@@ -24,11 +24,27 @@ namespace AbstractAccount.Mocks
     [ManifestExtra("Description", "Test-only AA core stub for verifier authority checks")]
     public class MockVerifierCore : SmartContract
     {
+        private static readonly byte[] Prefix_BackupOwner = new byte[] { 0x01 };
+
         [Safe]
         public static bool CanConfigureVerifier(UInt160 accountId, UInt160 verifier) => true;
 
         [Safe]
         public static bool CanExecuteVerifier(UInt160 accountId, UInt160 caller, UInt160 verifier) => true;
+
+        public static void SetBackupOwner(UInt160 accountId, UInt160 owner)
+        {
+            Storage.Put(Storage.CurrentContext, Helper.Concat(Prefix_BackupOwner, (byte[])accountId), (byte[])owner);
+        }
+
+        [Safe]
+        public static UInt160 GetBackupOwner(UInt160 accountId)
+        {
+            ByteString? value = Storage.Get(
+                Storage.CurrentContext,
+                Helper.Concat(Prefix_BackupOwner, (byte[])accountId));
+            return value == null ? UInt160.Zero : (UInt160)value;
+        }
 
         /// <summary>
         /// Forwards an arbitrary call so the target observes this contract as its caller.

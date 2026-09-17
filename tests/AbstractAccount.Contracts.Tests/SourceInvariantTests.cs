@@ -841,14 +841,28 @@ public class SourceInvariantTests
     public void SourceInvariant_RecoveryVerifier_LeastPrivilegePermissions()
     {
         // Audit fix AA-03: the wildcard ContractPermission("*", "*") is replaced by
-        // four method-scoped grants covering the verified call surface — any future
+        // five method-scoped grants covering the verified call surface — any future
         // wildcard reintroduction or dropped grant must fail here.
         string fixedSource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
         Assert.IsFalse(fixedSource.Contains("ContractPermission(\"*\", \"*\")", StringComparison.Ordinal), "AA-03: no wildcard contract permission");
         StringAssert.Contains(fixedSource, "ContractPermission(\"0xfffdc93764dbaddd97c48f252a53ea4643faa3fd\", \"update\")", "AA-03: ContractManagement.update grant (timelocked self-upgrade)");
         StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"getBackupOwner\")", "AA-03: core getBackupOwner grant (AA-06 attestation)");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"canExecuteVerifier\")", "AA-03: V3 verifier execution-context grant");
         StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"request\")", "AA-03: oracle request grant (ticket submission)");
         StringAssert.Contains(fixedSource, "ContractPermission(\"0xd2a4cff31913016155e38e474a2c06d08be276cf\", \"transfer\")", "AA-03: GAS transfer grant (credit forwarding)");
+    }
+
+    [TestMethod, Timeout(120_000)]
+    public void SourceInvariant_RecoveryVerifier_ImplementsGuardedV3Surface()
+    {
+        string v3Source = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.V3.cs");
+        StringAssert.Contains(v3Source, "public static bool SupportsV3() => true");
+        StringAssert.Contains(v3Source, "public static bool ValidateSignature(UInt160 accountId, UserOperation op)");
+        StringAssert.Contains(v3Source, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
+        Assert.AreEqual(2, v3Source.Split("AssertV3ExecutionCaller(accountId)", StringSplitOptions.None).Length - 1,
+            "Both V3 execution entrypoints must validate the bound AA Core context");
+        StringAssert.Contains(v3Source, "\"canExecuteVerifier\"");
+        StringAssert.Contains(v3Source, "Runtime.CallingScriptHash == core");
     }
 
     // ========================================================================
@@ -856,12 +870,33 @@ public class SourceInvariantTests
     // ========================================================================
 
     [TestMethod, Timeout(120_000)]
+    public void SourceInvariant_SignedPayloadsBindAuthorizedAaCore()
+    {
+        string sharedPayload = ReadRepo("contracts", "verifiers", "VerifierPayload.cs");
+        StringAssert.Contains(sharedPayload, "VerifierAuthority.AuthorizedCore()",
+            "shared verifier payload must bind the authorized AA core");
+
+        string web3Auth = ReadRepo("contracts", "verifiers", "Web3AuthVerifier.cs");
+        StringAssert.Contains(web3Auth, "ToBytes20Word(VerifierAuthority.AuthorizedCore())",
+            "Web3Auth struct hash must bind the authorized AA core");
+        StringAssert.Contains(web3Auth, "UserOperationTypeHash",
+            "Web3Auth struct hash must use the core-bound type hash");
+
+        string zkLogin = ReadRepo("contracts", "verifiers", "ZkLoginVerifier.cs");
+        StringAssert.Contains(zkLogin, "(byte[])VerifierAuthority.AuthorizedCore()",
+            "ZkLogin payload must bind the authorized AA core");
+    }
+
+    // ========================================================================
+    // 24b. Every PostExecute validates its caller (audit low, pattern risk)
+    // ========================================================================
+
+    [TestMethod, Timeout(120_000)]
     public void SourceInvariant_AllPostExecutePathsValidateCaller()
     {
-        // Audit low: NeoDIDCredentialHook, WhitelistHook, and NeoNativeVerifier had
-        // EMPTY PostExecute bodies with no caller guard — harmless today, but a
-        // future edit could add logic to an unguarded path. The estate invariant is
-        // that EVERY PostExecute validates its caller, even a no-op. Pin all three.
+        // Audit low: several no-op PostExecute bodies previously had no caller guard —
+        // harmless today, but a future edit could add logic to an unguarded path. The
+        // estate invariant is that EVERY PostExecute validates its caller, even a no-op.
         string neoDid = ReadRepo("contracts", "hooks", "NeoDIDCredentialHook.cs");
         StringAssert.Contains(neoDid, "HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
             "NeoDIDCredentialHook.PostExecute validates its caller");
@@ -871,6 +906,12 @@ public class SourceInvariantTests
         string neoNative = ReadRepo("contracts", "verifiers", "NeoNativeVerifier.cs");
         StringAssert.Contains(neoNative, "VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
             "NeoNativeVerifier.PostExecute validates its caller");
+        foreach (string verifier in new[] { "TEEVerifier.cs", "Web3AuthVerifier.cs", "WebAuthnVerifier.cs", "ZKEmailVerifier.cs", "ZkLoginVerifier.cs" })
+        {
+            string source = ReadRepo("contracts", "verifiers", verifier);
+            StringAssert.Contains(source, "VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
+                $"{verifier}.PostExecute validates its caller");
+        }
     }
 
     // ========================================================================

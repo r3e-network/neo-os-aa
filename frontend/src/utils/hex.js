@@ -1,7 +1,7 @@
 // Consolidated: sanitizeHex lives in the repo-level shared module (single
 // source of truth — the same function previously existed here verbatim).
 // formatHash stays local (frontend display concern).
-export { sanitizeHex } from '../../../shared/metaTxCore.mjs';
+export { sanitizeHex } from '../shared/metaTxCore.mjs';
 
 /**
  * Format a hash/hex string for compact display as `0x<head>…<tail>`.

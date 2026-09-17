@@ -6,21 +6,24 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
-const defaultOracleRoot = path.resolve(repoRoot, '..', 'neo-morpheus-oracle');
+const oracleRootCandidates = [
+  path.resolve(repoRoot, '..', 'neo-os-services'),
+  path.resolve(repoRoot, '..', '..', 'neo-os', 'neo-os-services'),
+];
+const defaultOracleRoot = oracleRootCandidates.find((candidate) => fs.existsSync(candidate))
+  || oracleRootCandidates[0];
 const oracleRoot = process.env.MORPHEUS_ORACLE_ROOT
   ? path.resolve(process.env.MORPHEUS_ORACLE_ROOT)
   : defaultOracleRoot;
 
-// Confidential-envelope drift guard. The canonical client implementation
-// lives in the oracle workspace; this repo vendors a browser copy in
-// frontend/src/utils/morpheusEncryption.js. When the canonical file changes,
-// its hash changes and this sync fails until the vendored copy is
-// re-verified (sdk/js/tests/morpheus-envelope-roundtrip.unit.test.js) and
-// the pin below is updated.
+// The canonical confidential-envelope implementation lives in the oracle
+// workspace. AA keeps only a generated browser artifact plus a thin adapter;
+// the generated source is refreshed and byte-checked by this script.
 const CANONICAL_ENVELOPE_RELATIVE_PATH = 'packages/shared/src/confidential-envelope.js';
 const CANONICAL_ENVELOPE_SHA256 =
-  '508329d6f14974733d8f1ca5fb7d3ac6e9b1dc21820e3f12131098de4bb3e129';
-const LOCAL_ENVELOPE_RELATIVE_PATH = 'frontend/src/utils/morpheusEncryption.js';
+  '6071fcbe03f66281c9504a200a2505e12896c69ca2df305bb81c3ac91bf8ab5d';
+const LOCAL_GENERATED_ENVELOPE_RELATIVE_PATH =
+  'frontend/src/utils/morpheusConfidentialEnvelope.generated.js';
 
 async function loadOracleModule(moduleName, exportName) {
   const modulePath = path.join(oracleRoot, 'scripts', moduleName);
@@ -85,56 +88,70 @@ function writeGeneratedJs(targetPath, exportName, value, commentLine) {
   }
 }
 
+function writeGeneratedSource(targetPath, source, sourceSha256, commentLine) {
+  const body = [
+    '// GENERATED from neo-os-services/packages/shared/src/confidential-envelope.js.',
+    `// Source sha256: ${sourceSha256}. Re-run scripts/sync_morpheus_registry.mjs after a reviewed canonical change.`,
+    `// ${commentLine}`,
+    '',
+    source,
+  ].join('\n');
+
+  if (!DRY_RUN) {
+    fs.writeFileSync(targetPath, body, 'utf8');
+    return;
+  }
+
+  const relativeTarget = path.relative(repoRoot, targetPath);
+  const previous = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : null;
+  if (previous === null) {
+    console.log(`[dry-run] would create ${relativeTarget} (${body.length} bytes)`);
+    return;
+  }
+  if (previous === body) {
+    console.log(`[dry-run] unchanged: ${relativeTarget}`);
+    return;
+  }
+  console.log(`[dry-run] would update ${relativeTarget}`);
+}
+
 async function assertConfidentialEnvelopeParity() {
   const canonicalPath = path.join(oracleRoot, CANONICAL_ENVELOPE_RELATIVE_PATH);
   if (!fs.existsSync(canonicalPath)) {
     throw new Error(`Missing canonical module: ${canonicalPath}`);
   }
 
-  const canonicalSha256 = createHash('sha256').update(fs.readFileSync(canonicalPath)).digest('hex');
+  const canonicalSource = fs.readFileSync(canonicalPath, 'utf8');
+  const canonicalSha256 = createHash('sha256').update(canonicalSource).digest('hex');
   if (canonicalSha256 !== CANONICAL_ENVELOPE_SHA256) {
     throw new Error(
       [
         `Canonical confidential envelope drift detected: ${canonicalPath}`,
         `expected sha256 ${CANONICAL_ENVELOPE_SHA256}`,
         `actual   sha256 ${canonicalSha256}`,
-        `Re-verify ${LOCAL_ENVELOPE_RELATIVE_PATH} against the canonical implementation,`,
+        `Re-verify the generated browser artifact ${LOCAL_GENERATED_ENVELOPE_RELATIVE_PATH},`,
         'run `node --test tests/morpheus-envelope-roundtrip.unit.test.js` in sdk/js,',
         'then update CANONICAL_ENVELOPE_SHA256 in this script.',
       ].join('\n')
     );
   }
 
-  const canonical = await import(pathToFileURL(canonicalPath).href);
-  const localPath = path.join(repoRoot, LOCAL_ENVELOPE_RELATIVE_PATH);
-  if (!fs.existsSync(localPath)) {
-    throw new Error(`Missing vendored envelope copy: ${localPath}`);
-  }
-  const localSource = fs.readFileSync(localPath, 'utf8');
-  const requiredPins = [
-    { name: 'ENVELOPE_INFO', test: localSource.includes(canonical.CONFIDENTIAL_ENVELOPE_INFO) },
-    {
-      name: 'ENVELOPE_ALGORITHM',
-      test: localSource.includes(canonical.CONFIDENTIAL_ENVELOPE_ALGORITHM),
-    },
-    {
-      name: 'ENVELOPE_VERSION',
-      test: new RegExp(
-        `ENVELOPE_VERSION\\s*=\\s*${canonical.CONFIDENTIAL_ENVELOPE_VERSION}\\b`
-      ).test(localSource),
-    },
-    {
-      name: 'AES_GCM_TAG_LENGTH_BYTES',
-      test: new RegExp(
-        `AES_GCM_TAG_LENGTH_BYTES\\s*=\\s*${canonical.AES_GCM_TAG_LENGTH_BYTES}\\b`
-      ).test(localSource),
-    },
-  ];
-  const missing = requiredPins.filter((pin) => !pin.test).map((pin) => pin.name);
-  if (missing.length > 0) {
-    throw new Error(
-      `Vendored envelope copy ${LOCAL_ENVELOPE_RELATIVE_PATH} drifted from canonical literals: ${missing.join(', ')}`
-    );
+  writeGeneratedSource(
+    path.join(repoRoot, LOCAL_GENERATED_ENVELOPE_RELATIVE_PATH),
+    canonicalSource,
+    canonicalSha256,
+    'Do not edit manually; import this module through morpheusEncryption.js.',
+  );
+
+  if (!DRY_RUN) {
+    const generatedPath = path.join(repoRoot, LOCAL_GENERATED_ENVELOPE_RELATIVE_PATH);
+    const generatedSource = fs.readFileSync(generatedPath, 'utf8');
+    if (!generatedSource.includes(`Source sha256: ${canonicalSha256}.`)
+      || !generatedSource.endsWith(canonicalSource)) {
+      throw new Error(
+        `Generated envelope ${LOCAL_GENERATED_ENVELOPE_RELATIVE_PATH} does not match ${CANONICAL_ENVELOPE_RELATIVE_PATH}`
+      );
+    }
   }
 }
 
@@ -148,14 +165,14 @@ async function main() {
     path.join(repoRoot, 'frontend/src/config/generatedMorpheusRegistry.js'),
     'MORPHEUS_PUBLIC_REGISTRY',
     registry,
-    '// Generated from neo-morpheus-oracle/scripts/export-public-network-registry.mjs.'
+    '// Generated from neo-os-services/scripts/export-public-network-registry.mjs.'
   );
 
   writeGeneratedJs(
     path.join(repoRoot, 'frontend/src/config/generatedMorpheusRuntimeCatalog.js'),
     'MORPHEUS_PUBLIC_RUNTIME_CATALOG',
     catalog,
-    '// Generated from neo-morpheus-oracle/scripts/export-public-runtime-catalog.mjs.'
+    '// Generated from neo-os-services/scripts/export-public-runtime-catalog.mjs.'
   );
 
   console.log(DRY_RUN

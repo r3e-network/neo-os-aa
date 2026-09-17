@@ -57,13 +57,19 @@ namespace AbstractAccount.Verifiers
         };
         private static readonly byte[] UserOperationTypeHash = new byte[]
         {
-            0x11, 0x92, 0x53, 0xf9, 0x50, 0x4b, 0x54, 0xcf,
-            0xd9, 0x46, 0x60, 0xa8, 0x1a, 0x50, 0xad, 0xef,
-            0x30, 0x66, 0x3e, 0xd5, 0xa8, 0xe9, 0x40, 0x6b,
-            0x87, 0x1c, 0x96, 0xdf, 0x18, 0xe0, 0xf2, 0xf4
+            0x57, 0x7a, 0x3a, 0x6b, 0xd9, 0x16, 0x83, 0xe3,
+            0x00, 0xe8, 0x14, 0xcd, 0x25, 0xff, 0x62, 0x47,
+            0xab, 0x7c, 0xa2, 0x73, 0xdd, 0xd0, 0x15, 0x3a,
+            0x99, 0x91, 0x9d, 0x72, 0xdd, 0xf9, 0xfa, 0x04
         };
 
         public static void _deploy(object data, bool update) => VerifierAuthority.Initialize(data, update);
+
+        [Safe]
+        public static bool SupportsV3() => true;
+
+        [Safe]
+        public static bool SupportsMessageSignatures() => true;
 
         [Safe]
         public static UInt160 AuthorizedCore() => VerifierAuthority.AuthorizedCore();
@@ -105,6 +111,7 @@ namespace AbstractAccount.Verifiers
 
         public static void PostExecute(UInt160 accountId, UserOperation op, object result)
         {
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
         }
 
         public static void ClearAccount(UInt160 accountId)
@@ -141,6 +148,38 @@ namespace AbstractAccount.Verifiers
             );
         }
 
+        /// <summary>
+        /// Validates a fixed 32-byte message digest for the ERC-1271 adapter.
+        /// Neo's verifier ABI uses the configured public key and a compact 64-byte
+        /// r||s signature; the core maps the result to ERC-1271's bytes4 magic.
+        /// </summary>
+        [Safe]
+        public static bool IsValidSignature(UInt160 accountId, ByteString hash, ByteString signature)
+        {
+            ByteString pubKey = GetPublicKey(accountId);
+            ExecutionEngine.Assert(pubKey.Length == 65, "No pubkey configured");
+            ExecutionEngine.Assert(hash != null && hash.Length == 32, "Invalid message hash");
+            ExecutionEngine.Assert(
+                signature != null && (signature.Length == 64 || signature.Length == 65),
+                "Invalid message signature");
+            ByteString compactSignature = signature!;
+            if (signature!.Length == 65)
+            {
+                byte recoveryId = signature[64];
+                ExecutionEngine.Assert(
+                    recoveryId == 0 || recoveryId == 1 || recoveryId == 27 || recoveryId == 28,
+                    "Invalid recovery id");
+                byte[] compact = new byte[64];
+                for (int i = 0; i < 64; i++) compact[i] = signature[i];
+                compactSignature = (ByteString)compact;
+            }
+            return CryptoLib.VerifyWithECDsa(
+                hash,
+                CompressPubKey(pubKey),
+                compactSignature,
+                NamedCurveHash.secp256k1Keccak256);
+        }
+
         private static byte[] BuildMetaTxStructHash(UInt160 accountId, UserOperation op)
         {
             byte[] argsSerialized = (byte[])StdLib.Serialize(op.Args);
@@ -152,15 +191,15 @@ namespace AbstractAccount.Verifiers
                         Helper.Concat(
                             Helper.Concat(
                                 Helper.Concat(UserOperationTypeHash, ToBytes20Word(accountId)),
-                                ToAddressWord(op.TargetContract)
+                                ToBytes20Word(VerifierAuthority.AuthorizedCore())
                             ),
-                            methodHash
+                            ToAddressWord(op.TargetContract)
                         ),
-                        (byte[])argsHash
+                        methodHash
                     ),
-                    ToUint256Word(op.Nonce)
+                    (byte[])argsHash
                 ),
-                ToUint256Word(op.Deadline)
+                Helper.Concat(ToUint256Word(op.Nonce), ToUint256Word(op.Deadline))
             );
             return (byte[])NativeCryptoLib.Keccak256((ByteString)payload);
         }

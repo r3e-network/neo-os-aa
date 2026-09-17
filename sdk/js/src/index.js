@@ -164,7 +164,7 @@ class AbstractAccountClient {
     return [
       '0c',
       byteLength.toString(16).padStart(2, '0'),
-      normalizedAccountId,
+      sanitizeHex(u.reverseHex(normalizedAccountId)),
       '11c01f0c06766572696679',
       '0c14',
       sanitizeHex(u.reverseHex(this.masterContractHash)),
@@ -242,7 +242,7 @@ class AbstractAccountClient {
   deriveVirtualAccount(accountIdSeedHex) {
     const accountIdHash = this.deriveAccountIdHash(accountIdSeedHex);
     const verifyScript = this.buildVerifyScript(accountIdHash);
-    const scriptHash = sanitizeHex(u.hash160(verifyScript));
+    const scriptHash = sanitizeHex(u.reverseHex(u.hash160(verifyScript)));
     const address = wallet.getAddressFromScriptHash(scriptHash);
     return {
       accountIdHash,
@@ -272,7 +272,7 @@ class AbstractAccountClient {
     }
 
     const verifyScript = this.buildVerifyScript(pubKeyHex);
-    const scriptHash = sanitizeHex(u.hash160(verifyScript));
+    const scriptHash = sanitizeHex(u.reverseHex(u.hash160(verifyScript)));
     return wallet.getAddressFromScriptHash(scriptHash);
   }
 
@@ -606,6 +606,7 @@ class AbstractAccountClient {
         chainId,
         verifyingContract: resolvedVerifierHash,
         accountIdHash: resolvedAccountIdHash,
+        coreContractHash: this.masterContractHash,
         targetContract,
         method,
         argsHashHex,
@@ -748,6 +749,42 @@ class AbstractAccountClient {
     }
 
     return decodeStackBoolean(response?.stack?.[0]);
+  }
+
+  /**
+   * Checks an account signature through the Neo ERC-1271 adapter surface.
+   * The returned value is the four-byte magic value as lowercase hex
+   * (0x1626ba7e means valid; 0xffffffff means invalid).
+   *
+   * @param {string} accountHashOrAddress - Account hash or address
+   * @param {string} hash - Exactly 32-byte message digest, hex encoded
+   * @param {string} signature - Compact 64-byte signature, hex encoded
+   * @returns {Promise<string>} ERC-1271-compatible magic value
+   */
+  async isValidSignature(accountHashOrAddress, hash, signature) {
+    const accountId = normalizeAddress(accountHashOrAddress);
+    const messageHash = sanitizeHex(hash || '');
+    const messageSignature = sanitizeHex(signature || '');
+    validateHexString(messageHash, { byteLength: 32 });
+    // ERC-1271 callers commonly provide either compact r||s (64 bytes) or
+    // recoverable r||s||v (65 bytes). The Neo verifier validates the recovery
+    // id when present and strips it before secp256k1 verification.
+    validateHexString(messageSignature, { minLength: 64, maxLength: 65 });
+
+    const script = sc.createScript({
+      scriptHash: this.masterContractHash,
+      operation: 'isValidSignature',
+      args: [
+        { type: 'Hash160', value: accountId },
+        { type: 'ByteArray', value: messageHash },
+        { type: 'ByteArray', value: messageSignature },
+      ],
+    });
+    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
+    if (response?.state === 'FAULT') {
+      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
+    }
+    return `0x${metaTxExports.decodeByteStringStackHex(response?.stack?.[0])}`;
   }
 
   /**

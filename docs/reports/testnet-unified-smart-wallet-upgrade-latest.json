@@ -1,0 +1,63 @@
+{
+  "network": "testnet",
+  "network_magic": 894710606,
+  "rpc_url": "https://testnet1.neo.coz.io:443",
+  "core_hash": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
+  "signer_hash": "0x6d0656f6dd91469db1c90cc1e574380613f43738",
+  "execute_requested": true,
+  "propose_requested": true,
+  "operation": "proposeUpdate",
+  "chain_writes_performed": true,
+  "candidate": {
+    "manifest_name": "UnifiedSmartWalletV3",
+    "nef_sha256": "0xc634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+    "manifest_sha256": "0x24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+    "method_count": 89,
+    "required_registrar_methods": [
+      "computePlatformAccountId",
+      "registerPlatformAccount",
+      "rotatePlatformAccountOwner",
+      "getPlatformRegistrar",
+      "getPendingPlatformRegistrar",
+      "getPlatformRegistrarAvailableAt",
+      "proposePlatformRegistrar",
+      "confirmPlatformRegistrar",
+      "cancelPlatformRegistrar"
+    ]
+  },
+  "live": {
+    "update_counter": 5,
+    "nef_checksum": 2785794149,
+    "method_count": 86,
+    "required_registrar_methods_present": [
+      "computePlatformAccountId",
+      "registerPlatformAccount",
+      "rotatePlatformAccountOwner",
+      "getPlatformRegistrar",
+      "getPendingPlatformRegistrar",
+      "getPlatformRegistrarAvailableAt",
+      "proposePlatformRegistrar",
+      "confirmPlatformRegistrar",
+      "cancelPlatformRegistrar"
+    ],
+    "missing_registrar_methods": []
+  },
+  "preview": {
+    "state": "HALT",
+    "gas_consumed": "534531"
+  },
+  "next_action": "confirm the exact candidate after 2026-09-22T10:55:50.056Z; preserve governance timelock",
+  "generated_at_utc": "2026-09-15T10:55:46.614Z",
+  "transaction": {
+    "txid": "0x7097a11cc706eb0c3b6ea172c5f35376c67460a7c91aab81537415ebe96f7022"
+  },
+  "broadcast_status": "confirmed_halt",
+  "post_proposal": {
+    "update_counter": 5,
+    "method_count": 86,
+    "proposal_recorded": true,
+    "raw_digests_match_candidate": true,
+    "available_at": "2026-09-22T10:55:50.056Z"
+  },
+  "evidence_file": "docs/reports/testnet-aa-proposal-repair-20260915.json"
+}

@@ -263,7 +263,7 @@
                 :placeholder="
                   t(
                     'studioPanels.hookMethodPlaceholder',
-                    'setWhitelist / setDailyLimit / requireCredentialForContract ...',
+                    'setWhitelist / setDailyLimit / requireCredentialCommitmentForContract ...',
                   )
                 "
               />
@@ -537,13 +537,13 @@ const hookPresets = [
       "studioPanels.presetDIDDesc",
       "Require an active NeoDID registry binding before target access.",
     ),
-    method: "requireCredentialForContract",
+    method: "requireCredentialCommitmentForContract",
     args: [
       { type: "Hash160", value: "0x<accountId>" },
       { type: "Hash160", value: "0x<targetContract>" },
       { type: "String", value: "github" },
       { type: "String", value: "Github_VerifiedUser" },
-      { type: "String", value: "true" },
+      { type: "ByteArray", value: "0x<32-byte-commitment>" },
     ],
   },
   {
@@ -617,7 +617,7 @@ args: [
  { "type": "Hash160", "value": "0x<neoDidRegistry>" }
 ]
 
-method: requireCredentialForContract
+method: requireCredentialCommitmentForContract
 args: [
  { "type": "Hash160", "value": "0x<account>" },
  { "type": "Hash160", "value": "0x<target>" },
@@ -625,13 +625,13 @@ args: [
  { "type": "String", "value": "Github_VerifiedUser" },
  { "type": "String", "value": "true" }
 ]`,
-    method: "requireCredentialForContract",
+    method: "requireCredentialCommitmentForContract",
     args: [
       { type: "Hash160", value: "0x<account>" },
       { type: "Hash160", value: "0x<target>" },
       { type: "String", value: "github" },
       { type: "String", value: "Github_VerifiedUser" },
-      { type: "String", value: "true" },
+      { type: "ByteArray", value: "0x<32-byte-commitment>" },
     ],
   },
 ];

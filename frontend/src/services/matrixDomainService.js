@@ -47,17 +47,23 @@ function decodeAddressArray(item) {
 
 async function invokeRead({ rpcUrl, scriptHash, operation, args = [], fetchImpl } = {}) {
   const result = await invokeReadFunction(rpcUrl, scriptHash, operation, args, fetchImpl);
-  if (result?.state === 'FAULT') {
+  if (result?.state !== 'HALT') {
     const err = new Error(EC.rpcFault);
-    err.rpcDetail = result.exception || null;
+    err.rpcDetail = result?.exception || null;
     throw err;
   }
   return result;
 }
 
-export async function resolveMatrixDomain(domain, { rpcUrl = RUNTIME_CONFIG.rpcUrl, matrixContractHash = RUNTIME_CONFIG.matrixContractHash } = {}) {
+export async function resolveMatrixDomain(domain, { rpcUrl = RUNTIME_CONFIG.rpcUrl, matrixContractHash = RUNTIME_CONFIG.matrixContractHash, fetchImpl } = {}) {
   const normalized = normalizeMatrixDomain(domain);
   if (!normalized) return '';
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+matrix$/.test(normalized)) {
+    throw new Error(EC.matrixDomainInvalid);
+  }
+  if (!/^[0-9a-f]{40}$/.test(sanitizeHex(matrixContractHash))) {
+    throw new Error(EC.contractNotFound);
+  }
   const result = await invokeRead({
     rpcUrl,
     scriptHash: sanitizeHex(matrixContractHash),
@@ -66,11 +72,16 @@ export async function resolveMatrixDomain(domain, { rpcUrl = RUNTIME_CONFIG.rpcU
       { type: 'String', value: normalized },
       { type: 'Integer', value: 16 },
     ],
+    fetchImpl,
   });
   const item = result?.stack?.[0];
   if (item?.type !== 'ByteString' || !item.value) return '';
   const decoded = decodeBase64ToUtf8(item.value);
-  return decoded && decoded.startsWith('N') && decoded.length === 34 ? decoded : '';
+  if (!decoded || !decoded.startsWith('N') || decoded.length !== 34) return '';
+  // An address-shaped TXT record is not sufficient evidence for a contract
+  // target. Validate the Base58 checksum before passing it to an invocation.
+  getScriptHashFromAddress(decoded);
+  return decoded;
 }
 
 export async function discoverAccountsForMatrixDomain(domain, { rpcUrl = RUNTIME_CONFIG.rpcUrl, aaContractHash = RUNTIME_CONFIG.abstractAccountHash, matrixContractHash = RUNTIME_CONFIG.matrixContractHash } = {}) {
@@ -98,6 +109,8 @@ export async function discoverAccountsForMatrixDomain(domain, { rpcUrl = RUNTIME
 
 export function buildMatrixRegistrationInvocation(domain, ownerAddress, { matrixContractHash = RUNTIME_CONFIG.matrixContractHash } = {}) {
   const normalized = normalizeMatrixDomain(domain);
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+matrix$/.test(normalized)) throw new Error(EC.matrixDomainInvalid);
+  if (!/^[0-9a-f]{40}$/.test(sanitizeHex(matrixContractHash))) throw new Error(EC.contractNotFound);
   return {
     scriptHash: sanitizeHex(matrixContractHash),
     operation: 'register',

@@ -134,6 +134,30 @@ public class Fix_AdminTimelock_Tests
     }
 
     [TestMethod]
+    public void ReversedDigestProposal_CannotConfirmEvenAfterTimelock()
+    {
+        RuntimeFixture fx = new();
+        UInt160 wallet = fx.Deploy(WalletArtifact);
+        (byte[] nef, string manifest) = ReadArtifact(WalletArtifact);
+        byte[] reversedNef = Sha256(nef);
+        byte[] reversedManifest = Sha256(manifest);
+        System.Array.Reverse(reversedNef);
+        System.Array.Reverse(reversedManifest);
+        fx.CallVoid(wallet, "proposeUpdate", reversedNef, reversedManifest);
+        fx.AdvanceTime(Window);
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(wallet, "confirmUpdate", nef, manifest));
+        StringAssert.Contains(rejected.Message, "NEF hash mismatch");
+        Assert.AreEqual(BigInteger.Zero, UpdateCounter(fx, wallet));
+
+        // The repair pins raw SHA-256 bytes and starts a fresh governance window.
+        fx.CallVoid(wallet, "proposeUpdate", Sha256(nef), Sha256(manifest));
+        fx.AdvanceTime(Window);
+        fx.CallVoid(wallet, "confirmUpdate", nef, manifest);
+        Assert.AreEqual(BigInteger.One, UpdateCounter(fx, wallet));
+    }
+
+    [TestMethod]
     public void CancelUpdate_ClearsPendingProposal()
     {
         RuntimeFixture fx = new();

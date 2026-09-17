@@ -3,6 +3,7 @@ using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
+using Neo.Network.P2P.Payloads;
 using Neo.SmartContract.Testing.Exceptions;
 
 namespace AbstractAccount.Contracts.Tests;
@@ -94,6 +95,70 @@ public class ExecuteUserOpRuntimeTests
     }
 
     [TestMethod]
+    [DataRow(false, false, true)]
+    [DataRow(true, false, false)]
+    [DataRow(false, true, false)]
+    public void ExecuteUserOp_VerifyContextIsAccountAndTargetScoped(
+        bool otherAccount, bool indirectCaller, bool expected)
+    {
+        WalletHarness h = new();
+        UInt160 accountId = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+        UInt160 otherId = h.RegisterAccount(UInt160.Zero, Stranger, EscapeTimelockSeconds);
+        // A second deployment with a different sender gives the nested caller
+        // a distinct script hash without mocking AA's verification result.
+        h.Fx.SetSigners(Stranger);
+        UInt160 relay = h.Fx.Deploy("MockVerifierCore");
+        h.Fx.Engine.SetTransactionSigners(new Signer
+        {
+            Account = BackupOwner,
+            Scopes = WitnessScope.CustomContracts,
+            AllowedContracts = new[] { h.Wallet },
+        });
+        UInt160 checkedId = otherAccount ? otherId : accountId;
+        object?[] verifyArgs = { h.Wallet, "verify", new object?[] { checkedId } };
+        object?[] args = indirectCaller
+            ? new object?[] { relay, "forward", verifyArgs }
+            : verifyArgs;
+        object[] op = RuntimeFixture.UserOp(h.Core, "forward", args,
+            BigInteger.Zero, h.Fx.Now() + 60_000, Array.Empty<byte>());
+
+        Assert.AreEqual(expected, h.ExecuteUserOp(accountId, op));
+        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, 0));
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(otherId, 0));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", accountId));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "forward", h.Wallet, "verify",
+            new object?[] { accountId }), "Target authority must end with the operation");
+    }
+
+    [TestMethod]
+    public void ExecuteUserOp_WrongOwnerScopeDoesNotConsumeNonceOrLeaveAuthority()
+    {
+        WalletHarness h = new();
+        UInt160 accountId = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+        var signer = new Signer
+        {
+            Account = BackupOwner,
+            Scopes = WitnessScope.CustomContracts,
+            AllowedContracts = new[] { h.Core },
+        };
+        h.Fx.Engine.SetTransactionSigners(signer);
+        object[] op = RuntimeFixture.UserOp(h.Core, "forward",
+            new object?[] { h.Wallet, "verify", new object?[] { accountId } },
+            BigInteger.Zero, h.Fx.Now() + 60_000, Array.Empty<byte>());
+        TestException rejected = Assert.ThrowsExactly<TestException>(() => h.ExecuteUserOp(accountId, op));
+        StringAssert.Contains(rejected.Message, "Native witness failed");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", accountId));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "forward", h.Wallet, "verify",
+            new object?[] { accountId }));
+
+        signer.AllowedContracts = new[] { h.Wallet };
+        h.Fx.Engine.SetTransactionSigners(signer);
+        Assert.IsTrue(h.ExecuteUserOp(accountId, op));
+        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, 0));
+    }
+
+    [TestMethod]
     public void ExecuteUserOp_NativeFallback_ExecutesAndConsumesChannelNonce()
     {
         WalletHarness h = new();
@@ -106,6 +171,83 @@ public class ExecuteUserOpRuntimeTests
         Assert.IsTrue(h.ExecuteUserOp(accountId, h.TransferOp(accountId, nonce: 0, deadline)),
             "Mock transfer target should report success");
         Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, 0), "Channel 0 sequence advances exactly once");
+    }
+
+    [TestMethod]
+    public void RegisterAccount_AcceptsRecoveryVerifierWithV3Marker()
+    {
+        WalletHarness h = new();
+        UInt160 recoveryVerifier = h.Fx.Deploy("SocialRecoveryVerifier");
+        h.Fx.CallVoid(recoveryVerifier, "setAuthorizedCore", h.Wallet);
+        UInt160 accountId = h.Fx.CallUInt160(
+            h.Wallet, "computeRegistrationAccountId",
+            recoveryVerifier, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(
+            h.Wallet, "registerAccount",
+            accountId, recoveryVerifier, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+
+        Assert.AreEqual(recoveryVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+    }
+
+    [TestMethod]
+    public void ExecuteUserOp_RecoveryVerifier_EnforcesOwnerAndCoreContext()
+    {
+        WalletHarness h = new();
+        UInt160 recoveryVerifier = h.Fx.Deploy("SocialRecoveryVerifier");
+        h.Fx.CallVoid(recoveryVerifier, "setAuthorizedCore", h.Wallet);
+
+        UInt160 accountId = h.Fx.CallUInt160(
+            h.Wallet, "computeRegistrationAccountId",
+            recoveryVerifier, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(
+            h.Wallet, "registerAccount",
+            accountId, recoveryVerifier, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+
+        using P256SessionKey morpheusKey = new();
+        byte[] factor = new byte[32];
+        for (int i = 0; i < factor.Length; i++) factor[i] = (byte)(i + 1);
+        h.Fx.CallVoid(
+            recoveryVerifier,
+            "setupRecovery",
+            accountId.ToArray(),
+            accountId.ToString(),
+            "neo3-testnet",
+            BackupOwner,
+            h.Wallet,
+            accountId,
+            Recipient,
+            new object?[] { factor },
+            (BigInteger)1,
+            (ulong)604_800_000,
+            morpheusKey.CompressedPublicKey);
+
+        BigInteger deadline = h.Fx.Now() + 3_600_000;
+        object[] op = h.TransferOp(accountId, nonce: 0, deadline);
+
+        h.Fx.SetSigners(Stranger);
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteUserOp(accountId, op),
+            "An unrelated witness must not authorize the recovery-bound account");
+        StringAssert.Contains(rejected.Message, "Verifier rejected signature");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0));
+
+        TestException directValidate = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallBoolean(recoveryVerifier, "validateSignature", accountId, op),
+            "validateSignature must only run inside the bound AA Core execution context");
+        StringAssert.Contains(directValidate.Message, "Unauthorized AA core caller");
+
+        TestException directPost = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(recoveryVerifier, "postExecute", accountId, op, true),
+            "postExecute must only run inside the bound AA Core execution context");
+        StringAssert.Contains(directPost.Message, "Unauthorized AA core caller");
+
+        h.Fx.SetSigners(BackupOwner);
+        Assert.IsTrue(h.ExecuteUserOp(accountId, op));
+        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, 0));
     }
 
     [TestMethod]

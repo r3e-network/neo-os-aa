@@ -1,19 +1,23 @@
 # Protocol Completeness Audit: vs ERC-4337 & ERC-7579
 
-**Date:** 2026-03-29
-**Auditor:** SDK Reviewer
-**Status:** ✓ Protocol is production-aligned with documented differences
+**Date:** 2026-09-13
+**Auditor:** NeoOS protocol remediation review
+**Status:** Conditional compatibility; Neo-native implementation with explicit adapters
 
 ---
 
 ## Executive Summary
 
-The Neo N3 Abstract Account protocol is **well-aligned** with Ethereum ERC-4337 and ERC-7579 patterns. All critical components are implemented with appropriate Neo ecosystem adaptations. The existing documentation (`docs/ETHEREUM_AA_COMPARISON.md` and `docs/SECURITY_MODEL.md`) accurately reflects the implementation.
+The Neo N3 Abstract Account protocol is a **Neo-native account system inspired by ERC-4337/ERC-7579**, not a drop-in Ethereum implementation. It does not expose an EntryPoint, Ethereum UserOperation ABI, bundler RPC, ERC-7579 executor/module interface, or Ethereum paymaster staking lifecycle. Those differences are protocol boundaries and must be visible to integrators.
+
+The core now exposes a standards-friendly discovery surface (`getAccountImplementationId`, `supportsExecutionMode`, `supportsModuleType`, `isModuleInstalled`, and `previewUserOpValidation`) plus an ERC-1271-compatible result adapter. `isValidSignature` returns `0x1626ba7e` only when the installed verifier explicitly supports message signatures; UserOperation validation is never silently reused as message validation. The currently shipped Web3Auth verifier implements that adapter for compact 64-byte and recoverable 65-byte ECDSA signatures. Other verifiers advertise `false` and fail closed.
+
+This is **interoperability at the adapter boundary**, not a claim of full ERC-4337/ERC-7579 conformance. Ethereum clients still need a Neo transport adapter, Neo RPC, Neo transaction witnesses, and the documented Neo UserOperation layout.
 
 | # | Requirement | Status | Notes |
 |---|---|---|---|
 | 1 | Plugin Lifecycle (install/update/remove) | ✓ | Complete with timelocks and events |
-| 2 | 2D Nonce Management (channel+sequence, salt mode) | ✓ | Full ERC-4337 2D compliance |
+| 2 | 2D Nonce Management (channel+sequence, salt mode) | ✓ Neo equivalent | Sequential channel/sequence semantics match the relevant ERC-4337 shape; the surrounding UserOperation and transport remain Neo-specific |
 | 3 | Escape Hatch Mechanism (timelock, cooldown, finalization) | ✓ | Production-grade L1 escape |
 | 4 | Storage Patterns (gas-efficient for Neo N3) | ✓ | Optimized prefix-key storage |
 | 5 | Account State Management (atomic) | ✓ | Atomic state updates |
@@ -21,6 +25,9 @@ The Neo N3 Abstract Account protocol is **well-aligned** with Ethereum ERC-4337 
 | 7 | Verification Scripts Integration | ✓ | Native script model properly used |
 | 8 | Paymaster/Sponsor Flow | ✓ | Off-chain Morpheus integration |
 | 9 | Documentation Accuracy | ✓ | Docs accurately reflect implementation |
+| 10 | ERC-1271 message validation adapter | ✓ | Core returns standard magic/invalid values; verifier capability is explicit |
+| 11 | Full ERC-4337 EntryPoint/bundler compatibility | — | Not implemented; Neo-native relay and RPC are required |
+| 12 | Full ERC-7579 executor/module ABI compatibility | — | Not implemented; lifecycle is exposed through the Neo module ABI |
 
 ---
 
@@ -49,7 +56,7 @@ The Neo N3 Abstract Account protocol is **well-aligned** with Ethereum ERC-4337 
 
 ---
 
-### 2. 2D Nonce Management (channel+sequence, salt mode) ✓
+### 2. Neo 2D Nonce Management (channel+sequence, salt mode) ✓
 
 **Implementation Location:** `contracts/UnifiedSmartWallet.Execution.cs` lines 156-204
 
@@ -58,7 +65,7 @@ The Neo N3 Abstract Account protocol is **well-aligned** with Ethereum ERC-4337 
 BigInteger channel = nonce >> 64;
 BigInteger sequence = nonce & 0xFFFFFFFFFFFFFFFF;
 ```
-- Exactly matches ERC-4337 2D sequential nonce semantics
+- Matches the relevant ERC-4337 2D sequential nonce shape
 - Channel 0: 0, 1, 2, 3... | Channel 1: 0, 1, 2, 3...
 - Used for standard transactions requiring ordering
 
@@ -80,8 +87,8 @@ key = Helper.Concat(key, nonce.ToByteArray());
 
 **Comparison to ERC-4337:**
 - ERC-4337: `nonce = key << 64 + sequence`
-- Neo: **Identical semantics** for sequential mode
-- Neo: **Enhanced** with UUID/salt mode for concurrency
+- Neo: **Equivalent semantics** for sequential mode
+- Neo: adds a Neo-specific UUID/salt mode for concurrency
 
 **Assessment:** ✓ Exceeds ERC-4337 with UUID mode support
 
@@ -410,13 +417,13 @@ Response: { approved: boolean, reason?: string }
 
 ## Conclusion
 
-The Neo N3 Abstract Account protocol is **production-grade** and well-designed. The core architecture successfully maps ERC-4337 and ERC-7579 concepts to Neo ecosystem constraints, with several notable advantages:
+The Neo N3 Abstract Account protocol is production-oriented, with a clearly bounded Neo-native protocol and explicit compatibility adapters. It should be integrated as a Neo AA protocol. The ERC-1271 message adapter is now safe to consume because unsupported verifiers return the invalid magic value instead of falling back to a different signature domain.
 
 - **Zero-cost virtual accounts** enable frictionless onboarding
 - **Heterogeneous signatures** support multiple security models
 - **Native L1 escape** provides robust recovery
 - **Integrated market escrow** enables secure account transfer
 
-The **5 documented vulnerabilities** (VULN-001 through VULN-005) are known and manageable. Implementing the high-priority recommendations would significantly improve security posture.
+The remaining Ethereum compatibility work is architectural rather than a method-name rename: a real ERC-4337 bridge would need a Neo EntryPoint-equivalent, UserOperation translation with domain separation, bundler/simulation endpoints, and an accountable paymaster policy. A real ERC-7579 bridge would need an executor/module ABI translation layer and lifecycle mapping. Those components must be deployed and tested as separate adapters before claiming ecosystem compatibility.
 
-**Overall Assessment:** Protocol is ready for mainnet deployment with recommended security hardening.
+**Overall Assessment:** Neo-native AA is locally verified and the ERC-1271 adapter is implemented; full ERC-4337/ERC-7579 compatibility remains intentionally unclaimed.

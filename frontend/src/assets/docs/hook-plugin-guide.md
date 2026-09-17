@@ -16,6 +16,12 @@ Treat an AA policy stack as three layers:
    - `TEEVerifier`
    - `ZkLoginVerifier`
 
+`ZkLoginVerifier` is a compatibility name for the current delegated-signer
+scheme. It verifies a `secp256r1` signature plus provider and nullifier
+bindings; it does not verify a zero-knowledge proof. The master nullifier is
+public contract state, and action-nullifier replay protection comes from the
+core account nonce rather than an on-chain nullifier set.
+
 2. **Hook plugin**
    Use this to decide **what the account is allowed to do** after a verifier accepts the signature.
    Examples:
@@ -117,13 +123,13 @@ require an active NeoDID registry binding before a call is allowed.
 Typical operations:
 
 - `setRegistry(registryHash)`
-- `requireCredentialForContract(accountId, target, provider, claimType, claimValue)`
+- `requireCredentialCommitmentForContract(accountId, target, provider, claimType, claimCommitment)`
 
 Operational notes:
 
 - this hook no longer stores local `issueCredential` / `revokeCredential` flags
 - the credential must exist on the configured `NeoDIDRegistry`
-- an empty `claimValue` means \"any active binding for this provider + claim type\"
+- `claimCommitment` must be the 32-byte commitment registered for the provider + claim type
 
 ### MultiHook
 

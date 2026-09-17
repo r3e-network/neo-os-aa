@@ -1,6 +1,6 @@
-# Neo N3 Abstract Account (ERC-4337 equivalent)
+# NeoOS AA — Neo N3 Abstract Account (ERC-4337 equivalent)
 
-This project contains the comprehensive standard, smart contract implementation, frontend tooling, and SDK for creating and utilizing Abstract Accounts on the Neo N3 blockchain.
+`neo-os-aa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Abstract Accounts on Neo N3.
 
 Current status note:
 
@@ -86,7 +86,7 @@ When this repo references Morpheus-integrated addresses, treat the following as 
 | Oracle callback consumer | `0xe1226268f2fe08bea67fb29e1c8fda0d7c8e9844` | `0x8c506f224d82e67200f20d9d5361f767f0756e3b` |
 | NeoDIDRegistry | `0xb81f31ea81e279793b30411b82c2e82078b63105` | unpublished in the shared registry |
 | AA Web3AuthVerifier | `0xf5c452cd4ba29dcdc47026383568c0d8b38d9272` | `0x7147f9a508594a7656a25f45d0a7a7dede7c227f` |
-| SocialRecoveryVerifier | `0x198b3a9cec9bccc2110d19bd929b10374a9d034d` | `recovery.smartwallet.neo` |
+| SocialRecoveryVerifier v2 | `0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26` | `recovery.smartwallet.neo` |
 
 The Morpheus Oracle (MiniApp-OS kernel v2) has the same contract hash on mainnet and testnet. The testnet hash `0x4b882e94ed766807c4fd728768f972e13008ad52` still seen in older records is the retired v1 oracle — do not integrate against it.
 
@@ -220,6 +220,17 @@ npm run testnet:validate:report
 ```
 
 The suite writes JSON artifacts under `sdk/docs/reports/`.
+
+### Shared Platform Account Bootstrap
+
+The shared platform-account registrar is enabled in a separate, testnet-only AA upgrade before the PlatformRegistry reciprocal configuration. Start with a read-only exact-update simulation using the AA core's public admin identity:
+
+```bash
+AA_TESTNET_UPDATE_SIGNER=<public-AA-admin-address-or-script-hash> \
+  node scripts/upgrade_testnet_unified_smart_wallet.js
+```
+
+The helper verifies testnet magic, the local `UnifiedSmartWalletV3` artifact, the live update surface, and the exact `update` preview. It writes `docs/reports/testnet-unified-smart-wallet-upgrade-latest.json` without signing or broadcasting. Execution requires `--execute`, `CONFIRM_AA_TESTNET_UPDATE=I_UNDERSTAND_THIS_WRITES_CHAIN`, and `AA_TESTNET_UPDATE_WIF`; the WIF-derived signer must match the public identity used for the preview. After a successful upgrade, rerun the platform shared-AA preflight before configuring the Registry core.
 
 ### Build
 

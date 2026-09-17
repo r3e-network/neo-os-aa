@@ -2,18 +2,18 @@ import { ripemd160, sha256 } from 'ethers';
 import { EC } from '../config/errorCodes.js';
 import { sanitizeHex } from './hex.js';
 import { fetchWithTimeout } from './fetchWithTimeout.js';
-import { createRegistrationAccountIdDeriver } from '../../../shared/registrationAccountId.mjs';
+import { createRegistrationAccountIdDeriver } from '../shared/registrationAccountId.mjs';
 
 export const DEFAULT_NEO_ADDRESS_VERSION = 53;
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const BASE58_INDEX = new Map([...BASE58_ALPHABET].map((char, index) => [char, index]));
 
-// The escape-timelock bounds live in shared/registrationAccountId.mjs so the
+// The escape-timelock bounds live in the vendored shared/registrationAccountId.mjs so the
 // frontend, the SDK, and the on-chain registration guard cannot drift apart.
 export {
   MIN_REGISTRATION_ESCAPE_TIMELOCK_SECONDS,
   MAX_REGISTRATION_ESCAPE_TIMELOCK_SECONDS,
-} from '../../../shared/registrationAccountId.mjs';
+} from '../shared/registrationAccountId.mjs';
 export const MIN_REGISTRATION_ESCAPE_TIMELOCK_DAYS = 7;
 export const MAX_REGISTRATION_ESCAPE_TIMELOCK_DAYS = 90;
 
@@ -244,7 +244,7 @@ export function getScriptHashFromAddress(address) {
 }
 
 export function createVerifyScript(contractHash, accountIdHex) {
-  const accountId = deriveAccountIdHash(accountIdHex);
+  const accountId = reverseHex(deriveAccountIdHash(accountIdHex));
   const contract = sanitizeHex(contractHash);
   const operationHex = bytesToHex(new TextEncoder().encode('verify'));
 

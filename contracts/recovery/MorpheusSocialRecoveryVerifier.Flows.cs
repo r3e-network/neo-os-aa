@@ -22,7 +22,7 @@ namespace Neo.SmartContract.Examples
         private const ulong MAX_TIMELOCK = 7776000000;   // 90 days = 90 * 24 * 60 * 60 * 1000 ms
 
         public static void SetupRecovery(
-            ByteString accountId,
+            UInt160 accountId,
             string accountIdText,
             string network,
             UInt160 owner,
@@ -57,7 +57,6 @@ namespace Neo.SmartContract.Examples
             // cannot point the attestation at a fake core that answers favorably) and require
             // the core's registry of record to attest that `owner` is the account's
             // registered backup owner.
-            ExecutionEngine.Assert(accountId.Length == 20, "accountId must be a 20-byte AA account id");
             UInt160 authorizedCore = AuthorizedCore();
             ExecutionEngine.Assert(authorizedCore != UInt160.Zero, "Authorized AA core not configured");
             ExecutionEngine.Assert(aaContract == authorizedCore, "aaContract is not the authorized core");
@@ -66,7 +65,7 @@ namespace Neo.SmartContract.Examples
             // ("Account not found"); a registered account returns its backup owner, which
             // must equal the witnessed `owner`.
             UInt160 registeredOwner = (UInt160)Contract.Call(
-                aaContract, "getBackupOwner", CallFlags.ReadOnly, new object[] { (UInt160)accountId });
+                aaContract, "getBackupOwner", CallFlags.ReadOnly, new object[] { accountId });
             ExecutionEngine.Assert(registeredOwner == owner, "owner does not control account");
 
             StoreConfig(accountId, accountIdText, network, owner, aaContract, accountAddress, morpheusOracle, masterNullifiers, threshold, timelock, morpheusVerifier);
@@ -76,7 +75,7 @@ namespace Neo.SmartContract.Examples
         }
 
         public static void UpdateRecoveryConfig(
-            ByteString accountId,
+            UInt160 accountId,
             UInt160 morpheusOracle,
             ByteString[] masterNullifiers,
             BigInteger threshold,
@@ -102,7 +101,7 @@ namespace Neo.SmartContract.Examples
         }
 
         public static BigInteger RequestRecoveryTicket(
-            ByteString accountId,
+            UInt160 accountId,
             string provider,
             UInt160 newOwner,
             string expiresAtText,
@@ -163,7 +162,7 @@ namespace Neo.SmartContract.Examples
         }
 
         public static BigInteger RequestActionSession(
-            ByteString accountId,
+            UInt160 accountId,
             string provider,
             UInt160 executor,
             ulong expiresAt,

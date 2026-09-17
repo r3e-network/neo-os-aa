@@ -21,6 +21,7 @@ const CORE_ERROR_CODES = {
   NONCE_REQUIRED: EC.VALIDATION_NONCE_REQUIRED,
   DEADLINE_REQUIRED: EC.VALIDATION_DEADLINE_REQUIRED,
   ARGS_HASH_INVALID: EC.VALIDATION_ARGS_HASH_INVALID,
+  CORE_CONTRACT_REQUIRED: EC.VALIDATION_OPTIONS_REQUIRED,
 };
 
 /**
@@ -162,13 +163,13 @@ const EIP712_VERSION_HASH = new Uint8Array([
 
 /**
  * Type hash for UserOperation struct.
- * Pre-computed keccak256("UserOperation(bytes20 accountId,address targetContract,string method,bytes32 argsHash,uint256 nonce,uint256 deadline)")
+ * Pre-computed keccak256("UserOperation(bytes20 accountId,bytes20 coreContract,address targetContract,string method,bytes32 argsHash,uint256 nonce,uint256 deadline)")
  */
 const USER_OPERATION_TYPE_HASH = new Uint8Array([
-  0x11, 0x92, 0x53, 0xf9, 0x50, 0x4b, 0x54, 0xcf,
-  0xd9, 0x46, 0x60, 0xa8, 0x1a, 0x50, 0xad, 0xef,
-  0x30, 0x66, 0x3e, 0xd5, 0xa8, 0xe9, 0x40, 0x6b,
-  0x87, 0x1c, 0x96, 0xdf, 0x18, 0xe0, 0xf2, 0xf4,
+  0x57, 0x7a, 0x3a, 0x6b, 0xd9, 0x16, 0x83, 0xe3,
+  0x00, 0xe8, 0x14, 0xcd, 0x25, 0xff, 0x62, 0x47,
+  0xab, 0x7c, 0xa2, 0x73, 0xdd, 0xd0, 0x15, 0x3a,
+  0x99, 0x91, 0x9d, 0x72, 0xdd, 0xf9, 0xfa, 0x04,
 ]);
 
 /**
@@ -208,7 +209,7 @@ function buildContractCompatibleDomainSeparator(network, verifyingContract) {
  *
  * This function replicates the contract's custom encoding:
  * - Uses raw keccak256 of method string (not EIP-712 string encoding)
- * - Right-pads the big-endian accountId bytes to 32 bytes (ToBytes20Word)
+ * - Right-pads the big-endian accountId and AA core bytes to 32 bytes (ToBytes20Word)
  * - Left-pads the big-endian targetContract bytes to 32 bytes (ToAddressWord)
  * - Uses big-endian encoding for nonce/deadline
  *
@@ -218,6 +219,7 @@ function buildContractCompatibleDomainSeparator(network, verifyingContract) {
  *
  * @param {Object} options - Struct hash options
  * @param {string} options.accountIdHash - Account ID hash (40 hex chars)
+ * @param {string} options.coreContractHash - Authorized AA core hash (40 hex chars)
  * @param {string} options.targetContract - Target contract hash (40 hex chars)
  * @param {string} options.method - Method name
  * @param {string} options.argsHash - Serialized args hash (32 bytes, 64 hex chars)
@@ -231,6 +233,7 @@ function buildContractCompatibleDomainSeparator(network, verifyingContract) {
  * ```javascript
  * const structHash = buildContractCompatibleStructHash({
  *   accountIdHash: 'f951...hash',
+ *   coreContractHash: 'dbf3...hash',
  *   targetContract: '49c0...hash',
  *   method: 'transfer',
  *   argsHash: '0xabcd...hash',
@@ -240,7 +243,7 @@ function buildContractCompatibleDomainSeparator(network, verifyingContract) {
  *
  * // Create the 66-byte signing payload (0x1901 || domainSeparator || structHash)
  * const payload = buildWeb3AuthSigningPayload({
- *   chainId, verifierHash, accountIdHash, targetContract,
+ *   chainId, verifierHash, accountIdHash, coreContractHash, targetContract,
  *   method, argsHash, nonce, deadline,
  * });
  *
@@ -253,6 +256,7 @@ function buildContractCompatibleDomainSeparator(network, verifyingContract) {
  */
 function buildContractCompatibleStructHash({
   accountIdHash,
+  coreContractHash,
   targetContract,
   method,
   argsHash,
@@ -268,6 +272,13 @@ function buildContractCompatibleStructHash({
     throw createError(EC.ENCODING_HASH160_INVALID, {
       provided: accountIdHash,
       hint: 'accountIdHash must be 40 hex chars (20 bytes)',
+    });
+  }
+  const cleanCoreContract = sanitizeHex(coreContractHash);
+  if (cleanCoreContract.length !== 40) {
+    throw createError(EC.ENCODING_HASH160_INVALID, {
+      provided: coreContractHash,
+      hint: 'coreContractHash must be 40 hex chars (20 bytes)',
     });
   }
   if (cleanTarget.length !== 40) {
@@ -290,33 +301,20 @@ function buildContractCompatibleStructHash({
 
   // Build struct payload matching contract's concatenation order:
   // keccak256(UserOperationTypeHash || ToBytes20Word(accountId) ||
-  //   ToAddressWord(targetContract) || keccak256(method) ||
+  //   ToBytes20Word(coreContract) || ToAddressWord(targetContract) ||
+  //   keccak256(method) ||
   //   keccak256(serializedArgs) || ToUint256Word(nonce) ||
   //   ToUint256Word(deadline))
-  const payload = new Uint8Array(
-    USER_OPERATION_TYPE_HASH.length +
-    32 + // accountId
-    32 + // targetContract
-    32 + // methodHash
-    32 + // argsHash
-    32 + // nonce
-    32 // deadline
-  );
-
-  let offset = 0;
-  payload.set(USER_OPERATION_TYPE_HASH, offset);
-  offset += USER_OPERATION_TYPE_HASH.length;
-  payload.set(toBytes20Word(cleanAccountId), offset);
-  offset += 32;
-  payload.set(toAddressWord(cleanTarget), offset);
-  offset += 32;
-  payload.set(ethers.getBytes(methodHash), offset);
-  offset += 32;
-  payload.set(ethers.getBytes(`0x${cleanArgsHash}`), offset);
-  offset += 32;
-  payload.set(toUint256Word(nonce), offset);
-  offset += 32;
-  payload.set(toUint256Word(deadline), offset);
+  const payload = ethers.concat([
+    USER_OPERATION_TYPE_HASH,
+    toBytes20Word(cleanAccountId),
+    toBytes20Word(cleanCoreContract),
+    toAddressWord(cleanTarget),
+    methodHash,
+    `0x${cleanArgsHash}`,
+    toUint256Word(nonce),
+    toUint256Word(deadline),
+  ]);
 
   return ethers.keccak256(payload);
 }
@@ -329,6 +327,7 @@ function buildContractCompatibleStructHash({
  * @param {number|string|bigint} options.chainId - Network chain ID
  * @param {string} options.verifierHash - Verifier contract hash (40 hex chars)
  * @param {string} options.accountIdHash - Account ID hash (40 hex chars)
+ * @param {string} options.coreContractHash - Authorized AA core hash (40 hex chars)
  * @param {string} options.targetContract - Target contract hash (40 hex chars)
  * @param {string} options.method - Method name
  * @param {string} options.argsHash - Args hash (32 bytes, 64 hex chars)
@@ -340,6 +339,7 @@ function buildWeb3AuthSigningPayload({
   chainId,
   verifierHash,
   accountIdHash,
+  coreContractHash,
   targetContract,
   method,
   argsHash,
@@ -352,6 +352,7 @@ function buildWeb3AuthSigningPayload({
   const structHash = ethers.getBytes(
     buildContractCompatibleStructHash({
       accountIdHash,
+      coreContractHash,
       targetContract,
       method,
       argsHash,

@@ -13,23 +13,19 @@ namespace AbstractAccount.Contracts.Tests;
 ///
 /// The contract's storage keys are namespaced by a one-byte prefix declared as
 /// <c>private static readonly byte[] Prefix_* = new byte[] { 0xNN };</c> across several partial-class
-/// files. Two prefix BYTES are deliberately reused (0x12 and 0x13: a bare admin key in
-/// <c>UnifiedSmartWallet.Admin.cs</c> versus an accountId-suffixed key in
-/// <c>UnifiedSmartWallet.Internal.cs</c> / <c>UnifiedSmartWallet.MarketEscrow.cs</c>). That reuse is
-/// collision-safe only because the two consumers of each byte use a different KEY SHAPE — a bare
-/// 1-byte global key can never alias a 21-byte accountId-suffixed key.
+/// files. The active layout uses a globally unique byte for every prefix. The contract retains
+/// separate legacy compatibility constants for the pre-renumbered 0x12/0x13 layout, but those
+/// constants are read/delete-only and are not active prefix declarations.
 ///
 /// These tests:
 ///   1. Derive each prefix's (byte, key shape) directly from the contract source.
-///   2. Assert no two prefixes share BOTH the same byte AND the same key shape (a real collision) —
-///      so any FUTURE prefix addition that would actually collide fails the suite.
+///   2. Assert no two active prefixes share the same byte, so any FUTURE prefix reuse fails the suite.
 ///   3. Assert the authoritative STORAGE PREFIX MAP doc comment in <c>UnifiedSmartWallet.cs</c> is
 ///      complete and accurate against the source (every declared prefix is documented with the
 ///      correct owning partial and shape, and nothing extra is documented).
 ///
-/// Renumbering 0x12/0x13 to make every byte globally unique is intentionally deferred (it would
-/// change the on-chain storage layout and require a redeploy/migration), so these tests pin the
-/// CURRENT allocation rather than demanding global byte-uniqueness.
+/// Legacy compatibility is intentionally outside the active map and is covered by runtime fallback
+/// paths in the affected getters and cleanup methods.
 /// </summary>
 [TestClass]
 public class StoragePrefixMapTests
@@ -52,6 +48,7 @@ public class StoragePrefixMapTests
         "UnifiedSmartWallet.MarketEscrow.cs",
         "UnifiedSmartWallet.Models.cs",
         "UnifiedSmartWallet.Paymaster.cs",
+        "UnifiedSmartWallet.PlatformRegistrar.cs",
         "UnifiedSmartWallet.State.cs",
         "UnifiedSmartWallet.VerifyContext.cs",
     };
@@ -111,7 +108,7 @@ public class StoragePrefixMapTests
     }
 
     [TestMethod]
-    public void NoPrefixSharesBothByteAndKeyShape()
+    public void ActivePrefixBytesAreGloballyUnique()
     {
         string allSource = ReadAllPartials();
         List<PrefixDecl> declarations = CollectDeclarations();
@@ -119,44 +116,24 @@ public class StoragePrefixMapTests
         Assert.IsTrue(declarations.Count >= 24,
             $"Expected the full known prefix set to be declared; found only {declarations.Count}.");
 
-        // Group every declaration by its (byte, derived key shape). Two declarations landing in the
-        // same group would alias the same storage namespace — a real collision.
-        var byByteAndShape = new Dictionary<(byte Value, string Shape), List<string>>();
+        var byByte = new Dictionary<byte, List<string>>();
         foreach (PrefixDecl decl in declarations)
         {
-            string shape = DeriveShape(decl.Name, allSource);
-            var slot = (decl.Value, shape);
-            if (!byByteAndShape.TryGetValue(slot, out List<string>? owners))
+            DeriveShape(decl.Name, allSource);
+            if (!byByte.TryGetValue(decl.Value, out List<string>? owners))
             {
                 owners = new List<string>();
-                byByteAndShape[slot] = owners;
+                byByte[decl.Value] = owners;
             }
             owners.Add($"{decl.Name} ({decl.Partial})");
         }
 
-        foreach (var (slot, owners) in byByteAndShape)
+        foreach (var (value, owners) in byByte)
         {
             Assert.AreEqual(1, owners.Count,
-                $"Storage collision: byte 0x{slot.Value:X2} with key shape '{slot.Shape}' is claimed by " +
-                $"multiple prefixes: {string.Join(", ", owners)}. Allocate a distinct byte (or a distinct " +
-                "key shape) for the new prefix.");
+                $"Active storage prefix byte 0x{value:X2} is claimed by multiple prefixes: " +
+                $"{string.Join(", ", owners)}. Allocate a distinct byte.");
         }
-
-        // The two known, intentional byte reuses (0x12, 0x13) must remain split across distinct shapes.
-        AssertReusedByteIsShapeSplit(declarations, allSource, 0x12);
-        AssertReusedByteIsShapeSplit(declarations, allSource, 0x13);
-    }
-
-    private static void AssertReusedByteIsShapeSplit(IEnumerable<PrefixDecl> declarations, string allSource, byte value)
-    {
-        PrefixDecl[] sharing = declarations.Where(decl => decl.Value == value).ToArray();
-        Assert.AreEqual(2, sharing.Length,
-            $"Byte 0x{value:X2} is expected to be reused by exactly two prefixes (one bare admin key, " +
-            $"one accountId-suffixed key); found {sharing.Length}.");
-        string[] shapes = sharing.Select(decl => DeriveShape(decl.Name, allSource)).Distinct().ToArray();
-        Assert.AreEqual(2, shapes.Length,
-            $"Byte 0x{value:X2} is reused by {string.Join(", ", sharing.Select(d => d.Name))} but they share the " +
-            "same key shape, which is a real storage collision.");
     }
 
     [TestMethod]
@@ -228,19 +205,13 @@ public class StoragePrefixMapTests
     }
 
     [TestMethod]
-    public void MarketEscrowPrefixCommentNoLongerClaimsGlobalUniqueness()
+    public void ActivePrefixMapUsesUniqueMarketEscrowAllocation()
     {
         string marketSource = ReadPartial("UnifiedSmartWallet.MarketEscrow.cs");
 
-        // The previous comment falsely claimed 0x13 was "distinct from every prefix" — it overlooked
-        // the bare admin key reuse. The corrected comment must state the byte is reused but
-        // disambiguated by key shape.
-        Assert.IsFalse(
-            Regex.IsMatch(marketSource, @"Distinct from every prefix"),
-            "The misleading 'distinct from every prefix' claim must be removed from MarketEscrow.cs.");
-        StringAssert.Contains(marketSource, "REUSED across partials",
-            "The corrected comment must acknowledge the 0x13 byte reuse.");
-        StringAssert.Contains(marketSource, "STORAGE PREFIX MAP",
-            "The corrected comment must point to the authoritative STORAGE PREFIX MAP.");
+        StringAssert.Contains(marketSource, "globally unique",
+            "MarketEscrow.cs must document that its active prefix is globally unique.");
+        StringAssert.Contains(marketSource, "legacy 0x13",
+            "MarketEscrow.cs must document the legacy compatibility read/delete path.");
     }
 }

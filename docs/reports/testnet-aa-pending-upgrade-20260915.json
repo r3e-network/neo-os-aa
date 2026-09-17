@@ -1,0 +1,16 @@
+{
+  "network": "testnet",
+  "core": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
+  "read_only": true,
+  "update_counter": 5,
+  "proposalAt": "2026-09-14T14:48:44.518Z",
+  "availableAt": "2026-09-21T14:48:44.518Z",
+  "rawPendingNefHex": "4b9bd0943461579bdd5bdcc27a912bff3c185943d642b353db3bc82198ab34c6",
+  "canonicalPendingNefHash": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+  "candidateNefHash": "0xc634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+  "checkedAt": "2026-09-15T10:52:47.704Z",
+  "pendingNefMatchesCanonicalDisplay": true,
+  "pendingManifestMatchesCanonicalDisplay": true,
+  "pendingNefMatchesContractDigest": false,
+  "note": "Historical pre-repair snapshot. Canonical Hash256 display equality is insufficient: CryptoLib.Sha256 compares raw digest bytes. VM regression confirms this reversed proposal cannot apply."
+}

@@ -82,6 +82,14 @@ namespace AbstractAccount
         [DisplayName("MarketEscrowSettled")]
         public static event MarketEscrowSettledDelegate OnMarketEscrowSettled = null!;
 
+        // --- Verify scope configuration ---
+
+        /// <summary>Emitted whenever an account's verify-scope target changes.</summary>
+        public delegate void VerifyScopeTargetDelegate(UInt160 accountId, UInt160 targetContract);
+
+        [DisplayName("VerifyScopeTargetSet")]
+        public static event VerifyScopeTargetDelegate OnVerifyScopeTargetSet = null!;
+
         // --- Paymaster / Sponsored Transactions ---
 
         public delegate void SponsoredUserOpExecutedDelegate(UInt160 accountId, UInt160 paymaster, UInt160 sponsor, UInt160 relay, BigInteger reimbursementAmount);

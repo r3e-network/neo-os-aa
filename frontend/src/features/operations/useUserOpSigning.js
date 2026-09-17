@@ -115,6 +115,7 @@ export async function signUserOpWithEvm({
     chainId,
     verifyingContract: verifierHash,
     accountIdHash,
+    coreContractHash: aaContractHash,
     targetContract: operationBody?.targetContract,
     method: operationBody?.method,
     argsHashHex,

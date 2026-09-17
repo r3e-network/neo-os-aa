@@ -6,12 +6,15 @@ const { buildV3UserOp, buildEIP712PayloadForWeb3AuthVerifier } = require('../src
 const {
   AbstractAccountClient,
   buildV3UserOperationTypedData,
+  buildContractCompatibleStructHash,
+  buildWeb3AuthSigningPayload,
   createUserOpBuilder,
   simulateUserOperation,
 } = require('../src/index');
 const { checkEscapeStatus } = require('../src/simulation');
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
+const CORE_CONTRACT_HASH = 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2';
 
 // Real nodes return UInt160 stack items as ByteString carrying the internal
 // little-endian bytes (base64-encoded). Build that wire shape from the
@@ -48,6 +51,7 @@ test('buildEIP712PayloadForWeb3AuthVerifier uses the supplied on-chain argsHash'
     chainId: 894710606,
     verifierHash: '0x1234',
     accountId: 'abcd',
+    coreContractHash: CORE_CONTRACT_HASH,
     userOp: op,
     argsHash,
   });
@@ -75,6 +79,7 @@ test('buildEIP712PayloadForWeb3AuthVerifier throws when argsHash is omitted', ()
       chainId: 894710606,
       verifierHash: '0x1234',
       accountId: 'abcd',
+      coreContractHash: CORE_CONTRACT_HASH,
       userOp: op,
     }),
     /requires argsHash.*computeArgsHash/s,
@@ -86,6 +91,7 @@ test('buildV3UserOperationTypedData constructs correct domain and message', () =
     chainId: 894710606,
     verifyingContract: '0x1234',
     accountIdHash: 'abcd',
+    coreContractHash: CORE_CONTRACT_HASH,
     targetContract: '1234567890123456789012345678901234567890',
     method: 'transfer',
     argsHashHex: 'ab'.repeat(32),
@@ -208,6 +214,23 @@ test('deriveRegistrationAccountIdHash matches the frontend V3 registration vecto
   });
 
   assert.equal(accountId, '27c01243fca45e1b821dc3bb45267a579762d530');
+});
+
+test('deriveVirtualAccount uses canonical Neo UInt160 byte order', () => {
+  const client = new AbstractAccountClient(
+    'https://example.invalid',
+    '0x0123456789abcdef0123456789abcdef01234567'
+  );
+  const account = client.deriveVirtualAccount(
+    '0x89abcdef0123456789abcdef0123456789abcdef'
+  );
+
+  assert.deepEqual(account, {
+    accountIdHash: '89abcdef0123456789abcdef0123456789abcdef',
+    verifyScript: '0c14efcdab8967452301efcdab8967452301efcdab8911c01f0c067665726966790c1467452301efcdab8967452301efcdab896745230141627d5b52',
+    scriptHash: 'f2afddbbdae6b710f0c2cdebb8b734e40d4d4fda',
+    address: 'NfpHVWDgSaedTHuk183urAp9FDBS4i4VYB',
+  });
 });
 
 test('createAccountPayload derives the registration-bound account id', () => {
@@ -475,6 +498,10 @@ test('client exposes standards-aligned account capability introspection helpers'
       state: 'HALT',
       stack: [{ type: 'Boolean', value: true }],
     },
+    {
+      state: 'HALT',
+      stack: [{ type: 'ByteString', value: Buffer.from('1626ba7e', 'hex').toString('base64') }],
+    },
   ];
   client.rpcClient = {
     async invokeScript() {
@@ -492,6 +519,34 @@ test('client exposes standards-aligned account capability introspection helpers'
       '0xb4107cb2cb4bace0ebe15bc4842890734abe133a',
     ),
     true,
+  );
+  assert.equal(
+    await client.isValidSignature(
+      '0xf951cd3eb5196dacde99b339c5dcca37ac38cc22',
+      '0x' + '11'.repeat(32),
+      '0x' + '22'.repeat(64),
+    ),
+    '0x1626ba7e',
+  );
+});
+
+test('ERC-1271 adapter accepts recoverable 65-byte signatures', async () => {
+  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  client.rpcClient = {
+    async invokeScript() {
+      return {
+        state: 'HALT',
+        stack: [{ type: 'ByteString', value: Buffer.from('1626ba7e', 'hex').toString('base64') }],
+      };
+    },
+  };
+  assert.equal(
+    await client.isValidSignature(
+      '0xf951cd3eb5196dacde99b339c5dcca37ac38cc22',
+      '0x' + '11'.repeat(32),
+      '0x' + '22'.repeat(64) + '1b',
+    ),
+    '0x1626ba7e',
   );
 });
 
@@ -780,6 +835,7 @@ test('EIP-712 typed data hash matches expected test vector', () => {
     chainId: networkId,
     verifyingContract: verifierHash,
     accountIdHash,
+    coreContractHash: CORE_CONTRACT_HASH,
     targetContract,
     method,
     argsHashHex,
@@ -831,20 +887,49 @@ test('EIP-712 typed data hash matches expected test vector', () => {
 
   // Verify the struct hash components match the contract's UserOperation type.
   // The contract's BuildMetaTxStructHash encodes:
-  //   keccak256(UserOperationTypeHash || bytes20(accountId) || address(target) ||
+  //   keccak256(UserOperationTypeHash || bytes20(accountId) || bytes20(core) || address(target) ||
   //             keccak256(method) || argsHash || uint256(nonce) || uint256(deadline))
-  // where UserOperationTypeHash = keccak256("UserOperation(bytes20 accountId,address targetContract,string method,bytes32 argsHash,uint256 nonce,uint256 deadline)")
+  // where UserOperationTypeHash = keccak256("UserOperation(bytes20 accountId,bytes20 coreContract,address targetContract,string method,bytes32 argsHash,uint256 nonce,uint256 deadline)")
   const userOpTypeHash = ethers.keccak256(
     ethers.toUtf8Bytes(
-      'UserOperation(bytes20 accountId,address targetContract,string method,bytes32 argsHash,uint256 nonce,uint256 deadline)',
+      'UserOperation(bytes20 accountId,bytes20 coreContract,address targetContract,string method,bytes32 argsHash,uint256 nonce,uint256 deadline)',
     ),
   );
   // Confirm our type hash matches the contract's hardcoded UserOperationTypeHash:
-  // 0x119253f9504b54cfd94660a81a50adef30663ed5a8e9406b871c96df18e0f2f4
+  // 0x577a3a6bd91683e300e814cd25ff6247ab7ca273ddd0153a99919d72ddf9fa04
   assert.equal(
     userOpTypeHash,
-    '0x119253f9504b54cfd94660a81a50adef30663ed5a8e9406b871c96df18e0f2f4',
+    '0x577a3a6bd91683e300e814cd25ff6247ab7ca273ddd0153a99919d72ddf9fa04',
     'UserOperation type hash must match the contract constant',
+  );
+  assert.equal(typedData.message.coreContract, `0x${CORE_CONTRACT_HASH}`);
+  assert.equal(
+    structHash,
+    buildContractCompatibleStructHash({
+      accountIdHash,
+      coreContractHash: CORE_CONTRACT_HASH,
+      targetContract,
+      method,
+      argsHash: argsHashHex,
+      nonce,
+      deadline,
+    }),
+    'typed-data struct hash must match the Web3Auth contract-compatible layout',
+  );
+  assert.equal(
+    signingHash,
+    ethers.keccak256(buildWeb3AuthSigningPayload({
+      chainId: networkId,
+      verifierHash,
+      accountIdHash,
+      coreContractHash: CORE_CONTRACT_HASH,
+      targetContract,
+      method,
+      argsHash: argsHashHex,
+      nonce,
+      deadline,
+    })),
+    'typed-data signing hash must match the raw Web3Auth signing payload',
   );
 
   // All three hashes are deterministic — they must not change between runs.
@@ -892,6 +977,7 @@ test('EIP-712 byte-order convention: SDK expects big-endian hex for accountIdHas
     chainId: 860833102,
     verifyingContract: 'b4107cb2cb4bace0ebe15bc4842890734abe133a',
     accountIdHash: bigEndian,
+    coreContractHash: CORE_CONTRACT_HASH,
     targetContract: '49c095ce04d38642e39155f5481615c58227a498',
     method: 'transfer',
     argsHashHex: argsHash,
@@ -913,6 +999,7 @@ test('EIP-712 byte-order convention: SDK expects big-endian hex for accountIdHas
     chainId: 860833102,
     verifyingContract: 'b4107cb2cb4bace0ebe15bc4842890734abe133a',
     accountIdHash: neoLittleEndian,
+    coreContractHash: CORE_CONTRACT_HASH,
     targetContract: '49c095ce04d38642e39155f5481615c58227a498',
     method: 'transfer',
     argsHashHex: argsHash,
@@ -1038,6 +1125,7 @@ test('contract-compatible signing recipe produces a recoverable 64-byte r||s sig
     chainId: 894710606,
     verifierHash: 'b4107cb2cb4bace0ebe15bc4842890734abe133a',
     accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
+    coreContractHash: CORE_CONTRACT_HASH,
     targetContract: '49c095ce04d38642e39155f5481615c58227a498',
     method: 'transfer',
     argsHash: 'aa'.repeat(32),

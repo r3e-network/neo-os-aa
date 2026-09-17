@@ -1,0 +1,50 @@
+{
+  "network": "mainnet",
+  "network_magic": 860833102,
+  "rpc_url": "https://api.n3index.dev/mainnet",
+  "core_hash": "0x0268a387913b250166ddec032b03332690a1ef78",
+  "admin_hash": "0x6d0656f6dd91469db1c90cc1e574380613f43738",
+  "signer_hash": "0x6d0656f6dd91469db1c90cc1e574380613f43738",
+  "execute_requested": true,
+  "chain_writes_performed": true,
+  "candidate": {
+    "nef_sha256": "0xc634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+    "manifest_sha256": "0x24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+    "method_count": 89,
+    "expected_nef_sha256": "0xc634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b"
+  },
+  "live": {
+    "update_counter": 4,
+    "nef_checksum": 2765313802,
+    "candidate_nef_checksum": 2035992441,
+    "method_count": 64,
+    "has_update_timelock": false
+  },
+  "preview": {
+    "state": "HALT",
+    "gas_consumed": "38820645",
+    "authorized_simulation": true,
+    "authorization_gate_rejected_unwitnessed_call": false,
+    "exception": null
+  },
+  "next_action": "run downstream AA interface and application acceptance checks",
+  "generated_at_utc": "2026-09-15T10:37:21.355Z",
+  "broadcast_status": "confirmed_halt",
+  "transaction": {
+    "txid": "0x8b93cf7c9b5fa3ac74ea7b12ebcf384ccce2ec8376220ea8a375541880de609a",
+    "block": 13245950,
+    "vmstate": "HALT",
+    "system_fee": "38820645",
+    "network_fee": "800884"
+  },
+  "post_update": {
+    "update_counter": 5,
+    "nef_checksum": 2035992441,
+    "deployed_script_matches_candidate": true,
+    "deployed_manifest_matches_candidate": true,
+    "has_transfer_admin": false,
+    "independent_rpc_verified": true
+  },
+  "evidence_file": "docs/reports/mainnet-unified-smart-wallet-upgrade-20260915-evidence.json",
+  "verification_note": "Recovered actual transaction from containing block after correcting local NEF hex decoding; no second broadcast."
+}

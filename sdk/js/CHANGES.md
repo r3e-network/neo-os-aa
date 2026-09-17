@@ -5,7 +5,7 @@
 ### Problem
 The Web3AuthVerifier contract uses a CUSTOM struct hash (not standard EIP-712). The contract's `BuildMetaTxStructHash` computes:
 ```
-keccak256(UserOperationTypeHash || ToBytes20Word(accountId) || ToAddressWord(targetContract) || keccak256(method) || keccak256(serializedArgs) || ToUint256Word(nonce) || ToUint256Word(deadline))
+keccak256(UserOperationTypeHash || ToBytes20Word(accountId) || ToBytes20Word(coreContract) || ToAddressWord(targetContract) || keccak256(method) || keccak256(serializedArgs) || ToUint256Word(nonce) || ToUint256Word(deadline))
 ```
 
 But the JS SDK's `createEIP712Payload` in `sdk/js/src/index.js` builds standard EIP-712 typed data that ethers signs with `signTypedData`. These produce DIFFERENT hashes because:

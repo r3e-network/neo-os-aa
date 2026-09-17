@@ -12,7 +12,7 @@ namespace Neo.SmartContract.Examples
 {
     public partial class SocialRecoveryVerifier
     {
-        public static bool VerifyExecution(ByteString accountId)
+        public static bool VerifyExecution(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
             UInt160 owner = GetOwner(accountId);
@@ -23,7 +23,7 @@ namespace Neo.SmartContract.Examples
             return session.Executor != UInt160.Zero && Runtime.CheckWitness(session.Executor);
         }
 
-        public static bool VerifyExecutionMetaTx(ByteString accountId, UInt160[] signerHashes)
+        public static bool VerifyExecutionMetaTx(UInt160 accountId, UInt160[] signerHashes)
         {
             ValidateAccountId(accountId, "accountId");
             if (signerHashes == null || signerHashes.Length == 0) return false;
@@ -43,14 +43,14 @@ namespace Neo.SmartContract.Examples
             return false;
         }
 
-        public static bool VerifyAdmin(ByteString accountId)
+        public static bool VerifyAdmin(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
             UInt160 owner = GetOwner(accountId);
             return owner != UInt160.Zero && Runtime.CheckWitness(owner);
         }
 
-        public static bool VerifyAdminMetaTx(ByteString accountId, UInt160[] signerHashes)
+        public static bool VerifyAdminMetaTx(UInt160 accountId, UInt160[] signerHashes)
         {
             ValidateAccountId(accountId, "accountId");
             if (signerHashes == null || signerHashes.Length == 0) return false;
@@ -63,95 +63,95 @@ namespace Neo.SmartContract.Examples
             return false;
         }
 
-        public static bool Verify(ByteString accountId)
+        public static bool Verify(UInt160 accountId)
         {
             return VerifyExecution(accountId);
         }
 
-        public static bool VerifyMetaTx(ByteString accountId, UInt160[] signerHashes)
+        public static bool VerifyMetaTx(UInt160 accountId, UInt160[] signerHashes)
         {
             return VerifyExecutionMetaTx(accountId, signerHashes);
         }
 
         [Safe]
-        public static UInt160 GetOwner(ByteString accountId)
+        public static UInt160 GetOwner(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_OWNER, accountId));
             return data == null ? UInt160.Zero : (UInt160)data;
         }
 
         [Safe]
-        public static UInt160 GetAAContract(ByteString accountId)
+        public static UInt160 GetAAContract(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_AA_CONTRACT, accountId));
             return data == null ? UInt160.Zero : (UInt160)data;
         }
 
         [Safe]
-        public static UInt160 GetAccountAddress(ByteString accountId)
+        public static UInt160 GetAccountAddress(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_ACCOUNT_ADDRESS, accountId));
             return data == null ? UInt160.Zero : (UInt160)data;
         }
 
         [Safe]
-        public static UInt160 GetMorpheusOracle(ByteString accountId)
+        public static UInt160 GetMorpheusOracle(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_MORPHEUS_ORACLE, accountId));
             return data == null ? UInt160.Zero : (UInt160)data;
         }
 
         [Safe]
-        public static string GetNetwork(ByteString accountId)
+        public static string GetNetwork(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_NETWORK, accountId));
             return data == null ? string.Empty : (string)data;
         }
 
         [Safe]
-        public static string GetAccountIdText(ByteString accountId)
+        public static string GetAccountIdText(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_ACCOUNT_ID_TEXT, accountId));
             return data == null ? string.Empty : (string)data;
         }
 
         [Safe]
-        public static BigInteger GetThreshold(ByteString accountId)
+        public static BigInteger GetThreshold(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_THRESHOLD, accountId));
             return data == null ? 0 : (BigInteger)data;
         }
 
         [Safe]
-        public static ulong GetTimelock(ByteString accountId)
+        public static ulong GetTimelock(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_TIMELOCK, accountId));
             return data == null ? 0 : (ulong)(BigInteger)data;
         }
 
         [Safe]
-        public static BigInteger GetRecoveryNonce(ByteString accountId)
+        public static BigInteger GetRecoveryNonce(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_RECOVERY_NONCE, accountId));
             return data == null ? 0 : (BigInteger)data;
         }
 
         [Safe]
-        public static BigInteger GetSessionNonce(ByteString accountId)
+        public static BigInteger GetSessionNonce(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_SESSION_NONCE, accountId));
             return data == null ? 0 : (BigInteger)data;
         }
 
         [Safe]
-        public static ECPoint GetMorpheusVerifier(ByteString accountId)
+        public static ECPoint GetMorpheusVerifier(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_MORPHEUS_VERIFIER, accountId));
             return data == null ? null! : (ECPoint)(byte[])data;
         }
 
         [Safe]
-        public static ByteString[] GetMasterNullifiers(ByteString accountId)
+        public static ByteString[] GetMasterNullifiers(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_FACTORS, accountId));
             if (data == null) return new ByteString[] { };
@@ -159,7 +159,7 @@ namespace Neo.SmartContract.Examples
         }
 
         [Safe]
-        public static bool IsAllowedMasterNullifier(ByteString accountId, ByteString masterNullifier)
+        public static bool IsAllowedMasterNullifier(UInt160 accountId, ByteString masterNullifier)
         {
             if (masterNullifier == null || masterNullifier.Length != FIXED_HASH_LENGTH) return false;
             ByteString[] factors = GetMasterNullifiers(accountId);
@@ -171,14 +171,14 @@ namespace Neo.SmartContract.Examples
         }
 
         [Safe]
-        public static bool IsActionNullifierUsed(ByteString accountId, ByteString actionNullifier)
+        public static bool IsActionNullifierUsed(UInt160 accountId, ByteString actionNullifier)
         {
             if (actionNullifier == null || actionNullifier.Length != FIXED_HASH_LENGTH) return false;
             return Storage.Get(Storage.CurrentContext, UsedActionKey(accountId, actionNullifier)) != null;
         }
 
         [Safe]
-        public static PendingRecovery GetPendingRecovery(ByteString accountId)
+        public static PendingRecovery GetPendingRecovery(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
             ByteString? active = Storage.Get(Storage.CurrentContext, Key(PREFIX_PENDING_ACTIVE, accountId));
@@ -206,7 +206,7 @@ namespace Neo.SmartContract.Examples
         }
 
         [Safe]
-        public static ActiveSession GetActiveSession(ByteString accountId)
+        public static ActiveSession GetActiveSession(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_ACTIVE_SESSION, accountId));

@@ -22,6 +22,7 @@ const USER_OP = {
   chainId: 894710606,
   accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
   verifierHash: 'b4107cb2cb4bace0ebe15bc4842890734abe133a',
+  coreContractHash: 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2',
   masterHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
   accountAddressScriptHash: '13ef519c362973f9a34648a9eac5b71250b2a80a',
   targetContract: '49c095ce04d38642e39155f5481615c58227a498',
@@ -40,6 +41,7 @@ test('frontend, SDK, and UserOpBuilder produce byte-identical V3 EIP-712 digests
     chainId: USER_OP.chainId,
     verifyingContract: USER_OP.verifierHash,
     accountIdHash: USER_OP.accountIdHash,
+    coreContractHash: USER_OP.coreContractHash,
     targetContract: USER_OP.targetContract,
     method: USER_OP.method,
     argsHashHex: USER_OP.argsHashHex,
@@ -50,6 +52,7 @@ test('frontend, SDK, and UserOpBuilder produce byte-identical V3 EIP-712 digests
     chainId: USER_OP.chainId,
     verifyingContract: USER_OP.verifierHash,
     accountIdHash: USER_OP.accountIdHash,
+    coreContractHash: USER_OP.coreContractHash,
     targetContract: USER_OP.targetContract,
     method: USER_OP.method,
     argsHashHex: USER_OP.argsHashHex,
@@ -61,6 +64,7 @@ test('frontend, SDK, and UserOpBuilder produce byte-identical V3 EIP-712 digests
     .setTarget(USER_OP.targetContract)
     .setMethod(USER_OP.method)
     .setVerifier(USER_OP.verifierHash)
+    .setCoreContract(USER_OP.coreContractHash)
     .setChainId(USER_OP.chainId)
     .setNonce(USER_OP.nonce)
     .setDeadline(USER_OP.deadline)
@@ -110,6 +114,7 @@ test('frontend builders carry the SDK validation guards', () => {
     chainId: USER_OP.chainId,
     verifyingContract: USER_OP.verifierHash,
     accountIdHash: USER_OP.accountIdHash,
+    coreContractHash: USER_OP.coreContractHash,
     targetContract: USER_OP.targetContract,
     method: USER_OP.method,
     argsHashHex: USER_OP.argsHashHex,
@@ -129,6 +134,11 @@ test('frontend builders carry the SDK validation guards', () => {
   assert.throws(
     () => buildV3UserOperationTypedData({ ...base, deadline: undefined }),
     { code: 'METATX_DEADLINE_REQUIRED' },
+  );
+  assert.throws(
+    () => buildV3UserOperationTypedData({ ...base, coreContractHash: '' }),
+    { code: 'METATX_CORE_CONTRACT_REQUIRED' },
+    'an AA core hash is required to prevent cross-core signature replay',
   );
   assert.throws(
     () => buildMetaTransactionTypedData({

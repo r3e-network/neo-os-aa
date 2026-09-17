@@ -11,15 +11,15 @@ const DOC_DEFINITIONS = {
   overview: {
     title: { en: 'Overview & Verified Status', 'zh-CN': '概览与已验证状态' },
     loaders: {
-      en: () => import('@repo/README.md?raw'),
+      en: () => import('@/assets/docs/repo-readme.md?raw'),
       'zh-CN': () => import('@/assets/docs/overview.zh.md?raw'),
     },
   },
   architecture: {
     title: { en: 'Core Architecture', 'zh-CN': '核心架构' },
     loaders: {
-      en: () => import('@repo/docs/AA_V3_ARCHITECTURE.en.md?raw'),
-      'zh-CN': () => import('@repo/docs/AA_V3_ARCHITECTURE.zh-CN.md?raw'),
+      en: () => import('@/assets/docs/AA_V3_ARCHITECTURE.en.md?raw'),
+      'zh-CN': () => import('@/assets/docs/AA_V3_ARCHITECTURE.zh-CN.md?raw'),
     },
   },
   workflow: {
@@ -75,22 +75,22 @@ const DOC_DEFINITIONS = {
   paymasterValidation: {
     title: { en: 'Paymaster Readiness', 'zh-CN': 'Paymaster 就绪状态' },
     loaders: {
-      en: () => import('@repo/docs/PAYMASTER_RELAY_VALIDATION.md?raw'),
+      en: () => import('@/assets/docs/PAYMASTER_RELAY_VALIDATION.md?raw'),
       'zh-CN': () => import('@/assets/docs/paymaster-validation.zh.md?raw'),
     },
   },
   securityAudit: {
     title: { en: 'Security Audit', 'zh-CN': '安全审计' },
     loaders: {
-      en: () => import('@repo/docs/SECURITY_AUDIT.md?raw'),
+      en: () => import('@/assets/docs/SECURITY_AUDIT.md?raw'),
       'zh-CN': () => import('@/assets/docs/security-audit.zh.md?raw'),
     },
   },
   morpheusActions: {
     title: { en: 'Morpheus Private Actions', 'zh-CN': 'Morpheus 私密操作' },
     loaders: {
-      en: () => import('@repo/docs/MORPHEUS_PRIVATE_ACTIONS.md?raw'),
-      'zh-CN': () => import('@repo/docs/MORPHEUS_PRIVATE_ACTIONS.zh-CN.md?raw'),
+      en: () => import('@/assets/docs/MORPHEUS_PRIVATE_ACTIONS.md?raw'),
+      'zh-CN': () => import('@/assets/docs/MORPHEUS_PRIVATE_ACTIONS.zh-CN.md?raw'),
     },
   },
 };

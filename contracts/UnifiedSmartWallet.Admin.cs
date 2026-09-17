@@ -19,8 +19,8 @@ namespace AbstractAccount
         // first proposes the sha256 of the new NEF and manifest, then can only apply that
         // exact artifact pair after a >= 7-day window, giving account owners an escape
         // window. These prefixes were never written by previous deployments.
-        private static readonly byte[] Prefix_PendingUpdateNefHash = new byte[] { 0x12 };
-        private static readonly byte[] Prefix_PendingUpdateManifestHash = new byte[] { 0x13 };
+        private static readonly byte[] Prefix_PendingUpdateNefHash = new byte[] { 0x1A };
+        private static readonly byte[] Prefix_PendingUpdateManifestHash = new byte[] { 0x1B };
         private static readonly byte[] Prefix_UpdateTimelock = new byte[] { 0x14 };
         private static readonly BigInteger MinUpgradeDelayMs = 7L * 24 * 60 * 60 * 1000;
 
@@ -34,10 +34,7 @@ namespace AbstractAccount
         // the same >= 7-day window, giving account owners an escape window and proving the new
         // admin key is live before the role moves. These prefixes were never written by
         // previous deployments. Reuses MinUpgradeDelayMs so the rotation window matches the
-        // upgrade window. The renumber of the value-colliding prefixes (0x12/0x13) to make
-        // every byte globally unique is intentionally DEFERRED: it would change the storage
-        // layout and require a redeploy/migration. See the STORAGE PREFIX MAP in
-        // UnifiedSmartWallet.cs for why the current allocation is collision-safe today.
+        // upgrade window.
         private static readonly byte[] Prefix_PendingContractAdmin = new byte[] { 0x15 };
         private static readonly byte[] Prefix_AdminTransferTimelock = new byte[] { 0x16 };
 
@@ -71,6 +68,8 @@ namespace AbstractAccount
             ValidateAdmin();
             ExecutionEngine.Assert(nefHash != UInt256.Zero && nefHash.IsValid, "Invalid NEF hash");
             ExecutionEngine.Assert(manifestHash != UInt256.Zero && manifestHash.IsValid, "Invalid manifest hash");
+            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix12);
+            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix13);
             Storage.Put(Storage.CurrentContext, Prefix_PendingUpdateNefHash, (byte[])nefHash);
             Storage.Put(Storage.CurrentContext, Prefix_PendingUpdateManifestHash, (byte[])manifestHash);
             Storage.Put(Storage.CurrentContext, Prefix_UpdateTimelock, Runtime.Time);
@@ -82,6 +81,8 @@ namespace AbstractAccount
             ValidateAdmin();
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
+            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix12);
+            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix13);
             Storage.Delete(Storage.CurrentContext, Prefix_UpdateTimelock);
         }
 
@@ -94,9 +95,9 @@ namespace AbstractAccount
         public static void Update(ByteString nef, string manifest)
         {
             ValidateAdmin();
-            ByteString? pendingNef = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
+            ByteString? pendingNef = GetPendingUpdateNefHash();
             ExecutionEngine.Assert(pendingNef != null, "No pending update");
-            ByteString? pendingManifest = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
+            ByteString? pendingManifest = GetPendingUpdateManifestHash();
             ExecutionEngine.Assert(pendingManifest != null, "No pending update");
             ByteString? timelockData = Storage.Get(Storage.CurrentContext, Prefix_UpdateTimelock);
             ExecutionEngine.Assert(timelockData != null, "No timelock set");
@@ -105,8 +106,22 @@ namespace AbstractAccount
             ExecutionEngine.Assert((UInt256)CryptoLib.Sha256(manifest) == (UInt256)pendingManifest!, "Manifest hash mismatch");
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
+            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix12);
+            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix13);
             Storage.Delete(Storage.CurrentContext, Prefix_UpdateTimelock);
             ContractManagement.Update(nef, manifest);
+        }
+
+        private static ByteString? GetPendingUpdateNefHash()
+        {
+            ByteString? value = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
+            return value ?? Storage.Get(Storage.CurrentContext, LegacyStoragePrefix12);
+        }
+
+        private static ByteString? GetPendingUpdateManifestHash()
+        {
+            ByteString? value = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
+            return value ?? Storage.Get(Storage.CurrentContext, LegacyStoragePrefix13);
         }
 
         /// <summary>Alias for <see cref="Update"/>, mirroring the verifier/hook upgrade naming.</summary>

@@ -41,7 +41,10 @@ export const DEFAULT_RPC_URL = MAINNET_REGISTRY.rpcUrl;
 export const DEFAULT_RPC_URL_TESTNET = TESTNET_REGISTRY.rpcUrl;
 export const DEFAULT_RELAY_ENDPOINT = '/api/relay-transaction';
 export const DEFAULT_EXPLORER_BASE_URL = 'https://neotube.io/tx/';
-export const DEFAULT_MATRIX_CONTRACT_HASH = '89908093c5ccc463e2c5744d6bacb06108b60a75';
+// Matrix NameService is network-scoped; each hash comes from the reviewed
+// Morpheus registry, never from the other network's fallback.
+export const DEFAULT_MATRIX_CONTRACT_HASH = stripHexPrefix(MAINNET_REGISTRY.contracts.matrixNameService || '');
+export const DEFAULT_MATRIX_CONTRACT_HASH_TESTNET = stripHexPrefix(TESTNET_REGISTRY.contracts.matrixNameService || '');
 export const DEFAULT_N3INDEX_API_BASE_URL = 'https://api.n3index.dev';
 export const DEFAULT_N3INDEX_NETWORK = 'mainnet';
 export const DEFAULT_NEO_NNS_CONTRACT_HASH = '50ac1c37690cc2cfc594472833cf57505d5f46de';
@@ -196,9 +199,10 @@ export function getRuntimeConfig(env = import.meta.env ?? {}) {
       env.VITE_AA_EXPLORER_BASE_URL || env.VITE_EXPLORER_BASE_URL,
       DEFAULT_EXPLORER_BASE_URL
     ),
-    matrixContractHash: resolveAbstractAccountHash(
-      env.VITE_AA_MATRIX_CONTRACT_HASH || env.VITE_MATRIX_CONTRACT_HASH || env.VITE_MATRIX_CONTRACT_HASH_TESTNET,
-      DEFAULT_MATRIX_CONTRACT_HASH
+    matrixContractHash: resolveOptionalHash(
+      (runtimeNetwork === 'testnet' ? env.VITE_MATRIX_CONTRACT_HASH_TESTNET : env.VITE_MATRIX_CONTRACT_HASH_MAINNET)
+        || env.VITE_AA_MATRIX_CONTRACT_HASH || env.VITE_MATRIX_CONTRACT_HASH,
+      runtimeNetwork === 'testnet' ? DEFAULT_MATRIX_CONTRACT_HASH_TESTNET : DEFAULT_MATRIX_CONTRACT_HASH
     ),
     addressMarketHash: resolveOptionalHash(
       env.VITE_AA_MARKET_HASH || env.VITE_AA_ADDRESS_MARKET_HASH,

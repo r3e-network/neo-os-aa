@@ -13,7 +13,7 @@ namespace Neo.SmartContract.Examples
     public partial class SocialRecoveryVerifier
     {
         private static void StoreConfig(
-            ByteString accountId,
+            UInt160 accountId,
             string accountIdText,
             string network,
             UInt160 owner,
@@ -37,7 +37,7 @@ namespace Neo.SmartContract.Examples
             Storage.Put(Storage.CurrentContext, Key(PREFIX_MORPHEUS_VERIFIER, accountId), (byte[])morpheusVerifier);
         }
 
-        private static void SavePendingRecovery(ByteString accountId, PendingRecovery pending)
+        private static void SavePendingRecovery(UInt160 accountId, PendingRecovery pending)
         {
             Storage.Put(Storage.CurrentContext, Key(PREFIX_PENDING_NEW_OWNER, accountId), pending.NewOwner);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_PENDING_NONCE, accountId), pending.RecoveryNonce);
@@ -47,7 +47,7 @@ namespace Neo.SmartContract.Examples
             Storage.Put(Storage.CurrentContext, Key(PREFIX_PENDING_ACTIVE, accountId), pending.Active ? 1 : 0);
         }
 
-        private static void DeletePendingRecovery(ByteString accountId)
+        private static void DeletePendingRecovery(UInt160 accountId)
         {
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_PENDING_NEW_OWNER, accountId));
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_PENDING_NONCE, accountId));
@@ -57,7 +57,7 @@ namespace Neo.SmartContract.Examples
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_PENDING_ACTIVE, accountId));
         }
 
-        private static void SaveActiveSession(ByteString accountId, ActiveSession session)
+        private static void SaveActiveSession(UInt160 accountId, ActiveSession session)
         {
             Storage.Put(Storage.CurrentContext, Key(PREFIX_ACTIVE_SESSION, accountId), StdLib.Serialize(session));
         }
@@ -96,23 +96,23 @@ namespace Neo.SmartContract.Examples
             Storage.Delete(Storage.CurrentContext, OracleActionRequestKey(requestId));
         }
 
-        private static void MarkFactorApproved(ByteString accountId, BigInteger recoveryNonce, ByteString masterNullifier)
+        private static void MarkFactorApproved(UInt160 accountId, BigInteger recoveryNonce, ByteString masterNullifier)
         {
             Storage.Put(Storage.CurrentContext, ApprovalKey(accountId, recoveryNonce, masterNullifier), 1);
         }
 
-        private static bool HasApprovedFactor(ByteString accountId, BigInteger recoveryNonce, ByteString masterNullifier)
+        private static bool HasApprovedFactor(UInt160 accountId, BigInteger recoveryNonce, ByteString masterNullifier)
         {
             return Storage.Get(Storage.CurrentContext, ApprovalKey(accountId, recoveryNonce, masterNullifier)) != null;
         }
 
-        private static void MarkActionNullifierUsed(ByteString accountId, ByteString actionNullifier)
+        private static void MarkActionNullifierUsed(UInt160 accountId, ByteString actionNullifier)
         {
             Storage.Put(Storage.CurrentContext, UsedActionKey(accountId, actionNullifier), 1);
         }
 
         private static void ActivateActionSessionInternal(
-            ByteString accountId,
+            UInt160 accountId,
             UInt160 executor,
             string actionId,
             ulong expiresAt,

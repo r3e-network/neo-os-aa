@@ -11,6 +11,8 @@ namespace AbstractAccount
     public partial class UnifiedSmartWallet
     {
         private const string AccountImplementationId = "org.r3e.neo.aa.unified-smart-wallet.v3";
+        private static readonly byte[] ERC1271_MAGIC_VALUE = new byte[] { 0x16, 0x26, 0xBA, 0x7E };
+        private static readonly byte[] ERC1271_INVALID_VALUE = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF };
 
         private static AccountState GetAccountState(UInt160 accountId)
         {
@@ -55,6 +57,40 @@ namespace AbstractAccount
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Neo adapter for ERC-1271 contract-wallet message validation.
+        ///
+        /// The four-byte result is intentionally the ERC-1271 magic value so a
+        /// relayer or cross-chain adapter can consume the same success signal.
+        /// Verifiers must explicitly implement and advertise
+        /// supportsMessageSignatures; UserOperation validation is never reused
+        /// as a generic message signature check.
+        /// </summary>
+        [Safe]
+        public static ByteString IsValidSignature(UInt160 accountId, ByteString hash, ByteString signature)
+        {
+            ExecutionEngine.Assert(hash != null && hash.Length == 32, "Invalid message hash");
+            ExecutionEngine.Assert(
+                signature != null && (signature.Length == 64 || signature.Length == 65),
+                "Invalid message signature");
+            AccountState state = GetAccountState(accountId);
+            if (state.Verifier == UInt160.Zero) return (ByteString)ERC1271_INVALID_VALUE;
+
+            bool supported = (bool)Contract.Call(
+                state.Verifier,
+                "supportsMessageSignatures",
+                CallFlags.ReadOnly,
+                new object[] { });
+            if (!supported) return (ByteString)ERC1271_INVALID_VALUE;
+
+            bool valid = (bool)Contract.Call(
+                state.Verifier,
+                "isValidSignature",
+                CallFlags.ReadOnly,
+                new object[] { accountId, hash!, signature! });
+            return valid ? (ByteString)ERC1271_MAGIC_VALUE : (ByteString)ERC1271_INVALID_VALUE;
         }
 
         [Safe]

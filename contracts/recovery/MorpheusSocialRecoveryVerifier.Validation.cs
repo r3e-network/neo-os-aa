@@ -40,7 +40,7 @@ namespace Neo.SmartContract.Examples
         }
 
         private static ByteString ComputeActionDigest(
-            ByteString accountId,
+            UInt160 accountId,
             UInt160 executor,
             string actionId,
             ulong expiresAt,
@@ -60,13 +60,13 @@ namespace Neo.SmartContract.Examples
             return CryptoLib.Sha256(payload);
         }
 
-        private static string BuildActionId(ByteString accountId, UInt160 executor, BigInteger sessionNonce, ulong expiresAt)
+        private static string BuildActionId(UInt160 accountId, UInt160 executor, BigInteger sessionNonce, ulong expiresAt)
         {
             ByteString material = (ByteString)GetNetwork(accountId);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)(byte[])GetAAContract(accountId));
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
-            material = Helper.Concat(material, accountId);
+            material = Helper.Concat(material, (ByteString)(byte[])accountId);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)(byte[])executor);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
@@ -76,13 +76,13 @@ namespace Neo.SmartContract.Examples
             return "aa_proxy:" + BytesToHex(CryptoLib.Sha256(material));
         }
 
-        private static string BuildRecoveryActionId(ByteString accountId, UInt160 newOwner, string recoveryNonceText)
+        private static string BuildRecoveryActionId(UInt160 accountId, UInt160 newOwner, string recoveryNonceText)
         {
             ByteString material = (ByteString)GetNetwork(accountId);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)(byte[])GetAAContract(accountId));
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
-            material = Helper.Concat(material, accountId);
+            material = Helper.Concat(material, (ByteString)(byte[])accountId);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)(byte[])newOwner);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
@@ -111,8 +111,8 @@ namespace Neo.SmartContract.Examples
             return result;
         }
 
-        private static byte[] Key(byte prefix, ByteString accountId) =>
-            Helper.Concat(new byte[] { prefix }, accountId);
+        private static byte[] Key(byte prefix, UInt160 accountId) =>
+            Helper.Concat(new byte[] { prefix }, (ByteString)(byte[])accountId);
 
         private static string HashToHex(UInt160 value)
         {
@@ -137,13 +137,13 @@ namespace Neo.SmartContract.Examples
             return ((char)('a' + (value - 10))).ToString();
         }
 
-        private static byte[] UsedActionKey(ByteString accountId, ByteString actionNullifier)
+        private static byte[] UsedActionKey(UInt160 accountId, ByteString actionNullifier)
         {
             byte[] key = Key(PREFIX_USED_ACTION, accountId);
             return Helper.Concat(key, actionNullifier);
         }
 
-        private static byte[] ApprovalKey(ByteString accountId, BigInteger recoveryNonce, ByteString masterNullifier)
+        private static byte[] ApprovalKey(UInt160 accountId, BigInteger recoveryNonce, ByteString masterNullifier)
         {
             byte[] key = Key(PREFIX_APPROVAL, accountId);
             key = Helper.Concat(key, recoveryNonce.ToByteArray());
@@ -160,9 +160,9 @@ namespace Neo.SmartContract.Examples
             return Helper.Concat(new byte[] { PREFIX_ORACLE_ACTION_REQUEST }, requestId.ToByteArray());
         }
 
-        private static void ValidateAccountId(ByteString accountId, string name)
+        private static void ValidateAccountId(UInt160 accountId, string name)
         {
-            ExecutionEngine.Assert(accountId != null && accountId.Length > 0, name + " is required");
+            ExecutionEngine.Assert(accountId != null && accountId.IsValid && accountId != UInt160.Zero, name + " is invalid");
         }
 
         private static void ValidateAddress(UInt160 address, string name)
@@ -211,7 +211,7 @@ namespace Neo.SmartContract.Examples
             ExecutionEngine.Assert(value != null && value.Length == FIXED_SIGNATURE_LENGTH, "invalid verification signature");
         }
 
-        private static void AssertOwner(ByteString accountId)
+        private static void AssertOwner(UInt160 accountId)
         {
             UInt160 owner = GetOwner(accountId);
             ExecutionEngine.Assert(owner != UInt160.Zero && Runtime.CheckWitness(owner), "Not owner");

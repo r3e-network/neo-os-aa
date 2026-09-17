@@ -317,7 +317,11 @@ public class ContractTests
         StringAssert.Contains(source, "public static void PostExecute");
         StringAssert.Contains(source, "if (!DidExecutionSucceed(result)) return;");
         StringAssert.Contains(source, "ExecutionEngine.Assert(IsProtectedTransferSource(accountId, fromAccount), \"Transfer source not permitted\");");
-        StringAssert.Contains(source, "return from == accountId;");
+        // Assets leave from the account's holding address (the core's proxy script
+        // hash), not from the accountId itself, so the protected-source check has to
+        // compare against that address.
+        StringAssert.Contains(source, "return from == AssetAddressOf(accountId);");
+        StringAssert.Contains(source, "Contract.Call(core, \"getProxyScriptHash\", CallFlags.ReadOnly, accountId)");
         StringAssert.Contains(source, "StoreFixedWindowSpent(accountId, targetContract, currentTime, spentToday + amount);");
         Assert.IsFalse(source.Contains("Storage.Put(Storage.CurrentContext, spentKey, newTotal);", StringComparison.Ordinal));
     }
@@ -339,10 +343,13 @@ public class ContractTests
 
         StringAssert.Contains(source, "SetRegistry");
         StringAssert.Contains(source, "\"getBinding\"");
+        StringAssert.Contains(source, "\"getClaimCommitment\"");
+        StringAssert.Contains(source, "RequireCredentialCommitmentForContract");
         StringAssert.Contains(source, "NeoDID registry not configured");
         Assert.IsFalse(source.Contains("IssueCredential(", StringComparison.Ordinal));
         Assert.IsFalse(source.Contains("RevokeCredential(", StringComparison.Ordinal));
         Assert.IsFalse(source.Contains("Prefix_VerifiedCredentials", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("Prefix_RequiredClaimValue", StringComparison.Ordinal));
     }
 
     [TestMethod]

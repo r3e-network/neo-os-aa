@@ -56,8 +56,16 @@ public class Fix_DailyLimitHook_Tests
         StringAssert.Contains(source,
             "Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);",
             "snapshot must iterate the configured-limit set");
-        StringAssert.Contains(source, "BigInteger before = TokenBalanceOf(token, accountId);",
-            "snapshot records each configured token's pre-execution balance");
+        StringAssert.Contains(source, "BigInteger before = TokenBalanceOf(token, AssetAddressOf(accountId));",
+            "snapshot records each configured token's pre-execution balance at the address that holds it");
+        // The accountId never holds a balance: a virtual AA account keeps its assets at
+        // the core's proxy script hash, so metering the id charged nothing against the limit.
+        StringAssert.Contains(source, "HookAuthority.AuthorizedCore()",
+            "the holding address must be derived from the authorized core, not assumed");
+        StringAssert.Contains(source, "Contract.Call(core, \"getProxyScriptHash\", CallFlags.ReadOnly, accountId)",
+            "the hook asks the core for the canonical holding address");
+        Assert.IsFalse(source.Contains("TokenBalanceOf(token, accountId)", StringComparison.Ordinal),
+            "metering must never read the accountId's own balance");
 
         // The pre-fix code only snapshotted the single directly-targeted token; that helper and
         // its single-target metering counterpart must be gone.

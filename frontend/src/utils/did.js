@@ -13,10 +13,8 @@ export function hydrateConnectedDidProfileFromStorage() {
   }
 
   try {
-    const cached = window.localStorage.getItem(DID_STORAGE_KEY);
-    if (cached) {
-      setConnectedDidProfile(JSON.parse(cached));
-    }
+    // Historical localStorage records are display metadata, never login proof.
+    window.localStorage.removeItem(DID_STORAGE_KEY);
   } catch {
     setConnectedDidProfile(null);
   }

@@ -95,7 +95,9 @@ async function read(client, hash, method, params = []) {
 
 async function deploy(client, account, magic, name, suffix) {
   const { nef, manifest } = load(name, suffix);
-  const predicted = hex(experimental.getContractHash(account.scriptHash, nef.checksum, manifest.name));
+  const predicted = hex(
+    experimental.getContractHash(u.HexString.fromHex(account.scriptHash), nef.checksum, manifest.name)
+  );
   const txid = await retry(`deploy ${name}`, () => experimental.deployContract(nef, manifest, cfg(account, magic)));
   const log = await waitLog(client, txid, `deploy ${name}`);
   const deployed = extractDeployedContractHash(log) || predicted;
@@ -320,6 +322,7 @@ async function main() {
     chainId: magic,
     verifierHash: web3auth,
     accountIdHash: id7,
+    coreContractHash: core,
     targetContract: sanitizeHex(GAS),
     method,
     argsHash,

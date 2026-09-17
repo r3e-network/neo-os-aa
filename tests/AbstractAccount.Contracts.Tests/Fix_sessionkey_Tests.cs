@@ -24,11 +24,15 @@ public class Fix_SessionKey_Tests
         public RuntimeFixture Fx { get; } = new();
         public UInt160 Core { get; }
         public UInt160 Target { get; }
+        public UInt160 Owner { get; } = UInt160.Parse("0x2222222222222222222222222222222222222222");
+        public UInt160 Attacker { get; } = UInt160.Parse("0x3333333333333333333333333333333333333333");
 
         public Harness()
         {
             Core = Fx.Deploy("MockVerifierCore");
             Target = Fx.Deploy("MockTransferTarget");
+            Fx.CallVoid(Core, "setBackupOwner", AccountId, Owner);
+            Fx.SetSigners(Owner);
         }
 
         public UInt160 DeployVerifier() => Fx.Deploy("verifiers/SessionKeyVerifier", Core.ToArray());
@@ -38,6 +42,13 @@ public class Fix_SessionKey_Tests
             BigInteger validUntil = Fx.Now() + 86_400_000; // 24h
             Fx.CallVoid(Core, "forward", verifier, "setSessionKey",
                 new object?[] { AccountId, pubKey, Target, method, validUntil, spendingLimit, "fix suite" });
+        }
+
+        public void SetSessionKeyDirect(UInt160 verifier, byte[] pubKey)
+        {
+            BigInteger validUntil = Fx.Now() + 86_400_000;
+            Fx.CallVoid(verifier, "setSessionKey",
+                AccountId, pubKey, Target, "transfer", validUntil, 1000, "direct owner suite");
         }
     }
 
@@ -139,5 +150,36 @@ public class Fix_SessionKey_Tests
 
         Neo.VM.Types.Array state = h.Fx.SingleNotificationState(verifier, "SessionKeyGranted");
         Assert.IsTrue(state[UncappedFlagIndex].GetBoolean(), "Zero-limit transfer session key must be flagged uncapped");
+    }
+
+    [TestMethod]
+    public void BackupOwner_CanConfigureAndClearSessionKeyDirectly()
+    {
+        Harness h = new();
+        using P256SessionKey key = new();
+        UInt160 verifier = h.DeployVerifier();
+
+        h.SetSessionKeyDirect(verifier, key.CompressedPublicKey);
+        Assert.AreNotEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", AccountId));
+
+        h.Fx.CallVoid(verifier, "clearSessionKey", AccountId);
+        Assert.AreEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", AccountId));
+    }
+
+    [TestMethod]
+    public void NonOwner_CannotConfigureOrClearSessionKeyDirectly()
+    {
+        Harness h = new();
+        using P256SessionKey key = new();
+        UInt160 verifier = h.DeployVerifier();
+        h.Fx.SetSigners(h.Attacker);
+
+        TestException configureRejected = Assert.ThrowsExactly<TestException>(
+            () => h.SetSessionKeyDirect(verifier, key.CompressedPublicKey));
+        StringAssert.Contains(configureRejected.Message, "Backup owner witness required");
+
+        TestException clearRejected = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(verifier, "clearSessionKey", AccountId));
+        StringAssert.Contains(clearRejected.Message, "Backup owner witness required");
     }
 }

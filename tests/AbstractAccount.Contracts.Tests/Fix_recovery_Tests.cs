@@ -224,7 +224,7 @@ public class FixRecoveryTests
         h.Fx.FundGasFromValidators(OwnerA, 10_000_000);
         h.Fx.SetSigners(OwnerA);
 
-        byte[] unknownAccount = Encoding.ASCII.GetBytes("never-setup");
+        byte[] unknownAccount = AccountAddress.ToArray();
         TestException rejected = Assert.ThrowsExactly<TestException>(
             () => h.Fx.TransferGas(OwnerA, h.Verifier, 1_000_000, unknownAccount));
         StringAssert.Contains(rejected.Message, "Recovery not setup");

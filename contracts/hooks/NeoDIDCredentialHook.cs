@@ -3,6 +3,7 @@ using Neo;
 using Neo.SmartContract;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
+using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
@@ -20,14 +21,13 @@ namespace AbstractAccount.Hooks
     [ContractPermission("*", "canExecuteHook")]
     [ContractPermission("*", "canConfigureHook")]
     [ContractPermission("*", "getBinding")]
+    [ContractPermission("*", "getClaimCommitment")]
     [ManifestExtra("Description", "NeoDID Credential Check Hook")]
     public class NeoDIDCredentialHook : SmartContract
     {
         private static readonly byte[] Prefix_RequiredProvider = new byte[] { 0x01 };
         private static readonly byte[] Prefix_RequiredClaimType = new byte[] { 0x02 };
-        private static readonly byte[] Prefix_RequiredClaimValue = new byte[] { 0x03 };
-        private static readonly byte[] Prefix_Registry = new byte[] { 0x04 };
-
+        private static readonly byte[] Prefix_RequiredClaimCommitment = new byte[] { 0x03 };
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
 
         [Safe]
@@ -42,6 +42,10 @@ namespace AbstractAccount.Hooks
         public static void ConfirmAdminRotation(UInt160 newAdmin) => HookAuthority.ConfirmAdminRotation(newAdmin);
         public static void CancelAdminRotation() => HookAuthority.CancelAdminRotation();
 
+        public static void ProposeRegistry(UInt160 registryContract) => HookAuthority.ProposeRegistry(registryContract);
+        public static void ConfirmRegistry(UInt160 registryContract) => HookAuthority.ConfirmRegistry(registryContract);
+        public static void CancelRegistryChange() => HookAuthority.CancelRegistryChange();
+
         // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => HookAuthority.ProposeUpdate(nefHash, manifestHash);
@@ -55,26 +59,24 @@ namespace AbstractAccount.Hooks
         [Safe]
         public static UInt160 GetRegistry()
         {
-            ByteString? raw = Storage.Get(Storage.CurrentContext, Prefix_Registry);
-            return raw == null ? UInt160.Zero : (UInt160)raw;
+            return HookAuthority.Registry();
         }
 
         public static void SetRegistry(UInt160 registryContract)
         {
-            HookAuthority.ValidateAdminCaller();
-            ExecutionEngine.Assert(registryContract != UInt160.Zero && registryContract.IsValid, "Invalid NeoDID registry");
-            Storage.Put(Storage.CurrentContext, Prefix_Registry, (byte[])registryContract);
+            HookAuthority.SetRegistry(registryContract);
         }
 
         /// <summary>
-        /// Declares which NeoDID provider/claim pair is required before the account may call a target contract.
+        /// Declares the exact privacy-preserving NeoDID commitment required before the account may call a target contract.
+        /// Plaintext claim values are deliberately not accepted or stored.
         /// </summary>
-        public static void RequireCredentialForContract(
+        public static void RequireCredentialCommitmentForContract(
             UInt160 accountId,
             UInt160 targetContract,
             string provider,
             string claimType,
-            string claimValue)
+            ByteString claimCommitment)
         {
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
             if (string.IsNullOrEmpty(provider) || string.IsNullOrEmpty(claimType))
@@ -83,18 +85,14 @@ namespace AbstractAccount.Hooks
                 return;
             }
 
+            ExecutionEngine.Assert(claimCommitment != null && claimCommitment.Length == 32,
+                "claim commitment must be 32 bytes");
+
             Storage.Put(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredProvider, accountId, targetContract), provider);
             Storage.Put(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredClaimType, accountId, targetContract), claimType);
-
-            byte[] claimValueKey = BuildTargetScopedKey(Prefix_RequiredClaimValue, accountId, targetContract);
-            if (string.IsNullOrEmpty(claimValue))
-            {
-                Storage.Delete(Storage.CurrentContext, claimValueKey);
-            }
-            else
-            {
-                Storage.Put(Storage.CurrentContext, claimValueKey, claimValue);
-            }
+            Storage.Put(Storage.CurrentContext,
+                BuildTargetScopedKey(Prefix_RequiredClaimCommitment, accountId, targetContract),
+                (byte[])claimCommitment!);
         }
 
         /// <summary>
@@ -124,12 +122,21 @@ namespace AbstractAccount.Hooks
             bool active = (bool)binding[8];
             ExecutionEngine.Assert(active, "NeoDID Credential Missing");
 
-            string expectedClaimValue = ReadRequiredString(Prefix_RequiredClaimValue, accountId, targetContract);
-            if (expectedClaimValue.Length > 0)
-            {
-                string actualClaimValue = (string)binding[3];
-                ExecutionEngine.Assert(actualClaimValue == expectedClaimValue, "NeoDID Claim Value Mismatch");
-            }
+            ByteString? expectedCommitment = Storage.Get(
+                Storage.CurrentContext,
+                BuildTargetScopedKey(Prefix_RequiredClaimCommitment, accountId, targetContract));
+            ExecutionEngine.Assert(expectedCommitment != null && expectedCommitment.Length == 32,
+                "NeoDID commitment requirement missing");
+
+            ByteString actualCommitment = (ByteString)Contract.Call(
+                registry,
+                "getClaimCommitment",
+                CallFlags.ReadOnly,
+                new object[] { accountId, provider, claimType });
+            ExecutionEngine.Assert(actualCommitment != null && actualCommitment.Length == 32,
+                "NeoDID commitment missing");
+            ExecutionEngine.Assert(StdLib.MemoryCompare(actualCommitment!, expectedCommitment!) == 0,
+                "NeoDID commitment mismatch");
         }
 
         public static void PostExecute(UInt160 accountId, object[] opParams, object result)
@@ -145,7 +152,7 @@ namespace AbstractAccount.Hooks
 
             ClearPrefixForAccount(Prefix_RequiredProvider, accountId);
             ClearPrefixForAccount(Prefix_RequiredClaimType, accountId);
-            ClearPrefixForAccount(Prefix_RequiredClaimValue, accountId);
+            ClearPrefixForAccount(Prefix_RequiredClaimCommitment, accountId);
         }
 
         private static void ClearPrefixForAccount(byte[] prefix, UInt160 accountId)
@@ -162,7 +169,7 @@ namespace AbstractAccount.Hooks
         {
             Storage.Delete(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredProvider, accountId, targetContract));
             Storage.Delete(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredClaimType, accountId, targetContract));
-            Storage.Delete(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredClaimValue, accountId, targetContract));
+            Storage.Delete(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredClaimCommitment, accountId, targetContract));
         }
 
         private static byte[] BuildTargetScopedKey(byte[] prefix, UInt160 accountId, UInt160 targetContract)
@@ -175,5 +182,6 @@ namespace AbstractAccount.Hooks
             ByteString? raw = Storage.Get(Storage.CurrentContext, BuildTargetScopedKey(prefix, accountId, targetContract));
             return raw == null ? "" : (string)raw;
         }
+
     }
 }

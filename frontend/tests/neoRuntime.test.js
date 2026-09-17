@@ -96,13 +96,29 @@ test('deriveRegistrationAccountIdHash rejects escape timelocks outside the contr
 test('createVerifyScript matches the V3 verify script encoding', () => {
   const script = createVerifyScript(
     '5be915aea3ce85e4752d522632f0a9520e377aaf',
-    '56e5bbd0603bdf01699c047b2397ee0e'
+    REGISTRATION_VECTOR_DISPLAY_HEX
   );
 
   assert.equal(
     script,
-    '0c14f951cd3eb5196dacde99b339c5dcca37ac38cc2211c01f0c067665726966790c14af7a370e52a9f03226522d75e485cea3ae15e95b41627d5b52'
+    '0c1430d56297577a2645bbc31d821b5ea4fc4312c02711c01f0c067665726966790c14af7a370e52a9f03226522d75e485cea3ae15e95b41627d5b52'
   );
+});
+
+test('frontend and SDK derive one canonical virtual account address', () => {
+  const coreHash = '0123456789abcdef0123456789abcdef01234567';
+  const accountId = '89abcdef0123456789abcdef0123456789abcdef';
+  const expectedScript = '0c14efcdab8967452301efcdab8967452301efcdab8911c01f0c067665726966790c1467452301efcdab8967452301efcdab896745230141627d5b52';
+  const expectedScriptHash = 'f2afddbbdae6b710f0c2cdebb8b734e40d4d4fda';
+  const expectedAddress = 'NfpHVWDgSaedTHuk183urAp9FDBS4i4VYB';
+  const client = new AbstractAccountClient('https://example.invalid', coreHash);
+  const account = client.deriveVirtualAccount(accountId);
+
+  assert.equal(createVerifyScript(coreHash, accountId), expectedScript);
+  assert.equal(account.verifyScript, expectedScript);
+  assert.equal(account.scriptHash, expectedScriptHash);
+  assert.equal(account.address, expectedAddress);
+  assert.equal(getAddressFromScriptHash(expectedScriptHash), expectedAddress);
 });
 
 test('invokeReadFunction posts an invokefunction payload', async () => {

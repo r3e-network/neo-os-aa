@@ -1,0 +1,66 @@
+{
+  "network": "mainnet",
+  "rpc": "https://mainnet1.neo.coz.io:443",
+  "core": "0x0268a387913b250166ddec032b03332690a1ef78",
+  "read_only": true,
+  "checks": [
+    {
+      "method": "getContractAdmin",
+      "state": "HALT",
+      "result": "0x6d0656f6dd91469db1c90cc1e574380613f43738"
+    },
+    {
+      "method": "getPlatformRegistrar",
+      "state": "HALT",
+      "result": "0x0000000000000000000000000000000000000000"
+    },
+    {
+      "method": "getPendingPlatformRegistrar",
+      "state": "HALT",
+      "result": "0x0000000000000000000000000000000000000000"
+    },
+    {
+      "method": "getPlatformRegistrarAvailableAt",
+      "state": "HALT",
+      "result": {
+        "type": "Integer",
+        "value": "0"
+      }
+    },
+    {
+      "method": "getPendingContractAdmin",
+      "state": "HALT",
+      "result": "0x0000000000000000000000000000000000000000"
+    },
+    {
+      "method": "getAdminTransferAvailableAt",
+      "state": "HALT",
+      "result": {
+        "type": "Integer",
+        "value": "0"
+      }
+    },
+    {
+      "method": "update",
+      "signers": [],
+      "state": "FAULT",
+      "exception": "at instruction 4590 (ABORTMSG): ABORTMSG is executed. Reason: Not admin",
+      "proves": "Unauthenticated update rejected"
+    },
+    {
+      "method": "proposeUpdate",
+      "signers": [],
+      "state": "FAULT",
+      "exception": "at instruction 4590 (ABORTMSG): ABORTMSG is executed. Reason: Not admin",
+      "proves": "Unauthenticated update rejected"
+    },
+    {
+      "method": "confirmAdminTransfer",
+      "signers": [],
+      "state": "FAULT",
+      "exception": "at instruction 5537 (ABORTMSG): ABORTMSG is executed. Reason: No pending admin transfer",
+      "proves": "No transfer is pending; this does not independently prove witness enforcement"
+    }
+  ],
+  "verified_at": "2026-09-15T10:48:12.410Z"
+}

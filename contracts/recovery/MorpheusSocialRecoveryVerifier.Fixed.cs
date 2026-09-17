@@ -12,7 +12,7 @@ namespace Neo.SmartContract.Examples
 {
     [ManifestExtra("Author", "R3E Network")]
     [ManifestExtra("Description", "Morpheus NeoDID-powered social recovery verifier for Neo Abstract Account")]
-    [ManifestExtra("Version", "1.0.0")]
+    [ManifestExtra("Version", "2.0.0")]
     // AA-03: least-privilege method-scoped grants replacing the former wildcard.
     // Call surface (verified by source sweep):
     //   1. ContractManagement.Update          — the 7-day-timelocked self-upgrade
@@ -21,6 +21,7 @@ namespace Neo.SmartContract.Examples
     //   4. GAS.transfer                       — Lifecycle credit deposits forwarded to the oracle
     [ContractPermission("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd", "update")]
     [ContractPermission("*", "getBackupOwner")]
+    [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "request")]
     [ContractPermission("0xd2a4cff31913016155e38e474a2c06d08be276cf", "transfer")]
     [DisplayName("SocialRecoveryVerifier")]
@@ -106,7 +107,7 @@ namespace Neo.SmartContract.Examples
 
         public class OracleRecoveryRequest
         {
-            public ByteString AccountId = (ByteString)"";
+            public UInt160 AccountId = UInt160.Zero;
             public UInt160 NewOwner = UInt160.Zero;
             public string RecoveryNonceText = string.Empty;
             public string ExpiresAtText = string.Empty;
@@ -115,7 +116,7 @@ namespace Neo.SmartContract.Examples
 
         public class OracleActionRequest
         {
-            public ByteString AccountId = (ByteString)"";
+            public UInt160 AccountId = UInt160.Zero;
             public UInt160 Executor = UInt160.Zero;
             public string ActionId = string.Empty;
             public ulong ExpiresAt;
@@ -143,15 +144,15 @@ namespace Neo.SmartContract.Examples
             public ByteString Signature = (ByteString)"";
         }
 
-        public delegate void RecoverySetupHandler(ByteString accountId, UInt160 owner, BigInteger threshold, ulong timelock, int factorCount);
-        public delegate void RecoveryConfigUpdatedHandler(ByteString accountId, BigInteger threshold, ulong timelock, int factorCount);
-        public delegate void RecoveryTicketAcceptedHandler(ByteString accountId, UInt160 newOwner, ByteString masterNullifier, ByteString actionNullifier, BigInteger approvedCount);
-        public delegate void RecoveryReadyHandler(ByteString accountId, UInt160 newOwner, BigInteger recoveryNonce, ulong executableAt);
-        public delegate void RecoveryCancelledHandler(ByteString accountId, BigInteger recoveryNonce);
-        public delegate void RecoveryFinalizedHandler(ByteString accountId, UInt160 oldOwner, UInt160 newOwner, BigInteger nextRecoveryNonce);
-        public delegate void ActionSessionRequestedHandler(ByteString accountId, UInt160 executor, string actionId, ulong expiresAt, BigInteger requestId);
-        public delegate void ActionSessionActivatedHandler(ByteString accountId, UInt160 executor, string actionId, ByteString actionNullifier, ulong expiresAt);
-        public delegate void ActionSessionRevokedHandler(ByteString accountId, UInt160 executor, string actionId);
+        public delegate void RecoverySetupHandler(UInt160 accountId, UInt160 owner, BigInteger threshold, ulong timelock, int factorCount);
+        public delegate void RecoveryConfigUpdatedHandler(UInt160 accountId, BigInteger threshold, ulong timelock, int factorCount);
+        public delegate void RecoveryTicketAcceptedHandler(UInt160 accountId, UInt160 newOwner, ByteString masterNullifier, ByteString actionNullifier, BigInteger approvedCount);
+        public delegate void RecoveryReadyHandler(UInt160 accountId, UInt160 newOwner, BigInteger recoveryNonce, ulong executableAt);
+        public delegate void RecoveryCancelledHandler(UInt160 accountId, BigInteger recoveryNonce);
+        public delegate void RecoveryFinalizedHandler(UInt160 accountId, UInt160 oldOwner, UInt160 newOwner, BigInteger nextRecoveryNonce);
+        public delegate void ActionSessionRequestedHandler(UInt160 accountId, UInt160 executor, string actionId, ulong expiresAt, BigInteger requestId);
+        public delegate void ActionSessionActivatedHandler(UInt160 accountId, UInt160 executor, string actionId, ByteString actionNullifier, ulong expiresAt);
+        public delegate void ActionSessionRevokedHandler(UInt160 accountId, UInt160 executor, string actionId);
 
         [DisplayName("RecoverySetup")]
         public static event RecoverySetupHandler OnRecoverySetup = default!;
@@ -181,7 +182,7 @@ namespace Neo.SmartContract.Examples
         public static event ActionSessionRevokedHandler OnActionSessionRevoked = default!;
 
         [Safe]
-        public static string Version() => "1.0.0";
+        public static string Version() => "2.0.0";
 
         public static void _deploy(object data, bool update)
         {
@@ -219,6 +220,27 @@ namespace Neo.SmartContract.Examples
             Storage.Delete(Storage.CurrentContext, new byte[] { PREFIX_PENDING_UPDATE_NEF_HASH });
             Storage.Delete(Storage.CurrentContext, new byte[] { PREFIX_PENDING_UPDATE_MANIFEST_HASH });
             Storage.Delete(Storage.CurrentContext, new byte[] { PREFIX_UPDATE_TIMELOCK });
+        }
+
+        [Safe]
+        public static UInt256 GetPendingUpdateNefHash()
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, new byte[] { PREFIX_PENDING_UPDATE_NEF_HASH });
+            return data is null ? UInt256.Zero : (UInt256)data;
+        }
+
+        [Safe]
+        public static UInt256 GetPendingUpdateManifestHash()
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, new byte[] { PREFIX_PENDING_UPDATE_MANIFEST_HASH });
+            return data is null ? UInt256.Zero : (UInt256)data;
+        }
+
+        [Safe]
+        public static BigInteger GetPendingUpdateAvailableAt()
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, new byte[] { PREFIX_UPDATE_TIMELOCK });
+            return data is null ? 0 : (BigInteger)data + AdminRotationTimelockMs;
         }
 
         public static void Update(ByteString nef, string manifest)

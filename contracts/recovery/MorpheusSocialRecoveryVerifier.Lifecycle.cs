@@ -18,7 +18,7 @@ namespace Neo.SmartContract.Examples
         private const byte PREFIX_ORACLE_CREDIT = 0x19;
 
         [Safe]
-        public static BigInteger GetOracleCredit(ByteString accountId)
+        public static BigInteger GetOracleCredit(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_ORACLE_CREDIT, accountId));
@@ -26,7 +26,7 @@ namespace Neo.SmartContract.Examples
         }
 
         public static void SubmitRecoveryTicket(
-            ByteString accountId,
+            UInt160 accountId,
             UInt160 newOwner,
             string recoveryNonceText,
             string expiresAtText,
@@ -56,7 +56,7 @@ namespace Neo.SmartContract.Examples
         }
 
         public static void SubmitActionTicket(
-            ByteString accountId,
+            UInt160 accountId,
             UInt160 executor,
             string actionId,
             ulong expiresAt,
@@ -74,7 +74,7 @@ namespace Neo.SmartContract.Examples
             ActivateActionSessionInternal(accountId, executor, actionId, expiresAt, actionNullifier, verificationSignature);
         }
 
-        public static void DepositOracleCredits(ByteString accountId, BigInteger amount)
+        public static void DepositOracleCredits(UInt160 accountId, BigInteger amount)
         {
             ValidateAccountId(accountId, "accountId");
             UInt160 oracle = GetMorpheusOracle(accountId);
@@ -113,7 +113,7 @@ namespace Neo.SmartContract.Examples
             // The payment must earmark which account it funds (memo = accountId), and that
             // account must already be configured. The GAS is credited to that account only,
             // so it can never be spent on behalf of a different account.
-            ByteString accountId = (ByteString)data;
+            UInt160 accountId = (UInt160)data;
             ValidateAccountId(accountId, "accountId");
             ExecutionEngine.Assert(
                 Storage.Get(Storage.CurrentContext, Key(PREFIX_OWNER, accountId)) != null,
@@ -175,7 +175,7 @@ namespace Neo.SmartContract.Examples
         }
 
         private static void SubmitRecoveryTicketInternal(
-            ByteString accountId,
+            UInt160 accountId,
             UInt160 newOwner,
             string recoveryNonceText,
             string expiresAtText,
@@ -259,7 +259,7 @@ namespace Neo.SmartContract.Examples
             OnRecoveryTicketAccepted(accountId, pending.NewOwner, masterNullifier, actionNullifier, pending.ApprovedCount);
         }
 
-        public static void FinalizeRecovery(ByteString accountId)
+        public static void FinalizeRecovery(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
 
@@ -277,7 +277,7 @@ namespace Neo.SmartContract.Examples
             OnRecoveryFinalized(accountId, oldOwner, pending.NewOwner, pending.RecoveryNonce + 1);
         }
 
-        public static void CancelRecovery(ByteString accountId)
+        public static void CancelRecovery(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
             AssertOwner(accountId);
@@ -291,7 +291,7 @@ namespace Neo.SmartContract.Examples
             OnRecoveryCancelled(accountId, pending.RecoveryNonce);
         }
 
-        public static void RevokeActionSession(ByteString accountId)
+        public static void RevokeActionSession(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
             AssertOwner(accountId);

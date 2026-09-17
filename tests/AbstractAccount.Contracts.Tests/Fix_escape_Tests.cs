@@ -150,6 +150,24 @@ public class Fix_escape_Tests
     }
 
     [TestMethod]
+    public void FinalizeEscape_LegacyTwoArgumentPathRemainsAvailable()
+    {
+        EscapeHarness h = new();
+        UInt160 accountId = h.RegisterAccount(OldPubKey());
+        h.InitiateAndAdvancePastTimelock(accountId);
+
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier);
+
+        Assert.AreEqual(h.NewVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        CollectionAssert.AreEqual(
+            Array.Empty<byte>(),
+            h.Fx.CallBytes(h.NewVerifier, "getPublicKey", accountId),
+            "The legacy entrypoint preserves its historical no-verifier-params behavior");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+    }
+
+    [TestMethod]
     public void FinalizeEscape_WithoutInitiation_Faults()
     {
         EscapeHarness h = new();

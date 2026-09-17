@@ -57,26 +57,29 @@ namespace AbstractAccount
         // 0x0F  Prefix_PendingVerifierCall         Internal.cs               +acctId
         // 0x10  Prefix_PendingHookCall             Internal.cs               +acctId
         // 0x11  Prefix_ContractAdmin               Admin.cs                  bare
-        // 0x12  Prefix_PendingUpdateNefHash        Admin.cs                  bare         <-- byte reused
-        // 0x12  Prefix_VerifyScopeTarget           Internal.cs               +acctId      <-- by 0x12, distinct shape
-        // 0x13  Prefix_PendingUpdateManifestHash   Admin.cs                  bare         <-- byte reused
-        // 0x13  Prefix_MarketEscrowCancelInitiated MarketEscrow.cs           +acctId      <-- by 0x13, distinct shape
+        // 0x1A  Prefix_PendingUpdateNefHash        Admin.cs                  bare
+        // 0x1B  Prefix_PendingUpdateManifestHash   Admin.cs                  bare
+        // 0x1C  Prefix_VerifyScopeTarget           Internal.cs               +acctId
+        // 0x1D  Prefix_MarketEscrowCancelInitiated MarketEscrow.cs           +acctId
         // 0x14  Prefix_UpdateTimelock              Admin.cs                  bare
         // 0x15  Prefix_PendingContractAdmin        Admin.cs                  bare
         // 0x16  Prefix_AdminTransferTimelock       Admin.cs                  bare
+        // 0x17  Prefix_PlatformRegistrar           PlatformRegistrar.cs      bare
+        // 0x18  Prefix_PendingPlatformRegistrar    PlatformRegistrar.cs      bare
+        // 0x19  Prefix_PlatformRegistrarTimelock   PlatformRegistrar.cs      bare
+        // 0x1E  Prefix_PlatformAccountBinding     PlatformRegistrar.cs      +acctId
+        // 0x1F  Prefix_PlatformProxyAccount      PlatformRegistrar.cs      +acctId(proxy)
         //
-        // COLLISION SAFETY: bytes 0x12 and 0x13 are each declared TWICE (once in Admin.cs, once in
-        // an account-scoped partial). This is NOT a storage collision because the two consumers of
-        // each byte use different key shapes: the Admin.cs keys are bare 1-byte global slots, while
-        // the Internal/MarketEscrow keys are always 21-byte accountId-suffixed keys. A 1-byte key
-        // and a 21-byte key can never alias, so the two namespaces are disjoint. StoragePrefixMapTests
-        // pins this map against the source and fails if any FUTURE prefix is added such that two
-        // prefixes share BOTH the same byte AND the same key shape (a real collision).
+        // ACTIVE LAYOUT: every prefix byte is globally unique. StoragePrefixMapTests pins this map
+        // against the source and rejects any future active prefix reuse.
         //
-        // DEFERRED: renumbering 0x12/0x13 so that every byte is globally unique is intentionally NOT
-        // done here. The prefixes are part of the on-chain storage layout of already-deployed
-        // instances; changing them would orphan existing data and require a redeploy/migration. The
-        // shape-based disambiguation above keeps the current allocation correct without that churn.
+        // LEGACY COMPATIBILITY: LegacyStoragePrefix12 and LegacyStoragePrefix13 below are used only
+        // to read and delete keys written by the pre-renumbered layout. They are not active prefixes,
+        // and all new writes use the unique 0x1A-0x1D allocation above. This keeps ContractManagement
+        // upgrades state-compatible without carrying the old shape-based allocation forward.
         // =====================================================================================
+
+        private static readonly byte[] LegacyStoragePrefix12 = new byte[] { 0x12 };
+        private static readonly byte[] LegacyStoragePrefix13 = new byte[] { 0x13 };
     }
 }

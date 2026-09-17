@@ -278,10 +278,7 @@ export function useStudioController() {
         backupOwnerAddress: createForm.value.backupOwner,
         escapeTimelock: Math.floor(escapeTimelockDays * 24 * 60 * 60),
       });
-      // The verify script pushes the raw account-id bytes, which the VM reads
-      // as the UInt160 internal (little-endian) form — the reverse of the
-      // big-endian display hex shown to the user and sent to RPC params.
-      const script = createVerifyScript(aaHash, reverseHex(accountIdHash));
+      const script = createVerifyScript(aaHash, accountIdHash);
 
       computedAccountIdHash.value = accountIdHash;
       computedScriptHex.value = script;

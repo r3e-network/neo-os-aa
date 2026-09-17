@@ -10,6 +10,7 @@ import {
   DEFAULT_DID_PROVIDER,
   DEFAULT_EXPLORER_BASE_URL,
   DEFAULT_MATRIX_CONTRACT_HASH,
+  DEFAULT_MATRIX_CONTRACT_HASH_TESTNET,
   DEFAULT_MORPHEUS_API_BASE_URL,
   DEFAULT_MORPHEUS_API_BASE_URL_TESTNET,
   DEFAULT_MORPHEUS_ENVELOPE_VERSION,
@@ -221,7 +222,7 @@ test('network defaults keep mainnet and testnet anchors explicit', () => {
   assert.deepEqual(MORPHEUS_NETWORK_DEFAULTS.testnet, {
     abstractAccountHash: 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2',
     abstractAccountDomain: '',
-    addressMarketHash: '',
+    addressMarketHash: '6b979cdd246cc6491a20000a2a822e497c92c23b',
     paymasterHash: '',
     rpcUrl: 'https://api.n3index.dev/testnet',
     networkMagic: 894710606,
@@ -232,8 +233,13 @@ test('network defaults keep mainnet and testnet anchors explicit', () => {
 });
 
 
-test('default matrix contract hash tracks the validated testnet deployment', () => {
-  assert.equal(DEFAULT_MATRIX_CONTRACT_HASH, '89908093c5ccc463e2c5744d6bacb06108b60a75');
+test('Matrix resolver is network-scoped and testnet env cannot configure mainnet', () => {
+  assert.equal(DEFAULT_MATRIX_CONTRACT_HASH, '994c3cbe0d8641b9c911452c37191de8dd9f5f4e');
+  assert.equal(DEFAULT_MATRIX_CONTRACT_HASH_TESTNET, '994c3cbe0d8641b9c911452c37191de8dd9f5f4e');
+  assert.equal(getRuntimeConfig({}).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH);
+  assert.equal(getRuntimeConfig({ VITE_AA_NETWORK: 'testnet' }).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH_TESTNET);
+  assert.equal(getRuntimeConfig({ VITE_MATRIX_CONTRACT_HASH_TESTNET: DEFAULT_MATRIX_CONTRACT_HASH_TESTNET }).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH);
+  assert.equal(getRuntimeConfig({ VITE_MATRIX_CONTRACT_HASH_MAINNET: '1'.repeat(40) }).matrixContractHash, '1'.repeat(40));
 });
 
 test('default n3index api base url tracks the documented public edge', () => {

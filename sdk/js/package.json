@@ -11,10 +11,10 @@
       "default": "./src/index.js"
     }
   },
-  "homepage": "https://github.com/r3e-network/neo-abstract-account",
+  "homepage": "https://github.com/r3e-network/neo-os-aa",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/r3e-network/neo-abstract-account.git"
+    "url": "git+https://github.com/r3e-network/neo-os-aa.git"
   },
   "engines": {
     "node": ">=22"

@@ -55,12 +55,11 @@ test("did service integrates Web3Auth as the NeoDID identity root", () => {
 
   assert.match(source, /@web3auth\/modal/);
   assert.match(source, /new modal\.Web3Auth/);
-  assert.match(source, /provider:\s*RUNTIME_CONFIG\.neoDidProvider/);
-  assert.match(source, /web3auth:/);
+  assert.match(source, /authenticateVerifiedDid\(client, this\.verifyProfile\)/);
+  assert.doesNotMatch(source, /decodeJwtClaims|buildDidProfile|buildStableDidKey/);
   assert.match(source, /buildNeoDidSubject/);
   assert.match(source, /didVerificationEndpoint/);
-  assert.match(source, /serviceDid/);
-  assert.match(source, /identityRoot/);
+  assert.match(source, /this\.persist\(null\)/);
 });
 
 test("morpheus did service can bind DIDs and invoke AA verifier requests", () => {

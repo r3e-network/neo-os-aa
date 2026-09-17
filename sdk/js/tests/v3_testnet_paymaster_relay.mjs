@@ -455,6 +455,7 @@ async function main() {
     chainId: networkMagic,
     verifyingContract: sanitizeHex(WEB3AUTH_VERIFIER_HASH),
     accountIdHash: accountId,
+    coreContractHash: sanitizeHex(CORE_HASH),
     targetContract: sanitizeHex(GAS_HASH),
     method: "symbol",
     argsHashHex,

@@ -161,6 +161,8 @@ export interface UserOperationTypedData {
   message: {
     /** `0x`-prefixed account id (20 bytes, `bytes20`). */
     accountId: string;
+    /** `0x`-prefixed authorized AA core hash (20 bytes, `bytes20`). */
+    coreContract: string;
     /** `0x`-prefixed target contract hash (20 bytes). */
     targetContract: string;
     /** Raw method name (the V3 layout signs the string, not its hash). */
@@ -196,6 +198,8 @@ export interface BuildV3UserOperationTypedDataOptions {
   /** Verifier contract hash. */
   verifyingContract: Hash160;
   accountIdHash: Hash160;
+  /** Authorized AA core hash; signatures are invalid on another core. */
+  coreContractHash: Hash160;
   targetContract: Hash160;
   method: string;
   /** Args hash (32 bytes / 64 hex chars). */
@@ -222,6 +226,8 @@ export declare function buildV3UserOperationTypedData(
 /** Options for {@link buildContractCompatibleStructHash}. */
 export interface BuildContractCompatibleStructHashOptions {
   accountIdHash: Hash160;
+  /** Authorized AA core hash; signatures are invalid on another core. */
+  coreContractHash: Hash160;
   targetContract: Hash160;
   method: string;
   /** Args hash (32 bytes / 64 hex chars). */
@@ -236,6 +242,8 @@ export interface BuildWeb3AuthSigningPayloadOptions {
   chainId: IntegerLike;
   verifierHash: Hash160;
   accountIdHash: Hash160;
+  /** Authorized AA core hash; signatures are invalid on another core. */
+  coreContractHash: Hash160;
   targetContract: Hash160;
   method: string;
   /** Args hash (32 bytes / 64 hex chars). */
@@ -340,6 +348,7 @@ export interface UserOperationBuilderState {
   nonce: IntegerLike;
   deadline: IntegerLike | string;
   verifierHash: string;
+  coreContractHash: string;
   chainId: string;
   accountAddressScriptHash: string;
   accountAddressHash: string;
@@ -357,6 +366,7 @@ export interface UserOperationBuilderOptions {
   nonce?: IntegerLike;
   deadline?: IntegerLike | string;
   verifierHash?: string;
+  coreContractHash?: string;
   chainId?: IntegerLike;
   accountAddressScriptHash?: string;
   accountAddressHash?: string;
@@ -383,6 +393,7 @@ export declare class UserOperationBuilder {
   nonce: IntegerLike;
   deadline: IntegerLike | string;
   verifierHash: string;
+  coreContractHash: string;
   chainId: string;
   accountAddressScriptHash: string;
   accountAddressHash: string;
@@ -416,6 +427,8 @@ export declare class UserOperationBuilder {
   autoDeadline(bufferSeconds?: number): this;
   /** Sets the verifier contract hash for V3 EIP-712 signing. */
   setVerifier(verifierHash: string): this;
+  /** Sets the authorized AA core hash for V3 EIP-712 signing. */
+  setCoreContract(coreContractHash: string): this;
   /** Sets the chain id for EIP-712 signing. */
   setChainId(chainId: IntegerLike): this;
   /** Sets the legacy account address script hash. */
@@ -754,7 +767,7 @@ export declare class AbstractAccountClient {
     signers?: unknown[],
   ): Promise<any>;
 
-  /** Builds the verification script for an account id. */
+  /** Builds the verification script from a display-order account id. */
   buildVerifyScript(accountIdHex: string): string;
   /** Derives the account id hash from a seed or existing hash. */
   deriveAccountIdHash(accountIdHexOrSeed: string): Hash160;
@@ -826,6 +839,16 @@ export declare class AbstractAccountClient {
     moduleType: string,
     moduleHashOrAddress: Hash160 | NeoAddress,
   ): Promise<boolean>;
+  /**
+   * Checks a message signature through the ERC-1271-compatible Neo adapter.
+   * Returns `0x1626ba7e` for valid or `0xffffffff` for invalid.
+   */
+  isValidSignature(
+    accountHashOrAddress: Hash160 | NeoAddress,
+    hash: Bytes32Hex,
+    /** Compact r||s or recoverable r||s||v signature (64 or 65 bytes). */
+    signature: string,
+  ): Promise<string>;
 
   /** Returns a validation preview for a UserOperation before submission. */
   getUserOpValidationPreview(

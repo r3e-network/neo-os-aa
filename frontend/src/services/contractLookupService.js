@@ -307,7 +307,7 @@ export async function loadContractMethodsByHash(contractHash, { apiBaseUrl = RUN
 export async function searchContractsByDomain(domain, { apiBaseUrl = RUNTIME_CONFIG.n3IndexApiBaseUrl || DEFAULT_N3INDEX_API_BASE_URL, network = RUNTIME_CONFIG.n3IndexNetwork || DEFAULT_N3INDEX_NETWORK, rpcUrl = RUNTIME_CONFIG.rpcUrl, matrixContractHash = RUNTIME_CONFIG.matrixContractHash, fetchImpl } = {}) {
   const normalized = String(domain || '').trim().toLowerCase();
   const resolvedAddress = isMatrixDomain(normalized)
-    ? await resolveMatrixDomain(normalized, { rpcUrl, matrixContractHash })
+    ? await resolveMatrixDomain(normalized, { rpcUrl, matrixContractHash, fetchImpl })
     : await resolveNeoDomain(normalized, { fetchImpl });
 
   if (!resolvedAddress) {

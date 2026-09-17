@@ -10,6 +10,7 @@ const {
 const CHAIN_ID = 894710606;
 const ACCOUNT_ID_HASH = 'f951cd3eb5196dacde99b339c5dcca37ac38cc22';
 const VERIFIER_HASH = 'b4107cb2cb4bace0ebe15bc4842890734abe133a';
+const CORE_CONTRACT_HASH = 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2';
 const MASTER_HASH = '5be915aea3ce85e4752d522632f0a9520e377aaf';
 const TARGET_CONTRACT = '49c095ce04d38642e39155f5481615c58227a498';
 const ARGS_HASH = 'ab'.repeat(32);
@@ -21,6 +22,7 @@ function v3Builder() {
     .setTarget(TARGET_CONTRACT)
     .setMethod('transfer')
     .setVerifier(VERIFIER_HASH)
+    .setCoreContract(CORE_CONTRACT_HASH)
     .setChainId(CHAIN_ID)
     .setNonce(7)
     .setDeadline(DEADLINE);
@@ -32,6 +34,7 @@ test('buildEIP712 delegates to the shared V3 typed-data builder', () => {
     chainId: String(CHAIN_ID),
     verifyingContract: VERIFIER_HASH,
     accountIdHash: ACCOUNT_ID_HASH,
+    coreContractHash: CORE_CONTRACT_HASH,
     targetContract: TARGET_CONTRACT,
     method: 'transfer',
     argsHashHex: ARGS_HASH,
@@ -53,6 +56,7 @@ test('buildLegacyEIP712 uses the explicit master contract as verifyingContract',
     .setTarget(TARGET_CONTRACT)
     .setMethod('transfer')
     .setVerifier(VERIFIER_HASH)
+    .setCoreContract(CORE_CONTRACT_HASH)
     .setChainId(CHAIN_ID)
     .setNonce(3)
     .setDeadline(DEADLINE);

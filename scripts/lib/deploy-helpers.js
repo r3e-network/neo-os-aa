@@ -83,8 +83,30 @@ function normalizeHash(value) {
   return hex ? `0x${hex}` : '';
 }
 
+function stackHash160(item) {
+  const raw = String(item?.value || '').trim();
+  const direct = sanitizeHex(raw);
+  if (/^[0-9a-f]{40}$/i.test(direct)) return `0x${direct.toLowerCase()}`;
+
+  const bytes = Buffer.from(raw, 'base64');
+  if (bytes.length !== 20) {
+    throw new Error(`Expected a Hash160 stack item, received ${item?.type || 'unknown'}`);
+  }
+  return `0x${Buffer.from(bytes).reverse().toString('hex')}`;
+}
+
 function buildConfig(account, networkMagic, rpcAddress) {
   return { account, networkMagic, rpcAddress, blocksTillExpiry: 200 };
+}
+
+function predictContractHash(account, nefChecksum, manifestName) {
+  return normalizeHash(
+    experimental.getContractHash(
+      u.HexString.fromHex(account.scriptHash),
+      nefChecksum,
+      manifestName
+    )
+  );
 }
 
 function hash160Param(value) {
@@ -152,22 +174,27 @@ function assertVmState(appLog, label, expected = 'HALT') {
  * FAULTs, then broadcasts with the previewed gas as the system fee and waits
  * for a HALTed application log.
  */
-async function invokePersisted({ client, account, networkMagic, rpcUrl, contractHash, operation, params = [], signers }) {
+async function invokePersisted({ client, account, networkMagic, rpcUrl, contractHash, operation, params = [], signers, onBroadcast }) {
   const baseConfig = buildConfig(account, networkMagic, rpcUrl);
   const effectiveSigners = signers && signers.length > 0 ? signers : [makeSigner(account.scriptHash)];
   const contract = new experimental.SmartContract(sanitizeHex(contractHash), baseConfig);
   const preview = await withRpcRetry(`${operation}.preview`, () =>
     contract.testInvoke(operation, params, effectiveSigners));
-  if (String(preview?.state || '').includes('FAULT')) {
-    throw new Error(`${operation} preview FAULT: ${preview.exception || 'unknown error'}`);
+  if (String(preview?.state || '') !== 'HALT') {
+    throw new Error(`${operation} preview ${preview?.state || 'UNKNOWN'}: ${preview?.exception || 'missing successful HALT result'}`);
   }
   const systemFeeOverride = u.BigInteger.fromDecimal(preview.gasconsumed || '1', 0);
   const invokeContract = new experimental.SmartContract(
     sanitizeHex(contractHash),
     { ...baseConfig, systemFeeOverride },
   );
-  const txid = await withRpcRetry(`${operation}.invoke`, () =>
-    invokeContract.invoke(operation, params, effectiveSigners));
+  // Never retry an ambiguous broadcast.  A transport timeout can happen after
+  // the node accepted the transaction; retrying could create a second state
+  // transition (or make the caller incorrectly fall back to another witness).
+  const txid = await invokeContract.invoke(operation, params, effectiveSigners);
+  // Persist the transaction ID before waiting for confirmation or doing any
+  // post-state checks.  A later read failure must not erase the broadcast receipt.
+  if (onBroadcast) await onBroadcast(txid);
   const appLog = await waitForAppLog(client, txid, operation);
   assertVmState(appLog, operation, 'HALT');
   return { txid, appLog };
@@ -179,7 +206,7 @@ async function invokePersisted({ client, account, networkMagic, rpcUrl, contract
  */
 async function deployArtifact({ client, account, networkMagic, rpcUrl, baseName, uniqueSuffix = '' }) {
   const { nef, manifest, manifestName } = loadArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(experimental.getContractHash(account.scriptHash, nef.checksum, manifestName));
+  const predictedHash = predictContractHash(account, nef.checksum, manifestName);
   console.log(`  Deploying ${baseName}${uniqueSuffix ? ` (suffix: ${uniqueSuffix})` : ''}...`);
   console.log(`  Predicted hash: ${predictedHash}`);
   const txid = await withRpcRetry(`deploy ${baseName}`, () =>
@@ -279,7 +306,9 @@ module.exports = {
   artifactPaths,
   loadArtifact,
   normalizeHash,
+  stackHash160,
   buildConfig,
+  predictContractHash,
   hash160Param,
   integerParam,
   stringParam,

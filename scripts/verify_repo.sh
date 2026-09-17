@@ -18,7 +18,7 @@ usage() {
 Usage: scripts/verify_repo.sh [--contracts-only|--frontend-only|--sdk-only] [--skip-contract-build] [--skip-e2e]
 
 Runs the full local validation gate:
-- contracts: build + nccs compile + solution tests + format verify
+- contracts: build + nccs compile + solution tests + deployment-tool tests + format verify
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
 - sdk: unit tests + declaration types check + production dependency audit
 EOF
@@ -53,6 +53,10 @@ if [[ $run_contracts -eq 1 ]]; then
     bash contracts/compile.sh
   fi
   dotnet test neo-abstract-account.sln -c Release --nologo
+  node --test scripts/lib/deploy-helpers.test.mjs \
+    scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
+    scripts/upgrade_testnet_unified_smart_wallet.test.mjs \
+    scripts/deploy_latest_aa_verifiers.test.mjs
   dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal
 fi
 

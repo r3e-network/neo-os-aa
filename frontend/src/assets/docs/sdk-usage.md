@@ -29,7 +29,7 @@ const proxyAddress = aaClient.deriveAddressFromEVM(evmPubKey);
 console.log(proxyAddress);
 ```
 
-The derived address corresponds to the deterministic `verify(accountId)` script for that `accountId`.
+The derived address corresponds to the deterministic `verify(accountId)` script for that `accountId`. SDK and frontend helpers accept the big-endian display form and reverse it only while emitting the raw NeoVM `UInt160` bytes.
 
 ## 3. Build an Account-Creation Payload
 

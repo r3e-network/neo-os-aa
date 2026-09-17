@@ -60,6 +60,9 @@ class UserOperationBuilder {
     /** @type {string} The verifier contract hash for EIP-712 */
     this.verifierHash = options.verifierHash || '';
 
+    /** @type {string} The authorized AA core hash for EIP-712 */
+    this.coreContractHash = options.coreContractHash || '';
+
     /** @type {string} The chain ID for EIP-712 */
     this.chainId = options.chainId || '';
 
@@ -206,6 +209,19 @@ class UserOperationBuilder {
   }
 
   /**
+   * Sets the authorized AA core contract hash for EIP-712 signing.
+   * @param {string} coreContractHash - 20-byte AA core hash (40 hex chars)
+   * @returns {UserOperationBuilder} This builder for chaining
+   */
+  setCoreContract(coreContractHash) {
+    this.coreContractHash = sanitizeHex(coreContractHash);
+    if (this.coreContractHash) {
+      validateHash160(this.coreContractHash);
+    }
+    return this;
+  }
+
+  /**
    * Sets the chain ID for EIP-712 signing.
    * @param {string|number} chainId - The chain ID
    * @returns {UserOperationBuilder} This builder for chaining
@@ -323,6 +339,12 @@ class UserOperationBuilder {
       });
     }
 
+    if (!this.coreContractHash) {
+      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
+        hint: 'Authorized AA core hash is required for EIP-712 signing',
+      });
+    }
+
     if (!this.chainId) {
       throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
         hint: 'Chain ID is required for EIP-712',
@@ -333,6 +355,7 @@ class UserOperationBuilder {
       chainId: this.chainId,
       verifyingContract: this.verifierHash,
       accountIdHash: this.accountIdHash,
+      coreContractHash: this.coreContractHash,
       targetContract: this.targetContract,
       method: this.method,
       argsHashHex: finalArgsHash,
@@ -406,6 +429,7 @@ class UserOperationBuilder {
       nonce: this.nonce,
       deadline: this.deadline,
       verifierHash: this.verifierHash,
+      coreContractHash: this.coreContractHash,
       chainId: this.chainId,
       accountAddressScriptHash: this.accountAddressScriptHash,
       accountAddressHash: this.accountAddressHash,
@@ -427,6 +451,7 @@ class UserOperationBuilder {
     this.nonce = DEFAULT_NONCE;
     this.deadline = '';
     this.verifierHash = '';
+    this.coreContractHash = '';
     this.chainId = '';
     this.accountAddressScriptHash = '';
     this.accountAddressHash = '';
@@ -448,6 +473,7 @@ class UserOperationBuilder {
       nonce: this.nonce,
       deadline: this.deadline,
       verifierHash: this.verifierHash,
+      coreContractHash: this.coreContractHash,
       chainId: this.chainId,
       accountAddressScriptHash: this.accountAddressScriptHash,
       accountAddressHash: this.accountAddressHash,

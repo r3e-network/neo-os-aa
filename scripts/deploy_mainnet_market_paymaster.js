@@ -23,7 +23,9 @@ const {
   withRpcRetry,
   loadArtifact,
   normalizeHash,
+  stackHash160,
   buildConfig,
+  predictContractHash,
   hash160Param,
   integerParam,
   stringParam,
@@ -128,7 +130,7 @@ async function contractExists(client, hash) {
 async function deployContract(client, account, networkMagic, rpcUrl, baseName) {
   const suffix = String(process.env.AA_DEPLOY_SUFFIX || '').trim();
   const { nef, manifest, manifestName } = loadArtifact(baseName, suffix);
-  const predictedHash = normalizeHash(experimental.getContractHash(account.scriptHash, nef.checksum, manifestName));
+  const predictedHash = predictContractHash(account, nef.checksum, manifestName);
   const alreadyDeployed = await contractExists(client, predictedHash);
   if (planOnly || alreadyDeployed) {
     return {
@@ -269,6 +271,7 @@ async function runPaymasterSmoke({ client, account, networkMagic, rpcUrl, coreHa
     chainId: networkMagic,
     verifyingContract: sanitizeHex(verifierHash),
     accountIdHash: accountId,
+    coreContractHash: sanitizeHex(coreHash),
     targetContract: sanitizeHex(GAS_HASH),
     method: 'symbol',
     argsHashHex: argsHash,
@@ -385,7 +388,7 @@ async function main() {
     const methods = state?.manifest?.abi?.methods?.map((method) => method.name) || [];
     if (!methods.includes('setAuthorizedCore')) continue;
     const authorizedCore = await invokeRead(client, moduleDeployment.hash, 'authorizedCore');
-    const currentCore = normalizeHash(authorizedCore?.stack?.[0]?.value || '');
+    const currentCore = stackHash160(authorizedCore?.stack?.[0]);
     if (currentCore !== activeCoreHash) {
       console.log(`Binding ${moduleName} ${moduleDeployment.hash} to AA core ${activeCoreHash}`);
       const bind = await invokePersisted({
@@ -400,7 +403,7 @@ async function main() {
 
   if (paymaster && !planOnly) {
     const authorizedCore = await invokeRead(client, paymaster.hash, 'authorizedCore');
-    const currentCore = normalizeHash(authorizedCore?.stack?.[0]?.value || '');
+    const currentCore = stackHash160(authorizedCore?.stack?.[0]);
     if (currentCore !== activeCoreHash) {
       console.log(`Binding Paymaster ${paymaster.hash} to AA core ${activeCoreHash}`);
       const bind = await invokePersisted({

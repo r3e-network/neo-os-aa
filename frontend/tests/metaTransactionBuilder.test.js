@@ -153,6 +153,7 @@ test('buildV3UserOperationTypedData matches the V3 verifier field layout', () =>
     chainId: 894710606,
     verifyingContract: '49c095ce04d38642e39155f5481615c58227a498',
     accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
+    coreContractHash: 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2',
     targetContract: '49c095ce04d38642e39155f5481615c58227a498',
     method: 'balanceOf',
     argsHashHex: 'ab'.repeat(32),
@@ -170,6 +171,7 @@ test('buildV3UserOperationTypedData matches the V3 verifier field layout', () =>
     types: {
       UserOperation: [
         { name: 'accountId', type: 'bytes20' },
+        { name: 'coreContract', type: 'bytes20' },
         { name: 'targetContract', type: 'address' },
         { name: 'method', type: 'string' },
         { name: 'argsHash', type: 'bytes32' },
@@ -179,6 +181,7 @@ test('buildV3UserOperationTypedData matches the V3 verifier field layout', () =>
     },
     message: {
       accountId: '0xf951cd3eb5196dacde99b339c5dcca37ac38cc22',
+      coreContract: '0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2',
       targetContract: '0x49c095ce04d38642e39155f5481615c58227a498',
       method: 'balanceOf',
       argsHash: `0x${'ab'.repeat(32)}`,
@@ -319,6 +322,7 @@ test('toCompactEcdsaSignature drops the recovery byte for V3 contract submission
     chainId: 894710606,
     verifyingContract: '49c095ce04d38642e39155f5481615c58227a498',
     accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
+    coreContractHash: 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2',
     targetContract: '49c095ce04d38642e39155f5481615c58227a498',
     method: 'balanceOf',
     argsHashHex: 'ab'.repeat(32),

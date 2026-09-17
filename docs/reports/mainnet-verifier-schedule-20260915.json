@@ -1,0 +1,26 @@
+{
+  "network": "mainnet",
+  "read_only": false,
+  "chain_writes_performed": true,
+  "targets": [
+    {
+      "name": "SessionKeyVerifier",
+      "hash": "0x63d6a10d388dd4885bc42ba69593734476f47151",
+      "update_counter_before": 0,
+      "candidate_nef_sha256": "0x614ac9db96181b26a663fbeaa4a5022db7e6f856196f041948cc8206b3d1029f",
+      "candidate_manifest_sha256": "0x866610e6d788f25913e2de96b2b8a9a7962011d2816d74bc0e3f147c05e9b3b2",
+      "txid": "0xc16b0f212caa159343b3d304a77c3c70d126a26a9df7e13e845a3429fa26688d",
+      "application_halt": true
+    },
+    {
+      "name": "SocialRecoveryVerifier",
+      "hash": "0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26",
+      "update_counter_before": 0,
+      "candidate_nef_sha256": "0xfdcdb5a74295e26fcc9d6e8da2f343130d76ab1fa7db2dced79f5834a3e33ecd",
+      "candidate_manifest_sha256": "0x4e44e5f368289d58d430deff2a2db7ab73f70f80d862d8030c4bb481b0178517",
+      "txid": "0x4e78b40a7f4aeb1cd5303711827e765fe65177e8b5019497296e5aa613e2c07c",
+      "application_halt": true
+    }
+  ],
+  "generated_at": "2026-09-15T11:08:37.217Z"
+}

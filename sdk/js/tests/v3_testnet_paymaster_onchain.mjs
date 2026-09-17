@@ -159,7 +159,9 @@ function makeSigner(scriptHash) {
 // Contract operations
 async function deployContract(client, account, networkMagic, baseName, uniqueSuffix) {
   const { nef, manifest } = loadArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(experimental.getContractHash(account.scriptHash, nef.checksum, manifest.name));
+  const predictedHash = normalizeHash(
+    experimental.getContractHash(u.HexString.fromHex(account.scriptHash), nef.checksum, manifest.name)
+  );
   const txid = await withRpcRetry(`deploy ${baseName}`, () =>
     experimental.deployContract(nef, manifest, buildConfig(account, networkMagic)));
   const appLog = await waitForAppLog(client, txid, `deploy ${baseName}`);
@@ -334,6 +336,7 @@ async function main() {
     chainId: networkMagic,
     verifyingContract: sanitizeHex(verifier.hash),
     accountIdHash: accountId,
+    coreContractHash: sanitizeHex(core.hash),
     targetContract: sanitizeHex(GAS_HASH),
     method: 'symbol',
     argsHashHex: argsHash,

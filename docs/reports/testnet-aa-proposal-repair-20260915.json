@@ -1,0 +1,50 @@
+{
+  "network": "testnet",
+  "core": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
+  "txid": "0x7097a11cc706eb0c3b6ea172c5f35376c67460a7c91aab81537415ebe96f7022",
+  "applicationLog": {
+    "txid": "0x7097a11cc706eb0c3b6ea172c5f35376c67460a7c91aab81537415ebe96f7022",
+    "executions": [
+      {
+        "trigger": "Application",
+        "vmstate": "HALT",
+        "gasconsumed": "534531",
+        "stack": [
+          {
+            "type": "Any"
+          }
+        ],
+        "notifications": [],
+        "exception": null,
+        "invocations": [
+          {
+            "hash": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
+            "method": "proposeUpdate",
+            "arguments": {
+              "type": "Array",
+              "value": [
+                {
+                  "type": "ByteString",
+                  "value": "xjSrmCHIO9tTs0LWQ1kYPP8rkXrC3Fvdm1dhNJTQm0s="
+                },
+                {
+                  "type": "ByteString",
+                  "value": "JMRxCorACj3yNtKghQlybb4nRRdKv4M91S4m2JsDsbQ="
+                }
+              ]
+            },
+            "argumentscount": 2,
+            "truncated": false
+          }
+        ]
+      }
+    ]
+  },
+  "rawNefDigest": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+  "rawManifestDigest": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+  "matchesCryptoLibSha256": true,
+  "proposedAt": "2026-09-15T10:55:50.056Z",
+  "availableAt": "2026-09-22T10:55:50.056Z",
+  "checkedAt": "2026-09-15T10:57:10.032Z",
+  "note": "Only a corrected proposal was submitted; contract upgrade awaits the full on-chain seven-day window."
+}

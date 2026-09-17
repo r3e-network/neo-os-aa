@@ -164,6 +164,36 @@ public class AuthorityTimelockRuntimeTests
         Assert.AreEqual(core, fx.CallUInt160(verifier, "authorizedCore"), "Core unchanged throughout");
     }
 
+    [TestMethod]
+    public void NeoDidRegistry_InitialSetThenRepoint_HonorsSevenDayWindow()
+    {
+        RuntimeFixture fx = new();
+        UInt160 hook = fx.Deploy("hooks/NeoDIDCredentialHook");
+
+        fx.CallVoid(hook, "setRegistry", ProposedCore);
+        Assert.AreEqual(ProposedCore, fx.CallUInt160(hook, "getRegistry"), "Initial registry set succeeds");
+
+        TestException instant = Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(hook, "setRegistry", OtherCore),
+            "Registry re-pointing must not remain instant");
+        StringAssert.Contains(instant.Message, "registry already set; use ProposeRegistry");
+
+        fx.CallVoid(hook, "proposeRegistry", OtherCore);
+        TestException early = Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(hook, "confirmRegistry", OtherCore),
+            "Registry confirmation inside the window must be rejected");
+        StringAssert.Contains(early.Message, "Registry change timelock not expired");
+
+        fx.AdvanceTime(Window - TimeSpan.FromSeconds(1));
+        Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(hook, "confirmRegistry", OtherCore),
+            "Registry confirmation one second before expiry must be rejected");
+
+        fx.AdvanceTime(TimeSpan.FromSeconds(1));
+        fx.CallVoid(hook, "confirmRegistry", OtherCore);
+        Assert.AreEqual(OtherCore, fx.CallUInt160(hook, "getRegistry"), "Registry re-pointed after the full window");
+    }
+
     // ========================================================================
     // 2. update — timelocked upgrades (AA-D-01)
     // ========================================================================

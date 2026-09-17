@@ -37,6 +37,7 @@ import type {
 
 const ACCOUNT_ID = 'f951cd3eb5196dacde99b339c5dcca37ac38cc22';
 const VERIFIER = 'b4107cb2cb4bace0ebe15bc4842890734abe133a';
+const CORE = 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2';
 const MASTER = '5be915aea3ce85e4752d522632f0a9520e377aaf';
 const TARGET = '49c095ce04d38642e39155f5481615c58227a498';
 const PAYMASTER = '27a81e6d04d38642e39155f5481615c58227a498';
@@ -54,6 +55,7 @@ const builder: UserOperationBuilder = createUserOpBuilder()
   .setArgs([{ type: 'Hash160', value: '0xabc' }])
   .addArg({ type: 'Integer', value: 1 })
   .setVerifier(VERIFIER)
+  .setCoreContract(CORE)
   .setChainId(860833102)
   .setNonce(7)
   .setDeadline(Date.now() + 3_600_000)
@@ -151,6 +153,7 @@ const standaloneTyped = buildV3UserOperationTypedData({
   chainId: 1,
   verifyingContract: VERIFIER,
   accountIdHash: ACCOUNT_ID,
+  coreContractHash: CORE,
   targetContract: TARGET,
   method: 'transfer',
   argsHashHex: ARGS_HASH,
@@ -173,6 +176,7 @@ void legacyStandalone.message.accountAddress;
 
 const structHash: string = buildContractCompatibleStructHash({
   accountIdHash: ACCOUNT_ID,
+  coreContractHash: CORE,
   targetContract: TARGET,
   method: 'transfer',
   argsHash: ARGS_HASH,
@@ -185,6 +189,7 @@ const signingPayload: Uint8Array = buildWeb3AuthSigningPayload({
   chainId: 1,
   verifierHash: VERIFIER,
   accountIdHash: ACCOUNT_ID,
+  coreContractHash: CORE,
   targetContract: TARGET,
   method: 'transfer',
   argsHash: ARGS_HASH,

@@ -1,5 +1,5 @@
 /* eslint-disable */
-// Generated from neo-morpheus-oracle/scripts/export-public-runtime-catalog.mjs.
+// Generated from neo-os-services/scripts/export-public-runtime-catalog.mjs.
 // Do not edit manually; re-export from the Morpheus canonical oracle workspace.
 
 export const MORPHEUS_PUBLIC_RUNTIME_CATALOG = {
@@ -59,14 +59,15 @@ export const MORPHEUS_PUBLIC_RUNTIME_CATALOG = {
       "contracts": {
         "aaCore": "0x0268a387913b250166ddec032b03332690a1ef78",
         "aaWeb3AuthVerifier": "0xf5c452cd4ba29dcdc47026383568c0d8b38d9272",
-        "aaSessionKeyVerifier": "0x3ba8333406e59f9fd83cf378b33706a33d9f3755",
-        "aaSocialRecoveryVerifier": "0x198b3a9cec9bccc2110d19bd929b10374a9d034d",
+        "aaSessionKeyVerifier": "0x63d6a10d388dd4885bc42ba69593734476f47151",
+        "aaSocialRecoveryVerifier": "0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26",
         "aaAddressMarket": "0xae7afe3a85ab08bfd1d4907b35ae8b80c75b3a69",
         "aaPaymaster": "0xa0defa2bc6d7a71ba1e237149287c8ca4ff46caf",
         "morpheusOracle": "0xf54d8584ef82315c1800373272ab08ae0db2d5ef",
         "oracleCallbackConsumer": "0xe1226268f2fe08bea67fb29e1c8fda0d7c8e9844",
         "morpheusDatafeed": "0x03013f49c42a14546c8bbe58f9d434c3517fccab",
-        "morpheusNeoDid": "0xb81f31ea81e279793b30411b82c2e82078b63105"
+        "morpheusNeoDid": "0xb81f31ea81e279793b30411b82c2e82078b63105",
+        "matrixNameService": "0x994c3cbe0d8641b9c911452c37191de8dd9f5f4e"
       },
       "domains": {
         "aa": "smartwallet.neo",
@@ -77,7 +78,7 @@ export const MORPHEUS_PUBLIC_RUNTIME_CATALOG = {
         "aaSocialRecoveryVerifier": "recovery.smartwallet.neo",
         "aaAddressMarket": "market.smartwallet.neo",
         "aaPaymaster": "paymaster.smartwallet.neo",
-        "oracle": "oracle.morpheus.neo",
+        "oracle": "morpheus-oracle.neo",
         "callbackConsumer": "callback.morpheus.neo",
         "datafeed": "pricefeed.morpheus.neo",
         "neodid": "neodid.morpheus.neo"
@@ -110,15 +111,16 @@ export const MORPHEUS_PUBLIC_RUNTIME_CATALOG = {
       },
       "contracts": {
         "aaCore": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
-        "aaWeb3AuthVerifier": "0x7147f9a508594a7656a25f45d0a7a7dede7c227f",
-        "aaSessionKeyVerifier": "0xed44c88535650b4dd6b8d59776e6ed045462cab6",
-        "aaSocialRecoveryVerifier": "",
-        "aaAddressMarket": "",
+        "aaWeb3AuthVerifier": "0x1111f5b6b046a964c75d208998c13945ce172e85",
+        "aaSessionKeyVerifier": "0x63d6a10d388dd4885bc42ba69593734476f47151",
+        "aaSocialRecoveryVerifier": "0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26",
+        "aaAddressMarket": "0x6b979cdd246cc6491a20000a2a822e497c92c23b",
         "aaPaymaster": "",
         "morpheusOracle": "0xf54d8584ef82315c1800373272ab08ae0db2d5ef",
-        "oracleCallbackConsumer": "0x8c506f224d82e67200f20d9d5361f767f0756e3b",
+        "oracleCallbackConsumer": "0x0ac1fa9cdcb66c1672f0642f62d767902f460f2b",
         "morpheusDatafeed": "0x9bea75cf702f6afc09125aa6d22f082bfd2ee064",
-        "morpheusNeoDid": ""
+        "morpheusNeoDid": "",
+        "matrixNameService": "0x994c3cbe0d8641b9c911452c37191de8dd9f5f4e"
       },
       "domains": {
         "aa": "",

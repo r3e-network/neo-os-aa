@@ -277,7 +277,7 @@ async function deployContract(
   const { nef, manifest } = loadArtifact(baseName, uniqueSuffix);
   const predictedHash = normalizeHash(
     experimental.getContractHash(
-      account.scriptHash,
+      u.HexString.fromHex(account.scriptHash),
       nef.checksum,
       manifest.name,
     ),
@@ -311,7 +311,7 @@ async function deployOracleContract(
   const { nef, manifest } = loadOracleArtifact(baseName, uniqueSuffix);
   const predictedHash = normalizeHash(
     experimental.getContractHash(
-      account.scriptHash,
+      u.HexString.fromHex(account.scriptHash),
       nef.checksum,
       manifest.name,
     ),
@@ -465,23 +465,27 @@ function encodeNeoDidSegment(value) {
   return Buffer.concat([Buffer.from([text.length]), text]);
 }
 
-function buildNeoDidBindingDigest({
+function buildNeoDidBindingCommitmentDigest({
   vaultAccount,
   provider,
   claimType,
-  claimValue,
+  claimCommitmentHex,
   masterNullifierHex,
   metadataHashHex,
+  networkMagic,
 }) {
+  const network = Buffer.alloc(4);
+  network.writeUInt32LE(Number(networkMagic) >>> 0, 0);
   return sha256Buffer(
     Buffer.concat([
-      Buffer.from("neodid-binding-v1", "utf8"),
+      Buffer.from("neodid-claim-commitment-v1", "utf8"),
       Buffer.from(sanitizeHex(vaultAccount), "hex"),
       encodeNeoDidSegment(provider),
       encodeNeoDidSegment(claimType),
-      encodeNeoDidSegment(claimValue),
+      Buffer.from(sanitizeHex(claimCommitmentHex), "hex"),
       Buffer.from(sanitizeHex(masterNullifierHex), "hex"),
       Buffer.from(sanitizeHex(metadataHashHex), "hex"),
+      network,
     ]),
   );
 }
@@ -1362,13 +1366,13 @@ async function main() {
           account,
           networkMagic,
           scenario.accountId,
-          "requireCredentialForContract",
+          "requireCredentialCommitmentForContract",
           [
             hash160Param(scenario.accountId),
             hash160Param(mockTarget.hash),
             stringParam("github"),
             stringParam("Github_VerifiedUser"),
-            stringParam("true"),
+            byteArrayParam("0x" + "11".repeat(32)),
           ],
         );
         console.log("[neodid-hook] requireCredential:done");
@@ -1398,13 +1402,15 @@ async function main() {
         const metadataHash = sanitizeHex(
           crypto.randomBytes(32).toString("hex"),
         );
-        const bindingDigest = buildNeoDidBindingDigest({
+        const claimCommitment = Buffer.alloc(32, 0x11);
+        const bindingDigest = buildNeoDidBindingCommitmentDigest({
           vaultAccount: scenario.accountId,
           provider: "github",
           claimType: "Github_VerifiedUser",
-          claimValue: "true",
+          claimCommitmentHex: claimCommitment.toString("hex"),
           masterNullifierHex: masterNullifier,
           metadataHashHex: metadataHash,
+          networkMagic,
         });
         const bindingSignature = wallet.sign(
           bindingDigest.toString("hex"),
@@ -1415,12 +1421,12 @@ async function main() {
           neoDidRegistry.hash,
           account,
           networkMagic,
-          "registerBinding",
+          "registerBindingCommitment",
           [
             hash160Param(scenario.accountId),
             stringParam("github"),
             stringParam("Github_VerifiedUser"),
-            stringParam("true"),
+            byteArrayParam(claimCommitment.toString("hex")),
             byteArrayParam(masterNullifier),
             byteArrayParam(metadataHash),
             byteArrayParam(bindingSignature),
@@ -1561,6 +1567,7 @@ async function main() {
       chainId: networkMagic,
       verifyingContract: sanitizeHex(web3AuthA.hash),
       accountIdHash: scenario.accountId,
+      coreContractHash: sanitizeHex(core.hash),
       targetContract: mockTarget.hash,
       method: "symbol",
       argsHashHex: argsHash,
@@ -2353,13 +2360,13 @@ async function main() {
       account,
       networkMagic,
       scenario.accountId,
-      "requireCredentialForContract",
+      "requireCredentialCommitmentForContract",
       [
         hash160Param(scenario.accountId),
         hash160Param(mockTarget.hash),
         stringParam("github"),
         stringParam("Github_VerifiedUser"),
-        stringParam("true"),
+        byteArrayParam("0x" + "11".repeat(32)),
       ],
     );
     const missing = await testInvoke(
@@ -2384,13 +2391,15 @@ async function main() {
     console.log("[neodid-hook] missing:done", missing?.state || "unknown");
     const masterNullifier = sanitizeHex(crypto.randomBytes(32).toString("hex"));
     const metadataHash = sanitizeHex(crypto.randomBytes(32).toString("hex"));
-    const bindingDigest = buildNeoDidBindingDigest({
+    const claimCommitment = Buffer.alloc(32, 0x11);
+    const bindingDigest = buildNeoDidBindingCommitmentDigest({
       vaultAccount: scenario.accountId,
       provider: "github",
       claimType: "Github_VerifiedUser",
-      claimValue: "true",
+      claimCommitmentHex: claimCommitment.toString("hex"),
       masterNullifierHex: masterNullifier,
       metadataHashHex: metadataHash,
+      networkMagic,
     });
     const bindingSignature = wallet.sign(
       bindingDigest.toString("hex"),
@@ -2402,12 +2411,12 @@ async function main() {
       neoDidRegistry.hash,
       account,
       networkMagic,
-      "registerBinding",
+      "registerBindingCommitment",
       [
         hash160Param(scenario.accountId),
         stringParam("github"),
         stringParam("Github_VerifiedUser"),
-        stringParam("true"),
+        byteArrayParam(claimCommitment.toString("hex")),
         byteArrayParam(masterNullifier),
         byteArrayParam(metadataHash),
         byteArrayParam(bindingSignature),

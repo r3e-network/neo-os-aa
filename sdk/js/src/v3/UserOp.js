@@ -12,6 +12,7 @@ const { buildV3UserOperationTypedData } = require('../metaTx');
  * @param {string|number} options.chainId - Chain ID
  * @param {string} options.verifierHash - Verifier contract hash
  * @param {string} options.accountId - Account ID hash
+ * @param {string} options.coreContractHash - Authorized AA core hash
  * @param {Object} options.userOp - UserOperation object
  * @param {string} options.argsHash - On-chain-computed args hash. REQUIRED: this
  *   must equal keccak256(StdLib.Serialize(args)) as produced by the contract's
@@ -22,7 +23,7 @@ const { buildV3UserOperationTypedData } = require('../metaTx');
  * @returns {Object} EIP-712 typed data
  * @throws {Error} If argsHash is omitted.
  */
-function buildEIP712PayloadForWeb3AuthVerifier({ chainId, verifierHash, accountId, userOp, argsHash }) {
+function buildEIP712PayloadForWeb3AuthVerifier({ chainId, verifierHash, accountId, coreContractHash, userOp, argsHash }) {
   if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
     // eslint-disable-next-line no-console
     console.warn('buildEIP712PayloadForWeb3AuthVerifier is deprecated. Use buildV3UserOperationTypedData from metaTx.js instead.');
@@ -42,6 +43,7 @@ function buildEIP712PayloadForWeb3AuthVerifier({ chainId, verifierHash, accountI
     chainId,
     verifyingContract: verifierHash,
     accountIdHash: accountId,
+    coreContractHash,
     targetContract: userOp.TargetContract,
     method: userOp.Method,
     argsHashHex: argsHash,

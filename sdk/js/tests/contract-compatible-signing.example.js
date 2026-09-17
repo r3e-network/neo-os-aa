@@ -25,6 +25,7 @@ async function signUserOperation() {
     chainId: 860833102, // Neo testnet magic
     verifierHash: '0xYOUR_VERIFIER_HASH_40_CHARS',
     accountIdHash: '0xYOUR_ACCOUNT_ID_40_CHARS',
+    coreContractHash: '0xYOUR_AA_CORE_HASH_40_CHARS',
     targetContract: '0xYOUR_TARGET_CONTRACT_40_CHARS',
     method: 'transfer',
     argsHash: '0xCOMPUTED_ARGS_HASH_64_CHARS',

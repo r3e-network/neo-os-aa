@@ -23,9 +23,9 @@
   "textContainsRelayReceiptAfterSubmit": true,
   "textContainsTxidAfterSubmit": true,
   "screenshots": [
-    "/Users/jinghuiliao/git/r3e/neo-abstract-account/docs/reports/shared-draft-relay-gate-browser/desktop-before-preflight.png",
-    "/Users/jinghuiliao/git/r3e/neo-abstract-account/docs/reports/shared-draft-relay-gate-browser/desktop-after-preflight.png",
-    "/Users/jinghuiliao/git/r3e/neo-abstract-account/docs/reports/shared-draft-relay-gate-browser/desktop-after-submit.png",
-    "/Users/jinghuiliao/git/r3e/neo-abstract-account/docs/reports/shared-draft-relay-gate-browser/mobile-shared-draft.png"
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/docs/reports/shared-draft-relay-gate-browser/desktop-before-preflight.png",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/docs/reports/shared-draft-relay-gate-browser/desktop-after-preflight.png",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/docs/reports/shared-draft-relay-gate-browser/desktop-after-submit.png",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/docs/reports/shared-draft-relay-gate-browser/mobile-shared-draft.png"
   ]
 }

@@ -171,7 +171,9 @@ function userOpParam({ targetContract, method, args = [], nonce = 0n, deadline =
 
 async function deployContract(client, account, networkMagic, baseName, uniqueSuffix) {
   const { nef, manifest } = loadArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(experimental.getContractHash(account.scriptHash, nef.checksum, manifest.name));
+  const predictedHash = normalizeHash(
+    experimental.getContractHash(u.HexString.fromHex(account.scriptHash), nef.checksum, manifest.name)
+  );
   const txid = await withRpcRetry(`deploy ${baseName}`, () => experimental.deployContract(nef, manifest, buildConfig(account, networkMagic)));
   const appLog = await waitForAppLog(client, txid, `deploy ${baseName}`);
   assertHalt(appLog, `deploy ${baseName}`);
@@ -451,6 +453,7 @@ async function main() {
     chainId: networkMagic,
     verifyingContract: sanitizeHex(web3Auth.hash),
     accountIdHash: web3AuthAccountId,
+    coreContractHash: sanitizeHex(core.hash),
     targetContract: GAS_HASH,
     method: 'symbol',
     argsHashHex: argsHash,

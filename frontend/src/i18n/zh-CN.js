@@ -1,6 +1,11 @@
 // zh-CN translations — dynamically loaded by i18n/index.js
 // Extracted to reduce initial bundle size (was ~100KB inline).
 export default {
+    networkGate: {
+      title: '网络不匹配',
+      description: '请求的网络与此部署不一致，账户操作界面未打开。',
+      return: '打开此网络首页',
+    },
     nav: {
       home: '首页',
       app: '应用',
@@ -210,7 +215,7 @@ export default {
       archVerifier2: 'Web3Auth / DID',
       archVerifier3: '会话密钥',
       archVerifier4: '多签 (m-of-n)',
-      archVerifier5: 'WebAuthn / Passkeys',
+      archVerifier5: 'WebAuthn 签名者（仅 P-256 验签）',
       archHooksTitle: '钩子',
       archHook1: '每日消费限额',
       archHook2: '地址白名单',
@@ -1295,7 +1300,7 @@ export default {
       calling: '调用中...',
       callVerifier: '调用验证器',
       callActiveHook: '调用活动钩子插件',
-      hookMethodPlaceholder: 'setWhitelist / setDailyLimit / requireCredentialForContract ...',
+      hookMethodPlaceholder: 'setWhitelist / setDailyLimit / requireCredentialCommitmentForContract ...',
       hookArgsPlaceholder: '[{"type":"Hash160","value":"0x..."},{"type":"Boolean","value":true}]',
       callHook: '调用钩子',
       commonExamples: '常见示例',

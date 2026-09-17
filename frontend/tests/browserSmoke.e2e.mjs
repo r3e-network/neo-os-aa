@@ -227,4 +227,18 @@ test("browser smoke covers home, identity, app workspace, market, and docs", asy
   await page.goto(`${baseUrl}/docs`, { waitUntil: "domcontentloaded" });
   await waitForVisible(page.getByText(/^Documentation$/).first(), "docs heading (mobile)");
   await captureScreenshot(page, "mobile-docs");
+
+  for (const viewport of [{ width: 1440, height: 960 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    for (const requested of ['testnet', 'invalid', '', 'mainnet&network=testnet']) {
+      await page.goto(`${baseUrl}/app?network=${requested}`, { waitUntil: 'networkidle' });
+      await waitForVisible(page.getByTestId('network-mismatch'), 'network mismatch guard');
+      assert.equal(await page.getByRole('heading', { name: /Abstract Account Workspace/i }).count(), 0);
+      assert.equal(await page.getByRole('button', { name: /Connect Wallet/i }).count(), 0);
+    }
+    await captureScreenshot(page, `network-mismatch-${viewport.width}`);
+    await page.getByRole('link', { name: 'Open this network home' }).click();
+    await waitForVisible(page.getByRole('heading', { name: /Neo AA Operations Console/i }), 'explicit network home');
+    assert.equal(new URL(page.url()).searchParams.get('network'), 'mainnet');
+  }
 });

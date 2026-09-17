@@ -8,7 +8,7 @@ import {
   decodeHash160Stack,
   decodeIntegerStack,
   decodeValidationPreviewStack,
-} from '../../../../shared/metaTxCore.mjs';
+} from '../../shared/metaTxCore.mjs';
 
 // EIP-712 typed-data builders come from the shared core (single source of
 // truth with the SDK, see shared/metaTxCore.mjs). The core carries the SDK's

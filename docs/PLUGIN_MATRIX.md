@@ -37,7 +37,7 @@ The main deployment set used for the full matrix run was:
 - Web3AuthVerifier B: `0x0a9141e587d31f50e37557c2ae0d06918a5bf360`
 - TEEVerifier: `0x07586f52b3a37cf528c4b3954f3f3aaff40256f2`
 - WebAuthnVerifier: `0x08d7b9b7e101f7ad5c369864df9f1b519af91539`
-- SessionKeyVerifier: `0xed44c88535650b4dd6b8d59776e6ed045462cab6`
+- SessionKeyVerifier v2: `0x63d6a10d388dd4885bc42ba69593734476f47151`
 - MultiSigVerifier: `0x11d1012e071fac7fd75569981ac44da097913a84`
 - SubscriptionVerifier: `0xaaad17cff9bf9a799e9f1c5e7645267948a11d53`
 - ZKEmailVerifier: `0x018bb68bfe6a44a52c938d8dc0002a2d5137b693`
@@ -171,7 +171,7 @@ Conclusion:
 - Positive execution tx: `0x0128360207bc4bfdba2dac49a06f720aaa0f7037cb2261992ad13bfa26121d2b`
 - Registry-backed configuration:
   - `setRegistry(neoDidRegistryHash)`
-  - `requireCredentialForContract(accountId, target, provider, claimType, claimValue)`
+  - `requireCredentialCommitmentForContract(accountId, target, provider, claimType, claimCommitment)`
 - Positive path:
   - register a real binding on `NeoDIDRegistry`
   - execute the gated target successfully

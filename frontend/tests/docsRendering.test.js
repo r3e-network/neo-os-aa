@@ -59,7 +59,8 @@ test("supplemental root docs are preserved and indexable", () => {
 
 test("docs registry uses the repo README as the overview source of truth", () => {
   const registrySource = read("src/features/docs/registry.js");
-  assert.match(registrySource, /@repo\/README\.md\?raw/);
+  assert.match(registrySource, /@\/assets\/docs\/repo-readme\.md\?raw/);
+  assert.match(read("src/assets/docs/repo-readme.md"), /Abstract Account|Neo N3/i);
 });
 
 test("workflow doc explains the V3 execution path after proxy hardening", () => {

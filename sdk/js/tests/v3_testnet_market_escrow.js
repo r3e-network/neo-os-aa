@@ -138,7 +138,9 @@ function assertVmState(appLog, label, expected = 'HALT') {
 
 async function deployContract(client, account, networkMagic, baseName, uniqueSuffix) {
   const { nef, manifest } = loadArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(experimental.getContractHash(account.scriptHash, nef.checksum, manifest.name));
+  const predictedHash = normalizeHash(
+    experimental.getContractHash(u.HexString.fromHex(account.scriptHash), nef.checksum, manifest.name)
+  );
   const txid = await withRpcRetry(`deploy ${baseName}`, () => experimental.deployContract(nef, manifest, buildConfig(account, networkMagic)));
   const appLog = await waitForAppLog(client, txid, `deploy ${baseName}`);
   assertVmState(appLog, `deploy ${baseName}`, 'HALT');

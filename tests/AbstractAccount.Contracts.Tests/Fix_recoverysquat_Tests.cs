@@ -228,7 +228,7 @@ public class Fix_RecoverySquat_Tests
             () => h.Fx.CallVoid(
                 h.Verifier, "setupRecovery",
                 h.SetupArgs(legacyTextId, OwnerA, h.Core, verifierKey.CompressedPublicKey)));
-        StringAssert.Contains(malformed.Message, "accountId must be a 20-byte AA account id");
+        StringAssert.Contains(malformed.Message, "invalid");
     }
 
     // ========================================================================

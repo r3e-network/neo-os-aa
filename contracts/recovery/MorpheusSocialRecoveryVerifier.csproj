@@ -18,6 +18,7 @@
     <Compile Include="MorpheusSocialRecoveryVerifier.Queries.cs" />
     <Compile Include="MorpheusSocialRecoveryVerifier.Storage.cs" />
     <Compile Include="MorpheusSocialRecoveryVerifier.Validation.cs" />
+    <Compile Include="MorpheusSocialRecoveryVerifier.V3.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Neo.SmartContract.Framework" Version="3.9.1" />

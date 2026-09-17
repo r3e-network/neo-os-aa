@@ -50,8 +50,8 @@ internal sealed class RuntimeFixture
     }
 
     /// <summary>
-    /// Deploys a compiled contract from <c>contracts/bin/v3</c> (path relative to that
-    /// directory, without extension) and returns its runtime hash.
+    /// Deploys a compiled artifact from contracts/bin/v3 (the directory the deploy
+    /// tooling reads), with logical names such as verifiers/SessionKeyVerifier.
     /// </summary>
     public UInt160 Deploy(string baseName, object? data = null)
     {
@@ -66,9 +66,23 @@ internal sealed class RuntimeFixture
     }
 
     /// <summary>
+    /// Deploys an externally supplied artifact pair (e.g. a byte-for-byte copy of a
+    /// deployed contract) so tests execute live bytecode instead of a local build.
+    /// </summary>
+    public UInt160 DeployArtifact(byte[] nefBytes, string manifestText, object? data = null)
+    {
+        NefFile nef = NefFile.Parse(nefBytes, verify: true);
+        ContractManifest manifest = ContractManifest.Parse(manifestText);
+        UInt160 contractHash = Engine.GetDeployHash(nef, manifest);
+        _ = Call(ContractManagementHash, "deploy", nef.ToArray(), manifestText, data);
+        return contractHash;
+    }
+
+    /// <summary>
     /// Replaces the transaction signers. Global witness scope is used so that
-    /// <c>Runtime.CheckWitness</c> succeeds in nested contract-to-contract calls, matching
-    /// how wallets attach witnesses for AA flows. The first account is the transaction sender.
+    /// <c>Runtime.CheckWitness</c> succeeds in nested contract-to-contract calls for test
+    /// convenience, not as evidence of production wallet scopes. Scope-sensitive tests
+    /// must set explicit signers on Engine. The first account is the transaction sender.
     /// </summary>
     public void SetSigners(params UInt160[] accounts)
     {
@@ -237,6 +251,7 @@ internal sealed class RuntimeFixture
         string s => new ContractParameter(ContractParameterType.String) { Value = s },
         byte[] bytes => new ContractParameter(ContractParameterType.ByteArray) { Value = bytes },
         UInt160 hash => new ContractParameter(ContractParameterType.Hash160) { Value = hash },
+        Neo.Cryptography.ECC.ECPoint point => new ContractParameter(ContractParameterType.ByteArray) { Value = point.EncodePoint(true) },
         object?[] array => new ContractParameter(ContractParameterType.Array) { Value = array.Select(ToParameter).ToList() },
         _ => throw new NotSupportedException($"Unsupported argument type: {value.GetType()}")
     };

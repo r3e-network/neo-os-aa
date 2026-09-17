@@ -1,0 +1,37 @@
+{
+  "network": "mainnet",
+  "networkMagic": 860833102,
+  "rpcUrl": "https://api.n3index.dev/mainnet",
+  "coreHash": "0x0268a387913b250166ddec032b03332690a1ef78",
+  "deployer": "NR3E4D8NUXh3zhbf5ZkAp3rTxWbQqNih32",
+  "planOnly": false,
+  "deployments": [
+    {
+      "module": "session",
+      "artifact": "SessionKeyVerifier",
+      "hash": "0x63d6a10d388dd4885bc42ba69593734476f47151",
+      "status": "deployed",
+      "deploymentTx": "0x22ea5329fcb1402d617a26a69c9280cf210223067d15ad7064797c15c7936ed4",
+      "bindingTx": "0xcab2e2f3b75b67ed3c70f0d2e83b1d58444d9114574ad55451b8e4f20e2ee5cf",
+      "checksum": 1874586225,
+      "methodCount": 22,
+      "supportsV3": true,
+      "authorizedCore": "0x0268a387913b250166ddec032b03332690a1ef78",
+      "version": "2.0.0"
+    },
+    {
+      "module": "recovery",
+      "artifact": "SocialRecoveryVerifier",
+      "hash": "0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26",
+      "status": "deployed",
+      "deploymentTx": "0xd5be52a826d326e386219b3f8b243549608cdc72a352a35446c5a05746e53240",
+      "bindingTx": "0xe01594ed5a6762f22a5a9ce898fedf5ec8edec1c723d906b3cb0b663b38c8347",
+      "checksum": 2171070755,
+      "methodCount": 57,
+      "supportsV3": true,
+      "authorizedCore": "0x0268a387913b250166ddec032b03332690a1ef78",
+      "version": "2.0.0"
+    }
+  ],
+  "generatedAt": "2026-08-31T05:15:39.971Z"
+}
