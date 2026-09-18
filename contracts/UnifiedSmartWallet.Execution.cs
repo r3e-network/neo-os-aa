@@ -9,6 +9,15 @@ namespace AbstractAccount
 {
     public partial class UnifiedSmartWallet
     {
+        // Protocol bounds. These are consensus-visible limits: accepting an unbounded
+        // object/array here would make the operation format depend only on VM resource
+        // limits. These cardinality bounds do not replace gas or nested-payload limits.
+        private const int MaxUserOperationBatchLength = 32;
+        private const int MaxUserOperationArgsLength = 64;
+        private const int MaxUserOperationArgsSerializedLength = 4096;
+        private const int MaxUserOperationMethodLength = 128;
+        private const int MaxUserOperationSignatureLength = 1024;
+
         // ========================================================================
         // 3. Core Routing: Validation and Execution (aligned with 4337 Validate & Call)
         // ========================================================================
@@ -22,7 +31,9 @@ namespace AbstractAccount
         /// </remarks>
         public static object ExecuteUserOp(UInt160 accountId, UserOperation op)
         {
+            ValidateAccountId(accountId);
             ExecutionEngine.Assert(!IsExecutionActive(accountId), "Reentrant call rejected");
+            ValidateUserOperation(op);
 
             AccountState state = GetAccountState(accountId);
             AssertNoMarketEscrow(accountId);
@@ -136,6 +147,8 @@ namespace AbstractAccount
         [Safe]
         public static object[] PreviewUserOpValidation(UInt160 accountId, UserOperation op)
         {
+            ValidateAccountId(accountId);
+            ValidateUserOperation(op);
             AccountState state = GetAccountState(accountId);
             return new object[]
             {
@@ -158,6 +171,10 @@ namespace AbstractAccount
         /// </summary>
         public static object[] ExecuteUserOps(UInt160 accountId, UserOperation[] ops)
         {
+            ValidateAccountId(accountId);
+            ExecutionEngine.Assert(ops != null && ops.Length > 0, "Operations required");
+            ExecutionEngine.Assert(ops!.Length <= MaxUserOperationBatchLength, "Batch exceeds protocol limit");
+
             object[] results = new object[ops.Length];
             for (int i = 0; i < ops.Length; i++)
             {
@@ -178,7 +195,7 @@ namespace AbstractAccount
         // lane, which makes every channel (including channel >= 1) reachable.
         private static bool IsNonceAcceptable(UInt160 accountId, BigInteger nonce)
         {
-            if (nonce < 0) return false;
+            if (nonce < 0 || !IsUnsignedIntegerWithinBytes(nonce, 32)) return false;
 
             BigInteger channel = nonce >> 64;
             BigInteger sequence = nonce & 0xFFFFFFFFFFFFFFFF;
@@ -194,6 +211,7 @@ namespace AbstractAccount
         private static void ConsumeNonce(UInt160 accountId, BigInteger nonce)
         {
             ExecutionEngine.Assert(nonce >= 0, "Invalid sequence for channel");
+            ExecutionEngine.Assert(IsUnsignedIntegerWithinBytes(nonce, 32), "Nonce outside uint256 domain");
 
             // Strictly follow ERC-4337 channel incrementing mode (Key = Channel, Seq = Sequence)
             BigInteger channel = nonce >> 64;
@@ -210,6 +228,51 @@ namespace AbstractAccount
             // and out-of-order sequences within a channel are rejected.
             ExecutionEngine.Assert(sequence == currentSeq, "Invalid sequence for channel");
             Storage.Put(Storage.CurrentContext, key, currentSeq + 1);
+        }
+
+        private static void ValidateAccountId(UInt160 accountId)
+        {
+            ExecutionEngine.Assert(accountId != null && accountId != UInt160.Zero && accountId.IsValid, "Account id required");
+        }
+
+        /// <summary>
+        /// Enforces the canonical UserOperation ABI boundary before any external call.
+        /// BigInteger is used by Neo's VM, but the AA wire format is deliberately bounded
+        /// to the unsigned uint256 domain for nonce and deadline.
+        /// </summary>
+        private static void ValidateUserOperation(UserOperation op)
+        {
+            ExecutionEngine.Assert(op != null, "Operation required");
+            ExecutionEngine.Assert(op!.TargetContract != null && op.TargetContract != UInt160.Zero && op.TargetContract.IsValid,
+                "Target contract required");
+            ExecutionEngine.Assert(op.Method != null && op.Method.Length > 0 && op.Method.Length <= MaxUserOperationMethodLength,
+                "Invalid method");
+            ExecutionEngine.Assert(op.Args != null && op.Args.Length <= MaxUserOperationArgsLength,
+                "Arguments exceed protocol limit");
+            byte[] serializedArgs = (byte[])StdLib.Serialize(op.Args!);
+            ExecutionEngine.Assert(serializedArgs.Length <= MaxUserOperationArgsSerializedLength,
+                "Serialized arguments exceed protocol limit");
+            ExecutionEngine.Assert(op.Deadline >= 0 && IsUnsignedIntegerWithinBytes(op.Deadline, 32),
+                "Deadline outside uint256 domain");
+            ExecutionEngine.Assert(op.Nonce >= 0, "Invalid sequence for channel");
+            ExecutionEngine.Assert(IsUnsignedIntegerWithinBytes(op.Nonce, 32),
+                "Nonce outside uint256 domain");
+            ExecutionEngine.Assert(op.Signature != null, "Signature required");
+            ExecutionEngine.Assert(op.Signature!.Length <= MaxUserOperationSignatureLength,
+                "Signature exceeds protocol limit");
+        }
+
+        /// <summary>
+        /// BigInteger.ToByteArray() is signed little-endian and may include one trailing
+        /// sign byte. Trim that byte before applying the unsigned protocol-width bound.
+        /// </summary>
+        private static bool IsUnsignedIntegerWithinBytes(BigInteger value, int maxBytes)
+        {
+            if (value < 0) return false;
+            byte[] encoded = value.ToByteArray();
+            int length = encoded.Length;
+            if (length > 0 && encoded[length - 1] == 0) length--;
+            return length <= maxBytes;
         }
     }
 }

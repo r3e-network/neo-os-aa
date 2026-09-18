@@ -93,6 +93,44 @@ public class PaymasterRuntimeTests
     }
 
     [TestMethod]
+    [DataRow(1L)]
+    [DataRow(100_000_000L)]
+    [DataRow(500_000_000L)]
+    public void Paymaster_DepositWithdraw_RoundTripPreservesBalancesAndOtherSponsor(long rawAmount)
+    {
+        BigInteger amount = rawAmount;
+        PaymasterHarness h = new(depositAmount: 3 * OneGas);
+        // Relay is a second sponsor for this test, not a reimbursement recipient.
+        h.Fx.FundGasFromValidators(Relay, amount * 2);
+        h.Fx.SetSigners(Relay);
+        BigInteger walletBefore = h.Fx.GasBalanceOf(Relay);
+        BigInteger contractBefore = h.Fx.GasBalanceOf(h.Paymaster);
+        BigInteger firstSponsorBefore = h.Deposit();
+        BigInteger firstWalletBefore = h.Fx.GasBalanceOf(Sponsor);
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Paymaster, "getSponsorDeposit", Relay));
+
+        h.Fx.TransferGas(Relay, h.Paymaster, amount, null);
+        Assert.AreEqual(amount, h.Fx.CallInteger(h.Paymaster, "getSponsorDeposit", Relay));
+        Assert.AreEqual(walletBefore - amount, h.Fx.GasBalanceOf(Relay));
+        Assert.AreEqual(contractBefore + amount, h.Fx.GasBalanceOf(h.Paymaster));
+        Assert.AreEqual(firstSponsorBefore, h.Deposit());
+
+        h.Fx.CallVoid(h.Paymaster, "withdrawDeposit", amount);
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Paymaster, "getSponsorDeposit", Relay));
+        Assert.AreEqual(walletBefore, h.Fx.GasBalanceOf(Relay), "Round trip restores the second sponsor's GAS");
+        Assert.AreEqual(contractBefore, h.Fx.GasBalanceOf(h.Paymaster), "Other sponsor's backing is retained");
+        Assert.AreEqual(firstSponsorBefore, h.Deposit());
+        Assert.AreEqual(firstWalletBefore, h.Fx.GasBalanceOf(Sponsor));
+
+        TestException empty = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Paymaster, "withdrawDeposit", BigInteger.One));
+        StringAssert.Contains(empty.Message, "Insufficient deposit");
+        Assert.AreEqual(walletBefore, h.Fx.GasBalanceOf(Relay));
+        Assert.AreEqual(contractBefore, h.Fx.GasBalanceOf(h.Paymaster));
+        Assert.AreEqual(firstSponsorBefore, h.Deposit());
+    }
+
+    [TestMethod]
     public void Paymaster_Settlement_ReimbursesRelayWithinBudgets()
     {
         PaymasterHarness h = new(depositAmount: 5 * OneGas);
