@@ -1,0 +1,13 @@
+{
+  "schema": "aa-formal-source-lock/v1",
+  "boundary": "Manual correspondence snapshot; NOT a refinement proof or deployed-artifact attestation. Review models and tests before changing pins.",
+  "sources": {
+    "contracts/UnifiedSmartWallet.Escape.cs": "df9b57ddf6cee7b5cabab4f41d2cc0de1329dcb55547b8180e47d67169bfbbe8",
+    "contracts/UnifiedSmartWallet.Execution.cs": "fac8ba367ae24d9e8c6f4d41f09ee4cde8f669a86b824111f00d6e756426f7f5",
+    "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
+    "contracts/UnifiedSmartWallet.Paymaster.cs": "0ecbd13f9f8f51b43339e7ac66ac9cd5e77f30e06300fa6d71dde12f18c78f0a",
+    "contracts/UnifiedSmartWallet.State.cs": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f",
+    "contracts/paymaster/Paymaster.cs": "c04511d90eff0e97fabb94d17c38c80de4287186138dcdf01073ee2a16cada87",
+    "contracts/verifiers/VerifierPayload.cs": "9366d6d24a0ad9be79b24756558bea6b89e165b91a6b4e24cca2e54147204f12"
+  }
+}

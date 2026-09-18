@@ -81,6 +81,7 @@ The Neo N3 Abstract Account system implements a policy-gated, plugin-based accou
 | **Availability** | No per-account deployment | Single point of failure |
 | **Non-repudiation** | Nonce + Deadline | Sender can't deny transaction |
 | **Replay Protection** | Nonce + Network ID + Deadline | Can't replay on same/different chain |
+| **Operation Shape** | Target/method/argument/serialization/signature/batch bounds | Rejects malformed and resource-amplifying input before execution |
 
 ### 3.2 Verification Layer
 
@@ -182,9 +183,9 @@ flowchart TD
 
 ### 5.2 Should-Hold Invariants
 
-1. **Gas Limits on Verifiers:** *(VIOLATED)* Verifiers can consume unbounded gas
-2. **Plugin State Cleanup:** *(PARTIAL)* Market settlement may leave orphaned storage
-3. **Session Key Revocation:** *(PARTIAL)* Race condition between clear and use
+1. **Gas Limits on Verifiers:** *(OPEN)* Verifier execution still needs explicit gas/resource accounting.
+2. **Plugin State Cleanup:** *(PARTIAL)* Current settlement clears known plugin markers; full plugin/refinement coverage is pending.
+3. **Session Key Revocation:** *(DEFINED)* Revocation is effective at canonical transaction execution order; a later validation sees no active key, and `SessionKeyRevoked` is emitted. No protocol component promises mempool cancellation or retroactive invalidation of an operation already executed earlier in the chain.
 
 ---
 
@@ -194,12 +195,12 @@ flowchart TD
 
 | ID | Severity | Component | Description | Status |
 | --- | --- | --- | --- |
-| **VULN-001** | Critical | **Verifier Gas DoS** | Verifiers have no gas limit | Open |
-| **VULN-002** | High | **Escape Hatch Bypass** | Market escrow clears escape state | Open |
-| **VULN-003** | High | **Session Key Race** | Clear/use timing window | Open |
-| **VULN-004** | Medium | **MultiSig Empty Array** | No explicit empty check | Open |
-| **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup incomplete | Open |
-| **VULN-006** | Low | **Nonce Collision** | Salt space insufficiently large | Open |
+| **VULN-001** | Critical | **Verifier Gas DoS** | Verifiers still need explicit gas/resource accounting | Open / unverified |
+| **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Mitigated in source; refinement/deployment unverified |
+| **VULN-003** | Medium | **Session Key Ordering** | A signed operation can execute before a later revocation transaction is ordered | Defined execution-order semantics; residual pre-inclusion operational risk |
+| **VULN-004** | Medium | **MultiSig Empty Array** | Empty, oversized, invalid-threshold and duplicate verifier configurations | Fixed in current source; dedicated proof pending |
+| **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Partial / open |
+| **VULN-006** | Low | **Nonce Collision** | Legacy salt wording; current core uses 192-bit channel + 64-bit sequence with uint256 bound | Fixed in protocol core; transport/refinement unverified |
 
 ### 6.2 Mitigated Attack Vectors
 
@@ -234,13 +235,13 @@ flowchart TD
 
 - **SHA256:** Used for payload hashing in most verifiers
 - **Keccak256:** Used for `Web3AuthVerifier` EIP-712 compatibility
-- **Nonce Hashing:** Storage key includes `accountId` + channel/salt
+- **Nonce Storage:** Storage key includes `accountId` + a uint192 channel; the uint64 sequence is the stored cursor
 
 ### 7.3 Replay Protection Mechanisms
 
 1. **Nonce:**
-   - Sequential: Auto-increment per channel
-   - Salt: UUID-based, tracked in storage
+   - Canonical two-dimensional form: `channel = nonce >> 64`, `sequence = nonce & (2^64 - 1)`
+   - Core rejects negative and over-width values; each channel advances exactly one step
 
 2. **Deadline:**
    - Absolute timestamp (`Runtime.Time`)
@@ -354,9 +355,9 @@ stateDiagram-v2
 
 ### 11.1 Critical Priority
 
-1. **Verifier Gas Limits:** Add gas cap to verifier `validateSignature` calls
-2. **Escape Escrow Protection:** Block market entry during active escape
-3. **Session Key Delay:** Add revocation timelock window
+1. **Verifier Gas Limits:** Add explicit gas/resource accounting to verifier `validateSignature` calls
+2. **Deployed Refinement:** Prove/read back that the hardened source and formal boundary match deployed NEF
+3. **Session Key Cancellation UX:** Relayers and wallets must re-check canonical key state before submission; cancellation is not a chain-level rollback primitive
 
 ### 11.2 Medium Priority
 
@@ -366,9 +367,9 @@ stateDiagram-v2
 
 ### 11.3 Low Priority
 
-7. **Nonce Space Expansion:** Increase salt threshold to 2^64
+7. **Protocol Conformance:** Add canonical vectors for uint256 nonce encoding, UTF-8 method bounds and nested-argument limits
 8. **Account-Based Rate Limiting:** Per-account limits in relay
-9. **Formal Verification:** Third-party security audit
+9. **Formal Verification:** Independent review of the remaining refinement and callback boundaries
 
 ---
 

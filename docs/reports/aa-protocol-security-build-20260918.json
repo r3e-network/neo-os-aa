@@ -1,0 +1,124 @@
+{
+  "schema": "neoos-aa-local-build-report/v1",
+  "checkedAt": "2026-09-18T09:09:05Z",
+  "scope": "Local source-to-artifact reproducibility and security-regression evidence; no chain write.",
+  "compiler": {
+    "tool": "nccs",
+    "version": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697",
+    "project": "contracts/UnifiedSmartWallet.csproj",
+    "frameworkPackage": "Neo.SmartContract.Framework 3.9.1",
+    "invocations": 2,
+    "invocationOutput": "UnifiedSmartWalletV3.nef and UnifiedSmartWalletV3.manifest.json",
+    "byteIdenticalAcrossInvocations": true
+  },
+  "sourceFiles": [
+    {
+      "path": "contracts/UnifiedSmartWallet.cs",
+      "sha256": "acae71beecf5fac6886117293b0ab2ca4358c1c6bf1685576561200462b45f46"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Models.cs",
+      "sha256": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Internal.cs",
+      "sha256": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Events.cs",
+      "sha256": "361b616f6557bd8b845c2c790d32152653e0b09668ac4c2baeea302429fa8f2f"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Accounts.cs",
+      "sha256": "6629d6ea02855d04a283f4596b9d3b6d4fcdf42a6c3929e6d9f0daee85303605"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.PlatformRegistrar.cs",
+      "sha256": "9c729c0a5778484cf1b4e23122eed5b077bcd80f0e33b8e6a428c60a93a91abb"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Proxy.cs",
+      "sha256": "46427b4d2046f03d29bd51130c902d2ef7e2239f97617e85c6e0d51d1bb123e6"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.State.cs",
+      "sha256": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Execution.cs",
+      "sha256": "fac8ba367ae24d9e8c6f4d41f09ee4cde8f669a86b824111f00d6e756426f7f5"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.VerifyContext.cs",
+      "sha256": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Escape.cs",
+      "sha256": "df9b57ddf6cee7b5cabab4f41d2cc0de1329dcb55547b8180e47d67169bfbbe8"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.MarketEscrow.cs",
+      "sha256": "cd71b7b892c45b33ff144136057b92f406dd41ca490422843536c2553f41a609"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Admin.cs",
+      "sha256": "74fa83c1f5e39a3cc1661a71efa5b061e87374b8d7904b9d61e9662c39738f52"
+    },
+    {
+      "path": "contracts/UnifiedSmartWallet.Paymaster.cs",
+      "sha256": "0ecbd13f9f8f51b43339e7ac66ac9cd5e77f30e06300fa6d71dde12f18c78f0a"
+    }
+  ],
+  "coreArtifacts": [
+    {
+      "path": "contracts/bin/v3/UnifiedSmartWalletV3.nef",
+      "sha256": "aa5bbf427c28a6cfcaf6bf65b7f421608cdd907c5dd96b64a59947cbb4b009d5"
+    },
+    {
+      "path": "contracts/bin/v3/UnifiedSmartWalletV3.manifest.json",
+      "sha256": "0f1447724af4a576c70032495edcd1369d81d47b60497ff90c97e985d29cebe0"
+    }
+  ],
+  "sessionKeyProfile": {
+    "source": {
+      "path": "contracts/verifiers/SessionKeyVerifier.cs",
+      "sha256": "2237ea633139b025039757eb175cb1d9be2dc2a95965ad0c427d52d910d5aa96"
+    },
+    "artifacts": [
+      {
+        "path": "contracts/bin/v3/verifiers/SessionKeyVerifier.nef",
+        "sha256": "5f0a37a239c2bb696d7322c36b1b696cb671f8fa0f73f87fd0cabf5e6f9db2ab"
+      },
+      {
+        "path": "contracts/bin/v3/verifiers/SessionKeyVerifier.manifest.json",
+        "sha256": "e444f8ef49674ad4121158dcbf317547c87d13e1befcd5016ac229a6655aab0d"
+      }
+    ],
+    "deterministicBuildInvocations": 2,
+    "byteIdenticalAcrossInvocations": true,
+    "revocationEvent": "SessionKeyRevoked(accountId)",
+    "orderingRule": "A later validation observes the clear after the clear transaction is canonically executed; earlier execution is not retroactively invalidated."
+  },
+  "regressionEvidence": {
+    "contractRuntimeSuite": {
+      "passed": 257,
+      "failed": 0,
+      "skipped": 0
+    },
+    "sessionRevocationRuntime": "clear then validate faults with No session key active; successful clear emits SessionKeyRevoked"
+  },
+  "deployedParity": {
+    "status": "unverified",
+    "chainReadbackPerformed": false,
+    "deploymentAttempted": false,
+    "reason": "This report proves reproducible local compilation only; it does not establish equality with any deployed NEF or manifest."
+  },
+  "privacy": {
+    "credentialsIncluded": false,
+    "absoluteUserPathsIncluded": false
+  },
+  "notes": [
+    "The earlier mainnet-aa-rebuild-20260915 report referenced different artifact hashes; that historical claim is not reused for this hardened source.",
+    "Verifier gas/resource isolation remains a platform-level open obligation because Contract.Call exposes no per-call gas budget in the checked framework surface."
+  ]
+}

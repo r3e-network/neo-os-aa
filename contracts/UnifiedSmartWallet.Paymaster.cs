@@ -47,7 +47,8 @@ namespace AbstractAccount
             UInt160 sponsor,
             BigInteger reimbursementAmount)
         {
-            ExecutionEngine.Assert(accountId != null && accountId != UInt160.Zero, "AccountId required");
+            ValidateAccountId(accountId);
+            ValidateUserOperation(op);
             ExecutionEngine.Assert(paymaster != null && paymaster != UInt160.Zero, "Paymaster required");
             ExecutionEngine.Assert(sponsor != null && sponsor != UInt160.Zero, "Sponsor required");
             ExecutionEngine.Assert(reimbursementAmount > 0, "Reimbursement amount required");
@@ -88,11 +89,18 @@ namespace AbstractAccount
             UInt160 sponsor,
             BigInteger reimbursementAmount)
         {
-            ExecutionEngine.Assert(accountId != null && accountId != UInt160.Zero, "AccountId required");
+            ValidateAccountId(accountId);
             ExecutionEngine.Assert(paymaster != null && paymaster != UInt160.Zero, "Paymaster required");
             ExecutionEngine.Assert(sponsor != null && sponsor != UInt160.Zero, "Sponsor required");
             ExecutionEngine.Assert(reimbursementAmount > 0, "Reimbursement amount required");
             ExecutionEngine.Assert(ops != null && ops.Length > 0, "Operations required");
+            ExecutionEngine.Assert(ops!.Length <= MaxUserOperationBatchLength, "Batch exceeds protocol limit");
+
+            UserOperation[] validatedOps = ops!;
+            for (int i = 0; i < validatedOps.Length; i++)
+            {
+                ValidateUserOperation(validatedOps[i]);
+            }
 
             // Verify the paymaster is trusted
             UInt160 paymasterCore = (UInt160)Contract.Call(paymaster!, "authorizedCore", CallFlags.ReadOnly, new object[] { });

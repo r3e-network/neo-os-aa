@@ -40,7 +40,9 @@ This index keeps the root documentation set visible and easy to browse.
 
 ## Security Notes
 
+- `docs/AA-FORMAL-VERIFICATION.md` — AA formal-model, runtime-correspondence and boundary report
 - `docs/SECURITY_MODEL.md` — current threat model and trust assumptions
+- `docs/reports/aa-protocol-security-build-20260918.json` — reproducible local artifact and security-regression receipt
 - `docs/SECURITY_AUDIT.md`
 - `docs/ETHEREUM_AA_COMPARISON.md`
 - `docs/PLUGIN_MATRIX.md`

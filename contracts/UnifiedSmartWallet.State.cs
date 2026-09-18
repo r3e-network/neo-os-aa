@@ -154,6 +154,8 @@ namespace AbstractAccount
         [Safe]
         public static BigInteger GetNonce(UInt160 accountId, BigInteger channel)
         {
+            ValidateAccountId(accountId);
+            ExecutionEngine.Assert(channel >= 0 && IsUnsignedIntegerWithinBytes(channel, 24), "Invalid channel");
             byte[] key = Helper.Concat(Prefix_Nonce, (byte[])accountId);
             key = Helper.Concat(key, channel.ToByteArray());
 

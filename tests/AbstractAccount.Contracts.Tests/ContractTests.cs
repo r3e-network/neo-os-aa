@@ -689,8 +689,9 @@ public class ContractTests
         StringAssert.Contains(source, "authorizedCore");
         StringAssert.Contains(source, "Paymaster not bound to this core");
 
-        // M-2 fix: accountId validation
-        StringAssert.Contains(source, "AccountId required");
+        // M-2 fix: accountId validation is shared with the canonical execution path
+        StringAssert.Contains(source, "ValidateAccountId(accountId)");
+        StringAssert.Contains(source, "ValidateUserOperation(op)");
 
         // H-2 fix: batch ops must share target/method
         StringAssert.Contains(source, "Batch ops must share target contract");

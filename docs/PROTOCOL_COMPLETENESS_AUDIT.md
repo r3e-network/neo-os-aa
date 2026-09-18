@@ -4,6 +4,13 @@
 **Auditor:** NeoOS protocol remediation review
 **Status:** Conditional compatibility; Neo-native implementation with explicit adapters
 
+> **Snapshot notice:** This is a 2026-09-13 compatibility snapshot. Its
+> historical finding list and recommendations are not the current remediation
+> ledger. For current source status, bounded formal evidence, and explicit
+> unresolved boundaries, use `docs/SECURITY_MODEL.md`,
+> `docs/AA-FORMAL-VERIFICATION.md`, and the dated build receipt under
+> `docs/reports/`.
+
 ---
 
 ## Executive Summary
