@@ -64,7 +64,7 @@ The ABI representation of <code>UserOperation</code> is an Array of exactly six 
 | 5 || signature || ByteArray || Verifier-specific authorization bytes
 |}
 
-The core MUST reject invalid field shapes or numeric ranges before target execution. A zero-length signature is permitted only when the configured authorization scheme permits it, such as native-witness authorization; it is not authorization by itself.
+The core MUST reject invalid field shapes or numeric ranges before target execution. `targetContract` MUST be non-zero and valid; `method` MUST be a non-empty UTF-8 string of at most 128 bytes; `args` MUST contain at most 64 items and its canonical serialization MUST be at most 4096 bytes; `signature` MUST be at most 1024 bytes; `nonce` and `deadline` MUST each be in the unsigned 256-bit range. A zero-length signature is permitted only when the configured authorization scheme permits it, such as native-witness authorization; it is not authorization by itself.
 A signing profile MUST define supported argument types, recursive serialization, maximum lengths and nesting, and reject unsupported values. JSON stringification or EVM ABI encoding MUST NOT silently substitute for that serialization.
 
 ===Execution entrypoints===
@@ -74,7 +74,7 @@ executeUserOp(accountId: Hash160, op: Array) -> Any
 executeUserOps(accountId: Hash160, ops: Array) -> Array
 </pre>
 
-Both methods are application-phase, non-safe ABI methods. The batch method takes a non-empty Array of UserOperation arrays for one account.
+Both methods are application-phase, non-safe ABI methods. The batch method takes a non-empty Array of UserOperation arrays for one account and MUST reject more than 32 operations in one invocation.
 The core MUST look up an existing account and use its configured verifier, hook and any explicitly specified recovery state. Caller-supplied module identities MUST NOT replace these bindings.
 
 For each operation, the core MUST:
@@ -116,6 +116,18 @@ postExecute(accountId: Hash160, op: Array, result: Any) -> Void
 
 The core MUST call <code>validateSignature</code> with <code>CallFlags.ReadOnly</code>. The method MUST have a Boolean ABI result; false, a missing method, a wrong result type, or a VM failure rejects authorization.
 An installed verifier MUST implement <code>postExecute</code>; a verifier without accounting needs MAY implement it as a no-op. Its post-execution failure MUST fail the invocation.
+
+==== Revocable delegated authorizations ====
+
+If a verifier exposes a revocable delegated credential such as a session key,
+the active credential MUST be read from canonical contract state at the time
+<code>validateSignature</code> executes. A successful <code>clear</code> operation
+MUST make subsequent validation fail, and SHOULD emit a credential-revocation
+event containing the account identifier. Revocation is ordered by canonical
+transaction execution: it MUST NOT be described as mempool cancellation or as
+retroactive invalidation of an operation that executed earlier in chain order.
+The verifier profile MUST document the credential scope, expiry, signature
+encoding, and any spending limits separately from this foundation.
 
 For off-chain signatures, the signing profile MUST authenticate at least the protocol/signing-profile version, network magic, core hash, accountId, target contract, method, exact argument commitment, nonce and deadline. It MUST specify the digest, field encodings and signature encoding with positive test vectors. Signature bytes are not part of the message signed by that signature.
 Signature algorithms and signing profiles are extensions; this foundation does not declare EIP-712 to be Neo's mandatory native signing format.
