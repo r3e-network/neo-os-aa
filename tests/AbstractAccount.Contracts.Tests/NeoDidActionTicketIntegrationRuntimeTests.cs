@@ -34,6 +34,18 @@ public sealed class NeoDidActionTicketIntegrationRuntimeTests
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
+    /// <summary>
+    /// Environment variable that pins the neo-os-services contract build directory
+    /// explicitly instead of relying on the sibling-checkout layout.
+    /// </summary>
+    private const string ServicesBuildEnvVar = "NEOOS_SERVICES_CONTRACT_BUILD";
+
+    /// <summary>
+    /// Set to 1 in an environment that is expected to supply the cross-repo
+    /// artifact; a missing artifact then fails the run instead of skipping it.
+    /// </summary>
+    private const string RequireServicesEnvVar = "NEOOS_REQUIRE_SERVICES_ARTIFACTS";
+
     private static readonly UInt160 ContractManagementHash =
         UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd");
 
@@ -57,8 +69,9 @@ public sealed class NeoDidActionTicketIntegrationRuntimeTests
             Wallet = Fx.Deploy("UnifiedSmartWalletV3");
             WalletAdmin = Fx.Engine.Sender;
 
-            string serviceBuild = Path.GetFullPath(Path.Combine(
-                RepoRoot, "..", "neo-os-services", "contracts", "build"));
+            string serviceBuild = ResolveServicesBuildDirectory()
+                ?? throw new InvalidOperationException(
+                    "NeoDIDRegistry artifact is unavailable; the test should have been skipped.");
             byte[] nef = File.ReadAllBytes(Path.Combine(serviceBuild, "NeoDIDRegistry.nef"));
             string manifest = File.ReadAllText(Path.Combine(serviceBuild, "NeoDIDRegistry.manifest.json"));
 
@@ -172,6 +185,59 @@ public sealed class NeoDidActionTicketIntegrationRuntimeTests
                 },
             },
         };
+    }
+
+    /// <summary>
+    /// Locates the neo-os-services contract build output that holds the compiled
+    /// NeoDIDRegistry artifact, or returns null when it is not present.
+    /// </summary>
+    /// <remarks>
+    /// The artifact is produced by the private sibling repository neo-os-services
+    /// and is gitignored there, so it exists only in a workspace that checks out
+    /// both repositories side by side. A single-repository checkout (which is what
+    /// CI receives) has no sibling directory and therefore cannot run this
+    /// cross-contract integration proof.
+    /// </remarks>
+    private static string? ResolveServicesBuildDirectory()
+    {
+        string configured = Environment.GetEnvironmentVariable(ServicesBuildEnvVar) ?? string.Empty;
+        string serviceBuild = configured.Length > 0
+            ? Path.GetFullPath(configured)
+            : Path.GetFullPath(Path.Combine(RepoRoot, "..", "neo-os-services", "contracts", "build"));
+
+        bool complete =
+            File.Exists(Path.Combine(serviceBuild, "NeoDIDRegistry.nef")) &&
+            File.Exists(Path.Combine(serviceBuild, "NeoDIDRegistry.manifest.json"));
+
+        return complete ? serviceBuild : null;
+    }
+
+    /// <summary>
+    /// Reports the absent cross-repository artifact instead of failing on a
+    /// DirectoryNotFoundException, so a single-repository checkout records an
+    /// explicit skip with its reason rather than an unexplained error.
+    /// </summary>
+    [TestInitialize]
+    public void RequireServicesArtifact()
+    {
+        if (ResolveServicesBuildDirectory() is not null)
+            return;
+
+        string expected = Environment.GetEnvironmentVariable(ServicesBuildEnvVar) is { Length: > 0 } configured
+            ? Path.GetFullPath(configured)
+            : Path.GetFullPath(Path.Combine(RepoRoot, "..", "neo-os-services", "contracts", "build"));
+
+        string reason =
+            "SKIPPED (0 cross-contract assertions executed): NeoDIDRegistry.nef/.manifest.json not found in " +
+            expected + ". This proof deploys the compiled NeoDIDRegistry from the private sibling repository " +
+            "neo-os-services, whose contracts/build output is gitignored there and absent from a " +
+            "single-repository checkout. Point " + ServicesBuildEnvVar + " at a neo-os-services contract build " +
+            "directory to run it, or set " + RequireServicesEnvVar + "=1 to make the missing artifact a failure.";
+
+        if (Environment.GetEnvironmentVariable(RequireServicesEnvVar) == "1")
+            Assert.Fail(reason);
+
+        Assert.Inconclusive(reason);
     }
 
     [TestMethod]

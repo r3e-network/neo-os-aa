@@ -52,6 +52,21 @@ if [[ $run_contracts -eq 1 ]]; then
     dotnet build contracts/UnifiedSmartWallet.csproj -c Release -p:WarningsAsErrors=nullable -nologo
     bash contracts/compile.sh
   fi
+  # The NeoDIDRegistry cross-contract proof deploys a compiled artifact built by
+  # the private sibling repository neo-os-services, whose contracts/build output is
+  # gitignored there. CI checks out this repository on its own, so state the gate's
+  # reachability before the run instead of letting a bare "skipped" read as a pass.
+  services_build="${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/contracts/build}"
+  if [[ -f "$services_build/NeoDIDRegistry.nef" && -f "$services_build/NeoDIDRegistry.manifest.json" ]]; then
+    echo "cross-repo gate: NeoDIDRegistry integration proof ENABLED (artifact dir: $services_build)"
+  else
+    echo "cross-repo gate: NeoDIDRegistry integration proof NOT RUN - 0 cross-contract assertions executed."
+    echo "cross-repo gate:   missing $services_build/NeoDIDRegistry.nef"
+    echo "cross-repo gate:   that artifact is built by the private sibling repository neo-os-services and is"
+    echo "cross-repo gate:   gitignored there, so a single-repository checkout cannot supply it."
+    echo "cross-repo gate:   set NEOOS_SERVICES_CONTRACT_BUILD to a neo-os-services contract build directory to"
+    echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
+  fi
   dotnet test neo-abstract-account.sln -c Release --nologo
   node --test scripts/lib/deploy-helpers.test.mjs \
     scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
