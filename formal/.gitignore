@@ -1,0 +1,9 @@
+.runs/
+__pycache__/
+*.vo
+*.vos
+*.vok
+*.glob
+.*.aux
+.lia.cache
+states/

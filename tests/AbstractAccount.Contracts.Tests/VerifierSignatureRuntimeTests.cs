@@ -89,6 +89,24 @@ public class VerifierSignatureRuntimeTests
     }
 
     [TestMethod]
+    public void SessionKey_ClearTakesEffectBeforeLaterValidation()
+    {
+        VerifierHarness h = new();
+        using P256SessionKey key = new();
+        UInt160 verifier = SetUpSessionKey(h, key, spendingLimit: 0);
+
+        BigInteger deadline = h.Fx.Now() + 600_000;
+        byte[] signature = h.SignTransferOp(key, verifier, 1000, 7, deadline);
+        object[] op = h.TransferOp(1000, 7, deadline, signature);
+
+        h.Configure(verifier, "clearSessionKey", AccountId);
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallBoolean(verifier, "validateSignature", AccountId, op));
+        StringAssert.Contains(rejected.Message, "No session key active");
+    }
+
+    [TestMethod]
     public void SessionKey_TamperedSignature_IsRejected()
     {
         VerifierHarness h = new();
@@ -279,6 +297,74 @@ public class VerifierSignatureRuntimeTests
         TestException mismatch = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallBoolean(multiSig, "validateSignature", AccountId, h.TransferOp(1000, 7, deadline, bundle)));
         StringAssert.Contains(mismatch.Message, "Signature array length mismatch");
+    }
+
+    [TestMethod]
+    public void MultiSig_EmptyConfig_IsRejected()
+    {
+        VerifierHarness h = new();
+        UInt160 multiSig = h.DeployVerifier("MultiSigVerifier");
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Configure(multiSig, "setConfig", AccountId, Array.Empty<object?>(), 1));
+        StringAssert.Contains(rejected.Message, "Empty verifier list not allowed");
+    }
+
+    [TestMethod]
+    public void MultiSig_ConfigAboveMaximum_IsRejected()
+    {
+        VerifierHarness h = new();
+        UInt160 multiSig = h.DeployVerifier("MultiSigVerifier");
+        object?[] verifiers = new object?[11];
+        for (int i = 0; i < verifiers.Length; i++)
+        {
+            verifiers[i] = UInt160.Parse($"0x{i + 1:X40}");
+        }
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Configure(multiSig, "setConfig", AccountId, verifiers, 1));
+        StringAssert.Contains(rejected.Message, "Maximum 10 child verifiers allowed");
+    }
+
+    [TestMethod]
+    public void MultiSig_ZeroThreshold_IsRejected()
+    {
+        VerifierHarness h = new();
+        UInt160 multiSig = h.DeployVerifier("MultiSigVerifier");
+        object?[] verifiers = { UInt160.Parse("0x1010101010101010101010101010101010101010") };
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Configure(multiSig, "setConfig", AccountId, verifiers, 0));
+        StringAssert.Contains(rejected.Message, "Invalid threshold");
+    }
+
+    [TestMethod]
+    public void MultiSig_ThresholdAboveVerifierCount_IsRejected()
+    {
+        VerifierHarness h = new();
+        UInt160 multiSig = h.DeployVerifier("MultiSigVerifier");
+        object?[] verifiers =
+        {
+            UInt160.Parse("0x2020202020202020202020202020202020202020"),
+            UInt160.Parse("0x3030303030303030303030303030303030303030")
+        };
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Configure(multiSig, "setConfig", AccountId, verifiers, 3));
+        StringAssert.Contains(rejected.Message, "Invalid threshold");
+    }
+
+    [TestMethod]
+    public void MultiSig_DuplicateVerifier_IsRejected()
+    {
+        VerifierHarness h = new();
+        UInt160 multiSig = h.DeployVerifier("MultiSigVerifier");
+        UInt160 duplicate = UInt160.Parse("0x4040404040404040404040404040404040404040");
+        object?[] verifiers = { duplicate, duplicate };
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Configure(multiSig, "setConfig", AccountId, verifiers, 2));
+        StringAssert.Contains(rejected.Message, "Duplicate verifier");
     }
 
     // ========================================================================
