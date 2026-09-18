@@ -163,6 +163,9 @@ public class Fix_SessionKey_Tests
         Assert.AreNotEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", AccountId));
 
         h.Fx.CallVoid(verifier, "clearSessionKey", AccountId);
+        Neo.VM.Types.Array state = h.Fx.SingleNotificationState(verifier, "SessionKeyRevoked");
+        Assert.AreEqual(AccountId, (UInt160)Neo.SmartContract.Testing.Extensions.TestExtensions.ConvertTo(
+            state[0], typeof(UInt160))!);
         Assert.AreEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", AccountId));
     }
 

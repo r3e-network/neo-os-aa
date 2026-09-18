@@ -51,6 +51,14 @@ namespace AbstractAccount.Verifiers
         [DisplayName("SessionKeyGranted")]
         public static event SessionKeyGrantedDelegate OnSessionKeyGranted = null!;
 
+        // Revocation is ordered by Neo transaction execution. Consumers can use this event to
+        // invalidate cached or pending session-key work; it does not rewrite an operation that
+        // was already executed earlier in canonical chain order.
+        public delegate void SessionKeyRevokedDelegate(UInt160 accountId);
+
+        [DisplayName("SessionKeyRevoked")]
+        public static event SessionKeyRevokedDelegate OnSessionKeyRevoked = null!;
+
         public static void _deploy(object data, bool update) => VerifierAuthority.Initialize(data, update);
 
         [Safe]
@@ -169,6 +177,9 @@ namespace AbstractAccount.Verifiers
             Storage.Delete(Storage.CurrentContext, metadataKey);
             byte[] spentKey = Helper.Concat(Prefix_SpentAmount, (byte[])accountId);
             Storage.Delete(Storage.CurrentContext, spentKey);
+            // A successful clear is an explicit revocation command. Emit even when the key was
+            // already absent so indexers can converge on the canonical ordering of the command.
+            OnSessionKeyRevoked(accountId);
         }
 
         [Safe]
