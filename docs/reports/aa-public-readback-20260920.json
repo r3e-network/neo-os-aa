@@ -1,0 +1,56 @@
+{
+  "schema": "neoos-aa-public-readback/v1",
+  "observedOn": "2026-09-20",
+  "scope": "Read-only public RPC readback of the known canonical AA core hashes; no signing, deployment, upgrade, or broadcast.",
+  "localArtifact": {
+    "contractName": "UnifiedSmartWalletV3",
+    "nefPath": "contracts/bin/v3/UnifiedSmartWalletV3.nef",
+    "nefSha256": "793f3a84ef49420349a4c15bdb9b25f8f3fda151ad144e36cc1bd5655221057a",
+    "scriptSha256": "10abc3a8c1ec6f46c9daf6fedef5aa4e2a0bc9b3d0652544062b036da0bfe026",
+    "manifestSha256": "3b01d4bc1c9cff9fc32e4b91ac5755da550142c4e0b99469ab14e5da099f0734"
+  },
+  "readbacks": [
+    {
+      "network": "testnet",
+      "rpcUrl": "https://api.n3index.dev/testnet",
+      "networkMagic": 894710606,
+      "contractHash": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
+      "manifestName": "UnifiedSmartWalletV3",
+      "liveMethodCount": 87,
+      "liveNefScriptSha256": "6fbc74f176b86ff870c6bb8fb670cbeefc9e15b6dc1e405e808dca68fe3744e9",
+      "liveNefScriptLength": 16006,
+      "liveNefChecksum": 2785794149,
+      "localNefSha256": "793f3a84ef49420349a4c15bdb9b25f8f3fda151ad144e36cc1bd5655221057a",
+      "localNefScriptSha256": "10abc3a8c1ec6f46c9daf6fedef5aa4e2a0bc9b3d0652544062b036da0bfe026",
+      "localNefContainsLiveScript": false,
+      "status": "mismatch-current-local-artifact"
+    },
+    {
+      "network": "mainnet",
+      "rpcUrl": "https://api.n3index.dev/mainnet",
+      "networkMagic": 860833102,
+      "contractHash": "0x0268a387913b250166ddec032b03332690a1ef78",
+      "manifestName": "UnifiedSmartWalletV3",
+      "liveMethodCount": 90,
+      "liveNefScriptSha256": "29d81ce40beb9d3f74e4586d310c5a58c37a75fd4a06a9d8990039530bd37815",
+      "liveNefScriptLength": 19258,
+      "liveNefChecksum": 2035992441,
+      "localNefSha256": "793f3a84ef49420349a4c15bdb9b25f8f3fda151ad144e36cc1bd5655221057a",
+      "localNefScriptSha256": "10abc3a8c1ec6f46c9daf6fedef5aa4e2a0bc9b3d0652544062b036da0bfe026",
+      "localNefContainsLiveScript": false,
+      "status": "mismatch-current-local-artifact"
+    }
+  ],
+  "parityConclusion": {
+    "currentLocalArtifactMatchesKnownPublicTestnet": false,
+    "currentLocalArtifactMatchesKnownPublicMainnet": false,
+    "publicDeploymentOfCurrentArtifact": false,
+    "publicParityStatus": "not-satisfied-known-deployments-differ",
+    "publicReadbackReceiptBasis": "current local artifact hashes updated after post-remediation rebuild; public RPC readback itself was read-only"
+  },
+  "privacy": {
+    "credentialsIncluded": false,
+    "privateKeysIncluded": false,
+    "absoluteUserPathsIncluded": false
+  }
+}

@@ -19,6 +19,7 @@ namespace AbstractAccount.Hooks
     [DisplayName("DailyLimitHook")]
     [ContractPermission("*", "canExecuteHook")]
     [ContractPermission("*", "canConfigureHook")]
+    [ContractPermission("*", "getProxyScriptHash")]
     [ManifestExtra("Description", "Daily Limit Policy Hook Plugin for Neo N3 AA")]
     public class DailyLimitHook : SmartContract
     {
@@ -34,6 +35,9 @@ namespace AbstractAccount.Hooks
         private const int MaxHistorySize = 50; // Maximum historical transactions to track for rolling window
 
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
+
+        [Safe]
+        public static bool SupportsV3() => true;
 
         [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
@@ -274,6 +278,26 @@ namespace AbstractAccount.Hooks
             return Helper.Concat(Helper.Concat(Prefix_BalanceSnapshot, (byte[])accountId), (byte[])token);
         }
 
+        /// <summary>
+        /// Address that actually holds this account's assets on chain.
+        /// </summary>
+        /// <remarks>
+        /// A virtual AA account keeps its assets at the script hash of the core's fixed
+        /// proxy verification script, not at the accountId - the core states the
+        /// invariant in UnifiedSmartWallet.Proxy.cs: "Hooks, verifiers and consumers
+        /// must meter and restrict against this address, not against the accountId
+        /// (which never holds a balance)". Metering the accountId therefore read a
+        /// balance that is always zero, so no outflow was ever charged against the
+        /// limit. The address is derived from (core, accountId) by the core itself, so
+        /// it is asked for the value rather than duplicating the script bytes here.
+        /// </remarks>
+        private static UInt160 AssetAddressOf(UInt160 accountId)
+        {
+            UInt160 core = HookAuthority.AuthorizedCore();
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "authorized core not set");
+            return (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId);
+        }
+
         private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account)
         {
             return (BigInteger)Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
@@ -291,7 +315,7 @@ namespace AbstractAccount.Hooks
             while (iterator.Next())
             {
                 UInt160 token = (UInt160)(ByteString)iterator.Value;
-                BigInteger before = TokenBalanceOf(token, accountId);
+                BigInteger before = TokenBalanceOf(token, AssetAddressOf(accountId));
                 Storage.Put(Storage.CurrentContext, BuildBalanceSnapshotKey(accountId, token), before);
             }
         }
@@ -328,7 +352,7 @@ namespace AbstractAccount.Hooks
                 if (config == null) continue;          // limit cleared mid-op
 
                 BigInteger before = (BigInteger)snap;
-                BigInteger after = TokenBalanceOf(token, accountId);
+                BigInteger after = TokenBalanceOf(token, AssetAddressOf(accountId));
                 BigInteger outflow = before - after;
                 if (outflow <= 0) continue;            // inflow or no movement
 
@@ -479,7 +503,9 @@ namespace AbstractAccount.Hooks
 
         private static bool IsProtectedTransferSource(UInt160 accountId, UInt160 from)
         {
-            return from == accountId;
+            // The account's assets leave from the proxy address, so a transfer that
+            // names the accountId as the source is not the account's own funds moving.
+            return from == AssetAddressOf(accountId);
         }
     }
 }

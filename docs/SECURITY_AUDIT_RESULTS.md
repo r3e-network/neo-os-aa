@@ -15,7 +15,15 @@ This audit covers the complete Neo Abstract Account smart contract system, inclu
 
 **Overall Assessment**: The codebase demonstrates strong security architecture with proper access controls, storage isolation, and timelock protections. Several issues were identified and 4 high severity fixes have been applied. Remaining issues require attention before production deployment.
 
-**Status Note**: The finding sections below preserve the original audit evidence. Current remediation status is tracked in the "Fixes Applied" section and the later "Updated Summary Table".
+**Status Note**: The finding sections below preserve the original audit evidence and
+some original code snippets/status labels are intentionally historical. Current
+remediation status is tracked in `docs/SECURITY_MODEL.md`,
+`docs/PROTOCOL_COMPLETENESS_AUDIT.md`, and
+`docs/reports/aa-protocol-security-build-20260918.json`. In particular, current
+module binding uses exact manifest parameter/return-type checks and a safe Boolean
+`supportsV3` marker; the latest private-chain parity and test counts are recorded
+in the current receipt. Do not use the historical snippets below as a description
+of the deployed artifact.
 
 ---
 

@@ -16,12 +16,15 @@ ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
              "tla/UnifiedSmartWalletAA.tla",
              "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
 SOURCE_FILES = {"contracts/UnifiedSmartWallet.Execution.cs",
+                "contracts/UnifiedSmartWallet.Accounts.cs",
                 "contracts/UnifiedSmartWallet.Models.cs",
                 "contracts/UnifiedSmartWallet.State.cs",
                 "contracts/UnifiedSmartWallet.Escape.cs",
                 "contracts/UnifiedSmartWallet.Paymaster.cs",
                 "contracts/paymaster/Paymaster.cs",
-                "contracts/verifiers/VerifierPayload.cs"}
+                "contracts/verifiers/VerifierPayload.cs",
+                "contracts/verifiers/MultiSigVerifier.cs",
+                "contracts/hooks/MultiHook.cs"}
 MULTISIG_SOURCE = "contracts/verifiers/MultiSigVerifier.cs"
 MULTISIG_SOURCE_GUARDS = {
     "non_empty": "verifiers != null && verifiers.Length > 0",

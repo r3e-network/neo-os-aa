@@ -174,6 +174,90 @@ public class ExecuteUserOpRuntimeTests
     }
 
     [TestMethod]
+    public void ExecuteUserOp_HookReceivesCanonicalOperationParamsAndBindsTarget()
+    {
+        WalletHarness h = new();
+        UInt160 hook = h.Fx.Deploy("hooks/WhitelistHook", h.Wallet.ToArray());
+        // The harness already has a second, distinct contract hash. It is intentionally not
+        // allowlisted; the hook must reject it before the target method is resolved.
+        UInt160 blockedTarget = h.Core;
+        UInt160 accountId = h.Fx.CallUInt160(
+            h.Wallet, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), hook, BackupOwner, EscapeTimelockSeconds);
+
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(
+            h.Wallet, "registerAccount",
+            accountId, UInt160.Zero, Array.Empty<byte>(), hook, BackupOwner, EscapeTimelockSeconds);
+
+        // callHook is a two-phase configuration path. The second call installs a whitelist entry
+        // for the real target; the pre-execution callback must receive that target at opParams[0],
+        // not the account id or an opaque UserOperation object.
+        object[] whitelistArgs = { accountId, h.Target, true };
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "callHook", accountId, "setWhitelist", whitelistArgs));
+        h.Fx.AdvanceTime(TimeSpan.FromHours(24));
+        h.Fx.CallVoid(h.Wallet, "callHook", accountId, "setWhitelist", whitelistArgs);
+        Assert.IsTrue(h.Fx.CallBoolean(hook, "isWhitelisted", accountId, h.Target));
+
+        BigInteger deadline = h.Fx.Now() + 3_600_000;
+        h.Fx.SetSigners(BackupOwner);
+        Assert.IsTrue(h.ExecuteUserOp(accountId, h.TransferOp(accountId, 0, deadline)),
+            "The canonical target must pass the whitelist pre-hook");
+        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, 0));
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteUserOp(accountId, RuntimeFixture.UserOp(
+                blockedTarget,
+                "transfer",
+                h.TransferArgs(accountId),
+                1,
+                deadline,
+                Array.Empty<byte>())),
+            "A target not present in the whitelist must be rejected by the pre-hook");
+        StringAssert.Contains(rejected.Message, "Target contract not in whitelist");
+        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, 0),
+            "A rejected pre-hook must roll back nonce consumption");
+    }
+
+    [TestMethod]
+    public void ExecuteUserOp_RejectsOversizedSignatureBeforeVerifierCall()
+    {
+        using P256SessionKey key = new();
+        WalletHarness h = new();
+        UInt160 accountId = h.RegisterSessionKeyAccount(key, out _);
+        BigInteger deadline = h.Fx.Now() + 3_600_000;
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() =>
+            h.ExecuteUserOp(accountId, h.TransferOp(accountId, 0, deadline, new byte[1025])));
+
+        StringAssert.Contains(rejected.Message, "Signature exceeds protocol limit");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0),
+            "Oversized verifier input must be rejected before nonce consumption");
+    }
+
+    [TestMethod]
+    public void ExecuteUserOp_RejectsOversizedArgumentShapeBeforeExternalCall()
+    {
+        WalletHarness h = new();
+        UInt160 accountId = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+        object[] tooManyArguments = new object[65];
+        BigInteger deadline = h.Fx.Now() + 3_600_000;
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() =>
+            h.ExecuteUserOp(accountId, RuntimeFixture.UserOp(
+                h.Target,
+                "transfer",
+                tooManyArguments,
+                0,
+                deadline,
+                Array.Empty<byte>())));
+
+        StringAssert.Contains(rejected.Message, "Arguments exceed protocol limit");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0),
+            "Oversized argument shape must be rejected before nonce consumption");
+    }
+
+    [TestMethod]
     public void RegisterAccount_AcceptsRecoveryVerifierWithV3Marker()
     {
         WalletHarness h = new();

@@ -66,22 +66,33 @@ namespace AbstractAccount
             UInt160 previousHook = state.HookId;
 
             // Clear the old (possibly compromised) verifier's per-account config before
-            // rotating. Must set config context so the plugin's ValidateConfigCaller succeeds.
+            // rotating. A cleanup fault must abort the escape finalization rather than leaving
+            // an orphaned verifier authority behind the new pointer.
             if (previousVerifier != UInt160.Zero)
             {
                 SetVerifierConfigContext(accountId, previousVerifier);
-                try { Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId }); }
-                catch { } // Plugin may not implement clearAccount
-                finally { ClearVerifierConfigContext(accountId); }
+                try
+                {
+                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                }
+                finally
+                {
+                    ClearVerifierConfigContext(accountId);
+                }
             }
 
             // Reset the installed hook so a compromised hook cannot persist across the escape.
             if (previousHook != UInt160.Zero)
             {
                 SetHookConfigContext(accountId, previousHook);
-                try { Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId }); }
-                catch { } // Plugin may not implement clearAccount
-                finally { ClearHookConfigContext(accountId); }
+                try
+                {
+                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                }
+                finally
+                {
+                    ClearHookConfigContext(accountId);
+                }
             }
 
             state.Verifier = newVerifier;

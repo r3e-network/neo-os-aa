@@ -84,21 +84,33 @@ namespace AbstractAccount
             UInt160 previousVerifier = state.Verifier;
             UInt160 previousHook = state.HookId;
 
-            // Clear old plugin state before wiping pointers
-            // Must set config context so the plugin's ValidateConfigCaller succeeds
+            // Clear old plugin state before wiping pointers. A cleanup failure MUST abort the
+            // settlement rather than handing the buyer an account whose old plugin storage may
+            // still authorize actions. The finally blocks only clear the temporary caller
+            // context; the enclosing Neo transaction rolls every state write back on the fault.
             if (previousVerifier != UInt160.Zero)
             {
                 SetVerifierConfigContext(accountId, previousVerifier);
-                try { Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId }); }
-                catch { } // Plugin may not implement clearAccount
-                finally { ClearVerifierConfigContext(accountId); }
+                try
+                {
+                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                }
+                finally
+                {
+                    ClearVerifierConfigContext(accountId);
+                }
             }
             if (previousHook != UInt160.Zero)
             {
                 SetHookConfigContext(accountId, previousHook);
-                try { Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId }); }
-                catch { } // Plugin may not implement clearAccount
-                finally { ClearHookConfigContext(accountId); }
+                try
+                {
+                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                }
+                finally
+                {
+                    ClearHookConfigContext(accountId);
+                }
             }
 
             state.BackupOwner = newBackupOwner!;
@@ -159,8 +171,10 @@ namespace AbstractAccount
         /// <summary>
         /// Completes the backup-owner escape after the timelock elapses, clearing the escrow and
         /// returning full control to the existing backup owner without changing ownership. Preserves
-        /// the normal market settle/cancel paths; this only guarantees the owner is never permanently
-        /// locked out by an unresponsive market.
+        /// the normal market settle/cancel paths; this guarantees the owner is never permanently
+        /// locked out by a market that was destroyed, upgraded away, never settles, or throws.
+        /// The market notification is pre-flighted and best-effort; see
+        /// <see cref="NotifyMarketListingAbandoned"/> for the exact boundary.
         /// </summary>
         public static void ForceCancelMarketEscrow(UInt160 accountId)
         {
@@ -236,27 +250,63 @@ namespace AbstractAccount
             Storage.Delete(Storage.CurrentContext, legacyOwnerCancelKey);
         }
 
+        private const string MarketAbandonListingMethod = "abandonListing";
+        private const int MarketAbandonListingParameterCount = 2;
+
         /// <summary>
         /// Asks the market contract to retire the listing this escrow was bound to so a wallet-side
         /// escrow clear (owner force-cancel or market-driven cancel) never leaves an Active listing
-        /// the market can no longer settle. The call is best-effort: a market that was destroyed or
-        /// upgraded away (the very situation the owner escape exists for) must not be able to block
-        /// the owner from reclaiming the account, and the AbandonListing transition is idempotent
-        /// so overlapping with the market's own cancel path is harmless.
+        /// the market can no longer settle. The AbandonListing transition is idempotent, so
+        /// overlapping with the market's own cancel path is harmless.
         /// </summary>
+        /// <remarks>
+        /// The notification must never be able to block the owner escape. A NeoVM <c>catch</c>
+        /// only intercepts a callee <c>THROW</c>; a call to a destroyed contract, to a contract
+        /// without a matching method, or a callee <c>ASSERT</c>/<c>ABORT</c> faults the whole
+        /// transaction uncatchably. The market is therefore inspected through
+        /// <c>ContractManagement.GetContract</c> before it is called: a market that no longer
+        /// exists or that does not expose <c>abandonListing(accountId, listingId)</c> is skipped,
+        /// and a market that throws is tolerated by the <c>catch</c>. The remaining residual is a
+        /// market that aborts inside its own <c>abandonListing</c>; such a market already holds
+        /// unconditional settle authority over the escrowed account (see <see cref="SettleMarketEscrow"/>),
+        /// so listing on it is the trust decision, not this callback.
+        /// </remarks>
         private static void NotifyMarketListingAbandoned(UInt160 market, UInt160 accountId, BigInteger listingId)
         {
             if (market == UInt160.Zero || listingId <= 0) return;
+            if (!MarketExposesAbandonListing(market)) return;
             try
             {
-                Contract.Call(market, "abandonListing", CallFlags.All, new object[] { accountId, listingId });
+                Contract.Call(market, MarketAbandonListingMethod, CallFlags.All, new object[] { accountId, listingId });
             }
             catch
             {
-                // Market unreachable/incompatible: the local escrow is already cleared, so the
-                // owner keeps control regardless. A still-Active listing on an unresponsive market
-                // cannot settle anyway because the wallet no longer recognises it as the escrow holder.
+                // Market threw: the local escrow is already cleared, so the owner keeps control
+                // regardless. A still-Active listing on such a market cannot settle anyway because
+                // the wallet no longer recognises it as the escrow holder.
             }
+        }
+
+        /// <summary>
+        /// True when <paramref name="market"/> is a deployed contract whose manifest declares
+        /// <c>abandonListing</c> with exactly two parameters. This is the only pre-flight NeoVM
+        /// offers: it removes the missing-contract and missing-method faults that a
+        /// <c>try</c>/<c>catch</c> cannot intercept.
+        /// </summary>
+        private static bool MarketExposesAbandonListing(UInt160 market)
+        {
+            Contract? deployed = ContractManagement.GetContract(market);
+            if (deployed == null) return false;
+            ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
+            for (int i = 0; i < methods.Length; i++)
+            {
+                if (methods[i].Name == MarketAbandonListingMethod
+                    && methods[i].Parameters.Length == MarketAbandonListingParameterCount)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

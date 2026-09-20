@@ -148,6 +148,11 @@ namespace AbstractAccount.Verifiers
             );
         }
 
+        /// <summary>
+        /// Validates a fixed 32-byte message digest for the ERC-1271 adapter.
+        /// Neo's verifier ABI uses the configured public key and a compact 64-byte
+        /// r||s signature; the core maps the result to ERC-1271's bytes4 magic.
+        /// </summary>
         [Safe]
         public static bool IsValidSignature(UInt160 accountId, ByteString hash, ByteString signature)
         {

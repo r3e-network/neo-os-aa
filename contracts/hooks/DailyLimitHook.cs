@@ -37,6 +37,9 @@ namespace AbstractAccount.Hooks
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
 
         [Safe]
+        public static bool SupportsV3() => true;
+
+        [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
 
         public static void SetAuthorizedCore(UInt160 coreContract) => HookAuthority.SetAuthorizedCore(coreContract);

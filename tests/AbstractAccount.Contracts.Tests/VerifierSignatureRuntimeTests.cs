@@ -367,6 +367,22 @@ public class VerifierSignatureRuntimeTests
         StringAssert.Contains(rejected.Message, "Duplicate verifier");
     }
 
+    [TestMethod]
+    public void MultiSig_RejectsSelfAndIncompleteChildModulesBeforeStorage()
+    {
+        VerifierHarness h = new();
+        UInt160 multiSig = h.DeployVerifier("MultiSigVerifier");
+        UInt160 markerOnly = h.Fx.Deploy("MarkerOnlyModule");
+
+        TestException self = Assert.ThrowsExactly<TestException>(() =>
+            h.Configure(multiSig, "setConfig", AccountId, new object?[] { multiSig }, 1));
+        StringAssert.Contains(self.Message, "MultiSig verifier cannot contain itself");
+
+        TestException incomplete = Assert.ThrowsExactly<TestException>(() =>
+            h.Configure(multiSig, "setConfig", AccountId, new object?[] { markerOnly }, 1));
+        StringAssert.Contains(incomplete.Message, "Child verifier validation ABI missing");
+    }
+
     // ========================================================================
     // SubscriptionVerifier
     // ========================================================================
@@ -391,10 +407,12 @@ public class VerifierSignatureRuntimeTests
         return verifier;
     }
 
+    // A subscription pull moves the account's assets, which live at the core-derived proxy
+    // script hash rather than at the account id; the verifier rejects any other source.
     private static object[] SubscriptionOp(VerifierHarness h, byte[] subId, BigInteger nonce) =>
         RuntimeFixture.UserOp(
             h.Target, "transfer",
-            new object?[] { AccountId, Merchant, (BigInteger)SubscriptionAmount },
+            new object?[] { h.Fx.CallUInt160(h.Core, "getProxyScriptHash", AccountId), Merchant, (BigInteger)SubscriptionAmount },
             nonce, BigInteger.Zero, subId);
 
     /// <summary>

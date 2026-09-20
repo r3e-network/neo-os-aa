@@ -90,7 +90,7 @@ Theorem supporters_are_approved_members :
   In id (filter approve ids) <-> In id ids /\ approve id = true.
 Proof. intros. apply filter_In. Qed.
 
-Theorem accepted_has_support : forall ids threshold count approve,
+Theorem accepted_has_support : forall (ids : list nat) (threshold count : nat) (approve : nat -> bool),
   accepts ids threshold count approve = true ->
   exists id, In id ids /\ approve id = true.
 Proof.
@@ -101,7 +101,30 @@ Proof.
   exists id. apply filter_In. rewrite E. simpl. auto.
 Qed.
 
-Theorem acceptance_complete : forall ids threshold count approve,
+(* The concrete PostExecute loop is intended to call only the children that
+   validated successfully. This theorem makes the bounded policy obligation
+   explicit: the abstract post-callback roster is unique, is a subset of the
+   configured roster, and still contains threshold support. It does not claim
+   that a concrete NeoVM callback sequence refines this roster, nor that child
+   identifiers denote independent keys. *)
+Theorem accepted_post_plan_is_unique_and_configured :
+  forall ids threshold count approve,
+  accepts ids threshold count approve = true ->
+  NoDup (filter approve ids) /\
+  (forall id, In id (filter approve ids) -> In id ids) /\
+  threshold <= length (filter approve ids) /\
+  count = length ids.
+Proof.
+  intros ids threshold count approve H.
+  pose proof (accepted_has_distinct_threshold_support ids threshold count approve H) as Hsupport.
+  destruct Hsupport as [Hunique [Hthreshold [Hpos Hcount]]].
+  repeat split; try assumption.
+  intros id Hin.
+  apply filter_In in Hin.
+  exact (proj1 Hin).
+Qed.
+
+Theorem acceptance_complete : forall (ids : list nat) (threshold count : nat) (approve : nat -> bool),
   config_valid ids threshold = true -> count = length ids ->
   threshold <= length (filter approve ids) ->
   accepts ids threshold count approve = true.
@@ -126,6 +149,7 @@ Print Assumptions config_sound.
 Print Assumptions accepted_has_distinct_threshold_support.
 Print Assumptions supporters_are_approved_members.
 Print Assumptions accepted_has_support.
+Print Assumptions accepted_post_plan_is_unique_and_configured.
 Print Assumptions acceptance_complete.
 Print Assumptions valid_two_of_two.
 Print Assumptions duplicate_rejected.

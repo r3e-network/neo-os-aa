@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RunNccsAfterBuild>false</RunNccsAfterBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="3.9.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="MarkerOnlyModule.cs" />
+  </ItemGroup>
+
+  <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
+    <Message Text="Compiling Neo smart contract: MarkerOnlyModule.cs" Importance="high" />
+    <Exec Command="nccs ./MarkerOnlyModule.csproj -o ../bin/v3" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+
+</Project>

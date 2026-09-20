@@ -32,6 +32,7 @@ namespace AbstractAccount.Hooks
     [ContractPermission("*", "canConfigureHook")]
     [ContractPermission("*", "preExecute")]
     [ContractPermission("*", "postExecute")]
+    [ContractPermission("*", "supportsV3")]
     [ManifestExtra("Description", "Composable Hook to chain multiple hooks")]
     public class MultiHook : SmartContract
     {
@@ -41,6 +42,9 @@ namespace AbstractAccount.Hooks
         private const int MaxHookDepth = 3;
 
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
+
+        [Safe]
+        public static bool SupportsV3() => true;
 
         [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
@@ -86,9 +90,78 @@ namespace AbstractAccount.Hooks
                     {
                         ExecutionEngine.Assert(hooks[i] != hooks[j], "Duplicate hook not allowed");
                     }
+                    AssertChildHook(hooks[i]);
                 }
                 Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(hooks));
             }
+        }
+
+        private static void AssertChildHook(UInt160 hook)
+        {
+            Contract? deployed = ContractManagement.GetContract(hook);
+            ExecutionEngine.Assert(deployed != null, "Child hook is not deployed");
+
+            ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
+            ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsV3", ContractParameterType.Boolean), "Child hook V3 marker missing");
+            ExecutionEngine.Assert(ExposesMethod(methods, "preExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Array), "Child hook pre ABI missing");
+            ExecutionEngine.Assert(ExposesMethod(methods, "postExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any), "Child hook post ABI missing");
+            ExecutionEngine.Assert(ExposesMethod(methods, "clearAccount", ContractParameterType.Void,
+                ContractParameterType.Hash160), "Child hook cleanup ABI missing");
+
+            bool supported = (bool)Contract.Call(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(supported, "Child hook does not implement V3 interface");
+        }
+
+        private static bool ExposesSafeMethod(ContractMethodDescriptor[] methods, string name,
+            ContractParameterType returnType, params ContractParameterType[] parameterTypes)
+        {
+            for (int i = 0; i < methods.Length; i++)
+            {
+                ContractMethodDescriptor method = methods[i];
+                if (!method.Safe || method.Name != name || method.ReturnType != returnType
+                    || method.Parameters.Length != parameterTypes.Length) continue;
+                bool parametersMatch = true;
+                for (int j = 0; j < parameterTypes.Length; j++)
+                {
+                    if (method.Parameters[j].Type != parameterTypes[j])
+                    {
+                        parametersMatch = false;
+                        break;
+                    }
+                }
+                if (parametersMatch)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool ExposesMethod(ContractMethodDescriptor[] methods, string name,
+            ContractParameterType returnType, params ContractParameterType[] parameterTypes)
+        {
+            for (int i = 0; i < methods.Length; i++)
+            {
+                ContractMethodDescriptor method = methods[i];
+                if (method.Name != name || method.ReturnType != returnType
+                    || method.Parameters.Length != parameterTypes.Length) continue;
+                bool parametersMatch = true;
+                for (int j = 0; j < parameterTypes.Length; j++)
+                {
+                    if (method.Parameters[j].Type != parameterTypes[j])
+                    {
+                        parametersMatch = false;
+                        break;
+                    }
+                }
+                if (parametersMatch)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         [Safe]

@@ -34,11 +34,11 @@ public class ProxyWitnessRuntimeTests
     /// Data pushes followed by exactly one `core.&lt;method&gt;(accountId, op)` call, the
     /// only transaction shape the proxy witness accepts.
     /// </summary>
-    private static byte[] AccountBoundScript(UInt160 core, string method, int opBytes)
+    private static byte[] AccountBoundScript(UInt160 core, string method, int opBytes, UInt160? accountId = null)
     {
         using ScriptBuilder sb = new();
         sb.EmitPush(new byte[opBytes]);
-        sb.EmitPush(AccountId.GetSpan().ToArray());
+        sb.EmitPush((accountId ?? AccountId).GetSpan().ToArray());
         sb.EmitPush(2);
         sb.Emit(OpCode.PACK);
         sb.EmitPush((byte)CallFlags.All);
@@ -46,6 +46,22 @@ public class ProxyWitnessRuntimeTests
         sb.EmitPush(core.GetSpan().ToArray());
         sb.EmitSysCall(ApplicationEngine.System_Contract_Call.Hash);
         return sb.ToArray();
+    }
+
+    private static byte[] WithPrefix(byte prefix, byte[] script)
+    {
+        byte[] result = new byte[script.Length + 1];
+        result[0] = prefix;
+        Buffer.BlockCopy(script, 0, result, 1, script.Length);
+        return result;
+    }
+
+    private static byte[] WithSuffix(byte[] script, byte suffix)
+    {
+        byte[] result = new byte[script.Length + 1];
+        Buffer.BlockCopy(script, 0, result, 0, script.Length);
+        result[^1] = suffix;
+        return result;
     }
 
     private static WitnessRule[] ExactRules(UInt160 wallet, UInt160 target) => new[]
@@ -164,6 +180,24 @@ public class ProxyWitnessRuntimeTests
             "A shaped executeUserOps call on the core must be accepted");
         Assert.IsFalse(h.Verify(false, false, new byte[] { (byte)OpCode.RET }),
             "An arbitrary script that only lists the proxy as a signer must be rejected");
+    }
+
+    [TestMethod]
+    public void ProxyWitnessRejectsWrongAccountAndNonDataScriptPrefixOrSuffix()
+    {
+        ProxyHarness h = new();
+        UInt160 otherAccount = UInt160.Parse("0x2222222222222222222222222222222222222222");
+        byte[] shaped = AccountBoundScript(h.Wallet, "executeUserOp", 16);
+
+        Assert.IsFalse(
+            h.Verify(false, false, AccountBoundScript(h.Wallet, "executeUserOp", 16, otherAccount)),
+            "A call shaped for another account must not satisfy this proxy witness");
+        Assert.IsFalse(
+            h.Verify(false, false, WithPrefix(0x21, shaped)),
+            "A non-data instruction before the core call must be rejected");
+        Assert.IsFalse(
+            h.Verify(false, false, WithSuffix(shaped, 0x21)),
+            "A non-data instruction after the core call must be rejected");
     }
 
     [TestMethod]

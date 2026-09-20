@@ -18,6 +18,7 @@ namespace AbstractAccount.Hooks
     [DisplayName("TokenRestrictedHook")]
     [ContractPermission("*", "canExecuteHook")]
     [ContractPermission("*", "canConfigureHook")]
+    [ContractPermission("*", "getProxyScriptHash")]
     [ManifestExtra("Description", "Hook to restrict interacting with specific high-value tokens")]
     public class TokenRestrictedHook : SmartContract
     {
@@ -27,6 +28,9 @@ namespace AbstractAccount.Hooks
         private static readonly byte[] Prefix_RestrictedSnapshot = new byte[] { 0x02 };
 
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
+
+        [Safe]
+        public static bool SupportsV3() => true;
 
         [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
@@ -104,6 +108,17 @@ namespace AbstractAccount.Hooks
         private static ByteString SnapshotKey(UInt160 accountId, UInt160 token) =>
             (ByteString)Helper.Concat(Helper.Concat(Prefix_RestrictedSnapshot, (byte[])accountId), (byte[])token);
 
+        /// <summary>
+        /// Address that actually holds this account's assets on chain - the core's
+        /// proxy script hash, not the accountId, which never holds a balance.
+        /// </summary>
+        private static UInt160 AssetAddressOf(UInt160 accountId)
+        {
+            UInt160 core = HookAuthority.AuthorizedCore();
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "authorized core not set");
+            return (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId);
+        }
+
         private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account) =>
             (BigInteger)Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
 
@@ -119,7 +134,7 @@ namespace AbstractAccount.Hooks
             while (iterator.Next())
             {
                 UInt160 token = (UInt160)(ByteString)iterator.Value;
-                BigInteger before = TokenBalanceOf(token, accountId);
+                BigInteger before = TokenBalanceOf(token, AssetAddressOf(accountId));
                 Storage.Put(Storage.CurrentContext, SnapshotKey(accountId, token), before);
             }
         }
@@ -137,7 +152,7 @@ namespace AbstractAccount.Hooks
                 ByteString snapKey = SnapshotKey(accountId, token);
                 ByteString raw = Storage.Get(Storage.CurrentContext, snapKey);
                 BigInteger before = raw == null ? 0 : (BigInteger)raw;
-                BigInteger after = TokenBalanceOf(token, accountId);
+                BigInteger after = TokenBalanceOf(token, AssetAddressOf(accountId));
                 Storage.Delete(Storage.CurrentContext, snapKey);
                 ExecutionEngine.Assert(after >= before, "Restricted token outflow (incl. via intermediary) is forbidden");
             }

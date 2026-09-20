@@ -247,6 +247,14 @@ The review used the following process:
 4. Analysis of cryptographic implementations and replay protection mechanisms
 5. Review of authorization, reentrancy, and gas DoS vectors
 
+> **Current-status boundary (2026-09-20):** The findings below are retained as
+> historical/pre-V3 audit material. They are not the current V3 remediation
+> ledger. Current V3 status is defined by `docs/SECURITY_MODEL.md`,
+> `docs/AA-FORMAL-VERIFICATION.md`, and the dated receipts in
+> `docs/reports/`. In particular, the current artifact still has no
+> non-bypassable verifier gas cap; the platform extension proposal is tracked
+> in `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`.
+
 ---
 
 ## Critical Findings

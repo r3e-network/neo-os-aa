@@ -19,9 +19,13 @@ namespace Neo.SmartContract.Examples
     //   2. core.getBackupOwner                — AA-06 setup-time ownership attestation
     //   3. oracle.request                     — recovery/action ticket submission
     //   4. GAS.transfer                       — Lifecycle credit deposits forwarded to the oracle
+    //                                            and the ClearAccount credit refund
+    //   5. core.canExecuteVerifier            — V3 execution-context gate
+    //   6. core.canConfigureVerifier          — V3 configuration-context gate (clearAccount)
     [ContractPermission("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd", "update")]
     [ContractPermission("*", "getBackupOwner")]
     [ContractPermission("*", "canExecuteVerifier")]
+    [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "request")]
     [ContractPermission("0xd2a4cff31913016155e38e474a2c06d08be276cf", "transfer")]
     [DisplayName("SocialRecoveryVerifier")]
@@ -153,6 +157,7 @@ namespace Neo.SmartContract.Examples
         public delegate void ActionSessionRequestedHandler(UInt160 accountId, UInt160 executor, string actionId, ulong expiresAt, BigInteger requestId);
         public delegate void ActionSessionActivatedHandler(UInt160 accountId, UInt160 executor, string actionId, ByteString actionNullifier, ulong expiresAt);
         public delegate void ActionSessionRevokedHandler(UInt160 accountId, UInt160 executor, string actionId);
+        public delegate void RecoveryClearedHandler(UInt160 accountId, UInt160 previousOwner, BigInteger refundedCredit);
 
         [DisplayName("RecoverySetup")]
         public static event RecoverySetupHandler OnRecoverySetup = default!;
@@ -180,6 +185,9 @@ namespace Neo.SmartContract.Examples
 
         [DisplayName("ActionSessionRevoked")]
         public static event ActionSessionRevokedHandler OnActionSessionRevoked = default!;
+
+        [DisplayName("RecoveryCleared")]
+        public static event RecoveryClearedHandler OnRecoveryCleared = default!;
 
         [Safe]
         public static string Version() => "2.0.0";

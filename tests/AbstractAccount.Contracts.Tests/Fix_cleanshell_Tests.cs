@@ -206,4 +206,76 @@ public class Fix_CleanShell_Tests
         Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getEscapeTriggeredAt", accountId),
             "Escape trigger is reset after finalize");
     }
+
+    [TestMethod]
+    public void SettleMarketEscrow_CleanupFailureDoesNotTransferDirtyShell()
+    {
+        Harness h = new();
+        UInt160 failingVerifier = h.Fx.Deploy("MockVerifierCore");
+        UInt160 accountId = h.RegisterAccount(Array.Empty<byte>());
+
+        // Replace the normal verifier with a test-only V3 plugin whose clearAccount always faults.
+        h.Fx.SetSigners(Seller);
+        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, failingVerifier, Array.Empty<byte>());
+        h.Fx.AdvanceTime(ConfigUpdateWindow);
+        h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId);
+
+        BigInteger listingId = h.CreateListing(accountId);
+        h.Fx.FundGasFromValidators(Buyer, Price * 2);
+        h.Fx.SetSigners(Buyer);
+        h.Fx.TransferGas(Buyer, h.Market, Price, listingId);
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Market, "settleListing", listingId, Buyer, Buyer));
+        StringAssert.Contains(rejected.Message, "Mock plugin cleanup failure");
+
+        // The failed nested call faults the enclosing transaction: escrow, ownership and the
+        // market's active listing remain unchanged, so no buyer receives a dirty shell.
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", accountId));
+        Assert.AreEqual(failingVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        Neo.VM.Types.Array listing = (Neo.VM.Types.Array)h.Fx.Call(h.Market, "getListing", listingId);
+        Assert.AreEqual((BigInteger)1, listing[7].GetInteger(), "Failed settlement leaves listing Active");
+    }
+
+    [TestMethod]
+    public void ConfirmVerifierUpdate_CleanupFailurePreservesOldVerifier()
+    {
+        Harness h = new();
+        UInt160 failingVerifier = h.Fx.Deploy("MockVerifierCore");
+        UInt160 accountId = h.RegisterAccount(OldPubKey());
+
+        h.Fx.SetSigners(Seller);
+        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, failingVerifier, Array.Empty<byte>());
+        h.Fx.AdvanceTime(ConfigUpdateWindow);
+        h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId);
+
+        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, h.NewVerifier, NewPubKey());
+        h.Fx.AdvanceTime(ConfigUpdateWindow);
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId));
+        StringAssert.Contains(rejected.Message, "Mock plugin cleanup failure");
+        Assert.AreEqual(failingVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "hasPendingVerifierUpdate", accountId));
+    }
+
+    [TestMethod]
+    public void FinalizeEscape_CleanupFailurePreservesOldVerifierAndEscape()
+    {
+        Harness h = new();
+        UInt160 failingVerifier = h.Fx.Deploy("MockVerifierCore");
+        UInt160 accountId = h.RegisterAccount(OldPubKey());
+
+        h.Fx.SetSigners(Seller);
+        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, failingVerifier, Array.Empty<byte>());
+        h.Fx.AdvanceTime(ConfigUpdateWindow);
+        h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId);
+
+        h.Fx.CallVoid(h.Wallet, "initiateEscape", accountId);
+        h.Fx.AdvanceTime(EscapeWindow);
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier, NewPubKey()));
+        StringAssert.Contains(rejected.Message, "Mock plugin cleanup failure");
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+        Assert.AreEqual(failingVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+    }
 }

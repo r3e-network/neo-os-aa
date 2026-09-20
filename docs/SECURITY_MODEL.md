@@ -162,6 +162,12 @@ flowchart TD
 - **Authority Validation:** `CanConfigureVerifier` / `CanExecuteHook` checks
 - **Module Lifecycle:** Timelocked updates with events
 
+The core passes hook callbacks a single canonical operation tuple in both phases:
+`[TargetContract, Method, Args, Nonce, Deadline, Signature]`; the account id remains a separate
+callback argument. This prevents a hook from validating one operation representation and metering
+another. A real NeoVM regression vector confirms that `WhitelistHook` accepts the signed target,
+rejects an unlisted target before dispatch, and rolls back the nonce on rejection.
+
 ### Layer 4: Off-Chain Infrastructure
 - **TEE Attestation:** Hardware root of trust (future)
 - **Relay Diversity:** Multiple competing relays prevent censorship
@@ -184,8 +190,20 @@ flowchart TD
 ### 5.2 Should-Hold Invariants
 
 1. **Gas Limits on Verifiers:** *(OPEN)* Verifier execution still needs explicit gas/resource accounting.
-2. **Plugin State Cleanup:** *(PARTIAL)* Current settlement clears known plugin markers; full plugin/refinement coverage is pending.
+2. **Plugin State Cleanup:** *(PARTIAL)* Current settlement clears known plugin markers and rejects modules whose manifest omits the V3 lifecycle ABI; semantic cleanup/refinement coverage for arbitrary future plugins is pending.
+   Every verifier and hook must implement `clearAccount`: the core calls it without a fallback from
+   `confirmVerifierUpdate`, `confirmHookUpdate`, `finalizeEscape` and `settleMarketEscrow`, and a
+   nested call to a missing method faults the enclosing transaction uncatchably. The
+   `SocialRecoveryVerifier` source now implements it (core-gated, oracle credit refunded to the
+   recovery owner, consumed action nullifiers retained as replay protection). The recovery verifier
+   artifacts recorded as deployed on TestNet and MainNet predate this method, so an account bound to
+   a deployed instance cannot rotate away from it, finalize an escape or be sold until that instance
+   is upgraded through its timelocked `proposeUpdate`/`update` path.
 3. **Session Key Revocation:** *(DEFINED)* Revocation is effective at canonical transaction execution order; a later validation sees no active key, and `SessionKeyRevoked` is emitted. No protocol component promises mempool cancellation or retroactive invalidation of an operation already executed earlier in the chain.
+4. **Transfer-Source Metering:** A virtual account's assets live at the core-derived proxy script
+   hash (`getProxyScriptHash(accountId)`), never at the `accountId`. A verifier or hook that pins or
+   meters a transfer source must compare against that proxy address; `SubscriptionVerifier` and
+   `DailyLimitHook` do so, and a source equal to the `accountId` is rejected outright.
 
 ---
 
@@ -195,12 +213,42 @@ flowchart TD
 
 | ID | Severity | Component | Description | Status |
 | --- | --- | --- | --- |
-| **VULN-001** | Critical | **Verifier Gas DoS** | Verifiers still need explicit gas/resource accounting | Open / unverified |
+| **VULN-001** | Critical | **Verifier Gas DoS** | Current AA artifact still uses unbounded verifier `Contract.Call`; platform budget prototype is not integrated | Open / current artifact exposed; integration pending |
 | **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Mitigated in source; refinement/deployment unverified |
 | **VULN-003** | Medium | **Session Key Ordering** | A signed operation can execute before a later revocation transaction is ordered | Defined execution-order semantics; residual pre-inclusion operational risk |
-| **VULN-004** | Medium | **MultiSig Empty Array** | Empty, oversized, invalid-threshold and duplicate verifier configurations | Fixed in current source; dedicated proof pending |
-| **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Partial / open |
+| **VULN-004** | Medium | **MultiSig Empty Array** | Empty, oversized, invalid-threshold, duplicate, self-referential and incomplete-child configurations | Bounded Coq policy + 11 real Neo VM vectors + child manifest preflight; key independence, cycles, crypto/VM/refinement boundary remains open |
+| **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Manifest lifecycle preflight for core, MultiSig and MultiHook plus fail-closed cleanup; arbitrary-plugin storage/refinement coverage remains open |
 | **VULN-006** | Low | **Nonce Collision** | Legacy salt wording; current core uses 192-bit channel + 64-bit sequence with uint256 bound | Fixed in protocol core; transport/refinement unverified |
+
+**VULN-001 closure gate:** the current NeoVM `Contract.Call` surface exposes no
+per-verifier gas budget or independent gas meter. `Runtime.GasLeft`/`BurnGas`
+can provide diagnostics or voluntary accounting, but they do not establish a
+non-bypassable cap around an untrusted child call. This item therefore remains
+open; it must not be relabeled mitigated by a local pre-check or by total
+transaction gas limits. Closure requires a platform-level call-budget
+capability, or a redesigned verifier boundary with an independently bounded
+execution path, plus exhaustion and rollback vectors.
+
+An isolated Neo core/DevPack platform prototype now implements the required
+capability as `System.Contract.CallWithGasLimit`, with an ancestor-inherited
+budget and fail-closed exhaustion. The prototype has 7/7 targeted engine
+vectors and 1,433/1,433 Neo core unit tests, but the current AA artifact still
+uses the published 3.9.1 framework and has not been compiled, activated, or
+read back with the new syscall. See
+`docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`. VULN-001
+therefore remains open and must not be marked mitigated yet.
+
+**Witness/callback evidence boundary:** the runtime suite now covers bounded proxy-script shape
+vectors (wrong account, arbitrary/non-data instructions, decoy/global signer, and fee-payer
+cases) and the shipped hook callback tuple. This is implementation evidence, not a formal proof
+of every NeoVM witness condition, script-parser corner case, cryptographic primitive, arbitrary
+plugin, or full callback refinement.
+The core also rejects oversized verifier signatures and argument arrays before nonce
+consumption or external dispatch. This is input-amplification mitigation only; it cannot cap a
+verifier that is already executing inside the shared NeoVM gas budget.
+A read-only RPC comparison of the known canonical TestNet/MainNet AA core hashes also
+found different NEF scripts than the current local artifact. This is a detected deployment
+drift, not a current-artifact deployment proof; no public write was performed.
 
 ### 6.2 Mitigated Attack Vectors
 
@@ -212,10 +260,20 @@ flowchart TD
 | **Front-Running** | Nonce prevents same-op reuse | ✓ Mitigated |
 | **Hook Censorship** | Hooks only reject, don't modify | ✓ Mitigated |
 | **Verifier Bypass** | Authority checks on all calls | ✓ Mitigated |
-| **Market Escrow Censorship** | Direct cancel available | ✓ Mitigated |
+| **Market Escrow Censorship** | Backup owner's timelocked `initiateMarketEscrowCancel` / `forceCancelMarketEscrow`; the market `abandonListing` callback is pre-flighted through the market's manifest so a destroyed, upgraded-away, method-less or throwing market cannot block the escape | ✓ Mitigated (see boundary below) |
 | **Paymaster Front-Running** | On-chain atomic settlement; off-chain decision pre-submission | ✓ Mitigated (on-chain) / Partially mitigated (off-chain) |
 | **Paymaster Deposit Drain** | Per-op limits + daily budgets + total budgets | ✓ Mitigated |
 | **RPC Censorship** | Multiple relays + client-side broadcast | ✓ Mitigated |
+
+**Market escrow trust boundary:** entering an escrow delegates settle authority to the market
+contract. `settleMarketEscrow` and `cancelMarketEscrow` are authorized purely by
+`CallingScriptHash == marketContract`, so a hostile market that the backup owner listed on can
+settle the account to any address it chooses; no owner action is required. The owner escape
+therefore protects against a market that is destroyed, upgraded without `abandonListing`, never
+settles, or throws. It does not protect against a market that aborts inside its own
+`abandonListing`, and it cannot: NeoVM `ASSERT`/`ABORT` faults are uncatchable and no
+call-site guard exists. Only list accounts on audited markets; the shipped `AAAddressMarket`
+allowlists the core it trusts, and the same allowlisting discipline applies in the other direction.
 
 ---
 
@@ -355,7 +413,9 @@ stateDiagram-v2
 
 ### 11.1 Critical Priority
 
-1. **Verifier Gas Limits:** Add explicit gas/resource accounting to verifier `validateSignature` calls
+1. **Verifier Gas Limits:** Integrate and activate the platform
+   `System.Contract.CallWithGasLimit` extension; do not rely on an ABI gas
+   parameter or voluntary verifier accounting.
 2. **Deployed Refinement:** Prove/read back that the hardened source and formal boundary match deployed NEF
 3. **Session Key Cancellation UX:** Relayers and wallets must re-check canonical key state before submission; cancellation is not a chain-level rollback primitive
 

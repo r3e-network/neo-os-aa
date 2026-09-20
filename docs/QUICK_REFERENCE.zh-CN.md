@@ -4,6 +4,9 @@
 
 ```bash
 ./scripts/verify_repo.sh
+
+# 发布级跨仓库身份内核门（必须存在 neo-os-services 真实工件）：
+NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 ./scripts/verify_repo.sh --contracts-only
 ```
 
 ## 仅前端

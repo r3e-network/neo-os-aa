@@ -21,6 +21,7 @@ namespace AbstractAccount.Verifiers
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ContractPermission("*", "postExecute")]
+    [ContractPermission("*", "supportsV3")]
     [ContractPermission("*", "validateSignature")]
     [ManifestExtra("Description", "Heterogeneous Threshold Multi-Sig Verifier")]
     public class MultiSigVerifier : SmartContract
@@ -75,15 +76,85 @@ namespace AbstractAccount.Verifiers
             for (int i = 0; i < verifiers.Length; i++)
             {
                 ExecutionEngine.Assert(verifiers[i] != UInt160.Zero && verifiers[i].IsValid, "Invalid verifier address");
+                ExecutionEngine.Assert(verifiers[i] != Runtime.ExecutingScriptHash, "MultiSig verifier cannot contain itself");
                 for (int j = i + 1; j < verifiers.Length; j++)
                 {
                     ExecutionEngine.Assert(verifiers[i] != verifiers[j], "Duplicate verifier");
                 }
+                AssertChildVerifier(verifiers[i]);
             }
 
             MultiSigConfig config = new MultiSigConfig { Verifiers = verifiers, Threshold = threshold };
             byte[] key = Helper.Concat(Prefix_Config, (byte[])accountId);
             Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(config));
+        }
+
+        private static void AssertChildVerifier(UInt160 verifier)
+        {
+            Contract? deployed = ContractManagement.GetContract(verifier);
+            ExecutionEngine.Assert(deployed != null, "Child verifier is not deployed");
+
+            ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
+            ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsV3", ContractParameterType.Boolean), "Child verifier V3 marker missing");
+            ExecutionEngine.Assert(ExposesMethod(methods, "validateSignature", ContractParameterType.Boolean,
+                ContractParameterType.Hash160, ContractParameterType.Any), "Child verifier validation ABI missing");
+            ExecutionEngine.Assert(ExposesMethod(methods, "postExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any), "Child verifier post ABI missing");
+            ExecutionEngine.Assert(ExposesMethod(methods, "clearAccount", ContractParameterType.Void,
+                ContractParameterType.Hash160), "Child verifier cleanup ABI missing");
+
+            bool supported = (bool)Contract.Call(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(supported, "Child verifier does not implement V3 interface");
+        }
+
+        private static bool ExposesSafeMethod(ContractMethodDescriptor[] methods, string name,
+            ContractParameterType returnType, params ContractParameterType[] parameterTypes)
+        {
+            for (int i = 0; i < methods.Length; i++)
+            {
+                ContractMethodDescriptor method = methods[i];
+                if (!method.Safe || method.Name != name || method.ReturnType != returnType
+                    || method.Parameters.Length != parameterTypes.Length) continue;
+                bool parametersMatch = true;
+                for (int j = 0; j < parameterTypes.Length; j++)
+                {
+                    if (method.Parameters[j].Type != parameterTypes[j])
+                    {
+                        parametersMatch = false;
+                        break;
+                    }
+                }
+                if (parametersMatch)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool ExposesMethod(ContractMethodDescriptor[] methods, string name,
+            ContractParameterType returnType, params ContractParameterType[] parameterTypes)
+        {
+            for (int i = 0; i < methods.Length; i++)
+            {
+                ContractMethodDescriptor method = methods[i];
+                if (method.Name != name || method.ReturnType != returnType
+                    || method.Parameters.Length != parameterTypes.Length) continue;
+                bool parametersMatch = true;
+                for (int j = 0; j < parameterTypes.Length; j++)
+                {
+                    if (method.Parameters[j].Type != parameterTypes[j])
+                    {
+                        parametersMatch = false;
+                        break;
+                    }
+                }
+                if (parametersMatch)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         [Safe]

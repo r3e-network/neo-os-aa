@@ -63,6 +63,7 @@ public class ContractTests
         "hooks/TokenRestrictedHook.csproj",
         "hooks/WhitelistHook.csproj",
         "market/AAAddressMarket.csproj",
+        "mocks/MarkerOnlyModule.csproj",
         "mocks/MockTransferTarget.csproj",
         "paymaster/Paymaster.csproj",
         "verifiers/MultiSigVerifier.csproj",
@@ -230,6 +231,40 @@ public class ContractTests
     }
 
     [TestMethod]
+    public void HookCallbacksUseTheCanonicalOperationTupleForPreAndPostPhases()
+    {
+        string executionSource = ReadContractFile("UnifiedSmartWallet.Execution.cs");
+        string preHookBlock = ExtractSourceBlock(
+            executionSource,
+            "// [Hook phase] pre-execution hook",
+            "// [Execution phase]");
+        string postHookBlock = ExtractSourceBlock(
+            executionSource,
+            "// [Hook phase] post-execution hook",
+            "if (state.Verifier != UInt160.Zero)");
+
+        StringAssert.Contains(preHookBlock, "BuildHookOperationParams(op)");
+        StringAssert.Contains(postHookBlock, "BuildHookOperationParams(op)");
+        StringAssert.Contains(executionSource, "private static object[] BuildHookOperationParams(UserOperation op)");
+        StringAssert.Contains(executionSource, "op.TargetContract,");
+        StringAssert.Contains(executionSource, "op.Method,");
+        StringAssert.Contains(executionSource, "op.Args,");
+        StringAssert.Contains(executionSource, "op.Nonce,");
+        StringAssert.Contains(executionSource, "op.Deadline,");
+        StringAssert.Contains(executionSource, "op.Signature");
+
+        // Passing the opaque UserOperation object directly was incompatible with every shipped
+        // hook, whose ABI reads target/method/args from opParams[0..2]. Keep both phases on the
+        // same canonical tuple so a hook cannot validate one shape and meter another.
+        Assert.IsFalse(
+            preHookBlock.Contains("new object[] { accountId, op });", StringComparison.Ordinal),
+            "PreExecute must not receive an opaque UserOperation in place of the hook tuple");
+        Assert.IsFalse(
+            postHookBlock.Contains("new object[] { accountId, op, result });", StringComparison.Ordinal),
+            "PostExecute must not receive an opaque UserOperation in place of the hook tuple");
+    }
+
+    [TestMethod]
     public void MarketEscrowSettlementWipesInheritedVerifierAndHookState()
     {
         string marketSource = ReadContractFile("UnifiedSmartWallet.MarketEscrow.cs");
@@ -334,6 +369,8 @@ public class ContractTests
         StringAssert.Contains(source, "hooks allowed");
         StringAssert.Contains(source, "Self hook not allowed");
         StringAssert.Contains(source, "Duplicate hook not allowed");
+        StringAssert.Contains(source, "AssertChildHook");
+        StringAssert.Contains(source, "Child hook cleanup ABI missing");
     }
 
     [TestMethod]
@@ -404,6 +441,51 @@ public class ContractTests
         StringAssert.Contains(
             source,
             "Contract.Call(config.Verifiers[i], \"postExecute\", CallFlags.All, new object[] { accountId, subOp, result });");
+    }
+
+    [TestMethod]
+    public void PluginCleanupFailsClosedAcrossOwnershipTransitions()
+    {
+        string[] sources =
+        {
+            ReadContractFile("UnifiedSmartWallet.Accounts.cs"),
+            ReadContractFile("UnifiedSmartWallet.Escape.cs"),
+            ReadContractFile("UnifiedSmartWallet.MarketEscrow.cs")
+        };
+
+        // Swallowing clearAccount faults would hand a buyer a shell whose old plugin storage can
+        // still authorize actions. Settlement must let the enclosing Neo transaction fault; only
+        // the temporary verifier/hook caller context is cleared in finally blocks.
+        foreach (string source in sources)
+        {
+            Assert.IsFalse(source.Contains("catch { } // Plugin may not implement clearAccount",
+                StringComparison.Ordinal));
+            StringAssert.Contains(source, "finally");
+        }
+        StringAssert.Contains(sources[2], "the enclosing Neo transaction rolls every state write back on the fault.");
+    }
+
+    [TestMethod]
+    public void HookLifecycleRequiresTheV3MarkerBeforeBinding()
+    {
+        string accountsSource = ReadContractFile("UnifiedSmartWallet.Accounts.cs");
+        StringAssert.Contains(accountsSource, "private static void AssertV3Hook(UInt160 hook)");
+        StringAssert.Contains(accountsSource, "AssertV3Hook(hookId)");
+        StringAssert.Contains(accountsSource, "AssertV3Hook(newHookId)");
+        StringAssert.Contains(accountsSource, "AssertV3Hook(pending.NewHookId)");
+        StringAssert.Contains(accountsSource, "private static bool ModuleExposesSafeMethod(UInt160 module, string methodName, ContractParameterType returnType");
+        StringAssert.Contains(accountsSource, "private static bool ModuleExposesMethod(UInt160 module, string methodName, ContractParameterType returnType");
+        StringAssert.Contains(accountsSource, "method.Parameters[j].Type != parameterTypes[j]");
+        StringAssert.Contains(accountsSource, "Verifier V3 cleanup ABI missing");
+        StringAssert.Contains(accountsSource, "Hook V3 cleanup ABI missing");
+
+        foreach (string fileName in HookFiles.Where(path => path != "hooks/HookAuthority.cs"))
+        {
+            StringAssert.Contains(
+                ReadContractFile(fileName),
+                "public static bool SupportsV3() => true",
+                $"Hook lifecycle marker missing from {fileName}");
+        }
     }
 
     [TestMethod]

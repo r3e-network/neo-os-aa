@@ -20,6 +20,7 @@ namespace AbstractAccount.Verifiers
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
+    [ContractPermission("*", "getProxyScriptHash")]
     [ManifestExtra("Description", "Time-based Subscription Auto-Payment Verifier")]
     public class SubscriptionVerifier : SmartContract
     {
@@ -108,7 +109,12 @@ namespace AbstractAccount.Verifiers
 
             // Expected args: [from, to, amount, ...]
             ExecutionEngine.Assert(op.Args.Length >= 3, "Invalid transfer args");
-            ExecutionEngine.Assert((UInt160)op.Args[0] == accountId, "Transfer source must be the account");
+            // A virtual AA account never holds a balance at its accountId: its assets sit at the
+            // core's proxy script hash, which is also the only "from" the token's CheckWitness can
+            // accept during executeUserOp (UnifiedSmartWallet.Proxy.cs). Pinning the source to the
+            // accountId therefore authorized a transfer that could never move funds; the source
+            // must be the asset address the core derives for this account.
+            ExecutionEngine.Assert((UInt160)op.Args[0] == AssetAddressOf(accountId), "Transfer source must be the account asset address");
             ExecutionEngine.Assert((UInt160)op.Args[1] == config.Merchant, "Transfer destination must be merchant");
             ExecutionEngine.Assert((BigInteger)op.Args[2] <= config.Amount, "Transfer amount exceeds subscription");
 
@@ -147,6 +153,17 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert(op.Nonce == expectedNonce, "Subscription nonce mismatch");
 
             return true;
+        }
+
+        /// <summary>
+        /// Address that actually holds this account's assets on chain: the authorized core's
+        /// proxy script hash for the account, never the accountId itself.
+        /// </summary>
+        private static UInt160 AssetAddressOf(UInt160 accountId)
+        {
+            UInt160 core = VerifierAuthority.AuthorizedCore();
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            return (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, new object[] { accountId });
         }
 
         public static void ClearAccount(UInt160 accountId)

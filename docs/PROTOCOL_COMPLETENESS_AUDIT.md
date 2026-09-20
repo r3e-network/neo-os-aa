@@ -335,11 +335,17 @@ Response: { approved: boolean, reason?: string }
 - ✓ Market escrow with clean state management
 
 **Known Limitations (as documented):**
-- **VULN-001:** Verifiers have no gas limits (DoS vulnerability)
-- **VULN-002:** Escape hatch can be bypassed via market escrow
-- **VULN-003:** Session key race condition between clear/use
-- **VULN-004:** MultiSig empty array not explicitly checked
-- **VULN-005:** Plugin state orphaning on incomplete settlement
+- **VULN-001:** The current AA artifact has no non-bypassable verifier gas cap;
+  the platform extension is prototyped but not integrated or activated.
+- **VULN-002:** Market/escape and settlement cleanup require deployed/refinement
+  evidence; current source paths are hardened and tested fail-closed.
+- **VULN-003:** Session-key revocation follows canonical execution order and
+  cannot retroactively cancel an already ordered transaction.
+- **VULN-004:** MultiSig configuration guards now include self-reference and
+  child lifecycle-ABI/deployment preflight; bounded policy proofs exist, while
+  child-key independence, arbitrary cycles and cryptographic refinement remain open.
+- **VULN-005:** Known-plugin cleanup faults closed; arbitrary future-plugin
+  cleanup remains outside the generic proof boundary.
 
 **Assessment:** ✓ Documentation accurately reflects implementation and known limitations
 
@@ -362,7 +368,9 @@ Response: { approved: boolean, reason?: string }
 ### Areas Where Neo Exceeds ERC-4337
 
 1. **On-chain Paymaster Verification** - Neo uses off-chain only (reduced transparency)
-2. **Per-Operation Gas Limits** - Verifiers have no gas cap (VULN-001)
+2. **Per-Operation Gas Limits** - the current AA artifact still lacks a
+   non-bypassable verifier cap; a platform extension is drafted and prototyped
+   separately in `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`
 3. **Staking Sponsorships** - Off-chain model vs ERC-4337 on-chain staking
 
 ### Areas Where ERC-4337 Exceeds Neo
@@ -377,29 +385,44 @@ Response: { approved: boolean, reason?: string }
 
 ### High Priority (Security)
 
-1. **Implement Verifier Gas Limits** (VULN-001)
-   - Add `maxVerificationGas` parameter to `validateSignature()`
-   - Enforce per-verifier gas cap (e.g., 1M GAS)
-   - Requires: Verifier interface update + contract deployment
+1. **Integrate the platform verifier gas budget** (VULN-001)
+   - Do not add a caller-controlled `maxVerificationGas` parameter to
+     `validateSignature()`; an ABI parameter alone cannot cap VM execution.
+   - Activate and version `System.Contract.CallWithGasLimit` as specified in
+     `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`.
+   - Recompile the AA core against the matching DevPack, then complete private
+     NeoExpress and deployed-byte parity gates before changing the status.
 
-2. **Prevent Market Bypass of Escape** (VULN-002)
-   - Add `IsMarketEscrowActive()` check to `InitiateEscape()`
-   - Ensure active escrow blocks new escape initiation
+2. **Preserve the current market/escape hardening**
+   - Keep `IsMarketEscrowActive()` checks on normal escape/configuration paths.
+   - Keep market settlement and owner-force-cancel cleanup fail-closed, and
+     add a concrete cleanup/refinement proof for every future plugin profile.
+     The manifest lifecycle preflight rejects marker-only, wrong-typed, or incomplete
+     modules, including nested MultiSig/MultiHook children, but cannot prove the
+     implementation of a declared method is semantically correct.
 
-3. **Fix Session Key Race** (VULN-003)
-   - Add `LastClearedAt` timestamp to `SessionKeyVerifier`
-   - Enforce cooldown between `clearSessionKey()` and use
-   - Requires: Storage layout change + contract update
+3. **Keep explicit session-key execution-order semantics**
+   - Canonical state is read when validation executes; a later clear rejects a
+     later operation but cannot retroactively cancel an already ordered one.
+   - Wallets and relayers must re-check canonical state before submission.
 
-4. **Add MultiSig Empty Check** (VULN-004)
-   - Add explicit empty check before threshold verification
-   - Contract change to `MultiSigVerifier.cs` required
+4. **Extend MultiSig refinement coverage**
+   - The empty, oversized, invalid-threshold and duplicate configuration
+     checks now also reject self-reference and undeployed/incomplete or
+     wrong-typed child lifecycle ABIs before storage. This is a concrete
+     deployment/ABI guard,
+     not a proof of independent child keys, arbitrary-cycle freedom,
+     cryptographic correctness or full child-call refinement.
 
 ### Medium Priority (Enhancement)
 
-5. **Prevent Plugin State Orphaning** (VULN-005)
-   - Add state cleanup to `SettleMarketEscrow()` failure path
-   - Ensure all previous verifier/hook state cleared even if settlement fails mid-flight
+5. **Complete plugin cleanup refinement**
+   - Known-plugin cleanup now faults closed when `clearAccount` fails, and
+     binding rejects a marker-only, wrong-typed, or incomplete module before
+     storing its address.
+   - A generic proof for arbitrary future plugins is not possible from a
+     manifest alone; require an audited plugin manifest/profile and a concrete
+     storage/refinement proof.
 
 6. **Add Per-Account Gas Limits**
    - Implement account-level gas cap configuration

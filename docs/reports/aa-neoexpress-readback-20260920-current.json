@@ -1,0 +1,94 @@
+{
+  "schema": "neoos-aa-neoexpress-readback/v1",
+  "observedOn": "2026-09-20",
+  "scope": "Fresh one-node private NeoExpress deployment and RPC readback of the latest AA core, MultiSigVerifier and MultiHook artifacts after exact lifecycle-ABI preflight hardening; no public-chain or production deployment.",
+  "tool": {
+    "name": "NeoExpress",
+    "version": "3.10.1.18+3373db93dd",
+    "neoVersion": "3.10.1"
+  },
+  "network": {
+    "kind": "isolated-private-single-node",
+    "networkMagic": 4203685182,
+    "rpcHost": "127.0.0.1",
+    "blockCountAtReadback": 280,
+    "publicNetwork": false,
+    "feeSettings": "local-only StorageFeeFactor reduction; no public signing or broadcast"
+  },
+  "deployments": [
+    {
+      "contractName": "UnifiedSmartWalletV3",
+      "contractHash": "0x44407172bb3763553679cf72da87154a5fdbd56d",
+      "deploymentTransaction": "0x906e1142f095439c3e4d1307f634db30b631731d6ee1f73318e2f9562242a63a",
+      "localNefSha256": "4195a6fc4453f38e72e52b2448e2dafb2f64d5fa44bb7ec2e63d077ba595273b",
+      "localManifestSha256": "2393c1b6df9e3098f7b2350cd42b2b052a0999ad57558355555a29b4713bab7a",
+      "rpcReadback": {
+        "manifestSemanticEquality": true,
+        "nefScriptByteEquality": true,
+        "nefScriptSha256": "704d40788de3bc1ffecb50bbcfe7d52d0e16fe48f50bb3207a1e3aa350ba0317",
+        "nefScriptLength": 21420,
+        "nefChecksum": 1202205244
+      }
+    },
+    {
+      "contractName": "MultiSigVerifier",
+      "contractHash": "0x0720612332ac7a8a6ab892fc776a7bce2e96029b",
+      "deploymentTransaction": "0x9a6bdb5af5802592a27d32bb8108ba7ff515a6b7ae931c8e682101c1666f8d11",
+      "localNefSha256": "39de8647b557f978defa580a094f486b7411a07478e5865b3b1376c40a07b976",
+      "localManifestSha256": "f4af2396f03b01ca2e4dea7ceba13ef760a4e7a35b7682cd6b21468ba6dc8f33",
+      "rpcReadback": {
+        "manifestSemanticEquality": true,
+        "nefScriptByteEquality": true,
+        "nefScriptSha256": "20230d661c1f7a11416ed7af3c00702116d9814c4820ad28e0fd04291c097c7b",
+        "nefScriptLength": 4220,
+        "nefChecksum": 1704670566
+      }
+    },
+    {
+      "contractName": "MultiHook",
+      "contractHash": "0x316bfbdc8408dd0fb47f171b56c1dea5b35f3d33",
+      "deploymentTransaction": "0x878cba04100ea1639f6f0ed0509925e2350b526fbc571ef09f42e37476834ea6",
+      "localNefSha256": "3436e4f4c7dc260b6f74c0d0ad8d6994807ed7389d31140ef1a9f6fc4c7a4b7a",
+      "localManifestSha256": "023dd4c01f19a68b7b7be0a93f78ce9ba2d348a3a9a260b82d1aaa8521838244",
+      "rpcReadback": {
+        "manifestSemanticEquality": true,
+        "nefScriptByteEquality": true,
+        "nefScriptSha256": "3157f5977159396a1e56c5d73c496ef7103aa7469e4dc1f0979ce0306617a039",
+        "nefScriptLength": 4298,
+        "nefChecksum": 1105844213
+      }
+    }
+  ],
+  "runtimeProbes": [
+    {
+      "contractName": "UnifiedSmartWalletV3",
+      "method": "supportsExecutionMode",
+      "input": "single",
+      "result": "HALT true"
+    },
+    {
+      "contractName": "UnifiedSmartWalletV3",
+      "method": "previewUserOpValidation",
+      "input": "nonzero account with null operation",
+      "result": "FAULT ABORTMSG is executed. Reason: Operation required",
+      "expected": "fail-closed"
+    },
+    {
+      "contractName": "UnifiedSmartWalletV3",
+      "method": "getAccountImplementationId",
+      "result": "HALT org.r3e.neo.aa.unified-smart-wallet.v3"
+    }
+  ],
+  "parityBoundary": {
+    "currentCsharpToLocalNef": "verified-by-independent-byte-identical-builds",
+    "currentLocalNefToNeoExpressRpc": "verified-current-exact-lifecycle-ABI-preflight-artifacts",
+    "publicTestnetOrMainnetReadback": "known public artifacts differ; see aa-public-readback-20260920.json",
+    "productionDeployment": false,
+    "transactionSigningOrBroadcast": false
+  },
+  "privacy": {
+    "credentialsIncluded": false,
+    "privateKeysIncluded": false,
+    "absoluteUserPathsIncluded": false
+  }
+}

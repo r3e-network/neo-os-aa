@@ -1,0 +1,65 @@
+{
+  "schema": "neoos-aa-neoexpress-readback/v1",
+  "observedOn": "2026-09-18",
+  "scope": "One-node private NeoExpress deployment and RPC readback only; no public-chain or production deployment.",
+  "tool": {
+    "name": "NeoExpress",
+    "version": "3.10.1.18+3373db93dd",
+    "neoVersion": "3.10.1"
+  },
+  "network": {
+    "kind": "isolated-private-single-node",
+    "networkMagic": 3460544739,
+    "rpcHost": "127.0.0.1",
+    "blockCountAtReadback": 64,
+    "publicNetwork": false
+  },
+  "deployment": {
+    "contractName": "UnifiedSmartWalletV3",
+    "contractHash": "0x17b4454ef2160d31b2ef68ce2b4f7005bfe05582",
+    "deploymentTransaction": "0x5071284e7fd3c8f72191ebdd3ea0cf9bcaac9f0dec1560375357e5ca8580aa9a",
+    "localNefSha256": "aa5bbf427c28a6cfcaf6bf65b7f421608cdd907c5dd96b64a59947cbb4b009d5",
+    "localManifestSha256": "0f1447724af4a576c70032495edcd1369d81d47b60497ff90c97e985d29cebe0"
+  },
+  "rpcReadback": {
+    "manifestSemanticEquality": true,
+    "nefScriptByteEquality": true,
+    "nefScriptSha256": "9f3631f04756f295c2703b9c6fa42e717c758c34a5f90a09aaa84a9031e63d64",
+    "nefScriptLength": 20182,
+    "nefChecksum": 2912069017,
+    "manifestName": "UnifiedSmartWalletV3",
+    "status": "verified-local-readback"
+  },
+  "runtimeProbes": [
+    {
+      "method": "supportsExecutionMode",
+      "input": "single",
+      "result": "HALT true"
+    },
+    {
+      "method": "previewUserOpValidation",
+      "input": "malformed operation with zero target",
+      "result": "FAULT Target contract required",
+      "expected": "fail-closed"
+    },
+    {
+      "method": "getAccountImplementationId",
+      "result": "org.r3e.neo.aa.unified-smart-wallet.v3"
+    }
+  ],
+  "parityBoundary": {
+    "csharpToLocalNef": "verified-by-independent-byte-identical-builds",
+    "localNefToNeoExpressRpc": "verified",
+    "publicTestnetOrMainnetReadback": "unverified",
+    "productionDeployment": false,
+    "transactionSigningOrBroadcast": false
+  },
+  "privacy": {
+    "credentialsIncluded": false,
+    "privateKeysIncluded": false,
+    "absoluteUserPathsIncluded": false
+  },
+  "status": "historical-pre-fail-closed-market-cleanup-rebuild",
+  "supersededBy": "aa-neoexpress-readback-20260919.json",
+  "boundaryNote": "This receipt predates the fail-closed market-cleanup rebuild; use the 2026-09-19 receipt for the current artifact."
+}

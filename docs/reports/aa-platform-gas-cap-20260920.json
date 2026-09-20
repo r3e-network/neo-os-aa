@@ -1,0 +1,72 @@
+{
+  "report": "aa-platform-gas-cap-20260920",
+  "date": "2026-09-20",
+  "status": "implemented-isolated-not-integrated",
+  "purpose": "Evidence receipt for the NeoVM and DevPack capability required to bound untrusted AA verifier execution.",
+  "security_boundary": {
+    "current_aa_artifact_uses_call_with_gas_limit": false,
+    "current_aa_vuln_001": "open",
+    "public_network_activation": "not-performed",
+    "public_deployment_or_broadcast": false
+  },
+  "neo_core_prototype": {
+    "branch": "aa/verifier-gas-cap",
+    "base_commit": "8461a720a5c8eaa2f1b077d505d5b02fa8eb71b4",
+    "patch_sha256": "6f55e0faf8339ffd200f977b1308de634b7a9eb5af387f3aa497e43256fe7c1b",
+    "syscall": "System.Contract.CallWithGasLimit",
+    "activation": "Hardfork.HF_Iara",
+    "targeted_tests": {
+      "passed": 7,
+      "failed": 0,
+      "vectors": [
+        "child-limit-exhaustion-fault",
+        "ordinary-nested-call-inherits-ancestor-budget",
+        "child-within-limit-succeeds",
+        "invalid-and-excessive-limits-rejected",
+        "syscall-registration",
+        "child-storage-rolls-back-on-exhaustion",
+        "syscall-rejected-before-hardfork-activation"
+      ]
+    },
+    "full_unit_tests": {
+      "passed": 1433,
+      "failed": 0,
+      "skipped": 0
+    },
+    "build": {
+      "warnings": 0,
+      "errors": 0
+    }
+  },
+  "devpack_prototype": {
+    "branch": "aa/verifier-gas-cap",
+    "base_commit": "34255c46676b7b847b98b787616de10e268331c5",
+    "patch_sha256": "243ed628672e51d4f9a53df6c863335999d2a70e0a555414c8f3551a3b324ffa",
+    "framework_declaration": "System.Contract.CallWithGasLimit",
+    "framework_build": "passed",
+    "compiler_emission_smoke": "passed",
+    "compiler_unit_tests_on_published_core": {
+      "passed": 1359,
+      "failed": 0,
+      "skipped": 0
+    },
+    "published_framework_suite": {
+      "passed": 270,
+      "failed": 1,
+      "failure": "expected System.Contract.CallWithGasLimit registry mismatch against the currently published Neo core package; this prevents claiming a full matched cross-repository pass"
+    }
+  },
+  "integration_gates_remaining": [
+    "publish and consume matching Neo core and DevPack versions",
+    "compile UnifiedSmartWallet against the new syscall",
+    "run AA runtime and NeoExpress readback with hardfork active",
+    "verify whitelist and nested-budget vectors in the integrated engine",
+    "read back exact NEF and manifest bytes from the target node",
+    "obtain explicit approval before any public deployment or broadcast"
+  ],
+  "privacy": {
+    "contains_credentials": false,
+    "contains_private_keys": false,
+    "contains_absolute_paths": false
+  }
+}

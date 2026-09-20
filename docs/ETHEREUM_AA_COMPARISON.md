@@ -351,7 +351,11 @@ relayMetaInvocation({ scriptHash: aaContract, operation: "executeUserOps", args:
 
 ## 11. Known Limitations vs Ethereum AA
 
-1. **No Verifier Gas Limits:** Malicious verifiers can DoS operations (critical).
+1. **Verifier Gas Budget:** The current AA artifact still permits a verifier to
+   consume the shared transaction budget. A platform-level bounded-call
+   extension is specified and prototyped, but it is not yet integrated into
+   the AA artifact; see
+   `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`.
 2. **Simpler Fee Model:** No per-op gas estimation hooks (Neo has fixed transaction fees).
 3. **No Staking Mechanism:** On-chain Paymaster uses direct GAS deposits, not staking.
 4. **Limited Aggregation:** `MultiHook` doesn't aggregate signatures like Ethereum aggregators.

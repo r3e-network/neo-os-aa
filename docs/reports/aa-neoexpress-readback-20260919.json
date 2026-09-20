@@ -1,0 +1,66 @@
+{
+  "schema": "neoos-aa-neoexpress-readback/v1",
+  "observedOn": "2026-09-19",
+  "scope": "Fresh one-node private NeoExpress deployment of the current hardened core and RPC readback; no public-chain or production deployment.",
+  "tool": {
+    "name": "NeoExpress",
+    "version": "3.10.1.18+3373db93dd",
+    "neoVersion": "3.10.1"
+  },
+  "network": {
+    "kind": "isolated-private-single-node",
+    "networkMagic": 231575912,
+    "rpcHost": "127.0.0.1",
+    "blockCountAtReadback": 3,
+    "publicNetwork": false,
+    "feeSettings": "local-only reduced storage/execution factors to fit the deployment in the default private-node block fee envelope"
+  },
+  "deployment": {
+    "contractName": "UnifiedSmartWalletV3",
+    "contractHash": "0x745dc5c058be46104420922a0ee2ce6d59fffa1a",
+    "deploymentTransaction": "0x25f84e17850b8b83a804c5b7b14153b2d1c4f31d82b4222eb977e762b9348957",
+    "localNefSha256": "bf5a6b70ada36bcf605dfd55b83b68b76a26bd6aee2503e1f7d7f511a74c2dcc",
+    "localManifestSha256": "07089e9338c5ea37ab0b0f3fe193507cffbd04710a9b739e5c216407f2dd0daa"
+  },
+  "rpcReadback": {
+    "manifestSemanticEquality": true,
+    "nefScriptByteEquality": true,
+    "nefScriptSha256": "8ad63953ef64f273b1b753d5704d234324d95f4b490e3a74c784524fe4b45eff",
+    "nefScriptLength": 20164,
+    "nefChecksum": 3326529578,
+    "manifestName": "UnifiedSmartWalletV3",
+    "status": "verified-current-local-readback"
+  },
+  "runtimeProbes": [
+    {
+      "method": "supportsExecutionMode",
+      "input": "single",
+      "result": "HALT true"
+    },
+    {
+      "method": "previewUserOpValidation",
+      "input": "malformed operation with zero target",
+      "result": "FAULT Target contract required",
+      "expected": "fail-closed"
+    },
+    {
+      "method": "getAccountImplementationId",
+      "result": "org.r3e.neo.aa.unified-smart-wallet.v3"
+    }
+  ],
+  "parityBoundary": {
+    "currentCsharpToLocalNef": "verified-by-independent-byte-identical-builds",
+    "currentLocalNefToNeoExpressRpc": "verified",
+    "publicTestnetOrMainnetReadback": "unverified",
+    "productionDeployment": false,
+    "transactionSigningOrBroadcast": false
+  },
+  "privacy": {
+    "credentialsIncluded": false,
+    "privateKeysIncluded": false,
+    "absoluteUserPathsIncluded": false
+  },
+  "status": "historical-pre-callback-ABI-fix",
+  "supersededBy": "aa-neoexpress-readback-20260920-current.json",
+  "boundaryNote": "This receipt predates the canonical hook callback ABI fix; use the 2026-09-20 receipt for the current artifact."
+}

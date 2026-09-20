@@ -31,6 +31,9 @@ namespace AbstractAccount.Hooks
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
 
         [Safe]
+        public static bool SupportsV3() => true;
+
+        [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
 
         public static void SetAuthorizedCore(UInt160 coreContract) => HookAuthority.SetAuthorizedCore(coreContract);
@@ -69,6 +72,7 @@ namespace AbstractAccount.Hooks
 
         /// <summary>
         /// Declares the exact privacy-preserving NeoDID commitment required before the account may call a target contract.
+        /// Plaintext claim values are deliberately not accepted or stored.
         /// </summary>
         public static void RequireCredentialCommitmentForContract(
             UInt160 accountId,
@@ -89,8 +93,8 @@ namespace AbstractAccount.Hooks
 
             Storage.Put(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredProvider, accountId, targetContract), provider);
             Storage.Put(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredClaimType, accountId, targetContract), claimType);
-
-            Storage.Put(Storage.CurrentContext, BuildTargetScopedKey(Prefix_RequiredClaimCommitment, accountId, targetContract),
+            Storage.Put(Storage.CurrentContext,
+                BuildTargetScopedKey(Prefix_RequiredClaimCommitment, accountId, targetContract),
                 (byte[])claimCommitment!);
         }
 
@@ -121,11 +125,16 @@ namespace AbstractAccount.Hooks
             bool active = (bool)binding[8];
             ExecutionEngine.Assert(active, "NeoDID Credential Missing");
 
-            ByteString? expectedCommitment = Storage.Get(Storage.CurrentContext,
+            ByteString? expectedCommitment = Storage.Get(
+                Storage.CurrentContext,
                 BuildTargetScopedKey(Prefix_RequiredClaimCommitment, accountId, targetContract));
             ExecutionEngine.Assert(expectedCommitment != null && expectedCommitment.Length == 32,
                 "NeoDID commitment requirement missing");
-            ByteString actualCommitment = (ByteString)Contract.Call(registry, "getClaimCommitment", CallFlags.ReadOnly,
+
+            ByteString actualCommitment = (ByteString)Contract.Call(
+                registry,
+                "getClaimCommitment",
+                CallFlags.ReadOnly,
                 new object[] { accountId, provider, claimType });
             ExecutionEngine.Assert(actualCommitment != null && actualCommitment.Length == 32,
                 "NeoDID commitment missing");

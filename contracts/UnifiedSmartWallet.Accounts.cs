@@ -83,6 +83,10 @@ namespace AbstractAccount
             {
                 AssertV3Verifier(verifier);
             }
+            if (hookId != UInt160.Zero)
+            {
+                AssertV3Hook(hookId);
+            }
 
             byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId!);
             ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, key) == null, "Account already exists");
@@ -148,6 +152,10 @@ namespace AbstractAccount
         {
             AssertBackupOwner(accountId);
             AssertNoMarketEscrow(accountId);
+            if (newHookId != UInt160.Zero)
+            {
+                AssertV3Hook(newHookId);
+            }
 
             AccountState state = GetAccountState(accountId);
 
@@ -196,14 +204,24 @@ namespace AbstractAccount
             AccountState state = GetAccountState(accountId);
             UInt160 previousHook = state.HookId;
 
-            // Clear old plugin's per-account state before replacing it
-            // Must set config context so the plugin's ValidateConfigCaller succeeds
+            if (pending.NewHookId != UInt160.Zero)
+            {
+                AssertV3Hook(pending.NewHookId);
+            }
+
+            // Clear old plugin state before replacing it. A cleanup fault must abort the update,
+            // otherwise the new pointer could coexist with an old plugin's durable authority.
             if (previousHook != UInt160.Zero)
             {
                 SetHookConfigContext(accountId, previousHook);
-                try { Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId }); }
-                catch { } // Plugin may not implement clearAccount
-                finally { ClearHookConfigContext(accountId); }
+                try
+                {
+                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                }
+                finally
+                {
+                    ClearHookConfigContext(accountId);
+                }
             }
 
             state.HookId = pending.NewHookId;
@@ -304,14 +322,19 @@ namespace AbstractAccount
             AccountState state = GetAccountState(accountId);
             UInt160 previousVerifier = state.Verifier;
 
-            // Clear old plugin's per-account state before replacing it
-            // Must set config context so the plugin's ValidateConfigCaller succeeds
+            // Clear old plugin state before replacing it. A cleanup fault must abort the update,
+            // otherwise the new pointer could coexist with an old plugin's durable authority.
             if (previousVerifier != UInt160.Zero)
             {
                 SetVerifierConfigContext(accountId, previousVerifier);
-                try { Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId }); }
-                catch { } // Plugin may not implement clearAccount
-                finally { ClearVerifierConfigContext(accountId!); }
+                try
+                {
+                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                }
+                finally
+                {
+                    ClearVerifierConfigContext(accountId!);
+                }
             }
 
             state.Verifier = pending.NewVerifier;
@@ -348,8 +371,86 @@ namespace AbstractAccount
 
         private static void AssertV3Verifier(UInt160 verifier)
         {
+            // A marker alone is not enough: a stale or malicious module could return true
+            // from supportsV3 while omitting a lifecycle entrypoint. Missing-method faults
+            // are not catchable by the caller, so reject an incomplete ABI before binding.
+            ExecutionEngine.Assert(ModuleExposesSafeMethod(verifier, "supportsV3", ContractParameterType.Boolean), "Verifier V3 marker missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "validateSignature", ContractParameterType.Boolean,
+                ContractParameterType.Hash160, ContractParameterType.Any), "Verifier V3 validation ABI missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "postExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any), "Verifier V3 post ABI missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "clearAccount", ContractParameterType.Void,
+                ContractParameterType.Hash160), "Verifier V3 cleanup ABI missing");
             bool supported = (bool)Contract.Call(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Verifier does not implement V3 interface");
+        }
+
+        private static void AssertV3Hook(UInt160 hook)
+        {
+            ExecutionEngine.Assert(ModuleExposesSafeMethod(hook, "supportsV3", ContractParameterType.Boolean), "Hook V3 marker missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(hook, "preExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Array), "Hook V3 pre ABI missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(hook, "postExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any), "Hook V3 post ABI missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(hook, "clearAccount", ContractParameterType.Void,
+                ContractParameterType.Hash160), "Hook V3 cleanup ABI missing");
+            bool supported = (bool)Contract.Call(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(supported, "Hook does not implement V3 interface");
+        }
+
+        private static bool ModuleExposesSafeMethod(UInt160 module, string methodName, ContractParameterType returnType,
+            params ContractParameterType[] parameterTypes)
+        {
+            Contract? deployed = ContractManagement.GetContract(module);
+            if (deployed == null) return false;
+
+            ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
+            for (int i = 0; i < methods.Length; i++)
+            {
+                ContractMethodDescriptor method = methods[i];
+                if (!method.Safe || method.Name != methodName || method.ReturnType != returnType
+                    || method.Parameters.Length != parameterTypes.Length) continue;
+                bool parametersMatch = true;
+                for (int j = 0; j < parameterTypes.Length; j++)
+                {
+                    if (method.Parameters[j].Type != parameterTypes[j])
+                    {
+                        parametersMatch = false;
+                        break;
+                    }
+                }
+                if (parametersMatch) return true;
+            }
+            return false;
+        }
+
+        private static bool ModuleExposesMethod(UInt160 module, string methodName, ContractParameterType returnType,
+            params ContractParameterType[] parameterTypes)
+        {
+            Contract? deployed = ContractManagement.GetContract(module);
+            if (deployed == null) return false;
+
+            ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
+            for (int i = 0; i < methods.Length; i++)
+            {
+                ContractMethodDescriptor method = methods[i];
+                if (method.Name != methodName || method.ReturnType != returnType
+                    || method.Parameters.Length != parameterTypes.Length) continue;
+                bool parametersMatch = true;
+                for (int j = 0; j < parameterTypes.Length; j++)
+                {
+                    if (method.Parameters[j].Type != parameterTypes[j])
+                    {
+                        parametersMatch = false;
+                        break;
+                    }
+                }
+                if (parametersMatch)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static readonly string[] AllowedVerifierMethods = new string[]

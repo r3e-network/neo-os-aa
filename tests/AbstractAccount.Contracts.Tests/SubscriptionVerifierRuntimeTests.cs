@@ -86,14 +86,14 @@ public class SubscriptionVerifierRuntimeTests
         // --- Charge #1 in period P (nonce counter 0): must validate. ---
         BigInteger period1 = h.Now() / PeriodMs;
         Assert.IsTrue(period1 > 0, "Precondition: billing period must be greater than zero.");
-        object[] charge1 = BuildTransferOp(ExpectedNonce(SubId, period1, nonceCounter: 0));
+        object[] charge1 = BuildTransferOp(ExpectedNonce(SubId, period1, nonceCounter: 0), h.AssetAddress);
         Assert.IsTrue(h.ValidateSignature(AccountId, charge1), "First charge in the period should be accepted.");
 
         // Apply post-execution effects: records the charged period and advances the nonce counter.
         h.PostExecute(AccountId, charge1);
 
         // --- Charge #2 in the SAME period P (nonce counter 1): must be rejected by the period gate. ---
-        object[] charge2SamePeriod = BuildTransferOp(ExpectedNonce(SubId, period1, nonceCounter: 1));
+        object[] charge2SamePeriod = BuildTransferOp(ExpectedNonce(SubId, period1, nonceCounter: 1), h.AssetAddress);
         TestException rejected = Assert.ThrowsExactly<TestException>(
             () => h.ValidateSignature(AccountId, charge2SamePeriod),
             "A second charge within the same billing period must be rejected.");
@@ -103,7 +103,7 @@ public class SubscriptionVerifierRuntimeTests
         h.Engine.PersistingBlock.Advance(TimeSpan.FromMilliseconds((double)PeriodMs));
         BigInteger period2 = h.Now() / PeriodMs;
         Assert.IsTrue(period2 > period1, "Precondition: time must advance into a later billing period.");
-        object[] charge2NextPeriod = BuildTransferOp(ExpectedNonce(SubId, period2, nonceCounter: 1));
+        object[] charge2NextPeriod = BuildTransferOp(ExpectedNonce(SubId, period2, nonceCounter: 1), h.AssetAddress);
         Assert.IsTrue(
             h.ValidateSignature(AccountId, charge2NextPeriod),
             "A charge in the next billing period should be accepted.");
@@ -123,7 +123,7 @@ public class SubscriptionVerifierRuntimeTests
         h.CreateSubscription(AccountId, SubId, Merchant, Token, Amount, PeriodSeconds);
 
         BigInteger period = h.Now() / PeriodMs;
-        object[] charge = BuildTransferOp(ExpectedNonce(SubId, period, nonceCounter: 0));
+        object[] charge = BuildTransferOp(ExpectedNonce(SubId, period, nonceCounter: 0), h.AssetAddress);
         TestException rejected = Assert.ThrowsExactly<TestException>(
             () => h.ValidateSignature(AccountId, charge),
             "A charge without the merchant's witness must be rejected.");
@@ -131,15 +131,37 @@ public class SubscriptionVerifierRuntimeTests
     }
 
     /// <summary>
+    /// The account id never holds a balance: the core keeps a virtual account's assets at its
+    /// proxy script hash, which is also the only <c>from</c> a token's <c>CheckWitness</c> accepts
+    /// during <c>executeUserOp</c>. A pull that names the account id as the source could never
+    /// move funds and must be rejected up front rather than silently consuming a billing period.
+    /// </summary>
+    [TestMethod]
+    public void ValidateSignature_RejectsTransferSourcedFromTheAccountId()
+    {
+        Harness h = new();
+        h.Engine.PersistingBlock.Advance(TimeSpan.FromMilliseconds((double)PeriodMs));
+        h.CreateSubscription(AccountId, SubId, Merchant, Token, Amount, PeriodSeconds);
+        Assert.AreNotEqual(AccountId, h.AssetAddress, "Precondition: the asset address differs from the account id");
+
+        BigInteger period = h.Now() / PeriodMs;
+        object[] charge = BuildTransferOp(ExpectedNonce(SubId, period, nonceCounter: 0), AccountId);
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.ValidateSignature(AccountId, charge),
+            "A pull sourced from the account id must be rejected.");
+        StringAssert.Contains(rejected.Message, "Transfer source must be the account asset address");
+    }
+
+    /// <summary>
     /// Builds the UserOperation array (positional struct layout) for a subscription transfer.
     /// Field order matches <c>AbstractAccount.Verifiers.UserOperation</c>:
     /// [TargetContract, Method, Args, Nonce, Deadline, Signature].
     /// </summary>
-    private static object[] BuildTransferOp(BigInteger nonce) => new object[]
+    private static object[] BuildTransferOp(BigInteger nonce, UInt160 from) => new object[]
     {
         Token,                                              // TargetContract
         "transfer",                                         // Method
-        new object[] { AccountId, Merchant, (BigInteger)Amount }, // Args: [from, to, amount]
+        new object[] { from, Merchant, (BigInteger)Amount }, // Args: [from, to, amount]
         nonce,                                              // Nonce
         BigInteger.Zero,                                    // Deadline (unused by this verifier)
         SubId                                               // Signature carries the subscription id
@@ -171,6 +193,8 @@ public class SubscriptionVerifierRuntimeTests
 
         public UInt160 CoreHash { get; }
 
+        public UInt160 AssetAddress { get; }
+
         public Harness(bool merchantSigns = true)
         {
             // Audit fix M-8: validateSignature requires the configured merchant to witness the
@@ -193,6 +217,10 @@ public class SubscriptionVerifierRuntimeTests
             // Deploy the stub core first, then deploy the verifier bound to it as the authorized core.
             ExecuteRaw(ContractManagementHash, "deploy", CoreNef.ToArray(), CoreManifestText, null!);
             ExecuteRaw(ContractManagementHash, "deploy", VerifierNef.ToArray(), VerifierManifestText, CoreHash.ToArray());
+
+            // A virtual account's assets live at the core-derived proxy script hash, never at the
+            // account id; a subscription pull must name that address as the transfer source.
+            AssetAddress = new UInt160(ExecuteRaw(CoreHash, "getProxyScriptHash", AccountId).GetSpan());
         }
 
         public void CreateSubscription(UInt160 accountId, byte[] subId, UInt160 merchant, UInt160 token, BigInteger amount, BigInteger periodSeconds)

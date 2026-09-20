@@ -34,17 +34,24 @@ pushd hooks >/dev/null
 "$NCCS_BIN" ./TokenRestrictedHook.csproj -o ../bin/v3/hooks
 popd >/dev/null
 
-echo "Compiling verifier test-support stub..."
+# Test-support mocks. The contract test suite deploys all six from bin/v3
+# (MockTransferTarget in the execution/market/escrow suites, PlatformRegistrarMock
+# in the platform-registrar suite, MockVerifierCore in the verifier suites, and
+# MarkerOnlyModule, WrongLifecycleAbiModule and WrongHookLifecycleAbiModule in
+# the lifecycle-ABI negative suite), so they
+# are always compiled: a clean checkout that skipped them could not run
+# `dotnet test`. bin/v3 is gitignored and the deploy scripts select artifacts by
+# name, so the mocks never reach a network. INCLUDE_VALIDATION_MOCKS is accepted
+# for compatibility with older runbooks but no longer changes the output.
+echo "Compiling test-support mocks..."
 pushd mocks >/dev/null
 "$NCCS_BIN" ./MockVerifierCore.csproj -o ../bin/v3
+"$NCCS_BIN" ./MockTransferTarget.csproj -o ../bin/v3
+"$NCCS_BIN" ./PlatformRegistrarMock.csproj -o ../bin/v3
+"$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../bin/v3
+"$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../bin/v3
+"$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../bin/v3
 popd >/dev/null
-
-if [[ "${INCLUDE_VALIDATION_MOCKS:-0}" == "1" ]]; then
-  echo "Compiling validation-only mock targets..."
-  pushd mocks >/dev/null
-  "$NCCS_BIN" ./MockTransferTarget.csproj -o ../bin/v3
-  popd >/dev/null
-fi
 
 echo "Compiling Market Contracts..."
 pushd market >/dev/null

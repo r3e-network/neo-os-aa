@@ -1,7 +1,7 @@
 {
   "schema": "neoos-aa-local-build-report/v1",
-  "checkedAt": "2026-09-18T09:09:05Z",
-  "scope": "Local source-to-artifact reproducibility and security-regression evidence; no chain write.",
+  "checkedAt": "2026-09-20T00:29:22Z",
+  "scope": "Local source-to-artifact reproducibility, isolated NeoExpress readback and security-regression evidence; no public-chain write.",
   "compiler": {
     "tool": "nccs",
     "version": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697",
@@ -30,7 +30,7 @@
     },
     {
       "path": "contracts/UnifiedSmartWallet.Accounts.cs",
-      "sha256": "6629d6ea02855d04a283f4596b9d3b6d4fcdf42a6c3929e6d9f0daee85303605"
+      "sha256": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b"
     },
     {
       "path": "contracts/UnifiedSmartWallet.PlatformRegistrar.cs",
@@ -46,7 +46,7 @@
     },
     {
       "path": "contracts/UnifiedSmartWallet.Execution.cs",
-      "sha256": "fac8ba367ae24d9e8c6f4d41f09ee4cde8f669a86b824111f00d6e756426f7f5"
+      "sha256": "d1563713b7e42e72f19674dfb77d168470ea39b5b8b58fb0e0f76d6625106195"
     },
     {
       "path": "contracts/UnifiedSmartWallet.VerifyContext.cs",
@@ -54,11 +54,11 @@
     },
     {
       "path": "contracts/UnifiedSmartWallet.Escape.cs",
-      "sha256": "df9b57ddf6cee7b5cabab4f41d2cc0de1329dcb55547b8180e47d67169bfbbe8"
+      "sha256": "8047ae50e4800c56d3410b5395833b27b8bd1af70c5a357a0f7f27c9827a16b2"
     },
     {
       "path": "contracts/UnifiedSmartWallet.MarketEscrow.cs",
-      "sha256": "cd71b7b892c45b33ff144136057b92f406dd41ca490422843536c2553f41a609"
+      "sha256": "870f06a58e7c61bd7d31243b8fd63a7626e1b192e08ef847ecd4d0f2b4b450ab"
     },
     {
       "path": "contracts/UnifiedSmartWallet.Admin.cs",
@@ -67,16 +67,24 @@
     {
       "path": "contracts/UnifiedSmartWallet.Paymaster.cs",
       "sha256": "0ecbd13f9f8f51b43339e7ac66ac9cd5e77f30e06300fa6d71dde12f18c78f0a"
+    },
+    {
+      "path": "contracts/verifiers/MultiSigVerifier.cs",
+      "sha256": "6d06719afe686a91d68eba2a7bf0ba8d5a6f9e79fd0965cc64517ee65f03e314"
+    },
+    {
+      "path": "contracts/hooks/MultiHook.cs",
+      "sha256": "b6f3de93710f9439df37a09df93f2f46ed62c0867552ce4aac745c421e07eeb7"
     }
   ],
   "coreArtifacts": [
     {
       "path": "contracts/bin/v3/UnifiedSmartWalletV3.nef",
-      "sha256": "aa5bbf427c28a6cfcaf6bf65b7f421608cdd907c5dd96b64a59947cbb4b009d5"
+      "sha256": "4195a6fc4453f38e72e52b2448e2dafb2f64d5fa44bb7ec2e63d077ba595273b"
     },
     {
       "path": "contracts/bin/v3/UnifiedSmartWalletV3.manifest.json",
-      "sha256": "0f1447724af4a576c70032495edcd1369d81d47b60497ff90c97e985d29cebe0"
+      "sha256": "2393c1b6df9e3098f7b2350cd42b2b052a0999ad57558355555a29b4713bab7a"
     }
   ],
   "sessionKeyProfile": {
@@ -101,24 +109,230 @@
   },
   "regressionEvidence": {
     "contractRuntimeSuite": {
-      "passed": 257,
+      "passed": 291,
       "failed": 0,
-      "skipped": 0
+      "skipped": 0,
+      "total": 291,
+      "crossRepoArtifact": "NeoDIDRegistry.nef and manifest",
+      "crossRepoIntegration": "2/2 PASS"
     },
-    "sessionRevocationRuntime": "clear then validate faults with No session key active; successful clear emits SessionKeyRevoked"
+    "standaloneWithoutSiblingArtifact": {
+      "passed": 289,
+      "failed": 0,
+      "skipped": 2,
+      "total": 291,
+      "skippedTests": [
+        "AaProxyWitnessConsumesDidActionTicketExactlyOnce",
+        "DidActionSignatureCannotBeRetargetedToAnotherProxy"
+      ],
+      "skipReason": "sibling NeoDIDRegistry build artifact was not present in the standalone checkout"
+    },
+    "sessionRevocationRuntime": "clear then validate faults with No session key active; successful clear emits SessionKeyRevoked",
+    "multiSig": {
+      "runtimeVectors": "12 passed: valid threshold, invalid child/witness, exact signature cardinality, empty/oversized/invalid-threshold/duplicate configs, self-reference, undeployed child and incomplete-child lifecycle ABI",
+      "boundedCoqDeclarations": 11,
+      "boundedModelConfigCases": 104,
+      "boundedModelAcceptanceCases": 206846,
+      "sourceGuardMutationsRejected": 6,
+      "coqSemanticMutationsRejected": 3,
+      "status": "bounded-partial",
+      "sourceInvariantChecks": 1
+    },
+    "pluginOrphaning": {
+      "targetedRuntimeTests": 22,
+      "cleanupFailureVector": "MockVerifierCore.clearAccount faults during settlement, verifier update and escape finalization; enclosing transaction preserves escrow, owner, old verifier and Active listing",
+      "status": "known-roster, manifest-lifecycle-preflight, and fail-closed cleanup verified; generic storage/refinement boundary remains open"
+    },
+    "callbackAbi": {
+      "canonicalTuple": "[TargetContract, Method, Args, Nonce, Deadline, Signature]",
+      "runtimeVectors": "1 passed: WhitelistHook accepts the signed target and rejects an unlisted target with nonce rollback",
+      "sourceInvariant": "pre/post hook callbacks share BuildHookOperationParams(UserOperation)",
+      "status": "bounded-runtime-verified; full NeoVM callback refinement remains open"
+    },
+    "inputBounds": {
+      "runtimeVectors": "2 passed: oversized verifier signature and oversized argument shape reject before nonce consumption",
+      "sourceLimits": "batch <= 32, args <= 64, serialized args <= 4096 bytes, method <= 128, signature <= 1024 bytes",
+      "status": "bounded-input-amplification-mitigation; independent verifier gas cap remains open"
+    },
+    "moduleLifecycleAbi": {
+      "negativeVectors": "8 passed: marker-only verifier/hook, wrong verifier/hook lifecycle return types, MultiSig self-reference, undeployed/incomplete child, and MultiHook incomplete child rejected before binding/storage",
+      "manifestRequirements": "verifier supportsV3(Boolean,safe)/validateSignature(Hash160,Any)->Boolean/postExecute(Hash160,Any,Any)->Void/clearAccount(Hash160)->Void; hook supportsV3(Boolean,safe)/preExecute(Hash160,Array)->Void/postExecute(Hash160,Array,Any)->Void/clearAccount(Hash160)->Void",
+      "status": "exact manifest type/safe-marker preflight verified for core, MultiSig and MultiHook child boundaries; module implementation/refinement remains outside the generic proof",
+      "productionManifestAudit": "14/14 standard verifier/hook production manifests (9 verifiers plus 5 hooks) expose required lifecycle methods; SocialRecoveryVerifier is audited separately and also exposes the exact verifier lifecycle ABI",
+      "markerOnlyNegativeVectors": 2,
+      "multiSigChildPreflightVectors": 3,
+      "multiHookChildPreflightVectors": 1,
+      "wrongLifecycleAbiNegativeVectors": 2,
+      "wrongHookLifecycleAbiNegativeVectors": 1
+    }
   },
   "deployedParity": {
-    "status": "unverified",
-    "chainReadbackPerformed": false,
-    "deploymentAttempted": false,
-    "reason": "This report proves reproducible local compilation only; it does not establish equality with any deployed NEF or manifest."
+    "status": "public-readback-mismatch-known-deployments",
+    "chainReadbackPerformed": true,
+    "localNeoExpressReadback": "verified-current-exact-lifecycle-ABI-preflight-artifacts",
+    "publicTestnetOrMainnetReadback": "mismatch-current-local-artifact",
+    "reason": "The current local core, MultiSigVerifier and MultiHook artifacts match fresh private NeoExpress RPC readback recorded in aa-neoexpress-readback-20260920-current.json; read-only RPC checks of the known canonical TestNet and MainNet AA core hashes returned different NEF scripts. The current artifacts have not been publicly deployed; no signing or broadcast was attempted.",
+    "publicDeploymentAttempted": false,
+    "publicReadbackReceipt": "docs/reports/aa-public-readback-20260920.json",
+    "neoExpressReadbackReceipt": "docs/reports/aa-neoexpress-readback-20260920-current.json"
   },
   "privacy": {
     "credentialsIncluded": false,
     "absoluteUserPathsIncluded": false
   },
   "notes": [
-    "The earlier mainnet-aa-rebuild-20260915 report referenced different artifact hashes; that historical claim is not reused for this hardened source.",
-    "Verifier gas/resource isolation remains a platform-level open obligation because Contract.Call exposes no per-call gas budget in the checked framework surface."
-  ]
+    "291/291 gated AA contract tests pass with the sibling NeoDIDRegistry artifact; standalone mode passes 289 and skips only the two sibling-artifact-dependent cases.",
+    "Core, MultiSig and MultiHook child preflight reject marker-only, wrong-typed, undeployed, incomplete or self-referential configurations before storage; the 14 standard verifier/hook manifests plus SocialRecoveryVerifier pass the manifest surface audit; child-key independence, arbitrary cycles, cryptographic correctness and callback refinement remain open.",
+    "The latest private NeoExpress readback verifies C# to NEF to deployed RPC script/manifest parity for the current core, MultiSigVerifier and MultiHook artifacts. Public TestNet/MainNet artifacts remain known mismatches and were not modified.",
+    "VULN-001 remains OPEN: the current AA artifact still uses published NeoVM Contract.Call without an independent verifier gas cap; the platform syscall prototype is isolated and not activated.",
+    "Formal evidence remains bounded: real Coq/TLC/SMT/mutation tools ran, but no full cryptography, Witness/script parser, complete NeoVM semantics or full callback refinement proof is claimed.",
+    "AA evidence added or modified in this continuation contains no credentials, private keys or absolute user paths."
+  ],
+  "formalVerification": {
+    "aaLocalRunner": "PASS",
+    "aaLocalSemanticMutations": 15,
+    "aaLocalCoqModules": 2,
+    "aaLocalParserTests": 17,
+    "externalDriver": "79/79 PASS",
+    "boundary": "bounded abstract models and bounded VM/source evidence; no cryptography, full Witness/script parsing proof, full NeoVM semantics, or full callback refinement",
+    "multiSigPolicyDeclarations": 11
+  },
+  "neoExpressReadback": {
+    "schema": "neoos-aa-neoexpress-readback/v1",
+    "observedOn": "2026-09-20",
+    "scope": "Fresh one-node private NeoExpress deployment and RPC readback of the latest AA core, MultiSigVerifier and MultiHook artifacts after exact lifecycle-ABI preflight hardening; no public-chain or production deployment.",
+    "tool": {
+      "name": "NeoExpress",
+      "version": "3.10.1.18+3373db93dd",
+      "neoVersion": "3.10.1"
+    },
+    "network": {
+      "kind": "isolated-private-single-node",
+      "networkMagic": 4203685182,
+      "rpcHost": "127.0.0.1",
+      "blockCountAtReadback": 280,
+      "publicNetwork": false,
+      "feeSettings": "local-only StorageFeeFactor reduction; no public signing or broadcast"
+    },
+    "deployments": [
+      {
+        "contractName": "UnifiedSmartWalletV3",
+        "contractHash": "0x44407172bb3763553679cf72da87154a5fdbd56d",
+        "deploymentTransaction": "0x906e1142f095439c3e4d1307f634db30b631731d6ee1f73318e2f9562242a63a",
+        "localNefSha256": "4195a6fc4453f38e72e52b2448e2dafb2f64d5fa44bb7ec2e63d077ba595273b",
+        "localManifestSha256": "2393c1b6df9e3098f7b2350cd42b2b052a0999ad57558355555a29b4713bab7a",
+        "rpcReadback": {
+          "manifestSemanticEquality": true,
+          "nefScriptByteEquality": true,
+          "nefScriptSha256": "704d40788de3bc1ffecb50bbcfe7d52d0e16fe48f50bb3207a1e3aa350ba0317",
+          "nefScriptLength": 21420,
+          "nefChecksum": 1202205244
+        }
+      },
+      {
+        "contractName": "MultiSigVerifier",
+        "contractHash": "0x0720612332ac7a8a6ab892fc776a7bce2e96029b",
+        "deploymentTransaction": "0x9a6bdb5af5802592a27d32bb8108ba7ff515a6b7ae931c8e682101c1666f8d11",
+        "localNefSha256": "39de8647b557f978defa580a094f486b7411a07478e5865b3b1376c40a07b976",
+        "localManifestSha256": "f4af2396f03b01ca2e4dea7ceba13ef760a4e7a35b7682cd6b21468ba6dc8f33",
+        "rpcReadback": {
+          "manifestSemanticEquality": true,
+          "nefScriptByteEquality": true,
+          "nefScriptSha256": "20230d661c1f7a11416ed7af3c00702116d9814c4820ad28e0fd04291c097c7b",
+          "nefScriptLength": 4220,
+          "nefChecksum": 1704670566
+        }
+      },
+      {
+        "contractName": "MultiHook",
+        "contractHash": "0x316bfbdc8408dd0fb47f171b56c1dea5b35f3d33",
+        "deploymentTransaction": "0x878cba04100ea1639f6f0ed0509925e2350b526fbc571ef09f42e37476834ea6",
+        "localNefSha256": "3436e4f4c7dc260b6f74c0d0ad8d6994807ed7389d31140ef1a9f6fc4c7a4b7a",
+        "localManifestSha256": "023dd4c01f19a68b7b7be0a93f78ce9ba2d348a3a9a260b82d1aaa8521838244",
+        "rpcReadback": {
+          "manifestSemanticEquality": true,
+          "nefScriptByteEquality": true,
+          "nefScriptSha256": "3157f5977159396a1e56c5d73c496ef7103aa7469e4dc1f0979ce0306617a039",
+          "nefScriptLength": 4298,
+          "nefChecksum": 1105844213
+        }
+      }
+    ],
+    "runtimeProbes": [
+      {
+        "contractName": "UnifiedSmartWalletV3",
+        "method": "supportsExecutionMode",
+        "input": "single",
+        "result": "HALT true"
+      },
+      {
+        "contractName": "UnifiedSmartWalletV3",
+        "method": "previewUserOpValidation",
+        "input": "nonzero account with null operation",
+        "result": "FAULT ABORTMSG is executed. Reason: Operation required",
+        "expected": "fail-closed"
+      },
+      {
+        "contractName": "UnifiedSmartWalletV3",
+        "method": "getAccountImplementationId",
+        "result": "HALT org.r3e.neo.aa.unified-smart-wallet.v3"
+      }
+    ],
+    "parityBoundary": {
+      "currentCsharpToLocalNef": "verified-by-independent-byte-identical-builds",
+      "currentLocalNefToNeoExpressRpc": "verified-current-exact-lifecycle-ABI-preflight-artifacts",
+      "publicTestnetOrMainnetReadback": "known public artifacts differ; see aa-public-readback-20260920.json",
+      "productionDeployment": false,
+      "transactionSigningOrBroadcast": false
+    },
+    "privacy": {
+      "credentialsIncluded": false,
+      "privateKeysIncluded": false,
+      "absoluteUserPathsIncluded": false
+    }
+  },
+  "platformGasBudget": {
+    "receipt": "docs/reports/aa-platform-gas-cap-20260920.json",
+    "status": "isolated-prototype-not-integrated",
+    "neoCoreTargetedTests": "7/7 PASS",
+    "neoCoreFullUnitTests": "1433/1433 PASS",
+    "aaVuln001Status": "open-until-matched-Neo-core-DevPack-AA-integration-hardfork-activation-and-node-readback"
+  },
+  "latestVerificationDate": "2026-09-20",
+  "multiSigProfile": {
+    "source": {
+      "path": "contracts/verifiers/MultiSigVerifier.cs",
+      "sha256": "6d06719afe686a91d68eba2a7bf0ba8d5a6f9e79fd0965cc64517ee65f03e314"
+    },
+    "artifacts": [
+      {
+        "path": "contracts/bin/v3/verifiers/MultiSigVerifier.nef",
+        "sha256": "39de8647b557f978defa580a094f486b7411a07478e5865b3b1376c40a07b976"
+      },
+      {
+        "path": "contracts/bin/v3/verifiers/MultiSigVerifier.manifest.json",
+        "sha256": "f4af2396f03b01ca2e4dea7ceba13ef760a4e7a35b7682cd6b21468ba6dc8f33"
+      }
+    ],
+    "runtimeArtifactSource": "contracts/bin/v3/verifiers/MultiSigVerifier.nef and manifest",
+    "status": "local-built-and-runtime-tested; self-reference and child-lifecycle-manifest preflight vectors pass; exact lifecycle ABI type and safe-marker preflight verified"
+  },
+  "multiHookProfile": {
+    "source": {
+      "path": "contracts/hooks/MultiHook.cs",
+      "sha256": "b6f3de93710f9439df37a09df93f2f46ed62c0867552ce4aac745c421e07eeb7"
+    },
+    "artifacts": [
+      {
+        "path": "contracts/bin/v3/hooks/MultiHook.nef",
+        "sha256": "3436e4f4c7dc260b6f74c0d0ad8d6994807ed7389d31140ef1a9f6fc4c7a4b7a"
+      },
+      {
+        "path": "contracts/bin/v3/hooks/MultiHook.manifest.json",
+        "sha256": "023dd4c01f19a68b7b7be0a93f78ce9ba2d348a3a9a260b82d1aaa8521838244"
+      }
+    ],
+    "runtimeArtifactSource": "contracts/bin/v3/hooks/MultiHook.nef and manifest",
+    "status": "local-built-and-runtime-tested; incomplete-child manifest preflight verified; exact lifecycle ABI type and safe-marker preflight verified"
+  }
 }

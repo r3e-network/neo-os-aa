@@ -4,6 +4,9 @@
 
 ```bash
 ./scripts/verify_repo.sh
+
+# Release-grade cross-repository identity-kernel gate:
+NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 ./scripts/verify_repo.sh --contracts-only
 ```
 
 ## Frontend only

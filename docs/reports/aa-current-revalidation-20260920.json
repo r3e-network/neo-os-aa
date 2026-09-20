@@ -1,0 +1,25 @@
+{
+  "schema": "neoos-aa-current-revalidation/v1",
+  "generated_at": "2026-09-20T04:48:17Z",
+  "read_only": true,
+  "aa_runtime_tests": {
+    "passed": 291,
+    "failed": 0,
+    "skipped": 0
+  },
+  "neodid_contract_tests": {
+    "passed": 75,
+    "failed": 0,
+    "skipped": 0,
+    "repository": "neo-os-services"
+  },
+  "formal_runner": {
+    "status": "UNAVAILABLE",
+    "command": "python3 formal/verify.py",
+    "error": "Cannot read java version; /usr/bin/java is a macOS launcher without an installed Java runtime"
+  },
+  "public_artifact_parity": "MISMATCH_ON_TESTNET_AND_MAINNET",
+  "private_neoexpress": "VALID_ISOLATED_ONLY",
+  "network_writes_performed": false,
+  "interpretation": "Local identity-kernel tests pass; formal freshness and public deployment parity remain open."
+}

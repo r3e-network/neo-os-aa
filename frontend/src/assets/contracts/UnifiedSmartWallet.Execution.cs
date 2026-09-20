@@ -91,7 +91,11 @@ namespace AbstractAccount
                     SetHookExecutionContext(accountId, state.HookId);
                     try
                     {
-                        Contract.Call(state.HookId, "preExecute", CallFlags.All, new object[] { accountId, op });
+                        Contract.Call(
+                            state.HookId,
+                            "preExecute",
+                            CallFlags.All,
+                            new object[] { accountId, BuildHookOperationParams(op) });
                     }
                     catch
                     {
@@ -111,7 +115,11 @@ namespace AbstractAccount
                     // [Hook phase] post-execution hook
                     if (state.HookId != UInt160.Zero)
                     {
-                        Contract.Call(state.HookId, "postExecute", CallFlags.All, new object[] { accountId, op, result });
+                        Contract.Call(
+                            state.HookId,
+                            "postExecute",
+                            CallFlags.All,
+                            new object[] { accountId, BuildHookOperationParams(op), result });
                     }
                     if (state.Verifier != UInt160.Zero)
                     {
@@ -181,6 +189,30 @@ namespace AbstractAccount
                 results[i] = ExecuteUserOp(accountId, ops[i]);
             }
             return results;
+        }
+
+        /// <summary>
+        /// Canonical callback ABI for hook plugins.
+        /// </summary>
+        /// <remarks>
+        /// The first callback argument is the account id; the second is the operation tuple
+        /// consumed by the hook family. It is deliberately not the serialized <see cref="UserOperation"/>
+        /// object: existing hooks inspect target, method, and call arguments by position. Keeping
+        /// this conversion in one helper prevents pre/post callbacks from drifting and makes the
+        /// hook refinement boundary explicit:
+        /// <c>[TargetContract, Method, Args, Nonce, Deadline, Signature]</c>.
+        /// </remarks>
+        private static object[] BuildHookOperationParams(UserOperation op)
+        {
+            return new object[]
+            {
+                op.TargetContract,
+                op.Method,
+                op.Args,
+                op.Nonce,
+                op.Deadline,
+                op.Signature
+            };
         }
 
         // ========================================================================
