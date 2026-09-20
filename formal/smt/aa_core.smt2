@@ -110,7 +110,10 @@
 
 ; ---------------------------------------------------------------------------
 ; OBL 4: reimbursement is capped by both the request and the actual measured
-;        execution cost, matching CapReimbursementToActualCost.
+;        execution cost, matching CapReimbursementToActualCost for every
+;        persisted transaction (actualCost > 0). A container with zero total fee
+;        is an invokescript estimation, not a chain transaction, and is settled
+;        at the request in the source; that branch is outside this obligation.
 ; ---------------------------------------------------------------------------
 (echo "OBL:reimbursement-cannot-exceed-request-or-actual-cost")
 (push)

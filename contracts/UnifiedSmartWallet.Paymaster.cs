@@ -23,10 +23,25 @@ namespace AbstractAccount
         /// real cost so a relay cannot always claim its policy MaxPerOp regardless of the gas actually
         /// consumed (audit MEDIUM-a). The paymaster still enforces MaxPerOp / budgets / deposit backing.
         /// </summary>
+        /// <remarks>
+        /// A persisted transaction never has a zero total fee: its system fee must cover the gas the
+        /// script consumes and its network fee must cover witness verification, whose execution-fee
+        /// factor is at least one. A container whose fees are both zero is therefore an
+        /// <c>invokescript</c>/<c>invokefunction</c> estimation, not a chain transaction. Faulting in
+        /// that case would make sponsored operations impossible to price with standard wallet and
+        /// relay tooling, so the estimation container is capped at the requested amount, the largest
+        /// amount the chain could settle; every transaction that reaches a block is capped as before.
+        /// The cap is computed without a branch so an estimation and the persisted transaction execute
+        /// the same instruction sequence: an early return on the estimation path was measured to
+        /// under-estimate the system fee by the instructions it skipped, which made the persisted
+        /// transaction fault with "Insufficient GAS". <c>BigInteger.Min</c> compiles to the MIN opcode.
+        /// </remarks>
         private static BigInteger CapReimbursementToActualCost(BigInteger requested)
         {
             BigInteger actualCost = (BigInteger)Runtime.Transaction.SystemFee + (BigInteger)Runtime.Transaction.NetworkFee;
-            return requested < actualCost ? requested : actualCost;
+            BigInteger estimationFlag = 1 - BigInteger.Min(actualCost, 1);
+            BigInteger cap = actualCost + estimationFlag * requested;
+            return BigInteger.Min(requested, cap);
         }
 
         /// <summary>

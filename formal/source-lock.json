@@ -2,15 +2,16 @@
   "schema": "aa-formal-source-lock/v1",
   "boundary": "Manual correspondence snapshot; NOT a refinement proof or deployed-artifact attestation. Review models and tests before changing pins.",
   "sources": {
+    "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
     "contracts/UnifiedSmartWallet.Escape.cs": "8047ae50e4800c56d3410b5395833b27b8bd1af70c5a357a0f7f27c9827a16b2",
     "contracts/UnifiedSmartWallet.Execution.cs": "d1563713b7e42e72f19674dfb77d168470ea39b5b8b58fb0e0f76d6625106195",
     "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
-    "contracts/UnifiedSmartWallet.Paymaster.cs": "0ecbd13f9f8f51b43339e7ac66ac9cd5e77f30e06300fa6d71dde12f18c78f0a",
+    "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
     "contracts/UnifiedSmartWallet.State.cs": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f",
+    "contracts/UnifiedSmartWallet.VerifyContext.cs": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7",
+    "contracts/hooks/MultiHook.cs": "b6f3de93710f9439df37a09df93f2f46ed62c0867552ce4aac745c421e07eeb7",
     "contracts/paymaster/Paymaster.cs": "c04511d90eff0e97fabb94d17c38c80de4287186138dcdf01073ee2a16cada87",
     "contracts/verifiers/MultiSigVerifier.cs": "6d06719afe686a91d68eba2a7bf0ba8d5a6f9e79fd0965cc64517ee65f03e314",
-    "contracts/verifiers/VerifierPayload.cs": "9366d6d24a0ad9be79b24756558bea6b89e165b91a6b4e24cca2e54147204f12",
-    "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
-    "contracts/hooks/MultiHook.cs": "b6f3de93710f9439df37a09df93f2f46ed62c0867552ce4aac745c421e07eeb7"
+    "contracts/verifiers/VerifierPayload.cs": "9366d6d24a0ad9be79b24756558bea6b89e165b91a6b4e24cca2e54147204f12"
   }
 }

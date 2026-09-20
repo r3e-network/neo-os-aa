@@ -32,16 +32,39 @@ or, through the repository entrypoint:
 NEOOS_REQUIRE_FORMAL=1 ./scripts/verify_repo.sh --contracts-only
 ```
 
+The private-chain validation is a separate opt-in step of the same entrypoint
+(`--neoexpress` or `NEOOS_REQUIRE_NEOEXPRESS=1`); it needs the `neoxp` tool and
+`openssl`, deploys every artifact to a fresh NeoExpress chain, drives the
+protocol with real transactions and reads every contract back over JSON-RPC.
+
 The local gate invalidates any previous result before checking, refuses source
 hash drift, requires real Coq/Z3/TLC execution, checks final TLC state counts
 and action coverage, rejects syntax-only mutations, and records tool/artifact
 hashes under ignored `formal/.runs/`.
 
-The gate needs Rocq/Coq 9 (the models use the `Stdlib` namespace), Z3, a real
-JDK and `tla2tools.jar`. On macOS `/usr/bin/java` is a stub that cannot run
-TLC; point `JAVA_BIN` at a real runtime (for example
-`JAVA_BIN=/opt/homebrew/opt/openjdk/bin/java`). `TLA_JAR` overrides the default
-`~/tools/tla/tla2tools.jar`.
+The gate needs Coq 8.16 or later (Rocq 9 included; the models use the
+portable `From Coq` import path, which Rocq 9 accepts with a deprecation
+warning), Z3, a JDK and `tla2tools.jar`. On macOS `/usr/bin/java` is a stub
+that cannot run TLC; the runner skips it and probes the usual JDK locations,
+or set `JAVA_BIN` explicitly. `TLA_JAR` overrides the default
+`~/tools/tla/tla2tools.jar`. Without a host toolchain, run the pinned
+environment instead:
+
+```sh
+formal/verify-in-docker.sh
+```
+
+It builds `formal/Dockerfile` (Ubuntu 24.04, Coq 8.18, Z3, OpenJDK, the TLA+
+tools jar verified against a pinned SHA-256) and runs both the gate and the
+runner's regression tests inside it, writing results under
+`formal/.runs/docker`. **Status:** the image has not yet been built and run
+end to end; in the authoring environment the build stalled at Docker Hub
+access, so the environment is provided as a pinned recipe, not as evidence.
+Its compatibility claim (the models use only `List`, `Bool`, `PeanoNat` and
+`Lia` lemmas present since Coq 8.16) has been exercised on Rocq 9.2 only. The
+first successful in-container run should be recorded in a dated receipt
+before the environment is cited as an independent-review result, and only
+then is a CI job that invokes the script worth adding.
 
 **CI status:** `.github/workflows/ci.yml` runs `scripts/verify_repo.sh`, which
 does not run the formal gate unless `--formal` or `NEOOS_REQUIRE_FORMAL=1` is
@@ -60,11 +83,13 @@ models under `verified/` for its own `verify.sh`.
 |---|---|
 | `formal/coq/UnifiedSmartWalletAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating and success-only state transitions |
 | `formal/coq/MultiSigPolicy.v` | Closed bounded threshold-policy proofs for configuration validity, exact signature cardinality and threshold support; child identity is abstract |
+| `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected `executeUserOp`/`executeUserOps` call, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
 | `formal/tla/UnifiedSmartWalletAA.tla` (sibling: `verified/tla/`) | Finite state-machine exploration of Begin/success/failure/Tick transitions |
 | `formal/tla/UnifiedSmartWalletAA.cfg` | TLC bounds and safety invariants |
 | `formal/smt/aa_core.smt2` (sibling: `verified/smt/`) | Nonce arithmetic, cursor advancement, rollback equalities, reimbursement cap and budget arithmetic |
 | sibling `reports/aa-formal-20260918/README.md` | Human-readable result and boundary report |
 | `formal/verify.py` | AA-local fail-closed runner with source pins and semantic mutations |
+| `formal/Dockerfile`, `formal/verify-in-docker.sh` | Pinned Ubuntu 24.04 environment (Coq 8.18, Z3, OpenJDK, TLA+ tools jar pinned by SHA-256) so an independent reviewer runs the identical gate without a host toolchain |
 | `formal/test_verify.py` | Runner/parser fail-closed regression tests |
 | `formal/source-lock.json` | Reviewed source snapshot hashes; not a proof attestation |
 
@@ -135,6 +160,19 @@ The same suite rejects an oversized verifier signature and an oversized argument
 consumption or external dispatch. These bounds reduce input-amplification risk but do not replace a
 non-bypassable per-verifier gas budget.
 
+The proxy-witness transaction-script shape is now covered by a closed Coq
+model rather than by runtime vectors alone. `formal/coq/ProxyWitnessScript.v`
+transcribes the parser byte for byte (opcode table, PUSHDATA length decoding,
+overrun checks, tail layout, CallFlags push range) and proves that any accepted
+script is a walk of data-push instructions landing exactly on the expected core
+call for the given account id and core hash, that no instruction start in that
+walk is a SYSCALL or any other non-push opcode, and that acceptance binds the
+account id and core hash uniquely; six semantic mutations (dropping the prefix
+walk, the account or core binding, the flags range, the syscall tail, or
+treating unknown opcodes as pushes) are each rejected. It does not prove NeoVM's
+own instruction decoding, witness-rule evaluation, signer-scope semantics, or
+C#-to-NEF refinement, and the byte range 0..255 is assumed from the C# type.
+
 Three further runtime boundaries are now pinned by real NeoVM vectors rather than
 by prose. First, the backup owner's `forceCancelMarketEscrow` and the
 market-driven `cancelMarketEscrow` pre-flight the market through
@@ -164,7 +202,7 @@ source/artifact hashes and explicit public-deployed-parity status are recorded i
 canonical TestNet/MainNet hashes found different NEF scripts; the current artifact has not
 been publicly deployed.
 
-The current gated contract run is **291 passed, 0 failed, 0 skipped** after
+The current gated contract run is **292 passed, 0 failed, 0 skipped** after
 adding the MultiSig configuration,
 fail-closed cleanup, witness-shape, hook-callback ABI, input-shape boundary,
 market-escape pre-flight, recovery-verifier cleanup, subscription transfer-source
@@ -178,9 +216,14 @@ before configuration storage; MultiHook rejects incomplete child hooks before st
 declared child methods are semantically safe, cryptographically independent, or
 free of multi-contract cycles. The
 formal gate itself was re-run on
-2026-09-20 against the latest source pins: 2 Coq modules (34 closed
-declarations, 11 rejected semantic mutations), TLC over 61,460 distinct states
-with 4 rejected mutations, and 6 SMT obligations with 6 satisfiable controls. A fresh private
+2026-09-20 against the latest source pins: 3 Coq modules (54 closed
+declarations, 17 rejected semantic mutations), TLC over 61,460 distinct states
+with 4 rejected mutations, and 6 SMT obligations with 6 satisfiable controls.
+The runner resolves a working Java runtime itself (an explicit `JAVA_BIN` is
+honoured verbatim; otherwise `JAVA_HOME`, the macOS locator, the Homebrew
+OpenJDK kegs and `PATH` are probed with `-version`, and the macOS launcher
+stub is skipped), so the earlier `UNAVAILABLE` revalidation verdict caused by
+that stub no longer reproduces on a machine with a JDK installed. A fresh private
 NeoExpress deployment of the current post-remediation core, MultiSigVerifier,
 and MultiHook matched each local NEF script and manifest over RPC; see
 `docs/reports/aa-neoexpress-readback-20260920-current.json`. This is local-chain
@@ -188,9 +231,32 @@ readback only. The read-only public comparison found the known
 canonical TestNet/MainNet artifacts differ from the current local artifact; deployment of the
 current artifact remains a separate approval-gated operation.
 
-The standalone checkout without the sibling `NeoDIDRegistry` artifact passes
-**289/291** and records exactly the two cross-repository DID cases as explicit
-skips; it does not count those cases as passes.
+A full private-chain validation on 2026-09-20 (`scripts/neoexpress_validate.py`, opt-in
+through `scripts/verify_repo.sh --neoexpress`) deployed all 24 `contracts/bin/v3` artifacts
+to a fresh single-node NeoExpress chain, drove 10 scenarios with 65 halted transactions and
+23 expected faults, checked 51 on-chain assertions, advanced 4,669,200 s of simulated block
+time, and read every deployed contract back over JSON-RPC with a byte-identical NEF script,
+matching checksum and semantically equal manifest:
+`docs/reports/aa-neoexpress-validation-20260920.json`. The scenarios cover native
+backup-owner execution with nonce lanes, replay, witness, deadline and size bounds; the
+escape hatch with cooldown and timelock; the whitelist hook callback tuple; the lifecycle-ABI
+pre-check for every plugin; relay-only session-key submission with a real P-256 signature;
+sponsored settlement whose zero-fee estimate equals the persisted gas to the datoshi;
+recovery-verifier rotation with cleanup and oracle-credit refund; MultiSig and MultiHook
+child pre-checks; a market sale, an owner escape and a silent market; and subscription pulls
+from the proxy asset address. The run found three defects the unit suite had not: the
+reimbursement cap faulted the zero-fee estimation container, the first fix under-estimated the
+system fee by the instructions its early return skipped, and a merchant pull needs a signer
+scope that reaches the verifier (see `SECURITY_MODEL.md`). The core artifact changed with the
+branch-free cap, so the earlier readback receipts describe the previous core NEF and this
+receipt is the current one. It remains local-chain evidence: neoxp signs with wallet accounts
+under CalledByEntry or Global, so the proxy verification-trigger witness path is covered by
+the runtime tests and the Coq model rather than by this receipt.
+
+The current standalone checkout without the sibling `NeoDIDRegistry` artifact passed
+**290/292** and records exactly the two cross-repository DID cases as explicit
+skips; it does not count those cases as passes. The earlier 289/291 result is
+historical, from before the zero-fee estimation regression test was added.
 
 The two AA-to-DID cross-contract cases require the sibling `NeoDIDRegistry`
 build artifact. They passed in the gated run with

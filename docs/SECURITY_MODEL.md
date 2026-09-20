@@ -204,6 +204,12 @@ rejects an unlisted target before dispatch, and rolls back the nonce on rejectio
    hash (`getProxyScriptHash(accountId)`), never at the `accountId`. A verifier or hook that pins or
    meters a transfer source must compare against that proxy address; `SubscriptionVerifier` and
    `DailyLimitHook` do so, and a source equal to the `accountId` is rejected outright.
+5. **Plugin-Level Witness Checks Need a Reaching Scope:** A verifier or hook runs as a nested call
+   from the core, so a `Runtime.CheckWitness` inside it (the merchant check in
+   `SubscriptionVerifier`, for example) only sees signers whose scope reaches the plugin.
+   `CalledByEntry` stops at the core and is rejected; the private-chain validation records that
+   fault and the successful pull with a reaching scope. A merchant scopes its signer to the
+   verifier with `CustomContracts` rather than signing `Global`.
 
 ---
 
@@ -240,9 +246,12 @@ therefore remains open and must not be marked mitigated yet.
 
 **Witness/callback evidence boundary:** the runtime suite now covers bounded proxy-script shape
 vectors (wrong account, arbitrary/non-data instructions, decoy/global signer, and fee-payer
-cases) and the shipped hook callback tuple. This is implementation evidence, not a formal proof
-of every NeoVM witness condition, script-parser corner case, cryptographic primitive, arbitrary
-plugin, or full callback refinement.
+cases) and the shipped hook callback tuple, and the transaction-script shape parser itself has a
+closed Coq model (`formal/coq/ProxyWitnessScript.v`) proving that an accepted script is data
+pushes followed by exactly the expected core call, with the account id and core hash bound.
+This is implementation evidence plus a parser-shape proof, not a formal proof of NeoVM witness
+condition evaluation, signer scopes, cryptographic primitives, arbitrary plugins, or full
+callback refinement.
 The core also rejects oversized verifier signatures and argument arrays before nonce
 consumption or external dispatch. This is input-amplification mitigation only; it cannot cap a
 verifier that is already executing inside the shared NeoVM gas budget.
@@ -347,6 +356,21 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 | **Off-chain Validation** | Apply business rules before chain submission |
 | **Network Isolation** | Testnet/Mainnet separation |
 | **Reason Disclosure** | Explain rejections to users |
+
+**Reimbursement cap and fee estimation:** `executeSponsoredUserOp` caps the settled
+reimbursement at the enclosing transaction's system fee plus network fee. A container whose
+fees are both zero can only be an `invokescript`/`invokefunction` estimation (a persisted
+transaction must pay for its consumed gas and for witness verification), so that container
+caps at the requested amount, the largest amount the chain could settle; every transaction
+that reaches a block is capped by its real fees. The cap is computed without a branch so the
+estimation and the persisted transaction execute the same instruction sequence, and the
+private-chain validation asserts that the estimate equals the persisted gas to the datoshi.
+Both were found on a private NeoExpress chain: the original cap faulted the estimation with
+"Reimbursement exceeds actual gas cost", and an early-return fix under-estimated the system fee
+by the instructions it skipped, so the persisted transaction faulted with "Insufficient GAS".
+The settled amount itself still differs between the two containers, which can change the byte
+length of a stored balance at a power-of-256 boundary and move the storage fee by one unit, so
+a relay should keep the customary system-fee margin on sponsored submissions.
 
 ### 8.3 TEE Security
 

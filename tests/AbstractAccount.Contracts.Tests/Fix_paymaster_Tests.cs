@@ -215,6 +215,27 @@ public class FixPaymasterTests
     }
 
     [TestMethod]
+    public void ExecuteSponsoredUserOp_ZeroFeeEstimationContainerStillSettles()
+    {
+        // Wallets and relays price a transaction through invokescript, whose container carries no
+        // fees. A persisted transaction always pays a positive total fee, so the zero-fee container
+        // is unambiguously an estimation and must not fault the sponsored path; it is settled at
+        // the request so the estimate stays representative.
+        SponsoredHarness h = new(depositAmount: 50 * OneGas);
+        h.SetWalletAccountPolicy(maxPerOp: 50 * OneGas, dailyBudget: 50 * OneGas, totalBudget: 50 * OneGas);
+        BigInteger depositBefore = h.Deposit();
+        BigInteger request = 3 * OneGas;
+        h.Fx.SetSigners(Relay, BackupOwner);
+        h.Fx.Engine.Transaction.SystemFee = 0;
+        h.Fx.Engine.Transaction.NetworkFee = 0;
+        BigInteger deadline = h.Fx.Now() + 3_600_000;
+        h.Fx.CallVoid(h.Wallet, "executeSponsoredUserOp",
+            h.ExecAccount, h.TransferOp(nonce: 0, deadline), h.Paymaster, Sponsor, request);
+        Assert.AreEqual(request, depositBefore - h.Deposit(),
+            "An estimation container settles the requested amount instead of faulting");
+    }
+
+    [TestMethod]
     public void ExecuteSponsoredUserOp_HonoursRequestWhenBelowActualCost()
     {
         SponsoredHarness h = new(depositAmount: 50 * OneGas);

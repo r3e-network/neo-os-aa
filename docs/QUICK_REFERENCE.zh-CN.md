@@ -7,6 +7,9 @@
 
 # 发布级跨仓库身份内核门（必须存在 neo-os-services 真实工件）：
 NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 ./scripts/verify_repo.sh --contracts-only
+
+# 可选的形式化验证门（Coq/Z3/TLC）与私链验证（neoxp）：
+./scripts/verify_repo.sh --contracts-only --formal --neoexpress
 ```
 
 ## 仅前端

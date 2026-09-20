@@ -123,6 +123,37 @@ class VerificationGateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Source drift"):
                 verify.check_inventory(formal)
 
+    def write_fake_java(self, directory, name, exit_code, message):
+        launcher = Path(directory) / name
+        launcher.write_text(f"#!/bin/sh\necho '{message}' 1>&2\nexit {exit_code}\n")
+        launcher.chmod(0o755)
+        return str(launcher)
+
+    def test_java_resolver_skips_stub_launcher_and_uses_working_runtime(self):
+        with tempfile.TemporaryDirectory() as temp:
+            stub = self.write_fake_java(temp, "java-stub", 1, "Unable to locate a Java Runtime.")
+            real = self.write_fake_java(temp, "java-real", 0, 'openjdk version "21.0.2" 2024-01-16')
+            logs = Path(temp) / "logs"
+            logs.mkdir()
+            path, version = verify.resolve_java([stub, real], logs)
+            self.assertEqual(real, path)
+            self.assertIn("openjdk version", version)
+
+    def test_java_resolver_fails_closed_when_no_candidate_works(self):
+        with tempfile.TemporaryDirectory() as temp:
+            stub = self.write_fake_java(temp, "java-stub", 1, "Unable to locate a Java Runtime.")
+            logs = Path(temp) / "logs"
+            logs.mkdir()
+            with self.assertRaisesRegex(ValueError, "No working Java runtime"):
+                verify.resolve_java([stub, str(Path(temp) / "absent-java")], logs)
+
+    def test_explicit_java_bin_is_the_only_candidate(self):
+        # A reviewer who names a runtime must not be silently redirected to another one.
+        self.assertEqual(["/explicit/java"], verify.java_candidates({"JAVA_BIN": "/explicit/java"}, "darwin"))
+        candidates = verify.java_candidates({"JAVA_HOME": "/jdk"}, "linux")
+        self.assertEqual(["/jdk/bin/java", "java"], candidates)
+        self.assertEqual(["java"], verify.java_candidates({}, "linux"))
+
     def test_missing_tool_invalidates_previous_success(self):
         with tempfile.TemporaryDirectory() as output:
             result = Path(output) / "result.json"

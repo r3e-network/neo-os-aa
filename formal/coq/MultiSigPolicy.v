@@ -5,7 +5,7 @@
    Crypto, serialization, gas exhaustion and post-target callback stability
    are NOT modelled. Validation and post-execution may have different approve
    functions: no stability assumption is silently made between these phases. *)
-From Stdlib Require Import List Bool PeanoNat Lia.
+From Coq Require Import List Bool PeanoNat Lia.
 Import ListNotations.
 
 (* Computable duplicate check. The decidable NoDup_dec would be the obvious

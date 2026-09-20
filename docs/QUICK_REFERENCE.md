@@ -7,6 +7,9 @@
 
 # Release-grade cross-repository identity-kernel gate:
 NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 ./scripts/verify_repo.sh --contracts-only
+
+# Opt-in formal gate (Coq/Z3/TLC) and private-chain validation (neoxp):
+./scripts/verify_repo.sh --contracts-only --formal --neoexpress
 ```
 
 ## Frontend only

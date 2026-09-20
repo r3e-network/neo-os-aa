@@ -13,6 +13,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent
 ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
+             "coq/ProxyWitnessScript.v",
              "tla/UnifiedSmartWalletAA.tla",
              "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
 SOURCE_FILES = {"contracts/UnifiedSmartWallet.Execution.cs",
@@ -24,7 +25,8 @@ SOURCE_FILES = {"contracts/UnifiedSmartWallet.Execution.cs",
                 "contracts/paymaster/Paymaster.cs",
                 "contracts/verifiers/VerifierPayload.cs",
                 "contracts/verifiers/MultiSigVerifier.cs",
-                "contracts/hooks/MultiHook.cs"}
+                "contracts/hooks/MultiHook.cs",
+                "contracts/UnifiedSmartWallet.VerifyContext.cs"}
 MULTISIG_SOURCE = "contracts/verifiers/MultiSigVerifier.cs"
 MULTISIG_SOURCE_GUARDS = {
     "non_empty": "verifiers != null && verifiers.Length > 0",
@@ -63,9 +65,23 @@ MULTISIG_COQ_MUTATIONS = {
     "multisig-uniqueness": ("forallb (fun id => negb (Nat.eqb id 0)) ids && unique ids.",
                             "forallb (fun id => negb (Nat.eqb id 0)) ids."),
 }
+PROXY_WITNESS_COQ_MUTATIONS = {
+    # Each drops one clause of the transaction-script shape check. A mutant that
+    # still compiles would mean the theorems never depended on that clause.
+    "witness-prefix-check": ("  script_prefix_is_data_pushes s (length s - tl).", "  true."),
+    "witness-account-binding": ("  bytes_eq (firstn 20 (skipn 2 t)) account &&", "  true &&"),
+    "witness-core-binding": ("  bytes_eq (firstn 20 (skipn (27 + length method_push) t)) core &&",
+                             "  true &&"),
+    "witness-flags-range": ("  flags_in_range (at_ t 24) &&", "  true &&"),
+    "witness-syscall-tail": ("  bytes_eq (firstn 5 (skipn (47 + length method_push) t)) SYSCALL_CONTRACT_CALL.",
+                             "  true."),
+    "witness-unknown-opcode": ("  else if op =? 219 then 2                            (* CONVERT <type> *)\n  else 0.",
+                               "  else if op =? 219 then 2                            (* CONVERT <type> *)\n  else 1."),
+}
 COQ_MODULES = {
     "UnifiedSmartWalletAA.v": COQ_MUTATIONS,
     "MultiSigPolicy.v": MULTISIG_COQ_MUTATIONS,
+    "ProxyWitnessScript.v": PROXY_WITNESS_COQ_MUTATIONS,
 }
 TLA_MUTATIONS = {
     "authorization": ("SuccessAuthorizationGuard == pendingAuthorized",
@@ -226,6 +242,58 @@ def executable(env, default):
     return path
 
 
+def java_candidates(environ=None, platform=None):
+    """Candidate Java launchers, most explicit first.
+
+    An explicit JAVA_BIN is the only candidate when set: a reviewer who names a
+    runtime must not be silently redirected to another one. Otherwise JAVA_HOME,
+    the macOS java_home locator, the Homebrew OpenJDK kegs and PATH are tried in
+    that order. macOS ships /usr/bin/java as a launcher stub that fails with
+    "Unable to locate a Java Runtime" when no JDK is installed; probing each
+    candidate with -version is what separates a working runtime from that stub.
+    """
+    environ = os.environ if environ is None else environ
+    platform = sys.platform if platform is None else platform
+    explicit = environ.get("JAVA_BIN")
+    if explicit:
+        return [explicit]
+    candidates = []
+    java_home = environ.get("JAVA_HOME")
+    if java_home:
+        candidates.append(str(Path(java_home) / "bin" / "java"))
+    if platform == "darwin":
+        locator = shutil.which("/usr/libexec/java_home")
+        if locator is not None:
+            located = subprocess.run([locator], capture_output=True, text=True, timeout=30)
+            if located.returncode == 0 and located.stdout.strip():
+                candidates.append(str(Path(located.stdout.strip()) / "bin" / "java"))
+        candidates += ["/opt/homebrew/opt/openjdk/bin/java", "/opt/homebrew/opt/openjdk@21/bin/java",
+                       "/opt/homebrew/opt/openjdk@17/bin/java", "/usr/local/opt/openjdk/bin/java"]
+    candidates.append("java")
+    return candidates
+
+
+def resolve_java(candidates, logs):
+    """Return (path, version line) for the first candidate whose -version succeeds.
+
+    Fails closed with every probe result when none works; a missing runtime is a
+    failure of the gate, never a reason to skip TLC.
+    """
+    attempts = []
+    for index, candidate in enumerate(candidates):
+        path = shutil.which(candidate)
+        if path is None:
+            attempts.append(f"{candidate}: not found")
+            continue
+        rc, output = run([path, "-version"], ROOT, logs, f"java-probe-{index}", timeout=60)
+        first = output.strip().splitlines()[0] if output.strip() else ""
+        if rc == 0 and "version" in output:
+            return path, first
+        attempts.append(f"{path}: exit {rc}: {first}")
+    raise ValueError("No working Java runtime for TLC (" + "; ".join(attempts)
+                     + "). Set JAVA_BIN to a JDK's bin/java; on macOS `brew install openjdk`.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".runs" / "latest")
@@ -242,15 +310,14 @@ def main():
         report["multisigBoundedModel"] = check_multisig_bounded()
         coqc = executable("COQC", "coqc")
         z3 = executable("Z3", "z3")
-        java = executable("JAVA_BIN", "java")
+        java, java_version = resolve_java(java_candidates(), logs)
         jar = Path(os.environ.get("TLA_JAR", str(Path.home() / "tools/tla/tla2tools.jar"))).resolve()
         require(jar.is_file(), "Missing TLA_JAR; no simulated success allowed")
         report["artifactSha256"] = artifact_hashes()
         report["sourceSha256"] = json.loads((ROOT / "source-lock.json").read_text())["sources"]
         report["tlcJarSha256"] = hashlib.sha256(jar.read_bytes()).hexdigest()
-        report["toolVersions"] = {}
-        for name, command in {"coq": [coqc, "--version"], "z3": [z3, "--version"],
-                              "java": [java, "-version"]}.items():
+        report["toolVersions"] = {"java": java_version}
+        for name, command in {"coq": [coqc, "--version"], "z3": [z3, "--version"]}.items():
             rc, output = run(command, ROOT, logs, name + "-version")
             require(rc == 0 and output.strip(), f"Cannot read {name} version")
             report["toolVersions"][name] = output.splitlines()[0]

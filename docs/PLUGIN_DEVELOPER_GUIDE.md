@@ -247,6 +247,15 @@ buyer or replacement module a potentially dirty account shell. This is
 fail-closed for known plugins, not a proof that an arbitrary future contract
 has no unrelated storage.
 
+**A witness you check inside a plugin needs a signer scope that reaches the plugin.**
+Verifiers and hooks execute as nested calls from the core, so `Runtime.CheckWitness`
+in a plugin only sees signers whose scope covers the plugin contract. A signer with
+`CalledByEntry` is visible to the core but not to the plugin: `SubscriptionVerifier`
+rejects such a merchant pull with "merchant authorization required" and accepts it once
+the merchant signs with a scope that reaches the verifier. Document the required scope
+for every witness your plugin checks, and prefer `CustomContracts` naming the plugin
+over `Global`.
+
 ### 3.2 Security Checklist for Hooks
 
 | Check | Why | Implementation |

@@ -47,7 +47,8 @@ This index keeps the root documentation set visible and easy to browse.
 - `docs/reports/aa-neoexpress-readback-20260918.json` — isolated NeoExpress deployment/readback receipt; public-chain parity remains unverified
 - `docs/reports/aa-neoexpress-readback-20260919.json` — historical pre-callback-ABI-fix NeoExpress readback; superseded by the 2026-09-20 receipt
 - `docs/reports/aa-neoexpress-readback-20260920.json` — historical post-callback-ABI readback; superseded by the current post-remediation receipt
-- `docs/reports/aa-neoexpress-readback-20260920-current.json` — current post-remediation core NeoExpress readback; local NEF/manifest parity verified, public artifacts differ
+- `docs/reports/aa-neoexpress-readback-20260920-current.json` — post-remediation core NeoExpress readback of the core artifact before the branch-free reimbursement cap; local NEF/manifest parity verified then, public artifacts differ
+- `docs/reports/aa-neoexpress-validation-20260920.json` — full private-chain validation of the current artifacts: all 24 deployed to a fresh NeoExpress chain, 10 transaction-driven scenarios (65 halted transactions, 23 expected faults, 51 on-chain assertions), RPC readback parity for every contract; local-chain evidence only
 - `docs/reports/aa-public-readback-20260920.json` — read-only TestNet/MainNet AA core readback; known public artifacts differ from the current local artifact
 - `docs/reports/aa-platform-gas-cap-20260920.json` — isolated Neo core/DevPack verifier-budget prototype receipt; AA integration and hardfork activation remain pending
 - `docs/reports/aa-current-revalidation-20260920.json` — independent read-only revalidation receipt; local runtime gates pass, while that environment's formal runner was unavailable and public parity remains open

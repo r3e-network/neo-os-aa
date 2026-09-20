@@ -1,6 +1,6 @@
 {
   "schema": "neoos-aa-local-build-report/v1",
-  "checkedAt": "2026-09-20T00:29:22Z",
+  "checkedAt": "2026-09-20T09:43:51Z",
   "scope": "Local source-to-artifact reproducibility, isolated NeoExpress readback and security-regression evidence; no public-chain write.",
   "compiler": {
     "tool": "nccs",
@@ -66,7 +66,7 @@
     },
     {
       "path": "contracts/UnifiedSmartWallet.Paymaster.cs",
-      "sha256": "0ecbd13f9f8f51b43339e7ac66ac9cd5e77f30e06300fa6d71dde12f18c78f0a"
+      "sha256": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4"
     },
     {
       "path": "contracts/verifiers/MultiSigVerifier.cs",
@@ -80,11 +80,11 @@
   "coreArtifacts": [
     {
       "path": "contracts/bin/v3/UnifiedSmartWalletV3.nef",
-      "sha256": "4195a6fc4453f38e72e52b2448e2dafb2f64d5fa44bb7ec2e63d077ba595273b"
+      "sha256": "a8c109039f40f90f6c7a1542e07603748d4cf999d7793864be3a0dbca3dc9a56"
     },
     {
       "path": "contracts/bin/v3/UnifiedSmartWalletV3.manifest.json",
-      "sha256": "2393c1b6df9e3098f7b2350cd42b2b052a0999ad57558355555a29b4713bab7a"
+      "sha256": "6d5804c26afc13f07dff3339bfb5b147c239ffb38761ce78eb24108d706e722f"
     }
   ],
   "sessionKeyProfile": {
@@ -109,23 +109,24 @@
   },
   "regressionEvidence": {
     "contractRuntimeSuite": {
-      "passed": 291,
+      "passed": 292,
       "failed": 0,
       "skipped": 0,
-      "total": 291,
+      "total": 292,
       "crossRepoArtifact": "NeoDIDRegistry.nef and manifest",
       "crossRepoIntegration": "2/2 PASS"
     },
     "standaloneWithoutSiblingArtifact": {
-      "passed": 289,
+      "passed": 290,
       "failed": 0,
       "skipped": 2,
-      "total": 291,
+      "total": 292,
       "skippedTests": [
         "AaProxyWitnessConsumesDidActionTicketExactlyOnce",
         "DidActionSignatureCannotBeRetargetedToAnotherProxy"
       ],
-      "skipReason": "sibling NeoDIDRegistry build artifact was not present in the standalone checkout"
+      "skipReason": "sibling NeoDIDRegistry build artifact was not present in the standalone checkout",
+      "note": "current standalone rerun after the zero-fee estimation regression test: 290 passed and the same 2 sibling-artifact-dependent cases explicitly skipped"
     },
     "sessionRevocationRuntime": "clear then validate faults with No session key active; successful clear emits SessionKeyRevoked",
     "multiSig": {
@@ -181,21 +182,27 @@
     "absoluteUserPathsIncluded": false
   },
   "notes": [
-    "291/291 gated AA contract tests pass with the sibling NeoDIDRegistry artifact; standalone mode passes 289 and skips only the two sibling-artifact-dependent cases.",
+    "292/292 gated AA contract tests pass with the sibling NeoDIDRegistry artifact; current standalone mode passes 290 and skips only the two sibling-artifact-dependent cases.",
     "Core, MultiSig and MultiHook child preflight reject marker-only, wrong-typed, undeployed, incomplete or self-referential configurations before storage; the 14 standard verifier/hook manifests plus SocialRecoveryVerifier pass the manifest surface audit; child-key independence, arbitrary cycles, cryptographic correctness and callback refinement remain open.",
     "The latest private NeoExpress readback verifies C# to NEF to deployed RPC script/manifest parity for the current core, MultiSigVerifier and MultiHook artifacts. Public TestNet/MainNet artifacts remain known mismatches and were not modified.",
     "VULN-001 remains OPEN: the current AA artifact still uses published NeoVM Contract.Call without an independent verifier gas cap; the platform syscall prototype is isolated and not activated.",
     "Formal evidence remains bounded: real Coq/TLC/SMT/mutation tools ran, but no full cryptography, Witness/script parser, complete NeoVM semantics or full callback refinement proof is claimed.",
-    "AA evidence added or modified in this continuation contains no credentials, private keys or absolute user paths."
+    "AA evidence added or modified in this continuation contains no credentials, private keys or absolute user paths.",
+    "The 2026-09-20 private-chain validation deployed all 24 artifacts to a fresh NeoExpress chain, drove 10 scenarios with real transactions (65 halted, 23 expected faults, 51 on-chain assertions) and read every contract back over RPC; it found and fixed the sponsored-op fee-estimation defect and documented the plugin witness-scope rule. Local-chain evidence only."
   ],
   "formalVerification": {
     "aaLocalRunner": "PASS",
-    "aaLocalSemanticMutations": 15,
-    "aaLocalCoqModules": 2,
-    "aaLocalParserTests": 17,
+    "aaLocalSemanticMutations": 21,
+    "aaLocalCoqModules": 3,
+    "aaLocalParserTests": 20,
     "externalDriver": "79/79 PASS",
-    "boundary": "bounded abstract models and bounded VM/source evidence; no cryptography, full Witness/script parsing proof, full NeoVM semantics, or full callback refinement",
-    "multiSigPolicyDeclarations": 11
+    "boundary": "bounded abstract models and bounded VM/source evidence; the proxy-witness transaction-script parser shape is modelled and proved, but no cryptography, witness-rule evaluation, signer-scope semantics, full NeoVM semantics, or full callback refinement",
+    "multiSigPolicyDeclarations": 11,
+    "proxyWitnessScriptDeclarations": 20,
+    "proxyWitnessScriptMutationsRejected": 6,
+    "aaLocalSourcePins": 11,
+    "javaResolution": "runner probes JAVA_BIN, JAVA_HOME, macOS java_home, Homebrew OpenJDK kegs and PATH with -version; the macOS launcher stub is skipped; no runtime means a failed gate, never a skipped TLC",
+    "pinnedEnvironment": "formal/Dockerfile + formal/verify-in-docker.sh (Ubuntu 24.04, Coq 8.18, Z3, OpenJDK, TLA+ tools jar pinned by SHA-256); recipe only: not yet built or run end to end, the build stalled at Docker Hub access in the authoring environment"
   },
   "neoExpressReadback": {
     "schema": "neoos-aa-neoexpress-readback/v1",
@@ -289,7 +296,8 @@
       "credentialsIncluded": false,
       "privateKeysIncluded": false,
       "absoluteUserPathsIncluded": false
-    }
+    },
+    "note": "describes the core artifact before the branch-free reimbursement cap; the current core, verifiers, hooks, market, paymaster and mocks are covered by privateChainValidation"
   },
   "platformGasBudget": {
     "receipt": "docs/reports/aa-platform-gas-cap-20260920.json",
@@ -334,5 +342,24 @@
     ],
     "runtimeArtifactSource": "contracts/bin/v3/hooks/MultiHook.nef and manifest",
     "status": "local-built-and-runtime-tested; incomplete-child manifest preflight verified; exact lifecycle ABI type and safe-marker preflight verified"
+  },
+  "privateChainValidation": {
+    "receipt": "docs/reports/aa-neoexpress-validation-20260920.json",
+    "driver": "scripts/neoexpress_validate.py (opt-in via scripts/verify_repo.sh --neoexpress)",
+    "status": "PASS",
+    "artifactsDeployed": 24,
+    "scenarios": 10,
+    "transactionsHalted": 65,
+    "expectedFaults": 23,
+    "onChainAssertions": 51,
+    "simulatedTimeAdvancedSeconds": 4669200,
+    "rpcReadbackContracts": 24,
+    "estimationParity": "executeSponsoredUserOp zero-fee invokescript estimate equals the persisted gasconsumed to the datoshi",
+    "defectsFoundAndFixed": [
+      "reimbursement cap faulted the zero-fee estimation container (Reimbursement exceeds actual gas cost)",
+      "early-return estimation clause under-estimated the system fee by 300 datoshi; persisted transaction faulted with Insufficient GAS; replaced by a branch-free MIN-based cap",
+      "SubscriptionVerifier merchant pull needs a signer scope that reaches the verifier; CalledByEntry is rejected as merchant authorization required (documented, driver uses Global)"
+    ],
+    "boundary": "isolated single-node private chain; wallet-account signers under CalledByEntry or Global; the proxy verification-trigger witness path is covered by runtime tests and the ProxyWitnessScript Coq model, not by this receipt; no public network touched"
   }
 }

@@ -11,21 +11,27 @@ run_contracts=1
 run_frontend=1
 run_sdk=1
 run_formal=0
+run_neoexpress=0
 skip_contract_build=0
 skip_e2e=0
 
 usage() {
   cat <<'EOF'
-Usage: scripts/verify_repo.sh [--contracts-only|--frontend-only|--sdk-only] [--skip-contract-build] [--skip-e2e] [--formal]
+Usage: scripts/verify_repo.sh [--contracts-only|--frontend-only|--sdk-only] [--skip-contract-build] [--skip-e2e] [--formal] [--neoexpress]
 
 Set NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 for the release-grade cross-repository gate.
 Pass --formal (or set NEOOS_REQUIRE_FORMAL=1) to also run the fail-closed AA model-checking
-gate (formal/verify.py plus its runner tests). It needs Rocq/Coq 9, Z3, a real JDK (JAVA_BIN)
+gate (formal/verify.py plus its runner tests). It needs Coq 8.16+ (including Rocq 9), Z3, a real JDK (JAVA_BIN)
 and tla2tools.jar (TLA_JAR); a missing tool is a failure, never a simulated pass.
+
+Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) to also deploy every artifact to a
+fresh private NeoExpress chain, drive the protocol with real transactions, read every
+contract back over JSON-RPC and write a dated receipt under docs/reports/. It needs the
+neoxp tool (~/.dotnet/tools/neoxp) and openssl; it never touches a public network.
 
 Runs the full local validation gate:
 - contracts: build + nccs compile + solution tests + deployment-tool tests + format verify
-  (+ formal model checks with --formal)
+  (+ formal model checks with --formal, + private-chain validation with --neoexpress)
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
 - sdk: unit tests + declaration types check + production dependency audit
 EOF
@@ -45,6 +51,8 @@ while [[ $# -gt 0 ]]; do
       skip_e2e=1; shift ;;
     --formal)
       run_formal=1; shift ;;
+    --neoexpress)
+      run_neoexpress=1; shift ;;
     -h|--help)
       usage; exit 0 ;;
     *)
@@ -97,6 +105,15 @@ if [[ $run_contracts -eq 1 ]]; then
   else
     echo "formal gate: NOT RUN - formal/verify.py (Coq/TLC/Z3 model checks + semantic mutations) was skipped."
     echo "formal gate:   pass --formal or set NEOOS_REQUIRE_FORMAL=1 to run it; see docs/AA-FORMAL-VERIFICATION.md."
+  fi
+  # The private-chain validation is opt-in for the same reason: it needs the neoxp tool,
+  # takes several minutes, and a missing tool must read as NOT RUN, never as a pass.
+  if [[ $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ]]; then
+    echo "neoexpress gate: deploying every artifact to a fresh private chain and driving the protocol"
+    python3 scripts/neoexpress_validate.py
+  else
+    echo "neoexpress gate: NOT RUN - scripts/neoexpress_validate.py (private-chain deployment, transactions, RPC readback) was skipped."
+    echo "neoexpress gate:   pass --neoexpress or set NEOOS_REQUIRE_NEOEXPRESS=1 to run it."
   fi
 fi
 

@@ -184,6 +184,15 @@ To run the full local verification sequence in one command:
 ./scripts/verify_repo.sh
 ```
 
+The formal gate and the private-chain validation are opt-in steps of the same
+entrypoint because they need extra tooling (Coq/Rocq, Z3, a JDK with the TLA+ tools;
+the `neoxp` tool and `openssl`). When not requested they are reported as NOT RUN;
+when requested, a missing tool fails the gate rather than producing a pass:
+
+```bash
+./scripts/verify_repo.sh --contracts-only --formal --neoexpress
+```
+
 ### Live Testnet Validation
 
 ```bash

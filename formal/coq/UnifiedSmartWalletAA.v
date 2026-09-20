@@ -25,7 +25,7 @@
   preconditions of this projection. Callbacks must preserve the modelled core
   configuration/nonces; callback noninterference is an unproved obligation.
 *)
-From Stdlib Require Import PeanoNat Bool Lia.
+From Coq Require Import PeanoNat Bool Lia.
 
 Record AAState : Type := mkAAState {
   cursor : nat -> nat;
