@@ -1,9 +1,9 @@
 {
   "schema": "neoos-aa-current-revalidation/v1",
-  "generated_at": "2026-09-20T04:48:17Z",
+  "generated_at": "2026-09-20T13:03:04Z",
   "read_only": true,
   "aa_runtime_tests": {
-    "passed": 291,
+    "passed": 292,
     "failed": 0,
     "skipped": 0
   },
@@ -14,12 +14,36 @@
     "repository": "neo-os-services"
   },
   "formal_runner": {
-    "status": "UNAVAILABLE",
-    "command": "python3 formal/verify.py",
-    "error": "Cannot read java version; /usr/bin/java is a macOS launcher without an installed Java runtime"
+    "status": "PASS",
+    "command": "JAVA_BIN=<homebrew-openjdk>/bin/java TLA_JAR=<tla2tools.jar> python3 formal/verify.py",
+    "observed_at": "2026-09-20T12:31:37Z",
+    "receipt": "docs/reports/aa-formal-gate-20260920.json",
+    "summary": "4 Coq modules (66 closed declarations; 22 Coq semantic mutations rejected), MultiSig bounded model (104 configs / 206846 acceptance cases / 6 source guards), TLC 11859476 generated / 61460 distinct states with 4 TLA+ mutations rejected, Z3 SMT core, source snapshot gate; runner tests 20/20",
+    "previous_attempt": {
+      "status": "UNAVAILABLE",
+      "command": "python3 formal/verify.py",
+      "error": "Cannot read java version; /usr/bin/java is a macOS launcher without an installed Java runtime"
+    }
+    },
+  "container_formal": {
+    "status": "PASS",
+    "observed_at": "2026-09-20T13:03:04Z",
+    "receipt": "docs/reports/aa-formal-gate-20260920.json#containerGate",
+    "summary": "Pinned Coq 8.18/Z3/OpenJDK/TLA+ image executed formal/verify.py and 20/20 runner tests in a Docker BuildKit RUN stage; result hashes match the host semantic result.",
+    "standard_docker_run": "NOT_COMPLETED_DUE_TO_LOCAL_DOCKER_DESKTOP_START_API_HANG"
   },
   "public_artifact_parity": "MISMATCH_ON_TESTNET_AND_MAINNET",
-  "private_neoexpress": "VALID_ISOLATED_ONLY",
+  "private_neoexpress": {
+    "status": "PASS",
+    "receipt": "docs/reports/aa-neoexpress-validation-20260920.json",
+    "observed_at": "2026-09-20T12:26:48Z",
+    "adds": "NeoDIDRegistry deployed from the sibling build; AA proxy-witness action-ticket consumption, replay refusal and retarget refusal driven by hand-signed WitnessRules transactions over RPC; 25 artifacts, 11 scenarios, 71 halted transactions, 25 expected faults and 59 assertions",
+    "previous": "VALID_ISOLATED_ONLY"
+  },
   "network_writes_performed": false,
-  "interpretation": "Local identity-kernel tests pass; formal freshness and public deployment parity remain open."
+  "interpretation": [
+    "Local contract suite passes 292/292; the host formal gate and private NeoExpress readback pass. Public artifact parity remains intentionally open.",
+    "The host formal orchestration passed on 2026-09-20T12:31Z with the Homebrew JDK. It covers 4 Coq modules, 26 total semantic mutations across Coq/TLA+, the bounded MultiSig model, TLC, Z3, and source pins. At 13:03Z the pinned Docker image also executed the gate and 20/20 runner tests in a clean BuildKit RUN stage; the normal docker run wrapper remains environment-blocked by a Docker Desktop start/API hang and is not used as evidence.",
+    "No TestNet/MainNet write or deployment was performed; known public artifact mismatch remains a separate approval-gated task."
+  ]
 }

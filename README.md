@@ -9,6 +9,18 @@ Current status note:
 - The canonical mainnet AA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `aa.morpheus.neo`.
 - The canonical shared testnet AA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x7147f9a508594a7656a25f45d0a7a7dede7c227f`.
 
+## Architecture authority
+
+`neo-os-aa` is the sole authority for account abstraction: user operations, proxy
+verification, and recovery (`protocol-aa-core`). AA decides whether an actor authorized an
+operation and nothing more: it does not grant DID eligibility, hold network identity, or
+select signers, and it has no dependency on the DID registry. The operation-policy layer
+composes `AAAuthorization` with an independently verified `EligibilityProof` when a product
+needs both.
+
+The binding is declared in `neo-os-web/docs/workspace/neoos-target-architecture.v1.json` and
+checked by the architecture source-coverage gate.
+
 ## Features
 - **Deterministic V3 Accounts**: Each account is keyed by a 20-byte `accountId` and derives a stable Neo virtual address without deploying per-user wallet logic.
 - **Verifier Plugin Authorization**: Bind Web3Auth, TEE, WebAuthn, session keys, multisig, or other verifier plugins per account.

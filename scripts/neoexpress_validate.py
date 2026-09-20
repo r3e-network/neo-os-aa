@@ -13,6 +13,15 @@ against the local NEF and manifest, and writes a dated receipt.
 Every assertion is fail-closed: the first mismatch aborts the run and the receipt
 records the failure. Nothing here touches a public network, and the receipt never
 contains wallet keys or absolute host paths.
+
+The final scenario composes AA with the NeoDID registry: it deploys
+NeoDIDRegistry.nef/.manifest.json from the sibling neo-os-services build
+(override the directory with NEOOS_SERVICES_CONTRACT_BUILD; set
+NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to fail instead of recording a skip when the
+artifact is absent) and drives the AA proxy-witness path with hand-built,
+hand-signed transactions over RPC, because neoxp cannot express a proxy signer.
+NEOOS_VALIDATE_ONLY=did runs deployment plus that scenario alone for iteration;
+its receipt is marked partialRun and is never release evidence.
 """
 import argparse
 import base64
@@ -166,6 +175,101 @@ def der_to_rs(der):
     r = r.lstrip(b"\x00").rjust(32, b"\x00")
     s = s.lstrip(b"\x00").rjust(32, b"\x00")
     return r + s
+
+
+def varint(n):
+    if n < 0xFD:
+        return bytes([n])
+    if n <= 0xFFFF:
+        return b"\xfd" + n.to_bytes(2, "little")
+    return b"\xfe" + n.to_bytes(4, "little")
+
+
+def hash_le(text):
+    """0x-prefixed big-endian UInt160 text -> the 20 little-endian bytes the wire carries."""
+    return bytes.fromhex(text[2:])[::-1]
+
+
+def hash160(data):
+    return hashlib.new("ripemd160", hashlib.sha256(data).digest()).digest()
+
+
+def sec1_der(private_key):
+    """SEC1 ECPrivateKey DER for a raw P-256 scalar (no public key member)."""
+    return bytes.fromhex("3031020101") + b"\x04\x20" + private_key + bytes.fromhex("a00a06082a8648ce3d030107")
+
+
+class RawKey:
+    """A P-256 key from a raw scalar, signing through the openssl CLI like P256Key."""
+
+    def __init__(self, workdir, name, private_key):
+        self.der = Path(workdir) / f"{name}.der"
+        self.der.write_bytes(sec1_der(private_key))
+        pub = subprocess.run(["openssl", "ec", "-inform", "DER", "-in", str(self.der), "-pubout",
+                              "-conv_form", "compressed", "-outform", "DER"], check=True, capture_output=True).stdout
+        self.compressed = pub[-33:]
+        # Standard single-signature verification script: PUSHDATA1 33 <key> SYSCALL CheckSig.
+        self.verification = b"\x0c\x21" + self.compressed + b"\x41\x56\xe7\xb3\x27"
+        self.script_hash = hash160(self.verification)
+
+    def sign(self, payload):
+        with tempfile.NamedTemporaryFile(delete=False) as handle:
+            handle.write(payload)
+            path = handle.name
+        try:
+            der = subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(self.der), "-keyform", "DER", path],
+                                 check=True, capture_output=True).stdout
+        finally:
+            os.unlink(path)
+        return der_to_rs(der)
+
+
+def aa_proxy_rules(wallet, target):
+    """The single WitnessRules entry UnifiedSmartWalletV3.verify demands of a proxy signer:
+    Allow when called by the wallet or by the scoped target, nothing else."""
+    return [{"action": "Allow", "condition": {"type": "Or", "expressions": [
+        {"type": "CalledByContract", "hash": wallet}, {"type": "CalledByContract", "hash": target}]}}]
+
+
+def serialize_signer(signer):
+    out = hash_le(signer["account"])
+    if signer["scopes"] == "CalledByEntry":
+        return out + b"\x01"
+    if signer["scopes"] == "WitnessRules":
+        out += b"\x40" + varint(len(signer["rules"]))
+        for rule in signer["rules"]:
+            out += b"\x01" if rule["action"] == "Allow" else b"\x00"
+            condition = rule["condition"]
+            assert condition["type"] == "Or"
+            out += b"\x03" + varint(len(condition["expressions"]))
+            for expression in condition["expressions"]:
+                assert expression["type"] == "CalledByContract"
+                out += b"\x28" + hash_le(expression["hash"])
+        return out
+    raise ValidationFailure(f"unsupported signer scope {signer['scopes']}")
+
+
+def serialize_unsigned(nonce, sysfee, netfee, valid_until, signers, script):
+    out = b"\x00" + nonce.to_bytes(4, "little") + sysfee.to_bytes(8, "little") + netfee.to_bytes(8, "little")
+    out += valid_until.to_bytes(4, "little") + varint(len(signers))
+    for signer in signers:
+        out += serialize_signer(signer)
+    out += varint(0) + varint(len(script)) + script
+    return out
+
+
+def serialize_witnesses(witnesses):
+    out = varint(len(witnesses))
+    for invocation, verification in witnesses:
+        out += varint(len(invocation)) + invocation + varint(len(verification)) + verification
+    return out
+
+
+def action_digest(proxy, action_id, nullifier, magic):
+    """NeoDIDRegistry action ticket digest: domain || big-endian proxy || len+actionId || nullifier || magic LE."""
+    payload = b"neodid-action-v1" + bytes.fromhex(proxy[2:]) + bytes([len(action_id)]) + action_id.encode()
+    payload += nullifier + int(magic).to_bytes(4, "little")
+    return hashlib.sha256(payload).digest()
 
 
 class P256Key:
@@ -445,25 +549,60 @@ class Chain:
         request = urllib.request.Request(f"http://127.0.0.1:{self.rpc_port}", data=body,
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=10) as response:
-            return json.loads(response.read())["result"]
+            reply = json.loads(response.read())
+        if "result" not in reply:
+            error = reply.get("error") or {}
+            raise ValidationFailure(f"rpc {method}: {error.get('message', error)} {error.get('data', '')}".strip())
+        return reply["result"]
 
-    def readback(self):
+    def start_node(self):
+        """Run the single consensus node with one-second blocks and wait for RPC. Offline neoxp
+        commands hold the chain database themselves, so every read after this point goes over RPC."""
+        if self.node is not None:
+            return
+        # Every express chain answers on the same default RPC port, so a node left behind by
+        # another run would silently serve a different chain's state. Refuse to start into it.
+        try:
+            self.rpc("getversion", [])
+        except Exception:
+            pass
+        else:
+            raise ValidationFailure(f"another node already answers on 127.0.0.1:{self.rpc_port}; stop it before validating")
         self.node_log = (self.workdir / "node.log").open("w")
         self.node = subprocess.Popen([self.neoxp, "run", "-i", str(self.file), "-s", "1"],
                                      stdout=self.node_log, stderr=subprocess.STDOUT, env=self.env)
+        for _ in range(60):
+            time.sleep(1)
+            if self.node.poll() is not None:
+                raise ValidationFailure(f"node exited with code {self.node.returncode} before answering RPC; "
+                                        f"see {self.workdir / 'node.log'}")
+            try:
+                self.rpc("getversion", [])
+                return
+            except Exception:
+                continue
+        raise ValidationFailure("node did not answer RPC")
+
+    def rpc_invoke(self, contract_hash, operation, args, signers=None):
+        """invokefunction over RPC: the exact script the node would run, its gas, and the stack."""
+        result = self.rpc("invokefunction", [contract_hash, operation, list(args), signers or []])
+        if result.get("state") != "HALT":
+            raise ValidationFailure(f"{operation} simulation faulted: {result.get('exception')}")
+        stack = result.get("stack") or []
+        value = decode(stack[0]) if stack and stack[0].get("type") not in ("Any",) else None
+        return value, base64.b64decode(result["script"]), int(result["gasconsumed"])
+
+    def wallet_private_key(self, name):
+        """The dev wallet's raw P-256 scalar from the express chain file (dev chain only)."""
+        config = json.loads(self.file.read_text())
+        for wallet in config.get("wallets", []):
+            if wallet["name"] == name:
+                return bytes.fromhex(wallet["accounts"][0]["private-key"])
+        raise ValidationFailure(f"wallet {name} not in chain file")
+
+    def readback(self):
+        self.start_node()
         try:
-            for _ in range(60):
-                time.sleep(1)
-                if self.node.poll() is not None:
-                    raise ValidationFailure(f"node exited with code {self.node.returncode} before answering RPC; "
-                                            f"see {self.workdir / 'node.log'}")
-                try:
-                    self.rpc("getversion", [])
-                    break
-                except Exception:
-                    continue
-            else:
-                raise ValidationFailure("node did not answer RPC")
             block_count = self.rpc("getblockcount", [])
             rows = []
             for name, relative, _ in ARTIFACTS:
@@ -786,6 +925,173 @@ def scenario_subscription(c):
               expect_fault="merchant authorization required")
 
 
+def scenario_did_action_ticket(c, workdir):
+    """AA proxy witness consuming a NeoDID action ticket with real transactions: the wallet's
+    verification-trigger path (WitnessRules proxy signer scoped to the registry) that neoxp
+    invoke cannot express, so the transactions are built, signed and broadcast by hand."""
+    build = Path(os.environ.get("NEOOS_SERVICES_CONTRACT_BUILD") or (ROOT.parent / "neo-os-services" / "contracts" / "build"))
+    nef = build / "NeoDIDRegistry.nef"
+    manifest = build / "NeoDIDRegistry.manifest.json"
+    scenario = c.scenario("AA proxy witness consumes a NeoDID action ticket")
+    if not (nef.is_file() and manifest.is_file()):
+        if os.environ.get("NEOOS_REQUIRE_SERVICES_ARTIFACTS") == "1":
+            raise ValidationFailure(f"NeoDIDRegistry artifact missing from {build}")
+        scenario["skipped"] = f"NeoDIDRegistry.nef/.manifest.json not found beside this checkout ({build.name})"
+        return
+    _, text = c.nx("contract", "deploy", str(nef), "genesis", "-j")
+    deployed = c.json_from(text)
+    if deployed["contract-name"] != "NeoDIDRegistry":
+        raise ValidationFailure(f"deployed name {deployed['contract-name']} != NeoDIDRegistry")
+    registry = deployed["contract-hash"]
+    c.contracts["NeoDIDRegistry"] = registry
+    c.deployments.append({"contractName": "NeoDIDRegistry", "contractHash": registry,
+                          "deploymentTransaction": deployed["tx-hash"], "deployData": None,
+                          "localNefSha256": hashlib.sha256(nef.read_bytes()).hexdigest(),
+                          "localManifestSha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                          "source": "neo-os-services/contracts/build (sibling checkout)"})
+    verifier = P256Key(workdir, "did-verifier")
+    c.tx("registry admin sets the action verifier key", "NeoDIDRegistry", "setVerifier", [B(verifier.compressed)], "genesis")
+    account, proxy = c.register("register native account for the ticket", owner="owner")
+    wallet = c.contracts["UnifiedSmartWalletV3"]
+    c.tx("wallet admin binds the account's verify scope to the registry", "UnifiedSmartWalletV3",
+         "setVerifyScopeTarget", [H(account), H(registry)], "genesis")
+    c.check(c.hash_result("UnifiedSmartWalletV3", "getVerifyScopeTarget", H(account)) == registry, "verify scope target recorded")
+    # Everything below runs against the live node over JSON-RPC.
+    c.start_node()
+    owner = RawKey(workdir, "owner-raw", c.wallet_private_key("owner"))
+    c.check("0x" + owner.script_hash[::-1].hex() == c.wallets["owner"], "owner key derives the wallet script hash")
+    # The proxy is not a deployed contract: it is the verification script
+    # PUSHDATA1 20 accountId | PUSH1 PACK PUSH15 | PUSHDATA1 6 "verify" | PUSHDATA1 20 core | SYSCALL Contract.Call
+    # whose hash the core publishes as the proxy script hash, so the witness carries the script itself.
+    proxy_script = (b"\x0c\x14" + hash_le(account) + bytes.fromhex("11c01f0c06") + b"verify" + b"\x0c\x14"
+                    + hash_le(wallet) + bytes.fromhex("41627d5b52"))
+    c.check("0x" + hash160(proxy_script)[::-1].hex() == proxy, "locally built proxy verification script hashes to the core's proxy hash")
+    signers = [{"account": c.wallets["owner"], "scopes": "CalledByEntry"},
+               {"account": proxy, "scopes": "WitnessRules", "rules": aa_proxy_rules(wallet, registry)}]
+    action_id = "neoos|private-chain|ticket|1"
+
+    def ticket(step, nullifier, signature, nonce, target_action=action_id, expect_fault=None):
+        op = A(H(registry), S("useActionTicket"), A(H(proxy), S(target_action), B(nullifier), B(signature)),
+               I(nonce), I(FAR_DEADLINE), B(b""))
+        args = [H(account), op]
+        record = {"step": step, "contract": "UnifiedSmartWalletV3", "operation": "executeUserOp", "signer": "owner",
+                  "witnessScope": "owner CalledByEntry + proxy WitnessRules(CalledByContract wallet|registry)",
+                  "nestedCall": "NeoDIDRegistry.useActionTicket"}
+        try:
+            _, script, gas = c.rpc_invoke(wallet, "executeUserOp", args, signers)
+        except ValidationFailure as failure:
+            # A deterministic refusal surfaces in simulation; broadcast it anyway so the
+            # chain itself records the fault, exactly as a relayer would observe it.
+            probe = c.rpc("invokefunction", [wallet, "executeUserOp", args, signers])
+            script, gas = base64.b64decode(probe["script"]), int(probe["gasconsumed"])
+            record["simulation"] = str(failure)
+        height = c.rpc("getblockcount", [])
+        nonce_value = int.from_bytes(os.urandom(4), "little")
+        sysfee = gas + 2_000_000
+        # NeoExpress's calculatenetworkfee endpoint resolves every signer through an
+        # opened wallet.  The AA proxy is deliberately not a wallet account: its
+        # verification script is carried by the witness itself.  Ask the endpoint
+        # for a lower-bound owner-only estimate, then add a deliberately conservative
+        # test-only margin for the proxy signer/script.  The final transaction still
+        # contains the real WitnessRules signer and proxy verification script.
+        fee_probe_signers = [{"account": c.wallets["owner"], "scopes": "CalledByEntry"}]
+        fee_probe_witnesses = [(b"\x0c\x40" + bytes(64), owner.verification)]
+        fee_probe = serialize_unsigned(nonce_value, sysfee, 0, height + 50, fee_probe_signers, script)
+        fee = c.rpc("calculatenetworkfee", [base64.b64encode(fee_probe + serialize_witnesses(fee_probe_witnesses)).decode()])
+        netfee = int(fee["networkfee"]) + GAS
+        unsigned = serialize_unsigned(nonce_value, sysfee, netfee, height + 50, signers, script)
+        # Neo N3 signs magic || SHA256(unsigned transaction); the node's reported hash pins
+        # that construction so a serialization drift cannot pass unnoticed.
+        tx_hash = hashlib.sha256(unsigned).digest()
+        signature_bytes = owner.sign(int(c.magic).to_bytes(4, "little") + tx_hash)
+        witnesses = [(b"\x0c\x40" + signature_bytes, owner.verification), (b"", proxy_script)]
+        raw = base64.b64encode(unsigned + serialize_witnesses(witnesses)).decode()
+        sent = None
+        attempts = []
+        for attempt in range(4):
+            try:
+                sent = c.rpc("sendrawtransaction", [raw])
+                attempts.append("accepted")
+                break
+            except ValidationFailure as failure:
+                attempts.append(str(failure)[:80])
+                if "InvalidSignature" not in str(failure):
+                    raise
+                time.sleep(2)
+        record["sendAttempts"] = attempts
+        if sent is None:
+            # Decide which witness the node refuses: the same script with only the owner
+            # signer is accepted by the mempool when the owner signature is valid (it then
+            # faults on chain because CheckWitness(proxy) is missing), so a second rejection
+            # isolates the owner signature and an acceptance isolates the proxy witness.
+            owner_only = [signers[0]]
+            probe_unsigned = serialize_unsigned(nonce_value, sysfee, netfee, height + 50, owner_only, script)
+            probe_hash = hashlib.sha256(probe_unsigned).digest()
+            probe_sig = owner.sign(int(c.magic).to_bytes(4, "little") + probe_hash)
+            probe_raw = base64.b64encode(probe_unsigned + serialize_witnesses([(b"\x0c\x40" + probe_sig, owner.verification)])).decode()
+            try:
+                c.rpc("sendrawtransaction", [probe_raw])
+                diagnosis = "owner signature accepted alone; the node refuses the proxy witness (wallet verify returned false or exceeded the verification gas)"
+            except ValidationFailure as failure:
+                diagnosis = f"owner-only transaction also refused ({str(failure)[:80]}); the owner signature or serialization is wrong"
+            c.current["steps"].append({**record, "outcome": "REJECTED", "diagnosis": diagnosis})
+            raise ValidationFailure(f"{step}: identical bytes rejected {len(attempts)} times; {diagnosis}")
+        if sent["hash"].lower() != "0x" + tx_hash[::-1].hex():
+            raise ValidationFailure(f"{step}: node hash {sent['hash']} differs from the computed transaction hash")
+        record["txHashAlgorithm"] = "sha256"
+        txid = sent["hash"]
+        record.update({"txid": txid, "systemFee": sysfee, "networkFee": netfee})
+        execution = None
+        for _ in range(40):
+            time.sleep(1)
+            try:
+                log = c.rpc("getapplicationlog", [txid])
+                execution = log["executions"][0]
+                break
+            except Exception:
+                continue
+        if execution is None:
+            raise ValidationFailure(f"{step}: transaction {txid} was not executed by the node")
+        record["outcome"] = execution["vmstate"]
+        record["gasConsumed"] = int(execution["gasconsumed"])
+        record["events"] = [n["eventname"] for n in execution.get("notifications", [])]
+        if execution.get("exception"):
+            record["exception"] = execution["exception"]
+        if expect_fault is None and execution["vmstate"] != "HALT":
+            raise ValidationFailure(f"{step}: vmstate {execution['vmstate']}: {execution.get('exception')}")
+        if expect_fault is not None:
+            if execution["vmstate"] != "FAULT":
+                raise ValidationFailure(f"{step}: expected fault {expect_fault!r} but transaction halted")
+            if expect_fault not in (execution.get("exception") or ""):
+                raise ValidationFailure(f"{step}: expected fault containing {expect_fault!r}, got {execution.get('exception')!r}")
+            record["expectedFault"] = expect_fault
+        c.current["steps"].append(record)
+        return record
+
+    def used(nullifier):
+        value, _, _ = c.rpc_invoke(registry, "isActionNullifierUsed", [B(nullifier)])
+        return value is True
+
+    nullifier = bytes([0x51]) * 32
+    signature = verifier.sign(action_digest(proxy, action_id, nullifier, c.magic))
+    nonce0, _, _ = c.rpc_invoke(wallet, "getNonce", [H(account), I(0)])
+    first = ticket("proxy witness consumes the ticket", nullifier, signature, nonce0)
+    c.check("ActionTicketUsed" in first["events"], "registry emitted ActionTicketUsed for the proxy account")
+    c.check(used(nullifier), "action nullifier is recorded as used")
+    nonce1, _, _ = c.rpc_invoke(wallet, "getNonce", [H(account), I(0)])
+    c.check(nonce1 == nonce0 + 1, "user operation nonce advanced through the composed call")
+    ticket("replaying the same nullifier", nullifier, signature, nonce1, expect_fault="action nullifier already used")
+    other = bytes([0x52]) * 32
+    escalated = "neoos|private-chain|ticket|escalated"
+    ticket("retargeting the signature to another action id", other, verifier.sign(action_digest(proxy, action_id, other, c.magic)),
+           nonce1, target_action=escalated, expect_fault="invalid verification signature")
+    c.check(not used(other), "a retargeted ticket leaves its nullifier unused")
+    state = c.rpc("getcontractstate", [registry])
+    local_script, local_checksum = nef_script(nef)
+    c.check(base64.b64decode(state["nef"]["script"]) == local_script and int(state["nef"]["checksum"]) == local_checksum,
+            "deployed NeoDIDRegistry bytes equal the sibling build artifact")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--neoxp", default=str(Path.home() / ".dotnet" / "tools" / "neoxp"))
@@ -802,7 +1108,8 @@ def main():
     receipt = {
         "schema": "neoos-aa-neoexpress-validation/v1",
         "observedOn": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "scope": "Fresh isolated single-node NeoExpress chain: deployment of every contracts/bin/v3 artifact, "
+        "scope": "Fresh isolated single-node NeoExpress chain: deployment of every contracts/bin/v3 artifact plus the sibling "
+                 "NeoDIDRegistry build, a hand-signed AA proxy-witness transaction that consumes a NeoDID action ticket, "
                  "protocol flows driven by real transactions, and JSON-RPC readback of every deployed contract. "
                  "No public network, no production deployment, no signing or broadcast outside the private chain.",
         "status": "FAILED",
@@ -819,17 +1126,30 @@ def main():
         chain.deploy_all()
         receipt["deployments"] = chain.deployments
 
-        account, proxy = scenario_native_execution(chain)
-        scenario_escape(chain, account, proxy)
-        scenario_hook(chain)
-        scenario_abi_precheck(chain)
-        scenario_session_key_and_paymaster(chain, workdir)
-        scenario_recovery_cleanup(chain, workdir)
-        scenario_multisig(chain)
-        scenario_multihook(chain)
-        scenario_market(chain)
-        scenario_subscription(chain)
+        only_did = os.environ.get("NEOOS_VALIDATE_ONLY") == "did"
+        if only_did:
+            receipt["partialRun"] = "NEOOS_VALIDATE_ONLY=did: iteration run, not release evidence"
+        account, proxy = (None, None) if only_did else scenario_native_execution(chain)
+        if not only_did:
+            scenario_escape(chain, account, proxy)
+        if not only_did:
+            scenario_hook(chain)
+        if not only_did:
+            scenario_abi_precheck(chain)
+        if not only_did:
+            scenario_session_key_and_paymaster(chain, workdir)
+        if not only_did:
+            scenario_recovery_cleanup(chain, workdir)
+        if not only_did:
+            scenario_multisig(chain)
+        if not only_did:
+            scenario_multihook(chain)
+        if not only_did:
+            scenario_market(chain)
+        if not only_did:
+            scenario_subscription(chain)
 
+        scenario_did_action_ticket(chain, workdir)
         receipt["rpcReadback"] = chain.readback()
         receipt["status"] = "PASS"
     except ValidationFailure as failure:
@@ -852,7 +1172,9 @@ def main():
             "localNefToPrivateChainRpc": "byte-identical NEF script, checksum and semantically equal manifest for every artifact"
                                          if receipt["status"] == "PASS" else "not established",
             "witnessScopes": "neoxp signs with wallet accounts under CalledByEntry or Global; the proxy verification-trigger "
-                             "witness path is covered by ProxyWitnessRuntimeTests and the ProxyWitnessScript Coq model, not here",
+                             "witness path (WitnessRules proxy signer scoped to a target contract) is exercised here only by the "
+                             "hand-built NeoDID action-ticket transactions, and otherwise by ProxyWitnessRuntimeTests and "
+                             "the ProxyWitnessScript Coq model",
             "publicNetwork": "not touched",
         }
         receipt["privacy"] = {"credentialsIncluded": False, "privateKeysIncluded": False, "absoluteUserPathsIncluded": False}
