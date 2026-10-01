@@ -1,0 +1,816 @@
+# Native SmartAccount Profile
+
+**Foundation:** Draft PR [#243](https://github.com/neo-project/proposals/pull/243)
+
+**Discussion:** Issue [#242](https://github.com/neo-project/proposals/issues/242)
+
+**Status:** Draft protocol profile; not activated and not an adopted standard
+**Version:** 1
+
+## 1. Scope
+
+This document defines a native Neo N3 profile for the SmartAccount protocol
+foundation. It specifies the native service identity, activation boundary,
+account identity, verification-script address, account state, module lifecycle,
+UserOperation authorization, resource accounting, governance, and migration.
+
+It does not assign a NEP number. It does not merge or replace the generic
+verification-script proposal in [#218](https://github.com/neo-project/proposals/pull/218),
+and it does not adopt the optional proposals in #219 or #220.
+
+An implementation MUST NOT expose this profile as active until the activation
+hardfork, the matching node implementation, the matching DevPack surface, and
+the published conformance vectors are accepted together.
+
+## 2. Normative language
+
+The terms **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, and
+**MAY** are normative.
+
+All byte strings in this document are shown in wire order. A Neo `UInt160` is
+serialized with its standard `ToArray()` representation. Hexadecimal display
+does not reverse the byte order a second time.
+
+## 3. Fixed profile parameters
+
+| Parameter | Value |
+|---|---|
+| Native service name | `AccountManagement` |
+| Native service hash | `GetContractHash(UInt160.Zero, 0, "AccountManagement")` |
+| Profile version | `1` |
+| Native ABI version | `1` |
+| Maximum batch size | `32` operations |
+| Maximum method length | `128` UTF-8 bytes |
+| Maximum argument count | `64` values |
+| Maximum serialized argument size | `4096` bytes |
+| Maximum signature size | `1024` bytes |
+| Maximum argument nesting depth | `8` |
+| Verifier callback budget | `1,000,000,000` datoshi per callback |
+| Hook callback budget | `250,000,000` datoshi per callback |
+| Verifier validation flags | `ReadOnly` (`0x05`) |
+| Verifier post flags | `All` (`0x0F`) |
+| Hook callback flags | `All` (`0x0F`) |
+| Target call flags | `All` (`0x0F`) |
+| Module-change delay | `86,400,000` milliseconds |
+| Custody-recovery delay | `604,800,000` milliseconds |
+| Native sponsorship | Not included in version 1 |
+
+The resource budgets are fixed profile parameters. They are not operation
+fields, account-controlled values, or fee-whitelist exemptions. A later profile
+version MUST use a new ABI version and activation boundary when changing them.
+
+The activation record MUST include this parameter digest:
+
+```text
+profileParameterDigest = SHA256(
+    ASCII("NeoSmartAccount/Profile") ||
+    UInt8(1) ||
+    CanonicalProfileParameterJsonUtf8
+)
+```
+
+For version 1, `CanonicalProfileParameterJsonUtf8` is exactly the following
+byte sequence:
+
+```text
+{"abiVersion":1,"argumentCountMax":64,"argumentDepthMax":8,"argumentSizeMax":4096,"batchMax":32,"custodyRecoveryDelayMs":604800000,"hookBudgetDatoshi":250000000,"methodBytesMax":128,"moduleChangeDelayMs":86400000,"nativeSponsorship":false,"profileVersion":1,"serviceName":"AccountManagement","signatureBytesMax":1024,"verifierBudgetDatoshi":1000000000}
+```
+
+The resulting version-1 digest is:
+
+```text
+8cfee92ae8f4fb534e31284c763520a4c5182594d717be3085608596f98a1616
+```
+
+## 4. Native identity and activation
+
+### 4.1 Service identity
+
+The service name is exactly `AccountManagement`. Its native hash is the hash
+produced by Neo's standard native-contract identity function:
+
+```text
+GetContractHash(UInt160.Zero, 0, "AccountManagement")
+```
+
+The service MUST publish the following native manifest metadata:
+
+```json
+{
+  "smartAccount": {
+    "abiVersion": 1,
+    "profileParameterDigest": "8cfee92ae8f4fb534e31284c763520a4c5182594d717be3085608596f98a1616"
+  }
+}
+```
+
+The ABI version is part of the protocol identity and MUST NOT be inferred from
+a method list.
+
+### 4.2 Activation
+
+The profile is activated by the dedicated network hardfork key
+`HF_SmartAccountV1` in the protocol configuration. The activation MUST be a
+distinct hardfork entry; an existing hardfork MUST NOT be repurposed.
+
+Each network MUST configure an explicit activation height. A missing activation
+entry means **disabled**, not genesis activation. Nodes MUST reject a native
+SmartAccount call before activation and MUST NOT create the service state at
+genesis as a side effect of loading an unconfigured protocol setting.
+
+At the activation block the node MUST:
+
+1. create the native `AccountManagement` contract state;
+2. initialize the profile version and fixed parameter digest;
+3. emit the normal native-contract deployment notification;
+4. make the version-1 ABI available from that block onward.
+
+Before activation, `AccountManagement` has no callable version-1 ABI. Existing
+ordinary contracts and existing verification scripts MUST retain their current
+behavior.
+
+The native service has no ordinary-contract deployment sender, NEF update
+method, administrator, or runtime code-upgrade path. Code and ABI changes
+require a later protocol activation with an explicit migration routine.
+
+## 5. Account identity and address
+
+### 5.1 Account identifier
+
+An account is registered from a custody address and a 32-byte salt. The native
+core computes the identifier as:
+
+```text
+accountId = Hash160(
+    ASCII("NeoSmartAccount") ||
+    UInt8(1) ||
+    UInt32LE(networkMagic) ||
+    coreHash.ToArray() ||
+    custodyAddress.ToArray() ||
+    salt
+)
+```
+
+`Hash160` is RIPEMD-160(SHA-256(input)). The domain string, version byte,
+network encoding, field order, and byte representation are fixed. The account
+identifier MUST be non-zero. The native core MUST reject an already registered
+identifier rather than overwrite it.
+
+The identifier is an account-state key. It is not an asset address and MUST
+NOT be used as one.
+
+### 5.2 Verification-script address
+
+The asset-holding address is derived from the following exact verification
+script:
+
+```text
+PUSH accountId
+PUSH 1
+PACK
+PUSH ReadOnly
+PUSH "verify"
+PUSH AccountManagement.Hash
+SYSCALL System.Contract.Call
+```
+
+The script MUST use Neo's canonical push encoding and MUST leave exactly one
+Boolean value on the stack. It MUST conform to the statically parseable
+contract-call shape in #218. The static call has:
+
+```text
+verifierContract = AccountManagement.Hash
+method           = "verify"
+callFlags        = ReadOnly (0x05)
+argumentCount    = 1
+arguments        = [accountId]
+```
+
+The address is the script hash of these bytes. Changing any byte, including the
+account identifier, call flags, method, or native service hash, creates a new
+address. Such a change MUST be treated as an address and asset migration, not
+as an in-place account upgrade.
+
+### 5.3 Verification-trigger bridge
+
+`verify(accountId)` is available only during the Verification trigger. The
+verification script is an asset-address compatibility bridge, not a second
+authorization entrypoint. It MUST NOT authorize an arbitrary transaction that
+merely includes the account address as a signer.
+
+For version 1, the transaction script MUST be the canonical application
+envelope for this account. The envelope is exactly one application call with
+the following semantic values and no additional instructions:
+
+```text
+System.Contract.Call(
+    AccountManagement.Hash,
+    "executeUserOp" or "executeUserOps",
+    All,
+    accountId,
+    op or ops
+)
+```
+
+The script parser MUST require the native service hash, method, call flags,
+argument count, account identifier, and canonical operation bytes to match.
+The batch form MUST also satisfy the batch bounds and same-account rule. A
+transaction that directly calls a token, NFT, application contract, or an
+unrelated native method MUST fail account-address verification.
+
+The canonical envelope is the byte-for-byte output of Neo's dynamic contract
+call builder for the following values, with no prefix or suffix:
+
+```text
+EmitDynamicCall(
+    AccountManagement.Hash,
+    "executeUserOp" or "executeUserOps",
+    CallFlags.All,
+    [accountId, op] or [accountId, ops]
+)
+```
+
+The builder MUST use canonical VM push encodings, `NEWARRAY0` for an empty
+array, and `PACK` for a non-empty array. The operation arrays themselves MUST
+use the canonical serialization defined by the foundation and this profile.
+Parsers MUST reject semantically equivalent scripts that contain extra
+instructions, alternate call flags, dynamic method values, or non-canonical
+push encodings.
+
+After envelope validation, `verify(accountId)` MUST:
+
+1. require the caller script hash to equal the deterministic account address;
+2. load the account state and require it to be active;
+3. recompute the address from `accountId` and require an exact match;
+4. validate the operation shape, deadline, current nonce, module code identity,
+   and authorization without mutating state;
+5. call the configured verifier's read-only `validateSignature`, or use the
+   native-witness fallback when no verifier is installed;
+6. return the authorization result without consuming a nonce, executing a
+   hook, invoking the target, or emitting a notification.
+
+The Application-trigger execution repeats the pure checks and then performs
+the stateful nonce, hook, target, and post-callback steps. This deliberate
+double evaluation is required because Verification-trigger execution cannot
+commit application state. The verifier MUST therefore be deterministic and
+read-only for this callback.
+
+The native-witness fallback requires the custody address to witness the same
+transaction and requires an empty operation signature. A configured verifier
+uses the operation signature/proof in the canonical envelope; custody is not
+implicitly required for that profile. The account-address proxy MUST never be
+accepted as its own custody witness, and caller-supplied signer lists MUST NOT
+be treated as proof.
+
+## 6. Canonical account state
+
+The native service stores one canonical record for each `accountId`:
+
+```text
+AccountState {
+    version:              UInt8
+    accountId:            UInt160
+    accountAddress:       UInt160
+    custodyAddress:       UInt160
+    recoveryAddress:      UInt160 | zero
+    verifier:             ModuleBinding | native-witness
+    hook:                 ModuleBinding | none
+    status:               Active | Frozen
+    configurationNonce:   UInt64
+    pendingVerifier:      PendingModuleChange | none
+    pendingHook:          PendingModuleChange | none
+    pendingRecoveryAddr:  PendingRecoveryAddressChange | none
+    pendingRecovery:      PendingRecovery | none
+}
+
+ModuleBinding {
+    contract:             UInt160
+    codeHash:              UInt256
+}
+
+PendingModuleChange {
+    contract:             UInt160 | zero
+    codeHash:              UInt256 | zero
+    proposedAt:            UInt64
+    activateAt:            UInt64
+    expectedConfiguration: UInt64
+}
+
+PendingRecovery {
+    newCustodyAddress:     UInt160
+    proposedAt:            UInt64
+    executeAt:             UInt64
+    expectedConfiguration: UInt64
+}
+
+PendingRecoveryAddressChange {
+    recoveryAddress:       UInt160 | zero
+    proposedAt:            UInt64
+    activateAt:            UInt64
+    expectedConfiguration: UInt64
+}
+```
+
+The native storage encoding MUST use deterministic field order and fixed
+integer semantics. The canonical stack representation of `AccountState` is an
+Array with exactly these 13 positions:
+
+```text
+[version, accountId, accountAddress, custodyAddress, recoveryAddress,
+ verifier, hook, status, configurationNonce, pendingVerifier, pendingHook,
+ pendingRecoveryAddr, pendingRecovery]
+```
+
+`version` and `status` are canonical non-negative Integers. `accountId`,
+`accountAddress`, and `custodyAddress` are 20-byte ByteStrings. A zero optional
+address is a 20-byte all-zero ByteString. A missing optional record is `Null`.
+Each `ModuleBinding` is `[contract, codeHash]`; each pending record uses the
+field order declared above and has no omitted fields. Neo's canonical binary
+serializer is applied to this Array without a map or textual JSON layer.
+Missing fields, additional fields, wrong types, and non-canonical encodings
+MUST fault closed.
+
+The service stores the next sequence independently for each nonce channel. A
+nonce key is `(accountId, channel)` where `channel = nonce >> 64`; the stored
+value is the next `sequence` or the exhaustion sentinel `2^64`. The canonical
+storage key is the one-byte field prefix `0x20`, followed by the 20-byte
+`accountId` wire representation and the 24-byte unsigned-big-endian channel.
+The account record key uses field prefix `0x10` followed by `accountId`; no
+other state may use either prefix.
+
+## 7. Account lifecycle and authority separation
+
+### 7.1 Creation
+
+`registerAccount(custodyAddress, salt, verifier, hook, recoveryAddress)` MUST:
+
+- be an Application-trigger call;
+- require a non-zero custody address;
+- require a 32-byte salt;
+- require a zero recovery address or a recovery address different from custody;
+- require the custody address to witness the transaction;
+- compute the account identifier and proxy address internally;
+- validate the verifier and hook ABI before storing them;
+- reject duplicate identifiers;
+- initialize all nonce channels at sequence zero;
+- initialize the account as `Active`;
+- emit `AccountCreated`.
+
+The caller MUST NOT supply `accountId` or `accountAddress` as authoritative
+values.
+
+### 7.2 Configuration authority
+
+The current custody address is the configuration authority. It may propose:
+
+- verifier replacement or removal;
+- hook replacement or removal;
+- recovery-address replacement or removal.
+
+Every change is delayed by the fixed module-change delay. Each proposal records
+the current `configurationNonce`. Activation MUST reject a stale proposal and
+MUST increment the configuration nonce. Cancellation is immediate and requires
+the current custody witness.
+
+The recovery-address change uses the same delayed state machine. A pending
+recovery-address change is independent from a pending custody recovery, but
+both are bound to the configuration nonce. While a custody recovery is
+pending, recovery-address replacement is forbidden. The current custody may
+cancel a pending recovery-address change before activation.
+
+Verifier removal selects the native-witness fallback. Hook removal selects no
+hook. Neither operation changes the account address or nonce state.
+
+### 7.3 Recovery authority
+
+The recovery address is optional. When configured, it is a separate authority
+from custody. The recovery address may propose a new custody address. The
+proposal becomes executable only after the fixed custody-recovery delay and
+only if its configuration nonce is still current.
+
+A proposed new custody address MUST be non-zero and MUST differ from both the
+current custody address and the configured recovery address. A proposed
+recovery address MUST be zero or different from the current custody address.
+These checks apply both at registration and during delayed rotation.
+
+The current custody may cancel a pending custody recovery before its execution
+time. After the delay, anyone may submit `executeRecovery`; the native service
+does not require the old custody to cooperate. The recovery address may cancel
+its own pending proposal. A stale or already cancelled proposal MUST fault.
+
+Executing recovery:
+
+- changes only the custody address;
+- preserves the account identifier, account address, nonce state, verifier,
+  hook, and recovery address;
+- cancels all pending module changes;
+- increments the configuration nonce;
+- leaves a frozen account frozen;
+- emits `RecoveryExecuted`.
+
+If no recovery address is configured, no recovery transition exists. There is
+no committee, administrator, plugin, or relayer recovery bypass.
+
+### 7.4 Freeze and unfreeze
+
+The configured recovery address may freeze an account immediately. A frozen
+account cannot execute UserOperations or change modules. Recovery operations
+remain available so that custody can be repaired.
+
+Unfreezing requires both the current custody witness and the configured
+recovery witness when a recovery address exists. If no recovery address exists,
+only the custody witness is required. A frozen account with no recovery address
+can therefore be unfrozen only by its custody authority.
+
+`freeze` MUST require the recovery witness and MUST be unavailable when the
+account has no recovery address. `unfreeze` MUST require the authorities stated
+above. Freeze and unfreeze increment the configuration nonce so that pending
+module and recovery proposals cannot cross a status transition unnoticed.
+
+## 8. Module binding and code identity
+
+An installed verifier MUST expose exactly:
+
+```text
+validateSignature(accountId: Hash160, op: Array) -> Boolean
+postExecute(accountId: Hash160, op: Array, result: Any) -> Void
+```
+
+An installed hook MUST expose exactly:
+
+```text
+preExecute(accountId: Hash160, op: Array) -> Void
+postExecute(accountId: Hash160, op: Array, result: Any) -> Void
+```
+
+Verifier validation MUST be read-only. Hook and verifier post-execution calls
+may write only through their normal application permissions.
+
+The native service MUST reject a module that is missing, blocked, has the wrong
+ABI types, or is not a deployed contract. The native service MUST reject a
+module if its current code identity differs from the stored binding.
+Native contracts, including `AccountManagement` itself, MUST NOT be installed as
+verifiers or hooks in version 1.
+
+The native service MUST call `validateSignature` with `ReadOnly`, and MUST call
+the verifier's `postExecute`, every hook callback, and the target method with
+`All`. The fixed flags are not operation fields and cannot be weakened or
+expanded by a caller.
+
+The module code identity is:
+
+```text
+codeHash = SHA256(
+    nefBytes ||
+    UInt8(0) ||
+    CanonicalManifestJsonUtf8
+)
+```
+
+`CanonicalManifestJsonUtf8` uses UTF-8, no whitespace, recursively sorted
+object keys, and the manifest's canonical array order. This definition is
+independent of source language and prevents a module administrator from
+silently replacing verifier code under the same contract hash.
+
+## 9. UserOperation authorization and execution
+
+The native service implements the foundation's exact six-field UserOperation:
+
+```text
+[targetContract, method, args, nonce, deadline, signature]
+```
+
+It MUST validate the shape, bounds, canonical argument types, and numeric
+ranges before calling any external module. Supported argument values are
+`Null`, `Boolean`, `Integer`, `ByteString`, `Array`, and `Struct`. `Map` and
+`InteropInterface` values are rejected by this profile. Nested arrays and
+structs have a maximum depth of eight.
+
+Nonce processing is exact:
+
+```text
+channel  = nonce >> 64
+sequence = nonce & (2^64 - 1)
+```
+
+Only the stored next sequence is accepted. Sequence `2^64 - 1` is consumable,
+after which the stored channel cursor is the explicit exhaustion sentinel
+`2^64`. A channel with cursor `2^64` is permanently exhausted and MUST NOT
+wrap or accept another operation.
+
+The execution order is:
+
+1. require Application trigger and establish the same-account execution lock;
+2. validate the operation and account state, rejecting a frozen account;
+3. reject an expired deadline or incorrect next sequence;
+4. validate the installed module code identity and ABI;
+5. validate authorization;
+6. consume the nonce;
+7. call hook `preExecute`;
+8. call the target with exactly the supplied method and arguments;
+9. call hook `postExecute`, then verifier `postExecute`;
+10. emit `UserOpExecuted` and clear temporary state.
+
+`executeUserOps` MUST validate that `ops` is non-empty, contains no more than
+32 operations, and contains only operations for the supplied `accountId`. The
+same-account execution lock remains held for the entire batch. All operations
+execute in array order inside one application-state boundary. A failure in any
+operation MUST roll back every nonce increment, target write, callback write,
+freeze transition, and notification produced by the batch.
+
+The effective normative order, without shorthand, is:
+
+```text
+lock
+validate
+deadline-and-nonce-check
+validateSignature or native-witness fallback
+consume-nonce
+hook.preExecute
+target call
+hook.postExecute
+verifier.postExecute
+UserOpExecuted
+unlock
+```
+
+The account MUST NOT accept caller-supplied verifier or hook identities. A
+same-account reentrant execution MUST fault before any external module runs.
+The target's Boolean `false` is a normal result; it is not converted into a
+VM fault by the core.
+
+Any validation failure, module failure, target VM fault, resource exhaustion,
+or post-callback failure MUST roll back nonce, target state, module state,
+freeze state, and notifications. Transaction fees are not refunded.
+
+### 9.1 Native-witness fallback
+
+When `verifier` is zero, authorization uses the stored custody witness. The
+operation's signature field MUST be an empty byte string. The native service
+MUST call `CheckWitnessInternal(custodyAddress)` and MUST NOT accept a supplied
+signer list as proof.
+
+This fallback authorizes the transaction that invokes the UserOperation. It
+does not create a relayer signature format and does not replace verifier-based
+authorization.
+
+### 9.2 Authorization domain
+
+Verifier profiles MUST bind their authorization digest to:
+
+```text
+ASCII("NeoSmartAccount/UserOperation") ||
+UInt8(1) ||
+UInt32LE(networkMagic) ||
+coreHash.ToArray() ||
+accountId.ToArray() ||
+canonicalOperationWithoutSignature
+```
+
+`canonicalOperationWithoutSignature` is the canonical six-field operation with
+field five replaced by an empty `ByteString`. The digest is
+`SHA256` of the complete byte sequence. The native core MUST expose this
+domain and operation digest through read-only methods so that independent
+verifier profiles do not reconstruct network or core identity from display
+strings.
+
+`getAuthorizationDomain()` returns the bytes from the domain prefix through
+`accountId` in the formula above. `getOperationDigest()` returns the single
+SHA-256 digest of that domain followed by the canonical operation bytes.
+
+## 10. Resource and fee accounting
+
+The native service MUST use the platform bounded-call capability for every
+external verifier and hook callback:
+
+```text
+System.Contract.CallWithGasLimit(
+    target,
+    method,
+    flags,
+    fixedProfileBudget,
+    args
+)
+```
+
+The platform capability is identified by the exact syscall name
+`System.Contract.CallWithGasLimit` and the exact parameter order shown above.
+It is available only after the separately configured `HF_SmartAccountV1`
+activation boundary. A node MUST reject the syscall before that boundary and
+MUST NOT treat an omitted `HF_SmartAccountV1` entry as activation at genesis.
+The `gasLimit` value is an integer number of datoshi; it MUST be positive and
+MUST fit within both the enclosing transaction budget and every active ancestor
+bounded-call budget before the callee context is created.
+
+The capability MUST satisfy all of the following:
+
+1. every billable charge in the callback and its descendants consumes the
+   active child budget;
+2. ordinary nested calls inherit all ancestor budgets;
+3. nested bounded calls cannot escape an ancestor budget;
+4. fee whitelists do not bypass the budget;
+5. zero, negative, and transaction-budget-exceeding limits are rejected;
+6. exhaustion faults closed and rolls back application state and notifications;
+7. the budget covers callback initialization, execution, nested calls, and
+   return-value handling.
+
+The verifier budget is `1,000,000,000` datoshi per callback. The hook budget is
+`250,000,000` datoshi per callback. The target call uses the enclosing
+transaction budget and is not silently assigned a verifier budget.
+
+Normal Neo fee charging still applies. A fee whitelist may change transaction
+fee charging but MUST NOT change the safety budget. Version 1 has no native
+paymaster or automatic sponsorship path.
+
+## 11. Governance and upgrades
+
+The native service has no runtime administrator. Its code, ABI, native hash,
+and hardfork activation are consensus-governed. Existing committee policy
+mechanisms may block a contract according to the general Neo protocol, but
+there is no SmartAccount-specific committee bypass for account custody,
+recovery, or module binding.
+
+An ABI or state-layout change requires:
+
+1. a new profile version;
+2. a new activation boundary;
+3. a deterministic migration routine;
+4. cross-client vectors for pre- and post-activation behavior;
+5. explicit compatibility rules for existing addresses and assets.
+
+There is no emergency method that changes custody, verifier, hook, or account
+address without the authority and delay rules above.
+
+## 12. Migration and compatibility
+
+Existing ordinary SmartAccounts remain ordinary deployed contracts. No native
+account is implicitly created for them and no existing address changes meaning.
+
+An optional migration adapter may create a native account only when:
+
+- the legacy account address witnesses the migration transaction;
+- the new custody address witnesses the same transaction;
+- the legacy core identity, legacy account identifier, and legacy address are
+  recorded in the migration event;
+- the new account identifier is computed by the version-1 formula;
+- the legacy identity has not already been imported.
+
+The native address is different from the legacy address. Assets remain at the
+legacy address until an explicitly authorized transfer occurs. The native core
+MUST NOT claim custody of legacy assets merely because an import record exists.
+
+The migration mapping is one-way and immutable:
+
+```text
+(legacyCoreHash, legacyAccountId, legacyAddress) -> nativeAccountId
+```
+
+No reverse mapping, address alias, or transparent script replacement is
+provided by version 1.
+
+## 13. Required ABI surface
+
+The version-1 ABI MUST contain the following methods and events. The exact Neo
+ABI parameter types are normative.
+
+### Read-only methods
+
+```text
+getVersion() -> Integer
+getAccount(accountId: Hash160) -> Any
+getAccountAddress(accountId: Hash160) -> Hash160
+getNonce(accountId: Hash160, channel: Integer) -> Integer
+getAuthorizationDomain(accountId: Hash160) -> ByteArray
+getOperationDigest(accountId: Hash160, op: Array) -> ByteArray
+verify(accountId: Hash160) -> Boolean
+```
+
+### Application methods
+
+```text
+registerAccount(custodyAddress: Hash160, salt: ByteArray,
+                verifier: Hash160, hook: Hash160,
+                recoveryAddress: Hash160) -> Hash160
+executeUserOp(accountId: Hash160, op: Array) -> Any
+executeUserOps(accountId: Hash160, ops: Array) -> Array
+proposeVerifier(accountId: Hash160, verifier: Hash160) -> Void
+activateVerifier(accountId: Hash160) -> Void
+cancelVerifier(accountId: Hash160) -> Void
+proposeHook(accountId: Hash160, hook: Hash160) -> Void
+activateHook(accountId: Hash160) -> Void
+cancelHook(accountId: Hash160) -> Void
+proposeRecoveryAddress(accountId: Hash160, recovery: Hash160) -> Void
+activateRecoveryAddress(accountId: Hash160) -> Void
+cancelRecoveryAddress(accountId: Hash160) -> Void
+proposeRecovery(accountId: Hash160, newCustody: Hash160) -> Void
+executeRecovery(accountId: Hash160) -> Void
+cancelRecovery(accountId: Hash160) -> Void
+freeze(accountId: Hash160) -> Void
+unfreeze(accountId: Hash160) -> Void
+```
+
+### Events
+
+```text
+AccountCreated(accountId, accountAddress, custodyAddress, verifier, hook,
+               recoveryAddress)
+VerifierChangeProposed(accountId, verifier, activateAt, configurationNonce)
+VerifierChanged(accountId, verifier, configurationNonce)
+VerifierChangeCancelled(accountId, configurationNonce)
+HookChangeProposed(accountId, hook, activateAt, configurationNonce)
+HookChanged(accountId, hook, configurationNonce)
+HookChangeCancelled(accountId, configurationNonce)
+RecoveryAddressChangeProposed(accountId, recoveryAddress, activateAt,
+                               configurationNonce)
+RecoveryAddressChanged(accountId, recoveryAddress, configurationNonce)
+RecoveryAddressChangeCancelled(accountId, configurationNonce)
+RecoveryProposed(accountId, newCustodyAddress, executeAt, configurationNonce)
+RecoveryCancelled(accountId, configurationNonce)
+RecoveryExecuted(accountId, oldCustodyAddress, newCustodyAddress,
+                 configurationNonce)
+AccountFrozen(accountId)
+AccountUnfrozen(accountId)
+UserOpExecuted(accountId, targetContract, method, nonce)
+```
+
+The event field order and types MUST be published in the native manifest and
+must remain stable for ABI version 1.
+
+The normative event parameter types and order are:
+
+| Event | Parameters |
+|---|---|
+| `AccountCreated` | `Hash160, Hash160, Hash160, Hash160, Hash160` |
+| `VerifierChangeProposed` | `Hash160, Hash160, Integer, Integer` |
+| `VerifierChanged` | `Hash160, Hash160, Integer` |
+| `VerifierChangeCancelled` | `Hash160, Integer` |
+| `HookChangeProposed` | `Hash160, Hash160, Integer, Integer` |
+| `HookChanged` | `Hash160, Hash160, Integer` |
+| `HookChangeCancelled` | `Hash160, Integer` |
+| `RecoveryAddressChangeProposed` | `Hash160, Hash160, Integer, Integer` |
+| `RecoveryAddressChanged` | `Hash160, Hash160, Integer` |
+| `RecoveryAddressChangeCancelled` | `Hash160, Integer` |
+| `RecoveryProposed` | `Hash160, Hash160, Integer, Integer` |
+| `RecoveryCancelled` | `Hash160, Integer` |
+| `RecoveryExecuted` | `Hash160, Hash160, Hash160, Integer` |
+| `AccountFrozen` | `Hash160` |
+| `AccountUnfrozen` | `Hash160` |
+| `UserOpExecuted` | `Hash160, Hash160, String, Integer` |
+
+Unknown-account queries for `getAccountAddress`, `getNonce`, and
+`getOperationDigest` MUST fault. `getVersion` and `getAuthorizationDomain`
+remain callable after activation without an account record. Every malformed
+ABI value, invalid authority, stale delayed transition, missing module, blocked
+module, callback budget exhaustion, target fault, and wrong callback result
+type MUST fault and MUST preserve the outer application-state rollback rule.
+
+## 14. Conformance vectors
+
+An implementation MUST publish machine-readable vectors for every boundary in
+this section. The following identity vector is normative:
+
+```text
+networkMagic = 0x12345678
+coreHash     = d9421d07adf206e9dc4be746a02e8e087fa61741
+custody      = 202122232425262728292a2b2c2d2e2f30313233
+salt         = 404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f
+
+accountId    = 0x3e25330008563c55fe2853e07868b36ca00020ac
+accountAddress = 0x7829f40af6380c00110932c9551ece0916fdcad1
+```
+
+The corresponding test suite MUST additionally cover:
+
+- zero and duplicate identifiers;
+- invalid salt length and custody values;
+- exact verification-script bytes and script hash;
+- strict UTF-8 method boundaries;
+- argument depth, type, count, and serialized-size boundaries;
+- nonce sequence zero, maximum, exhaustion, and channel independence;
+- deadline equal-to-now and one-millisecond expiry boundaries;
+- verifier and hook ABI mismatch;
+- module code replacement under the same contract hash;
+- callback budget exhaustion, nested inheritance, and fee whitelists;
+- same-account reentrancy and target Boolean `false`;
+- rollback of nonce, target state, callback state, and notifications;
+- recovery delay, stale configuration nonce, cancellation, and frozen state;
+- pre-activation rejection and activation-block initialization;
+- legacy import witness requirements and asset non-custody.
+
+## 15. Implementation gate
+
+The native core implementation is ready for a protocol PR only when all of the
+following are true:
+
+1. the activation identifier and network configuration are accepted;
+2. the bounded-call engine capability is implemented and independently tested;
+3. the native ABI and storage encoding match this document byte-for-byte;
+4. the vectors are checked by at least two independent clients;
+5. NeoExpress verifies activation, execution, rollback, migration, and
+   readback parity;
+6. the source, NEF-equivalent native manifest, and deployed readback hashes
+   match;
+7. a security audit has no unmitigated critical or high findings.
+
+Until these gates pass, this document remains a design profile and MUST NOT be
+presented as an activated Neo native SmartAccount service.

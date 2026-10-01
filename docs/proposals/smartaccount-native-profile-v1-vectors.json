@@ -1,0 +1,35 @@
+{
+  "profileVersion": 1,
+  "networkMagic": "0x12345678",
+  "serviceName": "AccountManagement",
+  "serviceHashDisplay": "0xd9421d07adf206e9dc4be746a02e8e087fa61741",
+  "serviceHashWire": "4117a67f088e2ea046e74bdce906f2ad071d42d9",
+  "profileParameterDigest": "8cfee92ae8f4fb534e31284c763520a4c5182594d717be3085608596f98a1616",
+  "identity": {
+    "custodyAddressWire": "202122232425262728292a2b2c2d2e2f30313233",
+    "salt": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+    "accountIdWire": "ac2000a06cb36878e05328fe553c56080033253e",
+    "accountAddressDisplay": "0x7829f40af6380c00110932c9551ece0916fdcad1",
+    "verificationScript": "0c14ac2000a06cb36878e05328fe553c56080033253e11c0150c067665726966790c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52"
+  },
+  "operation": {
+    "targetContractWire": "4117a67f088e2ea046e74bdce906f2ad071d42d9",
+    "methodUtf8": "transfer",
+    "args": [
+      {
+        "type": "ByteString",
+        "value": "ac2000a06cb36878e05328fe553c56080033253e"
+      },
+      {
+        "type": "Integer",
+        "value": "42"
+      }
+    ],
+    "nonce": "0",
+    "deadline": "1700000000000",
+    "signature": "",
+    "canonicalOperationWithoutSignature": "400628144117a67f088e2ea046e74bdce906f2ad071d42d928087472616e7366657240022814ac2000a06cb36878e05328fe553c56080033253e21012a210021060068e5cf8b012800",
+    "authorizationMessage": "4e656f536d6172744163636f756e742f557365724f7065726174696f6e01785634124117a67f088e2ea046e74bdce906f2ad071d42d9ac2000a06cb36878e05328fe553c56080033253e400628144117a67f088e2ea046e74bdce906f2ad071d42d928087472616e7366657240022814ac2000a06cb36878e05328fe553c56080033253e21012a210021060068e5cf8b012800",
+    "authorizationDigest": "d6ebf5b7cf6fab6a59c10a969d3ad5d2f170e0c794d8e87eacabce20f70f62f9"
+  }
+}

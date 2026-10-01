@@ -40,6 +40,9 @@ This index keeps the root documentation set visible and easy to browse.
 
 ## Security Notes
 
+- `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md` — normative native profile draft for Issue #242, including identity, activation, state, lifecycle, resource, governance, migration, and conformance rules
+- `docs/proposals/smartaccount-native-profile-v1-vectors.json` — machine-readable version-1 identity and authorization vectors
+- `docs/proposals/validate-native-smartaccount-profile.py` — deterministic profile and vector validation
 - `docs/AA-FORMAL-VERIFICATION.md` — AA formal-model, runtime-correspondence and boundary report
 - `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md` — exact NeoVM/DevPack verifier-budget extension and integration gates
 - `docs/SECURITY_MODEL.md` — current threat model and trust assumptions
