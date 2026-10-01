@@ -614,6 +614,14 @@ The capability MUST satisfy all of the following:
 7. the budget covers callback initialization, execution, nested calls, and
    return-value handling.
 
+For this profile, “descendants” includes ordinary contract calls, static method
+tokens, the contract's `_initialize` method, `System.Runtime.LoadScript`, and
+native asynchronous callback continuations reached before the callback returns.
+Each descendant retains the active budget chain. Dynamic execution does not
+acquire additional call permissions or a deployed contract identity, and this
+budget inheritance does not change legacy transaction fee-whitelist semantics.
+Returning from a descendant does not refund consumed budget.
+
 The verifier budget is `1,000,000,000` datoshi per callback. The hook budget is
 `250,000,000` datoshi per callback. The target call uses the enclosing
 transaction budget and is not silently assigned a verifier budget.
