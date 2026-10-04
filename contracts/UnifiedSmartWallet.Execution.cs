@@ -23,6 +23,18 @@ namespace AbstractAccount
         // including nested verifier calls; NeoVM enforces the ancestor budget transitively.
         private const long VerifierGasLimit = 1_000_000_000;
 
+        // System.Contract.CallWithGasLimit is a platform syscall that no published
+        // Neo.SmartContract.Framework declares, so this contract declares it. The attribute
+        // emits the same SYSCALL as the framework declaration it replaces: the compiled NEF
+        // and manifest are byte-identical. Only a Neo core that registers the syscall can
+        // execute it.
+        private static class PlatformSyscalls
+        {
+            [Syscall("System.Contract.CallWithGasLimit")]
+            public static extern object CallWithGasLimit(
+                UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);
+        }
+
         // ========================================================================
         // 3. Core Routing: Validation and Execution (aligned with 4337 Validate & Call)
         // ========================================================================
@@ -61,7 +73,7 @@ namespace AbstractAccount
                 if (state.Verifier != UInt160.Zero)
                 {
                     // Delegate to plugin for signature verification (e.g., ecrecover or TEE hardware)
-                    bool isValid = (bool)Contract.CallWithGasLimit(
+                    bool isValid = (bool)PlatformSyscalls.CallWithGasLimit(
                         state.Verifier,
                         "validateSignature",
                         CallFlags.ReadOnly,
@@ -133,7 +145,7 @@ namespace AbstractAccount
                     }
                     if (state.Verifier != UInt160.Zero)
                     {
-                        Contract.CallWithGasLimit(
+                        PlatformSyscalls.CallWithGasLimit(
                             state.Verifier,
                             "postExecute",
                             CallFlags.All,

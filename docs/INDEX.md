@@ -64,8 +64,10 @@ This index keeps the root documentation set visible and easy to browse.
 
 ## Build Toolchain
 
-- `docs/NEO-PLATFORM-PACKAGES.md` — why CI cannot restore the pinned private Neo framework (R-11 / N-DEP-1), what is and is not affected, and the owner action that fixes it
-- `contracts/neo-platform-packages.json` — audited hashes of the eight private packages; `scripts/check_neo_platform_packages.mjs` enforces them
+- `docs/AA-REPRODUCIBLE-BUILD.md` — the pinned, published toolchain, how to restore, build and reproduce the AA contracts byte for byte, and how to bump a pin (R-11 / N-DEP-1)
+- `docs/NEO-PLATFORM-PACKAGES.md` — the remaining platform gap: `System.Contract.CallWithGasLimit` is registered by no published Neo core, the four tests that need it, and the private packages that still provide it
+- `contracts/neo-platform-packages.json` — audited hashes of the nine published Neo packages and the nccs compiler; `scripts/check_neo_platform_packages.mjs` enforces them together with the `packages.lock.json` files
+- `docs/reports/aa-published-build-reproducibility-20261004.json` — receipt: 76 artifacts built from published packages in two clean exports at different paths, byte-identical
 
 ## Historical Reports
 

@@ -1,0 +1,32 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      The single pin for Neo.SmartContract.Framework (every contract project) and
+      Neo.SmartContract.Testing (the contract tests). Both are published on nuget.org, which
+      nuget.config makes the only package source. The audited bytes of this pin and of every
+      other Neo package it pulls in are in contracts/neo-platform-packages.json; change this
+      value, that file and the packages.lock.json files together (docs/AA-REPRODUCIBLE-BUILD.md,
+      "How to bump"). scripts/check_neo_platform_packages.mjs enforces all three.
+      The AA core also needs the System.Contract.CallWithGasLimit syscall, which no published
+      framework declares; the contract declares it itself (UnifiedSmartWallet.Execution.cs).
+    -->
+    <NeoSmartContractFrameworkVersion Condition="'$(NeoSmartContractFrameworkVersion)' == ''">3.10.1</NeoSmartContractFrameworkVersion>
+
+    <!--
+      Reproducible restores: every project commits packages.lock.json and a restore that would
+      change it fails (NU1004), so a different resolved version or different package bytes
+      (NU1403) can never enter a build silently. nccs runs its own restore of each contract
+      project and honours the same setting. To update a lock file deliberately, restore that
+      project with the force-evaluate switch and RestoreLockedMode set to false (docs/AA-REPRODUCIBLE-BUILD.md).
+    -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(RestoreLockedMode)' == ''">true</RestoreLockedMode>
+
+    <!--
+      A lock file belongs to one project. contracts/hooks, contracts/verifiers and contracts/mocks
+      hold several projects each, which would share one packages.lock.json, so a project in a
+      directory with other projects gets packages.ProjectName.lock.json instead.
+    -->
+    <NuGetLockFilePath Condition="$([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)', '*.csproj').Length) &gt; 1">packages.$(MSBuildProjectName).lock.json</NuGetLockFilePath>
+  </PropertyGroup>
+</Project>

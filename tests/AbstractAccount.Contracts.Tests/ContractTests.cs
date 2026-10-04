@@ -78,6 +78,19 @@ public class ContractTests
 
     private static Type ContractType => typeof(global::AbstractAccount.UnifiedSmartWallet);
 
+    private static int CountOccurrences(string text, string needle)
+    {
+        int count = 0;
+        for (int at = text.IndexOf(needle, StringComparison.Ordinal);
+             at >= 0;
+             at = text.IndexOf(needle, at + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
     private static string ReadContractFile(string fileName) =>
         File.ReadAllText(Path.Combine(ContractsDir, fileName));
 
@@ -176,7 +189,7 @@ public class ContractTests
             "object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, op.Args);");
         Assert.IsFalse(executionSource.Contains("op.CallFlags", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "ConsumeNonce(accountId, op.Nonce);");
-        StringAssert.Contains(executionSource, "Contract.CallWithGasLimit(");
+        StringAssert.Contains(executionSource, "PlatformSyscalls.CallWithGasLimit(");
         StringAssert.Contains(executionSource, "state.Verifier,");
         StringAssert.Contains(executionSource, "\"validateSignature\"");
         StringAssert.Contains(executionSource, "CallFlags.ReadOnly");
@@ -233,11 +246,38 @@ public class ContractTests
 
         StringAssert.Contains(
             executionSource,
-            "Contract.CallWithGasLimit(");
+            "PlatformSyscalls.CallWithGasLimit(");
         StringAssert.Contains(executionSource, "\"postExecute\"");
         StringAssert.Contains(executionSource, "private const long VerifierGasLimit = 1_000_000_000;");
         Assert.IsFalse(executionSource.Contains("Contract.Call(state.Verifier", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "VerifierGasLimit");
+    }
+
+    [TestMethod]
+    public void GasBoundedVerifierSyscallIsDeclaredByTheContractAndUsedForBothCallbacks()
+    {
+        // No published Neo.SmartContract.Framework declares Contract.CallWithGasLimit, so the
+        // contract declares the syscall itself. The compiled bytes are checked separately in
+        // CompiledCoreSyscallTests; this pins the source shape.
+        string executionSource = ReadContractFile("UnifiedSmartWallet.Execution.cs");
+
+        StringAssert.Contains(executionSource, "[Syscall(\"System.Contract.CallWithGasLimit\")]");
+        StringAssert.Contains(executionSource, "public static extern object CallWithGasLimit(");
+        StringAssert.Contains(
+            executionSource,
+            "UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);");
+        Assert.AreEqual(
+            2,
+            CountOccurrences(executionSource, "PlatformSyscalls.CallWithGasLimit("),
+            "validateSignature and postExecute are the two verifier callbacks");
+        Assert.IsFalse(
+            executionSource.Contains("Contract.CallWithGasLimit(", StringComparison.Ordinal),
+            "the framework-declared form does not exist in any published framework");
+
+        int declarations = Directory.EnumerateFiles(ContractsDir, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Sum(path => CountOccurrences(File.ReadAllText(path), "[Syscall(\"System.Contract.CallWithGasLimit\")]"));
+        Assert.AreEqual(1, declarations, "the syscall must be declared exactly once");
     }
 
     [TestMethod]

@@ -67,10 +67,11 @@ done
 if [[ $run_contracts -eq 1 ]]; then
   echo ""
   echo "=== Contract Gates ==="
-  # Restores the private Neo platform packages first so a machine without them
-  # stops here with the owner action (docs/NEO-PLATFORM-PACKAGES.md) instead of
-  # a bare NU1102, and a feed serving different bytes is refused.
+  # Restores the pinned Neo packages in locked mode first (every package is published on
+  # nuget.org), so a changed resolution, different package bytes or a different nccs stop here
+  # with the pinned versions named (docs/AA-REPRODUCIBLE-BUILD.md) instead of deep inside the build.
   node scripts/check_neo_platform_packages.mjs
+  node scripts/check_neo_platform_packages.mjs --compiler-only
   if [[ $skip_contract_build -eq 0 ]]; then
     dotnet build contracts/UnifiedSmartWallet.csproj -c Release -p:WarningsAsErrors=nullable -nologo
     bash contracts/compile.sh
@@ -95,12 +96,23 @@ if [[ $run_contracts -eq 1 ]]; then
     echo "cross-repo gate:   set NEOOS_SERVICES_CONTRACT_BUILD to a neo-os-services contract build directory to"
     echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
   fi
+  # Four runtime tests drive a verifier callback through System.Contract.CallWithGasLimit, which
+  # no published Neo core registers. On the pinned (published) packages the TestEngine lacks it, so
+  # those tests are reported skipped, not passed; they run on a core that registers the syscall.
+  if [[ "${NEOOS_REQUIRE_PLATFORM_SYSCALLS:-0}" == "1" ]]; then
+    echo "platform-syscall gate: REQUIRED - the verifier-callback tests fail if the TestEngine lacks System.Contract.CallWithGasLimit."
+  else
+    echo "platform-syscall gate: the 4 verifier-callback runtime tests are NOT RUN unless the TestEngine's Neo core registers"
+    echo "platform-syscall gate:   System.Contract.CallWithGasLimit; published cores do not, so expect 4 extra skipped tests."
+    echo "platform-syscall gate:   set NEOOS_REQUIRE_PLATFORM_SYSCALLS=1 to make their absence a hard failure."
+  fi
   dotnet test neo-abstract-account.sln -c Release --nologo
   node --test scripts/lib/deploy-helpers.test.mjs \
     scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
     scripts/upgrade_testnet_unified_smart_wallet.test.mjs \
     scripts/deploy_latest_aa_verifiers.test.mjs \
     scripts/check_neo_platform_packages.test.mjs \
+    scripts/check-artifact-reproducibility.test.mjs \
     scripts/fuzz_continuous.test.mjs \
     scripts/repo_hygiene.test.mjs
   dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal

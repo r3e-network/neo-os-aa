@@ -21,6 +21,9 @@ const releaseDir = path.join(repoRoot, "contracts", "bin", "v3");
 const trackedDir = path.join(repoRoot, "contracts", "build");
 const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
 const SKIP_DIRS = /(^|\/)(bin|obj|build)$/;
+// The restore policy every contract project is built under. Without them the scratch copy would
+// compile against whatever package source and framework version the machine happens to resolve.
+export const RESTORE_POLICY_FILES = ["Directory.Build.props", "nuget.config"];
 
 /** Recursively lists nef/manifest files relative to a directory. */
 export function listArtifacts(dir) {
@@ -52,12 +55,14 @@ export function compareTrees(expectedDir, actualDir) {
   });
 }
 
-function prepareScratch() {
+/** Copies the sources, lock files and restore policy that determine the artifacts into a new scratch directory. */
+export function prepareScratch() {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "aa-repro-"));
   fs.cpSync(path.join(repoRoot, "contracts"), path.join(scratch, "contracts"), {
     recursive: true,
     filter: (source) => !SKIP_DIRS.test(source),
   });
+  for (const file of RESTORE_POLICY_FILES) fs.copyFileSync(path.join(repoRoot, file), path.join(scratch, file));
   fs.mkdirSync(path.join(scratch, "scripts"), { recursive: true });
   fs.copyFileSync(
     path.join(repoRoot, "scripts", "dotnet_env.sh"),

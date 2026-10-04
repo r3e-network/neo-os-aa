@@ -6,6 +6,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR/contracts"
 source "$ROOT_DIR/scripts/dotnet_env.sh"
 
+# The NEF header names the compiler and its code generation decides the bytes, so artifacts
+# compiled with anything but the pinned nccs package are not the pinned build.
+node "$ROOT_DIR/scripts/check_neo_platform_packages.mjs" --compiler-only
+
 echo "Cleaning stale build intermediates..."
 find "$ROOT_DIR/contracts" -type d -name obj -prune -exec rm -rf {} +
 

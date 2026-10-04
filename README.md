@@ -177,10 +177,13 @@ If you want the clearest end-to-end explanation, read these docs in order:
 ### Prerequisites
 - `.NET SDK 10`
 - `Node.js 22+`
-- the private Neo platform packages pinned in `contracts/Directory.Build.props` for the
-  contract build and tests. They are on no public feed yet (audit finding R-11);
-  `node scripts/check_neo_platform_packages.mjs` reports whether they restore, and
-  `docs/NEO-PLATFORM-PACKAGES.md` describes the gap and the owner action that closes it.
+- the Neo compiler, pinned: `dotnet tool install -g neo.compiler.csharp --version 3.9.1`
+- access to nuget.org. Every package the contracts and tests restore is published there and pinned
+  by `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
+  `node scripts/check_neo_platform_packages.mjs` checks the pins and
+  `docs/AA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. The AA core calls a
+  syscall that no published Neo core registers, so four runtime tests are skipped on the published
+  packages (`docs/NEO-PLATFORM-PACKAGES.md`).
 
 ### Install
 
