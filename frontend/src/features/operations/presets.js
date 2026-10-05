@@ -1,3 +1,5 @@
+import { EC } from '../../config/errorCodes.js';
+import { TRANSFER_METHOD, isProxySourcedTransfer } from '../../shared/transferOutcome.mjs';
 import { sanitizeHex } from '../../utils/hex.js';
 import { getScriptHashFromAddress } from '../../utils/neo.js';
 
@@ -78,6 +80,24 @@ function toArrayArg(items, itemType = 'String') {
   };
 }
 
+/**
+ * A preset that cannot produce an operation which can do what it says. The message is the machine-readable
+ * error code, like every EC error, so `translateError(error.message, t)` shows the translated reason; `details`
+ * names what was refused.
+ */
+export class OperationPresetRefusedError extends Error {
+  constructor(code, details = {}) {
+    super(code);
+    this.name = 'OperationPresetRefusedError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export function isOperationPresetRefusal(error) {
+  return error instanceof OperationPresetRefusedError;
+}
+
 export function buildOperationFromPreset({
   preset = 'invoke',
   account = {},
@@ -93,9 +113,23 @@ export function buildOperationFromPreset({
   if (preset === 'nep17Transfer') {
     const fromHash = normalizeHash160(transfer.from || account.accountAddressScriptHash || '');
     const recipientHash = normalizeHash160(transfer.recipient || '');
+    const tokenHash = sanitizeHex(transfer.tokenScriptHash || '');
+    // A transfer out of the account's own proxy address cannot be authorised by the owner or relay witness this
+    // preset's transaction carries: the token checks the proxy address as a witness, answers false, and the
+    // account still burns its nonce and the fee (recorded on the deployed core, AA-03 case a). No deployed token
+    // is known to authorise through the account's `verify` instead, so every token is refused until a
+    // proxy-witness transaction can be built. Refused here, before an operation exists to stage or relay.
+    const proxyHash = normalizeHash160(account.accountAddressScriptHash || '');
+    if (isProxySourcedTransfer({ method: TRANSFER_METHOD, from: fromHash, proxy: proxyHash })) {
+      throw new OperationPresetRefusedError(EC.presetProxyTransferRefused, {
+        preset,
+        from: fromHash,
+        token: tokenHash,
+      });
+    }
     return {
       kind: 'transfer',
-      targetContract: sanitizeHex(transfer.tokenScriptHash || ''),
+      targetContract: tokenHash,
       method: 'transfer',
       args: [
         toHash160Arg(fromHash),
@@ -151,6 +185,19 @@ export function buildOperationFromPreset({
     args: normalizedArgs,
     metadata: {},
   };
+}
+
+/**
+ * buildOperationFromPreset with a refusal as a result instead of an exception: exactly one of `operation` and
+ * `refusal` (the OperationPresetRefusedError) is set. Any other error still throws, because it is a bug.
+ */
+export function tryBuildOperationFromPreset(input) {
+  try {
+    return { operation: buildOperationFromPreset(input), refusal: null };
+  } catch (error) {
+    if (isOperationPresetRefusal(error)) return { operation: null, refusal: error };
+    throw error;
+  }
 }
 
 export function buildPresetSummary(operation = {}) {

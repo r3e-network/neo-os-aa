@@ -734,6 +734,8 @@ const MESSAGES = {
       formatLabelNeoAddress: 'NEO address',
       invalidDappId: 'DApp ID should be lowercase alphanumeric with dashes only',
       readOnlyDraftError: 'This shared draft is read-only. Open the Collaborator Link to add signatures.',
+      presetProxyTransferRefused: 'Tokens held at the account address cannot be moved by this operation yet. The token checks that the account address signed the transaction, and an owner signature does not provide that, so the transfer would return false and still use the nonce and the fee. It needs a proxy-witness transaction, which also requires the contract admin to set the account scope target.',
+      presetRefusedTitle: 'NEP-17 transfer refused',
       operatorAccessRequired: 'Operator access is required to manage relay, broadcast, or link rotation for this shared draft.',
       relayCheckIdle: 'Not Checked',
       relayCheckIdleDetail: 'Run a relay preflight before submitting.',

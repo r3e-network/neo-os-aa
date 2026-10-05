@@ -317,6 +317,60 @@ export declare function decodeByteStringStackHex(
 export declare function sanitizeHex(hex: unknown): string;
 
 // ===========================================================================
+// Token transfer results
+// ===========================================================================
+//
+// The account core hands the result of the call it executes back untouched and the transaction still HALTs when
+// that result is a refusal. A NEP-17 / NEP-11 `transfer` answers `false` when nothing moved; the account then
+// burns its nonce and the fee for nothing. These are the rules the relay route and the wallet apply (shared source:
+// shared/transferOutcome.mjs). Only a method named `transfer` and only a Boolean `false` count: `false` is the
+// normal result of other calls, and a result that is not a Boolean says nothing.
+
+/** Stable code of the verdict "a token transfer returned false". */
+export declare const TRANSFER_RETURNED_FALSE: 'transfer_returned_false';
+
+/** Human-readable text of that verdict. */
+export declare const TRANSFER_RETURNED_FALSE_MESSAGE: string;
+
+/** A relay-ready meta invocation as the wallet and the relay route carry it. */
+export interface MetaInvocation {
+  scriptHash?: Hash160;
+  operation?: string;
+  args?: ContractParameter[];
+}
+
+/**
+ * Positions of the transfer operations of a simulated invocation whose result is a Boolean false. `stack` is the
+ * stack the VM returned for it; `[0]` is the operation's result, or for a batch (`executeUserOps`) the array of
+ * one result per operation. Empty means nothing is wrong, or nothing can be judged.
+ */
+export declare function findFailedTransferInInvocation(options: {
+  invocation: MetaInvocation | null | undefined;
+  stack?: StackItem[] | null;
+}): number[];
+
+/**
+ * The same verdict for one `executions[]` entry of a `getapplicationlog` result: the operations are read from its
+ * `UserOpExecuted` notifications.
+ */
+export declare function findFailedTransferInExecution(execution: {
+  stack?: StackItem[] | null;
+  notifications?: Array<{ eventname?: string; state?: StackItem | null }> | null;
+} | null | undefined): number[];
+
+/**
+ * True for a `transfer` whose source is the account's own proxy address: the token checks that address as a
+ * witness, an owner or relay signature does not provide it, so the transfer returns false.
+ */
+export declare function isProxySourcedTransfer(operation: {
+  method: string;
+  /** Source hash, 40 hex characters, `0x` optional. */
+  from: string;
+  /** The account's proxy address, same form. */
+  proxy: string;
+}): boolean;
+
+// ===========================================================================
 // UserOperation
 // ===========================================================================
 
@@ -514,6 +568,10 @@ export interface SimulateUserOperationOptions {
 /**
  * Simulates a UserOperation against the contract preview. Pre-flight only:
  * it never verifies the signature (see {@link SimulationResult}).
+ *
+ * A token `transfer` whose source is the account's own proxy address is reported in `errors` (`OP_001`,
+ * {@link EC}`.OPERATION_PROXY_TRANSFER_REFUSED`) and `passed` is false: it would HALT with result false, move
+ * nothing and still spend the nonce and the fee.
  */
 export declare function simulateUserOperation(
   client: AbstractAccountClient,

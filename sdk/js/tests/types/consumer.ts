@@ -24,6 +24,11 @@ import {
   createError,
   mapRpcError,
   EC,
+  TRANSFER_RETURNED_FALSE,
+  TRANSFER_RETURNED_FALSE_MESSAGE,
+  findFailedTransferInInvocation,
+  findFailedTransferInExecution,
+  isProxySourcedTransfer,
 } from 'neo-abstract-account';
 import type {
   UserOperation,
@@ -220,3 +225,17 @@ const mapped = mapRpcError('method not found');
 void code;
 void formatted;
 void mapped;
+
+// --- Token transfer results ---------------------------------------------------
+const failedPositions: number[] = findFailedTransferInInvocation({
+  invocation: { scriptHash: MASTER, operation: 'executeUserOp', args: [{ type: 'Hash160', value: ACCOUNT_ID }] },
+  stack: [{ type: 'Boolean', value: false }],
+});
+const failedInLog: number[] = findFailedTransferInExecution({
+  stack: [{ type: 'Boolean', value: false }],
+  notifications: [{ eventname: 'UserOpExecuted', state: { type: 'Array', value: [] } }],
+});
+const fromProxy: boolean = isProxySourcedTransfer({ method: 'transfer', from: ACCOUNT_ID, proxy: ACCOUNT_ID });
+const transferVerdictCode: 'transfer_returned_false' = TRANSFER_RETURNED_FALSE;
+const transferVerdictMessage: string = TRANSFER_RETURNED_FALSE_MESSAGE;
+void [failedPositions, failedInLog, fromProxy, transferVerdictCode, transferVerdictMessage];

@@ -91,6 +91,7 @@ export const EC = {
   noVerifierConfigured: 'EC_no_verifier_configured',
   noVerifierPlugin: 'EC_no_verifier_plugin',
   readOnlyDraftError: 'EC_read_only_draft_error',
+  presetProxyTransferRefused: 'EC_preset_proxy_transfer_refused',
 };
 
 /**
@@ -190,6 +191,7 @@ const EC_I18N_KEY = {
   EC_no_verifier_configured: 'operations.noVerifierConfigured',
   EC_no_verifier_plugin: 'sharedDraft.noVerifierPlugin',
   EC_read_only_draft_error: 'operations.readOnlyDraftError',
+  EC_preset_proxy_transfer_refused: 'operations.presetProxyTransferRefused',
 };
 
 /**

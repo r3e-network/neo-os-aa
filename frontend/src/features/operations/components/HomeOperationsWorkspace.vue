@@ -866,7 +866,7 @@ import {
 } from "@/features/operations/execution.js";
 import {
   OPERATION_PRESETS,
-  buildOperationFromPreset,
+  tryBuildOperationFromPreset,
 } from "@/features/operations/presets.js";
 import { createActivityEvent } from "@/features/operations/activity.js";
 import { createOperationsPreferences } from "@/features/operations/preferences.js";
@@ -1149,8 +1149,11 @@ const invokeTargetContract = computed(() => {
   return /^[0-9a-f]{40}$/.test(sanitized) ? sanitized : "";
 });
 
-const draftCandidate = computed(() =>
-  buildOperationFromPreset({
+// A preset can refuse to build an operation that cannot do what it says (a NEP-17 transfer out of the account
+// proxy returns false and still costs the nonce and the fee). The refusal is a normal answer here: it is shown in
+// the composer and blocks staging.
+const presetBuild = computed(() =>
+  tryBuildOperationFromPreset({
     preset: preset.value,
     account: workspace.account.value,
     invoke: {
@@ -1174,6 +1177,12 @@ const draftCandidate = computed(() =>
       threshold: batchThreshold.value,
     },
   }),
+);
+const draftCandidate = computed(() => presetBuild.value.operation);
+const presetRefusal = computed(() =>
+  presetBuild.value.refusal
+    ? translateError(presetBuild.value.refusal.message, t)
+    : "",
 );
 
 function translateSummary(operation = {}) {
@@ -1214,7 +1223,14 @@ function translateSummary(operation = {}) {
     detail: `${operation.method || "method pending"} ${t("operations.presetSummaryInvokeDetail", "on")} ${operation.targetContract || "target contract pending"}`,
   };
 }
-const composerSummary = computed(() => translateSummary(draftCandidate.value));
+const composerSummary = computed(() =>
+  presetRefusal.value
+    ? {
+        title: t("operations.presetRefusedTitle", "NEP-17 transfer refused"),
+        detail: presetRefusal.value,
+      }
+    : translateSummary(draftCandidate.value),
+);
 const signerProgress = computed(() =>
   summarizeSignerProgress(
     workspace.signerRequirements.value,
@@ -1890,6 +1906,10 @@ async function loadAccount(overrideAddress = "") {
 }
 
 function stageOperation() {
+  if (presetRefusal.value) {
+    toast.error(presetRefusal.value);
+    return;
+  }
   if (["invoke", "multisigDraft"].includes(preset.value)) {
     if (!invokeTargetContract.value || !String(method.value || "").trim())
       return;

@@ -3,8 +3,11 @@
  * Provides methods to check execution conditions before submission.
  */
 
-const { EC, createError, mapRpcError } = require('./errors');
+const { EC, createError, formatError, mapRpcError } = require('./errors');
 const { validateHash160, validateAccountId, sanitizeHex } = require('./validation');
+const { wallet } = require('./neonCompat');
+// Shared with the relay route and the wallet (single source of truth for what counts as a refused transfer).
+const { isProxySourcedTransfer } = require('../../../shared/transferOutcome.mjs');
 
 /**
  * Result of a UserOperation simulation.
@@ -26,8 +29,50 @@ const { validateHash160, validateAccountId, sanitizeHex } = require('./validatio
  */
 
 /**
+ * Reads a Hash160 out of a contract parameter ({ type, value }) or a bare value: 40 hex characters with or
+ * without 0x, or an N address. Returns '' when it is none of those.
+ * @private
+ */
+function hash160FromParam(param) {
+  const raw = param && typeof param === 'object' ? param.value : param;
+  if (typeof raw !== 'string') return '';
+  const clean = raw.trim();
+  if (/^N[a-zA-Z0-9]{33}$/.test(clean)) {
+    try {
+      return sanitizeHex(wallet.getScriptHashFromAddress(clean));
+    } catch (_error) {
+      return '';
+    }
+  }
+  return sanitizeHex(clean);
+}
+
+/**
+ * The account's proxy address as 40 hex characters, in a list: derived from the account id by the client (it
+ * knows the master contract), and for a legacy account the address itself. Empty when it cannot be known (a client
+ * that cannot derive it): then nothing can be judged and nothing is refused.
+ * @private
+ */
+function resolveProxyHashes(client, { accountIdHash, accountAddress }) {
+  const proxies = [];
+  if (accountIdHash && typeof client?.deriveVirtualAccount === 'function') {
+    try {
+      proxies.push(sanitizeHex(client.deriveVirtualAccount(accountIdHash).scriptHash));
+    } catch (_error) {
+      // An id the client cannot derive from is reported by the preview itself.
+    }
+  }
+  if (accountAddress) proxies.push(hash160FromParam(accountAddress));
+  return proxies.filter(Boolean);
+}
+
+/**
  * Simulates a UserOperation before submission.
  * Calls getUserOpValidationPreview to check execution conditions.
+ *
+ * A NEP transfer whose source is the account's own proxy address is reported as an error (OP_001): the token
+ * checks that address as a witness, an owner or relay signature does not provide it, so the transfer returns false
+ * while the transaction HALTs, burns the nonce and pays the fee (recorded on the deployed core, AA-03 case a).
  *
  * IMPORTANT: This is a pre-flight preview only. It checks the deadline, nonce
  * and verifier presence, but it does NOT verify the UserOperation signature or
@@ -110,6 +155,13 @@ async function simulateUserOperation(client, options) {
       errors: ['Method name is required'],
       warnings,
     };
+  }
+
+  const source = hash160FromParam(args?.[0]);
+  const transferFromProxy = resolveProxyHashes(client, { accountIdHash, accountAddress })
+    .some((proxy) => isProxySourcedTransfer({ method, from: source, proxy }));
+  if (transferFromProxy) {
+    errors.push(formatError(createError(EC.OPERATION_PROXY_TRANSFER_REFUSED)));
   }
 
   // Validate deadline against Neo Runtime.Time, which is expressed in milliseconds.

@@ -313,9 +313,15 @@ export async function executeBroadcast({
   }
 
   if (mode === 'relay') {
-    return walletService.relayTransaction(
+    const response = await walletService.relayTransaction(
       buildRelayBroadcastRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, transactionBody, signatures, morpheusNetwork })
     );
+    // The relay answers a broadcast it refused (a VM fault in its preview, a token transfer that returned false)
+    // with HTTP 200, ok:false and no txid. That is not a submission: callers must not report it as sent.
+    if (response?.ok === false) {
+      throw new Error(String(response.exception || response.message || EC.operationFailed));
+    }
+    return response;
   }
 
   return walletService.invoke(

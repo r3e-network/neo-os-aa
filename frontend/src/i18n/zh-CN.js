@@ -730,6 +730,8 @@ export default {
       formatLabelNeoAddress: 'NEO 地址',
       invalidDappId: 'DApp ID 应为小写字母、数字和短横线',
       readOnlyDraftError: '此共享草稿为只读。请打开协作者链接以添加签名。',
+      presetProxyTransferRefused: '此操作暂时无法转出账户地址上的代币。代币合约会检查账户地址是否签署了交易，而所有者签名无法提供该签名，转账将返回 false，同时仍会消耗 nonce 与手续费。这需要代理见证交易，并且需要合约管理员为该账户设置作用域目标。',
+      presetRefusedTitle: 'NEP-17 转账被拒绝',
       operatorAccessRequired: '需要操作者权限来管理中继、广播或此共享草稿的链接轮换。',
       relayCheckIdle: '未检查',
       relayCheckIdleDetail: '提交前请先运行中继预检。',

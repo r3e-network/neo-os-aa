@@ -1,4 +1,9 @@
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout.js';
+import {
+  TRANSFER_RETURNED_FALSE,
+  TRANSFER_RETURNED_FALSE_MESSAGE,
+  findFailedTransferInExecution,
+} from '../../shared/transferOutcome.mjs';
 
 // Confirmation lifecycle states for a relayed/broadcast transaction. These are
 // the values stored on a recent-transaction entry and surfaced to the user.
@@ -50,6 +55,20 @@ export function extractVmException(applicationLog) {
   const executions = Array.isArray(applicationLog.executions) ? applicationLog.executions : null;
   const source = executions && executions.length > 0 ? executions[0] : applicationLog;
   return String(source?.exception ?? source?.Exception ?? '').trim();
+}
+
+/**
+ * True when the HALTed execution carries a token transfer that returned false: the account core hands that
+ * result back untouched, so the transaction HALTs, burns its nonce and its fee, and moves nothing (recorded on
+ * the deployed core, AA-03 case a). Only a method named `transfer` and only a Boolean false count: `false` is
+ * the normal result of other calls (arming a timelocked change). The operations are read from the log's
+ * UserOpExecuted notifications, so no caller has to remember to say what it sent.
+ */
+export function hasFailedTransfer(applicationLog) {
+  if (!applicationLog || typeof applicationLog !== 'object') return false;
+  const executions = Array.isArray(applicationLog.executions) ? applicationLog.executions : null;
+  const source = executions && executions.length > 0 ? executions[0] : applicationLog;
+  return findFailedTransferInExecution(source).length > 0;
 }
 
 /**
@@ -106,10 +125,13 @@ export async function fetchApplicationLog(
 /**
  * Poll getapplicationlog until the transaction reaches a terminal VM state
  * (HALT -> confirmed, FAULT -> failed) or the time budget is exhausted
- * (-> pending). Never throws: a stuck or unreachable node degrades to
- * { status: 'pending' } so the UI never shows a false success.
+ * (-> pending). A HALT whose token transfer returned false is failed too:
+ * nothing moved although the VM finished. Never throws: a stuck or
+ * unreachable node degrades to { status: 'pending' } so the UI never shows a
+ * false success.
  *
- * Returns { status, vmState, exception }.
+ * Returns { status, vmState, exception }, plus `code` when the failure is a
+ * transfer that returned false rather than a VM fault.
  */
 export async function waitForTransactionConfirmation(
   rpcUrl,
@@ -144,6 +166,14 @@ export async function waitForTransactionConfirmation(
     });
     const vmState = extractVmState(log);
     if (vmState === 'HALT') {
+      if (hasFailedTransfer(log)) {
+        return {
+          status: TX_STATUS.FAILED,
+          vmState,
+          exception: TRANSFER_RETURNED_FALSE_MESSAGE,
+          code: TRANSFER_RETURNED_FALSE,
+        };
+      }
       return { status: TX_STATUS.CONFIRMED, vmState, exception: '' };
     }
     if (vmState === 'FAULT') {
