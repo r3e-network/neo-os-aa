@@ -96,16 +96,7 @@ if [[ $run_contracts -eq 1 ]]; then
     echo "cross-repo gate:   set NEOOS_SERVICES_CONTRACT_BUILD to a neo-os-services contract build directory to"
     echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
   fi
-  # Four runtime tests drive a verifier callback through System.Contract.CallWithGasLimit, which
-  # no published Neo core registers. On the pinned (published) packages the TestEngine lacks it, so
-  # those tests are reported skipped, not passed; they run on a core that registers the syscall.
-  if [[ "${NEOOS_REQUIRE_PLATFORM_SYSCALLS:-0}" == "1" ]]; then
-    echo "platform-syscall gate: REQUIRED - the verifier-callback tests fail if the TestEngine lacks System.Contract.CallWithGasLimit."
-  else
-    echo "platform-syscall gate: the 4 verifier-callback runtime tests are NOT RUN unless the TestEngine's Neo core registers"
-    echo "platform-syscall gate:   System.Contract.CallWithGasLimit; published cores do not, so expect 4 extra skipped tests."
-    echo "platform-syscall gate:   set NEOOS_REQUIRE_PLATFORM_SYSCALLS=1 to make their absence a hard failure."
-  fi
+  echo "public-profile gate: verifier-callback tests run on the published TestEngine; private PLATFORM bytecode is checked separately."
   dotnet test neo-abstract-account.sln -c Release --nologo
   node --test scripts/lib/deploy-helpers.test.mjs \
     scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \

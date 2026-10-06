@@ -18,6 +18,7 @@ namespace AbstractAccount
         private const int MaxUserOperationMethodLength = 128;
         private const int MaxUserOperationSignatureLength = 1024;
 
+#if PLATFORM
         // The platform syscall interprets this value in datoshi. 1,000,000,000
         // datoshi is 10 GAS, the maximum resource budget for each verifier callback,
         // including nested verifier calls; NeoVM enforces the ancestor budget transitively.
@@ -25,15 +26,14 @@ namespace AbstractAccount
 
         // System.Contract.CallWithGasLimit is a platform syscall that no published
         // Neo.SmartContract.Framework declares, so this contract declares it. The attribute
-        // emits the same SYSCALL as the framework declaration it replaces: the compiled NEF
-        // and manifest are byte-identical. Only a Neo core that registers the syscall can
-        // execute it.
+        // emits a SYSCALL only a private Neo core can execute. Public builds exclude it.
         private static class PlatformSyscalls
         {
             [Syscall("System.Contract.CallWithGasLimit")]
             public static extern object CallWithGasLimit(
                 UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);
         }
+#endif
 
         // ========================================================================
         // 3. Core Routing: Validation and Execution (aligned with 4337 Validate & Call)
@@ -73,12 +73,20 @@ namespace AbstractAccount
                 if (state.Verifier != UInt160.Zero)
                 {
                     // Delegate to plugin for signature verification (e.g., ecrecover or TEE hardware)
+#if PLATFORM
                     bool isValid = (bool)PlatformSyscalls.CallWithGasLimit(
                         state.Verifier,
                         "validateSignature",
                         CallFlags.ReadOnly,
                         VerifierGasLimit,
                         new object[] { accountId, op });
+#else
+                    bool isValid = (bool)Contract.Call(
+                        state.Verifier,
+                        "validateSignature",
+                        CallFlags.ReadOnly,
+                        new object[] { accountId, op });
+#endif
                     ExecutionEngine.Assert(isValid, "Verifier rejected signature");
                 }
                 else
@@ -145,12 +153,20 @@ namespace AbstractAccount
                     }
                     if (state.Verifier != UInt160.Zero)
                     {
+#if PLATFORM
                         PlatformSyscalls.CallWithGasLimit(
                             state.Verifier,
                             "postExecute",
                             CallFlags.All,
                             VerifierGasLimit,
                             new object[] { accountId, op, result });
+#else
+                        Contract.Call(
+                            state.Verifier,
+                            "postExecute",
+                            CallFlags.All,
+                            new object[] { accountId, op, result });
+#endif
                     }
 
                     OnUserOpExecuted(accountId, op.TargetContract, op.Method, op.Nonce);

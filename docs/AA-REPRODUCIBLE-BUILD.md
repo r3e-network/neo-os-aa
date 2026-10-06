@@ -34,10 +34,29 @@ check. To prove a clean restore, point `NUGET_PACKAGES` at an empty directory fi
 
 ## Reproduce
 
+### Public and private profiles
+
+The default core in `contracts/bin/v3` uses published `System.Contract.Call`: signature validation
+is read-only, while verifier `postExecute` retains write access for accounting. It emits no
+`System.Contract.CallWithGasLimit`. The four verifier-callback tests run on the published TestEngine;
+`tests/localchain/test_public_profile.py` exercises a signed operation on disposable published neoxp.
+
+`bash contracts/compile.sh` also builds the private core separately in `contracts/bin/platform`.
+To build only that profile, run `bash contracts/compile.sh --platform`. The pinned nccs 3.9.1 ignores
+MSBuild `DefineConstants`, so the script prepends `#define PLATFORM` to a temporary copy of the execution
+source and removes the copy afterwards. The private core retains both 10 GAS bounded callbacks and
+requires the private core syscall at runtime; do not deploy that artifact on public networks.
+
+The public profile does not bound verifier gas. The registry allowlist and relayer controls in
+DEC-AA-2 are separate work (CU-65); this build change does not establish those controls or authorize
+a deployment. `contracts/build` remains the historical deployed-artifact fixture.
+
+### Two-build comparison
+
 ```bash
 for dir in "$A" "$B/deeper"; do          # two different absolute paths
   mkdir -p "$dir" && git archive <commit> | tar -x -C "$dir" && (cd "$dir" && bash contracts/compile.sh) &&
-    (cd "$dir/contracts/bin/v3" && find . \( -name '*.nef' -o -name '*.manifest.json' \) | sort | xargs shasum -a 256) > "$dir.sha256"
+    (cd "$dir/contracts/bin" && find . \( -name '*.nef' -o -name '*.manifest.json' \) | sort | xargs shasum -a 256) > "$dir.sha256"
 done
 diff "$A.sha256" "$B/deeper.sha256" && echo reproduced
 ```
@@ -48,25 +67,27 @@ bytes depend only on the sources, the pinned packages and the pinned compiler.
 
 Reference digests of the AA core (SHA-256; they change whenever a contract source or a pin changes):
 
-| Artifact | SHA-256 |
+| Profile / artifact | SHA-256 |
 | --- | --- |
-| `UnifiedSmartWalletV3.nef` | `088f9157bb1c5f1217d29e49f6177f9da5a370fa671941da2c6bb216959bbc94` |
-| `UnifiedSmartWalletV3.manifest.json` | `9db29a5f9c3d2b38e16daa61a1ea9bbee3227d5cbf81026e23ce88d81420c44d` |
+| `v3/UnifiedSmartWalletV3.nef` | `63d33c11d9fe89d7386ec3d96d8a8e79680be432d7ccd01ee17e704e8cced245` |
+| `v3/UnifiedSmartWalletV3.manifest.json` | `b72317b021775187f55ed7851cdc268a63b3598153235cf02df3307007fd1546` |
+| `platform/UnifiedSmartWalletV3.nef` | `088f9157bb1c5f1217d29e49f6177f9da5a370fa671941da2c6bb216959bbc94` |
+| `platform/UnifiedSmartWalletV3.manifest.json` | `9db29a5f9c3d2b38e16daa61a1ea9bbee3227d5cbf81026e23ce88d81420c44d` |
 
-`docs/reports/aa-published-build-reproducibility-20261004.json` lists all 76 files that `compile.sh` writes
+`docs/reports/aa-published-build-reproducibility-20261004.json` lists the 76 files written by the 2026-10-04 build
 (24 contracts; the verifiers and hooks are written twice). Two clean exports at paths of 118 and 165
 characters, each with an empty NuGet cache, produced identical bytes and no warnings.
 
 ## What the bytes are, and are not
 
-- They are byte-identical to what the private framework build (`3.10.2-CI00384`) produced from the source as it
+- The historical 2026-10-04 artifacts were byte-identical to what the private framework build (`3.10.2-CI00384`) produced from the source as it
   was before the syscall declaration moved into the contract, for all 24 contracts, so contract behaviour and
   ABI did not change when the pin moved.
 - They are **not** the bytes deployed on MainNet or TestNet. Those cores were compiled from older source,
   before the verifier gas cap and later changes, so the current NEF differs from the deployed one.
   Deployed-versus-source evidence for the AA core is a separate task.
-- The core emits `SYSCALL System.Contract.CallWithGasLimit`, which no published Neo core registers, so four
-  runtime tests are skipped on these packages (`docs/NEO-PLATFORM-PACKAGES.md`).
+- The historical 2026-10-04 core emitted `SYSCALL System.Contract.CallWithGasLimit`. Only the private
+  PLATFORM profile now emits it; the public profile's four callback tests run without a skip guard.
 - 3.10.1 is the newest published framework. 3.10.0 gives the same bytes. 3.9.1 and older bind
   `ContractManagement.Update` to the two-argument native overload instead of the three-argument one (a
   different method token and one byte less code), so every later method offset shifts and the build differs.

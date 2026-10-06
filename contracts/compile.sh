@@ -10,6 +10,22 @@ source "$ROOT_DIR/scripts/dotnet_env.sh"
 # compiled with anything but the pinned nccs package are not the pinned build.
 node "$ROOT_DIR/scripts/check_neo_platform_packages.mjs" --compiler-only
 
+# nccs 3.9.1 does not read MSBuild DefineConstants. Define PLATFORM in a disposable
+# source copy; never mutate the public sources or write private bytes to bin/v3.
+if [[ "${1:-}" == "--platform" ]]; then
+  profile_dir="$(mktemp -d "${TMPDIR:-/tmp}/aa-platform.XXXXXX")"
+  trap 'rm -rf "$profile_dir"' EXIT
+  mkdir -p "$profile_dir/contracts"
+  cp "$ROOT_DIR/Directory.Build.props" "$ROOT_DIR/nuget.config" "$profile_dir/"
+  cp "$ROOT_DIR"/contracts/*.cs "$ROOT_DIR/contracts/UnifiedSmartWallet.csproj" \
+    "$ROOT_DIR/contracts/packages.lock.json" "$profile_dir/contracts/"
+  { printf '#define PLATFORM\n'; cat "$ROOT_DIR/contracts/UnifiedSmartWallet.Execution.cs"; } \
+    > "$profile_dir/contracts/UnifiedSmartWallet.Execution.cs"
+  cd "$profile_dir/contracts"
+  "$NCCS_BIN" UnifiedSmartWallet.csproj -o "$ROOT_DIR/contracts/bin/platform"
+  exit 0
+fi
+
 echo "Cleaning stale build intermediates..."
 find "$ROOT_DIR/contracts" -type d -name obj -prune -exec rm -rf {} +
 
@@ -66,5 +82,8 @@ echo "Compiling Recovery Contracts..."
 pushd recovery >/dev/null
 "$NCCS_BIN" ./MorpheusSocialRecoveryVerifier.csproj -o ../bin/v3
 popd >/dev/null
+
+echo "Compiling the private PLATFORM core into its separate artifact directory..."
+bash "$ROOT_DIR/contracts/compile.sh" --platform
 
 echo "Compilation completed successfully."

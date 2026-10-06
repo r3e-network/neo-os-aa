@@ -278,9 +278,6 @@ public class ExecuteUserOpRuntimeTests
     [TestMethod]
     public void ExecuteUserOp_RecoveryVerifier_EnforcesOwnerAndCoreContext()
     {
-        // Runs the verifier callback through the gas-bounded syscall; see PlatformSyscallRequirement.
-        PlatformSyscallRequirement.RequireRegistered(PlatformSyscallRequirement.CallWithGasLimit);
-
         WalletHarness h = new();
         UInt160 recoveryVerifier = h.Fx.Deploy("SocialRecoveryVerifier");
         h.Fx.CallVoid(recoveryVerifier, "setAuthorizedCore", h.Wallet);
@@ -460,9 +457,6 @@ public class ExecuteUserOpRuntimeTests
     [TestMethod]
     public void ExecuteUserOp_VerifierPath_AcceptsValidSessionSignatureWithoutOwnerWitness()
     {
-        // Runs the verifier callback through the gas-bounded syscall; see PlatformSyscallRequirement.
-        PlatformSyscallRequirement.RequireRegistered(PlatformSyscallRequirement.CallWithGasLimit);
-
         WalletHarness h = new();
         using P256SessionKey key = new();
         UInt160 accountId = h.RegisterSessionKeyAccount(key, out UInt160 verifier);
@@ -479,9 +473,6 @@ public class ExecuteUserOpRuntimeTests
     [TestMethod]
     public void ExecuteUserOp_VerifierPath_RejectsTamperedSessionSignature()
     {
-        // Runs the verifier callback through the gas-bounded syscall; see PlatformSyscallRequirement.
-        PlatformSyscallRequirement.RequireRegistered(PlatformSyscallRequirement.CallWithGasLimit);
-
         WalletHarness h = new();
         using P256SessionKey key = new();
         UInt160 accountId = h.RegisterSessionKeyAccount(key, out UInt160 verifier);
@@ -501,9 +492,6 @@ public class ExecuteUserOpRuntimeTests
     [TestMethod]
     public void ExecuteUserOp_ActiveEscape_OnlyBackupOwnerWitnessMayExecute()
     {
-        // Runs the verifier callback through the gas-bounded syscall; see PlatformSyscallRequirement.
-        PlatformSyscallRequirement.RequireRegistered(PlatformSyscallRequirement.CallWithGasLimit);
-
         WalletHarness h = new();
         using P256SessionKey key = new();
         UInt160 accountId = h.RegisterSessionKeyAccount(key, out UInt160 verifier);

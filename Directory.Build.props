@@ -7,7 +7,7 @@
       other Neo package it pulls in are in contracts/neo-platform-packages.json; change this
       value, that file and the packages.lock.json files together (docs/AA-REPRODUCIBLE-BUILD.md,
       "How to bump"). scripts/check_neo_platform_packages.mjs enforces all three.
-      The AA core also needs the System.Contract.CallWithGasLimit syscall, which no published
+      The private PLATFORM core uses the System.Contract.CallWithGasLimit syscall, which no published
       framework declares; the contract declares it itself (UnifiedSmartWallet.Execution.cs).
     -->
     <NeoSmartContractFrameworkVersion Condition="'$(NeoSmartContractFrameworkVersion)' == ''">3.10.1</NeoSmartContractFrameworkVersion>
