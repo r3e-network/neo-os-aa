@@ -1,0 +1,181 @@
+{
+  "variant": "deployed",
+  "totals": {
+    "checks": 54,
+    "executedTransactions": 66,
+    "simulatedFaults": 21,
+    "nodeRefusals": 6
+  },
+  "artifacts": [
+    {
+      "path": "contracts/build/UnifiedSmartWalletV3.nef",
+      "sha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b"
+    },
+    {
+      "path": "contracts/build/UnifiedSmartWalletV3.manifest.json",
+      "sha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4"
+    },
+    {
+      "path": "contracts/build/MockTransferTarget.nef",
+      "sha256": "3ef546218ab5b419f9b6aeb570cb22f2ec18b9624d44f7ae937593e5f7a1bd7e"
+    },
+    {
+      "path": "contracts/build/MockTransferTarget.manifest.json",
+      "sha256": "22ebc39d80962bf18e10efd2998034c3ba0dac58f82ae169694d6d5de49e23d5"
+    },
+    {
+      "path": "contracts/build/WebAuthnVerifier.nef",
+      "sha256": "09a585f02d75336b48d8e9af613e12d848356db60c7768ae49408e57e6dfe9eb"
+    },
+    {
+      "path": "contracts/build/WebAuthnVerifier.manifest.json",
+      "sha256": "a00ff4495c0a4788de8e350af566f3b966102c989460c356efcace3b0e7275c2"
+    },
+    {
+      "path": "contracts/build/SessionKeyVerifier.nef",
+      "sha256": "614ac9db96181b26a663fbeaa4a5022db7e6f856196f041948cc8206b3d1029f"
+    },
+    {
+      "path": "contracts/build/SessionKeyVerifier.manifest.json",
+      "sha256": "866610e6d788f25913e2de96b2b8a9a7962011d2816d74bc0e3f147c05e9b3b2"
+    },
+    {
+      "path": "contracts/build/AAPaymaster.nef",
+      "sha256": "2a8623b9cff55a5cd64c554dbc1f9983568746a3ab7fb5e454c291f9f77c6f3a"
+    },
+    {
+      "path": "contracts/build/AAPaymaster.manifest.json",
+      "sha256": "5728ccffa8554e51aa99ce8d8ab39c8b3f1654692f2912d1bedefdf7cd350c29"
+    },
+    {
+      "path": "contracts/build/WhitelistHook.nef",
+      "sha256": "01b898be5f24a742dccd8a2efe6d4af2fb05514d495ad220823eec0581232927"
+    },
+    {
+      "path": "contracts/build/WhitelistHook.manifest.json",
+      "sha256": "3c9bcd536eff6c99d50d2a385d68d949cba1072744ba46e6d4bcb945b4338504"
+    },
+    {
+      "path": "contracts/build/DailyLimitHook.nef",
+      "sha256": "9837fc08dbcd2eb2a8cc3771da1bdfca2a3b9ba484f0e6f217dab28e004e08ae"
+    },
+    {
+      "path": "contracts/build/DailyLimitHook.manifest.json",
+      "sha256": "47ad3f682705ecd0b5bdc92cdebac4acd5d1828cf4603ed4790fbfcd02059f45"
+    },
+    {
+      "path": "contracts/build/SocialRecoveryVerifier.nef",
+      "sha256": "fdcdb5a74295e26fcc9d6e8da2f343130d76ab1fa7db2dced79f5834a3e33ecd"
+    },
+    {
+      "path": "contracts/build/SocialRecoveryVerifier.manifest.json",
+      "sha256": "4e44e5f368289d58d430deff2a2db7ab73f70f80d862d8030c4bb481b0178517"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "AA-01/02 create + native execute",
+      "checks": [
+        "backup owner recorded",
+        "no verifier: native fallback",
+        "nonce advanced to 1",
+        "batch consumed two nonces",
+        "2D nonce channels independent"
+      ]
+    },
+    {
+      "name": "AA-03 send GAS (proxy witness)",
+      "checks": [
+        "proxy address holds 10 GAS",
+        "a. no GAS moved although the operation HALTed (native token refuses: proxy is not a witness)",
+        "a. the nonce was still consumed",
+        "scope target recorded",
+        "c. buyer received exactly 1 GAS from the AA proxy address",
+        "c. proxy address paid exactly 1 GAS; the owner wallet paid the fees",
+        "c. nonce advanced",
+        "f. proxy balance untouched",
+        "h1. buyer received 1 NEO from the AA proxy address"
+      ]
+    },
+    {
+      "name": "AA-04 key verifier (P-256)",
+      "checks": [
+        "public key stored through registration",
+        "nonce advanced"
+      ]
+    },
+    {
+      "name": "arm timelocked configuration",
+      "checks": [
+        "first call arms the timelock and returns false",
+        "first call arms the timelock and returns false",
+        "hook config armed",
+        "escape active"
+      ]
+    },
+    {
+      "name": "AA-07b social recovery phase 1",
+      "checks": [
+        "recovery owner recorded",
+        "threshold met: RecoveryReady emitted, timelock started"
+      ]
+    },
+    {
+      "name": "AA-05/06/07 session key, hook, escape",
+      "checks": [
+        "session key stored for session-relay",
+        "session key stored for session-pm",
+        "session op consumed nonce 0",
+        "target whitelisted",
+        "escape finalized"
+      ]
+    },
+    {
+      "name": "AA-07b social recovery phase 2",
+      "checks": [
+        "RecoveryFinalized emitted",
+        "recovery owner is now the buyer key",
+        "account nonce continues across the owner change",
+        "core backup owner unchanged (recovery rotates the verifier's owner only)"
+      ]
+    },
+    {
+      "name": "AA-03b value flow (session key + proxy witness + daily limit)",
+      "checks": [
+        "daily limit stored (5 GAS)",
+        "buyer +3 GAS, proxy -3 GAS exactly",
+        "the owner wallet paid nothing and signed nothing",
+        "the relay paid the fees",
+        "nonce advanced",
+        "5 GAS moved in total"
+      ]
+    },
+    {
+      "name": "AA-08 on-chain paymaster",
+      "checks": [
+        "deposit credited",
+        "SponsoredUserOpExecuted emitted",
+        "sponsor deposit was debited",
+        "sponsored op consumed nonce 0"
+      ]
+    },
+    {
+      "name": "AA-09 relay route",
+      "checks": [
+        "preflight simulation accepts the valid session-signed op",
+        "preflight reports a fault for a tampered signature",
+        "default posture (no paymaster, no opt-in) refuses to broadcast",
+        "no fee ceiling: refuses to broadcast",
+        "op addressed to another contract refused before signing",
+        "a fee ceiling below the real cost stops the broadcast",
+        "gasless broadcast returned a txid",
+        "8. preflight refuses a session-signed GAS transfer that returns false",
+        "8. refusal preserves the false transfer result (proxy is not a witness)",
+        "9. broadcast refuses the false transfer without a txid",
+        "9. refused transfer leaves the nonce unchanged",
+        "9. refused transfer leaves the proxy GAS balance unchanged",
+        "the user-operation nonce advanced on chain"
+      ]
+    }
+  ]
+}
