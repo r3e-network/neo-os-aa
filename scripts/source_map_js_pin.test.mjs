@@ -29,14 +29,28 @@ function advisoryViolations(lock, { name, patched }) {
 }
 
 function isPatched(version, patched) {
-  if (typeof version !== 'string') return false;
-  const parse = (value) => value.split('.').map((part) => Number.parseInt(part, 10) || 0);
+  // Require canonical stable releases; prereleases do not establish a patch floor.
+  const stable = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+  if (typeof version !== 'string' || !stable.test(version)) return false;
+  const parse = (value) => value.split('.').map(BigInt);
   const [major, minor, patch] = parse(version);
   const [wantMajor, wantMinor, wantPatch] = parse(patched);
   if (major !== wantMajor) return major > wantMajor;
   if (minor !== wantMinor) return minor > wantMinor;
   return patch >= wantPatch;
 }
+
+test('the patch floor accepts only canonical stable versions at or above the fix', () => {
+  for (const version of [
+    '1.2.1', '1.2.2-rc.0', '1.3.0-beta.1', '2.0.0-rc.0',
+    '1.2.2garbage', '1.2', '1.2.2.0', '01.2.2', '', null, undefined,
+  ]) {
+    assert.equal(isPatched(version, ADVISORY.patched), false, `${version} must be rejected`);
+  }
+  for (const version of ['1.2.2', '1.2.3', '1.3.0', '2.0.0']) {
+    assert.equal(isPatched(version, ADVISORY.patched), true, `${version} must be accepted`);
+  }
+});
 
 test('source-map-js stays pinned to the patched transitive release', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(FRONTEND, 'package.json'), 'utf8'));
