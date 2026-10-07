@@ -81,14 +81,14 @@
       </svg>
       <p class="text-sm font-semibold text-aa-text mb-1">
         {{
-          t("operations.discoverNotConfigured", "Address Market Not Configured")
+          t("operations.discoverNotConfigured", "Account Discovery Not Configured")
         }}
       </p>
       <p class="text-xs text-aa-muted max-w-sm mx-auto">
         {{
           t(
             "operations.discoverNotConfiguredHint",
-            "Account discovery requires the address market contract to be configured. Use direct account lookup below instead.",
+            "Account discovery reads registered accounts from the NeoOS read API. Set the read API base URL and the abstract account core hash for this network, or use direct account lookup below.",
           )
         }}
       </p>
@@ -115,7 +115,7 @@
     </div>
 
     <div
-      v-else-if="searched && discoveredListings.length === 0"
+      v-else-if="searched && registeredAccounts.length === 0 && discoveredListings.length === 0"
       class="empty-state"
     >
       <svg
@@ -139,13 +139,50 @@
         {{
           t(
             "operations.noAccountsHint",
-            "No market listings or owned accounts were found for your connected wallet.",
+            "The NeoOS read API lists no accounts registered to your connected wallet, and the address market has no listings for it.",
           )
         }}
       </p>
     </div>
 
-    <div v-else-if="discoveredListings.length > 0" class="space-y-3 mb-6">
+    <div v-if="registeredAccounts.length > 0" class="space-y-3 mb-6">
+      <p class="text-xs font-bold uppercase text-aa-muted">
+        {{ t("operations.discoveredRegisteredAccounts", "Registered Accounts") }}
+      </p>
+      <div
+        v-for="account in registeredAccounts"
+        :key="account.accountIdHash"
+        class="rounded-xl border border-aa-border bg-aa-panel/40 p-4 hover:border-aa-orange/30 transition-colors duration-200"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="text-xs text-aa-muted font-mono truncate">
+              {{ truncateHash(account.accountIdHash) }}
+            </p>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+              <span
+                v-if="account.registryBlockIndex"
+                class="text-xs text-aa-muted"
+                >{{ t("operations.registeredAtBlock", "Registered at block") }}
+                {{ account.registryBlockIndex }}</span
+              >
+              <span v-if="account.verifier" class="text-xs text-aa-muted"
+                >{{ t("operations.verifierShort", "Verifier") }}:
+                {{ truncateHash(account.verifier) }}</span
+              >
+            </div>
+          </div>
+          <button
+            class="btn-primary btn-xs shrink-0"
+            @click="$emit('select', account.accountIdHash)"
+          >
+            {{ t("operations.loadThisAccount", "Load") }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="discoveredListings.length > 0" class="space-y-3 mb-6">
       <p class="text-xs font-bold uppercase text-aa-muted">
         {{ t("operations.discoveredListings", "Market Listings") }}
       </p>
@@ -239,6 +276,10 @@ import {
   findListingsForWallet,
   isAddressMarketConfigured,
 } from "@/services/addressMarketService.js";
+import {
+  discoverAAAccountsForWallet,
+  isAAReadApiConfigured,
+} from "@/services/aaAccountDiscoveryService.js";
 import { translateError } from "@/config/errorCodes.js";
 
 const props = defineProps({
@@ -251,11 +292,14 @@ const { t } = useI18n();
 
 const searching = ref(false);
 const searched = ref(false);
+const registeredAccounts = ref([]);
 const discoveredListings = ref([]);
 const error = ref("");
 const directLookupValue = ref("");
 
-const isConfigured = computed(() => isAddressMarketConfigured());
+// Discovery reads the NeoOS read API, so it no longer depends on the address
+// market being configured; the market listing scan stays an extra when it is.
+const isConfigured = computed(() => isAAReadApiConfigured());
 
 const canSearch = computed(() => {
   if (!isConfigured.value) return false;
@@ -268,9 +312,9 @@ function walletScriptHash() {
   if (!addr) return "";
   try {
     if (addr.startsWith("N") && addr.length === 34) {
-      return getScriptHashFromAddress(addr);
+      return `0x${getScriptHashFromAddress(addr)}`;
     }
-    return sanitizeHex(addr);
+    return `0x${sanitizeHex(addr)}`;
   } catch (e) {
     if (import.meta.env.DEV)
       console.warn(
@@ -294,9 +338,12 @@ async function discoverAccounts() {
   searching.value = true;
   error.value = "";
   try {
-    discoveredListings.value = await findListingsForWallet(scriptHash);
+    registeredAccounts.value = await discoverAAAccountsForWallet({
+      address: scriptHash,
+    });
     searched.value = true;
   } catch (err) {
+    registeredAccounts.value = [];
     error.value =
       translateError(err?.message, t) ||
       t(
@@ -305,6 +352,22 @@ async function discoverAccounts() {
       );
   } finally {
     searching.value = false;
+  }
+  if (error.value || !isAddressMarketConfigured()) {
+    discoveredListings.value = [];
+    return;
+  }
+  try {
+    discoveredListings.value = await findListingsForWallet(scriptHash);
+  } catch (err) {
+    // The read API answered, so the market scan is the optional half: keep the
+    // registered accounts and let the market failure stay out of the panel.
+    discoveredListings.value = [];
+    if (import.meta.env.DEV)
+      console.warn(
+        "[AccountDiscoveryPanel] market listing scan failed:",
+        err?.message,
+      );
   }
 }
 
