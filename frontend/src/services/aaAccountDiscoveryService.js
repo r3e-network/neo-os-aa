@@ -5,10 +5,12 @@ import { getScriptHashFromAddress } from '../utils/neo.js';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout.js';
 
 // The wallet discovers its abstract accounts from the NeoOS read API instead of
-// scanning the address market over a hard-coded public host. The host, network
-// and AA core contract all come from runtime configuration, so a local stack
-// points the wallet at its own read API through VITE_AA_N3INDEX_API_BASE_URL,
-// VITE_AA_N3INDEX_NETWORK and the AA hash, with no rebuild.
+// scanning the address market over a hard-coded public host. The host comes from
+// the AA discovery runtime setting (VITE_AA_N3INDEX_API_BASE_URL, or an explicit
+// VITE_N3INDEX_API_BASE_URL), which has no compiled-in default: without it every
+// entry point below refuses before building a URL, so an unconfigured local stack
+// can never fall back to the public production read API. The network and the AA
+// core contract come from runtime configuration the same way, with no rebuild.
 //
 // Wire contract (docs/api/aa-accounts.md in neo-os-fura): both routes require
 // contract_hash, because an event name describes a payload shape and not the
@@ -62,7 +64,7 @@ export function normalizeAAContractHash(contractHash) {
 }
 
 export function isAAReadApiConfigured({
-  baseUrl = RUNTIME_CONFIG.n3IndexApiBaseUrl,
+  baseUrl = RUNTIME_CONFIG.aaReadApiBaseUrl,
   contractHash = RUNTIME_CONFIG.abstractAccountHash,
 } = {}) {
   try {
@@ -72,9 +74,16 @@ export function isAAReadApiConfigured({
   }
 }
 
+// assertAAReadApiBaseUrl is the discovery path's fail-closed gate: with no
+// explicit read API base URL there is no host to guess, so the call is refused
+// before a URL is built or a transport is touched.
+function assertAAReadApiBaseUrl(baseUrl) {
+  if (!trimTrailingSlash(baseUrl)) throw new Error(EC.rpcRequestFailed);
+}
+
 function buildReadApiUrl(path, baseUrl) {
+  assertAAReadApiBaseUrl(baseUrl);
   const normalizedBase = trimTrailingSlash(baseUrl);
-  if (!normalizedBase) throw new Error(EC.rpcRequestFailed);
   return `${normalizedBase}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
@@ -161,7 +170,7 @@ async function readApiJSON(url, { fetchImpl, timeoutMs } = {}) {
 
 export async function fetchAAAccountsByOwner({
   owner,
-  baseUrl = RUNTIME_CONFIG.n3IndexApiBaseUrl,
+  baseUrl = RUNTIME_CONFIG.aaReadApiBaseUrl,
   network = RUNTIME_CONFIG.n3IndexNetwork,
   contractHash = RUNTIME_CONFIG.abstractAccountHash,
   fetchImpl,
@@ -182,7 +191,7 @@ export async function fetchAAAccountsByOwner({
 
 export async function fetchAAAccountById({
   accountId,
-  baseUrl = RUNTIME_CONFIG.n3IndexApiBaseUrl,
+  baseUrl = RUNTIME_CONFIG.aaReadApiBaseUrl,
   network = RUNTIME_CONFIG.n3IndexNetwork,
   contractHash = RUNTIME_CONFIG.abstractAccountHash,
   fetchImpl,
@@ -196,15 +205,18 @@ export async function fetchAAAccountById({
 }
 
 // discoverAAAccountsForWallet is the panel-facing call: the connected wallet
-// address is the backup owner the AA core recorded at registration.
+// address is the backup owner the AA core recorded at registration. The address
+// is refused first, then the read API setting, so neither an empty address nor a
+// missing configuration ever reaches a host.
 export async function discoverAAAccountsForWallet({
   address,
-  baseUrl = RUNTIME_CONFIG.n3IndexApiBaseUrl,
+  baseUrl = RUNTIME_CONFIG.aaReadApiBaseUrl,
   network = RUNTIME_CONFIG.n3IndexNetwork,
   contractHash = RUNTIME_CONFIG.abstractAccountHash,
   fetchImpl,
   timeoutMs,
 } = {}) {
   if (!String(address || '').trim()) throw new Error(EC.addressValidationFailed);
+  assertAAReadApiBaseUrl(baseUrl);
   return fetchAAAccountsByOwner({ owner: address, baseUrl, network, contractHash, fetchImpl, timeoutMs });
 }

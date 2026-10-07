@@ -5,7 +5,7 @@ import http from "node:http";
 import path from "node:path";
 
 import { EC } from "../src/config/errorCodes.js";
-import { RUNTIME_CONFIG } from "../src/config/runtimeConfig.js";
+import { RUNTIME_CONFIG, getRuntimeConfig } from "../src/config/runtimeConfig.js";
 import { getScriptHashFromAddress } from "../src/utils/neo.js";
 import {
   AA_ACCOUNTS_PATH_SUFFIX,
@@ -55,14 +55,21 @@ async function withLocalReadApi(handler, run) {
 }
 
 test("abstract-account discovery reads the configured NeoOS read API", () => {
+  // The shared indexer base URL keeps its public default for the other
+  // consumers (contract lookup, the address market scan). The discovery path
+  // must not use it: with nothing configured that default silently listed
+  // accounts from the public production read API.
   assert.equal(RUNTIME_CONFIG.n3IndexApiBaseUrl.length > 0, true);
+  assert.equal(RUNTIME_CONFIG.aaReadApiBaseUrl, "");
+  assert.equal(isAAReadApiConfigured(), false);
   const source = fs.readFileSync(path.resolve("src/services/aaAccountDiscoveryService.js"), "utf8");
   assert.doesNotMatch(
     source,
     /https?:\/\/(api\.)?n3index\.dev/,
     "the discovery service must take its host from runtime config, never hard-code the public indexer",
   );
-  assert.match(source, /n3IndexApiBaseUrl/);
+  assert.match(source, /baseUrl = RUNTIME_CONFIG\.aaReadApiBaseUrl/);
+  assert.doesNotMatch(source, /baseUrl = RUNTIME_CONFIG\.n3IndexApiBaseUrl/);
 });
 
 test("owner and account id inputs are normalized or refused", () => {
@@ -192,4 +199,90 @@ test("read API failures surface as one translated request error", async () => {
     () => fetchAAAccountsByOwner({ owner: OWNER, baseUrl: "", network: "testnet", contractHash: AA_CORE }),
     (error) => error.message === EC.rpcRequestFailed,
   );
+});
+
+test("discovery fails closed and contacts no host without an explicit read API setting", async () => {
+  const requests = [];
+  const fetchImpl = async (url) => {
+    requests.push(String(url));
+    throw new Error("discovery must not reach any host without an explicit read API base URL");
+  };
+  await assert.rejects(
+    () => discoverAAAccountsForWallet({ address: OWNER_ADDRESS, fetchImpl }),
+    (error) => error.message === EC.rpcRequestFailed,
+  );
+  await assert.rejects(
+    () => fetchAAAccountsByOwner({ owner: OWNER, network: "testnet", contractHash: AA_CORE, fetchImpl }),
+    (error) => error.message === EC.rpcRequestFailed,
+  );
+  await assert.rejects(
+    () => fetchAAAccountById({ accountId: ACCOUNT_ID, network: "testnet", contractHash: AA_CORE, fetchImpl }),
+    (error) => error.message === EC.rpcRequestFailed,
+  );
+  assert.deepEqual(requests, []);
+  assert.equal(isAAReadApiConfigured(), false);
+  assert.equal(RUNTIME_CONFIG.aaReadApiBaseUrl, "");
+});
+
+test("an explicit AA read API setting is the only host discovery queries", async () => {
+  const explicit = getRuntimeConfig({
+    VITE_AA_N3INDEX_API_BASE_URL: "http://127.0.0.1:41295",
+    VITE_N3INDEX_API_BASE_URL: "https://api.n3index.dev",
+  });
+  assert.equal(explicit.aaReadApiBaseUrl, "http://127.0.0.1:41295");
+  // The shared key keeps its public default for the other consumers when no
+  // explicit setting is present.
+  assert.equal(getRuntimeConfig({}).n3IndexApiBaseUrl, "https://api.n3index.dev");
+  assert.equal(getRuntimeConfig({}).aaReadApiBaseUrl, "");
+  assert.equal(
+    getRuntimeConfig({ VITE_N3INDEX_API_BASE_URL: "http://127.0.0.1:41296" }).aaReadApiBaseUrl,
+    "http://127.0.0.1:41296",
+  );
+
+  const requests = [];
+  const fetchImpl = async (url) => {
+    requests.push(String(url));
+    return { ok: true, json: async () => ({ data: [ACCOUNT_ROW] }) };
+  };
+  const accounts = await discoverAAAccountsForWallet({
+    address: OWNER_ADDRESS,
+    baseUrl: explicit.aaReadApiBaseUrl,
+    network: "testnet",
+    contractHash: AA_CORE,
+    fetchImpl,
+  });
+  assert.equal(accounts.length, 1);
+  assert.equal(accounts[0].accountIdHash, ACCOUNT_ID);
+  assert.deepEqual(requests, [
+    `http://127.0.0.1:41295/indexer/v1/networks/testnet/aa/accounts?owner=${OWNER}&contract_hash=${AA_CORE}`,
+  ]);
+});
+
+test("an empty wallet address is refused before any request", async () => {
+  const requests = [];
+  const fetchImpl = async (url) => {
+    requests.push(String(url));
+    throw new Error("discovery must not be reached without a wallet address");
+  };
+  for (const address of ["", "   ", "\t\n"]) {
+    await assert.rejects(
+      () => discoverAAAccountsForWallet({ address, fetchImpl }),
+      (error) => error.message === EC.addressValidationFailed,
+      `address ${JSON.stringify(address)} must be refused`,
+    );
+  }
+  for (const address of ["not-an-address", "0x1234", `0x${"ab".repeat(32)}`]) {
+    await assert.rejects(
+      () =>
+        discoverAAAccountsForWallet({
+          address,
+          baseUrl: "http://127.0.0.1:41295",
+          contractHash: AA_CORE,
+          fetchImpl,
+        }),
+      (error) => error.message === EC.addressValidationFailed,
+      `address ${JSON.stringify(address)} must be refused`,
+    );
+  }
+  assert.deepEqual(requests, []);
 });
