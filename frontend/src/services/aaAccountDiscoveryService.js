@@ -14,9 +14,25 @@ import { fetchWithTimeout } from '../utils/fetchWithTimeout.js';
 //
 // Wire contract (docs/api/aa-accounts.md in neo-os-fura): both routes require
 // contract_hash, because an event name describes a payload shape and not the
-// identity of the contract that emitted it.
+// identity of the contract that emitted it. The base URL is the origin that
+// serves the read API under /indexer — the local edge or the deployment's
+// reverse proxy, not the read API's own listener, which serves /v1/... .
+//
+// The by-owner route is paged: it answers one limit/offset window with
+// {"data": [...], "paging": {limit, offset, count}} and no total, newest
+// registration first. fetchAAAccountsByOwner walks those windows until the read
+// API answers an empty one, so a wallet with more accounts than one page never
+// silently loses the older ones.
 
 export const AA_ACCOUNTS_PATH_SUFFIX = '/aa/accounts';
+
+// One wallet read asks for the read API's documented maximum page, so an
+// ordinary wallet is one page plus the empty window that ends the walk, and the
+// empty window only appears after 200 consecutive unusable rows if it is not
+// the true end of the list. The page bound stops a server that never reaches an
+// empty window; the walk then refuses rather than answering a truncated list.
+export const AA_ACCOUNTS_PAGE_LIMIT = 200;
+export const AA_ACCOUNTS_MAX_PAGES = 25;
 
 const HASH_HEX_LENGTH = 40;
 
@@ -87,16 +103,64 @@ function buildReadApiUrl(path, baseUrl) {
   return `${normalizedBase}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+// normalizeAAPage validates one requested window against the read API's
+// documented bounds: limit from 1 to 200, offset a non-negative integer.
+function normalizeAAPage({ limit = AA_ACCOUNTS_PAGE_LIMIT, offset = 0 } = {}) {
+  const pageLimit = Number(limit);
+  const pageOffset = Number(offset);
+  if (!Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > AA_ACCOUNTS_PAGE_LIMIT) {
+    throw validationError();
+  }
+  if (!Number.isInteger(pageOffset) || pageOffset < 0) throw validationError();
+  return { limit: pageLimit, offset: pageOffset };
+}
+
+// readAAPage validates one by-owner answer against the request that produced
+// it. The read API answers a window, so a page whose paging block disagrees
+// with the rows it carries is a shape this module cannot walk: it fails closed
+// instead of guessing which half to believe.
+function readAAPage(payload, { limit, offset }) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error(EC.rpcRequestFailed);
+  }
+  const rows = payload.data;
+  if (!Array.isArray(rows)) throw new Error(EC.rpcRequestFailed);
+  const paging = payload.paging;
+  if (!paging || typeof paging !== 'object' || Array.isArray(paging)) {
+    throw new Error(EC.rpcRequestFailed);
+  }
+  const pageLimit = Number(paging.limit);
+  const pageOffset = Number(paging.offset);
+  const pageCount = Number(paging.count);
+  if (!Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > limit) {
+    throw new Error(EC.rpcRequestFailed);
+  }
+  if (!Number.isInteger(pageOffset) || pageOffset !== offset) {
+    throw new Error(EC.rpcRequestFailed);
+  }
+  if (!Number.isInteger(pageCount) || pageCount !== rows.length || pageCount > pageLimit) {
+    throw new Error(EC.rpcRequestFailed);
+  }
+  return { rows, pageLimit, pageCount };
+}
+
 export function buildAAAccountsByOwnerPath({
   network = RUNTIME_CONFIG.n3IndexNetwork,
   owner,
   contractHash = RUNTIME_CONFIG.abstractAccountHash,
+  limit,
+  offset,
 } = {}) {
   const path = `/indexer/v1/networks/${normalizeAANetwork(network)}${AA_ACCOUNTS_PATH_SUFFIX}`;
   const query = new URLSearchParams({
     owner: normalizeAAOwner(owner),
     contract_hash: normalizeAAContractHash(contractHash),
   });
+  if (limit !== undefined || offset !== undefined) {
+    const page = normalizeAAPage({ limit, offset });
+    query.set('limit', String(page.limit));
+    query.set('offset', String(page.offset));
+  }
   return `${path}?${query.toString()}`;
 }
 
@@ -168,25 +232,61 @@ async function readApiJSON(url, { fetchImpl, timeoutMs } = {}) {
   }
 }
 
+// fetchAAAccountsByOwner reads every account the read API serves for one owner.
+// The route pages (limit default 20, maximum 200) and the envelope carries no
+// total, so the walk continues while the API has a window to serve and stops on
+// the empty window that ends the list. The order is the API's own
+// newest-registration-first order, one account appears once, and a page that
+// cannot advance the walk — a malformed envelope, an all-unusable page, or a
+// window that repeats rows already returned — fails closed rather than
+// becoming a partial list.
 export async function fetchAAAccountsByOwner({
   owner,
   baseUrl = RUNTIME_CONFIG.aaReadApiBaseUrl,
   network = RUNTIME_CONFIG.n3IndexNetwork,
   contractHash = RUNTIME_CONFIG.abstractAccountHash,
+  limit = AA_ACCOUNTS_PAGE_LIMIT,
+  offset = 0,
+  maxPages = AA_ACCOUNTS_MAX_PAGES,
   fetchImpl,
   timeoutMs,
 } = {}) {
-  const url = buildReadApiUrl(buildAAAccountsByOwnerPath({ network, owner, contractHash }), baseUrl);
-  const payload = await readApiJSON(url, { fetchImpl, timeoutMs });
-  const rows = payload?.data;
-  if (!Array.isArray(rows)) throw new Error(EC.rpcRequestFailed);
-  const accounts = rows.map(normalizeAAAccountRow).filter(Boolean);
-  if (rows.length > 0 && accounts.length === 0) {
-    // Every row was unusable: the wire shape is not the one this module reads,
-    // so an empty list would be a false "you own no accounts".
-    throw new Error(EC.rpcRequestFailed);
+  const page = normalizeAAPage({ limit, offset });
+  const pageBound = Number(maxPages);
+  if (!Number.isInteger(pageBound) || pageBound < 1) throw validationError();
+
+  const accounts = [];
+  const seenAccountIds = new Set();
+  let windowOffset = page.offset;
+  for (let pageIndex = 0; pageIndex < pageBound; pageIndex += 1) {
+    const url = buildReadApiUrl(
+      buildAAAccountsByOwnerPath({ network, owner, contractHash, limit: page.limit, offset: windowOffset }),
+      baseUrl,
+    );
+    const payload = await readApiJSON(url, { fetchImpl, timeoutMs });
+    const { rows, pageLimit, pageCount } = readAAPage(payload, { limit: page.limit, offset: windowOffset });
+    if (pageCount === 0) return accounts;
+
+    const pageAccounts = [];
+    for (const row of rows) {
+      const account = normalizeAAAccountRow(row);
+      if (!account || seenAccountIds.has(account.accountIdHash)) continue;
+      seenAccountIds.add(account.accountIdHash);
+      pageAccounts.push(account);
+    }
+    if (pageAccounts.length === 0) {
+      // Every row was unusable — the wire shape is not the one this module
+      // reads — or the window only repeated rows an earlier one returned, so
+      // the walk cannot advance. An empty list or a truncated one would both be
+      // a false answer.
+      throw new Error(EC.rpcRequestFailed);
+    }
+    accounts.push(...pageAccounts);
+    windowOffset += pageLimit;
   }
-  return accounts;
+  // The bound was reached while the last window still carried accounts: refuse
+  // rather than answer with a silently truncated list.
+  throw new Error(EC.rpcRequestFailed);
 }
 
 export async function fetchAAAccountById({
@@ -213,10 +313,23 @@ export async function discoverAAAccountsForWallet({
   baseUrl = RUNTIME_CONFIG.aaReadApiBaseUrl,
   network = RUNTIME_CONFIG.n3IndexNetwork,
   contractHash = RUNTIME_CONFIG.abstractAccountHash,
+  limit,
+  offset,
+  maxPages,
   fetchImpl,
   timeoutMs,
 } = {}) {
   if (!String(address || '').trim()) throw new Error(EC.addressValidationFailed);
   assertAAReadApiBaseUrl(baseUrl);
-  return fetchAAAccountsByOwner({ owner: address, baseUrl, network, contractHash, fetchImpl, timeoutMs });
+  return fetchAAAccountsByOwner({
+    owner: address,
+    baseUrl,
+    network,
+    contractHash,
+    limit,
+    offset,
+    maxPages,
+    fetchImpl,
+    timeoutMs,
+  });
 }
