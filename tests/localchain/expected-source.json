@@ -1,0 +1,115 @@
+{
+  "variant": "source",
+  "deployedCore": {
+    "path": "contracts/build/UnifiedSmartWalletV3.nef",
+    "sha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b"
+  },
+  "profiles": {
+    "platform-syscall-present": {
+      "description": "The current source emits System.Contract.CallWithGasLimit for both verifier callbacks (DEC-AA-1). Published neoxp registers no such interop, so every verifier-signed operation must fault; the proxy-witness path without a verifier must still work.",
+      "build": {
+        "gasBounded": "present",
+        "validateSignature": 1,
+        "postExecute": 1
+      },
+      "totals": {
+        "checks": 18,
+        "executedTransactions": 26,
+        "simulatedFaults": 2,
+        "nodeRefusals": 1
+      },
+      "scenarios": [
+        {
+          "name": "SRC-01/02 current source core: build profile and native-owner execution",
+          "checks": [
+            "the source variant deploys freshly compiled bytes, not the pinned deployed artifact",
+            "the compiled source core emits System.Contract.CallWithGasLimit for both verifier callbacks",
+            "backup owner recorded",
+            "no verifier: native fallback",
+            "native-witness operation HALTed and advanced the nonce"
+          ]
+        },
+        {
+          "name": "SRC-03 current source core: proxy witness without a verifier",
+          "checks": [
+            "proxy address holds 10 GAS",
+            "scope target recorded",
+            "the proxy-witness operation HALTed and moved the signed amount",
+            "buyer received exactly 1 GAS from the AA proxy address",
+            "proxy address paid exactly 1 GAS; the owner wallet paid the fees",
+            "nonce advanced",
+            "proxy rules naming another asset are still refused by the node"
+          ]
+        },
+        {
+          "name": "SRC-04 current source core: verifier callback (validateSignature)",
+          "checks": [
+            "DEC-AA-1 expected fault: the verifier-signed operation faults on a published node",
+            "the fault names the unregistered interop 1371299780",
+            "the fault left the account nonce unconsumed"
+          ]
+        },
+        {
+          "name": "SRC-03b current source core: verifier-backed proxy witness (P-256)",
+          "checks": [
+            "DEC-AA-1 expected fault: the verifier-backed proxy-witness operation faults on a published node",
+            "the fault names the unregistered interop 1371299780",
+            "no GAS moved and the nonce is unchanged"
+          ]
+        }
+      ]
+    },
+    "platform-syscall-absent": {
+      "description": "The public build profile landed (CU-29 / DEC-AA-1): the compiled core emits no gas-bounded verifier callback, so the same verifier-signed and verifier-backed proxy-witness operations must execute on published neoxp.",
+      "build": {
+        "gasBounded": "absent",
+        "validateSignature": 0,
+        "postExecute": 0
+      },
+      "totals": {
+        "checks": 16,
+        "executedTransactions": 28,
+        "simulatedFaults": 0,
+        "nodeRefusals": 1
+      },
+      "scenarios": [
+        {
+          "name": "SRC-01/02 current source core: build profile and native-owner execution",
+          "checks": [
+            "the source variant deploys freshly compiled bytes, not the pinned deployed artifact",
+            "the compiled source core emits no gas-bounded verifier callback (DEC-AA-1 is cleared)",
+            "backup owner recorded",
+            "no verifier: native fallback",
+            "native-witness operation HALTed and advanced the nonce"
+          ]
+        },
+        {
+          "name": "SRC-03 current source core: proxy witness without a verifier",
+          "checks": [
+            "proxy address holds 10 GAS",
+            "scope target recorded",
+            "the proxy-witness operation HALTed and moved the signed amount",
+            "buyer received exactly 1 GAS from the AA proxy address",
+            "proxy address paid exactly 1 GAS; the owner wallet paid the fees",
+            "nonce advanced",
+            "proxy rules naming another asset are still refused by the node"
+          ]
+        },
+        {
+          "name": "SRC-04 current source core: verifier callback (validateSignature)",
+          "checks": [
+            "DEC-AA-1 cleared: the verifier-signed operation HALTed",
+            "the verifier path advanced the nonce"
+          ]
+        },
+        {
+          "name": "SRC-03b current source core: verifier-backed proxy witness (P-256)",
+          "checks": [
+            "buyer +1 GAS, proxy -1 GAS exactly",
+            "the verifier-backed proxy witness advanced the nonce"
+          ]
+        }
+      ]
+    }
+  }
+}

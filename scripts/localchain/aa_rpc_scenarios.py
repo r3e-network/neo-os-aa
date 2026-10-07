@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 """AA module: local-chain acceptance scenarios (RPC-driven, published neoxp, no private hardfork).
-Variant 'deployed' uses the unchanged contracts/build artifacts assessed on 2026-10-05."""
-import argparse, base64, datetime as dt, json, os, shutil, subprocess, sys, time, traceback
+
+Variant 'deployed' uses the unchanged contracts/build artifacts assessed on 2026-10-05.
+Variant 'source' compiles the current checkout with the pinned published compiler and deploys those
+bytes; its expectations follow the build profile read from the compiled core (DEC-AA-1): while the
+source still emits System.Contract.CallWithGasLimit every verifier-signed operation must fault on a
+published node, and once the public build profile lands the same operations must execute.
+"""
+import argparse, base64, datetime as dt, hashlib, json, os, shutil, subprocess, sys, time, traceback
 import signal, socket, tempfile, random
 from collections import Counter
 from pathlib import Path
 
 from rpcx import *  # noqa
+import source_build as srcbuild
 
 EXPECTED = AA / "tests/localchain/expected-deployed.json"
+EXPECTED_SOURCE = AA / "tests/localchain/expected-source.json"
+SOURCE_FAULT_MARKER = srcbuild.FAULT_MARKER
 NAMES = ["deployer", "owner", "buyer", "merchant", "relay", "sponsor", "stranger"]
 TL = 604800  # 7 days: the minimum escape timelock
 
@@ -47,11 +56,11 @@ class Ctx:
         return self.c.read(self.core, "getNonce", H(account), I(channel))
 
 
-def bring_up(c, variant, workdir):
+def bring_up(c, variant, workdir, bin_dir=None):
     c.create(NAMES)
     c.start()
     c.fund(NAMES, 3000)
-    bin_dir = AA / "contracts/build"
+    bin_dir = Path(bin_dir) if bin_dir else AA / "contracts/build"
     core = c.deploy("UnifiedSmartWalletV3", bin_dir / "UnifiedSmartWalletV3.nef")
     c.deploy("MockTransferTarget", bin_dir / "MockTransferTarget.nef")
     for name in ("WebAuthnVerifier", "SessionKeyVerifier", "AAPaymaster", "WhitelistHook", "DailyLimitHook"):
@@ -413,7 +422,143 @@ def sc_relay_route(c, x):
     return {"relay": results}
 
 
+# ------------------------------------------------- current-source variant
+def sc_source_build_and_native(c, x):
+    """SRC-01/02 the build profile of the current source and the native-owner path on a published node."""
+    c.records.append({"scenario": "SRC-01/02 current source core: build profile and native-owner execution"})
+    profile = x.source_profile
+    c.check(profile["coreSha256"] != profile["deployedCoreSha256"],
+            "the source variant deploys freshly compiled bytes, not the pinned deployed artifact")
+    if profile["profile"] == srcbuild.PROFILE_SYSCALL_PRESENT:
+        c.check(profile["validateSignature"] == 1 and profile["postExecute"] == 1,
+                "the compiled source core emits System.Contract.CallWithGasLimit for both verifier callbacks")
+    else:
+        c.check(profile["validateSignature"] == 0 and profile["postExecute"] == 0,
+                "the compiled source core emits no gas-bounded verifier callback (DEC-AA-1 is cleared)")
+    account, proxy = x.register("source-native")
+    c.check(c.hash_of(x.core, "getBackupOwner", H(account)) == c.hashes["owner"], "backup owner recorded")
+    c.check(c.hash_of(x.core, "getVerifier", H(account)) == ZERO, "no verifier: native fallback")
+    target = c.contracts["MockTransferTarget"]
+    c.send("native-owner executeUserOp on the source core", [{"w": "owner"}], x.core, "executeUserOp",
+           [H(account), x.op(target, "transfer", [H(proxy), H(c.hashes["buyer"]), I(1000), B(b"")], 0)])
+    c.check(x.nonce(account) == 1, "native-witness operation HALTed and advanced the nonce")
+    return {"profile": profile["profile"]}
+
+
+def sc_source_proxy_witness(c, x):
+    """SRC-03 the proxy-witness path with no verifier: it never reaches the gas-bounded syscall."""
+    c.records.append({"scenario": "SRC-03 current source core: proxy witness without a verifier"})
+    core = x.core
+    account, proxy = x.register("source-gas")
+    owner, buyer = c.hashes["owner"], c.hashes["buyer"]
+    c.send("fund the proxy address with 10 GAS", [{"w": "owner"}], GAS_HASH, "transfer",
+           [H(owner), H(proxy), I(10 * GAS), B(b"")])
+    c.check(c.gas(proxy) == 10 * GAS, "proxy address holds 10 GAS")
+    c.send("admin sets the verify-scope target to GAS", [{"w": "deployer"}], core, "setVerifyScopeTarget",
+           [H(account), H(GAS_HASH)])
+    c.check(c.hash_of(core, "getVerifyScopeTarget", H(account)) == GAS_HASH, "scope target recorded")
+    pscript = proxy_script_for(account, core)
+    psig = lambda target: {"proxy": proxy, "core": core, "target": target, "script": pscript}
+    gas_op = lambda n: x.op(GAS_HASH, "transfer", [H(proxy), H(buyer), I(GAS), B(b"")], n)
+    before = c.gas(buyer)
+    rec = c.send("proxy-witness GAS transfer on the source core", [{"w": "owner"}, psig(GAS_HASH)], core,
+                 "executeUserOp", [H(account), gas_op(0)])
+    c.check(rec["outcome"] == "HALT", "the proxy-witness operation HALTed and moved the signed amount")
+    c.check(c.gas(buyer) - before == GAS, "buyer received exactly 1 GAS from the AA proxy address")
+    c.check(c.gas(proxy) == 9 * GAS, "proxy address paid exactly 1 GAS; the owner wallet paid the fees")
+    c.check(x.nonce(account) == 1, "nonce advanced")
+    rec = c.send("proxy rules naming another asset are still refused by the node", [{"w": "owner"}, psig(NEO_HASH)],
+                 core, "executeUserOp", [H(account), gas_op(1)], expect="REJECT")
+    c.check(rec["outcome"] == "REJECTED", "proxy rules naming another asset are still refused by the node")
+    return {}
+
+
+def sc_source_verifier_callback(c, x):
+    """SRC-04 the verifier validateSignature callback: the DEC-AA-1 fault, or execution after the profile."""
+    c.records.append({"scenario": "SRC-04 current source core: verifier callback (validateSignature)"})
+    verifier, target = c.contracts["WebAuthnVerifier"], c.contracts["MockTransferTarget"]
+    key = v.P256Key(x.workdir, "source-p256")
+    account, proxy = x.register("source-p256", verifier=verifier, params=key.compressed)
+    args = [H(proxy), H(c.hashes["buyer"]), I(1000), B(b"")]
+    payload = c.read(verifier, "getPayload", H(account), H(target), S("transfer"), A(*args), I(0), I(FAR_DEADLINE))
+    op = x.op(target, "transfer", args, 0, sig=key.sign(payload))
+    if x.source_profile["profile"] == srcbuild.PROFILE_SYSCALL_PRESENT:
+        rec = c.send("verifier-signed operation on the source core (expected DEC-AA-1 fault)", [{"w": "relay"}],
+                     x.core, "executeUserOp", [H(account), op], expect="FAULT")
+        c.check(SOURCE_FAULT_MARKER in (rec.get("exception") or ""),
+                "DEC-AA-1 expected fault: the verifier-signed operation faults on a published node")
+        c.check(str(srcbuild.INTEROP_HASH) in (rec.get("exception") or ""),
+                "the fault names the unregistered interop 1371299780")
+        c.check(x.nonce(account) == 0, "the fault left the account nonce unconsumed")
+    else:
+        rec = c.send("verifier-signed operation on the source core (public profile landed)", [{"w": "relay"}],
+                     x.core, "executeUserOp", [H(account), op])
+        c.check(rec["outcome"] == "HALT", "DEC-AA-1 cleared: the verifier-signed operation HALTed")
+        c.check(x.nonce(account) == 1, "the verifier path advanced the nonce")
+    return {}
+
+
+def sc_source_verifier_proxy_witness(c, x):
+    """SRC-03b the verifier-backed proxy witness: a P-256 owner signs a GAS transfer out of the proxy."""
+    c.records.append({"scenario": "SRC-03b current source core: verifier-backed proxy witness (P-256)"})
+    core, verifier = x.core, c.contracts["WebAuthnVerifier"]
+    key = v.P256Key(x.workdir, "source-p256-proxy")
+    account, proxy = x.register("source-p256-proxy", verifier=verifier, params=key.compressed)
+    buyer = c.hashes["buyer"]
+    c.send("fund the proxy address with 5 GAS", [{"w": "owner"}], GAS_HASH, "transfer",
+           [H(c.hashes["owner"]), H(proxy), I(5 * GAS), B(b"")])
+    c.send("admin sets the verify-scope target to GAS", [{"w": "deployer"}], core, "setVerifyScopeTarget",
+           [H(account), H(GAS_HASH)])
+    args = [H(proxy), H(buyer), I(GAS), B(b"")]
+    payload = c.read(verifier, "getPayload", H(account), H(GAS_HASH), S("transfer"), A(*args), I(0), I(FAR_DEADLINE))
+    op = x.op(GAS_HASH, "transfer", args, 0, sig=key.sign(payload))
+    psig = {"proxy": proxy, "core": core, "target": GAS_HASH, "script": proxy_script_for(account, core)}
+    before_buyer, before_proxy = c.gas(buyer), c.gas(proxy)
+    if x.source_profile["profile"] == srcbuild.PROFILE_SYSCALL_PRESENT:
+        rec = c.send("verifier-backed proxy-witness GAS transfer (expected DEC-AA-1 fault)", [{"w": "relay"}, psig],
+                     core, "executeUserOp", [H(account), op], expect="FAULT")
+        c.check(SOURCE_FAULT_MARKER in (rec.get("exception") or ""),
+                "DEC-AA-1 expected fault: the verifier-backed proxy-witness operation faults on a published node")
+        c.check(str(srcbuild.INTEROP_HASH) in (rec.get("exception") or ""),
+                "the fault names the unregistered interop 1371299780")
+        c.check(c.gas(buyer) == before_buyer and c.gas(proxy) == before_proxy and x.nonce(account) == 0,
+                "no GAS moved and the nonce is unchanged")
+    else:
+        c.send("verifier-backed proxy-witness GAS transfer (public profile landed)", [{"w": "relay"}, psig],
+               core, "executeUserOp", [H(account), op])
+        c.check(c.gas(buyer) - before_buyer == GAS and before_proxy - c.gas(proxy) == GAS,
+                "buyer +1 GAS, proxy -1 GAS exactly")
+        c.check(x.nonce(account) == 1, "the verifier-backed proxy witness advanced the nonce")
+    return {}
+
+
+SOURCE_SCENARIOS = [
+    ("SRC-01/02 current source core: build profile and native-owner execution", sc_source_build_and_native),
+    ("SRC-03 current source core: proxy witness without a verifier", sc_source_proxy_witness),
+    ("SRC-04 current source core: verifier callback (validateSignature)", sc_source_verifier_callback),
+    ("SRC-03b current source core: verifier-backed proxy witness (P-256)", sc_source_verifier_proxy_witness),
+]
+
+
 # ---------------------------------------------------------------- runner
+def _attempt(receipt, c, save, name, fn, *a):
+    """Record one scenario: its named checks, its outcome and its failure, then persist the receipt."""
+    s0 = time.time()
+    row = {"name": name, "status": "PASS"}
+    n_before = len(c.records)
+    try:
+        row["return"] = fn(*a)
+    except Fail as e:
+        row["status"] = "FAIL"; row["failure"] = str(e)[:700]
+    except Exception as e:
+        row["status"] = "ERROR"; row["failure"] = f"{type(e).__name__}: {str(e)[:500]}"; row["trace"] = traceback.format_exc()[-900:]
+    row["seconds"] = round(time.time() - s0, 1)
+    row["checks"] = [r for r in c.records[n_before:] if "check" in r]
+    receipt["results"].append(row)
+    print(f"[{time.strftime('%H:%M:%S')}] {name}: {row['status']} ({row['seconds']}s) {row.get('failure', '')[:260]}", flush=True)
+    save()
+
+
 def run(variant, workdir, port, receipt_path, plant_mismatch=False):
     t0 = time.time()
     receipt = {"variant": variant, "observedOn": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "results": [], "status": "RUNNING"}
@@ -422,20 +567,7 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
         receipt["records"] = c.records if c else []
         receipt_path.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
     def attempt(name, fn, *a):
-        s0 = time.time()
-        row = {"name": name, "status": "PASS"}
-        n_before = len(c.records)
-        try:
-            row["return"] = fn(*a)
-        except Fail as e:
-            row["status"] = "FAIL"; row["failure"] = str(e)[:700]
-        except Exception as e:
-            row["status"] = "ERROR"; row["failure"] = f"{type(e).__name__}: {str(e)[:500]}"; row["trace"] = traceback.format_exc()[-900:]
-        row["seconds"] = round(time.time() - s0, 1)
-        row["checks"] = [r for r in c.records[n_before:] if "check" in r]
-        receipt["results"].append(row)
-        print(f"[{time.strftime('%H:%M:%S')}] {name}: {row['status']} ({row['seconds']}s) {row.get('failure', '')[:260]}", flush=True)
-        save()
+        _attempt(receipt, c, save, name, fn, *a)
     try:
         c, x = bring_up(c, variant, workdir)
         x.plant_mismatch = plant_mismatch
@@ -467,6 +599,52 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
     return receipt
 
 
+def run_source(workdir, port, receipt_path, source_dir=None):
+    """Compile (or reuse) the current source, deploy it, and read the build profile that gates it."""
+    t0 = time.time()
+    receipt = {"variant": "source", "observedOn": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+               "results": [], "status": "RUNNING"}
+    c, x = Rx(workdir, port), None
+    def save():
+        receipt["records"] = c.records if c else []
+        receipt_path.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
+    def attempt(name, fn, *a):
+        _attempt(receipt, c, save, name, fn, *a)
+    try:
+        if source_dir is None:
+            source_dir = srcbuild.build_source_contracts(Path(workdir) / "source")
+            receipt["builtFromSource"] = True
+        else:
+            source_dir = srcbuild.require_artifacts(Path(source_dir))
+            receipt["builtFromSource"] = False
+        profile = srcbuild.profile_of(source_dir / "UnifiedSmartWalletV3.nef")
+        profile["deployedCoreSha256"] = hashlib.sha256(
+            (AA / "contracts/build/UnifiedSmartWalletV3.nef").read_bytes()).hexdigest()
+        profile["sourceDir"] = str(source_dir)
+        receipt["profile"] = profile["profile"]
+        receipt["source"] = profile
+        c, x = bring_up(c, "source", workdir, bin_dir=source_dir)
+        x.source_profile = profile
+        receipt["tool"] = v.ANSI.sub("", subprocess.run([c.neoxp, "--version"], capture_output=True, text=True, env=c.env).stdout).strip()
+        receipt["magic"] = c.magic
+        receipt["contracts"] = dict(c.contracts)
+        print(f"source build {profile['profile']}: validateSignature={profile['validateSignature']}, "
+              f"postExecute={profile['postExecute']}, {profile['bytes']} bytes", flush=True)
+        print("up in", round(time.time() - t0, 1), "s; contracts:", len(c.contracts), flush=True)
+        for name, fn in SOURCE_SCENARIOS:
+            attempt(name, fn, c, x)
+        receipt["status"] = "DONE"
+    except Exception as e:
+        receipt["status"] = "ABORTED"; receipt["abort"] = f"{type(e).__name__}: {str(e)[:700]}"
+        print("ABORT", receipt["abort"], flush=True)
+    finally:
+        if c:
+            c.stop()
+        receipt["seconds"] = round(time.time() - t0, 1)
+        save()
+    return receipt
+
+
 def validate_artifacts(expected):
     for artifact in expected["artifacts"]:
         name = artifact["path"]
@@ -474,26 +652,71 @@ def validate_artifacts(expected):
             raise Fail(f"deployed artifact mismatch: {name}")
 
 
-def validate_receipt(receipt, expected):
+def _inventory_failures(receipt, scenarios, totals, counts_label):
     failures = []
+
     def check(ok, name):
         if not ok:
             failures.append(name)
-    check(receipt["status"] == "DONE", "suite completed")
-    check(receipt["variant"] == expected["variant"], "deployed variant")
     results = receipt["results"]
-    check([s["name"] for s in results] == [s["name"] for s in expected["scenarios"]], "scenario inventory")
-    for actual, wanted in zip(results, expected["scenarios"]):
+    check([s["name"] for s in results] == [s["name"] for s in scenarios], "scenario inventory")
+    for actual, wanted in zip(results, scenarios):
         check(actual["status"] == "PASS", wanted["name"])
         check(actual["checks"] == [{"check": n, "ok": True} for n in wanted["checks"]],
               f"named checks: {wanted['name']}")
     checks = [r for r in receipt["records"] if "check" in r]
     check(checks == [c for s in results for c in s["checks"]], "recorded checks match scenarios")
-    check(len(checks) == expected["totals"]["checks"] and all(c["ok"] is True for c in checks), "54 successful checks")
+    check(len(checks) == totals["checks"] and all(c["ok"] is True for c in checks),
+          f"{totals['checks']} successful checks")
     counts = Counter(r["outcome"] for r in receipt["records"] if "outcome" in r)
-    check(counts == {"HALT": expected["totals"]["executedTransactions"],
-                     "FAULT": expected["totals"]["simulatedFaults"],
-                     "REJECTED": expected["totals"]["nodeRefusals"]}, "transaction outcomes: 66 executed, 21 simulated faults, 6 refusals")
+    wanted_counts = {"HALT": totals["executedTransactions"],
+                     "FAULT": totals["simulatedFaults"],
+                     "REJECTED": totals["nodeRefusals"]}
+    check(all(counts.get(outcome, 0) == count for outcome, count in wanted_counts.items())
+          and set(counts) <= set(wanted_counts), counts_label)
+    return failures
+
+
+def validate_receipt(receipt, expected):
+    failures = []
+    if receipt["status"] != "DONE":
+        failures.append("suite completed")
+    if receipt["variant"] != expected["variant"]:
+        failures.append("deployed variant")
+    failures += _inventory_failures(
+        receipt, expected["scenarios"], expected["totals"],
+        "transaction outcomes: 66 executed, 21 simulated faults, 6 refusals")
+    return failures
+
+
+def validate_source_receipt(receipt, expected):
+    """The source variant's gate: the build profile decides which half of the expectations applies."""
+    failures = []
+    profile = receipt.get("profile")
+    if profile not in expected["profiles"]:
+        return [f"known source build profile: {profile!r}"]
+    wanted = expected["profiles"][profile]
+    if receipt["status"] != "DONE":
+        failures.append("suite completed")
+    if receipt["variant"] != expected["variant"]:
+        failures.append("source variant")
+    source = receipt.get("source") or {}
+    build = wanted["build"]
+    if source.get("validateSignature") != build["validateSignature"]:
+        failures.append("validateSignature call sites in the compiled core")
+    if source.get("postExecute") != build["postExecute"]:
+        failures.append("postExecute call sites in the compiled core")
+    if bool(source.get("gasBoundedSyscall")) != (build["gasBounded"] == "present"):
+        failures.append("the recorded call sites match the declared build profile")
+    if not source.get("coreSha256"):
+        failures.append("the source core digest is recorded")
+    elif source["coreSha256"] == expected["deployedCore"]["sha256"]:
+        failures.append("the source build is not the deployed artifact")
+    totals = wanted["totals"]
+    failures += _inventory_failures(
+        receipt, wanted["scenarios"], totals,
+        "transaction outcomes: %d executed, %d simulated faults, %d refusals"
+        % (totals["executedTransactions"], totals["simulatedFaults"], totals["nodeRefusals"]))
     return failures
 
 
@@ -512,15 +735,26 @@ def free_port_pair():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--variant", choices=["deployed"], required=True)
-    ap.add_argument("--receipt", type=Path, default=AA / "tests/localchain/out/rpc-deployed.json")
-    ap.add_argument("--plant-mismatch", choices=["verifier"], help="negative control: register the native account with a verifier")
+    ap.add_argument("--variant", choices=["deployed", "source"], required=True)
+    ap.add_argument("--receipt", type=Path, help="receipt path (default: out/rpc-<variant>.json)")
+    ap.add_argument("--source-dir", type=Path, help="reuse a current-source build (source variant only)")
+    ap.add_argument("--plant-mismatch", choices=["verifier"], help="negative control (deployed variant only): register the native account with a verifier")
     a = ap.parse_args()
+    if a.variant == "deployed" and a.source_dir:
+        ap.error("--source-dir is only for the source variant")
+    if a.variant == "source" and a.plant_mismatch:
+        ap.error("--plant-mismatch is only for the deployed variant")
+    a.receipt = a.receipt or (AA / f"tests/localchain/out/rpc-{a.variant}.json")
     a.receipt.parent.mkdir(parents=True, exist_ok=True)
     # A failed prerequisite must never leave a successful receipt from an earlier invocation.
     a.receipt.unlink(missing_ok=True)
-    expected = json.loads(EXPECTED.read_text())
-    validate_artifacts(expected)
+    if a.variant == "deployed":
+        expected = json.loads(EXPECTED.read_text())
+        validate_artifacts(expected)
+    else:
+        expected = json.loads(EXPECTED_SOURCE.read_text())
+        if expected.get("variant") != "source" or not expected.get("profiles"):
+            raise Fail("the source expectations are incomplete")
     def interrupted(signum, frame):
         raise KeyboardInterrupt(f"signal {signum}")
     signal.signal(signal.SIGTERM, interrupted)
@@ -529,10 +763,15 @@ def main():
     with tempfile.TemporaryDirectory(prefix="aa-localchain-", dir="/private/tmp" if sys.platform == "darwin" else "/tmp") as workdir:
         port = free_port_pair()
         print(f"Disposable neoxp: 127.0.0.1:{port}, data {workdir}", flush=True)
-        receipt = run(a.variant, workdir, port, a.receipt, bool(a.plant_mismatch))
-    failures = validate_receipt(receipt, expected)
+        if a.variant == "deployed":
+            receipt = run(a.variant, workdir, port, a.receipt, bool(a.plant_mismatch))
+        else:
+            receipt = run_source(workdir, port, a.receipt, a.source_dir)
+    failures = validate_receipt(receipt, expected) if a.variant == "deployed" \
+        else validate_source_receipt(receipt, expected)
     receipt["gateFailures"] = failures
-    receipt["artifacts"] = expected["artifacts"]
+    if a.variant == "deployed":
+        receipt["artifacts"] = expected["artifacts"]
     a.receipt.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
     for failure in failures:
         print(f"FAIL: {failure}")

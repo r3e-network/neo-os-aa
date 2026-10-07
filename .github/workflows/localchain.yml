@@ -50,3 +50,43 @@ jobs:
           name: aa-localchain-receipt
           path: tests/localchain/out/rpc-deployed.json
           if-no-files-found: error
+
+  source-variant-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Install published neoxp
+        run: |
+          dotnet tool install Neo.Express --version 3.10.1 --tool-path "$RUNNER_TEMP/aa-neoxp"
+          echo "$RUNNER_TEMP/aa-neoxp" >> "$GITHUB_PATH"
+      - name: Install pinned Neo compiler (nccs 3.9.1)
+        run: dotnet tool install -g neo.compiler.csharp --version 3.9.1
+      - name: Report prerequisites
+        run: |
+          neoxp --version
+          nccs --version
+          python3 --version
+          openssl version
+      # No chain and no compiler: the detector is exercised against synthetic NEFs and the
+      # committed deployed core, and both expectation branches are mutated.
+      - name: Test source variant gate
+        run: python3 tests/localchain/test_source_gate.py
+      # Compiles the current checkout with the pinned compiler and prints the build profile
+      # (platform-syscall-present while DEC-AA-1 is in the source, absent after CU-29 lands).
+      - name: Build contracts from source and read the build profile
+        run: python3 scripts/localchain/source_build.py --out "$RUNNER_TEMP/aa-source"
+      - name: Run current-source suite
+        run: python3 tests/localchain/run.py --variant source --source-dir "$RUNNER_TEMP/aa-source"
+      - name: Upload receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aa-localchain-source-receipt
+          path: tests/localchain/out/rpc-source.json
+          if-no-files-found: error
