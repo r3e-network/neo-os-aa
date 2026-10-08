@@ -35,7 +35,7 @@ native convergence reports remain historical evidence for their recorded inputs.
   validates actual case identities, maximum inputs, negative controls and VM
   results. Verification requires exactly one Boolean true, not merely HALT.
 - The bounded-call prerequisite in Neo PR #4759 now uses the same allocation-free
-  fee traversal as native core #4766. Twelve measured cases drop from 56 bytes
+  fee traversal as native core #4768. Twelve measured cases drop from 56 bytes
   per charge to zero, preserving ancestor-budget and fee-exhaustion behavior.
 
 ## Evidence
@@ -78,7 +78,7 @@ encoding fixes were reimplemented with additional regressions; its original
 unsafe conversions and incorrect fee prose were not merged unchanged. Active
 worktrees are not discarded merely because some changes have been absorbed.
 
-Core #4766, RPC #1114 and proposal #243 remain subject to upstream review and
+Core #4768, RPC #1115 and proposal #243 remain subject to upstream review and
 activation decisions. PR #4759's implementation is repaired, but its reviewer
 thread and upstream approval remain separate state. No public-chain activation,
 user-wallet signing, npm publication or production database migration occurred.
@@ -89,3 +89,7 @@ The public sponsored target is MockTransferTarget: the proof covers argument
 preservation, nonce changes and actual GAS paymaster settlement, not target-token
 movement. Its P-256 verifier does not establish a browser WebAuthn ceremony.
 Private raw receipts and reproducible probes are retained in the recovery archive.
+
+The current upstream drafts continue the identical source commits from core #4766
+and RPC #1114 under neutral branch names; those historical drafts retain their
+discussion and check records.

@@ -41,7 +41,7 @@ Solves the "How to verify signatures?" problem. Verifiers dictate "who has the r
   * The primary EVM-compatibility verifier in the current V3 runtime.
   * Directly receives Ethereum-standard EIP-712 Typed Data Hashes and `v, r, s` signatures.
   * Internally uses N3's underlying `CryptoLib.VerifyWithECDsa` (for the secp256k1 curve) and custom Keccak256 to perfectly replicate Ethereum signature verification. Allows MetaMask users to seamlessly control N3 assets.
-* **TEE / AI Agent Verifier (Privacy & Automation Center)**:
+* **TEE / Automated Strategy Verifier (Privacy & Automation Center)**:
   * Bound to a specific hardware public key. As long as the `UserOperation` carries the TEE node's signature, it is considered approved (because complex business logic has already been pre-screened within the TEE).
 * **Session Key Verifier (High-frequency Interaction Tool)**:
   * Provides temporary authorization keys for short-lived, high-frequency interactions (like fully on-chain games or high-frequency trading), supporting fine-grained permission scopes and expiration times.
@@ -78,9 +78,9 @@ Through the Lego-like composability of Verifiers and Hooks, the V3 architecture 
 * **Solution B: "Bear Market DCA" Vault (Combined Risk Control)**
   * **Combination**: Built-in cold wallet fallback + DailyLimitHook + WhitelistHook (via MultiHook)
   * **Scenario**: Uses an extremely secure hardware cold wallet for control, while restricting daily outbound transfers to a small amount and only allowing interaction with specific DCA (Dollar Cost Averaging) or DeFi staking contracts.
-* **Solution C: AI-Managed Quant Fund (Intent-Driven)**
-  * **Combination**: TEE / AI Agent Verifier + Max Drawdown Hook (or NeoDIDCredentialHook / Custom Hook)
-  * **Scenario**: Funds are delegated to an AI agent running inside a TEE. The AI trades automatically based on market signals, but Hooks strictly enforce a maximum drawdown limit or restrict participation to KYC-compliant pools.
+* **Solution C: Automated Quant Fund (Intent-Driven)**
+  * **Combination**: TEE / Automated Strategy Verifier + Max Drawdown Hook (or NeoDIDCredentialHook / Custom Hook)
+  * **Scenario**: Funds are delegated to an automated strategy running inside a TEE. The strategy trades automatically based on market signals, but Hooks strictly enforce a maximum drawdown limit or restrict participation to KYC-compliant pools.
 * **Solution D: Fully On-chain Game / Esports Gold Farming Account**
   * **Combination**: Session Key Verifier + TokenRestrictedHook
   * **Scenario**: Gaming guilds issue Session Keys to power-levelers, restricting them to high-frequency in-game operations and the transfer of specific in-game reward tokens, preventing them from touching the vault's core assets.

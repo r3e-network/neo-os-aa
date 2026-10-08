@@ -1,5 +1,7 @@
 # Neo N3 native SmartAccount convergence — 2026-10-09
 
+Current upstream drafts are [core #4768](https://github.com/neo-project/neo/pull/4768) and [RPC #1115](https://github.com/neo-project/neo-node/pull/1115). They preserve the same source commits; the earlier PR references below identify historical review and validation records.
+
 The implementation target is consensus-native `AccountManagement`, enabled only by an explicit `HF_SmartAccountV1` activation. The AA repository supplies the matching ABI 2 modules, SDK, account workspace and conformance evidence. The deployed public V3 contract remains a separate compatibility profile. Native source integration does not activate a public network.
 
 ## Design and repaired boundaries

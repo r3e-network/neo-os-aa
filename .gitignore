@@ -7,7 +7,8 @@
 # scripts/repo_hygiene.test.mjs pins the paths below; run it after any edit.
 
 # Tool State (NEVER commit)
-.claude/
+.local/
+settings.local.json
 .serena/
 .planning/
 .workbuddy/

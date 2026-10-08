@@ -41,7 +41,7 @@ Solves the "How to verify signatures?" problem. Verifiers dictate "who has the r
   * The primary EVM-compatibility verifier in the current V3 runtime.
   * Directly receives Ethereum-standard EIP-712 Typed Data Hashes and `v, r, s` signatures.
   * Internally uses N3's underlying `CryptoLib.VerifyWithECDsa` (for the secp256k1 curve) and custom Keccak256 to perfectly replicate Ethereum signature verification. Allows MetaMask users to seamlessly control N3 assets.
-* **TEE / AI Agent Verifier (Privacy & Automation Center)**:
+* **TEE / Automated Strategy Verifier (Privacy & Automation Center)**:
   * Bound to a specific hardware public key. As long as the `UserOperation` carries the TEE node's signature, it is considered approved (because complex business logic has already been pre-screened within the TEE).
 * **Session Key Verifier (High-frequency Interaction Tool)**:
   * Provides temporary authorization keys for short-lived, high-frequency interactions (like fully on-chain games or high-frequency trading), supporting fine-grained permission scopes and expiration times.
@@ -78,9 +78,9 @@ Through the Lego-like composability of Verifiers and Hooks, the V3 architecture 
 * **Solution B: "Bear Market DCA" Vault (Combined Risk Control)**
   * **Combination**: Built-in cold wallet fallback + DailyLimitHook + WhitelistHook (via MultiHook)
   * **Scenario**: Uses an extremely secure hardware cold wallet for control, while restricting daily outbound transfers to a small amount and only allowing interaction with specific DCA (Dollar Cost Averaging) or DeFi staking contracts.
-* **Solution C: AI-Managed Quant Fund (Intent-Driven)**
-  * **Combination**: TEE / AI Agent Verifier + Max Drawdown Hook (or NeoDIDCredentialHook / Custom Hook)
-  * **Scenario**: Funds are delegated to an AI agent running inside a TEE. The AI trades automatically based on market signals, but Hooks strictly enforce a maximum drawdown limit or restrict participation to KYC-compliant pools.
+* **Solution C: Automated Quant Fund (Intent-Driven)**
+  * **Combination**: TEE / Automated Strategy Verifier + Max Drawdown Hook (or NeoDIDCredentialHook / Custom Hook)
+  * **Scenario**: Funds are delegated to an automated strategy running inside a TEE. The strategy trades automatically based on market signals, but Hooks strictly enforce a maximum drawdown limit or restrict participation to KYC-compliant pools.
 * **Solution D: Fully On-chain Game / Esports Gold Farming Account**
   * **Combination**: Session Key Verifier + TokenRestrictedHook
   * **Scenario**: Gaming guilds issue Session Keys to power-levelers, restricting them to high-frequency in-game operations and the transfer of specific in-game reward tokens, preventing them from touching the vault's core assets.
@@ -95,7 +95,7 @@ This architecture completely abandons the attack-prone and extremely GAS-heavy O
 1. **Setup Backup**: The user sets a physical cold wallet address (Native N3 address) as the `BackupOwner` within TEE/Web3Auth and sets a 30-day `Timelock`.
 2. **Initiate Escape**: If the TEE/Web2 service goes down, the user initiates `InitiateEscape` via the gateway using the cold wallet, starting a 30-day on-chain countdown.
 3. **Anti-Theft Cancel**: A pending escape is **not** silently auto-cancelled by routine activity — that design would let an attacker who triggers a malicious escape keep the countdown frozen indefinitely. On-chain (`UnifiedSmartWallet.Execution.cs`), an active escape is cancelled only by an operation authorized by the `BackupOwner` itself (`Only backup owner can cancel escape`), so the user stays in control and the attacker's attempt dies with the countdown. If the cold wallet is stolen and a hacker triggers the escape, the user receives an alert on their mobile App and cancels the pending escape with a backup-owner-authorized action from a key they still control.
-4. **Finalize Takeover**: If the escape window elapses without a backup-owner-authorized cancellation, the cold wallet gains supreme authority and resets the entire AA account's Verifier plugin, achieving absolute L1 asset sovereignty.
+4. **Finalize Recovery**: After the escape window, the backup owner can replace the verifier with a V3-compatible module or select zero to use backup-owner authorization. Finalization also clears the old verifier and hook configuration. It succeeds only if those plugins execute `clearAccount` successfully; an unavailable or faulty plugin can still block recovery. Atomic rollback preserves the prior state on failure. See [the recovery contract and its liveness limitation](ACCOUNT_RECOVERY_AND_IDENTITY.md).
 
 ---
 

@@ -70,10 +70,10 @@ const MUST_BE_IGNORED = [
   "frontend/npm-debug.log",
   "release.neopkg",
   "frontend/public/module.wasm",
-  // Editor and agent tool state at every depth.
-  ".claude/settings.local.json",
-  "frontend/.claude/settings.local.json",
-  "sdk/js/.claude/settings.local.json",
+  // Editor and local tool state at every depth.
+  ".local/settings.local.json",
+  "frontend/.local/settings.local.json",
+  "sdk/js/.local/settings.local.json",
   ".serena/project.yml",
   "sdk/js/.serena/project.yml",
   ".idea/workspace.xml",

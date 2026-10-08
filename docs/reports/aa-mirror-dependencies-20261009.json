@@ -4,7 +4,6 @@
   "decision": "Adopt both narrowly scoped upgrades; no compatibility or audit regression found in these gates.",
   "reviewedAtUtc": "2026-10-08T18:55:47.717240+00:00",
   "baseHead": "5e7428272775393a57d5f52781daf5bb633f69ba",
-  "branch": "codex/aa-mirror-patch-convergence",
   "packages": [
     {
       "name": "autoprefixer",
@@ -461,5 +460,6 @@
   "finalSourceHashReadback": {
     "matched": 371,
     "mismatches": []
-  }
+  },
+  "reviewedCommit": "e4f6162bde77b3f9d4de53abf0a16a2e95ab41a7"
 }
