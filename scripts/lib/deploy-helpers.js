@@ -60,6 +60,11 @@ async function withRpcRetry(label, fn, attempts = 5) {
 // ── Artifact loading ────────────────────────────────────────────────────────
 
 function artifactPaths(baseName) {
+  // Deployment names may select a nested public module, never an alternate
+  // profile or filesystem path. In particular ../platform must not be usable.
+  if (typeof baseName !== 'string' || !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(baseName)) {
+    throw new Error('Invalid public artifact name; select an artifact under contracts/bin/v3');
+  }
   const base = path.resolve(REPO_ROOT, 'contracts', 'bin', 'v3');
   return {
     nef: path.join(base, `${baseName}.nef`),

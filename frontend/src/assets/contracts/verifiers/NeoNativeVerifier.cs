@@ -16,8 +16,8 @@ namespace AbstractAccount.Verifiers
     /// </summary>
     [DisplayName("NeoNativeVerifier")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext")]
-    [ManifestExtra("SmartAccountProfile", "native-v1")]
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch")]
+    [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "computeArgsHash")]
@@ -88,17 +88,17 @@ namespace AbstractAccount.Verifiers
             }
 
             NativeVerifierConfig config = new NativeVerifierConfig { Signers = signers, Threshold = threshold };
-            byte[] key = Helper.Concat(Prefix_AuthorizedSigners, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_AuthorizedSigners, accountId);
             Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(config));
 
-            byte[] thresholdKey = Helper.Concat(Prefix_Threshold, (byte[])accountId);
+            byte[] thresholdKey = VerifierAuthority.AccountKey(Prefix_Threshold, accountId);
             Storage.Put(Storage.CurrentContext, thresholdKey, threshold);
         }
 
         [Safe]
         public static NativeVerifierConfig? GetConfig(UInt160 accountId)
         {
-            byte[] key = Helper.Concat(Prefix_AuthorizedSigners, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_AuthorizedSigners, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             if (data == null) return null;
 
@@ -109,7 +109,7 @@ namespace AbstractAccount.Verifiers
         [Safe]
         public static int GetThreshold(UInt160 accountId)
         {
-            byte[] key = Helper.Concat(Prefix_Threshold, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_Threshold, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             return data == null ? 0 : (int)(BigInteger)data!;
         }
@@ -165,7 +165,7 @@ namespace AbstractAccount.Verifiers
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
 #endif
         {
-            byte[] key = Helper.Concat(Prefix_AuthorizedSigners, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_AuthorizedSigners, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             ExecutionEngine.Assert(data != null, "No NeoNativeVerifier config");
 
@@ -192,8 +192,8 @@ namespace AbstractAccount.Verifiers
 #else
             VerifierAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
 #endif
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_AuthorizedSigners, (byte[])accountId));
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_Threshold, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_AuthorizedSigners, accountId));
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_Threshold, accountId));
         }
     }
 }

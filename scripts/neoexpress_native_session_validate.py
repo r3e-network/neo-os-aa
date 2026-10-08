@@ -17,7 +17,7 @@ import time
 from neoexpress_validate import (Chain, RawKey, P256Key, ValidationFailure, H, B, I, S, A, ZERO,
                                 decode, hash_le, varint, serialize_unsigned, serialize_witnesses, aa_proxy_rules)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
-from neoexpress_native_service_validate import CORE, check_native, persist
+from neoexpress_native_service_validate import CORE, check_native, persist, check_account_record, module_storage_key, transaction_system_fee, execution_arguments
 from neoexpress_native_proxy_validate import (GAS, GAS_TOKEN, push_bytes, proxy_address, verification_script,
                                             application_script, check_transaction, check_fault)
 from neoexpress_native_configuration_validate import call_script, pending_log
@@ -51,12 +51,14 @@ def serialize_value(item):
     return b'\x28'+varint(len(data))+data
 
 
-def signing_preimage(network, account, operation, core=CORE):
+def signing_preimage(network, account, operation, core=CORE, *, authority_epoch=0, configuration_nonce=0):
     require(type(network) is int and 0<=network<2**32,'Network must be UInt32')
     require(operation['type']=='Array' and len(operation['value'])==6,'Six-field operation required')
     require(len(hash_le(account))==20 and len(hash_le(core))==20,'Signing identity width')
+    for value in (authority_epoch, configuration_nonce):
+        require(type(value) is int and 0<=value<2**64,'Authority epoch and configuration nonce must be UInt64')
     unsigned=A(*operation['value'][:5],B(b''))
-    return b'NeoSmartAccount/UserOperation\x01'+network.to_bytes(4,'little')+hash_le(core)+hash_le(account)+serialize_value(unsigned)
+    return b'NeoSmartAccount/UserOperation\x02'+network.to_bytes(4,'little')+hash_le(core)+hash_le(account)+authority_epoch.to_bytes(8,'little')+configuration_nonce.to_bytes(8,'little')+serialize_value(unsigned)
 
 
 class SessionTransactions:
@@ -66,10 +68,16 @@ class SessionTransactions:
 
     def value(self,target,method,args):return self.chain.rpc_invoke(target,method,args)[0]
 
-    def storage(self,account):
+    def epoch(self,account):
+        epoch=self.value(CORE,'getAuthorityEpoch',[H(account)])
+        require(type(epoch) is int and 0<=epoch<2**64,'Authority epoch must be UInt64')
+        return epoch
+
+    def storage(self,account,*,authority_epoch=None):
+        epoch=self.epoch(account) if authority_epoch is None else authority_epoch
         values=[]
         for prefix in (1,2,3,4):
-            key=base64.b64encode(bytes([prefix])+hash_le(account)).decode()
+            key=base64.b64encode(module_storage_key(account,prefix,epoch)).decode()
             try: data=self.chain.rpc('getstorage',[self.verifier,key])
             except ValidationFailure as error:
                 require(str(error)=='rpc getstorage: Unknown storage item','Unexpected storage lookup failure');data=None
@@ -90,8 +98,12 @@ class SessionTransactions:
         payer=key or self.payer
         signers=[{'account':'0x'+payer.script_hash[::-1].hex(),'scopes':'CalledByEntry'}]
         if proxy:signers.append({'account':self.proxy,'scopes':'WitnessRules','rules':aa_proxy_rules(CORE,witness_target)})
-        script=application_script(self.account,args[1]) if proxy else call_script(target,method,args)
-        sysfee,netfee=10*GAS,2*GAS
+        if target==CORE and method in ('executeUserOp','executeUserOps'):
+            require(len(args)==2,'Fresh execution requires account and payload')
+            args=execution_arguments(self.account,args[1],before['account'])
+        script=application_script(self.account,args[1],batch=method=='executeUserOps',
+            authority_epoch=before['account'][13],configuration_nonce=before['account'][8]) if proxy else call_script(target,method,args)
+        sysfee,netfee=transaction_system_fee(self.chain,script,signers),2*GAS
         unsigned=serialize_unsigned(int.from_bytes(os.urandom(4),'little'),sysfee,netfee,self.chain.rpc('getblockcount',[])+50,signers,script)
         digest=hashlib.sha256(unsigned).digest();txid='0x'+digest[::-1].hex()
         witnesses=[(push_bytes(payer.sign(self.chain.magic.to_bytes(4,'little')+digest)),payer.verification)]
@@ -143,20 +155,25 @@ class SessionTransactions:
         self.report['executions'].append({'step':label,'method':method,'txid':txid,'vmstate':execution['vmstate'],'persisted':True,
             'expectedFailure':fault,'proxyWitnessIncluded':proxy,'confirmedBlock':tx['blockhash'],'rawTransactionAndWitnessReadbackMatched':True,
             'observedStateAndIsolationMatched':True,'spentAmount':after['spent'],'operationNonce':after['nonce'],'configurationNonce':after['account'][8],
-            'gasConsumedDatoshi':int(execution['gasconsumed']),'systemFeeDatoshi':sysfee,'networkFeeDatoshi':netfee})
+            'gasConsumedDatoshi':int(execution['gasconsumed']),'systemFeeDatoshi':sysfee,'networkFeeDatoshi':netfee,
+            'committedAuthorityEpoch':before['account'][13] if method in ('executeUserOp','executeUserOps') else None,
+            'committedConfigurationNonce':before['account'][8] if method in ('executeUserOp','executeUserOps') else None})
         return timestamp
 
     def signed(self,key,operation,*,network=None,account=None,core=CORE,double_hash=False):
-        canonical=signing_preimage(self.chain.magic,self.account,operation)
+        record=check_account_record(self.value(CORE,'getAccount',[H(self.account)]))
+        require(record[13]==self.epoch(self.account),'Native epoch and account record disagree')
+        counters={'authority_epoch':record[13],'configuration_nonce':record[8]}
+        canonical=signing_preimage(self.chain.magic,self.account,operation,**counters)
         fields=operation['value']
         payload=self.value(self.verifier,'getPayload',[H(self.account),*fields[:5]])
         digest=self.value(CORE,'getOperationDigest',[H(self.account),operation])
         require(payload==canonical and digest==hashlib.sha256(canonical).digest(),'Independent/native/module signing mismatch')
-        message=signing_preimage(self.chain.magic if network is None else network,self.account if account is None else account,operation,core)
+        message=signing_preimage(self.chain.magic if network is None else network,self.account if account is None else account,operation,core,**counters)
         if double_hash:message=hashlib.sha256(message).digest()
         result=copy.deepcopy(operation);signature=key.sign(message);result['value'][5]=B(signature)
         self.report['signingVectors'].append({'operationDigest':digest.hex(),'signedMessageSha256':hashlib.sha256(message).hexdigest(),
-            'publicKey':key.compressed.hex(),'signature':signature.hex(),'nativeAndIndependentDigestMatched':True,'doubleHashControl':double_hash})
+            'publicKey':key.compressed.hex(),'signature':signature.hex(),'authorityEpoch':record[13],'configurationNonce':record[8],'nativeAndIndependentDigestMatched':True,'doubleHashControl':double_hash})
         return result
 
 
@@ -183,7 +200,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                     with socket.socket() as sock:sock.bind(('127.0.0.1',0));config['consensus-nodes'][0][field]=sock.getsockname()[1]
                 chain.file.write_text(json.dumps(config));chain.magic=config['magic'];chain.rpc_port=config['consensus-nodes'][0]['rpc-port']
                 keys={}
-                for label in ('owner','relay','recipient'):
+                for label in ('owner','relay','recipient','guardian','replacement'):
                     chain.nx('wallet','create',label)
                     if label!='recipient':chain.nx('transfer','1000','GAS','genesis',label)
                     keys[label]=RawKey(root,'private-'+label,chain.wallet_private_key(label))
@@ -194,7 +211,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 deployed=chain.json_from(text);verifier=deployed['contract-hash'];report['module']={'contractHash':verifier,'deploymentTransaction':deployed['tx-hash'],'nefSha256':sha256(path),'manifestSha256':sha256(path.with_suffix('.manifest.json'))}
                 accounts=[]
                 for salt in (bytes([2])*32,bytes([3])*32):
-                    account=persist(chain,report,'register-'+str(len(accounts)),'registerAccount',[H(addresses['owner']),B(salt),H(verifier),H(ZERO),H(ZERO)],'AccountCreated')
+                    account=persist(chain,report,'register-'+str(len(accounts)),'registerAccount',[H(addresses['owner']),B(salt),H(verifier),H(ZERO),H(addresses['guardian'])],'AccountCreated')
                     accounts.append('0x'+account[::-1].hex())
                 account,other=accounts;proxy=proxy_address(account)
                 fund=chain.invoke_file(GAS_TOKEN,'transfer',[H(addresses['owner']),H(proxy),I(2*GAS),None])
@@ -205,9 +222,10 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                     require(state['manifest']==json.loads(path.with_suffix('.manifest.json').read_text()),'Session manifest readback mismatch')
                 readback();driver=SessionTransactions(chain,account,other,verifier,keys['relay'],addresses['recipient'],report)
                 initial=driver.state(account);require(initial['key'] is None and initial['nonce']==0 and initial['balance']==2*GAS and initial['raw']==[None]*4,'Unexpected initial session state')
-                def core(label,method,args,**kw):return driver.send(label,CORE,method,[H(account),*args],key=keys['owner'],**kw)
+                custodian=[keys['owner']]
+                def core(label,method,args,**kw):return driver.send(label,CORE,method,[H(account),*args],key=custodian[0],**kw)
                 def wait_delay():chain.stop_node();chain.nx('fastfwd','1','-t','86401');chain.start_node()
-                now=chain.rpc('getblockheader',[chain.rpc('getbestblockhash',[]),True])['time'];until=now+7*86400000;deadline=until+14*86400000
+                now=chain.rpc('getblockheader',[chain.rpc('getbestblockhash',[]),True])['time'];until=now+29*86400000;deadline=until+14*86400000
                 cap=3*GAS
                 configuration=[B(session.compressed),H(GAS_TOKEN),S('transfer'),I(until),I(cap),S('native session validation')]
                 def op(nonce,amount,source=proxy,target=GAS_TOKEN,method='transfer',recipient=addresses['recipient']):
@@ -300,20 +318,63 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 configure_session('grant-after-revocation',session,GAS//4)
                 execute('fresh-allowance-after-revocation',driver.signed(session,op(4,GAS//4)),proxy=True,expected=True,
                     events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=quarter_transfer,raw_changes=(1,2),recipient_delta=GAS//4)
+                stage='recovery-epoch-and-reinstallation'
+                prior=driver.state(account);old_epoch=prior['account'][13];binding=copy.deepcopy(prior['account'][5])
+                old_raw=driver.storage(account,authority_epoch=old_epoch)
+                require(old_raw[0] is not None and old_raw[2] is not None,'Recovery needs a configured and spent session')
+                stale_before_recovery=driver.signed(session,op(prior['nonce'],1))
+                def recovery_proposal(state,timestamp):
+                    state['account'][12]=[hash_le(addresses['replacement']),timestamp,timestamp+604800000,state['account'][8]]
+                driver.send('guardian-proposes-session-recovery',CORE,'proposeRecovery',[H(account),H(addresses['replacement'])],
+                    key=keys['guardian'],events=[(CORE,'RecoveryProposed')],change=recovery_proposal)
+                chain.stop_node();chain.nx('fastfwd','1','-t','604801');chain.start_node()
+                def recovered(state,timestamp):
+                    state['account'][3]=hash_le(addresses['replacement']);state['account'][5:7]=[None,None]
+                    state['account'][8]+=1;state['account'][13]+=1;state['account'][9:13]=[None]*4
+                    state['pending']=None;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*4
+                driver.send('recover-session-authority-epoch',CORE,'executeRecovery',[H(account)],key=keys['relay'],
+                    events=[(CORE,'RecoveryExecuted')],change=recovered)
+                custodian[0]=keys['replacement'];recovered_state=driver.state(account)
+                require(recovered_state['nonce']==prior['nonce'] and recovered_state['account'][7]==prior['account'][7],
+                    'Recovery reset nonce or frozen state')
+                require(driver.storage(account,authority_epoch=old_epoch)==old_raw,'Recovery must isolate old storage without trusting plugin cleanup')
+                for role in ('verifier','hook'):
+                    require(driver.value(CORE,'getPendingModuleCall',[H(account),S(role)]) is None,'Recovery retained pending module authority')
+                    require(driver.value(CORE,'getModuleDependencies',[H(account),S(role)])==[None,[],[]],'Recovery retained module dependencies')
+                def reinstall_proposal(state,timestamp):
+                    state['account'][9]=[*binding,timestamp,timestamp+86400000,state['account'][8]]
+                core('reinstall-same-session-propose','proposeVerifier',[H(verifier)],events=[(CORE,'VerifierChangeProposed')],change=reinstall_proposal)
+                wait_delay()
+                def reinstalled(state,timestamp):
+                    state['account'][5]=binding;state['account'][8]+=1;state['account'][9:13]=[None]*4
+                core('reinstall-same-session-confirm','activateVerifier',[],events=[(CORE,'VerifierChanged')],change=reinstalled)
+                require(driver.state(account)['key'] is None and driver.storage(account)==[None]*4,'Old session configuration resurrected')
+                execute('pre-recovery-session-signature-rejected',stale_before_recovery,fault='No session key active')
+                execute('pre-recovery-session-witness-rejected',stale_before_recovery,proxy=True,admission_rejection=True)
+                configure_session('configure-new-epoch-session',attacker,GAS)
+                fresh_nonce=driver.state(account)['nonce']
+                execute('retired-key-new-domain-rejected',driver.signed(session,op(fresh_nonce,1)),fault='The verifier must return exactly Boolean true.')
+                execute('new-epoch-session-transfer',driver.signed(attacker,op(fresh_nonce,GAS//4)),proxy=True,expected=True,
+                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=quarter_transfer,raw_changes=(1,2),recipient_delta=GAS//4)
+                require(driver.storage(account,authority_epoch=old_epoch)==old_raw,'New authority modified old epoch storage')
+                report['recoveryEpoch']={'before':old_epoch,'after':driver.epoch(account),'oldConfigurationDidNotResurrect':True,
+                    'oldNamespaceUnchanged':True,'newAuthorityTransferSucceeded':True,'operationNoncePreservedAtRecovery':prior['nonce']}
                 stage='expiry-and-cleanup'
-                chain.stop_node();chain.nx('fastfwd','1','-t',str(8*86400));chain.start_node()
-                execute('expired-session',driver.signed(session,op(5,1)),fault='Session key expired')
-                execute('expired-session-witness',driver.signed(session,op(5,1)),proxy=True,admission_rejection=True)
+                current_time=chain.rpc('getblockheader',[chain.rpc('getbestblockhash',[]),True])['time']
+                chain.stop_node();chain.nx('fastfwd','1','-t',str(max(1,(until-current_time)//1000+1)));chain.start_node()
+                next_nonce=driver.state(account)['nonce']
+                execute('expired-session',driver.signed(attacker,op(next_nonce,1)),fault='Session key expired')
+                execute('expired-session-witness',driver.signed(attacker,op(next_nonce,1)),proxy=True,admission_rejection=True)
                 def propose_remove(state,timestamp):state['account'][9]=[hash_le(ZERO),bytes(32),timestamp,timestamp+86400000,state['account'][8]]
                 core('propose-remove-session','proposeVerifier',[H(ZERO)],events=[(CORE,'VerifierChangeProposed')],change=propose_remove)
                 wait_delay()
                 def remove(state,timestamp):
-                    state['account'][5]=None;state['account'][8]+=1;state['account'][9:]=[None]*4;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*4
+                    state['account'][5]=None;state['account'][8]+=1;state['account'][9:13]=[None]*4;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*4
                 core('activate-remove-session','activateVerifier',[],events=[(verifier,'SessionKeyRevoked'),(CORE,'VerifierChanged')],change=remove)
                 require(driver.storage(account)==[None]*4,'Session cleanup left account-scoped storage')
                 readback();report.update(networkMagic=chain.magic,accountId=account,otherAccountId=other,
                     finalOperationNonce=driver.state(account)['nonce'],finalConfigurationNonce=driver.state(account)['account'][8],
-                    fullNefReadbackMatched=True,manifestReadbackMatched=True,allFourSessionStoragePrefixesCleared=True)
+                    fullNefReadbackMatched=True,manifestReadbackMatched=True,currentEpochSessionStoragePrefixesCleared=True)
             finally:chain.stop_node();report['ownedNodesStopped']=chain.node is None
         check_runtime_receipt(build,runtime)
         require(all(sha256(p)==report['sourceSha256'][p.name] for p in sources),'Session harness source changed')

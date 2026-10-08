@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as provenance from "./verify-private-artifact-provenance.mjs";
+import { buildInputSnapshot } from "./check-artifact-reproducibility.mjs";
 
 import {
   LOCAL_ARTIFACTS,
@@ -154,6 +155,7 @@ test("provenance join rejects a stale source certificate before deployment check
     release_matches_fresh_build: true,
     certificate: {
       schema: "neoos-aa-source-to-artifact-certificate/v1",
+      source_root: "repository",
       source_snapshot_sha256: "0".repeat(64),
       source_files: {},
     },
@@ -167,15 +169,19 @@ test("provenance join rejects a stale source certificate before deployment check
 function certificateFixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "aa-certificate-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const files = { "Core.nef": "nef", "Core.manifest.json": "{}" };
+  const files = Object.fromEntries(["v3", "platform"].flatMap((profile) => [
+    [`${profile}/UnifiedSmartWalletV3.nef`, profile], [`${profile}/UnifiedSmartWalletV3.manifest.json`, "{}"],
+  ]));
   const hashes = {};
   for (const [name, contents] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
     fs.writeFileSync(path.join(root, name), contents);
     hashes[name] = createHash("sha256").update(contents).digest("hex");
   }
-  return { root, repro: {
+  return { root: path.join(root, "v3"), repro: {
     release_matches_fresh_build: true,
-    artifacts_compared: 2, drifted: [], missing: [],
+    artifacts_compared: 4, drifted: [], missing: [],
+    profiles: Object.fromEntries(["v3", "platform"].map((profile) => [profile, { artifacts_compared: 2, required_core_present: true, matches_fresh_build: true }])),
     certificate: {
       byte_equal_release: true,
       fresh_artifact_sha256: { ...hashes },
@@ -186,23 +192,26 @@ function certificateFixture(t) {
 
 test("release certificate compares every fresh/release NEF and manifest to disk", (t) => {
   const { root, repro } = certificateFixture(t);
-  assert.equal(provenance.verifyReleaseCertificate(repro, root), 2);
+  assert.equal(provenance.verifyReleaseCertificate(repro, root), 4);
 });
 
 for (const [name, mutate] of Object.entries({
   "false certificate verdict": (r) => { r.certificate.byte_equal_release = false; },
-  "contradictory drift list": (r) => { r.drifted = ["Core.nef"]; },
-  "contradictory missing list": (r) => { r.missing = ["Core.nef"]; },
+  "contradictory drift list": (r) => { r.drifted = ["v3/UnifiedSmartWalletV3.nef"]; },
+  "contradictory missing list": (r) => { r.missing = ["v3/UnifiedSmartWalletV3.nef"]; },
   "wrong artifact count": (r) => { r.artifacts_compared = 1; },
-  "missing fresh manifest": (r) => { delete r.certificate.fresh_artifact_sha256["Core.manifest.json"]; },
-  "missing release manifest": (r) => { delete r.certificate.release_artifact_sha256["Core.manifest.json"]; },
-  "different fresh bytes": (r) => { r.certificate.fresh_artifact_sha256["Core.nef"] = "0".repeat(64); },
+  "missing fresh manifest": (r) => { delete r.certificate.fresh_artifact_sha256["v3/UnifiedSmartWalletV3.manifest.json"]; },
+  "missing release manifest": (r) => { delete r.certificate.release_artifact_sha256["v3/UnifiedSmartWalletV3.manifest.json"]; },
+  "different fresh bytes": (r) => { r.certificate.fresh_artifact_sha256["v3/UnifiedSmartWalletV3.nef"] = "0".repeat(64); },
   "matching maps but different disk bytes": (r) => {
-    r.certificate.fresh_artifact_sha256["Core.manifest.json"] = "0".repeat(64);
-    r.certificate.release_artifact_sha256["Core.manifest.json"] = "0".repeat(64);
+    r.certificate.fresh_artifact_sha256["v3/UnifiedSmartWalletV3.manifest.json"] = "0".repeat(64);
+    r.certificate.release_artifact_sha256["v3/UnifiedSmartWalletV3.manifest.json"] = "0".repeat(64);
   },
+  "missing private profile": (r, root) => { fs.rmSync(path.join(root, "../platform"), { recursive: true }); },
+  "private profile falsely marked missing": (r) => { r.profiles.platform.required_core_present = false; },
+  "stale private release bytes": (r, root) => { fs.writeFileSync(path.join(root, "../platform/UnifiedSmartWalletV3.nef"), "stale"); },
   "additional release output": (r, root) => { fs.writeFileSync(path.join(root, "Extra.nef"), "extra"); },
-  "deleted local output": (r, root) => { fs.unlinkSync(path.join(root, "Core.nef")); },
+  "deleted local output": (r, root) => { fs.unlinkSync(path.join(root, "UnifiedSmartWalletV3.nef")); },
 })) {
   test(`release certificate rejects ${name}`, (t) => {
     const { root, repro } = certificateFixture(t);
@@ -210,3 +219,37 @@ for (const [name, mutate] of Object.entries({
     assert.throws(() => provenance.verifyReleaseCertificate(repro, root), /rebuild certificate/);
   });
 }
+
+test("provenance joins both-profile certificate to all public-module RPC readbacks", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aa-full-provenance-test-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+  const script = Buffer.from([0x40]); const nef = syntheticNef(script); const manifest = Buffer.from("{}");
+  const hashes = {}; const deployments = []; const contracts = [];
+  const writePair = (relative) => {
+    for (const [name, bytes] of [[relative, nef], [relative.replace(/\.nef$/, ".manifest.json"), manifest]]) {
+      fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+      fs.writeFileSync(path.join(root, name), bytes); hashes[name] = hash(bytes);
+    }
+  };
+  for (const [contractName, relative] of Object.entries(LOCAL_ARTIFACTS)) {
+    writePair(`v3/${relative}`);
+    deployments.push({ contractName, localNefSha256: hash(nef), localManifestSha256: hash(manifest) });
+    contracts.push({ contractName, nefScriptSha256: hash(script), nefChecksumEquality: true,
+      manifestSemanticEquality: true, nefScriptByteEquality: true });
+  }
+  writePair("platform/UnifiedSmartWalletV3.nef");
+  const source = buildInputSnapshot();
+  const repro = { release_matches_fresh_build: true, artifacts_compared: 50, drifted: [], missing: [],
+    profiles: { v3: { artifacts_compared: 48, required_core_present: true, matches_fresh_build: true },
+      platform: { artifacts_compared: 2, required_core_present: true, matches_fresh_build: true } },
+    certificate: { schema: "neoos-aa-source-to-artifact-certificate/v1", source_root: "repository",
+      source_files: source, source_snapshot_sha256: hash(JSON.stringify(source)), byte_equal_release: true,
+      fresh_artifact_sha256: { ...hashes }, release_artifact_sha256: { ...hashes } } };
+  const receipt = { status: "PASS", releaseEvidenceEligible: true, network: { publicNetwork: false },
+    privacy: { privateKeysIncluded: false }, deployments, rpcReadback: { contracts } };
+  const result = verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") });
+  assert.equal(result.status, "PASS"); assert.equal(result.releaseToPrivateChain.localArtifactsChecked, 24);
+  receipt.rpcReadback.contracts[0].nefScriptSha256 = "0".repeat(64);
+  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }), /private artifact provenance mismatch/);
+});

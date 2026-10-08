@@ -18,6 +18,7 @@
     <Compile Include="UnifiedSmartWallet.Internal.cs" />
     <Compile Include="UnifiedSmartWallet.Events.cs" />
     <Compile Include="UnifiedSmartWallet.Accounts.cs" />
+    <Compile Include="UnifiedSmartWallet.VerifierChildren.cs" />
     <Compile Include="UnifiedSmartWallet.PlatformRegistrar.cs" />
     <Compile Include="UnifiedSmartWallet.Proxy.cs" />
     <Compile Include="UnifiedSmartWallet.State.cs" />

@@ -1,5 +1,12 @@
 # Native module bytecode probes
 
+The examples and recorded coverage below refer to the historical ABI 1 native
+probe. A current ABI 2 run must use the four-argument execution entrypoints,
+14-field state and tagged authorityEpoch namespaces, plus current source/build
+receipts. The separate `tests/NativeEpochProbe` gate executes compiled native
+modules on the public test VM with a test-only epoch service; it is not this
+source-built AccountManagement runtime and does not replace its chain evidence.
+
 ## Purpose and boundary
 
 Persisted NeoExpress transactions establish reachable end-to-end behavior, but

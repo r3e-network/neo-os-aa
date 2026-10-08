@@ -193,47 +193,37 @@ public class Fix_ModuleAbi_Tests
     }
 
     [TestMethod]
-    public void CompositeCanProvisionLeafBeforePublishingChildRoster()
+    public void CompositeRequiresPublishedRosterBeforeTimelockedLeafConfiguration()
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("UnifiedSmartWalletV3");
-        UInt160 child = fx.Deploy("verifiers/SessionKeyVerifier", wallet.ToArray());
-        UInt160 multiSig = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
-
-        UInt160 account = fx.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            multiSig,
-            Array.Empty<byte>(),
-            UInt160.Zero,
-            Owner,
-            EscapeTimelockSeconds);
-
+        UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
+        UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
+        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,
+            Array.Empty<byte>(), UInt160.Zero, Owner, EscapeTimelockSeconds);
         fx.SetSigners(Owner);
-        fx.CallVoid(wallet, "registerAccount", account, multiSig, Array.Empty<byte>(),
+        fx.CallVoid(wallet, "registerAccount", account, root, Array.Empty<byte>(),
             UInt160.Zero, Owner, EscapeTimelockSeconds);
 
-        byte[] compressedKey = new byte[33];
-        compressedKey[0] = 0x02;
-        var validUntil = fx.Now() + 172_800_000;
-        Assert.IsFalse(fx.CallBoolean(
-            wallet, "callVerifierChild", account, child, "setSessionKey",
-            new object?[] { account, compressedKey, UInt160.Parse("0x4444444444444444444444444444444444444444"),
-                "transfer", validUntil, 0, "child" }));
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        _ = fx.Call(wallet, "callVerifierChild", account, child, "setSessionKey",
-            new object?[] { account, compressedKey, UInt160.Parse("0x4444444444444444444444444444444444444444"),
-                "transfer", validUntil, 0, "child" });
+        object[] leafArgs = { account, new UInt160[] { Owner }, 1 };
+        TestException unpublished = Assert.ThrowsExactly<TestException>(() =>
+            fx.Call(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
+        StringAssert.Contains(unpublished.Message, "Invalid child verifier configuration");
+        Assert.IsFalse(fx.CallBoolean(wallet, "hasPendingVerifierCall", account));
+        Assert.IsTrue(fx.Call(child, "getConfig", account).IsNull);
 
-        Assert.IsFalse(fx.CallBoolean(
-            wallet, "callVerifier", account, "setConfig",
-            new object?[] { account, new UInt160[] { child }, 1 }));
+        object[] rootArgs = { account, new UInt160[] { child }, 1 };
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", rootArgs));
         fx.AdvanceTime(TimeSpan.FromDays(1));
-        _ = fx.Call(wallet, "callVerifier", account, "setConfig",
-            new object?[] { account, new UInt160[] { child }, 1 });
-
-        Assert.IsFalse(fx.Call(multiSig, "getConfig", account).IsNull,
-            "The composite must publish a roster after child configuration succeeds");
+        fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
+        TestException early = Assert.ThrowsExactly<TestException>(() =>
+            fx.Call(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
+        StringAssert.Contains(early.Message, "Timelock not elapsed");
+        Assert.IsTrue(fx.Call(child, "getConfig", account).IsNull);
+        fx.AdvanceTime(TimeSpan.FromDays(1));
+        fx.CallVoid(wallet, "callVerifierChild", account, child, "setConfig", leafArgs);
+        Assert.AreEqual(System.Numerics.BigInteger.One, fx.CallInteger(child, "getThreshold", account));
     }
 
     [TestMethod]
@@ -241,40 +231,31 @@ public class Fix_ModuleAbi_Tests
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("UnifiedSmartWalletV3");
-        UInt160 child = fx.Deploy("verifiers/SessionKeyVerifier", wallet.ToArray());
+        UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
         UInt160 firstRoot = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
         UInt160 secondRoot = fx.Deploy("MockVerifierCore");
-        UInt160 account = fx.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            firstRoot,
-            Array.Empty<byte>(),
-            UInt160.Zero,
-            Owner,
-            EscapeTimelockSeconds);
-
+        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", firstRoot,
+            Array.Empty<byte>(), UInt160.Zero, Owner, EscapeTimelockSeconds);
         fx.SetSigners(Owner);
         fx.CallVoid(wallet, "registerAccount", account, firstRoot, Array.Empty<byte>(),
             UInt160.Zero, Owner, EscapeTimelockSeconds);
 
-        byte[] compressedKey = new byte[33];
-        compressedKey[0] = 0x02;
-        var validUntil = fx.Now() + 172_800_000;
-        Assert.IsFalse(fx.CallBoolean(
-            wallet, "callVerifierChild", account, child, "setSessionKey",
-            new object?[] { account, compressedKey, UInt160.Parse("0x4444444444444444444444444444444444444444"),
-                "transfer", validUntil, 0, "orphan" }));
+        object[] rootArgs = { account, new UInt160[] { child }, 1 };
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", rootArgs));
+        fx.AdvanceTime(TimeSpan.FromDays(1));
+        fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
+        object[] leafArgs = { account, new UInt160[] { Owner }, 1 };
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
+        Assert.IsTrue(fx.CallBoolean(wallet, "hasPendingVerifierCall", account));
 
         fx.CallVoid(wallet, "updateVerifier", account, secondRoot, Array.Empty<byte>());
         fx.AdvanceTime(TimeSpan.FromDays(1));
         fx.CallVoid(wallet, "confirmVerifierUpdate", account);
-
-        Assert.IsFalse(fx.CallBoolean(
-            wallet, "callVerifierChild", account, child, "setSessionKey",
-            new object?[] { account, compressedKey, UInt160.Parse("0x4444444444444444444444444444444444444444"),
-                "transfer", validUntil, 0, "orphan" }),
-            "A child call armed under the replaced root must not be confirmed under the new root");
-        Assert.ThrowsExactly<TestException>(() => fx.Call(child, "getSignerDomains", account));
+        TestException replaced = Assert.ThrowsExactly<TestException>(() =>
+            fx.Call(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
+        StringAssert.Contains(replaced.Message, "Verifier child configuration ABI missing");
+        Assert.IsTrue(fx.Call(child, "getConfig", account).IsNull,
+            "A child proposal under a replaced root must never initialize the child.");
     }
 
     [TestMethod]
@@ -282,54 +263,45 @@ public class Fix_ModuleAbi_Tests
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("UnifiedSmartWalletV3");
-        UInt160 session = fx.Deploy("verifiers/SessionKeyVerifier", wallet.ToArray());
-        UInt160 webAuthn = fx.Deploy("verifiers/WebAuthnVerifier", wallet.ToArray());
-        UInt160 multiSig = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
-        UInt160 target = UInt160.Parse("0x4444444444444444444444444444444444444444");
-        UInt160 account = fx.CallUInt160(
-            wallet, "computeRegistrationAccountId", multiSig, Array.Empty<byte>(),
-            UInt160.Zero, Owner, EscapeTimelockSeconds);
-
+        UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
+        UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
+        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,
+            Array.Empty<byte>(), UInt160.Zero, Owner, EscapeTimelockSeconds);
         fx.SetSigners(Owner);
-        fx.CallVoid(wallet, "registerAccount", account, multiSig, Array.Empty<byte>(),
+        fx.CallVoid(wallet, "registerAccount", account, root, Array.Empty<byte>(),
             UInt160.Zero, Owner, EscapeTimelockSeconds);
 
-        byte[] firstKey = new byte[33];
-        firstKey[0] = 0x02;
-        firstKey[32] = 0x11;
-        var validUntil = fx.Now() + 7 * 86_400_000;
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, session, "setSessionKey",
-            new object?[] { account, firstKey, target, "transfer", validUntil, 0, "root-replay" }));
+        object[] rootArgs = { account, new UInt160[] { child }, 1 };
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", rootArgs));
         fx.AdvanceTime(TimeSpan.FromDays(1));
-        _ = fx.Call(wallet, "callVerifierChild", account, session, "setSessionKey",
-            new object?[] { account, firstKey, target, "transfer", validUntil, 0, "root-replay" });
+        fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
 
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, webAuthn, "setPublicKey",
-            new object?[] { account, firstKey }));
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        _ = fx.Call(wallet, "callVerifierChild", account, webAuthn, "setPublicKey",
-            new object?[] { account, firstKey });
-
-        UInt160[] children = new[] { session, webAuthn };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig",
-            new object?[] { account, children, 2 }));
+        // Public V3 rejects duplicate child identities; signer-domain uniqueness belongs
+        // to the native profile and is covered by that profile's state-machine suite.
+        object[] invalidRootArgs = { account, new UInt160[] { child, child }, 2 };
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
+        var failedRootProposedAt = fx.CallInteger(wallet, "getPendingVerifierCallTime", account);
         fx.AdvanceTime(TimeSpan.FromDays(1));
         TestException duplicate = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "callVerifier", account, "setConfig",
-                new object?[] { account, children, 2 }));
-        StringAssert.Contains(duplicate.Message, "Duplicate signer domain");
+            fx.Call(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
+        StringAssert.Contains(duplicate.Message, "Duplicate verifier");
 
-        byte[] secondKey = new byte[33];
-        secondKey[0] = 0x02;
-        secondKey[32] = 0x22;
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, webAuthn, "setPublicKey",
-            new object?[] { account, secondKey }));
+        object[] leafArgs = { account, new UInt160[] { Owner }, 1 };
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
         fx.AdvanceTime(TimeSpan.FromDays(1));
-        _ = fx.Call(wallet, "callVerifierChild", account, webAuthn, "setPublicKey",
-            new object?[] { account, secondKey });
+        fx.CallVoid(wallet, "callVerifierChild", account, child, "setConfig", leafArgs);
+        Assert.AreEqual(System.Numerics.BigInteger.One, fx.CallInteger(child, "getThreshold", account));
+        Assert.IsFalse(fx.CallBoolean(wallet, "hasPendingVerifierCall", account));
 
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig",
-            new object?[] { account, children, 2 }),
-            "A successful child mutation must invalidate the failed root intent and require a fresh root timelock");
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", invalidRootArgs),
+            "A successful child mutation must require a fresh root proposal and timelock.");
+        Assert.IsTrue(fx.CallInteger(wallet, "getPendingVerifierCallTime", account) > failedRootProposedAt);
+        TestException early = Assert.ThrowsExactly<TestException>(() =>
+            fx.Call(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
+        StringAssert.Contains(early.Message, "Timelock not elapsed");
+        fx.AdvanceTime(TimeSpan.FromDays(1));
+        TestException stillInvalid = Assert.ThrowsExactly<TestException>(() =>
+            fx.Call(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
+        StringAssert.Contains(stillInvalid.Message, "Duplicate verifier");
     }
 }

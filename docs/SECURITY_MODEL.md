@@ -1,12 +1,33 @@
 # Neo N3 Abstract Account Security Model
 
+## Runtime and authority versions (2026-10-08 convergence)
+
+Ordinary deployed `UnifiedSmartWallet` remains the public `v3` implementation
+from the tested main branch; its separate `PLATFORM` build retains 10 GAS bounded
+verifier callbacks. Neither is the native AccountManagement service. Native ABI 2
+uses a 1 GAS verifier budget (within the 1.5 GAS verification envelope), 2.5 GAS
+hook/maintenance budgets, and explicit epoch-aware module packaging.
+
+Native recovery now requires a checked authority-epoch and configuration-nonce
+advance, detaches old roots/dependencies without calling old modules, and leaves
+identity, asset address, execution nonce and frozen state unchanged. All module
+storage uses `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`. The native four-argument execution envelope commits both counters in the unsigned
+transaction script, covering custody fallback and native transaction witnesses;
+operation-signature preimages also bind them. Prior-generation
+keys or signatures cannot be restored by reinstalling a module. This is distinct
+from ordinary `finalizeEscape`, whose old-module cleanup can still fail closed.
+The normative rules are in `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`.
+Historical receipts below describe their pinned ABI 1 or ordinary-contract
+snapshots. They do not certify the changed ABI 2 source, SDK or runtime.
+
+
 ## Executive Summary
 
 The Neo N3 Abstract Account system implements a policy-gated, plugin-based account abstraction architecture. This document defines the threat model, trust assumptions, security properties, and defense-in-depth mechanisms across all layers of the system.
 
 The deployed-contract profile is not automatically compatible with native
 AccountManagement. The native NeoNativeVerifier, WhitelistHook, SessionKeyVerifier,
-DailyLimitHook and TokenRestrictedHook profiles now
+DailyLimitHook and TokenRestrictedHook historical ABI 1 profiles
 have private-chain evidence for actual witnesses, exact invocation grants,
 delayed configuration, rollback and cleanup. The remaining modules still require
 their own native-profile adaptation and validation. The consolidated evidence is
@@ -35,13 +56,13 @@ transfer is exercised. Uncapped Boolean-false HALT consumes nonce and updates
 last-use metadata, whereas target FAULT rolls back. Capped false transfers still
 fault. The event exposes the exact scope and uncapped flag.
 
-Revocation does not give permanent invalidation if an operator later regrants
-the same key. Two private replays retain identical signature bytes across both
-replacement and explicit revocation: they reject while unauthorized, then
-succeed after regrant if nonce and deadlines still permit them. Consumed nonce
-replay remains rejected. Do not reuse a retired key when permanent invalidation
-is required. An epoch-bearing signing domain would require an explicit protocol
-revision; this validation does not silently introduce one.
+The historical ABI 1 replay restored identical signature bytes after regrant
+when nonce/deadline still permitted them. ABI 2 closes that behavior: every
+configuration transition changes configurationNonce in the signing domain;
+recovery additionally advances authorityEpoch. Regranting the same public key
+cannot revive a pre-transition signature. The ABI 2 matrix must retain the old
+bytes and reject them after regrant, then accept a freshly signed operation.
+Old ABI 1 receipts remain historical evidence and must not be relabelled.
 
 DailyLimitHook native-profile evidence is recorded separately in
 `docs/reports/aa-native-daily-balance-validation-20261007.json`. Its net-outflow meter
@@ -272,8 +293,8 @@ rejects an unlisted target before dispatch, and rolls back the nonce on rejectio
 
 ### 5.2 Should-Hold Invariants
 
-1. **Gas Limits on Verifiers:** *(PRIVATE INTEGRATION VERIFIED; PUBLIC ACTIVATION PENDING)* The matching Neo core/DevPack runtime enforces a 10 GAS child budget for each verifier callback, including ordinary nested descendants and fee-whitelisted execution.
-2. **Plugin State Cleanup:** *(SHIPPED COMPOSITES VERIFIED; GENERIC PLUGINS PARTIAL)* The core owns the dependency registry for the shipped `MultiSig` and `MultiHook` composites, admits only leaf children, clears removed children before replacement, and clears every registered leaf before final removal. The formal model covers atomic rollback; unit and private NeoExpress tests cover retained-child reconfiguration, full cleanup, and detach behavior. Semantic cleanup/refinement coverage for arbitrary future plugins remains an explicit profile boundary.
+1. **Gas Limits on Verifiers:** *(PROFILE DEPENDENT)* The private `PLATFORM` core uses a 10 GAS child budget for each verifier callback on the matching runtime. Public `v3` uses standard `System.Contract.Call` and has no child budget; lifecycle admission, simulation and transaction fee ceilings do not establish one. Historical private runtime evidence requires revalidation after source/runtime changes.
+2. **Plugin State Cleanup:** *(PARTIAL)* Current settlement clears known plugin markers and rejects modules whose manifest omits the V3 lifecycle ABI; semantic cleanup/refinement coverage for arbitrary future plugins is pending.
    Every verifier and hook must implement `clearAccount`: the core calls it without a fallback from
    `confirmVerifierUpdate`, `confirmHookUpdate`, `finalizeEscape` and `settleMarketEscrow`, and a
    nested call to a missing method faults the enclosing transaction uncatchably. The
@@ -302,8 +323,8 @@ rejects an unlisted target before dispatch, and rolls back the nonce on rejectio
 
 | ID | Severity | Component | Description | Status |
 | --- | --- | --- | --- |
-| **VULN-001** | Critical | **Verifier Gas DoS** | Untrusted verifier and hook callbacks are bounded by `System.Contract.CallWithGasLimit` in the current AA artifact | Mitigated for the matching private-chain artifact; native AccountManagement and public activation/deployment remain pending |
-| **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Closed for the current private artifact: source/artifact certificate, 368 VM tests and NeoExpress runtime/readback pass; public deployment is excluded |
+| **VULN-001** | Critical | **Verifier Gas DoS** | Public `v3` permits lifecycle-compatible verifier callbacks through standard `Contract.Call` without a child budget | Open for public arbitrary-verifier sponsorship; historical private `PLATFORM` evidence only |
+| **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Mitigated in source; refinement/deployment unverified |
 | **VULN-003** | Medium | **Session Key Ordering** | A signed operation can execute before a later revocation transaction is ordered | Defined execution-order semantics; residual pre-inclusion operational risk |
 | **VULN-004** | Medium | **MultiSig Composition Boundary** | Empty, oversized, invalid-threshold, duplicate, self-referential, incomplete-child, and signer-domain-reuse configurations | Bounded Coq policy + 368 VM tests + private NeoExpress child manifest/domain preflight and revalidation; shipped-profile cryptographic vectors are covered, while private-key independence is not inferable from public keys and arbitrary future plugins remain a declared trust boundary |
 | **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Core-owned leaf dependency registries, manifest lifecycle preflight, and fail-closed cleanup for MultiSig/MultiHook; arbitrary-plugin storage/refinement coverage remains open |
@@ -312,21 +333,31 @@ rejects an unlisted target before dispatch, and rolls back the nonce on rejectio
 **VULN-001 closure gate:** a transaction-wide gas limit or voluntary
 `Runtime.GasLeft`/`BurnGas` accounting is insufficient. The current private
 artifact instead uses the platform-level `System.Contract.CallWithGasLimit`
-capability. Its application-trigger verifier budget is 1,000,000,000 datoshi and
-its hook budget is a separate 250,000,000 datoshi; the native profile specifies
-100,000,000 datoshi for verifiers and remains below Neo's 150,000,000-datoshi
-`MaxVerificationGas` envelope. The budget is charged against the child and
-every ancestor before counters mutate; ordinary nested calls inherit the
-budget and fee whitelisting cannot bypass it. The ERC-1271-style
-message-signature adapter also routes both verifier capability discovery and
-signature validation through the verifier budget rather than an unbounded call.
-The matching private NeoExpress
-receipt drives burning verifier and hook callbacks to `The bounded contract
-call gas limit has been exhausted.` with nonce rollback and complete 25-artifact
-RPC readback parity (NEF script bytes, checksums, and manifests). See
-`docs/reports/aa-neoexpress-validation-20261006.json`. VULN-001 is
-mitigated for this private integrated artifact; the native AccountManagement
-implementation and public activation/deployment remain pending.
+capability. Its 1,000,000,000-datoshi (10 GAS) budget is charged against the
+child and every ancestor before counters mutate; ordinary nested calls inherit
+the budget and fee whitelisting cannot bypass it. The matching core passes 9/9
+targeted vectors and 1,435/1,435 full unit tests. The matching AA artifact
+passes 292/292 contract tests, and the private NeoExpress receipt drives a
+burning verifier to `Contract call gas limit exceeded` with nonce rollback and
+25-artifact RPC readback parity. See
+`docs/reports/aa-platform-gas-cap-20260921.json` and
+`docs/reports/aa-neoexpress-gas-cap-20260921.json`. VULN-001 is mitigated for
+this private integrated artifact; public activation and deployment remain
+pending. These dated receipts describe the private artifact tested then, not the
+current public `contracts/bin/v3` build. The source lock scopes
+`VerifierGasBudget.v` to bounded `PLATFORM` and native callbacks; native ABI 2
+uses a separate 1 GAS verifier budget and 2.5 GAS hook/maintenance budget. A
+passing formal run does not close public VULN-001.
+
+**Public admission policy:** the on-chain lifecycle ABI preflight is a compatibility
+check and does not certify a module's trustworthiness, resource use, upgrade policy or
+nested dependencies. Permissionless account configuration does not oblige a relay to
+sponsor that configuration. A public sponsor must bound its transaction exposure and
+admit only reviewed verifier/hook configurations, including mutable child modules and
+upgrade authority; it must re-check the configuration and simulation before signing.
+An absent reviewed admission policy means arbitrary-module sponsorship is not ready for
+production. These operational controls reduce sponsor exposure without claiming the
+non-bypassable callback budget that only the private runtime supplies.
 
 **Witness/callback evidence boundary:** the runtime suite now covers bounded proxy-script shape
 vectors (wrong account, arbitrary/non-data instructions, decoy/global signer, and fee-payer
@@ -506,6 +537,13 @@ stateDiagram-v2
 | **Audit Trail** | All escape events emitted |
 | **No Bypass** | *(PARTIAL)* Market escrow can clear escape |
 
+Finalization validates a nonzero replacement verifier against the same V3 lifecycle ABI
+as normal verifier rotation before cleanup or state writes. It still calls the old
+verifier and hook's `clearAccount` and fails atomically if either module faults or aborts.
+The timelock therefore authorizes recovery but does not guarantee recovery liveness
+against an unavailable or malicious old plugin. Emergency detach would need an explicit
+authority-revocation and plugin-state design; it is not implemented by these changes.
+
 ---
 
 ## 10. Compliance & Privacy
@@ -528,7 +566,7 @@ stateDiagram-v2
 | **Sanctions Screening** | Via `WhitelistHook` |
 | **Transaction Monitoring** | Via relay server logs |
 | **Recovery Standard** | L1 timelock escape hatch |
-| **User Sovereignty** | Backup owner control guaranteed |
+| **User Sovereignty** | Backup owner authorizes delayed recovery; successful plugin cleanup remains required |
 
 ---
 

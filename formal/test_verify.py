@@ -1,4 +1,6 @@
 """Tests of the gate, not formal proof evidence. Run with unittest discovery."""
+import copy
+import hashlib
 import json
 import os
 import re
@@ -58,6 +60,60 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(theorem,verify.coq_declarations(model))
         self.assertIn('contracts/hooks/DailyLimitHook.cs',verify.SOURCE_FILES)
         self.assertEqual(15,len(verify.COQ_MODULES['NativeDailyPolicy.v']))
+
+    def test_budget_model_is_bounded_profiles_only(self):
+        profiles = verify.MODEL_PROFILES
+        self.assertEqual(["platform", "native"], profiles["coq/VerifierGasBudget.v"])
+        self.assertEqual(verify.ARTIFACTS, set(profiles))
+        self.assertFalse(verify.RUNTIME_PROFILES["v3"]["verifierChildBudgetEnforced"])
+        self.assertTrue(verify.RUNTIME_PROFILES["platform"]["verifierChildBudgetEnforced"])
+
+    def test_native_scope_and_authority_model_are_explicit(self):
+        self.assertTrue(verify.RUNTIME_PROFILES["native"]["verifierChildBudgetEnforced"])
+        self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeAuthorityEpoch.v"])
+        self.assertEqual(["native"], verify.MODEL_PROFILES["coq/CallbackPluginTopology.v"])
+        self.assertEqual(["v3", "platform"], verify.MODEL_PROFILES["coq/ProxyWitnessScript.v"])
+        self.assertEqual(22, len(verify.COQ_MODULES["NativeAuthorityEpoch.v"]))
+        # Legacy escape-owner and uint256/paymaster models are not native ABI 2 semantics.
+        for model in ("coq/UnifiedSmartWalletAA.v", "tla/UnifiedSmartWalletAA.tla", "smt/aa_core.smt2"):
+            self.assertNotIn("native", verify.MODEL_PROFILES[model])
+        self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeIntegerDomain.v"])
+
+    def test_native_core_provenance_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            core = Path(directory)
+            for name in verify.NATIVE_CORE_REQUIRED_FILES:
+                path = core / name; path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("// reviewed fixture\n")
+            pins = verify.native_core_hashes(core)
+            lock = {"nativeCoreSources": pins}
+            verify.check_native_core_sources(lock, core)
+            with self.assertRaisesRegex(ValueError, "native-core-root"):
+                verify.check_native_core_sources(lock, None)
+            changed = core / next(iter(verify.NATIVE_CORE_REQUIRED_FILES))
+            changed.write_text("// drift\n")
+            with self.assertRaisesRegex(ValueError, "Native core source drift"):
+                verify.check_native_core_sources(lock, core)
+            lock["nativeCoreSources"] = verify.native_core_hashes(core)
+            added = core / "src/Neo/Unreviewed.cs"; added.write_text("// new file\n")
+            with self.assertRaisesRegex(ValueError, "Native core source roster"):
+                verify.check_native_core_sources(lock, core)
+            added.unlink(); changed.unlink()
+            with self.assertRaisesRegex(ValueError, "Native core source missing"):
+                verify.check_native_core_sources(lock, core)
+
+    def test_source_lock_may_not_claim_public_child_budget(self):
+        lock = {"runtimeProfiles": copy.deepcopy(verify.RUNTIME_PROFILES), "modelProfiles": copy.deepcopy(verify.MODEL_PROFILES)}
+        verify.check_profile_scope(lock)
+        lock["modelProfiles"]["coq/VerifierGasBudget.v"].append("v3")
+        with self.assertRaisesRegex(ValueError, "Model profile scope"):
+            verify.check_profile_scope(lock)
+
+    def test_source_lock_may_not_change_runtime_capability(self):
+        lock = {"runtimeProfiles": copy.deepcopy(verify.RUNTIME_PROFILES), "modelProfiles": copy.deepcopy(verify.MODEL_PROFILES)}
+        lock["runtimeProfiles"]["v3"]["verifierChildBudgetEnforced"] = True
+        with self.assertRaisesRegex(ValueError, "Runtime profile scope"):
+            verify.check_profile_scope(lock)
 
     def tlc_output(self):
         return "\n".join([
@@ -133,7 +189,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("proof-replay-freshness", verify.ATTESTATION_PROOF_COQ_MUTATIONS)
 
     def test_open_formal_boundary_ledger_remains_explicit(self):
-        ledger = json.loads((verify.ROOT.parent / "docs/reports/aa-open-formal-boundaries-20261006.json").read_text())
+        ledger = json.loads((verify.ROOT.parent / "docs/reports/aa-native-open-boundaries-20261008.json").read_text())
         self.assertEqual("OPEN_BOUNDARIES_RETAINED", ledger["status"])
         statuses = {item["id"]: item["status"] for item in ledger["boundaries"]}
         self.assertEqual("OPEN", statuses["FORMAL-NEOVM-COMPILER-REFINEMENT"])
@@ -436,6 +492,10 @@ class VerificationGateTests(unittest.TestCase):
             for name in verify.SOURCE_FILES:
                 (repo / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(verify.ROOT.parent / name, repo / name)
+            lock = {"schema": "aa-formal-source-lock/v2", "runtimeProfiles": verify.RUNTIME_PROFILES,
+                    "modelProfiles": verify.MODEL_PROFILES,
+                    "sources": {name: hashlib.sha256((repo / name).read_bytes()).hexdigest() for name in verify.SOURCE_FILES}}
+            (formal / "source-lock.json").write_text(json.dumps(lock))
             verify.check_inventory(formal)
             (repo / "contracts/UnifiedSmartWallet.Execution.cs").write_text("// drift\n")
             with self.assertRaisesRegex(ValueError, "Source drift"):

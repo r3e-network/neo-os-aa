@@ -16,8 +16,8 @@ namespace AbstractAccount.Hooks
     /// </remarks>
     [DisplayName("WhitelistHook")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext")]
-    [ManifestExtra("SmartAccountProfile", "native-v1")]
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch")]
+    [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canExecuteHook")]
     [ContractPermission("*", "canConfigureHook")]
@@ -63,7 +63,7 @@ namespace AbstractAccount.Hooks
         public static void SetWhitelist(UInt160 accountId, UInt160 targetContract, bool allowed)
         {
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
-            byte[] key = Helper.Concat(Prefix_Whitelist, (byte[])accountId);
+            byte[] key = HookAuthority.AccountKey(Prefix_Whitelist, accountId);
             key = Helper.Concat(key, (byte[])targetContract);
             if (allowed) Storage.Put(Storage.CurrentContext, key, new byte[] { 1 });
             else Storage.Delete(Storage.CurrentContext, key);
@@ -99,7 +99,7 @@ namespace AbstractAccount.Hooks
         [Safe]
         public static bool IsWhitelisted(UInt160 accountId, UInt160 targetContract)
         {
-            byte[] key = Helper.Concat(Prefix_Whitelist, (byte[])accountId);
+            byte[] key = HookAuthority.AccountKey(Prefix_Whitelist, accountId);
             key = Helper.Concat(key, (byte[])targetContract);
             return Storage.Get(Storage.CurrentContext, key) != null;
         }
@@ -112,7 +112,7 @@ namespace AbstractAccount.Hooks
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
 #endif
 
-            byte[] prefix = Helper.Concat(Prefix_Whitelist, (byte[])accountId);
+            byte[] prefix = HookAuthority.AccountKey(Prefix_Whitelist, accountId);
             Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly);
             while (iterator.Next())
             {

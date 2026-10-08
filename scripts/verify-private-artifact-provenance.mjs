@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { listArtifacts, sourceSnapshot } from "./check-artifact-reproducibility.mjs";
+import { ARTIFACT_PROFILES, buildInputSnapshot, listArtifacts } from "./check-artifact-reproducibility.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const releaseDir = path.join(repoRoot, "contracts", "bin", "v3");
@@ -147,7 +147,20 @@ export function verifyReleaseCertificate(repro, releaseRoot = releaseDir) {
     throw new Error("rebuild certificate is not byte-identical");
   }
 
-  const disk = listArtifacts(releaseRoot);
+  // v3 is the deployed module set, but its source certificate also attests the
+  // isolated platform core. Validate both profile inventories before chain joining.
+  const binRoot = path.dirname(releaseRoot);
+  const disk = ARTIFACT_PROFILES.flatMap((profile) => {
+    const directory = profile === "v3" ? releaseRoot : path.join(binRoot, profile);
+    const files = listArtifacts(directory);
+    const entry = repro.profiles?.[profile];
+    if (entry?.matches_fresh_build !== true || entry?.required_core_present !== true
+        || entry.artifacts_compared !== files.length
+        || !["UnifiedSmartWalletV3.nef", "UnifiedSmartWalletV3.manifest.json"].every((name) => files.includes(name))) {
+      throw new Error(`rebuild certificate profile inventory mismatch: ${profile}`);
+    }
+    return files.map((file) => `${profile}/${file}`);
+  }).sort();
   const freshNames = Object.keys(fresh).sort();
   const releaseNames = Object.keys(release).sort();
   if (repro.artifacts_compared !== disk.length ||
@@ -160,7 +173,9 @@ export function verifyReleaseCertificate(repro, releaseRoot = releaseDir) {
     if (fresh[artifact] !== release[artifact]) {
       throw new Error(`rebuild certificate fresh/release mismatch: ${artifact}`);
     }
-    const actual = sha256(fs.readFileSync(path.join(releaseRoot, artifact)));
+    const [profile, ...relative] = artifact.split("/");
+    const directory = profile === "v3" ? releaseRoot : path.join(binRoot, profile);
+    const actual = sha256(fs.readFileSync(path.join(directory, ...relative)));
     if (actual !== release[artifact]) {
       throw new Error(`rebuild certificate does not match release bytes: ${artifact}`);
     }
@@ -172,7 +187,8 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
   if (repro.certificate?.schema !== "neoos-aa-source-to-artifact-certificate/v1") {
     throw new Error("source-to-artifact certificate is missing");
   }
-  const currentSourceFiles = sourceSnapshot(path.join(repoRoot, "contracts"), repoRoot);
+  if (repro.certificate.source_root !== "repository") throw new Error("source-to-artifact certificate must include repository restore policy");
+  const currentSourceFiles = buildInputSnapshot(repoRoot);
   const currentSourceSnapshotSha256 = sha256(Buffer.from(JSON.stringify(currentSourceFiles)));
   if (currentSourceSnapshotSha256 !== repro.certificate.source_snapshot_sha256) {
     throw new Error("current contract source inputs differ from the reproducibility certificate");
@@ -215,7 +231,7 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
       rpcChecksumMatch: chain.nefChecksumEquality === true,
       rpcManifestSemanticMatch: chain.manifestSemanticEquality === true,
       rpcScriptByteMatch: chain.nefScriptByteEquality === true,
-      releaseCertificateHashMatch: repro.certificate.release_artifact_sha256?.[relative] === sha256(nef),
+      releaseCertificateHashMatch: repro.certificate.release_artifact_sha256?.[`v3/${relative}`] === sha256(nef),
     };
     if (!Object.entries(row).filter(([key]) => key.endsWith("Match")).every(([, value]) => value === true)) {
       throw new Error(`private artifact provenance mismatch: ${name}`);

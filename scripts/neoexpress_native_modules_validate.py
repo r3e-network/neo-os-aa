@@ -16,12 +16,13 @@ import time
 from neoexpress_validate import (Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO, decode,
                                 hash_le, nef_script, varint, serialize_unsigned, serialize_witnesses)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
-from neoexpress_native_service_validate import CORE, STDLIB, check_native, persist, operation
+from neoexpress_native_service_validate import CORE, STDLIB, check_native, persist, operation, transaction_system_fee, module_storage_key, execution_arguments
 from neoexpress_native_proxy_validate import push_bytes, check_transaction, check_fault, GAS
 from neoexpress_native_configuration_validate import call_script, pending_log
 from neoexpress_native_recovery_validate import equal_typed
 from neoexpress_reproducible_build import check_runtime_receipt, sha256
 from native_module_profile import validate_descriptor
+from build_native_modules import collect_inputs
 
 NULL = {"type": "Any", "value": None}
 CONTEXT = "Missing native module invocation context"
@@ -56,6 +57,10 @@ def nef_from_rpc(value):
 
 
 def check_module_build(compiled, artifacts, contracts):
+    # ABI v2 receipts pin root restore policy as well as native module sources.
+    require(compiled.get("schema") == "smartaccount-native-module-build/v2" and
+            compiled.get("sourceRoot") == "repository" and compiled.get("restoreLockedMode") is True and
+            compiled.get("packageSourcesPolicy") == "nuget.config", "A locked repository-scoped v2 build receipt is required")
     require(compiled.get("status") == "PASS" and compiled.get("reproducible") is True and len(compiled.get("builds", [])) == 2,
             "A successful native two-build receipt is required")
     require(compiled["builds"][0], "Native artifact certificate is empty")
@@ -65,7 +70,8 @@ def check_module_build(compiled, artifacts, contracts):
     require(set(compiled["builds"][0]) == files and compiled["builds"][0] == compiled["builds"][1], "Native artifact roster or replay mismatch")
     pins = compiled["builds"][0]
     require(all(sha256(artifacts/n) == h for n,h in pins.items()), "Native artifact pin mismatch")
-    require(compiled.get("sourceSha256") and all(sha256(contracts/n) == h for n,h in compiled["sourceSha256"].items()), "Native source changed after build")
+    _, source_pins = collect_inputs(contracts)
+    require(compiled.get("sourceSha256") == source_pins, "Native source inventory or bytes changed after build")
     scripts = Path(__file__).parent
     require(compiled["recipeSha256"] == sha256(scripts/"build_native_modules.py") and
             compiled["packagingRecipeSha256"] == sha256(scripts/"native_module_profile.py"), "Native recipe changed after build")
@@ -109,10 +115,13 @@ class ModuleTransactions:
                 self.value(self.hook, "isWhitelisted", [H(account), H(STDLIB)])]
 
     def send(self, label, target, method, args, keys, *, module_scope=False, expected=None, event=None, fault=None,
-             state_change=None, pending=None, root_pending=None):
+             state_change=None, pending=None, root_pending=None, recovery_pending=None):
         before = self.state(self.account); other = self.state(self.other)
+        if target == CORE and method in ("executeUserOp", "executeUserOps"):
+            require(len(args) == 2, "Fresh execution requires account and payload")
+            args = execution_arguments(self.account, args[1], before[0])
         script = call_script(target, method, args); signers = module_signers(keys, module_scope)
-        sysfee, netfee = 10 * GAS, GAS
+        sysfee, netfee = transaction_system_fee(self.chain, script, signers), GAS
         unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee,
                                       self.chain.rpc("getblockcount", []) + 50, signers, script)
         digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()
@@ -140,7 +149,11 @@ class ModuleTransactions:
                               [hash_le(self.account), *arguments], timestamp, timestamp + 86_400_000, before[0][8]]
         if root_pending:
             timestamp = self.chain.rpc("getblockheader", [tx["blockhash"], True])["time"]
-            desired[0][root_pending] = [hash_le(ZERO), bytes(32), timestamp, timestamp + 86_400_000, before[0][8]]
+            field,binding = root_pending if isinstance(root_pending,tuple) else (root_pending,[hash_le(ZERO),bytes(32)])
+            desired[0][field] = [*binding, timestamp, timestamp + 86_400_000, before[0][8]]
+        if recovery_pending:
+            timestamp = self.chain.rpc("getblockheader", [tx["blockhash"], True])["time"]
+            desired[0][12] = [hash_le(recovery_pending),timestamp,timestamp+604_800_000,before[0][8]]
         if not equal_typed(desired, after):
             print("Expected state:", desired, "Actual state:", after, flush=True)
             raise ValidationFailure("Full declared account, cursor, intent and policy transition mismatch")
@@ -150,13 +163,15 @@ class ModuleTransactions:
             "witnessScopes": [s["scopes"] for s in signers], "rawTransactionAndWitnessReadbackMatched": True,
             "accountNonceIntentsAndPolicyMatched": True, "otherAccountUnchanged": True,
             "configurationNonce": after[0][8], "operationNonce": after[1], "gasConsumedDatoshi": int(execution["gasconsumed"]),
-            "systemFeeDatoshi": sysfee, "networkFeeDatoshi": netfee})
+            "systemFeeDatoshi": sysfee, "networkFeeDatoshi": netfee,
+            "committedAuthorityEpoch":before[0][13] if method in ('executeUserOp','executeUserOps') else None,
+            "committedConfigurationNonce":before[0][8] if method in ('executeUserOp','executeUserOps') else None})
         return tx
 
 
 def commit_config(state):
     state[0][8] += 1
-    state[0][9:] = [None] * 4
+    state[0][9:13] = [None] * 4
     state[2:4] = [None, None]
 
 
@@ -193,6 +208,11 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                     chain.nx("wallet", "create", label); chain.nx("transfer", "1000", "GAS", "genesis", label)
                     keys.append(RawKey(root, "private-" + label, chain.wallet_private_key(label)))
                 owner, cosigner = keys; addresses = ["0x" + k.script_hash[::-1].hex() for k in keys]
+                recovery_keys={}
+                for label in ("guardian","replacement"):
+                    chain.nx("wallet","create",label);chain.nx("transfer","1000","GAS","genesis",label)
+                    recovery_keys[label]=RawKey(root,"private-"+label,chain.wallet_private_key(label))
+                recovery_addresses={name:"0x"+key.script_hash[::-1].hex() for name,key in recovery_keys.items()}
                 modules = []
                 for name in ("NeoNativeVerifier", "WhitelistHook"):
                     path = artifacts / (name + ".nef")
@@ -204,7 +224,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 verifier, hook = modules; accounts = []
                 for salt in (bytes(32), bytes([1]) * 32):
                     account = persist(chain, report, "register-" + str(len(accounts)), "registerAccount",
-                                      [H(addresses[0]), B(salt), H(verifier), H(hook), H(ZERO)], "AccountCreated")
+                                      [H(addresses[0]), B(salt), H(verifier), H(hook), H(recovery_addresses["guardian"])], "AccountCreated")
                     accounts.append("0x" + account[::-1].hex())
                 chain.start_node(); check_native(chain.rpc("getcontractstate", [CORE]))
                 require(chain.rpc("getversion", [])["protocol"]["network"] == chain.magic, "Wrong private network")
@@ -271,6 +291,60 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                         execute("post-fault-positive-control", operation(1), module_scope=True, expected=b"\x21\x01\x07", event="UserOpExecuted", state_change=consumed)
                 execute("retired-cosigner", operation(2), [cosigner], fault="custody witness")
                 execute("custody-fallback", operation(2), [owner], expected=b"\x21\x01\x07", event="UserOpExecuted", state_change=consumed)
+                stage = "recovery-module-epoch-reinstallation"
+                def install_same(role, binding):
+                    field=5 if role=="Verifier" else 6; pending_field=9 if role=="Verifier" else 10
+                    send("reinstall-"+role.lower()+"-propose","propose"+role,[H(verifier if field==5 else hook)],
+                         event=role+"ChangeProposed",root_pending=(pending_field,binding))
+                    wait_delay()
+                    def installed(state):commit_config(state);state[0][field]=copy.deepcopy(binding)
+                    send("reinstall-"+role.lower()+"-confirm","activate"+role,[],event=role+"Changed",state_change=installed)
+                verifier_binding,hook_binding=initial[0][5:7]
+                install_same("Verifier",verifier_binding);install_same("Hook",hook_binding)
+                def configure_again(label, signer_addresses):
+                    args=[A(*[H(a) for a in signer_addresses]),I(2)]
+                    send(label+"-threshold-propose","callVerifier",[S("setConfig"),A(*args)],expected=False,
+                         pending=(2,0,"setConfig",[[hash_le(a) for a in signer_addresses],2],5))
+                    wait_delay()
+                    def configured(state):commit_config(state);state[4]=[[hash_le(a) for a in signer_addresses],2];state[5]=2
+                    send(label+"-threshold-confirm","callVerifier",[S("setConfig"),A(*args)],state_change=configured)
+                    send(label+"-allowlist-propose","callHook",[S("setWhitelist"),A(*allow_args)],expected=False,
+                         pending=(3,1,"setWhitelist",[hash_le(STDLIB),True],6))
+                    wait_delay();send(label+"-allowlist-confirm","callHook",[S("setWhitelist"),A(*allow_args)],state_change=allow)
+                configure_again("before-recovery",addresses)
+                before_recovery=driver.state(account);old_epoch=before_recovery[0][13]
+                def old_namespace():
+                    keys=[(verifier,module_storage_key(account,p,old_epoch))for p in (1,2)]
+                    keys.append((hook,module_storage_key(account,1,old_epoch,hash_le(STDLIB))))
+                    return [chain.rpc("getstorage",[contract,base64.b64encode(key).decode()])for contract,key in keys]
+                old_storage=old_namespace();require(all(v is not None for v in old_storage),"Recovery requires initialized native and hook storage")
+                guardian=recovery_keys["guardian"];replacement=recovery_keys["replacement"]
+                driver.send("guardian-proposes-module-recovery",CORE,"proposeRecovery",[H(account),H(recovery_addresses["replacement"])],
+                    [guardian],event="RecoveryProposed",recovery_pending=recovery_addresses["replacement"])
+                chain.stop_node();chain.nx("fastfwd","1","-t","604801");chain.start_node()
+                def recovered(state):
+                    state[0][3]=hash_le(recovery_addresses["replacement"]);state[0][5:7]=[None,None]
+                    commit_config(state);state[0][13]+=1;state[4:7]=[None,0,False]
+                driver.send("execute-module-authority-recovery",CORE,"executeRecovery",[H(account)],[replacement],
+                    event="RecoveryExecuted",state_change=recovered)
+                recovered_state=driver.state(account)
+                require(recovered_state[1]==before_recovery[1] and recovered_state[0][7]==before_recovery[0][7],"Recovery reset nonce or frozen state")
+                require(old_namespace()==old_storage,"Recovery changed old-epoch policy bytes")
+                for role in ("verifier","hook"):
+                    require(driver.value(CORE,"getModuleDependencies",[H(account),S(role)])==[None,[],[]],"Recovery retained dependency authority")
+                owner=replacement
+                install_same("Verifier",verifier_binding);install_same("Hook",hook_binding)
+                require(driver.state(account)[4:7]==[None,0,False],"Same-module reinstall resurrected old native/hook configuration")
+                execute("old-native-signers-after-recovery",operation(driver.state(account)[1]),keys,module_scope=True,fault="No NeoNativeVerifier config")
+                new_addresses=[recovery_addresses["replacement"],addresses[1]]
+                configure_again("after-recovery",new_addresses)
+                execute("retired-native-signer-after-new-config",operation(driver.state(account)[1]),keys,module_scope=True,
+                    fault="The verifier must return exactly Boolean true.")
+                execute("new-authority-native-and-hook-positive",operation(driver.state(account)[1]),[replacement,cosigner],module_scope=True,
+                    expected=b"\x21\x01\x07",event="UserOpExecuted",state_change=consumed)
+                require(old_namespace()==old_storage,"New authority modified old epoch namespace")
+                report["recoveryEpoch"]={"before":old_epoch,"after":driver.state(account)[0][13],
+                    "nativeAndHookOldConfigurationDidNotResurrect":True,"oldNamespaceUnchanged":True,"newAuthorityExecutionSucceeded":True}
                 readback(); final = driver.state(account)
                 report.update(networkMagic=chain.magic, accountId=account, otherAccountId=accounts[1],
                               finalConfigurationNonce=final[0][8], finalOperationNonce=final[1])

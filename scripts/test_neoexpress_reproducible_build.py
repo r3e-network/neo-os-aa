@@ -7,11 +7,48 @@ from unittest.mock import patch
 from types import SimpleNamespace
 import subprocess
 import sys
+import shutil
 
 import neoexpress_reproducible_build as build
 
 
 class ReproducibleBuildTests(unittest.TestCase):
+    def test_source_recipe_survives_nested_repository_targets(self):
+        dotnet = shutil.which("dotnet")
+        if dotnet is None:
+            self.fail("Real MSBuild is required for the source-graph regression")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "NativeRunner.targets").write_text(build.targets_text())
+            nested = root / "node"
+            nested.mkdir()
+            (nested / "Directory.Build.targets").write_text(
+                "<Project><PropertyGroup><RepositoryTargetsRetained>true</RepositoryTargetsRetained>"
+                "</PropertyGroup></Project>")
+            project = nested / "Probe.csproj"
+            project.write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+                '<TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup>'
+                '<PackageReference Include="Neo" Version="3.10.2-CI02099" />'
+                '</ItemGroup></Project>')
+            # Capture the exact production arguments passed to restore/publish.
+            commands = []
+            def capture(command, *args):
+                commands.append(command)
+                raise build.BuildFailure("captured")
+            with patch.object(build, "prepare"), patch.object(build, "run", side_effect=capture):
+                with self.assertRaisesRegex(build.BuildFailure, "captured"):
+                    build.build_once(root, {}, {}, root / "patch", dotnet, "10.0.400", root)
+            arguments = [arg for arg in commands[0] if arg.startswith("-p:")]
+            output = subprocess.check_output([dotnet, "msbuild", str(project),
+                "-getItem:PackageReference,ProjectReference", "-getProperty:RepositoryTargetsRetained,PathMap",
+                *arguments], text=True, cwd=root)
+            evaluated = json.loads(output)
+            self.assertEqual("true", evaluated["Properties"]["RepositoryTargetsRetained"])
+            self.assertFalse(any(item["Identity"] == "Neo" for item in evaluated["Items"]["PackageReference"]))
+            self.assertEqual([str(root / "core/src/Neo/Neo.csproj")],
+                [item["Identity"] for item in evaluated["Items"]["ProjectReference"]])
+            self.assertEqual(str(root) + "/=/_/native-runner/", evaluated["Properties"]["PathMap"])
+
     def test_sources_exclude_outputs_and_private_inputs(self):
         for path in ("src/Neo/Native.cs", "src/Neo/Neo.csproj", "global.json", "src/Directory.Build.props", "src/Neo/Resources/BIP-39.cs.txt"):
             self.assertTrue(build.allowed_source("core", path), path)

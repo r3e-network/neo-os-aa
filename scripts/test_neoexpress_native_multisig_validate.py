@@ -48,12 +48,10 @@ class NativeMultiSigMatrixTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError): m.validate(p, p, p, p / 'missing', p / 'module', report)
             self.assertEqual('FAIL', json.loads(report.read_text())['status'])
 
-    def test_diagnostic_mode_oracle_tracks_raw_storage(self):
+    def test_native_storage_namespace_uses_the_explicit_epoch(self):
         m = self.module(); account = '0x' + '11' * 20
-        state = {'diagnosticMode': 0, 'diagnosticRaw': {}}
-        m.diagnostic_mode(state, account, 4)
-        self.assertEqual(4, state['diagnosticMode'])
-        self.assertEqual(m.raw_entry(account, 1, bytes([4])), state['diagnosticRaw'])
+        self.assertEqual(bytes.fromhex('a201'+'11'*20+'0700000000000000'),m.native_storage_key(account,1,7))
+        self.assertNotEqual(m.raw_entry(account,1,b'\x04',0),m.raw_entry(account,1,b'\x04',1))
 
 
 if __name__ == '__main__': unittest.main()

@@ -1,5 +1,10 @@
 (* Zero-cap policy and key-reuse boundary. Identity comparison, signature
-   validity, target HALT, nonce and expiry are abstract correspondence inputs. *)
+   validity, target HALT, nonce and expiry are abstract correspondence inputs.
+   The key-reuse counterexample holds the domain-validity predicate fixed. It
+   describes a leaf-policy boundary and the historical ABI 1 risk, not ABI 2
+   end-to-end replay acceptance. NativeAuthorityEpoch.v separately models why
+   ABI 2 counter transitions invalidate signatures, even when a key is reused.
+   Composition with concrete domain bytes, cryptography and VM state is external. *)
 From Coq Require Import Bool PeanoNat Lia.
 
 Definition method_scope (target_match wildcard method_match : bool) : bool :=

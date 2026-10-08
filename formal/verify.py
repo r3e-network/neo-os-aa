@@ -21,14 +21,47 @@ ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
              "coq/WitnessRuleFaultSemantics.v", "coq/SignerDomainSeparation.v",
              "coq/AbiManifestProjection.v", "coq/NeoVmContinuationSemantics.v",
              "coq/WitnessRuleRefinement.v",
-             "coq/NativeIntegerDomain.v", "coq/NativeLifecycle.v", "coq/NativeDispatch.v", "coq/NativeInvocation.v",
+             "coq/NativeAuthorityEpoch.v", "coq/NativeIntegerDomain.v", "coq/NativeLifecycle.v", "coq/NativeDispatch.v", "coq/NativeInvocation.v",
              "coq/NativeSessionPolicy.v",
              "coq/NativeSessionScope.v",
              "coq/NativeDailyPolicy.v",
              "coq/NativeRestrictedPolicy.v", "coq/NativeCompositePhase.v",
              "tla/UnifiedSmartWalletAA.tla",
              "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
-SOURCE_FILES = {"contracts/UnifiedSmartWallet.Execution.cs",
+# Scope is part of the fail-closed source correspondence record. Successful
+# abstract budget proofs must never be attributed to standard public Call.
+RUNTIME_PROFILES = {
+    "v3": {"artifactDirectory": "contracts/bin/v3", "define": None,
+           "verifierCall": "System.Contract.Call", "verifierChildBudgetEnforced": False},
+    "platform": {"artifactDirectory": "contracts/bin/platform", "define": "PLATFORM",
+                 "verifierCall": "System.Contract.CallWithGasLimit", "verifierChildBudgetEnforced": True},
+    "native": {"artifactDirectory": "explicit native build output", "define": "SMARTACCOUNT_NATIVE",
+               "core": "AccountManagement", "abiVersion": 2, "identityVersion": 1,
+               "verifierCall": "bounded native callback", "verifierChildBudgetEnforced": True,
+               "verifierBudgetDatoshi": 100000000, "hookBudgetDatoshi": 250000000},
+}
+SHARED_MODELS = {"coq/MultiSigPolicy.v"}
+PUBLIC_MODELS = {"coq/UnifiedSmartWalletAA.v", "coq/ProxyWitnessScript.v",
+                 "tla/UnifiedSmartWalletAA.tla", "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
+MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
+                         ["v3", "platform", "native"] if name in SHARED_MODELS else
+                         ["v3", "platform"] if name in PUBLIC_MODELS else ["native"])
+                  for name in sorted(ARTIFACTS)}
+# The core checkout is external: no host path is committed or trusted as identity.
+# Hash the full selected Neo source graph, not only AccountManagement partials.
+NATIVE_CORE_REQUIRED_FILES = {
+    "src/Neo/Neo.csproj", "src/Neo/Hardfork.cs", "src/Neo/ProtocolSettings.cs",
+    "src/Neo/SmartContract/ApplicationEngine.cs", "src/Neo/SmartContract/ApplicationEngine.Contract.cs",
+    "src/Neo/SmartContract/ApplicationEngine.Runtime.cs", "src/Neo/SmartContract/Native/NativeContract.cs",
+    *{"src/Neo/SmartContract/Native/" + name for name in (
+        "AccountManagement.cs", "AccountManagement.Execution.cs", "AccountManagement.Modules.cs",
+        "SmartAccountProtocol.cs", "SmartAccountState.cs", "SmartAccountModulePolicy.cs",
+        "SmartAccountCanonicalJson.cs", "SmartAccountInvocationContext.cs", "SmartAccountEnvelope.cs")},
+}
+
+SOURCE_FILES = {"contracts/compile.sh", "contracts/UnifiedSmartWallet.csproj",
+                "contracts/UnifiedSmartWallet.VerifierChildren.cs",
+                "contracts/UnifiedSmartWallet.Execution.cs",
                 "contracts/UnifiedSmartWallet.Accounts.cs",
                 "contracts/UnifiedSmartWallet.Internal.cs",
                 "contracts/UnifiedSmartWallet.Models.cs",
@@ -50,7 +83,23 @@ SOURCE_FILES = {"contracts/UnifiedSmartWallet.Execution.cs",
                 "contracts/hooks/WhitelistHook.cs",
                 "contracts/hooks/DailyLimitHook.cs",
                 "contracts/hooks/TokenRestrictedHook.cs",
-                "contracts/UnifiedSmartWallet.VerifyContext.cs"}
+                "contracts/UnifiedSmartWallet.VerifyContext.cs",
+                "docs/proposals/smartaccount-native-profile-v2-parameters.json",
+                "docs/proposals/smartaccount-native-profile-v2-vectors.json",
+                "scripts/native_module_profile.py", "scripts/build_native_modules.py",
+                "contracts/native/profiles.json"}
+SOURCE_FILES.update({"Directory.Build.props", "nuget.config", "contracts/neo-platform-packages.json",
+                     "scripts/verify_repo.sh", "scripts/check_neo_platform_packages.mjs",
+                     "formal/verify.py", "formal/verify-in-docker.sh",
+                     "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
+                     "docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md",
+                     "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md",
+                     "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md",
+                     "docs/proposals/validate-native-smartaccount-profile.py"})
+for _module in ("NeoNativeVerifier", "SessionKeyVerifier", "MultiSigVerifier", "WhitelistHook", "DailyLimitHook", "TokenRestrictedHook"):
+    SOURCE_FILES.add(f"contracts/native/{_module}.Native.csproj")
+    SOURCE_FILES.add(f"contracts/native/packages.{_module}.Native.lock.json")
+
 MULTISIG_SOURCE = "contracts/verifiers/MultiSigVerifier.cs"
 MULTISIG_SOURCE_GUARDS = {
     "non_empty": "verifiers != null && verifiers.Length > 0",
@@ -97,6 +146,11 @@ PROXY_WITNESS_COQ_MUTATIONS = {
     "witness-core-binding": ("  bytes_eq (firstn 20 (skipn (27 + length method_push) t)) core &&",
                              "  true &&"),
     "witness-flags-range": ("  flags_in_range (at_ t 24) &&", "  true &&"),
+    "witness-method-arity": ("  bytes_eq (firstn 2 (skipn 22 t)) PUSH2_PACK &&", "  true &&"),
+    "witness-entrypoint-allowlist": (
+        "  || script_is_single_execute_call s account core METHOD_EXECUTE_USER_OPS.",
+        "  || script_is_single_execute_call s account core METHOD_EXECUTE_USER_OPS\n"
+        "  || script_is_single_execute_call s account core METHOD_EXECUTE_SPONSORED_USER_OP."),
     "witness-syscall-tail": ("  bytes_eq (firstn 5 (skipn (47 + length method_push) t)) SYSCALL_CONTRACT_CALL.",
                              "  true."),
     "witness-unknown-opcode": ("  else if op =? 219 then 2                            (* CONVERT <type> *)\n  else 0.",
@@ -487,7 +541,54 @@ NATIVE_COMPOSITE_PHASE_MUTATIONS = {
     "composite-post-wrong-entry": ("native_approve PostEntry PostPhase grant (reply id)", "native_approve ValidationEntry PostPhase grant (reply id)"),
     "composite-post-inverts-support": ("filter (fun id => native_approve PostEntry PostPhase grant (reply id)) ids.", "filter (fun id => negb (native_approve PostEntry PostPhase grant (reply id))) ids."),
 }
+NATIVE_AUTHORITY_EPOCH_MUTATIONS = {'epoch-bound-inclusive': ('(0 <=? value) && (value <? maximum).', '(0 <=? value) && (value <=? maximum).'),
+ 'recovery-authority-bypass': ('authority_valid && has_recovery s && mature_intent',
+                               'true && has_recovery s && mature_intent'),
+ 'recovery-timelock-bypass': ('has_recovery s && mature_intent maximum delay now p &&',
+                              'has_recovery s && true &&'),
+ 'recovery-stale-proposal-bypass': ('Z.eqb (expected_configuration p) (configuration_nonce s) &&', 'true &&'),
+ 'recovery-epoch-overflow-bypass': ('incrementable maximum (authority_epoch s) &&', 'true &&'),
+ 'recovery-config-overflow-bypass': ('incrementable maximum (configuration_nonce s).', 'true.'),
+ 'recovery-retains-old-epoch': ('(recovery_address s) (authority_epoch s + 1) (configuration_nonce s + 1)',
+                                '(recovery_address s) (authority_epoch s) (configuration_nonce s + 1)'),
+ 'recovery-retains-old-config': ('(recovery_address s) (authority_epoch s + 1) (configuration_nonce s + 1)',
+                                 '(recovery_address s) (authority_epoch s + 1) (configuration_nonce s)'),
+ 'recovery-retains-verifier': ('None None [] false false false None (target_nonces s) (frozen s).',
+                               '(verifier_root s) None [] false false false None (target_nonces s) (frozen '
+                               's).'),
+ 'recovery-retains-hook': ('None None [] false false false None (target_nonces s) (frozen s).',
+                           'None (hook_root s) [] false false false None (target_nonces s) (frozen s).'),
+ 'recovery-retains-dependencies': ('None None [] false false false None (target_nonces s) (frozen s).',
+                                   'None None (dependencies s) false false false None (target_nonces s) '
+                                   '(frozen s).'),
+ 'recovery-retains-pending': ('None None [] false false false None (target_nonces s) (frozen s).',
+                              'None None [] false false false (pending_recovery s) (target_nonces s) (frozen '
+                              's).'),
+ 'recovery-unfreezes': ('None None [] false false false None (target_nonces s) (frozen s).',
+                        'None None [] false false false None (target_nonces s) false.'),
+ 'recovery-resets-target-nonces': ('None None [] false false false None (target_nonces s) (frozen s).',
+                                   'None None [] false false false None [] (frozen s).'),
+ 'failed-recovery-commits': ('then (true, recovered s p) else (false, s)',
+                             'then (true, recovered s p) else (false, recovered s p)'),
+ 'configuration-changes-epoch': ('(recovery_address s) (authority_epoch s) (configuration_nonce s + 1)',
+                                 '(recovery_address s) (authority_epoch s + 1) (configuration_nonce s + 1)'),
+ 'namespace-ignores-epoch': ('Z.eqb (fst left) (fst right) && Z.eqb (snd left) (snd right).',
+                             'Z.eqb (fst left) (fst right).'),
+ 'namespace-ignores-account': ('Z.eqb (fst left) (fst right) && Z.eqb (snd left) (snd right).',
+                               'Z.eqb (snd left) (snd right).'),
+ 'signature-ignores-epoch': ('Z.eqb (signed_epoch domain) (authority_epoch s) &&', 'true &&'),
+ 'signature-ignores-configuration': ('Z.eqb (signed_configuration domain) (configuration_nonce s).', 'true.')}
+
+NATIVE_AUTHORITY_EPOCH_MUTATIONS["epoch-unreachable-state-admission"] = (
+    "counter_in_range maximum configuration && (epoch <=? configuration).",
+    "counter_in_range maximum configuration && true.")
+
+NATIVE_AUTHORITY_EPOCH_MUTATIONS["execution-envelope-arity-bypass"] = (
+    "Z.eqb arity 4 && authorized maximum s domain valid_signature.",
+    "true && authorized maximum s domain valid_signature.")
+
 COQ_MODULES = {
+    "NativeAuthorityEpoch.v": NATIVE_AUTHORITY_EPOCH_MUTATIONS,
     "NativeCompositePhase.v": NATIVE_COMPOSITE_PHASE_MUTATIONS,
     "NativeRestrictedPolicy.v": NATIVE_RESTRICTED_COQ_MUTATIONS,
     "NativeSessionScope.v": NATIVE_SESSION_SCOPE_COQ_MUTATIONS,
@@ -535,12 +636,57 @@ def replace_once(source, old, new):
     return source.replace(old, new, 1)
 
 
+def check_profile_scope(lock):
+    require(lock.get("runtimeProfiles") == RUNTIME_PROFILES,
+            "Runtime profile scope changed; explicit review required")
+    require(lock.get("modelProfiles") == MODEL_PROFILES,
+            "Model profile scope changed; public child-budget claims are forbidden")
+
+
+def native_core_hashes(core_root):
+    require(core_root is not None, "Missing --native-core-root (or NEOOS_NATIVE_CORE_SOURCE)")
+    core_root = Path(core_root).resolve()
+    def checked(path):
+        require(not any(part.is_symlink() for part in (path, *path.parents) if part != core_root and core_root in part.parents),
+                f"Native core source symlink: {path.relative_to(core_root)}")
+        require(core_root in path.resolve().parents, "Native core source escapes repository")
+        return path
+    for name in sorted(NATIVE_CORE_REQUIRED_FILES):
+        checked(core_root / name)
+        require((core_root / name).is_file(), f"Native core source missing: {name}")
+    selected = set()
+    for directory in ("src/Neo", "src/Neo.Extensions", "src/Neo.IO", "src/Neo.Json"):
+        for path in (core_root / directory).rglob("*"):
+            relative = path.relative_to(core_root)
+            if any(part in {"bin", "obj", ".git"} for part in relative.parts):
+                continue
+            if path.is_file() and (path.suffix.lower() in {".cs", ".csproj", ".props", ".targets", ".resx", ".ico", ".png"} or relative.as_posix().startswith("src/Neo/Resources/BIP-39.") and path.suffix == ".txt"):
+                checked(path)
+                selected.add(relative.as_posix())
+    for name in ("global.json", "Directory.Build.props", "Directory.Build.targets", "version.json", "src/Directory.Build.props", "src/Directory.Build.targets"):
+        if (core_root / name).is_file():
+            checked(core_root / name)
+            selected.add(name)
+    return {name: hashlib.sha256((core_root / name).read_bytes()).hexdigest() for name in sorted(selected)}
+
+
+def check_native_core_sources(lock, core_root):
+    current = native_core_hashes(core_root)
+    expected = lock.get("nativeCoreSources")
+    require(isinstance(expected, dict) and bool(expected), "Missing reviewed nativeCoreSources pins")
+    require(set(current) == set(expected), "Native core source roster changed; explicit review required")
+    changed = [name for name in current if current[name] != expected[name]]
+    require(not changed, f"Native core source drift: {changed}")
+    return current
+
+
 def check_inventory(root=ROOT):
     found = {str(p.relative_to(root)) for d in ("coq", "tla", "smt")
              for p in (root / d).rglob("*") if p.suffix in {".v", ".tla", ".cfg", ".smt2"}}
     require(found == ARTIFACTS, f"Artifact inventory mismatch: {found ^ ARTIFACTS}")
     lock = json.loads((root / "source-lock.json").read_text())
-    require(lock["schema"] == "aa-formal-source-lock/v1", "Unknown source-lock schema")
+    require(lock["schema"] == "aa-formal-source-lock/v2", "Unknown source-lock schema")
+    check_profile_scope(lock)
     require(set(lock["sources"]) == SOURCE_FILES, "Source roster changed; explicit review required")
     for name, expected in lock["sources"].items():
         actual = hashlib.sha256((root.parent / name).read_bytes()).hexdigest()
@@ -734,16 +880,21 @@ def resolve_java(candidates, logs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".runs" / "latest")
+    parser.add_argument("--native-core-root", type=Path, default=os.environ.get("NEOOS_NATIVE_CORE_SOURCE"))
     args = parser.parse_args()
     logs = args.output.resolve()
     logs.mkdir(parents=True, exist_ok=True)
     # Invalidate a previous success before any current gate runs.
     report = {"modelChecksPassed": False, "implementationVerified": False,
-              "boundary": "Hand-written abstractions; no VM/source/NEF refinement or liveness proof"}
+              "boundary": "Hand-written abstractions; no VM/source/NEF refinement or liveness proof",
+              "runtimeProfiles": RUNTIME_PROFILES, "modelProfiles": MODEL_PROFILES}
     report_path = logs / "result.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     try:
+        coqc = executable("COQC", "coqc")
         check_inventory()
+        source_lock = json.loads((ROOT / "source-lock.json").read_text())
+        report["nativeCoreSourceSha256"] = check_native_core_sources(source_lock, args.native_core_root)
         report["multisigBoundedModel"] = check_multisig_bounded()
         coqc = executable("COQC", "coqc")
         z3 = executable("Z3", "z3")
@@ -815,6 +966,8 @@ def main():
             report["smt"] = parse_smt(smt, out, rc)
         # Detect edits made while the tools were running.
         check_inventory()
+        require(json.loads((ROOT / "source-lock.json").read_text()) == source_lock, "Source lock changed during this run")
+        check_native_core_sources(source_lock, args.native_core_root)
         require(artifact_hashes() == report["artifactSha256"], "Model artifacts changed during this run")
         report["modelChecksPassed"] = True
         coq_mutation_count = sum(len(m) for m in COQ_MODULES.values())

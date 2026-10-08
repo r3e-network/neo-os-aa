@@ -14,7 +14,8 @@ class CanonicalIdentityDocumentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="native-profile-document-") as directory:
             target = Path(directory)
             for name in ("SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
-                         "smartaccount-native-profile-v1-vectors.json",
+                         "smartaccount-native-profile-v2-vectors.json",
+                         "smartaccount-native-profile-v2-parameters.json",
                          "validate-native-smartaccount-profile.py"):
                 text = (ROOT / name).read_text()
                 if name.endswith(".md") and before is not None:

@@ -17,9 +17,9 @@ namespace AbstractAccount.Hooks
     /// </remarks>
     [DisplayName("TokenRestrictedHook")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAccountAddress")]
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAccountAddress", "getAuthorityEpoch")]
     [ContractPermission("*", "balanceOf")]
-    [ManifestExtra("SmartAccountProfile", "native-v1")]
+    [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canExecuteHook")]
     [ContractPermission("*", "canConfigureHook")]
@@ -72,7 +72,7 @@ namespace AbstractAccount.Hooks
 #if SMARTACCOUNT_NATIVE
             ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid restricted token");
 #endif
-            byte[] key = Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId);
+            byte[] key = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
             key = Helper.Concat(key, (byte[])token);
             
             if (isRestricted)
@@ -111,7 +111,7 @@ namespace AbstractAccount.Hooks
             if (opParams.Length < 2) return;
             UInt160 targetContract = (UInt160)opParams[0];
 
-            byte[] key = Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId);
+            byte[] key = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
             key = Helper.Concat(key, (byte[])targetContract);
 
             // Abort if trying to interact with a restricted token (e.g. NEO/GAS)
@@ -131,7 +131,7 @@ namespace AbstractAccount.Hooks
         }
 
         private static ByteString SnapshotKey(UInt160 accountId, UInt160 token) =>
-            (ByteString)Helper.Concat(Helper.Concat(Prefix_RestrictedSnapshot, (byte[])accountId), (byte[])token);
+            (ByteString)Helper.Concat(HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId), (byte[])token);
 
         /// <summary>
         /// Address that actually holds this account's assets on chain - the core's
@@ -167,7 +167,7 @@ namespace AbstractAccount.Hooks
         /// </summary>
         private static void SnapshotRestrictedBalances(UInt160 accountId)
         {
-            byte[] prefix = Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId);
+            byte[] prefix = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
             Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);
             while (iterator.Next())
             {
@@ -182,7 +182,7 @@ namespace AbstractAccount.Hooks
         /// </summary>
         private static void EnforceRestrictedBalances(UInt160 accountId)
         {
-            byte[] prefix = Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId);
+            byte[] prefix = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
             Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);
             while (iterator.Next())
             {
@@ -206,12 +206,12 @@ namespace AbstractAccount.Hooks
         {
 #if SMARTACCOUNT_NATIVE
             NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "cleanup");
-            ClearPrefix(Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId));
-            ClearPrefix(Helper.Concat(Prefix_RestrictedSnapshot, (byte[])accountId));
+            ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId));
+            ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId));
 #else
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
 
-            byte[] prefix = Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId);
+            byte[] prefix = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
             Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly);
             while (iterator.Next())
             {

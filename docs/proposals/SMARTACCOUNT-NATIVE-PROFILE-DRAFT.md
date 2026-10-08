@@ -5,7 +5,7 @@
 **Discussion:** Issue [#242](https://github.com/neo-project/proposals/issues/242)
 
 **Status:** Draft protocol profile; not activated and not an adopted standard
-**Version:** 1
+**Version:** 2 (identity version 1; authorization and account-record version 2)
 
 ## 1. Scope
 
@@ -37,8 +37,12 @@ does not reverse the byte order a second time.
 |---|---|
 | Native service name | `AccountManagement` |
 | Native service hash | `GetContractHash(UInt160.Zero, 0, "AccountManagement")` |
-| Profile version | `1` |
-| Native ABI version | `1` |
+| Profile version | `2` |
+| Identity derivation version | `1` (unchanged) |
+| Authorization version | `2` |
+| Account record version | `2` |
+| Authority epoch and configuration nonce | Separate unsigned 64-bit counters |
+| Native ABI version | `2` |
 | Maximum batch size | `32` operations |
 | Maximum method length | `128` UTF-8 bytes |
 | Maximum argument count | `64` values |
@@ -54,7 +58,7 @@ does not reverse the byte order a second time.
 | Target call flags | `All` (`0x0F`) |
 | Module-change delay | `86,400,000` milliseconds |
 | Custody-recovery delay | `604,800,000` milliseconds |
-| Native sponsorship | Not included in version 1 |
+| Native sponsorship | Not included in version 2 |
 
 The resource budgets are fixed profile parameters. They are not operation
 fields, account-controlled values, or fee-whitelist exemptions. A later profile
@@ -65,22 +69,22 @@ The activation record MUST include this parameter digest:
 ```text
 profileParameterDigest = SHA256(
     ASCII("NeoSmartAccount/Profile") ||
-    UInt8(1) ||
+    UInt8(2) ||
     CanonicalProfileParameterJsonUtf8
 )
 ```
 
-For version 1, `CanonicalProfileParameterJsonUtf8` is exactly the following
+For version 2, `CanonicalProfileParameterJsonUtf8` is exactly the following
 byte sequence:
 
 ```text
-{"abiVersion":1,"argumentCountMax":64,"argumentDepthMax":8,"argumentSizeMax":4096,"batchMax":32,"childConfiguration":true,"custodyRecoveryDelayMs":604800000,"hookBudgetDatoshi":250000000,"maintenanceBudgetDatoshi":250000000,"methodBytesMax":128,"moduleChangeDelayMs":86400000,"nativeSponsorship":false,"profileVersion":1,"serviceName":"AccountManagement","signatureBytesMax":1024,"verifierBudgetDatoshi":100000000}
+{"abiVersion":2,"accountRecordVersion":2,"argumentCountMax":64,"argumentDepthMax":8,"argumentSizeMax":4096,"authorityEpochWidthBits":64,"authorizationDomainSuffix":["authorityEpochLE64","configurationNonceLE64"],"authorizationVersion":2,"batchMax":32,"childConfiguration":true,"configurationNonceWidthBits":64,"custodyRecoveryDelayMs":604800000,"executionArgumentOrder":["accountId","operationOrBatch","expectedAuthorityEpoch","expectedConfigurationNonce"],"executionCounterCommitments":["authorityEpoch","configurationNonce"],"hookBudgetDatoshi":250000000,"identityVersion":1,"maintenanceBudgetDatoshi":250000000,"methodBytesMax":128,"moduleChangeDelayMs":86400000,"nativeSponsorship":false,"profileVersion":2,"recoveryRevokesModules":true,"serviceName":"AccountManagement","signatureBytesMax":1024,"verifierBudgetDatoshi":100000000}
 ```
 
-The resulting version-1 digest is:
+The resulting version-2 digest is:
 
 ```text
-2601e456d8d5a3f746c8cdcd6f90f19a62bf00bdfb856ef6f14be74a2b44f81a
+a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e
 ```
 
 ## 4. Native identity and activation
@@ -99,8 +103,8 @@ The service MUST publish the following native manifest metadata:
 ```json
 {
   "smartAccount": {
-    "abiVersion": 1,
-    "profileParameterDigest": "2601e456d8d5a3f746c8cdcd6f90f19a62bf00bdfb856ef6f14be74a2b44f81a"
+    "abiVersion": 2,
+    "profileParameterDigest": "a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e"
   }
 }
 ```
@@ -130,9 +134,9 @@ At the activation block the node MUST:
 1. create the native `AccountManagement` contract state;
 2. initialize the profile version and fixed parameter digest;
 3. emit the normal native-contract deployment notification;
-4. make the version-1 ABI available from that block onward.
+4. make the version-2 ABI available from that block onward.
 
-Before activation, `AccountManagement` has no callable version-1 ABI. Existing
+Before activation, `AccountManagement` has no callable version-2 ABI. Existing
 ordinary contracts and existing verification scripts MUST retain their current
 behavior.
 
@@ -205,7 +209,7 @@ verification script is an asset-address compatibility bridge, not a second
 authorization entrypoint. It MUST NOT authorize an arbitrary transaction that
 merely includes the account address as a signer.
 
-For version 1, the transaction script MUST be the canonical application
+For version 2, the transaction script MUST be the canonical application
 envelope for this account. The envelope is exactly one application call with
 the following semantic values and no additional instructions:
 
@@ -215,12 +219,20 @@ System.Contract.Call(
     "executeUserOp" or "executeUserOps",
     All,
     accountId,
-    op or ops
+    op or ops,
+    expectedAuthorityEpoch,
+    expectedConfigurationNonce
 )
 ```
 
 The script parser MUST require the native service hash, method, call flags,
-argument count, account identifier, and canonical operation bytes to match.
+argument count of four, account identifier, both current authority counters, and canonical operation bytes to match.
+Both expected counters MUST be exact UInt64 Integers and MUST equal the current
+stored authorityEpoch and configurationNonce in both Verification and Application.
+The former two-argument entrypoints MUST NOT remain callable. The two expected
+counters are encoded in the unsigned transaction script, so transaction-witness
+modes (custody fallback and NeoNativeVerifier) commit to them as well as operation
+signatures. Native callbacks still receive the unchanged six-field UserOperation.
 The batch form MUST also satisfy the batch bounds and same-account rule. A
 transaction that directly calls a token, NFT, application contract, or an
 unrelated native method MUST fail account-address verification.
@@ -233,7 +245,7 @@ EmitDynamicCall(
     AccountManagement.Hash,
     "executeUserOp" or "executeUserOps",
     CallFlags.All,
-    [accountId, op] or [accountId, ops]
+    [accountId, op or ops, expectedAuthorityEpoch, expectedConfigurationNonce]
 )
 ```
 
@@ -337,6 +349,7 @@ AccountState {
     pendingHook:          PendingModuleChange | none
     pendingRecoveryAddr:  PendingRecoveryAddressChange | none
     pendingRecovery:      PendingRecovery | none
+    authorityEpoch:       UInt64
 }
 
 ModuleBinding {
@@ -369,15 +382,17 @@ PendingRecoveryAddressChange {
 
 The native storage encoding MUST use deterministic field order and fixed
 integer semantics. The canonical stack representation of `AccountState` is an
-Array with exactly these 13 positions:
+Array with exactly these 14 positions (positions 0 through 12 retain their meaning):
 
 ```text
 [version, accountId, accountAddress, custodyAddress, recoveryAddress,
  verifier, hook, status, configurationNonce, pendingVerifier, pendingHook,
- pendingRecoveryAddr, pendingRecovery]
+ pendingRecoveryAddr, pendingRecovery, authorityEpoch]
 ```
 
-`version` and `status` are canonical non-negative Integers. Version 1 uses
+`version` is exactly `2`; `status` is a canonical non-negative Integer.
+`authorityEpoch` at index 13 and `configurationNonce` at index 8 are distinct
+unsigned 64-bit Integers, initially zero. Counter overflow MUST fault before mutation. Version 1 uses
 `Active = 0` and `Frozen = 1`; all other status values MUST be rejected. `accountId`,
 `accountAddress`, and `custodyAddress` are 20-byte ByteStrings. A zero optional
 address is a 20-byte all-zero ByteString. A missing optional record is `Null`.
@@ -400,6 +415,13 @@ other state may use either prefix.
 
 ## 7. Account lifecycle and authority separation
 
+A decoded account record MUST satisfy `authorityEpoch <= configurationNonce`.
+Both counters start at zero; configuration advances only configurationNonce and
+recovery advances both. A record violating this reachable-state invariant MUST
+be rejected, even when both values individually fit UInt64. Pure authorization
+domain encoders may encode any UInt64 pair for conformance vectors; such vectors
+do not imply that the pair is a valid stored account state.
+
 ### 7.1 Creation
 
 `registerAccount(custodyAddress, salt, verifier, hook, recoveryAddress)` MUST:
@@ -414,7 +436,7 @@ other state may use either prefix.
 - validate the verifier and hook ABI before storing them;
 - reject duplicate identifiers;
 - initialize all nonce channels at sequence zero;
-- initialize the account as `Active` with configuration nonce zero;
+- initialize the account as `Active` with configuration nonce zero and authority epoch zero;
 - emit `AccountCreated`.
 
 The caller MUST NOT supply `accountId` or `accountAddress` as authoritative
@@ -449,7 +471,7 @@ unfreeze increments the configuration nonce and clears all pending intents,
 including custody recovery and recovery-address rotation. No stale pending
 record is retained. Configuration counters and timestamp arithmetic MUST NOT
 wrap; an exhausted configuration counter rejects proposals and transitions
-that require another epoch. Pending records MUST have the current epoch and
+that require another configuration counter value. Pending records MUST bind the current configuration nonce and
 the exact fixed delay for their kind. Callers MUST NOT supply maturity times.
 
 Verifier removal selects the native-witness fallback. Hook removal selects no
@@ -479,10 +501,11 @@ its own pending proposal. A stale or already cancelled proposal MUST fault.
 Executing recovery:
 
 - replaces the custody address without re-deriving the account identity;
-- preserves the account identifier, account address, nonce state, verifier,
-  hook, and recovery address;
+- preserves the account identifier, account address, nonce state, and recovery address;
+- removes the verifier and hook roots and all dependency records, selecting native-witness fallback;
+- revokes every old module generation without invoking any external callback;
 - clears all pending intents, including the executed recovery;
-- increments the configuration nonce;
+- increments both the configuration nonce and the authority epoch, with checked overflow;
 - leaves a frozen account frozen;
 - emits `RecoveryExecuted`.
 
@@ -506,6 +529,39 @@ account has no recovery address. `unfreeze` MUST require the authorities stated
 above. Freeze requires Active status and unfreeze requires Frozen status;
 repeated same-status calls MUST fault. Both increment the configuration nonce
 and clear all pending intents so that proposals cannot cross a status transition.
+
+### 7.5 Authority generations and recovery isolation
+
+Every native module MUST namespace all account-owned persistent state by the
+account identifier and the current `authorityEpoch`, obtained from the native
+service. The native module key encoding MUST be
+`0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`, with a
+one-byte policy prefix, a 20-byte account identifier and an unsigned 64-bit
+little-endian epoch. The distinct `0xA2` version tag prevents confusion with
+unversioned legacy keys. Modules MUST reject an invalid or unavailable epoch;
+there is no legacy namespace fallback or ability to select a future generation.
+Configuration counters are not storage namespaces. The same module
+reinstalled after recovery MUST observe an empty current-generation namespace;
+old grants, keys, spending state and transient snapshots MUST NOT become active
+again. Historical storage may remain unreachable; recovery never depends on
+old module availability, code identity or successful cleanup. A module must
+bind each callback to the current authenticated native account/module/phase.
+
+Only successful custody recovery increments `authorityEpoch`. Configuration,
+freeze and unfreeze retain the authority epoch and advance the separate
+configuration nonce as specified above. Both counters bind authorization, so a
+configuration transition invalidates previously signed but unconsumed operations.
+Recovery clears all pending intents and roots before returning; target nonces,
+identity and frozen state remain unchanged. Subsequent unfreeze still requires
+the current custody and configured recovery witnesses. No committee bypass is
+introduced.
+
+Native ABI 1 modules MUST NOT be relabelled as ABI 2. Packaged ABI 2 modules
+must declare the native-v2 profile, an explicit ABI version, and permission to
+read `getAuthorityEpoch`. All six supported native module profiles must pass
+recovery/reinstall isolation vectors. Migration of an existing ABI 1 account
+record requires a separately activated, deterministic migration routine; there
+is no implicit interpretation of a 13-field record as ABI 2.
 
 ## 8. Module binding and code identity
 
@@ -539,7 +595,7 @@ commitment for non-key profiles. A verifier MUST return
 the complete set of signer domains that can authorize the account, not only
 the signer used by the current operation. A dynamic policy whose signer set
 cannot be represented statically MUST return an empty array and is not an
-eligible child of `MultiSigVerifier` in version 1.
+eligible child of `MultiSigVerifier` in version 2.
 
 An installed hook MUST expose exactly:
 
@@ -605,7 +661,7 @@ validated leaf child, MUST apply the module-maintenance callback budget, and
 MUST use the same delayed-call semantics as root verifier configuration. The
 child call MUST execute with the child's configuration context, not the root's
 context. A pending child call MUST be invalidated when its root binding or the
-account configuration nonce changes. Every epoch transition in section 7 clears
+account configuration nonce changes. Every configuration-nonce transition in section 7 clears
 these pending calls along with the other pending intents. This native profile
 does not define escape, market settlement, or account removal entrypoints;
 ordinary-contract lifecycle routes MUST NOT be inferred as native ABI methods.
@@ -625,7 +681,7 @@ The native service MUST reject a module that is missing, blocked, has the wrong
 ABI types, or is not a deployed contract. The native service MUST reject a
 module if its current code identity differs from the stored binding.
 Native contracts, including `AccountManagement` itself, MUST NOT be installed as
-verifiers or hooks in version 1.
+verifiers or hooks in version 2.
 
 The native service MUST call `validateSignature` with `ReadOnly`, and MUST call
 the verifier's `postExecute`, every hook callback, and the target method with
@@ -767,7 +823,7 @@ not a proof that an arbitrary plugin confines its own writes to that account.
 At confirmation the core rechecks maturity, all bound bytes, code identity,
 blocking policy, ABI and authority before granting only the selected module's
 `configuration` context. It passes `All` and the fixed maintenance budget.
-Every failure rolls back the pending-call consumption, epoch, registry,
+Every failure rolls back the pending-call consumption, configuration nonce, registry,
 notifications and all module writes. A child configuration is registered in the
 core's cleanup roster even before the composite publishes that child as active.
 After the callback and before committing configuration, the core MUST revalidate
@@ -781,12 +837,12 @@ signer-domain separation after its configuration; a conflicting change faults.
 Pending call storage MUST use the exact Array:
 `[1, accountId, role, rootBinding, selectedBinding, methodBytes, invokedArguments,
 proposedAt, matureAt, configurationNonce]`. `role` is Integer `0` for verifier or
-`1` for hook; version, role, epoch and timestamps MUST be exact Integers, not
-Boolean or ByteString coercions. Timestamps and epoch use UInt64 bounds and the
+`1` for hook; version, role, configurationNonce and timestamps MUST be exact Integers, not
+Boolean or ByteString coercions. Timestamps and configurationNonce use UInt64 bounds and the
 fixed module-change delay. `methodBytes` MUST be a strict UTF-8 ByteString;
 `invokedArguments` MUST include the prepended accountId and satisfy the canonical
 argument rules. Queries and confirmation MUST reject a malformed, stale-root or
-stale-epoch record. Custody cancellation MAY delete a malformed intent without
+stale-configuration-nonce record. Custody cancellation MAY delete a malformed intent without
 executing it.
 
 ### 8.3 Authoritative composition registry
@@ -976,10 +1032,12 @@ Verifier profiles MUST bind their authorization digest to:
 
 ```text
 ASCII("NeoSmartAccount/UserOperation") ||
-UInt8(1) ||
+UInt8(2) ||
 UInt32LE(networkMagic) ||
 coreHash.ToArray() ||
 accountId.ToArray() ||
+UInt64LE(authorityEpoch) ||
+UInt64LE(configurationNonce) ||
 canonicalOperationWithoutSignature
 ```
 
@@ -990,9 +1048,13 @@ domain and operation digest through read-only methods so that independent
 verifier profiles do not reconstruct network or core identity from display
 strings.
 
-`getAuthorizationDomain()` returns the bytes from the domain prefix through
-`accountId` in the formula above. `getOperationDigest()` returns the single
-SHA-256 digest of that domain followed by the canonical operation bytes.
+`getAuthorizationDomain(accountId)` reads the registered account and returns the
+bytes through `configurationNonce` in that formula. It is a safe `ReadStates`
+method. `getOperationDigest(accountId, op)` returns the single SHA-256 digest of
+that domain followed by the canonical operation bytes. Unknown accounts fault.
+A signature produced for either older counter value MUST NOT authorize the
+current state. Identity derivation remains version 1; changing the authorization
+domain MUST NOT change accountId, verification-script bytes or asset address.
 
 ## 10. Resource and fee accounting
 
@@ -1034,8 +1096,8 @@ The same capability MUST be used for every external module maintenance callback,
 including lifecycle cleanup (`clearAccount`), profile-specific configuration, and
 composition-marker discovery. These calls use the fixed module maintenance
 budget of `250,000,000` datoshi. A maintenance callback that exhausts its budget
-MUST fault and MUST leave the enclosing configuration, recovery, or migration
-transition unchanged. A maintenance budget is independent of the verifier and
+MUST fault and MUST leave the enclosing module configuration or cleanup
+transition unchanged. Custody recovery does not invoke these callbacks. A maintenance budget is independent of the verifier and
 hook execution budgets and MUST NOT be supplied by an account or module.
 
 When a maintenance callback is a composite root, its ordinary descendant calls
@@ -1063,8 +1125,30 @@ Application-trigger hook path. The target call uses the enclosing transaction
 budget and is not silently assigned a verifier budget.
 
 Normal Neo fee charging still applies. A fee whitelist may change transaction
-fee charging but MUST NOT change the safety budget. Version 1 has no native
-paymaster or automatic sponsorship path.
+fee charging but MUST NOT change the safety budget. ABI 2 has no native
+paymaster or automatic reimbursement path. An external transaction fee payer
+may pay ordinary Neo fees, but the registered account proxy MUST NOT be the
+transaction sender. The payer signs the complete transaction and its fees;
+UserOperation authorization does not authorize spending proxy GAS on arbitrary
+transaction fees. This does not relax the exact operation envelope or target-frame
+witness authority.
+
+Application fee estimation MUST distinguish consumed gas from the minimum
+transaction budget required to admit each fixed bounded callback. The latter
+includes the peak of already consumed gas plus the next callback's fixed budget,
+with the runtime's exact fee units and ceiling conversion. The RPC simulation
+result MUST expose this value as `minimumrequiredfee`; clients MUST use at least
+`max(gasconsumed, minimumrequiredfee)` and apply explicit system/network/total
+fee caps before signing. A missing required field is not evidence that
+consumed-only estimation is safe. Generic proxy witness estimation must account
+for the exact verification-script bytes, witness layout, consumed verification
+cost and bounded-callback admission requirement within MaxVerificationGas.
+This value is a lower bound for the observed simulation trace, not all possible
+traces of a module. Fee fields, GasLeft and chain-state changes may alter behavior;
+clients must replay the final signed transaction with its exact final fee fields.
+Simulation does not guarantee admission after state changes or final signed
+witness verification, and an admitted transaction that faults still charges its
+external payer under ordinary Neo rules.
 
 ## 11. Governance and upgrades
 
@@ -1110,11 +1194,11 @@ The migration mapping is one-way and immutable:
 ```
 
 No reverse mapping, address alias, or transparent script replacement is
-provided by version 1.
+provided by version 2.
 
 ## 13. Required ABI surface
 
-The version-1 ABI MUST contain the following methods and events. The exact Neo
+The version-2 ABI MUST contain the following methods and events. The exact Neo
 ABI parameter types are normative.
 
 ### Read-only methods
@@ -1126,6 +1210,7 @@ getVersion() -> Integer
 getAccount(accountId: Hash160) -> Any
 getAccountAddress(accountId: Hash160) -> Hash160
 getNonce(accountId: Hash160, channel: Integer) -> Integer
+getAuthorityEpoch(accountId: Hash160) -> Integer
 getAuthorizationDomain(accountId: Hash160) -> ByteArray
 getOperationDigest(accountId: Hash160, op: Array) -> ByteArray
 verify(accountId: Hash160) -> Boolean
@@ -1149,8 +1234,8 @@ clearHookDependencies(accountId: Hash160) -> Void
 registerAccount(custodyAddress: Hash160, salt: ByteArray,
                 verifier: Hash160, hook: Hash160,
                 recoveryAddress: Hash160) -> Hash160
-executeUserOp(accountId: Hash160, op: Array) -> Any
-executeUserOps(accountId: Hash160, ops: Array) -> Array
+executeUserOp(accountId: Hash160, op: Array, expectedAuthorityEpoch: Integer, expectedConfigurationNonce: Integer) -> Any
+executeUserOps(accountId: Hash160, ops: Array, expectedAuthorityEpoch: Integer, expectedConfigurationNonce: Integer) -> Array
 callVerifierChild(accountId: Hash160, childVerifier: Hash160,
                   method: String, args: Array) -> Any
 proposeVerifier(accountId: Hash160, verifier: Hash160) -> Void
@@ -1187,14 +1272,14 @@ RecoveryAddressChangeCancelled(accountId, configurationNonce)
 RecoveryProposed(accountId, newCustodyAddress, executeAt, configurationNonce)
 RecoveryCancelled(accountId, configurationNonce)
 RecoveryExecuted(accountId, oldCustodyAddress, newCustodyAddress,
-                 configurationNonce)
+                 configurationNonce, authorityEpoch)
 AccountFrozen(accountId)
 AccountUnfrozen(accountId)
 UserOpExecuted(accountId, targetContract, method, nonce)
 ```
 
 The event field order and types MUST be published in the native manifest and
-must remain stable for ABI version 1.
+must remain stable for ABI version 2.
 
 The normative event parameter types and order are:
 
@@ -1212,14 +1297,14 @@ The normative event parameter types and order are:
 | `RecoveryAddressChangeCancelled` | `Hash160, Integer` |
 | `RecoveryProposed` | `Hash160, Hash160, Integer, Integer` |
 | `RecoveryCancelled` | `Hash160, Integer` |
-| `RecoveryExecuted` | `Hash160, Hash160, Hash160, Integer` |
+| `RecoveryExecuted` | `Hash160, Hash160, Hash160, Integer, Integer` |
 | `AccountFrozen` | `Hash160` |
 | `AccountUnfrozen` | `Hash160` |
 | `UserOpExecuted` | `Hash160, Hash160, String, Integer` |
 
 Unknown-account queries for `getAccountAddress`, `getNonce`, and
-`getOperationDigest` MUST fault. `getVersion` and `getAuthorizationDomain`
-remain callable after activation without an account record. Every malformed
+`getOperationDigest`, `getAuthorizationDomain`, and `getAuthorityEpoch` MUST fault.
+Only `getVersion` remains callable after activation without an account record. Every malformed
 ABI value, invalid authority, stale delayed transition, missing module, blocked
 module, callback budget exhaustion, target fault, and wrong callback result
 type MUST fault and MUST preserve the outer application-state rollback rule.

@@ -92,9 +92,9 @@ class NativeDailyTests(unittest.TestCase):
     def test_fixed_counter_selects_gas_key_not_first_configured_token(self):
         account='0x'+'11'*20
         driver=DailyTransactions(None,account,'0x'+'22'*20,'0x'+'33'*20,None,None,{})
-        counters=stored(account,2,raw_integer(999),token='0x'+'00'*19+'01')
-        counters.update(stored(account,2,raw_integer(7)))
-        driver.storage=Mock(return_value=[{},counters,{},{},{},{}]);driver.value=Mock(return_value=None)
+        counters=stored(account,2,raw_integer(999),token='0x'+'00'*19+'01',authority_epoch=0)
+        counters.update(stored(account,2,raw_integer(7),authority_epoch=0))
+        driver.storage=Mock(return_value=[{},counters,{},{},{},{}]);driver.value=Mock(return_value=None);driver.epoch=Mock(return_value=0)
         self.assertEqual(7,driver.state(account)['spent'])
 
     def test_raw_integer_and_exact_account_token_prefix(self):
@@ -108,9 +108,18 @@ class NativeDailyTests(unittest.TestCase):
             result=stored(account,5,b'\x01',token=token,suffix=b'\x02')
             self.assertEqual(bytes([5])+hash_le(account)+(hash_le(token) if token else b'')+b'\x02',base64.b64decode(next(iter(result))))
 
+    def test_module_storage_keys_are_tagged_and_epoch_isolated(self):
+        account='0x'+'11'*20
+        encoded=next(iter(stored(account,5,b'v',token=GAS_TOKEN,suffix=b'\x02',authority_epoch=7)))
+        self.assertEqual(b'\xa2\x05'+hash_le(account)+(7).to_bytes(8,'little')+hash_le(GAS_TOKEN)+b'\x02',base64.b64decode(encoded))
+        self.assertNotEqual(encoded,next(iter(stored(account,5,b'v',suffix=b'\x02',authority_epoch=8))))
+
     def test_storage_pagination_is_bounded(self):
+        count=0
         def rpc(method,args):
-            start=args[2];return {'results':[row(b'\x01'+bytes([start]))],'next':start+1,'truncated':True}
+            nonlocal count
+            count+=1;item=row(b'\x01'+count.to_bytes(2,'big'))
+            return {'results':[item],'next':item['key'],'truncated':True}
         with self.assertRaisesRegex(ValueError,'page bound'):
             storage_prefix(SimpleNamespace(rpc=rpc),'contract',b'\x01')
 
@@ -128,20 +137,45 @@ class NativeDailyTests(unittest.TestCase):
 
     def test_all_pages_and_empty_prefix_are_read(self):
         a,b=row(b'\x01a'),row(b'\x01b')
-        chain=SimpleNamespace(rpc=Mock(side_effect=[{'results':[a],'next':1,'truncated':True},
-            {'results':[b],'next':2,'truncated':False}]))
+        chain=SimpleNamespace(rpc=Mock(side_effect=[{'results':[a],'next':a['key'],'truncated':True},
+            {'results':[b],'next':b['key'],'truncated':False}]))
         self.assertEqual({a['key']:a['value'],b['key']:b['value']},storage_prefix(chain,'contract',b'\x01'))
-        self.assertEqual(1,chain.rpc.call_args_list[1].args[1][2])
-        chain.rpc=Mock(return_value={'results':[],'next':0,'truncated':False})
+        self.assertEqual(['contract','AQ==',''],chain.rpc.call_args_list[0].args[1])
+        self.assertEqual(['contract','AQ==',a['key']],chain.rpc.call_args_list[1].args[1])
+        chain.rpc=Mock(return_value={'results':[],'next':'','truncated':False})
         self.assertEqual({},storage_prefix(chain,'contract',b'\x01'))
 
+    def test_terminal_empty_page_preserves_the_exclusive_cursor(self):
+        first=row(b'\x01a')
+        chain=SimpleNamespace(rpc=Mock(side_effect=[{'results':[first],'next':first['key'],'truncated':True},
+            {'results':[],'next':first['key'],'truncated':False}]))
+        self.assertEqual({first['key']:first['value']},storage_prefix(chain,'contract',b'\x01'))
+
+    def test_duplicate_backwards_and_stalled_second_pages_fail_closed(self):
+        a,b,c=row(b'\x01a'),row(b'\x01b'),row(b'\x01c')
+        first={'results':[b],'next':b['key'],'truncated':True}
+        for second in ({'results':[b],'next':b['key'],'truncated':False},
+                       {'results':[a],'next':a['key'],'truncated':False},
+                       {'results':[c],'next':b['key'],'truncated':False},
+                       {'results':[],'next':b['key'],'truncated':True},
+                       {'results':[c],'next':c['key'],'truncated':1}):
+            with self.subTest(second=second), self.assertRaises(ValidationFailure):
+                storage_prefix(SimpleNamespace(rpc=Mock(side_effect=[first,second])),'contract',b'\x01')
+
     def test_malformed_pagination_and_foreign_keys_fail_closed(self):
-        valid=row(b'\x01a')
-        for page in ({'results':[],'next':0,'truncated':True},
+        valid=row(b'\x01a');later=row(b'\x01b')
+        for page in ({'results':[],'next':'','truncated':True},
                      {'results':[valid],'next':2,'truncated':False},
                      {'results':[valid],'next':True,'truncated':False},
-                     {'results':[row(b'\x02a')],'next':1,'truncated':False},
-                     {'results':[valid,valid],'next':2,'truncated':False}):
+                     {'results':[valid],'next':'@@@','truncated':False},
+                     {'results':[valid],'next':later['key'],'truncated':False},
+                     {'results':[row(b'\x02a')],'next':row(b'\x02a')['key'],'truncated':False},
+                     {'results':[valid,valid],'next':valid['key'],'truncated':False},
+                     {'results':[later,valid],'next':valid['key'],'truncated':False},
+                     {'results':[{'key':'AWH=','value':'AQ=='}],'next':'AWH=','truncated':False},
+                     {'results':[{'key':valid['key'],'value':'AR=='}],'next':valid['key'],'truncated':False},
+                     {'results':[{}],'next':valid['key'],'truncated':False},
+                     {'results':[],'next':0,'truncated':False}):
             with self.assertRaises(ValidationFailure):
                 storage_prefix(SimpleNamespace(rpc=Mock(return_value=page)),'contract',b'\x01')
 

@@ -3,7 +3,19 @@
 ## Compatibility boundary
 
 The deployed-contract profile and the native AccountManagement profile are
-distinct build targets. Existing verifier artifacts advertise an `Any` callback
+distinct build targets. Current native artifacts require `native-v2` and
+`extra.smartAccount.abiVersion = 2`; ABI 1 artifacts are incompatible. Identity
+derivation remains version 1. Every account-owned module key is
+`0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`, where
+policyPrefix is one byte. The epoch comes from the safe native getter on every
+access and must fit UInt64; unavailable/invalid reads fail closed. There is no
+legacy namespace fallback. This includes keys, grants, cooldowns, spending,
+configuration, child lists and transient snapshots. Recovery changes the epoch
+and revokes roots/dependencies without old-module callbacks, leaving old bytes
+unreachable. Reinstalling a module starts with empty current-generation state.
+Ordinary configuration retains the storage epoch and advances configurationNonce.
+
+Existing verifier artifacts advertise an `Any` callback
 argument and use `canConfigureVerifier` / `canExecuteVerifier`; native admission
 requires exact `Array` arguments and authenticated `hasModuleContext` phases.
 Existing hook authority queries also target the deployed-contract profile.
@@ -134,9 +146,8 @@ capped operation must reject, including a zero-amount transfer. A zero amount is
 admissible at the exact cap, but never bypasses an already-exceeded cap. Ordinary
 revocation clears accumulated spending as an explicit custody-authorized policy
 reset; a subsequent delayed grant begins a new allowance. Rotation without
-revocation is not such a reset. Operations do not bind a configuration epoch, so
-restoring an earlier key can restore an unconsumed, unexpired signature's
-validity; this profile does not promise permanent invalidation on key reuse.
+revocation is not such a reset. ABI 2 operation signatures bind both authorityEpoch and configurationNonce, so
+restoring an earlier key cannot restore signatures from an earlier configuration.
 Immediate containment requires a configured recovery authority and native freeze;
 there is no hidden direct-custody revocation bypass. Frozen accounts cannot use
 generic configuration. The delay and recovery dependency are operational limits,
@@ -195,25 +206,26 @@ with separate wrong-target and exact-method negative controls. The private
 matrix must include an actual whole-balance GAS transfer to demonstrate the
 exposure, not infer it from the event alone.
 
-Key reuse is an authorization boundary, not an independence guarantee. The
-current canonical payload contains no configuration epoch. A still-live,
-unconsumed signature must reject while its key is replaced or revoked, but may
-become valid again when that exact key is explicitly granted again. The private
-matrix must retain and submit the identical signature bytes across both kinds
-of transition, without re-signing the positive control. A consumed operation
-must remain rejected by nonce even after regrant. Operators requiring permanent
-invalidation must not reuse a retired key; this profile does not implement an
-epoch-bearing signature domain. Adding one would require an explicit protocol
-and compatibility revision, not a silent verifier-only change.
+ABI 2 operation signatures bind the account's current authorityEpoch and configurationNonce.
+The execution entrypoint additionally carries both expected counters in the unsigned
+transaction script; this is mandatory for native transaction-witness verifiers and
+custody fallback, whose evidence otherwise does not commit the operation domain.
+Replacing, revoking or regranting the same key advances configurationNonce; a
+retained, unconsumed signature from before any such transition must remain
+rejected after regrant. Recovery additionally advances authorityEpoch and leaves
+the module's previous key/spending/cooldown state unreachable. The private matrix
+must retain identical signed bytes across these transitions and verify rejection;
+a freshly signed operation under the new counters supplies the positive control.
+Consumed operations remain rejected by their target nonce as well.
 
-`NativeSessionScope.v` must distinguish the zero-cap path from capped policy,
-prove that wildcard methods retain target binding, and expose the key-reuse
-counterexample. Its key identifiers, signature validity, VM completion and
-nonce/expiry predicates are abstract inputs. These declarations are not a
-cryptographic independence or C#-to-NEF refinement proof. The private runner
-compares exact raw key, metadata, spending and rotation storage and all grant
-event fields, and retains full source/artifact provenance. No production
-contract or public-network deployment is required for these tests.
+`NativeSessionScope.v` retains a leaf-policy counterexample: restoring a key can
+revive a signature if the signature/domain predicates are held unchanged. This
+is a historical ABI 1 risk and an explicit abstraction boundary, not ABI 2
+end-to-end behavior. `NativeAuthorityEpoch.v` supplies the complementary state
+transition and domain-counter obligations. Neither model proves cryptography,
+byte-key encoding, the VM or their composition with deployed artifacts. Runtime
+validation must compare exact tagged raw storage and native/domain readbacks.
+Historical ABI 1 receipts do not establish ABI 2 compatibility.
 
 ## Daily-limit native hook profile
 

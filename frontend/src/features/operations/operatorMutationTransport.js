@@ -1,76 +1,20 @@
 import { EC } from '../../config/errorCodes.js';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout.js';
+import { canonicalizeOperatorMutationPayload, signOperatorMutationPayload } from '../../../api/operatorMutationHelpers.js';
 import {
-  canonicalizeOperatorMutationPayload,
-  importOperatorPrivateKey,
-  signOperatorMutationPayload,
-} from '../../../api/operatorMutationHelpers.js';
+  createOperatorKeyVault, encryptOperatorBackup, decryptOperatorBackup,
+  assertOperatorBackupPassphrase, withOperatorKeyLock,
+} from './operatorKeyVault.js';
 
-const STORAGE_PREFIX = 'aa_operator_session_v1';
 const DEFAULT_OPERATOR_MUTATION_ENDPOINT = '/api/draft-operator';
-
-function getStorage(storage) {
-  if (storage) return storage;
-  try {
-    return globalThis.sessionStorage || null;
-  } catch (err) {
-    if (import.meta.env.DEV) console.warn('[operatorMutationTransport] sessionStorage access denied:', err?.message);
-    return null;
-  }
-}
-
-function sessionStorageKey(shareSlug) {
-  return `${STORAGE_PREFIX}:${shareSlug}`;
-}
-
-function readSession(shareSlug, storage) {
-  const backend = getStorage(storage);
-  if (!backend) return null;
-  const raw = backend.getItem(sessionStorageKey(shareSlug));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    if (import.meta.env.DEV) console.warn('[operatorMutationTransport] Malformed session JSON:', err?.message);
-    return null;
-  }
-}
-
-function writeSession(shareSlug, value, storage) {
-  const backend = getStorage(storage);
-  if (!backend) return;
-  backend.setItem(sessionStorageKey(shareSlug), JSON.stringify(value));
-}
-
-async function ensureKeyMaterial(shareSlug, storage) {
-  const existing = readSession(shareSlug, storage);
-  if (existing?.privateJwk && existing?.publicJwk) {
-    return existing;
-  }
-
-  const keyPair = await crypto.subtle.generateKey(
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    true,
-    ['sign', 'verify'],
-  );
-  const session = {
-    privateJwk: await crypto.subtle.exportKey('jwk', keyPair.privateKey),
-    publicJwk: await crypto.subtle.exportKey('jwk', keyPair.publicKey),
-    operatorCounter: 0,
-    accessSlug: '',
-  };
-  writeSession(shareSlug, session, storage);
-  return session;
-}
 
 async function postJson(url, body, fetchImpl) {
   const response = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   }, { fetchImpl });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (payload?.error === 'operator_key_already_claimed') throw new Error('EC_operator_key_recovery_required');
     const err = new Error(EC.mutationTransportFailed);
     err.rpcDetail = payload?.message || payload?.error || null;
     throw err;
@@ -78,61 +22,71 @@ async function postJson(url, body, fetchImpl) {
   return payload;
 }
 
+function assertAccess(shareSlug, accessSlug) {
+  if (!shareSlug || !accessSlug) throw new Error(EC.operatorMutationMissingParams);
+}
+
 export function createOperatorMutationTransport({
   endpoint = DEFAULT_OPERATOR_MUTATION_ENDPOINT,
-  storage = null,
+  keyStore,
+  legacyStorage,
   fetchImpl = globalThis.fetch,
 } = {}) {
-  if (typeof fetchImpl !== 'function') {
-    return null;
+  if (typeof fetchImpl !== 'function') return null;
+  const vault = createOperatorKeyVault({ store: keyStore, legacyStorage });
+  const claim = (shareSlug, accessSlug, publicKeyJwk) => postJson(endpoint, {
+    action: 'claim', shareSlug, accessSlug, publicKeyJwk,
+  }, fetchImpl);
+  async function claimLocalKey(shareSlug, accessSlug) {
+    try {
+      const material = await vault.getOrCreate(shareSlug);
+      return { material, claimed: await claim(shareSlug, accessSlug, material.publicJwk) };
+    } catch (err) {
+      if (!['EC_operator_key_recovery_required', 'EC_operator_key_storage_corrupt'].includes(err?.message)) throw err;
+      // Another tab may have saved a fresh key before the original session was
+      // migrated. Only the server's existing pin can authorize its replacement.
+      const legacy = await vault.readLegacy(shareSlug);
+      if (!legacy) throw err;
+      const claimed = await claim(shareSlug, accessSlug, legacy.publicJwk);
+      const material = await vault.save(shareSlug, legacy);
+      vault.removeLegacy(shareSlug);
+      return { material, claimed };
+    }
   }
 
   return {
     async run({ shareSlug = '', accessSlug = '', mutation = '', payload = {} } = {}) {
-      if (!shareSlug || !accessSlug || !mutation) {
-        throw new Error(EC.operatorMutationMissingParams);
-      }
-
-      const session = await ensureKeyMaterial(shareSlug, storage);
-      const claim = await postJson(endpoint, {
-        action: 'claim',
-        shareSlug,
-        accessSlug,
-        publicKeyJwk: session.publicJwk,
-      }, fetchImpl);
-
-      const nextSession = {
-        ...session,
-        operatorCounter: Number(claim?.operatorCounter || 0),
-        accessSlug: claim?.accessSlug || accessSlug,
-      };
-      writeSession(shareSlug, nextSession, storage);
-
-      const privateKey = await importOperatorPrivateKey(nextSession.privateJwk);
-      const canonicalPayload = canonicalizeOperatorMutationPayload({
-        shareSlug,
-        mutation,
-        payload,
-        counter: nextSession.operatorCounter,
+      assertAccess(shareSlug, accessSlug);
+      if (!mutation) throw new Error(EC.operatorMutationMissingParams);
+      return withOperatorKeyLock(shareSlug, async () => {
+        const { material, claimed } = await claimLocalKey(shareSlug, accessSlug);
+        const counter = Number(claimed?.operatorCounter || 0);
+        const canonicalPayload = canonicalizeOperatorMutationPayload({ shareSlug, mutation, payload, counter });
+        const signature = await signOperatorMutationPayload(canonicalPayload, material.privateKey);
+        const result = await postJson(endpoint, {
+          action: 'mutate', shareSlug, accessSlug: claimed?.accessSlug || accessSlug,
+          mutation, payload, counter, signature,
+        }, fetchImpl);
+        return result?.draft || null;
       });
-      const signature = await signOperatorMutationPayload(canonicalPayload, privateKey);
-      const result = await postJson(endpoint, {
-        action: 'mutate',
-        shareSlug,
-        accessSlug: nextSession.accessSlug || accessSlug,
-        mutation,
-        payload,
-        counter: nextSession.operatorCounter,
-        signature,
-      }, fetchImpl);
-
-      writeSession(shareSlug, {
-        ...nextSession,
-        operatorCounter: Number(result?.operatorCounter || nextSession.operatorCounter + 1),
-        accessSlug: result?.accessSlug || result?.draft?.operator_slug || nextSession.accessSlug || accessSlug,
-      }, storage);
-
-      return result?.draft || null;
+    },
+    async exportBackup({ shareSlug = '', accessSlug = '', passphrase } = {}) {
+      assertAccess(shareSlug, accessSlug);
+      assertOperatorBackupPassphrase(passphrase);
+      return withOperatorKeyLock(shareSlug, async () => {
+        const { material } = await claimLocalKey(shareSlug, accessSlug);
+        return encryptOperatorBackup(shareSlug, material, passphrase);
+      });
+    },
+    async importBackup({ shareSlug = '', accessSlug = '', backup, passphrase } = {}) {
+      assertAccess(shareSlug, accessSlug);
+      const material = await decryptOperatorBackup(backup, passphrase, shareSlug);
+      return withOperatorKeyLock(shareSlug, async () => {
+        // Server pin verification precedes any replacement of a local key.
+        await claim(shareSlug, accessSlug, material.publicJwk);
+        await vault.save(shareSlug, material);
+        return true;
+      });
     },
   };
 }

@@ -1,14 +1,43 @@
 # Native SmartAccount private-chain validation
 
-## Actual native module profiles
+## Current ABI 2 acceptance boundary
 
-The current real-module matrix is `scripts/neoexpress_native_modules_validate.py`.
+Current runs must bind the reviewed ABI 2 core/RPC sources and the current
+native-v2 module build receipt. Execution uses four arguments:
+`(accountId, operationOrBatch, expectedAuthorityEpoch, expectedConfigurationNonce)`.
+Both counters must match the 14-field account record; the former two-argument
+entrypoints reject. This commitment is part of the unsigned transaction, including
+custody fallback and native transaction-witness authorization. Fee preparation
+uses the RPC `minimumrequiredfee` and verifies the final signed transaction.
+
+Recovery tests must preserve actual signed bytes across transitions, reject
+stale counters in both Verification and Application, and verify that reinstalled
+modules cannot read previous `0xA2` account/authorityEpoch namespaces. New
+signatures/configuration supply positive controls. Receipts must distinguish
+mempool rejection, admitted FAULT and persisted HALT, and compare actual account,
+nonce, module storage and asset deltas. Prior counts and receipts below describe
+ABI 1 snapshots only; they do not establish current ABI 2 validation.
+
+The ABI 2 source runner was rebuilt twice from the final reviewed production
+sources on 2026-10-08. All 104 runtime files, 50 dependency archives and generated
+lock maps matched. The source graph contains 313 core, 122 node and 182 Express
+inputs. Exact hashes are in
+[`aa-native-abi2-runner-build-20261008.json`](../reports/aa-native-abi2-runner-build-20261008.json);
+[`aa-native-abi2-build-convergence-20261008.json`](../reports/aa-native-abi2-build-convergence-20261008.json)
+joins the module, runtime, public-profile and model receipts. The final node
+formatting commit occurred after the build snapshot; the readback report records
+its new HEAD while preserving the original build metadata and matching source
+hashes. Build reproducibility does not itself constitute a native-chain pass.
+
+## Historical native module profiles
+
+The real-module matrix entrypoint is `scripts/neoexpress_native_modules_validate.py`.
 It uses the source-built runner receipt and the separately reproduced native
 NeoNativeVerifier/WhitelistHook artifacts, not accepting diagnostic modules.
 The native manifest ABI and `hasModuleContext` phases are not relaxed to admit
 legacy artifacts. See `SMARTACCOUNT-NATIVE-MODULE-PROFILES.md` for packaging.
 
-Each fresh run persists two registrations and 29 signed matrix transactions:
+The historical ABI 1 run persisted two registrations and 29 signed matrix transactions:
 11 HALTs and 18 expected FAULTs. It checks actual 2-of-2 witness authorization,
 missing cosigners, incorrect witness scopes, one-day configuration maturity,
 default-deny allowlists, direct-entry rejection, callback/target-frame separation,
@@ -79,6 +108,12 @@ wallets, private configuration and symbolic links. Every included file and every
 external NuGet archive is identified by SHA-256. Source compatibility changes and
 deterministic build metadata are explicit recipe inputs; no build may silently
 reuse an old SmartAccount package or unrecorded DLL.
+
+The source-reference and deterministic compiler settings are imported through
+MSBuild's explicit `CustomAfterMicrosoftCommonTargets` entry point. A nested
+repository `Directory.Build.targets` remains active but cannot hide this source
+recipe. A real MSBuild evaluation regression checks both its retained settings
+and the replacement of binary Neo references with the reviewed source projects.
 
 Two independent clean directories, package extraction directories and offline
 restores must produce identical complete runtime file maps, including dependencies,
@@ -202,7 +237,7 @@ does not satisfy this gate.
 
 The matrix verifies unauthorized freeze, recovery-authorized freeze, rejection
 of either single signer for unfreeze, and successful joint unfreeze. Freeze and
-unfreeze must advance the configuration epoch and invalidate pending intents.
+unfreeze must advance configurationNonce and invalidate pending intents; authorityEpoch is separate and advances only on recovery.
 While custody recovery is pending, mutable configuration is rejected; an Active
 account may still execute an authorized operation. The recovery authority can
 freeze separately if execution must stop. Custody cancellation is allowed only

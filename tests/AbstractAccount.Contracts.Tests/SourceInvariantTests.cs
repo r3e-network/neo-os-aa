@@ -256,7 +256,7 @@ public class SourceInvariantTests
 
         // Verify both authorization paths exist
         StringAssert.Contains(executionSource, "state.Verifier != UInt160.Zero", "Verifier path check");
-        StringAssert.Contains(executionSource, "Contract.CallWithGasLimit(", "Verifier bounded delegate call");
+        StringAssert.Contains(executionSource, "PlatformSyscalls.CallWithGasLimit(", "Verifier bounded delegate call");
         StringAssert.Contains(executionSource, "\"validateSignature\"", "Verifier method");
         StringAssert.Contains(executionSource, "VerifierGasLimit", "Verifier gas cap");
         StringAssert.Contains(executionSource, "Runtime.CheckWitness(state.BackupOwner!)", "Native fallback CheckWitness");
@@ -346,21 +346,13 @@ public class SourceInvariantTests
         var rng = Rng();
         var accountsSource = Read("UnifiedSmartWallet.Accounts.cs");
 
-        // Child configuration has a separate allowlist so setPublicKey cannot
-        // bypass the root verifier's ordinary configuration timelock.
-        StringAssert.Contains(accountsSource, "AllowedVerifierChildMethods");
-        var allowlistStart = accountsSource.IndexOf("AllowedVerifierChildMethods", StringComparison.Ordinal);
+        // Verify setPublicKey is NOT in the verifier method allowlist
+        StringAssert.Contains(accountsSource, "AllowedVerifierMethods");
+        var allowlistStart = accountsSource.IndexOf("AllowedVerifierMethods", StringComparison.Ordinal);
         var allowlistEnd = accountsSource.IndexOf("};", allowlistStart, StringComparison.Ordinal);
         var allowlistBlock = accountsSource.Substring(allowlistStart, allowlistEnd - allowlistStart + 2);
-        StringAssert.Contains(allowlistBlock, "\"setPublicKey\"",
-            "setPublicKey must be available for timelocked child configuration");
-
-        var rootAllowlistStart = accountsSource.IndexOf("AllowedVerifierMethods", StringComparison.Ordinal);
-        var rootAllowlistEnd = accountsSource.IndexOf("};", rootAllowlistStart, StringComparison.Ordinal);
-        var rootAllowlistBlock = accountsSource.Substring(rootAllowlistStart,
-            rootAllowlistEnd - rootAllowlistStart + 2);
-        Assert.IsFalse(rootAllowlistBlock.Contains("\"setPublicKey\"", StringComparison.Ordinal),
-            "setPublicKey must not be available through the ordinary verifier route");
+        Assert.IsFalse(allowlistBlock.Contains("\"setPublicKey\"", StringComparison.Ordinal),
+            "setPublicKey must NOT be in the verifier allowlist");
 
         // Verify hook allowlist exists
         StringAssert.Contains(accountsSource, "AllowedHookMethods");
@@ -368,12 +360,12 @@ public class SourceInvariantTests
         StringAssert.Contains(accountsSource, "Timelock not elapsed");
 
         // Randomized invariant check: verify method names in allowlist are safe
-        string[] safeVerifierMethods = { "clearAccount", "setPublicKey", "setSessionKey", "clearSessionKey", "setConfig", "createSubscription", "setDKIMRegistry" };
+        string[] safeVerifierMethods = { "clearAccount", "setSessionKey", "clearSessionKey", "setConfig", "createSubscription", "setDKIMRegistry" };
         for (int i = 0; i < Iterations; i++)
         {
             string method = safeVerifierMethods[rng.Next(safeVerifierMethods.Length)];
-            Assert.IsTrue(method == "setPublicKey" || !method.Contains("PublicKey", StringComparison.Ordinal),
-                $"Method {method} must use the exact public-key spelling");
+            Assert.IsFalse(method.Contains("PublicKey", StringComparison.Ordinal),
+                $"Method {method} should not contain PublicKey");
             Assert.IsFalse(method.Contains("Update", StringComparison.Ordinal),
                 $"Method {method} should not contain Update");
         }

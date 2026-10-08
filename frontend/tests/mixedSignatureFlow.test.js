@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
 
 import {
   appendSignatureEntries,
@@ -284,11 +285,7 @@ test('executeBroadcast relay submit can use meta invocation carried by collected
       signerId: 'evm:bob',
       kind: 'evm',
       metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUserOp',
-          args: [{ type: 'String', value: 'ok' }],
-        },
+        metaInvocation: executeUserOpInvocation(),
       },
     }],
     walletService: wallet,
@@ -300,11 +297,7 @@ test('executeBroadcast relay submit can use meta invocation carried by collected
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUserOp',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
   });
 });
 
@@ -451,11 +444,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
       signerId: 'evm:bob',
       kind: 'evm',
       metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUserOp',
-          args: [{ type: 'String', value: 'ok' }],
-        },
+        metaInvocation: executeUserOpInvocation(),
       },
     }],
   });
@@ -464,11 +453,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUserOp',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
     paymaster: {
       account_id: 'aa-test',
       zerc20Proof: {
@@ -491,4 +476,64 @@ test('wallet service exposes EVM connect and sign helpers', () => {
   assert.match(source, /signTypedDataWithEvm/);
   assert.match(source, /getAvailableWalletModes/);
   assert.match(source, /relayTransaction/);
+});
+
+// --- CU-06: a relay verdict of ok:false is not a submission ---------------------------------------------------
+// The route answers a refused broadcast (a simulated transfer that returned false, a VM fault in the preview)
+// with HTTP 200, ok:false and no txid. Reporting that as "Relay Submission Sent" is the silent no-op.
+
+function metaSignature() {
+  return [{
+    signerId: 'evm:bob',
+    kind: 'evm',
+    metadata: {
+      metaInvocation: executeUserOpInvocation(),
+    },
+  }];
+}
+
+const relaySubmit = (walletService) => executeBroadcast({
+  mode: 'relay',
+  relayPayloadMode: 'meta',
+  relayRawEnabled: false,
+  morpheusNetwork: 'testnet',
+  transactionBody: {},
+  signatures: metaSignature(),
+  walletService,
+  relayEndpoint: '/api/relay-transaction',
+});
+
+test('CU-06: executeBroadcast rejects a relay answer that says ok:false and carries the route reason', async () => {
+  const refusal = {
+    simulate: true,
+    ok: false,
+    code: 'relay_transfer_returned_false',
+    vmState: 'HALT',
+    operation: 'executeUserOp',
+    exception: 'A token transfer returned false, so no tokens moved; the nonce and the fee are still spent.',
+  };
+  await assert.rejects(
+    () => relaySubmit({ async relayTransaction() { return refusal; } }),
+    (error) => /transfer returned false/i.test(error.message),
+  );
+
+  const fault = { simulate: true, ok: false, code: 'relay_simulation_fault', vmState: 'FAULT', exception: 'Invalid sequence for channel' };
+  await assert.rejects(
+    () => relaySubmit({ async relayTransaction() { return fault; } }),
+    (error) => /Invalid sequence for channel/.test(error.message),
+  );
+
+  await assert.rejects(
+    () => relaySubmit({ async relayTransaction() { return { ok: false }; } }),
+    (error) => typeof error.message === 'string' && error.message.length > 0,
+    'a bare ok:false still fails, with a stable fallback message',
+  );
+});
+
+test('CU-06: executeBroadcast keeps returning successful relay bodies untouched', async () => {
+  const sent = { txid: '0xdef', systemFee: '88628280', networkFee: '1369520', invocation: { operation: 'executeUserOp' } };
+  assert.deepEqual(await relaySubmit({ async relayTransaction() { return sent; } }), sent);
+
+  const rawSent = { txid: '0xabc', result: { hash: '0xabc' } };
+  assert.deepEqual(await relaySubmit({ async relayTransaction() { return rawSent; } }), rawSent);
 });

@@ -28,11 +28,18 @@ if [[ -n "${AA_FORMAL_NO_PROXY:-}" ]]; then
                --build-arg "no_proxy=$AA_FORMAL_NO_PROXY")
 fi
 
+if [[ -z "${NEOOS_NATIVE_CORE_SOURCE:-}" || ! -d "$NEOOS_NATIVE_CORE_SOURCE" ]]; then
+  echo "Set NEOOS_NATIVE_CORE_SOURCE to the reviewed native core checkout" >&2
+  exit 1
+fi
+native_core_root="$(cd "$NEOOS_NATIVE_CORE_SOURCE" && pwd)"
+
 docker build "${build_args[@]}" -f "$ROOT_DIR/formal/Dockerfile" -t "$IMAGE" "$ROOT_DIR/formal"
 mkdir -p "$ROOT_DIR/formal/.runs/docker"
 
 echo "formal gate (docker): running formal/verify.py in $IMAGE"
-docker run --rm -v "$ROOT_DIR:/work" -w /work -e HOME=/tmp "$IMAGE" \
+docker run --rm -v "$ROOT_DIR:/work" -v "$native_core_root:/native-core:ro" \
+  -w /work -e HOME=/tmp -e NEOOS_NATIVE_CORE_SOURCE=/native-core "$IMAGE" \
   --output formal/.runs/docker "$@"
 
 echo "formal gate (docker): running the runner's own regression tests"

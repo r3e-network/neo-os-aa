@@ -30,27 +30,20 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             sdk/js/package-lock.json
-      # Needs no packages, so it still runs while the gate below is red.
+      # Needs no packages, so it still runs when the gate below fails.
       - name: Repository hygiene and package-pin tests
-        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/fuzz_continuous.test.mjs
-      # KNOWN RED until the owner action in docs/NEO-PLATFORM-PACKAGES.md is done
-      # (audit finding R-11 / N-DEP-1); do not silence it here.
-      #
-      # contracts/Directory.Build.props pins Neo.SmartContract.Framework
-      # 3.10.2-CI00384 because the wallet calls Contract.CallWithGasLimit, which
-      # no released framework declares (3.9.1, 3.10.0 and 3.10.1 fail with
-      # CS0117); the contract tests need the matching private TestEngine and Neo
-      # core. Seven of the eight packages in contracts/neo-platform-packages.json
-      # are on no public feed and there is no nuget.config, so restore fails
-      # NU1102. This step fails within seconds with the owner action instead of
-      # failing deep inside verify_repo.sh, and once a feed exists it refuses
-      # packages whose bytes differ from the audited ones. The fix is a reviewed
-      # feed plus nuget.config, not a downgrade and not a skip; no released Neo
-      # core activates the syscall, so these artifacts are still not deployable
-      # to a public node.
-      - name: Check pinned Neo platform packages
+        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/fuzz_continuous.test.mjs scripts/source_map_js_pin.test.mjs
+      # Neo.SmartContract.Framework and Neo.SmartContract.Testing 3.10.1, the Neo packages they pull
+      # in and every other NuGet package are published on nuget.org, which nuget.config makes the
+      # only source. Directory.Build.props pins the framework and the packages.lock.json next to
+      # each project pins the rest; restore runs in locked mode, so a changed resolution or different
+      # package bytes fail here, within seconds, with the pinned versions named
+      # (docs/AA-REPRODUCIBLE-BUILD.md), instead of deep inside verify_repo.sh.
+      - name: Check pinned Neo platform packages (framework 3.10.1)
         run: node scripts/check_neo_platform_packages.mjs
-      - name: Install Neo compiler (nccs)
+      # The compiler is not a project dependency, so no lock file covers it. verify_repo.sh and
+      # contracts/compile.sh check that the installed nccs is this exact package.
+      - name: Install Neo compiler (nccs 3.9.1)
         run: dotnet tool install -g neo.compiler.csharp --version 3.9.1
       - name: Install frontend dependencies
         working-directory: frontend

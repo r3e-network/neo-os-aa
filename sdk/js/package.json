@@ -3,12 +3,14 @@
   "version": "1.0.0",
   "description": "Neo N3 Abstract Account SDK",
   "license": "MIT",
-  "main": "src/index.js",
-  "types": "src/index.d.ts",
+  "main": "dist/sdk/js/src/index.js",
+  "types": "dist/sdk/js/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./dist/sdk/js/src/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/sdk/js/src/index.js",
+      "default": "./dist/sdk/js/src/index.js"
     }
   },
   "homepage": "https://github.com/r3e-network/neo-os-aa",
@@ -17,13 +19,17 @@
     "url": "git+https://github.com/r3e-network/neo-os-aa.git"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12.0"
   },
   "files": [
-    "src"
+    "dist",
+    "PACKAGING.md"
   ],
   "scripts": {
+    "build": "node scripts/build-package.mjs",
+    "prepack": "npm run build",
     "test": "node --test tests/*.unit.test.js",
+    "test:package": "node --test tests/package-consumer.test.js",
     "types:check": "tsc --noEmit --project tsconfig.types.json",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "testnet:validate": "./run_testnet_validation_suite.sh",

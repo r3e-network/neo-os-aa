@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Check and package native module metadata without changing compiler NEF bytes."""
+"""Package ABI v2 native modules without changing compiler NEF bytes.
+
+A native-v2 compiler marker and explicit service epoch permission are admission
+requirements; packaging never upgrades legacy native-v1 semantics by relabelling.
+"""
 import argparse
 import copy
 import hashlib
@@ -30,8 +34,17 @@ def prepare_native_source(source, destination):
 
 
 def package_manifest(original, role, capabilities):
-    if role not in ("verifier", "hook") or original.get("extra", {}).get("SmartAccountProfile") != "native-v1":
-        raise ValueError("Explicit native profile marker and role required")
+    if role not in ("verifier", "hook") or original.get("extra", {}).get("SmartAccountProfile") != "native-v2":
+        raise ValueError("Explicit native-v2 profile marker and role required")
+    service = "d9421d07adf206e9dc4be746a02e8e087fa61741"
+    permissions = original.get("permissions", [])
+    if not isinstance(permissions, list) or not any(
+        isinstance(p, dict) and isinstance(p.get("contract"), str)
+        and p["contract"].lower().removeprefix("0x") == service
+        and isinstance(p.get("methods"), list) and "getAuthorityEpoch" in p["methods"]
+        for p in permissions
+    ):
+        raise ValueError("Native-v2 requires explicit native service getAuthorityEpoch permission")
     methods = original.get("abi", {}).get("methods", [])
     def require(name, result, types, safe=None):
         found = [m for m in methods if m["name"] == name and len(m["parameters"]) == len(types)]
@@ -54,7 +67,7 @@ def package_manifest(original, role, capabilities):
     manifest = copy.deepcopy(original)
     if "smartAccount" in manifest["extra"]:
         raise ValueError("Compiler metadata already contains a native capability declaration")
-    manifest["extra"]["smartAccount"] = {"configurationMethods": list(capabilities)}
+    manifest["extra"]["smartAccount"] = {"abiVersion": 2, "configurationMethods": list(capabilities)}
     return manifest
 
 

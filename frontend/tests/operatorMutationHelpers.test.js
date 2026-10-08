@@ -7,6 +7,7 @@ import {
   importOperatorPublicKey,
   signOperatorMutationPayload,
   verifyOperatorMutationSignature,
+  operatorPublicKeysMatch,
 } from '../api/operatorMutationHelpers.js';
 
 async function generateKeyPair() {
@@ -44,4 +45,14 @@ test('operator mutation signatures verify against the stored public key', async 
 
   assert.equal(verified, true);
   assert.equal(tampered, false);
+});
+
+test('pinned-key comparison tolerates JSONB property order but rejects other keys and private material', async () => {
+  const first = await generateKeyPair(); const second = await generateKeyPair();
+  const publicJwk = await crypto.subtle.exportKey('jwk', first.publicKey);
+  const reordered = Object.fromEntries(Object.entries(publicJwk).reverse());
+  assert.equal(operatorPublicKeysMatch(publicJwk, reordered), true);
+  assert.equal(operatorPublicKeysMatch(publicJwk, await crypto.subtle.exportKey('jwk', second.publicKey)), false);
+  assert.equal(operatorPublicKeysMatch(publicJwk, await crypto.subtle.exportKey('jwk', first.privateKey)), false);
+  assert.equal(operatorPublicKeysMatch(publicJwk, null), false);
 });

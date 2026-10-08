@@ -18,15 +18,13 @@ namespace AbstractAccount.Verifiers
     /// </remarks>
     [DisplayName("MultiSigVerifier")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "setVerifierDependencies", "clearVerifierDependencies")]
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch", "setVerifierDependencies", "clearVerifierDependencies")]
     [ContractPermission("*", "validateSignatureForPostExecute")]
-    [ManifestExtra("SmartAccountProfile", "native-v1")]
+    [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
-    [ContractPermission("*", "setVerifierDependencies")]
-    [ContractPermission("*", "clearVerifierDependencies")]
 #endif
     [ContractPermission("*", "postExecute")]
     [ContractPermission("*", "supportsV3")]
@@ -36,15 +34,19 @@ namespace AbstractAccount.Verifiers
     {
         private static readonly byte[] Prefix_Config = new byte[] { 0x01 };
         private const int MaxChildVerifiers = 10;
+#if SMARTACCOUNT_NATIVE
         private const int MaxDomainsPerChild = 10;
+#endif
 
         public static void _deploy(object data, bool update) => VerifierAuthority.Initialize(data, update);
 
         [Safe]
         public static bool SupportsV3() => true;
 
+#if SMARTACCOUNT_NATIVE
         [Safe]
         public static bool SupportsComposition() => true;
+#endif
 
         [Safe]
         public static bool SupportsMessageSignatures() => false;
@@ -96,14 +98,18 @@ namespace AbstractAccount.Verifiers
                 AssertChildVerifier(verifiers[i]);
             }
 
+#if SMARTACCOUNT_NATIVE
             AssertSignerDomainSeparation(accountId, verifiers);
+#endif
 
             MultiSigConfig config = new MultiSigConfig { Verifiers = verifiers, Threshold = threshold };
-            byte[] key = Helper.Concat(Prefix_Config, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_Config, accountId);
             Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(config));
+#if SMARTACCOUNT_NATIVE
             UInt160 core = VerifierAuthority.AuthorizedCore();
             Contract.Call(core, "setVerifierDependencies", CallFlags.All,
                 new object[] { accountId, verifiers });
+#endif
         }
 
         private static void AssertChildVerifier(UInt160 verifier)
@@ -113,10 +119,10 @@ namespace AbstractAccount.Verifiers
 
             ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
             ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsV3", ContractParameterType.Boolean), "Child verifier V3 marker missing");
+#if SMARTACCOUNT_NATIVE
             ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsComposition", ContractParameterType.Boolean), "Child verifier composition marker missing");
             bool composite = (bool)Contract.Call(verifier, "supportsComposition", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(!composite, "Composite verifier cannot be a child");
-#if SMARTACCOUNT_NATIVE
             ExecutionEngine.Assert(ExposesMethod(methods, "validateSignature", ContractParameterType.Boolean,
                 ContractParameterType.Hash160, ContractParameterType.Array), "Child verifier validation ABI missing");
             ExecutionEngine.Assert(ExposesMethod(methods, "postExecute", ContractParameterType.Void,
@@ -131,8 +137,10 @@ namespace AbstractAccount.Verifiers
 #endif
             ExecutionEngine.Assert(ExposesMethod(methods, "clearAccount", ContractParameterType.Void,
                 ContractParameterType.Hash160), "Child verifier cleanup ABI missing");
+#if SMARTACCOUNT_NATIVE
             ExecutionEngine.Assert(ExposesSafeMethod(methods, "getSignerDomains", ContractParameterType.Array,
                 ContractParameterType.Hash160), "Child signer-domain ABI missing");
+#endif
 
             bool supported = (bool)Contract.Call(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Child verifier does not implement V3 interface");
@@ -142,9 +150,6 @@ namespace AbstractAccount.Verifiers
         private static void AssertSignerDomainSeparation(UInt160 accountId, UInt160[] verifiers) => ReadSignerDomains(accountId, verifiers);
 
         private static ByteString[] ReadSignerDomains(UInt160 accountId, UInt160[] verifiers)
-#else
-        private static void AssertSignerDomainSeparation(UInt160 accountId, UInt160[] verifiers)
-#endif
         {
             ByteString[] domains = new ByteString[MaxChildVerifiers * MaxDomainsPerChild];
             int domainCount = 0;
@@ -171,11 +176,9 @@ namespace AbstractAccount.Verifiers
                     domains[domainCount++] = domain;
                 }
             }
-#if SMARTACCOUNT_NATIVE
             ByteString[] result = new ByteString[domainCount];
             for (int i = 0; i < domainCount; i++) result[i] = domains[i];
             return result;
-#endif
         }
 
         private static bool EqualBytes(ByteString left, ByteString right)
@@ -187,6 +190,7 @@ namespace AbstractAccount.Verifiers
             }
             return true;
         }
+#endif
 
         private static bool ExposesSafeMethod(ContractMethodDescriptor[] methods, string name,
             ContractParameterType returnType, params ContractParameterType[] parameterTypes)
@@ -241,10 +245,21 @@ namespace AbstractAccount.Verifiers
         [Safe]
         public static MultiSigConfig? GetConfig(UInt160 accountId)
         {
-            byte[] key = Helper.Concat(Prefix_Config, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_Config, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             if (data == null) return null;
             return (MultiSigConfig)StdLib.Deserialize(data!);
+        }
+
+        /// <summary>
+        /// Explicit configuration-delegation capability consumed by the pinned core.
+        /// It returns the same ordered topology and threshold as GetConfig; unrelated
+        /// verifiers with a similarly shaped getConfig do not opt into delegation.
+        /// </summary>
+        [Safe]
+        public static MultiSigConfig? GetChildVerifierConfig(UInt160 accountId)
+        {
+            return GetConfig(accountId);
         }
 
         /// <summary>
@@ -259,12 +274,14 @@ namespace AbstractAccount.Verifiers
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
 #endif
-            byte[] key = Helper.Concat(Prefix_Config, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_Config, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             ExecutionEngine.Assert(data != null, "No MultiSig config");
 
             MultiSigConfig config = (MultiSigConfig)StdLib.Deserialize(data!);
+#if SMARTACCOUNT_NATIVE
             AssertSignerDomainSeparation(accountId, config.Verifiers);
+#endif
 
             // Expected that op.Signature is an array of sub-signatures matching the verifier order
 #if SMARTACCOUNT_NATIVE
@@ -292,12 +309,8 @@ namespace AbstractAccount.Verifiers
                     // the entire multisig when threshold can still be met
                     try
                     {
-#if SMARTACCOUNT_NATIVE
                         object approval = Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly, new object[] { accountId, subOp });
                         bool isValid = approval is bool && (bool)approval;
-#else
-                        bool isValid = (bool)Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly, new object[] { accountId, subOp });
-#endif
                         if (isValid) validCount++;
                     }
                     catch { }
@@ -318,12 +331,14 @@ namespace AbstractAccount.Verifiers
             VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
 #endif
 
-            byte[] key = Helper.Concat(Prefix_Config, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_Config, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             ExecutionEngine.Assert(data != null, "No MultiSig config");
 
             MultiSigConfig config = (MultiSigConfig)StdLib.Deserialize(data!);
+#if SMARTACCOUNT_NATIVE
             AssertSignerDomainSeparation(accountId, config.Verifiers);
+#endif
 #if SMARTACCOUNT_NATIVE
             object[] signatures = NativeSignatures(op.Signature);
 #else
@@ -332,6 +347,9 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert(signatures.Length == config.Verifiers.Length, "Signature array length mismatch");
 
             ByteString argumentSnapshot = StdLib.Serialize(op.Args);
+            // Any mutable target result is isolated as well. Unsupported Interop/iterator
+            // results fail serialization instead of leaking a shared object between children.
+            ByteString resultSnapshot = StdLib.Serialize(result);
             int validCount = 0;
             bool[] validChildren = new bool[config.Verifiers.Length];
             for (int i = 0; i < config.Verifiers.Length; i++)
@@ -347,10 +365,10 @@ namespace AbstractAccount.Verifiers
                 {
 #if SMARTACCOUNT_NATIVE
                     object approval = Contract.Call(config.Verifiers[i], "validateSignatureForPostExecute", CallFlags.ReadOnly, new object[] { accountId, subOp });
-                    bool isValid = approval is bool && (bool)approval;
 #else
-                    bool isValid = (bool)Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly, new object[] { accountId, subOp });
+                    object approval = Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly, new object[] { accountId, subOp });
 #endif
+                    bool isValid = approval is bool && (bool)approval;
                     if (!isValid) continue;
 
                     validChildren[i] = true;
@@ -371,7 +389,8 @@ namespace AbstractAccount.Verifiers
 #else
                 UserOperation subOp = CreateSubOperation(op, signatures[i], argumentSnapshot);
 #endif
-                Contract.Call(config.Verifiers[i], "postExecute", CallFlags.All, new object[] { accountId, subOp, result });
+                object childResult = StdLib.Deserialize(resultSnapshot);
+                Contract.Call(config.Verifiers[i], "postExecute", CallFlags.All, new object[] { accountId, subOp, childResult });
             }
         }
 
@@ -382,9 +401,11 @@ namespace AbstractAccount.Verifiers
 #else
             VerifierAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
 #endif
+#if SMARTACCOUNT_NATIVE
             UInt160 core = VerifierAuthority.AuthorizedCore();
             Contract.Call(core, "clearVerifierDependencies", CallFlags.All, new object[] { accountId });
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_Config, (byte[])accountId));
+#endif
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_Config, accountId));
         }
 
 #if SMARTACCOUNT_NATIVE

@@ -18,6 +18,9 @@ const {
 // payload layout and byte-order conventions; also consumed by the frontend).
 const { createRegistrationAccountIdDeriver } = require('../../../shared/registrationAccountId.mjs');
 
+// Result rules for token transfers, shared with the relay route and the wallet (shared/transferOutcome.mjs).
+const transferOutcome = require('../../../shared/transferOutcome.mjs');
+
 const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({
   hash160: (value) => sanitizeHex(u.hash160(value)),
 });
@@ -1498,6 +1501,9 @@ class AbstractAccountClient {
 
 module.exports = {
   AbstractAccountClient,
+  ...require('./native'),
+  ...require('./proxyWitness'),
+  ...require('./multisig'),
   // Meta-tx exports
   buildMetaTransactionTypedData: metaTxExports.buildMetaTransactionTypedData,
   buildV3UserOperationTypedData: metaTxExports.buildV3UserOperationTypedData,
@@ -1509,6 +1515,12 @@ module.exports = {
   toAddressWord: metaTxExports.toAddressWord,
   toUint256Word: metaTxExports.toUint256Word,
   sanitizeHex: metaTxExports.sanitizeHex,
+  // Token transfer result rules (shared with the relay route and the wallet)
+  TRANSFER_RETURNED_FALSE: transferOutcome.TRANSFER_RETURNED_FALSE,
+  TRANSFER_RETURNED_FALSE_MESSAGE: transferOutcome.TRANSFER_RETURNED_FALSE_MESSAGE,
+  findFailedTransferInInvocation: transferOutcome.findFailedTransferInInvocation,
+  findFailedTransferInExecution: transferOutcome.findFailedTransferInExecution,
+  isProxySourcedTransfer: transferOutcome.isProxySourcedTransfer,
   // Export new modules
   EC,
   createError,

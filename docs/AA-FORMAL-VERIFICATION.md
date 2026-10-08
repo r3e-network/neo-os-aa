@@ -2,6 +2,35 @@
 
 ## Status
 
+### ABI 2 convergence boundary
+
+The active native target is AccountManagement ABI 2, with identity derivation
+version 1, authorization/account-record version 2, and separate authority epoch
+and configuration nonce. Native recovery revokes old module generations without
+external cleanup. The six native modules use epoch-scoped state. Ordinary public
+`v3` and private `PLATFORM` sources are retained as separate profiles; native
+claims must bind the external Neo core sources, not the old deployed-core prototype.
+
+The ABI 2 host gate passed on 2026-10-08: **26 Coq modules, 409 closed declarations,
+222 rejected semantic mutations** (218 Coq and four TLA), 61,460 TLC distinct states,
+and six SMT obligations with six controls. All mutations first passed definition
+compilation and then failed the relevant proof or invariant. The gate pins 55 AA
+inputs and 309 external native core source files, checked again after verification.
+The gate regression suite passed 57 tests; the profile/vector suite passed 12.
+Exact model/source/tool hashes and profile applicability are in
+[`aa-native-abi2-formal-20261008.json`](reports/aa-native-abi2-formal-20261008.json).
+
+`NativeAuthorityEpoch.v` contributes 44 closed declarations and 22 mutations for
+checked counters, callback-free recovery, namespace separation and the four-argument
+execution commitment. Domain hashing, exact byte keys and VM transaction-witness
+behavior remain source/runtime correspondence obligations. The ordinary TLC and
+SMT checks retain their public/private contract scope. Formal models remain
+hand-written abstractions, not C#/VM/NEF refinement or deployment attestations;
+the result therefore retains `implementationVerified: false`. All counts below
+are historical unless explicitly labelled as ABI 2. Module/build and native-chain
+receipts are separate evidence; a passing proof does not substitute for replay.
+
+
 ### Bounded configuration postcondition
 
 The native confirmation boundary must re-admit both the selected child and its
@@ -20,13 +49,15 @@ The repository-local formal artifacts under `formal/` are the inputs to the
 fail-closed gate below; the sibling local `neo-os-formal-verification`
 workspace carries the parallel verification set.
 
-The current fail-closed AA-local host gate passed on 2026-10-08: **25 Coq
+### Historical native ABI 1 evidence
+
+The historical fail-closed AA-local host gate passed on 2026-10-08: **25 Coq
 modules, 360 assumption-audited closed declarations, and 198 rejected semantic
 mutations** (194 Coq and four TLA mutations). TLC explored 61,460 distinct
 states, all six SMT obligations and six controls passed, and the runner suite
-passed **52/52**. The current receipt is
+passed **52/52**. The historical receipt is
 `docs/reports/aa-formal-gate-native-multisig-20261008.json`.
-The gate now pins 23 source files, including the exact native module authority
+That gate pinned 23 source files, including the exact native module authority
 guard, selected module profiles and session clock/payload adapters. The entry lemmas require
 both the fixed service identity and an authenticated phase grant; a matching
 positive control excludes an always-reject implementation. Source pins remain
@@ -61,9 +92,10 @@ zero-cap authorization, wildcard target binding, configuration admission,
 uncapped result semantics, capped debit and key-reuse boundaries. It does not
 replace the capped lifecycle model. Signature validity, completion, key identity,
 nonce currency and expiry are abstract predicates, not cryptographic or engine
-proofs. In particular, a counterexample shows that restoring the same key can
-restore an unconsumed signature's validity; permanent invalidation is not proved
-and is not implemented by this profile.
+proofs. Its leaf-policy counterexample holds signature/domain predicates fixed and records
+the historical ABI 1 key-reuse risk. ABI 2 changes the authorization domain on
+configuration and recovery; `NativeAuthorityEpoch.v` models rejection of those
+stale signatures. Neither abstraction alone proves their VM composition.
 
 `docs/reports/aa-native-session-scope-validation-20261007.json` records two new
 private chains, each with 44 persisted matrix transactions (27 HALT, 17 expected
@@ -252,6 +284,50 @@ nor Colima context returned a successful bounded daemon probe. The current statu
 `HOST_PASS_CONTAINER_UNAVAILABLE`; an earlier container PASS is not reused for
 changed model bytes.
 
+### Historical ordinary-contract evidence
+
+The historical fail-closed AA-local gate passed on 2026-09-21: **5 Coq modules,
+72 closed declarations, 30 semantic mutations rejected, 61,460 TLC distinct
+states, and 6 SMT obligations with 6 controls**. The host run and the same
+source snapshot in the cached-base Docker BuildKit stage both passed; the
+runner regression suite is **20/20 OK**. This verifies the stated abstract
+models and arithmetic obligations, not a claim that a deployed NEF is fully
+formally verified.
+
+The 2026-10-08 host gate passed **5 Coq modules, 77 closed declarations, 32 semantic
+mutations rejected, 61,460 TLC distinct states, 6 SMT obligations and 6 controls**,
+with **23/23** runner tests. Exact source/model/tool hashes and versions are recorded in
+[`aa-formal-gate-20261008.json`](reports/aa-formal-gate-20261008.json). The Docker gate was
+not rerun; its pin is unchanged.
+
+The 2026-10-08 source separates public `v3` and private `PLATFORM` execution. The
+source lock and every new gate result include `runtimeProfiles` and `modelProfiles`;
+the runner rejects missing or changed scope metadata. `VerifierGasBudget.v` applies
+only to bounded `PLATFORM` and native callbacks. Public `v3` uses standard `System.Contract.Call` and has **no
+per-verifier child gas budget**. `ProxyWitnessScript.v` models only the ordinary public/private direct-call parser.
+Native-specific lifecycle, registry, witness and module models are labelled
+`native`; only the shared bounded MultiSig policy abstraction spans all profiles.
+The ordinary execution/escape model, TLC state machine and uint256/paymaster
+SMT file remain public/private-contract scope. Native integer, lifecycle and
+dispatch obligations use the dedicated native models instead. No scope label establishes source/VM refinement or deployment parity.
+
+The native source correspondence includes a separately supplied core checkout.
+`--native-core-root` (or `NEOOS_NATIVE_CORE_SOURCE`) is mandatory for a complete
+gate. Its reviewed source roster and hashes are checked before and after proofs;
+missing files, extra files, changed bytes or absent provenance reject. The public
+UnifiedSmartWallet source is never used as a substitute for AccountManagement.
+`NativeAuthorityEpoch.v` checks separate bounded counters, callback-free recovery,
+revoked roots/dependencies/pending intents, unchanged identity/nonces/frozen state,
+abstract generation isolation and stale-domain rejection. The four-argument
+native execution envelope commits both counters in the unsigned transaction;
+its guard applies to custody fallback and native transaction witnesses as well
+as operation-signature verifiers. The model rejects the old two-argument arity
+and stale explicit counters even when the witness-evidence predicate is true. Namespace emptiness
+requires no writes into future generations; byte encoding and exclusive use by
+every module require independent source and runtime validation. Historical
+private receipts below do not validate a changed public artifact or current source;
+re-run the gate and bytecode/runtime tests for the exact candidate being reviewed.
+
 Run from the formal-verification workspace:
 
 ```sh
@@ -264,7 +340,7 @@ For an AA-repository-local gate with source-hash pinning and semantic
 mutation tests:
 
 ```sh
-python3 formal/verify.py
+python3 formal/verify.py --native-core-root /path/to/reviewed/neo
 python3 -m unittest discover -s formal -p 'test_*.py'
 ```
 
@@ -424,15 +500,16 @@ models under `verified/` for its own `verify.sh`.
 |---|---|
 | `formal/coq/UnifiedSmartWalletAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating and success-only state transitions |
 | `formal/coq/MultiSigPolicy.v` | Closed bounded threshold-policy proofs for configuration validity, exact signature cardinality and threshold support; child identity is abstract |
-| `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected `executeUserOp`/`executeUserOps` call, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
-| `formal/coq/CallbackPluginTopology.v` | Closed abstract correspondence model for the six-field hook callback tuple, the complete success order including hook and verifier post-callbacks, CalledByEntry/Custom target binding, fail-closed plugin cleanup/rotation, atomic leaf-child cleanup, and core-owned dependency-registry replacement for shipped composites; it is not a proof of NeoVM dispatch or arbitrary plugin storage |
-| `formal/coq/VerifierGasBudget.v` | Closed abstract model of bounded callback charging: every charge checks the callback and all ancestor budgets before mutation, exhaustion is atomic, and nested callbacks cannot escape an ancestor cap |
+| `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected direct `executeUserOp`/`executeUserOps` call with its two-argument pack, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
+| `formal/coq/CallbackPluginTopology.v` | Closed abstract correspondence model for the six-field hook callback tuple, success/callback ordering, CalledByEntry/Custom target binding, and fail-closed plugin cleanup/rotation; it is not a proof of NeoVM dispatch or arbitrary plugin storage |
+| `formal/coq/VerifierGasBudget.v` | **Bounded PLATFORM/native profiles only:** closed abstract model of bounded callback charging: every charge checks the callback and all ancestor budgets before mutation, exhaustion is atomic, and nested callbacks cannot escape an ancestor cap; inapplicable to public `v3` |
 | `formal/coq/AuthorizationEvidence.v` | Closed protocol-level binding and replay model for cryptographic, native-witness, attestation and proof evidence; primitive validity is an explicit oracle, so this is not a proof of ECDSA, witness-rule evaluation, attestation or ZK soundness |
 | `formal/coq/AttestationProofBinding.v` | Closed protocol-envelope model for attestation and zero-knowledge evidence: account, target, nonce, issuer, measurement commitment, non-zero nullifier and single-use binding; primitive cryptographic and proof validity remain explicit oracle inputs |
 | `formal/coq/WitnessRuleSemantics.v` | Closed bounded model of Neo's first-match rule decision, default deny, allow/deny precedence, entry/direct-child scope, condition composition, and parser depth/child limits; it is not a refinement proof of `ApplicationEngine` or group-key cryptography |
 | `formal/coq/WitnessRuleFaultSemantics.v` | Closed fuel-bounded model of `ReadStates` faults, left-to-right And/Or short-circuiting, fault propagation through `Not`, and first-match fault behavior; concrete engine tests cover the corresponding permission and scope paths |
 | `formal/coq/WitnessRuleRefinement.v` | Closed refinement from parser-admissible fault-aware condition/rule evaluation to the Boolean model under readable permission; the uniform fuel certificate is derived rather than supplied, and does not refine the binary/JSON decoder or complete `ApplicationEngine` |
 | `formal/coq/NeoVmCallSubset.v` | Closed bounded transition-shape model for the proxy-relevant push/PACK/contract-call/RET subset; it rejects unsafe prefixes, truncated tails and trailing instructions, but is not the complete NeoVM or `ApplicationEngine` semantics |
+| `formal/coq/NativeAuthorityEpoch.v` | Native ABI 2 abstraction of checked independent counters, callback-free recovery, revoked roots/dependencies/pending intents, generation isolation and stale signature domains; excludes VM/byte-key refinement and assumes no future-generation writes |
 | `formal/coq/NeoVmContinuationSemantics.v` | Closed bounded model of callback-limit admission, CALLT/RET continuations, `LoadScript` budget inheritance, per-load initialization, hardfork gating, ancestor charging, and storage-only rollback; it is not a complete VM or compiler-refinement proof |
 | `formal/coq/AbiManifestProjection.v` | Closed finite, order-independent ABI projection model requiring exact source/manifest coverage, unique `(name, arity)` dispatch keys, parameter/return/safe equality, and the generated initializer |
 | `formal/coq/SignerDomainSeparation.v` | Closed binding model requiring exact authorization domain and payload equality; it rejects cross-domain replay but does not prove private-key independence or primitive cryptographic soundness |
@@ -471,24 +548,26 @@ full-semantics or compiler-refinement proof.
 
 ### Verifier resource-boundary status
 
-The current deployed UnifiedSmartWalletV3 prototype routes both application-trigger
-verifier and hook callbacks through `System.Contract.CallWithGasLimit`. Verifier
-callbacks use a 1,000,000,000-datoshi (10 GAS) budget and hook callbacks use a
-separate 250,000,000-datoshi budget. The matching Neo core/DevPack runtime
-activates the syscall at `HF_SmartAccountV1`; ordinary nested calls and bounded
-descendants consume the ancestor chain, and whitelist charging cannot bypass it.
-The native SmartAccount profile uses a separate 100,000,000-datoshi verifier
-budget, which is below Neo's 150,000,000-datoshi `MaxVerificationGas` envelope.
-The isolated core passes targeted bounded verifier and hook callback vectors and
-the repository unit suite. A fresh private NeoExpress chain activates the
-hardfork at block 0, drives adversarial burning verifier and hook callbacks to
-`The bounded contract call gas limit has been exhausted.`, confirms
-nonce rollback, and reads all 25 deployed artifacts back with byte-identical
-NEF scripts and matching manifests. This closes the bounded-callback property
-for the matching private artifact only; it does not prove the native
-AccountManagement contract, cryptography, full NeoVM refinement, or any public
-activation/deployment. The current receipt is
-`docs/reports/aa-neoexpress-validation-20261006.json`.
+The private `PLATFORM` source branch and `contracts/bin/platform` core call verifiers
+through `System.Contract.CallWithGasLimit`, with a 1,000,000,000-datoshi (10 GAS)
+callback budget. Public `contracts/bin/v3` uses standard `System.Contract.Call`:
+validation is read-only, post-execution accounting retains write access, and neither
+callback has an isolated child budget. Input bounds, total transaction gas ceilings
+and module admission do not supply the missing public runtime capability.
+
+The historical matching Neo core/DevPack runtime activates the private syscall
+at `HF_Iara`; ordinary nested calls and bounded descendants consume the
+ancestor chain, and whitelist charging cannot bypass it. The isolated core
+passes 9/9 targeted vectors and 1,435/1,435 full unit tests. A fresh private
+NeoExpress chain activates the hardfork at block 0, drives an adversarial
+burning verifier to `Contract call gas limit exceeded`, confirms nonce
+rollback, and reads all 25 deployed artifacts back with byte-identical NEF
+scripts and matching manifests. This closes VULN-001 for the matching private
+artifact only; no public activation or deployment was performed. The current
+receipts are `docs/reports/aa-platform-gas-cap-20260921.json` and
+`docs/reports/aa-neoexpress-gas-cap-20260921.json`.
+
+Native ABI 2 separately fixes verifier callbacks at 100,000,000 datoshi and hook/maintenance callbacks at 250,000,000 datoshi on the source-built AccountManagement runtime. The bounded gas model uses abstract budget parameters; it does not establish complete VM fee accounting.
 
 The models do not prove cryptography, the concrete witness-rule parser or
 `ApplicationEngine` implementation, full Neo VM semantics, or C#-to-NEF callback refinement, session lifecycle,
@@ -515,6 +594,33 @@ bounded VM evidence rather than a complete NeoVM or cryptographic proof. The
 policy model also proves that its abstract post-callback roster is unique,
 configured, and threshold-supported; this remains separate from concrete
 callback refinement.
+
+For the ordinary deployed public/PLATFORM profiles:
+
+The cleanup model proves fail-closed state transitions, not recovery availability:
+`finalizeEscape` still depends on successful cleanup by the old verifier and hook.
+The 2026-10-08 source validates the replacement verifier before these callbacks, but
+does not introduce emergency detach or guarantee progress past a malicious old module.
+`CallVerifierChild` and its explicit `getChildVerifierConfig` capability are recorded in
+the source snapshot and tested in NeoVM, but are outside the current abstract models.
+Those models do not prove the child configuration ABI, core/topology binding,
+pending-call serialization or timelock enforcement for this new route. The project file
+and profile build recipe are also pinned so changing source selection invalidates the
+snapshot. Hash pinning is not a proof of these implementation properties.
+The MultiSig model separately proves only the finite policy layer: non-empty,
+at-most-ten, nonzero/distinct child identifiers, threshold bounds, exact
+signature-array cardinality, and threshold support. It does not prove that
+child identifiers represent independent keys, that child verifiers agree
+between validation and post-execution, or that serialization and child calls
+are safe under gas exhaustion. The runtime suite adds negative configuration
+vectors and 2-of-2/1-of-2/native-witness vectors; these remain bounded VM
+evidence rather than a complete NeoVM or cryptographic proof. The policy model
+also proves that its abstract post-callback roster is unique, configured, and
+threshold-supported; this remains separate from concrete callback refinement.
+Its lists and callback fields are abstract values. The concrete protection against a
+child mutating another child's arguments or result depends on the implementation's
+deep snapshots and the NeoVM regression vectors; the model does not prove serialization
+or reference-isolation behavior.
 The local runtime suite does check the concrete session-key ordering rule:
 after `clearSessionKey` executes, a later `validateSignature` faults with no
 active key, and the clear emits `SessionKeyRevoked`. This does not cancel a
@@ -582,13 +688,20 @@ non-bypassable per-verifier gas budget.
 
 The proxy-witness transaction-script shape is now covered by a closed Coq
 model rather than by runtime vectors alone. `formal/coq/ProxyWitnessScript.v`
-transcribes the parser byte for byte (opcode table, PUSHDATA length decoding,
-overrun checks, tail layout, CallFlags push range) and proves that any accepted
+models the parser's opcode table, PUSHDATA length decoding,
+overrun checks, tail layout and CallFlags push range, and proves that any accepted
 script is a walk of data-push instructions landing exactly on the expected core
 call for the given account id and core hash, that no instruction start in that
 walk is a SYSCALL or any other non-push opcode, and that acceptance binds the
-account id and core hash uniquely; six semantic mutations (dropping the prefix
-walk, the account or core binding, the flags range, the syscall tail, or
+account id and core hash uniquely. The model allows only the two direct entrypoints:
+`executeUserOp`/`executeUserOps` require `PUSH2 PACK`. Both sponsored method names
+are explicitly rejected, including a correctly packed five-argument envelope and a
+two-argument disguise. These negative examples are compiled and assumption-audited;
+they preserve the boundary that sponsored settlement callbacks have not been authorized
+to reuse the proxy witness.
+Eight semantic mutations (dropping the prefix
+walk, the account or core binding, the flags range, the method/arity binding, widening
+the entrypoint allowlist, removing the syscall tail, or
 treating unknown opcodes as pushes) are each rejected. It does not prove NeoVM's
 own instruction decoding, witness-rule evaluation, signer-scope semantics, or
 C#-to-NEF refinement, and the byte range 0..255 is assumed from the C# type.
@@ -622,7 +735,7 @@ source/artifact hashes and explicit public-deployed-parity status are recorded i
 canonical TestNet/MainNet hashes found different NEF scripts; the current artifact has not
 been publicly deployed.
 
-The current gated contract run is **368 passed, 0 failed, 0 skipped** when the
+The historical native-prototype contract run was **368 passed, 0 failed, 0 skipped** when the
 sibling NeoDIDRegistry artifact is supplied, and **366 passed, 0 failed, 2
 skipped** in a standalone checkout, after
 adding the MultiSig configuration,
@@ -740,7 +853,12 @@ The current AA solution test run passed **368/368** with the sibling artifact
 supplied. In a standalone checkout it passes **366/368** and explicitly skips
 the two DID cases; the two modes remain intentionally distinct.
 
-The current source-to-artifact replay independently compiled the scratch tree
+The historical 2026-09-21 standalone checkout without the sibling `NeoDIDRegistry` artifact passed
+**290/292** and records exactly the two cross-repository DID cases as explicit
+skips; it does not count those cases as passes. The earlier 289/291 result is
+historical, from before the zero-fee estimation regression test was added.
+
+The historical 2026-09-21 source-to-artifact replay independently compiled the scratch tree
 with the matching private compiler and compared **76/76** NEF/manifest files
 byte-for-byte with `contracts/bin/v3`; no artifact was missing or drifted. The
 historical `contracts/build` tree remains an explicitly reported provenance
@@ -790,7 +908,7 @@ The prior **272/272** NeoExpress receipt remains at
 
 ### Native lifecycle authority model
 
-`NativeLifecycle.v` checks the authority guards and epoch invalidation used by
+`NativeLifecycle.v` checks the authority guards and configuration-nonce invalidation used by
 native account-record transitions: Active-only configuration, exclusion of
 configuration during pending custody recovery, strict custody-cancellation
 maturity, joint unfreeze authorization, and clearing every pending intent on

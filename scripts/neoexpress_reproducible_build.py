@@ -122,7 +122,7 @@ def prepare(root, sources, snapshots, patch, sdk):
         require_equal(snapshots[role], inventory(root / role), role + " snapshot")
     subprocess.run(["git", "apply", "--check", str(patch)], cwd=root / "express", check=True, capture_output=True)
     subprocess.run(["git", "apply", str(patch)], cwd=root / "express", check=True, capture_output=True)
-    (root / "Directory.Build.targets").write_text(targets_text())
+    (root / "NativeRunner.targets").write_text(targets_text())
     (root / "global.json").write_text(json.dumps({"sdk": {"version": sdk, "rollForward": "disable"}}))
     # Git-derived version generators are replaced by explicit, reproducible metadata.
     # Snapshot and revision identities are retained separately in the receipt.
@@ -162,7 +162,11 @@ def build_once(root, sources, snapshots, patch, dotnet, sdk, cache, expected=Non
     environment.update({"NUGET_PACKAGES": str(packages), "DOTNET_CLI_TELEMETRY_OPTOUT": "1", "DOTNET_NOLOGO": "1"})
     project = "express/src/neoxp/neoxp.csproj"
     log = root / "build.log"
-    common = ["-p:NuGetAudit=false", "-p:UseSharedCompilation=false"]
+    # Repository-local Directory.Build.targets stops MSBuild's upward search.
+    # Keep those targets, then explicitly import this reviewed source recipe in
+    # every project so a nested checkout cannot retain binary Neo references.
+    common = ["-p:NuGetAudit=false", "-p:UseSharedCompilation=false",
+              "-p:CustomAfterMicrosoftCommonTargets=" + str(root / "NativeRunner.targets")]
     run([dotnet, "restore", project, "--configfile", str(configuration), "--source", str(cache), *common], root, log, environment)
     archives = package_archives(root, packages)
     locks = {str(p.relative_to(root)): sha256(p) for p in root.glob("*/**/packages.lock.json") if "packages" not in p.relative_to(root).parts}

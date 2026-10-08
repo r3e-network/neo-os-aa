@@ -8,6 +8,7 @@ const ConsoleView = () => import('@/views/ConsoleView.vue');
 const IdentityView = () => import('@/views/IdentityView.vue');
 const AddressMarketView = () => import('@/views/AddressMarketView.vue');
 const TransactionInfoView = () => import('@/views/TransactionInfoView.vue');
+const NativeAccountWorkspace = () => import('@/features/native/NativeAccountWorkspace.vue');
 const DocsView = () => import('@/views/DocsView.vue');
 const NotFoundView = () => import('@/views/NotFoundView.vue');
 
@@ -45,6 +46,12 @@ const routes = [
         name: 'address-market',
         component: AddressMarketView,
         meta: { breadcrumb: 'Market', breadcrumbKey: 'nav.market', titleKey: 'page.titleMarket', title: 'Address Market — Neo Abstract Account' }
+      },
+      {
+        path: 'native',
+        name: 'native-account',
+        component: NativeAccountWorkspace,
+        meta: { breadcrumb: 'Native accounts', title: 'Native Accounts — Neo Abstract Account' }
       },
       {
         path: 'docs',

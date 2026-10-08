@@ -23,8 +23,13 @@ Set NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 for the release-grade cross-repository ga
 neo-os-services NeoDIDRegistry artifact, or a missing neo-os-services checkout for the Morpheus
 canonical-sync test (MORPHEUS_ORACLE_ROOT, else ../neo-os-services), then fails instead of skipping.
 Pass --formal (or set NEOOS_REQUIRE_FORMAL=1) to also run the fail-closed AA model-checking
-gate (formal/verify.py plus its runner tests). It needs Coq 8.16+ (including Rocq 9), Z3, a real JDK (JAVA_BIN)
+gate (formal/verify.py plus its runner tests). Set NEOOS_NATIVE_CORE_SOURCE to the reviewed
+core checkout matching formal/source-lock.json. It needs Coq 8.16+ (including Rocq 9), Z3, a real JDK (JAVA_BIN)
 and tla2tools.jar (TLA_JAR); a missing tool is a failure, never a simulated pass.
+
+Set NEOOS_NATIVE_EPOCH_RECEIPT to retain the native-module VM regression JSON at an explicit
+path; otherwise the contract gate writes and prints a temporary receipt path. This test-only
+public-VM harness does not establish native-chain admission or recovery.
 
 Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) to also deploy every artifact to a
 fresh private NeoExpress chain, drive the protocol with real transactions, read every
@@ -33,10 +38,10 @@ neoxp tool (~/.dotnet/tools/neoxp, or NEOOS_NEOXP for a core-matched runner) and
 it never touches a public network.
 
 Runs the full local validation gate:
-- contracts: build + nccs compile + solution tests + deployment-tool tests + format verify
+- contracts: build + nccs compile + solution tests + native-module VM regression + deployment-tool tests + format verify
   (+ formal model checks with --formal, + private-chain validation with --neoexpress)
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
-- sdk: unit tests + declaration types check + production dependency audit
+- sdk: unit tests + declaration types check + installed-package smoke test + production dependency audit
 EOF
 }
 
@@ -68,10 +73,11 @@ done
 if [[ $run_contracts -eq 1 ]]; then
   echo ""
   echo "=== Contract Gates ==="
-  # Restores the private Neo platform packages first so a machine without them
-  # stops here with the owner action (docs/NEO-PLATFORM-PACKAGES.md) instead of
-  # a bare NU1102, and a feed serving different bytes is refused.
-  node scripts/check_neo_platform_packages.mjs
+  # Restores the pinned Neo packages in locked mode first (every package is published on
+  # nuget.org), so a changed resolution, different package bytes or a different nccs stop here
+  # with the pinned versions named (docs/AA-REPRODUCIBLE-BUILD.md) instead of deep inside the build.
+  node scripts/check_neo_platform_packages.mjs --include-native
+  node scripts/check_neo_platform_packages.mjs --compiler-only
   if [[ $skip_contract_build -eq 0 ]]; then
     dotnet build contracts/UnifiedSmartWallet.csproj -c Release -p:WarningsAsErrors=nullable -nologo
     bash contracts/compile.sh
@@ -96,10 +102,22 @@ if [[ $run_contracts -eq 1 ]]; then
     echo "cross-repo gate:   set NEOOS_SERVICES_CONTRACT_BUILD to a neo-os-services contract build directory to"
     echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
   fi
+  echo "public-profile gate: verifier-callback tests run on the published TestEngine; private PLATFORM bytecode is checked separately."
   dotnet test neo-abstract-account.sln -c Release --nologo
   python3 -m unittest discover -s scripts -p 'test_neoexpress_*.py'
+  python3 docs/proposals/validate-native-smartaccount-profile.py
+  python3 -m unittest discover -s docs/proposals -p 'test_native_profile*.py'
   python3 -m unittest discover -s scripts -p 'test_native_module_*.py'
   python3 -m unittest discover -s scripts -p 'test_build_native_*.py'
+  # Real production module bytecode runs in the public NeoVM with a test-only ABI
+  # fixture. This proves module storage/object isolation, not native-chain admission.
+  native_epoch_probe_receipt="${NEOOS_NATIVE_EPOCH_RECEIPT:-}"
+  if [[ -z "$native_epoch_probe_receipt" ]]; then
+    native_epoch_probe_receipt="$(mktemp "${TMPDIR:-/tmp}/aa-native-epoch.XXXXXX")"
+  fi
+  echo "native module VM regression: locked production build + test-only public-VM fixture (not native-chain proof)"
+  echo "native module VM receipt: $native_epoch_probe_receipt"
+  python3 scripts/native_epoch_probe.py --compiler "$NCCS_BIN" --output "$native_epoch_probe_receipt"
   node --test scripts/lib/deploy-helpers.test.mjs \
     scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
     scripts/upgrade_testnet_unified_smart_wallet.test.mjs \
@@ -153,6 +171,8 @@ if [[ $run_frontend -eq 1 ]]; then
   npm run build
   if [[ $skip_e2e -eq 0 ]]; then
     npm run test:e2e:browser:built
+    npm run test:operator-recovery:browser
+    npm run test:native:browser
   fi
   cd ..
 fi
@@ -163,6 +183,7 @@ if [[ $run_sdk -eq 1 ]]; then
   cd sdk/js
   npm test
   npm run types:check
+  npm run test:package
   npm run audit:prod
   cd ../..
 fi

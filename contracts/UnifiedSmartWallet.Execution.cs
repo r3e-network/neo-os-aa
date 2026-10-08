@@ -18,23 +18,22 @@ namespace AbstractAccount
         private const int MaxUserOperationMethodLength = 128;
         private const int MaxUserOperationSignatureLength = 1024;
 
+#if PLATFORM
         // The platform syscall interprets this value in datoshi. 1,000,000,000
         // datoshi is 10 GAS, the maximum resource budget for each verifier callback,
         // including nested verifier calls; NeoVM enforces the ancestor budget transitively.
         private const long VerifierGasLimit = 1_000_000_000;
 
-        // Hook callbacks run in the application trigger and therefore use a separate
-        // profile budget.  This is deliberately independent from the verifier budget:
-        // a policy hook must not be able to consume the verifier's verification envelope,
-        // and an untrusted hook must not inherit the full enclosing transaction budget.
-        // Nested calls from the hook inherit this ancestor budget transitively.
-        private const long HookGasLimit = 250_000_000;
-
-        // Lifecycle and discovery calls are also untrusted module callbacks. They
-        // run outside UserOperation execution, but an installed module must not be
-        // able to consume the entire enclosing transaction while it is being
-        // inspected, configured, rotated, or cleaned up.
-        private const long ModuleMaintenanceGasLimit = 250_000_000;
+        // System.Contract.CallWithGasLimit is a platform syscall that no published
+        // Neo.SmartContract.Framework declares, so this contract declares it. The attribute
+        // emits a SYSCALL only a private Neo core can execute. Public builds exclude it.
+        private static class PlatformSyscalls
+        {
+            [Syscall("System.Contract.CallWithGasLimit")]
+            public static extern object CallWithGasLimit(
+                UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);
+        }
+#endif
 
         // ========================================================================
         // 3. Core Routing: Validation and Execution (aligned with 4337 Validate & Call)
@@ -74,12 +73,20 @@ namespace AbstractAccount
                 if (state.Verifier != UInt160.Zero)
                 {
                     // Delegate to plugin for signature verification (e.g., ecrecover or TEE hardware)
-                    bool isValid = (bool)Contract.CallWithGasLimit(
+#if PLATFORM
+                    bool isValid = (bool)PlatformSyscalls.CallWithGasLimit(
                         state.Verifier,
                         "validateSignature",
                         CallFlags.ReadOnly,
                         VerifierGasLimit,
                         new object[] { accountId, op });
+#else
+                    bool isValid = (bool)Contract.Call(
+                        state.Verifier,
+                        "validateSignature",
+                        CallFlags.ReadOnly,
+                        new object[] { accountId, op });
+#endif
                     ExecutionEngine.Assert(isValid, "Verifier rejected signature");
                 }
                 else
@@ -114,11 +121,10 @@ namespace AbstractAccount
                     SetHookExecutionContext(accountId, state.HookId);
                     try
                     {
-                        Contract.CallWithGasLimit(
+                        Contract.Call(
                             state.HookId,
                             "preExecute",
                             CallFlags.All,
-                            HookGasLimit,
                             new object[] { accountId, BuildHookOperationParams(op) });
                     }
                     catch
@@ -139,21 +145,28 @@ namespace AbstractAccount
                     // [Hook phase] post-execution hook
                     if (state.HookId != UInt160.Zero)
                     {
-                        Contract.CallWithGasLimit(
+                        Contract.Call(
                             state.HookId,
                             "postExecute",
                             CallFlags.All,
-                            HookGasLimit,
                             new object[] { accountId, BuildHookOperationParams(op), result });
                     }
                     if (state.Verifier != UInt160.Zero)
                     {
-                        Contract.CallWithGasLimit(
+#if PLATFORM
+                        PlatformSyscalls.CallWithGasLimit(
                             state.Verifier,
                             "postExecute",
                             CallFlags.All,
                             VerifierGasLimit,
                             new object[] { accountId, op, result });
+#else
+                        Contract.Call(
+                            state.Verifier,
+                            "postExecute",
+                            CallFlags.All,
+                            new object[] { accountId, op, result });
+#endif
                     }
 
                     OnUserOpExecuted(accountId, op.TargetContract, op.Method, op.Nonce);

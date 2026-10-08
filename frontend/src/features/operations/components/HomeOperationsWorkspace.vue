@@ -787,6 +787,11 @@
             </svg>
           </button>
           <div :class="sidebarExpanded ? 'block' : 'hidden xl:block'">
+            <OperatorKeyBackupPanel
+              v-if="runtime.collaborationEnabled && workspace.share.value.canOperate && workspace.share.value.shareSlug"
+              :share-slug="workspace.share.value.shareSlug"
+              :access-slug="workspace.share.value.operatorSlug"
+            />
             <ActivitySidebar
               class="xl:sticky xl:top-8 xl:max-h-[calc(100vh-4rem)] overflow-y-auto rounded-[20px] border border-aa-border bg-aa-panel/50 shadow-2xl backdrop-blur-xl"
               :draft-id="workspace.share.value.draftId"
@@ -857,6 +862,7 @@ import {
   createDraftStore,
 } from "@/features/operations/drafts.js";
 import { createOperatorMutationTransport } from "@/features/operations/operatorMutationTransport.js";
+import OperatorKeyBackupPanel from "@/features/operations/components/OperatorKeyBackupPanel.vue";
 import {
   buildDraftExportBundle,
   buildRelayPayloadOptions,
@@ -866,7 +872,7 @@ import {
 } from "@/features/operations/execution.js";
 import {
   OPERATION_PRESETS,
-  buildOperationFromPreset,
+  tryBuildOperationFromPreset,
 } from "@/features/operations/presets.js";
 import { createActivityEvent } from "@/features/operations/activity.js";
 import { createOperationsPreferences } from "@/features/operations/preferences.js";
@@ -1149,8 +1155,12 @@ const invokeTargetContract = computed(() => {
   return /^[0-9a-f]{40}$/.test(sanitized) ? sanitized : "";
 });
 
-const draftCandidate = computed(() =>
-  buildOperationFromPreset({
+// A preset can refuse to build an operation that cannot do what it says (a NEP-17 transfer out of the account
+// proxy returns false and still costs the nonce and the fee). The refusal is a normal answer here: it is shown in
+// the composer and blocks staging.
+const presetBuild = computed(() =>
+  tryBuildOperationFromPreset({
+    broadcastMode: workspace.broadcast.value.mode,
     preset: preset.value,
     account: workspace.account.value,
     invoke: {
@@ -1174,6 +1184,12 @@ const draftCandidate = computed(() =>
       threshold: batchThreshold.value,
     },
   }),
+);
+const draftCandidate = computed(() => presetBuild.value.operation);
+const presetRefusal = computed(() =>
+  presetBuild.value.refusal
+    ? translateError(presetBuild.value.refusal.message, t)
+    : "",
 );
 
 function translateSummary(operation = {}) {
@@ -1214,7 +1230,14 @@ function translateSummary(operation = {}) {
     detail: `${operation.method || "method pending"} ${t("operations.presetSummaryInvokeDetail", "on")} ${operation.targetContract || "target contract pending"}`,
   };
 }
-const composerSummary = computed(() => translateSummary(draftCandidate.value));
+const composerSummary = computed(() =>
+  presetRefusal.value
+    ? {
+        title: t("operations.presetRefusedTitle", "NEP-17 transfer refused"),
+        detail: presetRefusal.value,
+      }
+    : translateSummary(draftCandidate.value),
+);
 const signerProgress = computed(() =>
   summarizeSignerProgress(
     workspace.signerRequirements.value,
@@ -1288,6 +1311,7 @@ const currentRelayPreflightRequest = computed(() => {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: workspace.transactionBody.value,
       signatures: workspace.signatures.value,
     });
@@ -1361,8 +1385,7 @@ const steps = computed(() => [
     id: "step3",
     label: t("operations.stepSign", "Sign"),
     state:
-      signerProgress.value.requiredCount > 0 &&
-      signerProgress.value.signatureCount >= signerProgress.value.requiredCount
+      signerProgress.value.isComplete
         ? "completed"
         : step3Expanded.value
           ? "active"
@@ -1427,8 +1450,7 @@ watch(
 );
 watch(
   () =>
-    signerProgress.value.requiredCount > 0 &&
-    signerProgress.value.signatureCount >= signerProgress.value.requiredCount,
+    signerProgress.value.isComplete,
   (val, oldVal) => {
     if (val && !oldVal) {
       step3Expanded.value = false;
@@ -1890,6 +1912,10 @@ async function loadAccount(overrideAddress = "") {
 }
 
 function stageOperation() {
+  if (presetRefusal.value) {
+    toast.error(presetRefusal.value);
+    return;
+  }
   if (["invoke", "multisigDraft"].includes(preset.value)) {
     if (!invokeTargetContract.value || !String(method.value || "").trim())
       return;
@@ -1909,6 +1935,7 @@ function stageOperation() {
       rawTransaction: rawTransaction.value,
       notes: notes.value,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       createdAt: nextOperationBody.createdAt,
     }),
   );
@@ -2218,6 +2245,7 @@ async function checkRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: workspace.transactionBody.value,
       signatures: workspace.signatures.value,
     });
@@ -2227,6 +2255,7 @@ async function checkRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: workspace.transactionBody.value,
       signatures: workspace.signatures.value,
       t,
@@ -2296,6 +2325,8 @@ async function broadcastWithNeoWallet() {
   try {
     const result = await executeBroadcast({
       mode: "client",
+      morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       signerAddress: walletService.address,
       transactionBody: workspace.transactionBody.value,
       relayPayloadMode: relayPayloadMode.value,
@@ -2371,6 +2402,7 @@ async function submitViaRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: workspace.transactionBody.value,
       signatures: workspace.signatures.value,
       walletService,

@@ -1,3 +1,5 @@
+import { EC } from '../../config/errorCodes.js';
+import { TRANSFER_METHOD, isProxySourcedTransfer } from '../../shared/transferOutcome.mjs';
 import { sanitizeHex } from '../../utils/hex.js';
 import { getScriptHashFromAddress } from '../../utils/neo.js';
 
@@ -78,8 +80,27 @@ function toArrayArg(items, itemType = 'String') {
   };
 }
 
+/**
+ * A preset that cannot produce an operation which can do what it says. The message is the machine-readable
+ * error code, like every EC error, so `translateError(error.message, t)` shows the translated reason; `details`
+ * names what was refused.
+ */
+export class OperationPresetRefusedError extends Error {
+  constructor(code, details = {}) {
+    super(code);
+    this.name = 'OperationPresetRefusedError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export function isOperationPresetRefusal(error) {
+  return error instanceof OperationPresetRefusedError;
+}
+
 export function buildOperationFromPreset({
   preset = 'invoke',
+  broadcastMode = 'client',
   account = {},
   invoke = {},
   transfer = {},
@@ -93,9 +114,22 @@ export function buildOperationFromPreset({
   if (preset === 'nep17Transfer') {
     const fromHash = normalizeHash160(transfer.from || account.accountAddressScriptHash || '');
     const recipientHash = normalizeHash160(transfer.recipient || '');
+    const tokenHash = sanitizeHex(transfer.tokenScriptHash || '');
+    // Client wallet invoke APIs cannot supply the proxy verification script. The
+    // relay resolves the exact script and on-chain scope before simulating/signing;
+    // a relay without that capability still refuses the resulting false transfer.
+    const proxyHash = normalizeHash160(account.accountAddressScriptHash || '');
+    const requiresProxyWitness = isProxySourcedTransfer({ method: TRANSFER_METHOD, from: fromHash, proxy: proxyHash });
+    if (requiresProxyWitness && broadcastMode !== 'relay') {
+      throw new OperationPresetRefusedError(EC.presetProxyTransferRefused, {
+        preset,
+        from: fromHash,
+        token: tokenHash,
+      });
+    }
     return {
       kind: 'transfer',
-      targetContract: sanitizeHex(transfer.tokenScriptHash || ''),
+      targetContract: tokenHash,
       method: 'transfer',
       args: [
         toHash160Arg(fromHash),
@@ -105,6 +139,7 @@ export function buildOperationFromPreset({
       ],
       metadata: {
         assetStandard: 'NEP-17',
+        ...(requiresProxyWitness ? { requiresProxyWitness: true } : {}),
       },
     };
   }
@@ -151,6 +186,19 @@ export function buildOperationFromPreset({
     args: normalizedArgs,
     metadata: {},
   };
+}
+
+/**
+ * buildOperationFromPreset with a refusal as a result instead of an exception: exactly one of `operation` and
+ * `refusal` (the OperationPresetRefusedError) is set. Any other error still throws, because it is a bug.
+ */
+export function tryBuildOperationFromPreset(input) {
+  try {
+    return { operation: buildOperationFromPreset(input), refusal: null };
+  } catch (error) {
+    if (isOperationPresetRefusal(error)) return { operation: null, refusal: error };
+    throw error;
+  }
 }
 
 export function buildPresetSummary(operation = {}) {

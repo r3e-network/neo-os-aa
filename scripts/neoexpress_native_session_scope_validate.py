@@ -134,8 +134,10 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                     return fingerprint
                 def replay_retained(label,payload,fingerprint):
                     require(hashlib.sha256(serialize_value(payload)).hexdigest()==fingerprint,'Retained signed operation changed')
-                    execute(label,payload,proxy=True,expected=True,events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=complete(1),recipient_delta=1)
-                    report['retainedSignatures'][-1]['identicalBytesAcceptedAfterRegrant']=True
+                    reject_both(label,payload,'The verifier must return exactly Boolean true.')
+                    report['retainedSignatures'][-1]['identicalBytesRejectedAfterRegrant']=True
+                    execute(label+'-fresh-authority-signature',driver.signed(session,transfer(1)),proxy=True,expected=True,
+                            events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=complete(1),recipient_delta=1)
 
                 stage='invalid-cap-configuration'
                 reason='Spending limit only enforceable on transfer session keys'
@@ -186,13 +188,13 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 core('propose-remove-session','proposeVerifier',[H(ZERO)],events=[(CORE,'VerifierChangeProposed')],change=propose_remove)
                 wait_delay()
                 def remove(state,timestamp):
-                    state['account'][5]=None;state['account'][8]+=1;state['account'][9:]=[None]*4;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*4
+                    state['account'][5]=None;state['account'][8]+=1;state['account'][9:13]=[None]*4;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*4
                 core('activate-remove-session','activateVerifier',[],events=[(verifier,'SessionKeyRevoked'),(CORE,'VerifierChanged')],change=remove)
                 require(driver.storage(account)==[None]*4,'Session cleanup left account-scoped storage')
                 readback();report.update(networkMagic=chain.magic,accountId=account,otherAccountId=other,
                     finalOperationNonce=driver.state(account)['nonce'],finalConfigurationNonce=driver.state(account)['account'][8],
                     fullNefReadbackMatched=True,manifestReadbackMatched=True,allFourSessionStoragePrefixesCleared=True,
-                    zeroCapFalseCompletionVerified=True,wildcardTargetBindingVerified=True,keyReuseRevivalVerified=True)
+                    zeroCapFalseCompletionVerified=True,wildcardTargetBindingVerified=True,keyReuseRevivalRejected=True)
             finally:chain.stop_node();report['ownedNodesStopped']=chain.node is None
         check_runtime_receipt(build,runtime)
         require(all(sha256(p)==report['sourceSha256'][p.name] for p in sources),'Session scope harness source changed')

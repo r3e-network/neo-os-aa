@@ -27,6 +27,15 @@ namespace AbstractAccount.Hooks
         private static readonly byte[] Prefix_RegistryTimelock = new byte[] { 0xFA };
         private static readonly BigInteger AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000;
 
+        internal static byte[] AccountKey(byte[] prefix, UInt160 accountId)
+        {
+#if SMARTACCOUNT_NATIVE
+            return NativeAuthority.AccountKey(prefix, accountId);
+#else
+            return Helper.Concat(prefix, (byte[])accountId);
+#endif
+        }
+
         internal static void Initialize(object data, bool update)
         {
             if (update) return;

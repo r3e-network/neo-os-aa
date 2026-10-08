@@ -6,6 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
-    <Compile Include="ArgumentMutatingLeaf.cs" />
+    <Compile Include="NativeEpochCore.cs" />
   </ItemGroup>
 </Project>

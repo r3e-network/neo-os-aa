@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 
 from neoexpress_validate import Chain, RawKey, H, B, I, S, A, ZERO, hash_le
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
-from neoexpress_native_service_validate import CORE, check_native, persist
+from neoexpress_native_service_validate import CORE, check_native, persist, module_storage_key
 from neoexpress_native_proxy_validate import GAS, GAS_TOKEN, DEADLINE, proxy_address, transfer
 from neoexpress_native_modules_validate import nef_from_rpc, check_module_build, CONTEXT
 from neoexpress_native_session_validate import SessionTransactions, NULL
@@ -24,7 +24,8 @@ DAY=86400000
 
 class RestrictedTransactions(SessionTransactions):
     def storage(self,account):
-        return [storage_prefix(self.chain,self.verifier,bytes([p])+hash_le(account)) for p in (1,2)]
+        epoch=self.epoch(account)
+        return [storage_prefix(self.chain,self.verifier,module_storage_key(account,p,epoch)) for p in (1,2)]
 
     def state(self,account):
         # The shared transaction driver requires a spent field; this hook has no counter.
@@ -59,12 +60,17 @@ def build_diagnostic(compiler,cache,root):
     receipts=[];retained=None
     for index in (1,2):
         project=root/('diagnostic-'+str(index));shutil.copytree(source,project)
-        shutil.copyfile(Path(__file__).resolve().parent.parent/'contracts/Directory.Build.props',project/'Directory.Build.props')
+        repository=Path(__file__).resolve().parent.parent
+        for policy in ('Directory.Build.props','Directory.Packages.props','Directory.Build.targets'):
+            if (repository/policy).is_file():shutil.copyfile(repository/policy,project/policy)
+        shutil.copyfile(repository/'contracts/verifiers/packages.NeoNativeVerifier.lock.json',project/'packages.lock.json')
         config=ET.Element('configuration');feeds=ET.SubElement(config,'packageSources');ET.SubElement(feeds,'clear')
         ET.SubElement(feeds,'add',key='offline',value=str(cache));ET.ElementTree(config).write(project/'NuGet.Config')
+        lock_digest=sha256(project/'packages.lock.json')
         output=project/'out'
         result=subprocess.run([str(compiler),str(project/'RestrictedOutflow.csproj'),'-o',str(output)],capture_output=True,text=True,timeout=180)
         require(result.returncode==0,'Diagnostic compilation failed: '+result.stdout[-1500:]+result.stderr[-500:])
+        require(sha256(project/'packages.lock.json')==lock_digest,'Diagnostic restore rewrote the audited lock')
         pins={p.name:sha256(p) for p in output.iterdir() if p.suffix in ('.nef','.json')}
         require(set(pins)=={n+s for n in ('RestrictedOutflowToken','RestrictedOutflowRouter') for s in ('.nef','.manifest.json')},'Unexpected diagnostic artifacts')
         receipts.append(pins)
@@ -92,8 +98,11 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,compil
         with tempfile.TemporaryDirectory(prefix='smartaccount-native-restricted-') as scratch:
             root=Path(scratch);chain=Chain(make_runner(runtime,dotnet,root),root)
             stage='diagnostic-build';diagnostic,builds=build_diagnostic(compiler,cache,root)
+            repository=Path(__file__).resolve().parent.parent
+            framework_version=ET.parse(repository/'Directory.Build.props').find('.//NeoSmartContractFrameworkVersion').text
             report['diagnosticBuild']={'builds':builds,'compilerSha256':sha256(compiler),
-                'frameworkArchiveSha256':sha256(cache/'neo.smartcontract.framework/3.10.2-ci00384/neo.smartcontract.framework.3.10.2-ci00384.nupkg')}
+                'dependencyPolicySha256':sha256(repository/'Directory.Build.props'),'packageLockSha256':sha256(repository/'contracts/verifiers/packages.NeoNativeVerifier.lock.json'),
+                'frameworkArchiveSha256':sha256(cache/'neo.smartcontract.framework'/framework_version/('neo.smartcontract.framework.'+framework_version+'.nupkg'))}
             require(report['diagnosticBuild']['compilerSha256']==compiled['compilerLauncherSha256'] and
                     report['diagnosticBuild']['frameworkArchiveSha256']==compiled['frameworkArchiveSha256'],'Diagnostic toolchain mismatch')
             try:
@@ -154,9 +163,9 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,compil
                     else:
                         def confirmed(state,timestamp):
                             state['account'][8]+=1;state['pending']=None
-                            if value:state['raw'][0].update(stored(account,1,b'\x01',token=restricted))
+                            if value:state['raw'][0].update(stored(account,1,b'\x01',token=restricted,authority_epoch=state['account'][13]))
                             else:
-                                for index in (0,1):state['raw'][index].pop(next(iter(stored(account,index+1,b'',token=restricted))),None)
+                                for index in (0,1):state['raw'][index].pop(next(iter(stored(account,index+1,b'',token=restricted,authority_epoch=state['account'][13]))),None)
                         core(label+'-confirm','callHook',[S('setRestrictedToken'),A(*args)],change=confirmed)
                 def execute(label,operation,**kw):return core(label,'executeUserOp',[operation],proxy=True,**kw)
                 def gas(label,amount=1,**kw):return execute(label,transfer(proxy,recipient_address,driver.state(account)['nonce'],amount),**kw)
@@ -204,7 +213,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,compil
                 def proposal(state,timestamp):state['account'][10]=[hash_le(ZERO),bytes(32),timestamp,timestamp+DAY,state['account'][8]]
                 core('remove-hook-propose','proposeHook',[H(ZERO)],events=[(CORE,'HookChangeProposed')],change=proposal)
                 wait_delay()
-                def removed(state,timestamp):state['account'][6]=None;state['account'][8]+=1;state['account'][9:]=[None]*4;state['raw']=[{},{}]
+                def removed(state,timestamp):state['account'][6]=None;state['account'][8]+=1;state['account'][9:13]=[None]*4;state['raw']=[{},{}]
                 core('remove-hook-confirm','activateHook',[],events=[(CORE,'HookChanged')],change=removed)
                 require(driver.storage(account)==[{},{}],'Restricted cleanup left account state');readback();delegation()
                 report.update(networkMagic=chain.magic,accountId=account,otherAccountId=other,finalOperationNonce=driver.state(account)['nonce'],

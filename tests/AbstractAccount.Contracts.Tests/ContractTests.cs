@@ -78,6 +78,19 @@ public class ContractTests
 
     private static Type ContractType => typeof(global::AbstractAccount.UnifiedSmartWallet);
 
+    private static int CountOccurrences(string text, string needle)
+    {
+        int count = 0;
+        for (int at = text.IndexOf(needle, StringComparison.Ordinal);
+             at >= 0;
+             at = text.IndexOf(needle, at + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
     private static string ReadContractFile(string fileName) =>
         File.ReadAllText(Path.Combine(ContractsDir, fileName));
 
@@ -127,7 +140,6 @@ public class ContractTests
             "UpdateVerifier",
             "ConfirmVerifierUpdate",
             "CallVerifier",
-            "CallVerifierChild",
             "CallHook",
             "PreviewUserOpValidation",
             "ExecuteUserOp",
@@ -177,12 +189,11 @@ public class ContractTests
             "object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, op.Args);");
         Assert.IsFalse(executionSource.Contains("op.CallFlags", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "ConsumeNonce(accountId, op.Nonce);");
-        StringAssert.Contains(executionSource, "Contract.CallWithGasLimit(");
+        StringAssert.Contains(executionSource, "PlatformSyscalls.CallWithGasLimit(");
         StringAssert.Contains(executionSource, "state.Verifier,");
         StringAssert.Contains(executionSource, "\"validateSignature\"");
         StringAssert.Contains(executionSource, "CallFlags.ReadOnly");
         StringAssert.Contains(executionSource, "private const long VerifierGasLimit = 1_000_000_000;");
-        StringAssert.Contains(executionSource, "private const long HookGasLimit = 250_000_000;");
         Assert.IsFalse(executionSource.Contains("Contract.Call(state.Verifier", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "VerifierGasLimit");
     }
@@ -211,13 +222,9 @@ public class ContractTests
         string allowlistBlock = ExtractSourceBlock(
             accountsSource,
             "private static readonly string[] AllowedVerifierMethods = new string[]",
-            "private static readonly string[] AllowedVerifierChildMethods = new string[]");
+            "private static readonly string[] AllowedHookMethods = new string[]");
 
         Assert.IsFalse(allowlistBlock.Contains("\"setPublicKey\"", StringComparison.Ordinal));
-        StringAssert.Contains(accountsSource,
-            "private static readonly string[] AllowedVerifierChildMethods = new string[]");
-        StringAssert.Contains(accountsSource,
-            "IsMethodAllowed(method, AllowedVerifierChildMethods)");
     }
 
     [TestMethod]
@@ -239,7 +246,7 @@ public class ContractTests
 
         StringAssert.Contains(
             executionSource,
-            "Contract.CallWithGasLimit(");
+            "PlatformSyscalls.CallWithGasLimit(");
         StringAssert.Contains(executionSource, "\"postExecute\"");
         StringAssert.Contains(executionSource, "private const long VerifierGasLimit = 1_000_000_000;");
         Assert.IsFalse(executionSource.Contains("Contract.Call(state.Verifier", StringComparison.Ordinal));
@@ -247,81 +254,30 @@ public class ContractTests
     }
 
     [TestMethod]
-    public void ExecutionPathOrdersHookPostBeforeVerifierPostAndEmission()
+    public void GasBoundedVerifierSyscallIsDeclaredByTheContractAndUsedForBothCallbacks()
     {
+        // No published Neo.SmartContract.Framework declares Contract.CallWithGasLimit, so the
+        // contract declares the syscall itself. The compiled bytes are checked separately in
+        // CompiledCoreSyscallTests; this pins the source shape.
         string executionSource = ReadContractFile("UnifiedSmartWallet.Execution.cs");
-        string postExecution = ExtractSourceBlock(
+
+        StringAssert.Contains(executionSource, "[Syscall(\"System.Contract.CallWithGasLimit\")]");
+        StringAssert.Contains(executionSource, "public static extern object CallWithGasLimit(");
+        StringAssert.Contains(
             executionSource,
-            "// [Hook phase] post-execution hook",
-            "return result;");
+            "UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);");
+        Assert.AreEqual(
+            2,
+            CountOccurrences(executionSource, "PlatformSyscalls.CallWithGasLimit("),
+            "validateSignature and postExecute are the two verifier callbacks");
+        Assert.IsFalse(
+            executionSource.Contains("Contract.CallWithGasLimit(", StringComparison.Ordinal),
+            "the framework-declared form does not exist in any published framework");
 
-        int hookPost = postExecution.IndexOf("\"postExecute\"", StringComparison.Ordinal);
-        int verifierPost = postExecution.IndexOf("state.Verifier", StringComparison.Ordinal);
-        int emit = postExecution.IndexOf("OnUserOpExecuted", StringComparison.Ordinal);
-
-        Assert.IsTrue(hookPost >= 0, "Hook post callback must be present");
-        Assert.IsTrue(verifierPost > hookPost, "Verifier post callback must follow hook post callback");
-        Assert.IsTrue(emit > verifierPost, "Execution notification must follow both post callbacks");
-    }
-
-    [TestMethod]
-    public void ModuleLifecycleCallbacksUseAnIndependentMaintenanceBudget()
-    {
-        string[] sources =
-        {
-            ReadContractFile("UnifiedSmartWallet.Accounts.cs"),
-            ReadContractFile("UnifiedSmartWallet.Escape.cs"),
-            ReadContractFile("UnifiedSmartWallet.MarketEscrow.cs"),
-            ReadContractFile("UnifiedSmartWallet.VerifyContext.cs")
-        };
-
-        foreach (string source in sources)
-        {
-            Assert.IsFalse(source.Contains("Contract.Call(previousVerifier, \"clearAccount\"", StringComparison.Ordinal));
-            Assert.IsFalse(source.Contains("Contract.Call(previousHook, \"clearAccount\"", StringComparison.Ordinal));
-            Assert.IsFalse(source.Contains("Contract.Call(verifier, \"setPublicKey\"", StringComparison.Ordinal));
-            Assert.IsFalse(source.Contains("Contract.Call(newVerifier, \"setPublicKey\"", StringComparison.Ordinal));
-            Assert.IsFalse(source.Contains("Contract.Call(pending.NewVerifier, \"setPublicKey\"", StringComparison.Ordinal));
-        }
-
-        foreach (string sourceName in new[]
-        {
-            "UnifiedSmartWallet.Accounts.cs",
-            "UnifiedSmartWallet.Escape.cs",
-            "UnifiedSmartWallet.MarketEscrow.cs"
-        })
-        {
-            StringAssert.Contains(ReadContractFile(sourceName), "CallModuleWithMaintenanceBudget(",
-                "Core module lifecycle calls must use the bounded callback syscall");
-        }
-
-        string executionSource = ReadContractFile("UnifiedSmartWallet.Execution.cs");
-        StringAssert.Contains(executionSource, "private const long ModuleMaintenanceGasLimit = 250_000_000;");
-        string internalSource = ReadContractFile("UnifiedSmartWallet.Internal.cs");
-        StringAssert.Contains(internalSource, "Contract.CallWithGasLimit(");
-        StringAssert.Contains(internalSource, "ModuleMaintenanceGasLimit");
-        string compositeSource = ReadContractFile("UnifiedSmartWallet.VerifyContext.cs");
-        StringAssert.Contains(compositeSource, "bounded composite-root context");
-        StringAssert.Contains(compositeSource, "active root budget");
-    }
-
-    [TestMethod]
-    public void MessageSignatureVerifierCallbacksUseTheVerifierBudget()
-    {
-        string source = ReadContractFile("UnifiedSmartWallet.State.cs");
-        int firstCall = source.IndexOf("supportsMessageSignatures", StringComparison.Ordinal);
-        int secondCall = source.IndexOf("isValidSignature", firstCall + 1, StringComparison.Ordinal);
-        int blockEnd = source.IndexOf("[Safe]", secondCall + 1, StringComparison.Ordinal);
-        Assert.IsTrue(firstCall >= 0 && secondCall > firstCall, "Message-signature verifier calls must be present");
-        Assert.IsTrue(blockEnd > secondCall, "Message-signature callback block must be bounded");
-
-        string callbackBlock = source[firstCall..blockEnd];
-        Assert.IsFalse(callbackBlock.Contains("Contract.Call(", StringComparison.Ordinal),
-            "Message-signature verifier callbacks must not use an unbounded call");
-        Assert.IsTrue(callbackBlock.Contains("Contract.CallWithGasLimit(", StringComparison.Ordinal),
-            "Message-signature verifier callbacks must use the verifier gas budget");
-        Assert.IsTrue(callbackBlock.Contains("VerifierGasLimit", StringComparison.Ordinal),
-            "Message-signature verifier callbacks must use the canonical verifier budget");
+        int declarations = Directory.EnumerateFiles(ContractsDir, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Sum(path => CountOccurrences(File.ReadAllText(path), "[Syscall(\"System.Contract.CallWithGasLimit\")]"));
+        Assert.AreEqual(1, declarations, "the syscall must be declared exactly once");
     }
 
     [TestMethod]
@@ -339,12 +295,6 @@ public class ContractTests
 
         StringAssert.Contains(preHookBlock, "BuildHookOperationParams(op)");
         StringAssert.Contains(postHookBlock, "BuildHookOperationParams(op)");
-        StringAssert.Contains(preHookBlock, "Contract.CallWithGasLimit(");
-        StringAssert.Contains(postHookBlock, "Contract.CallWithGasLimit(");
-        StringAssert.Contains(preHookBlock, "HookGasLimit");
-        StringAssert.Contains(postHookBlock, "HookGasLimit");
-        Assert.IsFalse(preHookBlock.Contains("Contract.Call(", StringComparison.Ordinal));
-        Assert.IsFalse(postHookBlock.Contains("Contract.Call(", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "private static object[] BuildHookOperationParams(UserOperation op)");
         StringAssert.Contains(executionSource, "op.TargetContract,");
         StringAssert.Contains(executionSource, "op.Method,");
@@ -445,19 +395,19 @@ public class ContractTests
     }
 
     [TestMethod]
-    public void DailyLimitHookOnlyAccruesUsageAfterSuccessfulExecution()
+    public void DailyLimitHookAlwaysMetersActualOutflow()
     {
         string source = ReadContractFile("hooks/DailyLimitHook.cs");
 
         StringAssert.Contains(source, "public static void PostExecute");
-        StringAssert.Contains(source, "if (!DidExecutionSucceed(result)) return;");
+        Assert.IsFalse(source.Contains("if (!DidExecutionSucceed(result)) return;", StringComparison.Ordinal));
         StringAssert.Contains(source, "ExecutionEngine.Assert(IsProtectedTransferSource(accountId, fromAccount), \"Transfer source not permitted\");");
         // Assets leave from the account's holding address (the core's proxy script
         // hash), not from the accountId itself, so the protected-source check has to
         // compare against that address.
         StringAssert.Contains(source, "return from == AssetAddressOf(accountId);");
         StringAssert.Contains(source, "Contract.Call(core, \"getProxyScriptHash\", CallFlags.ReadOnly, accountId)");
-        StringAssert.Contains(source, "StoreFixedWindowSpent(accountId, targetContract, currentTime, spentToday + amount);");
+        StringAssert.Contains(source, "MeterAllLimitedOutflows(accountId, directToken, declaredAmount);");
         Assert.IsFalse(source.Contains("Storage.Put(Storage.CurrentContext, spentKey, newTotal);", StringComparison.Ordinal));
     }
 
@@ -520,7 +470,7 @@ public class ContractTests
         string sessionValidateBlock = ExtractSourceBlock(
             sessionSource,
             "public static bool ValidateSignature(UInt160 accountId, UserOperation op)",
-            "private static BigInteger ExtractTransferValue(UserOperation op)");
+            "private static BigInteger ExtractTransferValue(UInt160 accountId, UserOperation op)");
         string subscriptionValidateBlock = ExtractSourceBlock(
             subscriptionSource,
             "public static bool ValidateSignature(UInt160 accountId, UserOperation op)",
@@ -540,7 +490,7 @@ public class ContractTests
         StringAssert.Contains(source, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
         StringAssert.Contains(
             source,
-            "Contract.Call(config.Verifiers[i], \"postExecute\", CallFlags.All, new object[] { accountId, subOp, result });");
+            "Contract.Call(config.Verifiers[i], \"postExecute\", CallFlags.All, new object[] { accountId, subOp, childResult });");
     }
 
     [TestMethod]
@@ -589,11 +539,14 @@ public class ContractTests
     }
 
     [TestMethod]
-    public void SessionAndSubscriptionPostExecuteDoNotTreatBusinessReturnValuesAsExecutionFailure()
+    public void SessionAndSubscriptionPostExecuteEnforceTransferResultLocally()
     {
         string sessionSource = ReadContractFile("verifiers/SessionKeyVerifier.cs");
         string subscriptionSource = ReadContractFile("verifiers/SubscriptionVerifier.cs");
 
+        StringAssert.Contains(sessionSource, "if (op.Method == \"transfer\")");
+        StringAssert.Contains(sessionSource, "result is bool accepted && accepted");
+        StringAssert.Contains(subscriptionSource, "result is bool accepted && accepted");
         Assert.IsFalse(sessionSource.Contains("DidExecutionSucceed(result)", StringComparison.Ordinal));
         Assert.IsFalse(subscriptionSource.Contains("DidExecutionSucceed(result)", StringComparison.Ordinal));
         Assert.IsFalse(sessionSource.Contains("private static bool DidExecutionSucceed", StringComparison.Ordinal));

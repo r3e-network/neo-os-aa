@@ -14,15 +14,28 @@ class Key:
     def __init__(self, value): self.script_hash = bytes([value]) * 20
 
 class NativeModuleMatrixTests(unittest.TestCase):
+    def test_configuration_clears_only_pending_fields_and_preserves_authority_epoch(self):
+        from neoexpress_native_modules_validate import commit_config
+        record=[2,bytes(20),bytes(20),bytes(20),None,None,None,0,11,'verifier','hook','address','recovery',7]
+        state=[record,3,'verifier-call','hook-call',None,0,False]
+        commit_config(state)
+        self.assertEqual(14,len(state[0]));self.assertEqual(7,state[0][13]);self.assertEqual(12,state[0][8])
+        self.assertEqual([None]*4,state[0][9:13]);self.assertEqual([None,None],state[2:4]);self.assertEqual(3,state[1])
+
     def test_artifact_roster_tracks_explicit_profiles(self):
         root=Path(__file__).resolve().parent.parent
         profiles=json.loads((root/'contracts/native/profiles.json').read_text())
         pins={n+s:'pinned' for n in profiles for s in ('.nef','.manifest.json')}
         pins['native-profile-packaging.json']='pinned'
-        receipt={'status':'PASS','reproducible':True,'builds':[pins,pins],
-                 'sourceSha256':{'native/profiles.json':'pinned'},'recipeSha256':'pinned','packagingRecipeSha256':'pinned'}
-        with patch('neoexpress_native_modules_validate.sha256',return_value='pinned'):
+        receipt={'schema':'smartaccount-native-module-build/v2','sourceRoot':'repository','restoreLockedMode':True,'packageSourcesPolicy':'nuget.config','status':'PASS','reproducible':True,'builds':[pins,pins],
+                 'sourceSha256':{'contracts/native/profiles.json':'pinned'},'recipeSha256':'pinned','packagingRecipeSha256':'pinned'}
+        with patch('neoexpress_native_modules_validate.sha256',return_value='pinned'), patch('neoexpress_native_modules_validate.collect_inputs', return_value=(profiles, receipt['sourceSha256'])):
             self.assertEqual(pins,check_module_build(receipt,root/'artifacts',root/'contracts'))
+            for key, value in [('schema', 'smartaccount-native-module-build/v1'), ('sourceRoot', 'contracts'), ('restoreLockedMode', False), ('packageSourcesPolicy', 'offline')]:
+                wrong = copy.deepcopy(receipt); wrong[key] = value
+                with self.assertRaises(ValidationFailure): check_module_build(wrong, root/'artifacts', root/'contracts')
+            wrong = copy.deepcopy(receipt); wrong['sourceSha256']['Directory.Build.props'] = 'unexpected'
+            with self.assertRaises(ValidationFailure): check_module_build(wrong, root/'artifacts', root/'contracts')
 
     def test_missing_provenance_invalidates_previous_success(self):
         with tempfile.TemporaryDirectory() as tmp:

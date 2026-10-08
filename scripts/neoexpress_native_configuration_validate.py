@@ -13,7 +13,7 @@ import tempfile
 import time
 from neoexpress_validate import Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO, decode, hash_le, varint, serialize_unsigned, serialize_witnesses
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
-from neoexpress_native_service_validate import CORE, check_native, persist
+from neoexpress_native_service_validate import CORE, check_native, persist, transaction_system_fee
 from neoexpress_native_proxy_validate import encode_value, push_bytes, check_transaction, check_fault, GAS
 
 MANAGEMENT = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"
@@ -50,7 +50,7 @@ def module_fixture(hook, root, destroy_target=None):
     if destroy_target: name += "Destructive"
     manifest = {"name": name, "groups": [], "features": {}, "supportedstandards": [], "abi": {"methods": methods, "events": []},
                 "permissions": [{"contract": "*", "methods": "*"}], "trusts": [],
-                "extra": {"smartAccount": {"configurationMethods": ["configure"]}}}
+                "extra": {"smartAccount": {"abiVersion": 2, "configurationMethods": ["configure"]}}}
     script = bytes(script)
     body = b"NEF3" + b"Native configuration diagnostic".ljust(64, b"\x00") + bytes(5) + varint(len(script)) + script
     return script, body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4], manifest
@@ -68,10 +68,10 @@ def pending_log(error):
                           "rpc getapplicationlog: Unknown transaction/blockhash")
 
 
-def send(chain, owner, report, label, method, args, *, fault=False, cancellation=False):
+def send(chain, owner, report, label, method, args, *, fault=False, cancellation=False, event=None):
     script = call_script(CORE, method, args)
     signers = [{"account": "0x" + owner.script_hash[::-1].hex(), "scopes": "CalledByEntry"}]
-    sysfee, netfee = 10 * GAS, GAS
+    sysfee, netfee = transaction_system_fee(chain, script, signers), GAS
     unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee, chain.rpc("getblockcount", []) + 50, signers, script)
     digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()
     witnesses = [(push_bytes(owner.sign(chain.magic.to_bytes(4, "little") + digest)), owner.verification)]
@@ -85,7 +85,10 @@ def send(chain, owner, report, label, method, args, *, fault=False, cancellation
         time.sleep(0.5)
     require(execution is not None, "Configuration transaction did not persist")
     tx = chain.rpc("getrawtransaction", [txid, True]); check_transaction(tx, txid, script, signers, witnesses)
-    if cancellation: require(execution["vmstate"] == "HALT", "Cancellation failed")
+    if event:
+        require(execution["vmstate"]=="HALT" and [(n["contract"],n["eventname"])for n in execution["notifications"]]==[(CORE,event)],"Unexpected recovery outcome or event")
+        require(decode(execution["notifications"][0]["state"])[0]==hash_le(args[0]["value"]),"Recovery event account mismatch")
+    elif cancellation: require(execution["vmstate"] == "HALT", "Cancellation failed")
     else: check_configuration_outcome(execution, fault)
     report["executions"].append({"step": label, "txid": txid, "method": method, "vmstate": execution["vmstate"], "persisted": True,
         "gasConsumedDatoshi": int(execution["gasconsumed"]), "systemFeeDatoshi": sysfee, "networkFeeDatoshi": netfee,
@@ -117,6 +120,11 @@ def validate(runtime, dotnet, output):
                 chain.nx("wallet", "create", "owner"); chain.nx("transfer", "1000", "GAS", "genesis", "owner")
                 owner = RawKey(directory, "private-owner", chain.wallet_private_key("owner"))
                 custody = "0x" + owner.script_hash[::-1].hex(); scenarios = []
+                recovery_keys={}
+                for label in ("guardian","replacement"):
+                    chain.nx("wallet","create",label);chain.nx("transfer","1000","GAS","genesis",label)
+                    recovery_keys[label]=RawKey(directory,"private-"+label,chain.wallet_private_key(label))
+                recovery_addresses={name:"0x"+key.script_hash[::-1].hex()for name,key in recovery_keys.items()}
                 def deploy(label, artifact):
                     script, nef, manifest = artifact
                     path = directory / (label + ".nef"); path.write_bytes(nef); path.with_suffix(".manifest.json").write_text(json.dumps(manifest))
@@ -128,7 +136,7 @@ def validate(runtime, dotnet, output):
                     bad_artifact = module_fixture(hook, False, root); good_artifact = module_fixture(hook, False)
                     bad = deploy(role + "-bad", bad_artifact); good = deploy(role + "-good", good_artifact)
                     account = persist(chain, report, role + "-register", "registerAccount",
-                        [H(custody), B(bytes([1 + int(hook)]) * 32), H(ZERO if hook else root), H(root if hook else ZERO), H(ZERO)], "AccountCreated")
+                        [H(custody), B(bytes([1 + int(hook)]) * 32), H(ZERO if hook else root), H(root if hook else ZERO), H(recovery_addresses["guardian"])], "AccountCreated")
                     scenarios.append({"role": role, "route": "callHookChild" if hook else "callVerifierChild", "id": "0x" + account[::-1].hex(),
                         "root": root, "bad": bad, "good": good, "artifacts": [(root, root_artifact), (bad, bad_artifact), (good, good_artifact)]})
                 chain.start_node(); check_native(chain.rpc("getcontractstate", [CORE]))
@@ -160,6 +168,28 @@ def validate(runtime, dotnet, output):
                     report["scenarios"].append({"role": s["role"], "accountId": s["id"], "root": s["root"], "rootReadbackMatched": True,
                         "faultRolledBackAccountIntentRosterAndChild": True, "benignFalseResultCommitted": True, "configurationNonce": 1,
                         "artifacts": [{"contract": h, "nefSha256": hashlib.sha256(a[1]).hexdigest(), "manifestSha256": hashlib.sha256(json.dumps(a[2], sort_keys=True).encode()).hexdigest()} for h, a in s["artifacts"]]})
+                stage = "recovery-revokes-enrollment-and-pending"
+                for scenario in scenarios:
+                    account=scenario["id"]
+                    send(chain,owner,report,scenario["role"]+"-seed-pending-before-recovery",scenario["route"],config_args(scenario,"bad"))
+                    before=state(scenario);nonce=value(CORE,"getNonce",[H(account),I(0)])
+                    require(before[1] is not None and len(before[2][1])==1,"Recovery fixture must contain pending authority and enrollment")
+                    send(chain,recovery_keys["guardian"],report,scenario["role"]+"-propose-recovery","proposeRecovery",
+                         [H(account),H(recovery_addresses["replacement"])],event="RecoveryProposed")
+                    scenario["recoveryBefore"]=(before,nonce)
+                chain.stop_node();chain.nx("fastfwd","1","-t","604801");chain.start_node()
+                for scenario in scenarios:
+                    account=scenario["id"];before,nonce=scenario["recoveryBefore"]
+                    send(chain,recovery_keys["replacement"],report,scenario["role"]+"-execute-recovery","executeRecovery",[H(account)],event="RecoveryExecuted")
+                    after=state(scenario);expected=list(before[0]);expected[3]=hash_le(recovery_addresses["replacement"])
+                    expected[5:7]=[None,None];expected[8]+=1;expected[9:13]=[None]*4;expected[13]+=1
+                    require(after[0]==expected and after[1] is None and after[2]==[None,[],[]],"Recovery did not revoke root, pending authority and enrollment exactly")
+                    require(value(CORE,"getNonce",[H(account),I(0)])==nonce,"Recovery reset operation nonce")
+                    for role in ("verifier","hook"):
+                        require(value(CORE,"getModuleDependencies",[H(account),S(role)])==[None,[],[]],"Recovery retained other-role dependencies")
+                        require(value(CORE,"getPendingModuleCall",[H(account),S(role)]) is None,"Recovery retained other-role pending authority")
+                    require(value(scenario["good"],"getValue",[])==b"\x07","Recovery unexpectedly relied on old plugin cleanup")
+                    next(row for row in report["scenarios"]if row["role"]==scenario["role"])["recoveryRevokedPendingAndEnrollment"]=True
                 report["networkMagic"] = chain.magic
             finally: chain.stop_node(); report["ownedNodesStopped"] = chain.node is None
         require(hashes == runtime_hashes(runtime), "Runtime changed during validation")

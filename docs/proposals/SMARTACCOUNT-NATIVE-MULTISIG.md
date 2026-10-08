@@ -6,7 +6,10 @@ Adapt the heterogeneous MultiSigVerifier policy to the native AccountManagement
 service without weakening callback phase isolation. This is a module profile,
 not a change to native consensus activation, callback budgets or operation bytes.
 Legacy artifacts remain separate. Native compatibility requires a fresh module
-deployment and binding; it is not an in-place legacy upgrade.
+deployment and binding; it is not an in-place legacy upgrade. The current native
+profile requires ABI 2 and the tagged authority-generation storage namespace
+specified in `SMARTACCOUNT-NATIVE-MODULE-PROFILES.md`. Restoring the same module
+or child keys after recovery does not restore old policy state or signatures.
 
 ## Interfaces and state
 
@@ -58,6 +61,11 @@ Root `clearAccount` requires a cleanup grant, checks the native dependency-clear
 operation and removes root configuration. It must not impersonate a leaf's
 cleanup or configuration grant. Removing/replacing a root must clean enrolled
 leaves, including configured but inactive leaves, and preserve other accounts.
+This ordinary configuration cleanup is distinct from custody recovery. ABI 2
+recovery advances authorityEpoch and configurationNonce, clears root/dependency
+bindings and pending intents without external callbacks, and retains frozen
+state and target nonces. Old module state becomes unreachable; recovery does
+not require a deleted, changed or faulting child to cooperate.
 
 ## Required evidence
 
@@ -96,9 +104,13 @@ child's signature may differ. Deserialization failure is fail-closed.
 
 Regression tests must use a diagnostic mutating child followed by an honest
 signature verifier, including nested argument values and positive controls.
-The same invariant applies to the legacy composite profile. No operation ABI,
-signing preimage, budget or stored configuration layout changes are intended.
+The same argument/result isolation invariant applies to the ordinary composite
+profile. ABI 2 separately changes the native signing domain and storage namespace;
+copy isolation must not introduce further operation or budget changes.
 Serialization and per-child reconstruction consume the existing callback budget;
 their cost must be measured on private-chain executions before validation is
-claimed. Result-object isolation is a separate obligation and is not established
-by an argument-copy test.
+claimed. Every child post callback must also receive an independent deep snapshot
+of the original target result, including nested collections; snapshots must be
+captured before any callback can mutate them. Unsupported result types fail
+closed. This separate result-isolation obligation requires an actual mutating
+child regression and is not established by an argument-copy test.

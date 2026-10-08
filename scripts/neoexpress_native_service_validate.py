@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Persist and read back native SmartAccount transitions on a disposable local chain."""
 import argparse
+import base64
 import datetime
 import hashlib
 import json
@@ -15,8 +16,8 @@ from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require,
 
 CORE = "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
 STDLIB = "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0"
-DIGEST = "2601e456d8d5a3f746c8cdcd6f90f19a62bf00bdfb856ef6f14be74a2b44f81a"
-REQUIRED_METHODS = {"registerAccount", "getAccount", "getNonce", "getAccountAddress", "getVersion", "verify",
+DIGEST = "a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e"
+REQUIRED_METHODS = {"registerAccount", "getAccount", "getNonce", "getAccountAddress", "getVersion", "getAuthorityEpoch", "getAuthorizationDomain", "getOperationDigest", "verify",
                     "executeUserOp", "executeUserOps", "callVerifier", "callHook", "callVerifierChild", "callHookChild",
                     "setVerifierDependencies", "setHookDependencies", "clearVerifierDependencies", "clearHookDependencies",
                     "getModuleDependencies", "cancelModuleCall", "getPendingModuleCall", "proposeRecoveryAddress",
@@ -29,10 +30,51 @@ def check_native(state):
     manifest = state.get("manifest", {})
     require(manifest.get("name") == "AccountManagement", "Wrong native service name")
     metadata = (manifest.get("extra") or {}).get("smartAccount", {})
-    require(metadata.get("abiVersion") == 1 and metadata.get("profileParameterDigest") == DIGEST, "Wrong native profile metadata")
+    require(type(metadata.get("abiVersion")) is int and metadata["abiVersion"] == 2 and metadata.get("profileParameterDigest") == DIGEST, "Wrong native profile metadata")
     abi = manifest.get("abi", {})
     require(REQUIRED_METHODS <= {m.get("name") for m in abi.get("methods", [])}, "Incomplete native method ABI")
     require(REQUIRED_EVENTS <= {e.get("name") for e in abi.get("events", [])}, "Incomplete native event ABI")
+    for name in ("executeUserOp", "executeUserOps"):
+        methods=[m for m in abi.get("methods",[]) if m.get("name")==name]
+        require(len(methods)==1 and [p.get("type") for p in methods[0].get("parameters",[])]==["Hash160","Array","Integer","Integer"],
+                "Native execution ABI must commit account, operation, authority epoch and configuration nonce")
+
+
+def check_account_record(record):
+    require(type(record) is list and len(record) == 14 and type(record[0]) is int and record[0] == 2,
+            "Native ABI v2 requires a fourteen-field account record")
+    for index in (8, 13):
+        require(type(record[index]) is int and 0 <= record[index] < 2**64, "Native authority counters must be UInt64")
+    require(record[13] <= record[8], "Authority epoch exceeds configuration nonce")
+    return record
+
+
+def execution_arguments(account, payload, record):
+    """Commit the observed authority generation into a newly constructed call."""
+    check_account_record(record)
+    require(record[1] == hash_le(account), "Execution account differs from the observed record")
+    return [H(account), payload, I(record[13]), I(record[8])]
+
+
+def module_storage_key(account, prefix, authority_epoch, suffix=b''):
+    require(type(prefix) is int and 0 <= prefix <= 255, "Storage prefix must be a byte")
+    require(type(authority_epoch) is int and 0 <= authority_epoch < 2**64, "Authority epoch must be UInt64")
+    require(len(hash_le(account)) == 20 and type(suffix) is bytes, "Invalid module storage identity or suffix")
+    return b'\xa2' + bytes([prefix]) + hash_le(account) + authority_epoch.to_bytes(8, 'little') + suffix
+
+
+def transaction_system_fee(chain, script, signers):
+    """Price these exact transaction inputs, including intentionally faulting probes."""
+    result = chain.rpc("invokescript", [base64.b64encode(script).decode("ascii"), signers])
+    require(type(result) is dict and result.get("state") in ("HALT", "FAULT"),
+            "Transaction fee simulation must finish in HALT or FAULT")
+    fees = []
+    for field in ("gasconsumed", "minimumrequiredfee"):
+        value = result.get(field)
+        require(type(value) is str and re.fullmatch(r"[0-9]+", value) is not None,
+                f"Transaction fee simulation requires nonnegative integer {field} datoshi")
+        fees.append(int(value))
+    return max(fees)
 
 
 def check_application(execution, event):
@@ -57,6 +99,9 @@ def operation(nonce):
 
 
 def persist(chain, report, label, method, args, event, wallet="owner"):
+    if method in ("executeUserOp", "executeUserOps"):
+        require(len(args) == 2, "Fresh execution requires account and payload")
+        args = execution_arguments(args[0]["value"], args[1], chain.results(CORE, "getAccount", args[0]))
     path = chain.invoke_file(CORE, method, args)
     _, output = chain.nx("contract", "invoke", str(path), wallet, "-w", "Global", "-g", "10", "-j")
     match = re.search(r"0x[0-9a-fA-F]{64}", output)
@@ -71,6 +116,9 @@ def persist(chain, report, label, method, args, event, wallet="owner"):
 
 
 def rejected(chain, report, label, method, args, expected):
+    if method in ("executeUserOp", "executeUserOps"):
+        require(len(args) == 2, "Fresh execution requires account and payload")
+        args = execution_arguments(args[0]["value"], args[1], chain.results(CORE, "getAccount", args[0]))
     path = chain.invoke_file(CORE, method, args)
     rc, output = chain.nx("contract", "invoke", str(path), "owner", "-w", "Global", "-g", "10", "-r", "-j", check=False)
     try:
@@ -147,14 +195,15 @@ def validate(runtime, dotnet, output):
                 check_readback(chain.rpc("getcontractstate", [diagnostic]), probe_script, probe_nef, probe_manifest)
                 report["witnessDiagnostic"] = {"contractHash": diagnostic, "readbackMatched": True,
                     "nefSha256": hashlib.sha256(probe_nef).hexdigest(), "scriptHex": probe_script.hex()}
+                require(chain.rpc_invoke(CORE, "getVersion", [])[0] == 2, "Native service version is not ABI v2")
                 state, _, _ = chain.rpc_invoke(CORE, "getAccount", [H(account_text)])
                 nonce, _, _ = chain.rpc_invoke(CORE, "getNonce", [H(account_text), I(0)])
                 proxy, _, _ = chain.rpc_invoke(CORE, "getAccountAddress", [H(account_text)])
-                require(len(state) == 13 and state[0] == 1 and state[1] == account and state[2] == proxy, "Account record identity mismatch")
+                require(check_account_record(state) and state[0] == 2 and state[1] == account and state[2] == proxy, "Account record identity mismatch")
                 require(state[3] == hash_le(addresses["owner"]) and state[4] == hash_le(addresses["guardian"]), "Custody/guardian readback mismatch")
                 require(state[7] == 1 and state[8] == 2 and nonce == 3, "Freeze, configuration epoch or rollback nonce mismatch")
-                require(all(value is None for value in state[9:]), "Lifecycle did not clear pending intents")
-                report["readback"] = {"nativeId": native["id"], "nativeHash": CORE, "nativeManifestVerified": True,
+                require(all(value is None for value in state[9:13]), "Lifecycle did not clear pending intents")
+                report["readback"] = {"nativeId": native["id"], "nativeHash": CORE, "nativeManifestVerified": True, "authorityEpoch": state[13],
                     "nativeManifestSha256": hashlib.sha256(json.dumps(native["manifest"], sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
                     "accountStateMatched": True, "status": "Frozen", "configurationNonce": state[8], "nextSequence": nonce,
                     "blockCount": chain.rpc("getblockcount", []), "nodeVersion": version["useragent"]}

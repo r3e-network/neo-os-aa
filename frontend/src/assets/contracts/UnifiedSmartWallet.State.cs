@@ -78,19 +78,17 @@ namespace AbstractAccount
             AccountState state = GetAccountState(accountId);
             if (state.Verifier == UInt160.Zero) return (ByteString)ERC1271_INVALID_VALUE;
 
-            bool supported = (bool)Contract.CallWithGasLimit(
+            bool supported = (bool)Contract.Call(
                 state.Verifier,
                 "supportsMessageSignatures",
                 CallFlags.ReadOnly,
-                VerifierGasLimit,
                 new object[] { });
             if (!supported) return (ByteString)ERC1271_INVALID_VALUE;
 
-            bool valid = (bool)Contract.CallWithGasLimit(
+            bool valid = (bool)Contract.Call(
                 state.Verifier,
                 "isValidSignature",
                 CallFlags.ReadOnly,
-                VerifierGasLimit,
                 new object[] { accountId, hash!, signature! });
             return valid ? (ByteString)ERC1271_MAGIC_VALUE : (ByteString)ERC1271_INVALID_VALUE;
         }

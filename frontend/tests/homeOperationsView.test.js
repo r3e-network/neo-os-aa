@@ -136,7 +136,7 @@ test("operations workspace exposes load, compose, signature, and broadcast secti
   );
   assert.match(fs.readFileSync(routerPath, "utf8"), /path: 'identity'/);
   assert.match(didPanelSource, /NeoDID \/ Web3Auth/);
-  assert.match(didPanelSource, /fetchVerifierContractByAddress/);
+  assert.match(didPanelSource, /fetchAccountIdentity/);
   assert.match(didPanelSource, /fetchUnifiedVerifierState/);
   assert.match(didPanelSource, /fetchAccountMaintenanceState/);
   assert.match(didPanelSource, /Refresh Chain State/);

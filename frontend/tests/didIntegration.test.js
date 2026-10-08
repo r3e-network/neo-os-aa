@@ -78,7 +78,8 @@ test("morpheus did service can bind DIDs and invoke AA verifier requests", () =>
   assert.match(source, /cancelRecovery/);
   assert.match(source, /revokeProxySession/);
   assert.match(source, /zklogin_verifier_params_hex/);
-  assert.match(source, /fetchVerifierContractByAddress/);
+  assert.match(source, /fetchAccountIdentity/);
+  assert.doesNotMatch(source, /getAccountIdByAddress|getVerifierContractByAddress/);
   assert.match(source, /fetchAccountMaintenanceState/);
   assert.match(source, /hasPendingVerifierCall/);
   assert.match(source, /getPendingHookCallTime/);

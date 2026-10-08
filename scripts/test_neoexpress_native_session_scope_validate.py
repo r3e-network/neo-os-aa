@@ -16,13 +16,13 @@ class NativeSessionScopeTests(unittest.TestCase):
         return importlib.import_module('neoexpress_native_session_scope_validate')
 
     def state(self):
-        return {'account':[None]*8+[7], 'pending':['old'], 'key':None,'metadata':None,
+        return {'account':[2]+[None]*7+[7]+[None]*4+[3], 'pending':['old'], 'key':None,'metadata':None,
                 'spent':9,'nonce':3,'balance':100,'raw':[None,None,'CQ==','AA==']}
 
     def test_grant_oracle_preserves_spent_and_encodes_exact_storage(self):
         m=self.module();state=self.state();key=b'\x02'+bytes(32)
         m.grant_change(state,123,key,GAS_TOKEN,'*',999,0,'wildcard')
-        self.assertEqual(8,state['account'][8]);self.assertIsNone(state['pending'])
+        self.assertEqual(8,state['account'][8]);self.assertEqual(3,state['account'][13]);self.assertIsNone(state['pending'])
         self.assertEqual(9,state['spent']);self.assertEqual('CQ==',state['raw'][2])
         self.assertEqual([key,hash_le(GAS_TOKEN),b'*',999,0],state['key'])
         self.assertEqual([123,0,b'wildcard'],state['metadata'])

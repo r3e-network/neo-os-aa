@@ -18,13 +18,14 @@ namespace AbstractAccount.Verifiers
     /// </remarks>
     [DisplayName("SessionKeyVerifier")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorizationDomain", "getOperationDigest", "getAccountAddress")]
-    [ManifestExtra("SmartAccountProfile", "native-v1")]
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch", "getAuthorizationDomain", "getOperationDigest", "getAccountAddress")]
+    [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ContractPermission("*", "getBackupOwner")]
+    [ContractPermission("*", "getProxyScriptHash")]
 #endif
     [ManifestExtra("Description", "Temporary Session Key Verifier for High Frequency Actions")]
     [ManifestExtra("Version", "2.0.0")]
@@ -130,7 +131,7 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert(description == null || description.Length <= 128, "Description too long (max 128 chars)");
 
             // Enforce key rotation cooldown to prevent spending limit bypass via rapid key rotation
-            byte[] rotationKey = Helper.Concat(Prefix_LastKeyRotation, (byte[])accountId);
+            byte[] rotationKey = VerifierAuthority.AccountKey(Prefix_LastKeyRotation, accountId);
             ByteString? lastRotationData = Storage.Get(Storage.CurrentContext, rotationKey);
             if (lastRotationData != null)
             {
@@ -147,7 +148,7 @@ namespace AbstractAccount.Verifiers
                 SpendingLimit = spendingLimit
             };
 
-            byte[] key = Helper.Concat(Prefix_SessionKeys, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_SessionKeys, accountId);
             Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(data));
 
             // Store metadata
@@ -157,11 +158,11 @@ namespace AbstractAccount.Verifiers
                 LastUsedAt = 0,
                 Description = description ?? string.Empty
             };
-            byte[] metadataKey = Helper.Concat(Prefix_SessionMetadata, (byte[])accountId);
+            byte[] metadataKey = VerifierAuthority.AccountKey(Prefix_SessionMetadata, accountId);
             Storage.Put(Storage.CurrentContext, metadataKey, StdLib.Serialize(metadata));
 
             // Record rotation timestamp for cooldown enforcement
-            byte[] rotationTsKey = Helper.Concat(Prefix_LastKeyRotation, (byte[])accountId);
+            byte[] rotationTsKey = VerifierAuthority.AccountKey(Prefix_LastKeyRotation, accountId);
             Storage.Put(Storage.CurrentContext, rotationTsKey, Runtime.Time);
 
             // Do NOT reset spending tracking — prevent spending limit bypass via key rotation
@@ -179,11 +180,11 @@ namespace AbstractAccount.Verifiers
         public static void ClearSessionKey(UInt160 accountId)
         {
             ValidateSessionConfigCaller(accountId);
-            byte[] key = Helper.Concat(Prefix_SessionKeys, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_SessionKeys, accountId);
             Storage.Delete(Storage.CurrentContext, key);
-            byte[] metadataKey = Helper.Concat(Prefix_SessionMetadata, (byte[])accountId);
+            byte[] metadataKey = VerifierAuthority.AccountKey(Prefix_SessionMetadata, accountId);
             Storage.Delete(Storage.CurrentContext, metadataKey);
-            byte[] spentKey = Helper.Concat(Prefix_SpentAmount, (byte[])accountId);
+            byte[] spentKey = VerifierAuthority.AccountKey(Prefix_SpentAmount, accountId);
             Storage.Delete(Storage.CurrentContext, spentKey);
             // A successful clear is an explicit revocation command. Emit even when the key was
             // already absent so indexers can converge on the canonical ordering of the command.
@@ -193,7 +194,7 @@ namespace AbstractAccount.Verifiers
         [Safe]
         public static SessionKeyData? GetSessionKey(UInt160 accountId)
         {
-            byte[] key = Helper.Concat(Prefix_SessionKeys, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_SessionKeys, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             if (data == null) return null;
             return (SessionKeyData)StdLib.Deserialize(data!);
@@ -202,7 +203,7 @@ namespace AbstractAccount.Verifiers
         [Safe]
         public static SessionKeyMetadata? GetSessionKeyMetadata(UInt160 accountId)
         {
-            byte[] key = Helper.Concat(Prefix_SessionMetadata, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_SessionMetadata, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             if (data == null) return null;
             return (SessionKeyMetadata)StdLib.Deserialize(data!);
@@ -219,7 +220,7 @@ namespace AbstractAccount.Verifiers
         [Safe]
         public static BigInteger GetSpentAmount(UInt160 accountId)
         {
-            byte[] key = Helper.Concat(Prefix_SpentAmount, (byte[])accountId);
+            byte[] key = VerifierAuthority.AccountKey(Prefix_SpentAmount, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             return data == null ? 0 : (BigInteger)data;
         }
@@ -228,10 +229,10 @@ namespace AbstractAccount.Verifiers
         {
 #if SMARTACCOUNT_NATIVE
             NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "cleanup");
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_SessionKeys, (byte[])accountId));
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_SessionMetadata, (byte[])accountId));
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_SpentAmount, (byte[])accountId));
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_LastKeyRotation, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_SessionKeys, accountId));
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_SessionMetadata, accountId));
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_SpentAmount, accountId));
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_LastKeyRotation, accountId));
             OnSessionKeyRevoked(accountId);
 #else
             ClearSessionKey(accountId);
@@ -285,6 +286,10 @@ namespace AbstractAccount.Verifiers
                 ExecutionEngine.Assert(op.Method == sessionKey.Method, "Method not permitted");
             }
 
+#if !SMARTACCOUNT_NATIVE
+            // NEP-17 transfers have one precise value-bearing ABI, even for uncapped keys.
+            BigInteger operationValue = op.Method == "transfer" ? ExtractTransferValue(accountId, op) : 0;
+#endif
             ExecutionEngine.Assert(op.Signature != null && op.Signature.Length == 64, "Invalid signature length");
             ByteString signature = op.Signature!;
             byte[] payload = VerifierPayload.BuildPayload(accountId, op.TargetContract, op.Method, op.Args, op.Nonce, op.Deadline);
@@ -301,7 +306,6 @@ namespace AbstractAccount.Verifiers
                 // must not bypass that policy boundary merely because it adds no debit.
                 ExecutionEngine.Assert(spent + operationValue <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
 #else
-                BigInteger operationValue = ExtractTransferValue(op);
                 if (operationValue > 0)
                 {
                     BigInteger newSpent = spent + operationValue;
@@ -313,21 +317,25 @@ namespace AbstractAccount.Verifiers
             return isValid;
         }
 
-        /// <summary>
-        /// Extracts the transfer value from a user operation if it's a transfer call.
-        /// Returns 0 if not a transfer or value cannot be determined.
-        /// </summary>
-        private static BigInteger ExtractTransferValue(UserOperation op)
+#if !SMARTACCOUNT_NATIVE
+        /// <summary>Rejects ambiguous transfer encodings before applying the session cap.</summary>
+        private static BigInteger ExtractTransferValue(UInt160 accountId, UserOperation op)
         {
-            if (op.Args == null || op.Args.Length < 3) return 0;
-            if (op.Method != "transfer") return 0;
-
-            object[] args = (object[])op.Args;
-            if (args.Length < 3) return 0;
-
-            if (args[2] is BigInteger amount) return amount;
-            return 0;
+            ExecutionEngine.Assert(op.Args != null && op.Args.Length == 4, "Invalid NEP-17 transfer args");
+            ExecutionEngine.Assert(op.Args[2] is BigInteger, "Transfer amount must be an integer");
+            BigInteger amount = (BigInteger)op.Args[2];
+            ExecutionEngine.Assert(amount >= 0, "Transfer amount must be non-negative");
+            UInt160 from = (UInt160)op.Args[0];
+            UInt160 to = (UInt160)op.Args[1];
+            ExecutionEngine.Assert(from != null && from.IsValid && to != null && to.IsValid, "Invalid transfer address");
+            UInt160 core = VerifierAuthority.AuthorizedCore();
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            UInt160 proxy = (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId);
+            ExecutionEngine.Assert(from == proxy, "Transfer source must be the account asset address");
+            return amount;
         }
+
+#endif
 
 #if SMARTACCOUNT_NATIVE
         private static BigInteger NativeTransferValue(UInt160 accountId, UserOperation op)
@@ -354,26 +362,34 @@ namespace AbstractAccount.Verifiers
             if (sk == null) return;
 
             SessionKeyData sessionKey = sk!;
+#if !SMARTACCOUNT_NATIVE
+            BigInteger operationValue = 0;
+            if (op.Method == "transfer")
+            {
+                // A token rejection must revert the entire user operation, including its
+                // nonce and any token writes. Generic non-transfer business values are valid.
+                ExecutionEngine.Assert(result is bool accepted && accepted, "NEP-17 transfer failed");
+                operationValue = ExtractTransferValue(accountId, op);
+            }
+#endif
             if (sessionKey.SpendingLimit > 0)
             {
 #if SMARTACCOUNT_NATIVE
                 ExecutionEngine.Assert(result is bool && (bool)result, "Session transfer did not succeed");
                 BigInteger operationValue = NativeTransferValue(accountId, op);
                 ExecutionEngine.Assert(GetSpentAmount(accountId) + operationValue <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
-#else
-                BigInteger operationValue = ExtractTransferValue(op);
 #endif
                 if (operationValue > 0)
                 {
                     BigInteger spent = GetSpentAmount(accountId);
                     BigInteger newSpent = spent + operationValue;
                     ExecutionEngine.Assert(newSpent <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
-                    byte[] spentKey = Helper.Concat(Prefix_SpentAmount, (byte[])accountId);
+                    byte[] spentKey = VerifierAuthority.AccountKey(Prefix_SpentAmount, accountId);
                     Storage.Put(Storage.CurrentContext, spentKey, newSpent);
                 }
             }
 
-            byte[] metadataKey = Helper.Concat(Prefix_SessionMetadata, (byte[])accountId);
+            byte[] metadataKey = VerifierAuthority.AccountKey(Prefix_SessionMetadata, accountId);
             ByteString? metadataData = Storage.Get(Storage.CurrentContext, metadataKey);
             if (metadataData == null) return;
 

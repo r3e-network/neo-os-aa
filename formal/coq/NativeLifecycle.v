@@ -1,5 +1,9 @@
 (*
-  Native SmartAccount lifecycle authority and epoch invalidation.
+  Native SmartAccount lifecycle authority and configuration-nonce invalidation.
+  The historical field named epoch below is configurationNonce, not ABI 2's
+  separate authorityEpoch. NativeAuthorityEpoch.v models the latter and the
+  callback-free recovery transition; this module covers only the stated
+  authority, status, counter and pending-intent projections.
   Witness results are assumptions supplied by an abstract caller, not proofs
   of Neo witness evaluation. This model does not claim C# refinement, callback
   cleanup, ledger rollback, or complete native-service semantics.

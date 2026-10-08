@@ -9,7 +9,7 @@ from neoexpress_validate import A, B, H, I, S, BOOL, ValidationFailure, hash_le
 
 class NativeProxyValidationTests(unittest.TestCase):
     def test_proxy_script_matches_published_identity_vector(self):
-        vectors = json.loads((Path(__file__).parent.parent / "docs/proposals/smartaccount-native-profile-v1-vectors.json").read_text())
+        vectors = json.loads((Path(__file__).parent.parent / "docs/proposals/smartaccount-native-profile-v2-vectors.json").read_text())
         identity = vectors["identity"]
         account = "0x" + bytes.fromhex(identity["accountIdWire"])[::-1].hex()
         self.assertEqual(identity["verificationScript"], proxy.verification_script(account).hex())
@@ -18,11 +18,15 @@ class NativeProxyValidationTests(unittest.TestCase):
     def test_application_initializer_matches_independent_core_vector(self):
         account = "0x3e25330008563c55fe2853e07868b36ca00020ac"
         operation = A(H(proxy.CORE), S("ping"), A(), I(0), I(0), B(b""))
-        expected = ("0c001010c20c0470696e670c144117a67f088e2ea046e74bdce906f2ad071d42d916c0"
-                    "0c14ac2000a06cb36878e05328fe553c56080033253e12c01f0c0d65786563757465557365724f70"
+        expected = ("1b170c001010c20c0470696e670c144117a67f088e2ea046e74bdce906f2ad071d42d916c0"
+                    "0c14ac2000a06cb36878e05328fe553c56080033253e14c01f0c0d65786563757465557365724f70"
                     "0c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52")
-        self.assertEqual(expected, proxy.application_script(account, operation).hex())
-        self.assertIn(b"executeUserOps", proxy.application_script(account, A(operation, operation), batch=True))
+        self.assertEqual(expected, proxy.application_script(account, operation, authority_epoch=7, configuration_nonce=11).hex())
+        self.assertIn(b"executeUserOps", proxy.application_script(account, A(operation, operation), batch=True, authority_epoch=7, configuration_nonce=11))
+        for field in ('authority_epoch','configuration_nonce'):
+            for value in (-1,2**64,True,'1'):
+                counters={'authority_epoch':7,'configuration_nonce':11,field:value}
+                with self.assertRaises(ValidationFailure): proxy.application_script(account,operation,**counters)
 
     def test_exact_scalar_encodings_and_integer_boundaries(self):
         for value, expected in ((BOOL(True), "08"), (BOOL(False), "09"), (I(-1), "0f"), (I(0), "10"),

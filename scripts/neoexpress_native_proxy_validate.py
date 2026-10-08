@@ -16,7 +16,7 @@ from pathlib import Path
 from neoexpress_validate import (Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO,
     hash_le, hash160, decode, serialize_unsigned, serialize_witnesses, aa_proxy_rules, varint)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
-from neoexpress_native_service_validate import CORE, check_native, persist
+from neoexpress_native_service_validate import CORE, check_native, persist, transaction_system_fee, check_account_record
 
 GAS_TOKEN = "0xd2a4cff31913016155e38e474a2c06d08be276cf"
 GAS = 100_000_000
@@ -66,8 +66,11 @@ def proxy_address(account):
     return "0x" + hash160(verification_script(account))[::-1].hex()
 
 
-def application_script(account, payload, batch=False):
-    return (encode_value(payload) + encode_value(H(account)) + b"\x12\xc0\x1f" +
+def application_script(account, payload, batch=False, *, authority_epoch, configuration_nonce):
+    for value in (authority_epoch, configuration_nonce):
+        require(type(value) is int and 0 <= value < 2**64, "Execution authority counters must be UInt64")
+    return (encode_value(I(configuration_nonce)) + encode_value(I(authority_epoch)) +
+            encode_value(payload) + encode_value(H(account)) + b"\x14\xc0\x1f" +
             push_bytes(b"executeUserOps" if batch else b"executeUserOp") + push_bytes(hash_le(CORE)) + bytes.fromhex("41627d5b52"))
 
 
@@ -140,9 +143,11 @@ class ProxyTransactions:
             rules = aa_proxy_rules(CORE, GAS_TOKEN)
             if proxy_scope == "deny": rules[0]["action"] = "Deny"
             signers += [{"account": self.proxy, "scopes": "WitnessRules", "rules": rules}]
-        script = application_script(self.account, payload, batch)
+        record = check_account_record(self.chain.rpc_invoke(CORE, "getAccount", [H(self.account)])[0])
+        require(record[1] == hash_le(self.account), "Proxy authority record identity mismatch")
+        script = application_script(self.account, payload, batch, authority_epoch=record[13], configuration_nonce=record[8])
         if noncanonical: script += b"\x21"  # NOP changes the exact canonical envelope.
-        sysfee, netfee = 5 * GAS, 2 * GAS
+        sysfee, netfee = transaction_system_fee(self.chain, script, signers), 2 * GAS
         height = self.chain.rpc("getblockcount", [])
         unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee, height + 50, signers, script)
         digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()
@@ -152,7 +157,8 @@ class ProxyTransactions:
         if proxy_scope != "absent": witnesses.append((b"", verification_script(self.account)))
         raw = base64.b64encode(unsigned + serialize_witnesses(witnesses)).decode()
         row = {"step": label, "txid": txid, "proxyScope": proxy_scope, "canonicalEnvelope": not noncanonical,
-               "scriptSha256": hashlib.sha256(script).hexdigest(), "before": list(before)}
+               "scriptSha256": hashlib.sha256(script).hexdigest(), "before": list(before),
+               "committedAuthorityEpoch":record[13], "committedConfigurationNonce":record[8]}
         if admission_failure is not None:
             try: self.chain.rpc("sendrawtransaction", [raw])
             except ValidationFailure as error:

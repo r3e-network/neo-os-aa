@@ -2,17 +2,21 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { DEFAULT_ABSTRACT_ACCOUNT_HASH, DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET, resolveAbstractAccountHash, resolveOptionalBoolean } from '../src/config/runtimeConfig.js';
 import { sanitizeHex } from '../src/utils/hex.js';
+import { TRANSFER_RETURNED_FALSE_MESSAGE, findFailedTransferInInvocation } from '../src/shared/transferOutcome.mjs';
 import { convertContractParamFromJson, normalizeRelayPayload, sanitizeMetaInvocationForRelay } from './relayHelpers.js';
 import { attachRequestId, beginDurableRequest, completeDurableRequest, failDurableRequest } from './requestDurability.js';
 import { checkRateLimit, resolveClientIp, resolveRateLimitFailure, sanitizeError } from './rateLimiter.js';
 import { resolveMorpheusOracleCvmId, resolveMorpheusPaymasterEndpoint, resolveMorpheusRuntimeToken, resolveNetwork } from './morpheus-base.js';
 import { apiFetch } from './outboundFetch.js';
+import { resolveProxyTransferWitness } from './proxyWitness.js';
 
 const RAW_TRANSACTION_PATTERN = /^(0x)?[0-9a-fA-F]+$/;
 const MAX_RAW_TRANSACTION_LENGTH = 200000;
+// Stable code of the verdict "the simulated token transfer returned false" (see transferRefusal below).
+const RELAY_TRANSFER_RETURNED_FALSE_CODE = 'relay_transfer_returned_false';
 
 function getSdkRequire() {
-  return createRequire(new URL('../../sdk/js/package.json', import.meta.url));
+  return createRequire(new URL('../package.json', import.meta.url));
 }
 
 async function getNetworkMagic(rpcClient, rpc) {
@@ -485,13 +489,51 @@ async function fetchValidationPreview({ rpcUrl, invocation }) {
   return decodeValidationPreviewStack(payload?.result?.stack?.[0]);
 }
 
-function resolveInvocationSigners({ account, tx }) {
-  return [{ account: account.scriptHash, scopes: tx.WitnessScope.CalledByEntry }];
+async function resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation }) {
+  const proxy = await resolveProxyTransferWitness({
+    invocation, feePayer: account.scriptHash, rpcClient, sc,
+    enabled: resolveOptionalBoolean(process.env.AA_RELAY_PROXY_WITNESS_ENABLED, false),
+  });
+  if (proxy && resolvePositiveBigIntEnv('AA_RELAY_PROXY_NETWORK_FEE_RESERVE') == null) {
+    throw new Error('AA_RELAY_PROXY_NETWORK_FEE_RESERVE must be configured for proxy witnesses');
+  }
+  if (proxy && resolveMaxNetworkFee() == null && resolveMaxTotalFee() == null) {
+    throw new Error('A network or total fee ceiling must be configured for proxy witnesses');
+  }
+  return {
+    signers: [{ account: account.scriptHash, scopes: tx.WitnessScope.CalledByEntry }, ...(proxy ? [proxy.signer] : [])],
+    proxyWitness: proxy?.witness,
+  };
+}
+
+// A token transfer that returns false HALTs, so the VM state alone calls it a success; but nothing moved and the
+// transaction would still burn the account's nonce and the relay's fee (recorded on the deployed core, AA-09 cases
+// 8 and 9: a session-signed GAS transfer out of the account's proxy address, where the relay is the only signer
+// and the proxy is no witness). Even with configured proxy support, refuse any simulated false result.
+// Only a transfer operation with a Boolean false result is judged (src/shared/transferOutcome.mjs): false is the
+// normal result of other calls, and a result that is not a Boolean says nothing. Returns the refusal body, or
+// null when nothing is wrong.
+function transferRefusal({ invocation, simulation, validationPreview }) {
+  const stack = simulation?.stack || [];
+  const failedOperations = findFailedTransferInInvocation({ invocation, stack });
+  if (failedOperations.length === 0) return null;
+  return {
+    simulate: true,
+    ok: false,
+    code: RELAY_TRANSFER_RETURNED_FALSE_CODE,
+    vmState: String(simulation?.state || 'HALT').toUpperCase(),
+    exception: TRANSFER_RETURNED_FALSE_MESSAGE,
+    operation: invocation.operation,
+    gasConsumed: simulation?.gasconsumed || '0',
+    stack,
+    failedOperations,
+    validationPreview,
+  };
 }
 
 async function simulateMetaInvocation({ rpcUrl, relayWif, invocation }) {
   const { rpc, tx, sc, u, rpcClient, account } = loadRelayInvocationContext({ rpcUrl, relayWif });
-  const signers = resolveInvocationSigners({ account, tx });
+  const { signers } = await resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation });
   const script = buildInvocationScript({ invocation, sc, u });
   const validationPreview = await fetchValidationPreview({ rpcUrl, invocation });
 
@@ -509,6 +551,9 @@ async function simulateMetaInvocation({ rpcUrl, relayWif, invocation }) {
     };
   }
 
+  const refusal = transferRefusal({ invocation, simulation, validationPreview });
+  if (refusal) return refusal;
+
   return {
     simulate: true,
     ok: true,
@@ -523,13 +568,18 @@ async function simulateMetaInvocation({ rpcUrl, relayWif, invocation }) {
 async function relayMetaInvocation({ rpcUrl, relayWif, invocation, feePolicy = {} }) {
   const { rpc, tx, sc, u, rpcClient, account } = loadRelayInvocationContext({ rpcUrl, relayWif });
   const magic = await getNetworkMagic(rpcClient, rpc);
-  const signers = resolveInvocationSigners({ account, tx });
+  const { signers, proxyWitness } = await resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation });
   const script = buildInvocationScript({ invocation, sc, u });
 
   const simulation = await rpcClient.invokeScript(u.HexString.fromHex(script), signers);
   if (simulation?.state === 'FAULT') {
     throw new Error(`${invocation.operation} simulation fault: ${simulation.exception || 'VM fault'}`);
   }
+
+  // The simulation that prices the transaction is judged too: the preview ran earlier and the chain may have moved.
+  // Nothing is priced, signed or broadcast for a transfer that returned false.
+  const refusal = transferRefusal({ invocation, simulation });
+  if (refusal) return { refusal };
 
   const systemFee = simulation?.gasconsumed || '1000000';
   // The relay pays systemFee from its own WIF, so cap it before doing any more
@@ -550,7 +600,17 @@ async function relayMetaInvocation({ rpcUrl, relayWif, invocation, feePolicy = {
 
   let transaction = new tx.Transaction(basePayload);
   transaction.sign(account, magic);
-  const networkFee = await rpcClient.calculateNetworkFee(transaction);
+  if (proxyWitness) transaction.addWitness(proxyWitness);
+  const estimatedNetworkFee = await rpcClient.calculateNetworkFee(transaction);
+  // Published Neo's fee calculator omits non-standard nonempty verification
+  // scripts. An explicit operator reserve covers the proxy's verification work
+  // and serialized witness bytes; every existing network/total fee cap still
+  // applies. Never silently submit the known-underpriced calculator result.
+  const proxyReserve = proxyWitness ? resolvePositiveBigIntEnv('AA_RELAY_PROXY_NETWORK_FEE_RESERVE') : 0n;
+  if (proxyWitness && proxyReserve == null) throw new Error('AA_RELAY_PROXY_NETWORK_FEE_RESERVE must be configured for proxy witnesses');
+  const estimatedNetworkFeeBig = toBigIntOrNull(estimatedNetworkFee?.toString?.() ?? estimatedNetworkFee);
+  if (estimatedNetworkFeeBig == null || estimatedNetworkFeeBig < 0n) throw new Error('Invalid network fee estimate');
+  const networkFee = (estimatedNetworkFeeBig + proxyReserve).toString();
 
   // networkFee (calculateNetworkFee) is otherwise unbounded; enforce the
   // systemFee/networkFee/total caps plus any per-op ceiling carried by the
@@ -567,6 +627,7 @@ async function relayMetaInvocation({ rpcUrl, relayWif, invocation, feePolicy = {
     networkFee,
   });
   transaction.sign(account, magic);
+  if (proxyWitness) transaction.addWitness(proxyWitness);
 
   const txid = await rpcClient.sendRawTransaction(transaction);
   return {
@@ -809,6 +870,10 @@ export default async function handler(req, res) {
       invocation: sanitizedMetaInvocation,
       feePolicy: { approvedMaxFee: paymaster?.approvedMaxFee },
     });
+    if (result.refusal) {
+      await completeDurableRequest(durable.context, { statusCode: 200, body: attachRequestId(result.refusal, requestId) });
+      return sendJson(res, 200, result.refusal, requestId);
+    }
     failurePhase = 'response';
     const body = paymaster ? { ...result, paymaster } : result;
     await completeDurableRequest(durable.context, { statusCode: 200, body: attachRequestId(body, requestId) });

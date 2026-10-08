@@ -17,7 +17,7 @@ test('buildOperationSnapshotItems summarizes operation fields and available payl
       },
       transaction_body: {
         rawTransaction: 'aa',
-        metaInvocation: { operation: 'executeUnifiedByAddress' },
+        metaInvocation: { scriptHash: '11'.repeat(20), operation: 'executeUnifiedByAddress', args: [] },
       },
     },
     relayReadiness: {

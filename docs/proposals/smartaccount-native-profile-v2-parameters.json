@@ -1,0 +1,38 @@
+{
+  "abiVersion": 2,
+  "accountRecordVersion": 2,
+  "argumentCountMax": 64,
+  "argumentDepthMax": 8,
+  "argumentSizeMax": 4096,
+  "authorityEpochWidthBits": 64,
+  "authorizationDomainSuffix": [
+    "authorityEpochLE64",
+    "configurationNonceLE64"
+  ],
+  "authorizationVersion": 2,
+  "batchMax": 32,
+  "childConfiguration": true,
+  "configurationNonceWidthBits": 64,
+  "custodyRecoveryDelayMs": 604800000,
+  "hookBudgetDatoshi": 250000000,
+  "identityVersion": 1,
+  "maintenanceBudgetDatoshi": 250000000,
+  "methodBytesMax": 128,
+  "moduleChangeDelayMs": 86400000,
+  "nativeSponsorship": false,
+  "profileVersion": 2,
+  "recoveryRevokesModules": true,
+  "serviceName": "AccountManagement",
+  "signatureBytesMax": 1024,
+  "verifierBudgetDatoshi": 100000000,
+  "executionCounterCommitments": [
+    "authorityEpoch",
+    "configurationNonce"
+  ],
+  "executionArgumentOrder": [
+    "accountId",
+    "operationOrBatch",
+    "expectedAuthorityEpoch",
+    "expectedConfigurationNonce"
+  ]
+}

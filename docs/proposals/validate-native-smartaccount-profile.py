@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 DOCUMENT = (ROOT / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md").read_text()
-VECTORS = json.loads((ROOT / "smartaccount-native-profile-v1-vectors.json").read_text())
+VECTORS = json.loads((ROOT / "smartaccount-native-profile-v2-vectors.json").read_text())
 
 
 def hash160(value: bytes) -> bytes:
@@ -55,8 +55,8 @@ for required in (
     "postExecute(accountId: Hash160, op: Array, result: Any) -> Void",
     "getSignerDomains(accountId: Hash160) -> Array",
     "preExecute(accountId: Hash160, op: Array) -> Void",
-    "executeUserOp(accountId: Hash160, op: Array) -> Any",
-    "executeUserOps(accountId: Hash160, ops: Array) -> Array",
+    "executeUserOp(accountId: Hash160, op: Array, expectedAuthorityEpoch: Integer, expectedConfigurationNonce: Integer) -> Any",
+    "executeUserOps(accountId: Hash160, ops: Array, expectedAuthorityEpoch: Integer, expectedConfigurationNonce: Integer) -> Array",
     "callVerifierChild(accountId: Hash160, childVerifier: Hash160,",
     "module if its current code identity differs from the stored binding",
     "transaction that directly calls a token, NFT, application contract",
@@ -79,7 +79,10 @@ for required in (
 ):
     assert required in DOCUMENT, required
 
-assert VECTORS["profileVersion"] == 1
+assert "**Version:** 2 (identity version 1; authorization and account-record version 2)" in DOCUMENT
+assert VECTORS["profileVersion"] == 2
+assert VECTORS["identityVersion"] == 1
+assert VECTORS["authorizationVersion"] == VECTORS["accountRecordVersion"] == VECTORS["abiVersion"] == 2
 assert VECTORS["serviceName"] == "AccountManagement"
 assert VECTORS["serviceHashDisplay"] == "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
 assert "| Verifier callback budget | `100,000,000` datoshi per callback |" in DOCUMENT
@@ -118,18 +121,61 @@ assert script == (
 )
 assert "0x" + hash160(script)[::-1].hex() == identity["accountAddressDisplay"]
 
-profile_json = (
-    '{"abiVersion":1,"argumentCountMax":64,"argumentDepthMax":8,'
-    '"argumentSizeMax":4096,"batchMax":32,"childConfiguration":true,"custodyRecoveryDelayMs":604800000,'
-    '"hookBudgetDatoshi":250000000,"maintenanceBudgetDatoshi":250000000,"methodBytesMax":128,'
-    '"moduleChangeDelayMs":86400000,"nativeSponsorship":false,'
-    '"profileVersion":1,"serviceName":"AccountManagement",'
-    '"signatureBytesMax":1024,"verifierBudgetDatoshi":100000000}'
-)
-profile_digest = hashlib.sha256(
-    b"NeoSmartAccount/Profile" + bytes([1]) + profile_json.encode()
-).hexdigest()
+PARAMETERS = json.loads((ROOT / "smartaccount-native-profile-v2-parameters.json").read_text())
+profile_json = json.dumps(PARAMETERS, sort_keys=True, separators=(",", ":"))
+assert PARAMETERS["abiVersion"] == PARAMETERS["accountRecordVersion"] == PARAMETERS["authorizationVersion"] == PARAMETERS["profileVersion"] == 2
+assert PARAMETERS["identityVersion"] == 1
+assert PARAMETERS["authorityEpochWidthBits"] == PARAMETERS["configurationNonceWidthBits"] == 64
+assert PARAMETERS["authorizationDomainSuffix"] == ["authorityEpochLE64", "configurationNonceLE64"]
+assert PARAMETERS["recoveryRevokesModules"] is True
+assert PARAMETERS["executionArgumentOrder"] == ["accountId", "operationOrBatch", "expectedAuthorityEpoch", "expectedConfigurationNonce"]
+assert PARAMETERS["executionCounterCommitments"] == ["authorityEpoch", "configurationNonce"]
+assert "former two-argument entrypoints MUST NOT remain callable" in DOCUMENT
+assert PARAMETERS["verifierBudgetDatoshi"] == 100_000_000
+assert PARAMETERS["hookBudgetDatoshi"] == PARAMETERS["maintenanceBudgetDatoshi"] == 250_000_000
+assert profile_json in DOCUMENT
+profile_digest = hashlib.sha256(b"NeoSmartAccount/Profile" + bytes([2]) + profile_json.encode()).hexdigest()
 assert profile_digest == VECTORS["profileParameterDigest"]
+assert profile_digest in DOCUMENT
+for required in (
+    "Array with exactly these 14 positions",
+    "pendingRecoveryAddr, pendingRecovery, authorityEpoch]",
+    "getAuthorityEpoch(accountId: Hash160) -> Integer",
+    "UInt64LE(authorityEpoch) ||\nUInt64LE(configurationNonce)",
+    "without invoking any external callback",
+    "increments both the configuration nonce and the authority epoch, with checked overflow",
+    "| `RecoveryExecuted` | `Hash160, Hash160, Hash160, Integer, Integer` |",
+):
+    assert required in DOCUMENT, required
+assert VECTORS["events"]["AccountCreated"] == ["Hash160"] * 6
+assert VECTORS["events"]["RecoveryExecuted"] == ["Hash160", "Hash160", "Hash160", "Integer", "Integer"]
+assert VECTORS["accountRecord"]["fieldOrder"] == ["version", "accountId", "accountAddress", "custodyAddress", "recoveryAddress", "verifier", "hook", "status", "configurationNonce", "pendingVerifier", "pendingHook", "pendingRecoveryAddr", "pendingRecovery", "authorityEpoch"]
+assert VECTORS["accountRecord"]["authorityEpochIndex"] == 13
+assert VECTORS["accountRecord"]["configurationNonceIndex"] == 8
+
+# Independently serialize the fixed initial VM Array; zero Integers use an empty
+# byte sequence, and nulls remain Any/null rather than Integer zero.
+def serialize_record_value(value):
+    if value is None: return b"\x00"
+    if isinstance(value, list): return bytes([0x40, len(value)]) + b"".join(map(serialize_record_value, value))
+    if isinstance(value, bytes): return bytes([0x28, len(value)]) + value
+    assert type(value) is int and 0 <= value <= 2
+    return bytes([0x21, 0]) if value == 0 else bytes([0x21, 1, value])
+initial = [2, bytes.fromhex(identity["accountIdWire"]), hash160(script), custody,
+           bytes(20), None, None, 0, 0, None, None, None, None, 0]
+assert VECTORS["accountRecord"]["version"] == 2
+assert VECTORS["accountRecord"]["initialSerialized"] == serialize_record_value(initial).hex()
+assert "0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix" in DOCUMENT
+namespaces = VECTORS["storageNamespaces"]
+assert {v["name"] for v in namespaces} == {"initial", "recovered", "other-policy", "maximum-epoch"}
+for vector in namespaces:
+    prefix, epoch = vector["policyPrefix"], int(vector["authorityEpoch"])
+    account = bytes.fromhex(vector["accountIdWire"])
+    assert type(prefix) is int and 0 <= prefix <= 255 and len(account) == 20
+    assert 0 <= epoch < 1 << 64
+    key = bytes([0xa2, prefix]) + account + epoch.to_bytes(8, "little") + bytes.fromhex(vector["suffix"])
+    assert vector["key"] == key.hex()
+assert len({v["key"] for v in namespaces}) == 4
 
 signer_domain_prefix = b"NeoSmartAccount/SignerDomain" + bytes([1])
 for name, vector in VECTORS["signerDomains"].items():
@@ -138,7 +184,25 @@ for name, vector in VECTORS["signerDomains"].items():
     assert hashlib.sha256(material).hexdigest() == vector["commitment"], name
 
 operation = VECTORS["operation"]
-assert hashlib.sha256(bytes.fromhex(operation["authorizationMessage"])).hexdigest() == operation["authorizationDigest"]
+# Reconstruct the domain from independent state fields; self-consistent message/hash
+# pairs alone do not prove that an operation binds the current authority counters.
+def check_authorization(vector):
+    epoch, configuration = int(vector["authorityEpoch"]), int(vector["configurationNonce"])
+    assert 0 <= epoch < 1 << 64 and 0 <= configuration < 1 << 64
+    domain = (b"NeoSmartAccount/UserOperation" + bytes([2])
+              + int(VECTORS["networkMagic"], 16).to_bytes(4, "little")
+              + service_wire + bytes.fromhex(identity["accountIdWire"])
+              + epoch.to_bytes(8, "little") + configuration.to_bytes(8, "little"))
+    message = domain + bytes.fromhex(operation["canonicalOperationWithoutSignature"])
+    assert domain.hex() == vector["authorizationDomain"]
+    assert message.hex() == vector["authorizationMessage"]
+    assert hashlib.sha256(message).hexdigest() == vector["authorizationDigest"]
+check_authorization(operation)
+for control in VECTORS["authorizationControls"]:
+    check_authorization(control)
+    assert control["validAccountState"] is (int(control["authorityEpoch"]) <= int(control["configurationNonce"]))
+assert "authorityEpoch <= configurationNonce" in DOCUMENT
+assert len({value["authorizationDigest"] for value in VECTORS["authorizationControls"]}) == 5
 
 integer_domain = VECTORS["integerDomain"]
 maximum_nonce = (1 << 255) - 1
@@ -195,12 +259,16 @@ expected_envelopes = [("minimal-single", minimal, False),
 assert len(VECTORS["applicationEnvelopes"]) == len(expected_envelopes)
 for vector, (name, payload, batch) in zip(VECTORS["applicationEnvelopes"], expected_envelopes):
     assert vector["name"] == name and vector["isBatch"] == batch
+    epoch, configuration = int(vector["expectedAuthorityEpoch"]), int(vector["expectedConfigurationNonce"])
+    assert 0 <= epoch < 1 << 64 and 0 <= configuration < 1 << 64
+    assert vector["argumentCount"] == 4
     prefix = push_value(payload)
-    tail = (push_value(account_wire) + push_integer(2) + b"\xc0" + push_integer(15)
+    commitments = push_integer(configuration) + push_integer(epoch)
+    tail = (push_value(account_wire) + push_integer(4) + b"\xc0" + push_integer(15)
             + push_value(b"executeUserOps" if batch else b"executeUserOp")
             + push_value(service_wire) + bytes.fromhex("41627d5b52"))
     assert vector["initializer"] == prefix.hex()
-    assert vector["applicationScript"] == (prefix + tail).hex()
+    assert vector["applicationScript"] == (commitments + prefix + tail).hex()
 assert VECTORS["applicationEnvelopes"][2]["serializedPayload"] == operation["canonicalOperationWithoutSignature"]
 
 print("PASS: native SmartAccount profile document and vectors")

@@ -4,7 +4,10 @@ import { cloneImmutable } from './helpers.js';
 import { buildDraftCollaborationUrl, buildDraftShareUrl } from './shareLinks.js';
 import { EC } from '../../config/errorCodes.js';
 import { RUNTIME_CONFIG } from '../../config/runtimeConfig.js';
+import { selectSignedInvocation } from './signedInvocation.js';
+import { isProxySourcedTransfer } from '../../shared/transferOutcome.mjs';
 import {
+  computeArgsHash,
   buildExecuteUnifiedByAddressInvocation,
   buildExecuteUserOpInvocation as buildV3ExecuteUserOpInvocation,
 } from './metaTx.js';
@@ -79,43 +82,18 @@ function buildExecuteUserOpInvocation({ aaContractHash = '', account = {}, opera
   };
 }
 
-function selectMetaInvocation(transactionBody = {}, signatures = []) {
-  const v3Signature = transactionBody?.v3Invocation?.args?.[1]?.value?.[5]?.value;
-  if (transactionBody?.v3Invocation && typeof v3Signature === 'string' && sanitizeHex(v3Signature).length > 0) {
-    return cloneImmutable(transactionBody.v3Invocation);
-  }
-  if (transactionBody?.metaInvocation) {
-    return cloneImmutable(transactionBody.metaInvocation);
-  }
-  if (Array.isArray(transactionBody?.metaInvocations) && transactionBody.metaInvocations.length > 0) {
-    return cloneImmutable(transactionBody.metaInvocations[0]);
-  }
-  if (Array.isArray(transactionBody?.meta_invocations) && transactionBody.meta_invocations.length > 0) {
-    return cloneImmutable(transactionBody.meta_invocations[0]);
-  }
-  const clientV3Signature = transactionBody?.clientInvocation?.args?.[1]?.value?.[5]?.value;
-  if (
-    transactionBody?.clientInvocation
-    && transactionBody?.clientInvocation?.operation === 'executeUserOp'
-    && typeof clientV3Signature === 'string'
-    && sanitizeHex(clientV3Signature).length > 0
-  ) {
-    return cloneImmutable(transactionBody.clientInvocation);
-  }
-
-  const entry = Array.isArray(signatures)
-    ? signatures.find((item) => item?.metadata?.metaInvocation)
-    : null;
-  return entry?.metadata?.metaInvocation ? cloneImmutable(entry.metadata.metaInvocation) : null;
-}
-
 export function buildRelayPayloadOptions({ runtime = null, transactionBody = {}, signatures = [] } = {}) {
   const options = [];
   const allowRawRelay = runtime == null ? true : Boolean(runtime?.relayRawEnabled);
   const rawTransaction = sanitizeHex(
     transactionBody?.rawTransaction || transactionBody?.raw_transaction || transactionBody?.txHex || ''
   );
-  const metaInvocation = selectMetaInvocation(transactionBody, signatures);
+  let metaInvocation = null;
+  try {
+    metaInvocation = selectSignedInvocation({ transactionBody, signatures, morpheusNetwork: runtime?.morpheusNetwork, networkMagic: runtime?.networkMagic });
+  } catch (_) {
+    return []; // Untrusted collaboration metadata must block submission, never break rendering.
+  }
 
   if (rawTransaction && allowRawRelay) options.push('raw');
   if (metaInvocation) options.push('meta');
@@ -191,6 +169,7 @@ export function buildStagedTransactionBody({
     accountAddressScriptHash: account.accountAddressScriptHash || '',
     accountIdHash: account.accountIdHash || '',
     kind: operationBody?.kind || 'invoke',
+    requiresProxyWitness: Boolean(operationBody?.metadata?.requiresProxyWitness),
     clientInvocation,
     v3Invocation,
     legacyInvocation,
@@ -229,8 +208,37 @@ export function buildDraftApprovalTypedData({ draftRecord, chainId = RUNTIME_CON
   };
 }
 
-export function buildClientBroadcastRequest({ signerAddress = '', transactionBody = {} } = {}) {
-  const invocation = cloneImmutable(transactionBody?.clientInvocation || {});
+function assertClientWitnessSupported(transactionBody, invocation) {
+  const proxy = transactionBody?.accountAddressScriptHash;
+  const args = invocation?.args || [];
+  let calls = [{ method: invocation?.operation, args }];
+  if (['executeUserOp', 'executeSponsoredUserOp'].includes(invocation?.operation)) {
+    calls = [{ method: args[1]?.value?.[1]?.value, args: args[1]?.value?.[2]?.value }];
+  } else if (['executeUserOps', 'executeSponsoredUserOps'].includes(invocation?.operation)) {
+    calls = (args[1]?.value || []).map((op) => ({ method: op?.value?.[1]?.value, args: op?.value?.[2]?.value }));
+  } else if (invocation?.operation === 'executeUnifiedByAddress') {
+    calls = [{ method: args[2]?.value, args: args[3]?.value }];
+  }
+  if (transactionBody?.requiresProxyWitness || calls.some((call) => isProxySourcedTransfer({
+    method: call.method,
+    from: call.args?.[0]?.type === 'Hash160' ? call.args[0].value : '',
+    proxy,
+  }))) {
+    throw new Error('Account asset transfers require a proxy witness. Use a relay with proxy witness support; the connected wallet cannot attach this verification script.');
+  }
+}
+
+export function buildClientBroadcastRequest({ signerAddress = '', transactionBody = {}, signatures = [], morpheusNetwork = RUNTIME_CONFIG.morpheusNetwork, networkMagic } = {}) {
+  const signed = selectSignedInvocation({ transactionBody, signatures, morpheusNetwork, networkMagic });
+  if (signed && !transactionBody?.clientInvocation && !transactionBody?.v3Invocation) {
+    throw new Error('Draft signed invocation mismatch: client submission requires a staged operation anchor');
+  }
+  const invocation = signed || cloneImmutable(transactionBody?.clientInvocation || {});
+  // Only the staged body may prescribe witnesses; collaborator metadata cannot.
+  if (signed && transactionBody?.clientInvocation?.signers) {
+    invocation.signers = cloneImmutable(transactionBody.clientInvocation.signers);
+  }
+  assertClientWitnessSupported(transactionBody, invocation);
   if (!invocation.scriptHash || !invocation.operation) {
     throw new Error(EC.clientInvocationMissing);
   }
@@ -245,7 +253,7 @@ export function buildClientBroadcastRequest({ signerAddress = '', transactionBod
   return invocation;
 }
 
-export function buildRelayBroadcastRequest({ relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, transactionBody = {}, signatures = [], morpheusNetwork = RUNTIME_CONFIG.morpheusNetwork } = {}) {
+export function buildRelayBroadcastRequest({ relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, transactionBody = {}, signatures = [], morpheusNetwork = RUNTIME_CONFIG.morpheusNetwork, networkMagic } = {}) {
   if (!relayEndpoint) {
     throw new Error(EC.relayEndpointMissing);
   }
@@ -264,11 +272,11 @@ export function buildRelayBroadcastRequest({ relayEndpoint = '', relayPayloadMod
     : transactionBody?.paymasterRequest && typeof transactionBody.paymasterRequest === 'object'
       ? cloneImmutable(transactionBody.paymasterRequest)
       : null;
-  const metaInvocation = selectMetaInvocation(transactionBody, signatures);
+  const metaInvocation = selectSignedInvocation({ transactionBody, signatures, morpheusNetwork, networkMagic });
   if (rawTransaction && !relayRawEnabled && relayPayloadMode !== 'meta') {
     throw new Error(`${EC.rawRelayDisabled}: raw relay forwarding is not enabled`);
   }
-  const availableModes = buildRelayPayloadOptions({ runtime: { relayRawEnabled }, transactionBody, signatures });
+  const availableModes = buildRelayPayloadOptions({ runtime: { relayRawEnabled, morpheusNetwork, networkMagic }, transactionBody, signatures });
   const resolvedMode = resolveRelayPayloadMode({ relayPayloadMode, availableModes });
 
   if (resolvedMode === 'raw' && rawTransaction) {
@@ -303,6 +311,8 @@ export async function executeBroadcast({
   relayPayloadMode = 'best',
   relayRawEnabled = true,
   morpheusNetwork = RUNTIME_CONFIG.morpheusNetwork,
+  networkMagic,
+  deps = {},
   transactionBody = {},
   signatures = [],
   walletService,
@@ -313,14 +323,27 @@ export async function executeBroadcast({
   }
 
   if (mode === 'relay') {
-    return walletService.relayTransaction(
-      buildRelayBroadcastRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, transactionBody, signatures, morpheusNetwork })
+    const response = await walletService.relayTransaction(
+      buildRelayBroadcastRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, transactionBody, signatures, morpheusNetwork, networkMagic })
     );
+    // The relay answers a broadcast it refused (a VM fault in its preview, a token transfer that returned false)
+    // with HTTP 200, ok:false and no txid. That is not a submission: callers must not report it as sent.
+    if (response?.ok === false) {
+      throw new Error(String(response.exception || response.message || EC.operationFailed));
+    }
+    return response;
   }
 
-  return walletService.invoke(
-    buildClientBroadcastRequest({ signerAddress, transactionBody })
-  );
+  const request = buildClientBroadcastRequest({ signerAddress, transactionBody, signatures, morpheusNetwork, networkMagic });
+  const typedRecords = signatures.filter((item) => item?.metadata?.metaInvocation && item?.metadata?.typedData);
+  if (request.operation === 'executeUserOp' && typedRecords.length) {
+    // Metadata hashes are untrusted. Recompute the actual staged argument hash with the target core.
+    const hash = await (deps.computeArgsHash || computeArgsHash)({ rpcUrl: walletService.rpcUrl, aaContractHash: request.scriptHash, args: request.args[1].value[2].value });
+    if (typedRecords.some((item) => sanitizeHex(item.metadata.typedData.message?.argsHash) !== sanitizeHex(hash))) {
+      throw new Error('Draft signed invocation mismatch: on-chain arguments hash');
+    }
+  }
+  return walletService.invoke(request);
 }
 
 export function buildDraftExportBundle({ draftRecord = {}, origin = '' } = {}) {

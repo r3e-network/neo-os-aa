@@ -12,7 +12,7 @@ import tempfile
 
 from neoexpress_validate import Chain, RawKey, H, B, I, S, A, ZERO, hash_le, decode
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
-from neoexpress_native_service_validate import CORE, check_native, persist
+from neoexpress_native_service_validate import CORE, check_native, persist, module_storage_key
 from neoexpress_native_proxy_validate import GAS, GAS_TOKEN, DEADLINE, proxy_address, transfer
 from neoexpress_native_modules_validate import nef_from_rpc, check_module_build, CONTEXT
 from neoexpress_native_session_validate import SessionTransactions, serialize_value, NULL
@@ -23,19 +23,32 @@ DAY = 86400000
 
 
 def storage_prefix(chain, contract, prefix):
-    found={};start=0
+    """Read the pinned runtime's exclusive base64 key cursor; numeric-index RPC is rejected."""
+    require(type(prefix) is bytes,'Storage enumeration prefix must be bytes')
+    def decoded(value):
+        require(type(value) is str,'Storage enumeration requires base64 strings')
+        try:raw=base64.b64decode(value,validate=True)
+        except ValueError:require(False,'Invalid storage enumeration base64')
+        require(base64.b64encode(raw).decode()==value,'Noncanonical storage enumeration base64')
+        return raw
+    found={};cursor='';cursor_bytes=b''
     for _ in range(64):
-        page=chain.rpc('findstorage',[contract,base64.b64encode(prefix).decode(),start])
-        rows=page.get('results');next_index=page.get('next');truncated=page.get('truncated')
-        require(type(rows) is list and type(next_index) is int and type(truncated) is bool,
+        page=chain.rpc('findstorage',[contract,base64.b64encode(prefix).decode(),cursor])
+        require(type(page) is dict,'Invalid storage enumeration response')
+        rows=page.get('results');next_cursor=page.get('next');truncated=page.get('truncated')
+        require(type(rows) is list and type(next_cursor) is str and type(truncated) is bool,
                 'Invalid storage enumeration shape')
-        require(next_index==start+len(rows) and (not truncated or next_index>start),'Invalid storage pagination')
+        next_bytes=decoded(next_cursor);previous=cursor_bytes if cursor else None
         for row in rows:
-            key=row['key'];value=row['value']
-            require(base64.b64decode(key,validate=True).startswith(prefix) and key not in found,'Foreign or duplicate storage key')
-            base64.b64decode(value,validate=True);found[key]=value
+            require(type(row) is dict,'Invalid storage enumeration row')
+            key=row.get('key');value=row.get('value');key_bytes=decoded(key)
+            require(key_bytes.startswith(prefix) and key not in found,'Foreign or duplicate storage key')
+            require(previous is None or key_bytes>previous,'Storage keys did not advance past the exclusive cursor')
+            decoded(value);found[key]=value;previous=key_bytes
+        require(next_cursor==(rows[-1]['key'] if rows else cursor),'Storage next cursor differs from the last returned key')
+        require(not truncated or rows and next_bytes>cursor_bytes,'Truncated storage pagination did not advance')
         if not truncated:return found
-        start=next_index
+        cursor,cursor_bytes=next_cursor,next_bytes
     raise ValueError('Storage enumeration exceeded the diagnostic page bound')
 
 
@@ -46,18 +59,22 @@ def raw_integer(value):
     return value.to_bytes(size,'little',signed=True)
 
 
-def stored(account,prefix,value,token=GAS_TOKEN,suffix=b''):
-    key=bytes([prefix])+hash_le(account)+(hash_le(token) if token else b'')+suffix
+def stored(account,prefix,value,token=GAS_TOKEN,suffix=b'',*,authority_epoch=None):
+    tail=(hash_le(token) if token else b'')+suffix
+    # Diagnostic tokens deliberately use ordinary token storage; native policies opt into the epoch namespace.
+    key=(bytes([prefix])+hash_le(account)+tail if authority_epoch is None
+         else module_storage_key(account,prefix,authority_epoch,tail))
     return {base64.b64encode(key).decode():base64.b64encode(value).decode()}
 
 
 class DailyTransactions(SessionTransactions):
     def storage(self,account):
-        return [storage_prefix(self.chain,self.verifier,bytes([p])+hash_le(account)) for p in range(1,7)]
+        epoch=self.epoch(account)
+        return [storage_prefix(self.chain,self.verifier,module_storage_key(account,p,epoch)) for p in range(1,7)]
 
     def state(self,account):
         raw=self.storage(account)
-        fixed=raw[1].get(next(iter(stored(account,2,b''))))
+        fixed=raw[1].get(next(iter(stored(account,2,b'',authority_epoch=self.epoch(account)))))
         result={'account':self.value(CORE,'getAccount',[H(account)]),
                 'nonce':self.value(CORE,'getNonce',[H(account),I(0)]),
                 'pending':self.value(CORE,'getPendingModuleCall',[H(account),S('hook')]),
@@ -106,13 +123,19 @@ def build_diagnostic(compiler,cache,root):
     receipts=[];retained=None
     for index in (1,2):
         project=root/('diagnostic-'+str(index));shutil.copytree(source,project)
-        shutil.copyfile(Path(__file__).resolve().parent.parent/'contracts/Directory.Build.props',project/'Directory.Build.props')
+        repository=Path(__file__).resolve().parent.parent
+        for policy in ('Directory.Build.props','Directory.Packages.props','Directory.Build.targets'):
+            if (repository/policy).is_file():shutil.copyfile(repository/policy,project/policy)
+        # Both diagnostic projects depend only on the same audited Framework pin.
+        shutil.copyfile(repository/'contracts/verifiers/packages.NeoNativeVerifier.lock.json',project/'packages.lock.json')
         import xml.etree.ElementTree as ET
         config=ET.Element('configuration');feeds=ET.SubElement(config,'packageSources');ET.SubElement(feeds,'clear')
         ET.SubElement(feeds,'add',key='offline',value=str(cache));ET.ElementTree(config).write(project/'NuGet.Config')
+        lock_digest=sha256(project/'packages.lock.json')
         output=project/'out'
         result=subprocess.run([str(compiler),str(project/'DailyOutflowToken.csproj'),'-o',str(output)],capture_output=True,text=True,timeout=180)
         require(result.returncode==0,'Diagnostic compilation failed: '+result.stdout[-1500:]+result.stderr[-500:])
+        require(sha256(project/'packages.lock.json')==lock_digest,'Diagnostic restore rewrote the audited lock')
         pins={p.name:sha256(p) for p in output.iterdir() if p.suffix in ('.nef','.json')}
         require(set(pins)=={'DailyOutflowToken.nef','DailyOutflowToken.manifest.json'},'Unexpected diagnostic artifacts')
         receipts.append(pins)
@@ -144,8 +167,12 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,advers
             if adversarial:
                 stage='diagnostic-build';diagnostic_artifacts,diagnostic_builds=build_diagnostic(compiler,cache,root)
                 check_balance_fixture(json.loads((diagnostic_artifacts/'DailyOutflowToken.manifest.json').read_text()))
+                import xml.etree.ElementTree as ET
+                repository=Path(__file__).resolve().parent.parent
+                framework_version=ET.parse(repository/'Directory.Build.props').find('.//NeoSmartContractFrameworkVersion').text
                 report['diagnosticBuild']={'builds':diagnostic_builds,'compilerSha256':sha256(compiler),
-                    'frameworkArchiveSha256':sha256(cache/'neo.smartcontract.framework/3.10.2-ci00384/neo.smartcontract.framework.3.10.2-ci00384.nupkg')}
+                    'dependencyPolicySha256':sha256(repository/'Directory.Build.props'),'packageLockSha256':sha256(repository/'contracts/verifiers/packages.NeoNativeVerifier.lock.json'),
+                    'frameworkArchiveSha256':sha256(cache/'neo.smartcontract.framework'/framework_version/('neo.smartcontract.framework.'+framework_version+'.nupkg'))}
                 require(report['diagnosticBuild']['frameworkArchiveSha256']==json.loads(module_receipt.read_text())['frameworkArchiveSha256'],'Diagnostic framework mismatch')
             try:
                 stage='setup';chain.nx('create','-o',str(chain.file));config=json.loads(chain.file.read_text())
@@ -200,10 +227,10 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,advers
                         state['account'][8]+=1;state['pending']=None
                         if limited_token==GAS_TOKEN:state['config']=[limit,rolling] if limit else None
                         value=serialize_value(A(I(limit),{'type':'Boolean','value':rolling}))
-                        state['raw'][0].update(stored(account,1,value,token=limited_token))
+                        state['raw'][0].update(stored(account,1,value,token=limited_token,authority_epoch=state['account'][13]))
                         if limit==0:
                             for index in (0,1,2,3,5):
-                                prefix=bytes([index+1])+hash_le(account)+hash_le(limited_token)
+                                prefix=module_storage_key(account,index+1,state['account'][13],hash_le(limited_token))
                                 state['raw'][index]={k:v for k,v in state['raw'][index].items() if not base64.b64decode(k).startswith(prefix)}
                     core(label+'-confirm','callHook',[S('setDailyLimit'),A(*args)],change=confirmed)
                 stage='direct-context-rejection'
@@ -220,15 +247,15 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,advers
                         state['nonce']+=1;state['balance']-=amount
                         if rolling:
                             counter=int.from_bytes(base64.b64decode(next(iter(state['raw'][4].values()))),'little',signed=True) if state['raw'][4] else 0
-                            counter+=1;state['raw'][4]=stored(account,5,raw_integer(counter),token=None)
+                            counter+=1;state['raw'][4]=stored(account,5,raw_integer(counter),token=None,authority_epoch=state['account'][13])
                             if reset:state['raw'][3]={}
                             value=serialize_value(A(I(timestamp),I(amount)))
-                            state['raw'][3].update(stored(account,4,value,suffix=serialize_value(I(counter))))
+                            state['raw'][3].update(stored(account,4,value,suffix=serialize_value(I(counter)),authority_epoch=state['account'][13]))
                         else:
                             state['spent']=(0 if reset else state['spent'])+amount
-                            state['raw'][1]=stored(account,2,raw_integer(state['spent']))
+                            state['raw'][1]=stored(account,2,raw_integer(state['spent']),authority_epoch=state['account'][13])
                             if reset:anchor[0]=timestamp
-                            state['raw'][2]=stored(account,3,raw_integer(anchor[0]))
+                            state['raw'][2]=stored(account,3,raw_integer(anchor[0]),authority_epoch=state['account'][13])
                     return changed
                 events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')]
                 execute('first-fixed-transfer',GAS//2,1,expected=True,events=events,change=payment(GAS//2,reset=True),recipient_delta=GAS//2)
@@ -253,11 +280,11 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,advers
                             state['nonce']+=1;state['diagnosticBalances'][0]-=amount;state['diagnosticBalances'][1]+=amount
                             state['diagnosticRaw'][0]=stored(proxy,1,raw_integer(state['diagnosticBalances'][0]),token=None)
                             state['diagnosticRaw'][2]=stored(recipient_address,1,raw_integer(state['diagnosticBalances'][1]),token=None)
-                            key=next(iter(stored(account,2,b'',token=token)))
+                            key=next(iter(stored(account,2,b'',token=token,authority_epoch=state['account'][13])))
                             prior=int.from_bytes(base64.b64decode(state['raw'][1][key]),'little',signed=True) if key in state['raw'][1] else 0
-                            state['raw'][1].update(stored(account,2,raw_integer(prior+amount),token=token))
+                            state['raw'][1].update(stored(account,2,raw_integer(prior+amount),token=token,authority_epoch=state['account'][13]))
                             if reset:token_anchor[0]=timestamp
-                            state['raw'][2].update(stored(account,3,raw_integer(token_anchor[0]),token=token))
+                            state['raw'][2].update(stored(account,3,raw_integer(token_anchor[0]),token=token,authority_epoch=state['account'][13]))
                         return changed
                     require(driver.state(account)['diagnosticBalances']==[1000,0],'Diagnostic balances not initialized')
                     driver.send('diagnostic-direct-write-denied',token,'moveThenFalse',[H(proxy),H(recipient_address),I(1)],fault='Source witness required')
@@ -308,7 +335,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,advers
                 core('remove-hook-propose','proposeHook',[H(ZERO)],events=[(CORE,'HookChangeProposed')],change=proposal)
                 fast_forward(86401)
                 def removed(state,timestamp):
-                    state['account'][6]=None;state['account'][8]+=1;state['account'][9:]=[None]*4
+                    state['account'][6]=None;state['account'][8]+=1;state['account'][9:13]=[None]*4
                     state['raw']=[{}]*6;state['config']=None;state['spent']=0
                 core('remove-hook-confirm','activateHook',[],events=[(CORE,'HookChanged')],change=removed)
                 require(driver.storage(account)==[{}]*6,'Daily cleanup left account-scoped state');readback()

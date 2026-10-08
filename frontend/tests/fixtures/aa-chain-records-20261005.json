@@ -1,0 +1,173 @@
+{
+  "description": "Recorded chain behaviour used by the CU-06 tests (no keys). Extract of the deployed-bytes run of the AA assessment, 2026-10-05.",
+  "source": {
+    "file": "claudedocs/program/core/aa-evidence-20261005/out/rpc-deployed.json",
+    "sha256": "4541f2e3072f116f12c8e8bcee1d2c7fb1d4dbef3880bb99c8fb6f8286e6eb1d",
+    "variant": "deployed",
+    "observedOn": "2026-10-05T07:00:47Z",
+    "tool": "3.10.1.18+3373db93dd",
+    "networkMagic": 2001762629,
+    "note": "Final deployed-variant run: artifacts = contracts/build (byte-identical to the MainNet core); published neoxp 3.10.1.18; 54 checks, 96 recorded steps (66 transactions executed on the local chain, 21 simulated faults, 6 node-refused transactions); no key material is recorded"
+  },
+  "contracts": {
+    "UnifiedSmartWalletV3": "0xb1bda4a9170b54dd67898ac3f5fd34ea091f15ee",
+    "MockTransferTarget": "0xe1498b74d783c2dd1d8ea1db0c2f5f0eaab55139"
+  },
+  "records": {
+    "ownerWitnessUserOp": {
+      "step": "executeUserOp nonce 0 (owner witness)",
+      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "signers": [
+        "owner"
+      ],
+      "simulation": "HALT",
+      "outcome": "HALT",
+      "gas": 38135050,
+      "events": [
+        "UserOpExecuted"
+      ],
+      "result": true,
+      "txid": "0x6ed18b102560f88760034386cd7816753a804dd9d68e0f75a15d43114d6aa5be",
+      "recordIndex": 23
+    },
+    "gasTransferFromProxyByPlainWallet": {
+      "step": "a. GAS.transfer(proxy->buyer) submitted by a plain wallet (what the web wallet's NEP-17 preset and the relay route produce)",
+      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "signers": [
+        "owner"
+      ],
+      "simulation": "HALT",
+      "outcome": "HALT",
+      "gas": 46813440,
+      "events": [
+        "UserOpExecuted"
+      ],
+      "result": false,
+      "txid": "0x98495a0752971166b3f7dab49460ef91ef9f336e036054f2188cf0e471ebd96a",
+      "recordIndex": 36
+    },
+    "gasTransferProxyWitness": {
+      "step": "c. proxy-witness transaction after the admin set the scope target",
+      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "signers": [
+        "owner",
+        "proxy"
+      ],
+      "simulation": "HALT",
+      "outcome": "HALT",
+      "gas": 45205260,
+      "events": [
+        "Transfer",
+        "UserOpExecuted"
+      ],
+      "result": true,
+      "txid": "0xea43dfd44547a0eb3553020ec6e6252f79c3c1f419aa9c0e6d90c3da060cb349",
+      "recordIndex": 43
+    },
+    "armSessionKey": {
+      "step": "arm setSessionKey for session-relay (24h timelock)",
+      "call": "UnifiedSmartWalletV3.callVerifier",
+      "signers": [
+        "owner"
+      ],
+      "simulation": "HALT",
+      "outcome": "HALT",
+      "gas": 34153200,
+      "events": [],
+      "result": false,
+      "txid": "0x4f549d3b9c32d57b44b4c36ea99e89399c4a0496f3a67759d87be7c29d9c1a35",
+      "recordIndex": 66
+    },
+    "armDailyLimit": {
+      "step": "arm setDailyLimit 5 GAS for the value-flow account",
+      "call": "UnifiedSmartWalletV3.callHook",
+      "signers": [
+        "owner"
+      ],
+      "simulation": "HALT",
+      "outcome": "HALT",
+      "gas": 34148160,
+      "events": [],
+      "result": false,
+      "txid": "0xd65382ac09b39ece8da1e2de0561daafa98025e7cb43aad1e8a071440e537ca3",
+      "recordIndex": 76
+    },
+    "sessionOpSubmittedByRelay": {
+      "step": "relay submits a session-signed op (relay holds no key)",
+      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "signers": [
+        "relay"
+      ],
+      "simulation": "HALT",
+      "outcome": "HALT",
+      "gas": 90383200,
+      "events": [
+        "UserOpExecuted"
+      ],
+      "result": true,
+      "txid": "0xd78537c99eb0198243256793130e632a3947235de345f13021accd4220235461",
+      "recordIndex": 105
+    },
+    "gasTransferSessionProxyWitness": {
+      "step": "relay (fee payer) + proxy witness submit the session-signed 3 GAS transfer; no owner witness, user holds no GAS",
+      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "signers": [
+        "relay",
+        "proxy"
+      ],
+      "simulation": "HALT",
+      "outcome": "HALT",
+      "gas": 244688580,
+      "events": [
+        "Transfer",
+        "UserOpExecuted"
+      ],
+      "result": true,
+      "txid": "0xe0201f163a117cd6492bd2b92498fbe217d0ca1771b8cdde5d970be7a299e110",
+      "recordIndex": 127
+    },
+    "dailyLimitRefusal": {
+      "step": "a second 3 GAS transfer would exceed the 5 GAS daily limit: the hook refuses",
+      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "signers": [
+        "relay",
+        "proxy"
+      ],
+      "simulation": "FAULT",
+      "outcome": "FAULT",
+      "recordIndex": 132
+    }
+  },
+  "relayRoute": {
+    "case1SimulateValidSessionOp": {
+      "case": "1 simulate valid session-signed op",
+      "status": 200,
+      "ok": true,
+      "vmState": "HALT",
+      "gasConsumed": "88628280",
+      "validationPreview": null
+    },
+    "case7BroadcastGaslessOp": {
+      "case": "7 broadcast gasless op (relay pays, user holds no GAS)",
+      "status": 200,
+      "txid": "0xab734b07f3f07ed1fcea5684db4d976546d16d35eb21f53d5a1642c16bf4390e",
+      "systemFee": "88628280",
+      "networkFee": "1369520"
+    },
+    "case8SimulateSessionGasTransfer": {
+      "case": "8 simulate session-signed GAS transfer through the route",
+      "status": 200,
+      "ok": true,
+      "vmState": "HALT",
+      "gasConsumed": "99161590",
+      "stackFirst": false
+    },
+    "case9BroadcastSameTransfer": {
+      "case": "9 broadcast the same transfer through the route",
+      "status": 200,
+      "txid": "0xe9f1d0059acbbf685216f4bf03c45f31be64d04d777b2848d11df2af0814dd79",
+      "systemFee": "99161590",
+      "networkFee": "1371520"
+    }
+  }
+}
