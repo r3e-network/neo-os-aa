@@ -1,9 +1,9 @@
 {
   "variant": "deployed",
   "totals": {
-    "checks": 100,
-    "executedTransactions": 78,
-    "simulatedFaults": 29,
+    "checks": 129,
+    "executedTransactions": 87,
+    "simulatedFaults": 30,
     "nodeRefusals": 6
   },
   "artifacts": [
@@ -194,6 +194,40 @@
         "the relay is made whole on the allowed side too",
         "the sponsor paid the relay's fee again",
         "the allowed side HALTed on chain"
+      ]
+    },
+    {
+      "name": "AA-11 SDK sponsored operation end to end",
+      "checks": [
+        "the SDK sponsor deposit is credited",
+        "the policy records the 5 GAS maxPerOp bound",
+        "the SDK payload carries the inner argument list as 4 typed parameters",
+        "no parameter of the SDK payload is an untyped carrier",
+        "the SDK payload survives a JSON round trip unchanged",
+        "the sponsored envelope faults in the zero-fee pricing container on its settlement cap",
+        "the inner operation is priced cleanly in the same container",
+        "the SDK payload is byte-equivalent to the harness parameter path",
+        "the equivalent invocation reports the gas it priced",
+        "the SDK sponsored operation HALTed on the deployed core",
+        "the core emitted SponsoredUserOpExecuted",
+        "the SDK sponsored operation consumed the account nonce",
+        "the paymaster emitted exactly one Reimbursed event",
+        "the Reimbursed amount is the amount the sponsor deposit lost",
+        "Reimbursed names the sponsor",
+        "Reimbursed names the relay",
+        "the settlement is positive and below the 5 GAS that was requested",
+        "the unrelated sponsor deposit is untouched, so the debit is attributable",
+        "the relay's net position moves by the settlement minus the fee it paid",
+        "the 1 GAS bound refuses the SDK payload on chain",
+        "the refused SDK payload left the deposit untouched",
+        "the refused SDK payload left the account nonce unconsumed",
+        "the refused SDK payload emitted no Reimbursed event",
+        "the refused SDK payload cost the relay its own fee",
+        "the same SDK payload HALTed inside the 6 GAS bound",
+        "the allowed SDK payload settled below the requested amount again",
+        "the relay is made whole on the allowed side of the bound",
+        "the SDK refuses a zero reimbursement request",
+        "the SDK refuses a negative reimbursement request"
       ]
     },
     {

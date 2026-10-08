@@ -203,6 +203,37 @@ class Rx:
         out.pop("notifications", None)
         return out
 
+    def send_params(self, step, signers, contract, method, params, script=None, expect="HALT",
+                    expect_text=None, sysfee_margin=3 * GAS, netfee=3 * GAS, probe_fault_ok=False,
+                    fixed_sysfee=None, onchain_fault=None):
+        """Build, sign and broadcast one transaction whose contract arguments are a ready-made
+        parameter list (the relay-ready JSON shape) instead of harness helpers, and whose script may
+        be supplied by the caller. That is the shape a client produces through the SDK and the shape
+        the relay route forwards, so the same bytes can be driven here as are handed to a relay."""
+        sj = [self._signer_json(s) for s in signers]
+        probe = self.rpc("invokefunction", [contract, method, list(params), sj])
+        rec = {"step": step, "call": f"{self.name_of(contract)}.{method}",
+               "signers": [s.get("w") or ("genesis" if "genesis" in s else "proxy") for s in signers],
+               "simulation": probe.get("state"), "exception": (probe.get("exception") or "")[:240] or None}
+        self.records.append(rec)
+        if expect == "FAULT":
+            if probe.get("state") != "FAULT":
+                rec["outcome"] = "UNEXPECTED-" + str(probe.get("state"))
+                raise Fail(f"{step}: expected a fault but the simulation {probe.get('state')} (result {probe.get('stack')})")
+            if expect_text and expect_text not in (probe.get("exception") or ""):
+                rec["outcome"] = "FAULT-OTHER-REASON"
+                raise Fail(f"{step}: fault text mismatch: {probe.get('exception')}")
+            rec["outcome"] = "FAULT"
+            return rec
+        if probe.get("state") != "HALT" and expect == "HALT" and not probe_fault_ok:
+            rec["outcome"] = "FAULT"
+            raise Fail(f"{step}: simulation faulted: {probe.get('exception')}")
+        chosen = script if script is not None else base64.b64decode(probe["script"])
+        gas = int(probe.get("gasconsumed", 0))
+        out = self._broadcast(rec, signers, sj, chosen, fixed_sysfee if fixed_sysfee is not None else gas + sysfee_margin, netfee, expect, onchain_fault)
+        out.pop("notifications", None)
+        return out
+
     def _broadcast(self, rec, signers, sj, script, sysfee, netfee, expect="HALT", onchain_fault=None):
         height = self.rpc("getblockcount", [])
         nonce = int.from_bytes(os.urandom(4), "little")

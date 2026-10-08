@@ -19,6 +19,10 @@ EXPECTED = AA / "tests/localchain/expected-deployed.json"
 EXPECTED_SOURCE = AA / "tests/localchain/expected-source.json"
 SOURCE_FAULT_MARKER = srcbuild.FAULT_MARKER
 NAMES = ["deployer", "owner", "buyer", "merchant", "relay", "sponsor", "stranger"]
+# The SDK fixture is a Node program: it composes the sponsored invocation with the SDK's own payload
+# builder instead of the harness helpers (AA-11).
+NODE = os.environ.get("NODE") or shutil.which("node") or "node"
+
 TL = 604800  # 7 days: the minimum escape timelock
 
 
@@ -441,6 +445,179 @@ def sc_paymaster(c, x):
     return {"relayNet": relay_after - relay_before, "depositDebit": dep_before - dep_after,
             "settled": settled, "requested": requested, "allowedRelayNet": c.gas("relay") - relay_before2,
             "prePricingSimulation": x.sponsored_probe_state}
+
+
+def sc_sdk_sponsored(c, x):
+    """AA-11 the SDK sponsored-operation end to end on the deployed core.
+
+    The invocation is composed by the SDK's own payload builder (scripts/localchain/sdk_paymaster_fixture.mjs)
+    rather than by the harness, then driven through the deployed core exactly as a relay would receive it.
+    The scenario also records the two halves of the sponsorship bound: the pricing container cannot price the
+    sponsored envelope at all, while the inner operation prices cleanly, and the settlement on chain pays the
+    relay the fee it actually paid, never the amount it requested."""
+    c.records.append({"scenario": "AA-11 SDK sponsored operation end to end (payload built by the SDK)"})
+    core, pm, target, sess_v = x.core, c.contracts["AAPaymaster"], c.contracts["MockTransferTarget"], c.contracts["SessionKeyVerifier"]
+    buyer, sponsor = c.hashes["buyer"], c.hashes["sponsor"]
+    x.sesskey = v.P256Key(x.workdir, "session")
+    x.valid_until = c.now_ms() + 20 * DAY * 1000
+    acct, proxy = x.register("session-sdk", verifier=sess_v)
+    sess_args = [H(acct), B(x.sesskey.compressed), H(target), S("transfer"), I(x.valid_until), I(0), S("session-sdk")]
+    c.send("arm setSessionKey for the SDK account (24 h timelock)", [{"w": "owner"}], core, "callVerifier",
+           [H(acct), S("setSessionKey"), A(*sess_args)])
+    c.fastforward(DAY + 3600)
+    c.send("execute setSessionKey for the SDK account", [{"w": "owner"}], core, "callVerifier",
+           [H(acct), S("setSessionKey"), A(*sess_args)])
+    c.send("sponsor deposits 100 GAS into the paymaster", [{"w": "sponsor"}], GAS_HASH, "transfer",
+           [H(sponsor), H(pm), I(100 * GAS), B(b"")])
+    c.check(c.read(pm, "getSponsorDeposit", H(sponsor)) == 100 * GAS, "the SDK sponsor deposit is credited")
+    c.send("sponsor binds a 5 GAS per-operation policy for the SDK account", [{"w": "sponsor"}], pm, "setPolicy",
+           [H(acct), H(target), S("transfer"), I(5 * GAS), I(0), I(0), I(0)])
+    c.check(c.read(pm, "getPolicy", H(sponsor), H(acct))[3] == 5 * GAS, "the policy records the 5 GAS maxPerOp bound")
+    # The second sponsor is the attribution control: nothing in this scenario may touch its deposit.
+    c.send("an unrelated sponsor deposits 10 GAS", [{"w": "buyer"}], GAS_HASH, "transfer",
+           [H(buyer), H(pm), I(10 * GAS), B(b"")])
+    control_before = c.read(pm, "getSponsorDeposit", H(buyer))
+    requested = 5 * GAS
+    ar = [H(proxy), H(buyer), I(1000), B(b"")]
+    inner_script = None
+
+    def sdk_payload(nonce, args=None, amount=requested, overrides=None):
+        """Compose the sponsored invocation with the SDK and return (stdout json, exit code)."""
+        body = {"rpcUrl": f"http://127.0.0.1:{c.port}", "core": core, "accountId": acct, "target": target,
+                "method": "transfer", "args": list(args if args is not None else ar), "nonce": nonce,
+                "deadline": FAR_DEADLINE, "signatureHex": "", "paymaster": pm, "sponsor": sponsor,
+                "reimbursementAmount": amount}
+        if args is None:
+            sig_args = [H(proxy), H(buyer), I(1000), B(b"")]
+            payload = c.read(sess_v, "getPayload", H(acct), H(target), S("transfer"), A(*sig_args), I(nonce), I(FAR_DEADLINE))
+            body["signatureHex"] = x.sesskey.sign(payload).hex()
+        body.update(overrides or {})
+        request_path = c.workdir / f"sdk-request-{nonce}-{amount}.json"
+        request_path.write_text(json.dumps(body))
+        done = subprocess.run([NODE, str(AA / "scripts/localchain/sdk_paymaster_fixture.mjs"), str(request_path)],
+                              capture_output=True, text=True, cwd=str(AA), timeout=180)
+        try:
+            return json.loads(done.stdout.strip().splitlines()[-1]), done.returncode
+        except Exception:
+            raise Fail(f"the SDK fixture produced no JSON (exit {done.returncode}): {done.stderr[-300:]}")
+
+    def harness_params(nonce, args=None, amount=requested):
+        sig_args = list(args if args is not None else ar)
+        payload = c.read(sess_v, "getPayload", H(acct), H(target), S("transfer"), A(*sig_args), I(nonce), I(FAR_DEADLINE))
+        op = A(H(target), S("transfer"), A(*sig_args), I(nonce), I(FAR_DEADLINE), B(x.sesskey.sign(payload)))
+        return [H(acct), op, H(pm), H(sponsor), I(amount)]
+
+    # 1. The SDK builder produces a relay-ready invocation: typed arguments, no untyped carrier.
+    first, exit_code = sdk_payload(0)
+    if not first.get("ok"):
+        raise Fail(f"the SDK refused a valid sponsored payload: {first.get('error')}")
+    shape = first.get("argsParameter") or {}
+    c.check(exit_code == 0 and shape.get("type") == "Array" and shape.get("value") == 4
+            and shape.get("types") == ["Hash160", "Hash160", "Integer", "ByteArray"],
+            "the SDK payload carries the inner argument list as 4 typed parameters")
+    inner = ((first.get("payload") or {}).get("args") or [None, None])[1]
+    encoded = json.dumps(inner)
+    c.check('"Any"' not in encoded, "no parameter of the SDK payload is an untyped carrier")
+    c.check(encoded == json.dumps(json.loads(encoded)), "the SDK payload survives a JSON round trip unchanged")
+    c.records.append({"step": "the SDK payload for nonce 0 (what a relay receives)", "payload": first.get("payload")})
+
+    # 2. The two halves of the bound in the pricing container: the sponsored envelope cannot be priced there,
+    # the inner operation can, and the fault text names the deployed core's settlement cap.
+    sponsored_probe = c.rpc("invokescript", [first["script"], [c._signer_json({"w": "relay"})]])
+    c.check(sponsored_probe.get("state") == "FAULT"
+            and "Reimbursement exceeds actual gas cost" in (sponsored_probe.get("exception") or ""),
+            "the sponsored envelope faults in the zero-fee pricing container on its settlement cap")
+    inner_probe = c.rpc("invokefunction", [core, "executeUserOp", harness_params(0)[:2], [c._signer_json({"w": "relay"})]])
+    c.check(inner_probe.get("state") == "HALT", "the inner operation is priced cleanly in the same container")
+    c.records.append({"step": "the two containers a relay can price a sponsored operation from",
+                      "sponsoredGasConsumed": sponsored_probe.get("gasconsumed"),
+                      "sponsoredException": (sponsored_probe.get("exception") or "")[:200],
+                      "innerGasConsumed": inner_probe.get("gasconsumed")})
+
+    # 3. The SDK payload is the invocation the harness parameter path produces: same container, same outcome,
+    # same gas, so the payload the chain executes is the one the client built.
+    harness_probe = c.rpc("invokefunction", [core, "executeSponsoredUserOp", harness_params(0), [c._signer_json({"w": "relay"})]])
+    c.check(harness_probe.get("state") == sponsored_probe.get("state")
+            and harness_probe.get("gasconsumed") == sponsored_probe.get("gasconsumed")
+            and (harness_probe.get("exception") or "") == (sponsored_probe.get("exception") or ""),
+            "the SDK payload is byte-equivalent to the harness parameter path")
+    c.check(int(harness_probe.get("gasconsumed") or 0) > 0,
+            "the equivalent invocation reports the gas it priced")
+
+    # 4. The broadcast: the SDK script with fixed fees, and the settlement the sponsor actually pays.
+    fixed_fee = GAS * 5 // 2 + GAS // 2   # 2.5 GAS system fee + 0.5 GAS network fee
+    nonce_before = x.nonce(acct)
+    dep_before, relay_before = c.read(pm, "getSponsorDeposit", H(sponsor)), c.gas("relay")
+    rec = c.send_params("broadcast the SDK sponsored payload (fixed 2.5 GAS system fee, 0.5 GAS network fee)",
+                        [{"w": "relay"}], core, "executeSponsoredUserOp", harness_params(0),
+                        script=base64.b64decode(first["script"]), probe_fault_ok=True,
+                        fixed_sysfee=GAS * 5 // 2, netfee=GAS // 2)
+    dep_after, relay_after = c.read(pm, "getSponsorDeposit", H(sponsor)), c.gas("relay")
+    settled = dep_before - dep_after
+    log = c.rpc("getapplicationlog", [rec["txid"]])["executions"][0]
+    reimb = [n for n in log.get("notifications", []) if n["eventname"] == "Reimbursed"]
+    c.check(rec.get("outcome") == "HALT", "the SDK sponsored operation HALTed on the deployed core")
+    c.check("SponsoredUserOpExecuted" in rec.get("events", []), "the core emitted SponsoredUserOpExecuted")
+    c.check(x.nonce(acct) == nonce_before + 1, "the SDK sponsored operation consumed the account nonce")
+    c.check(len(reimb) == 1, "the paymaster emitted exactly one Reimbursed event")
+    fields = reimb[0]["state"]["value"] if reimb else []
+    c.check(len(fields) > 3 and int(fields[3]["value"]) == settled,
+            "the Reimbursed amount is the amount the sponsor deposit lost")
+    c.check(_event_hash(fields[0]) == sponsor if fields else False, "Reimbursed names the sponsor")
+    c.check(_event_hash(fields[2]) == c.hashes["relay"] if len(fields) > 2 else False, "Reimbursed names the relay")
+    c.check(0 < settled < requested, "the settlement is positive and below the 5 GAS that was requested")
+    c.check(c.read(pm, "getSponsorDeposit", H(buyer)) == control_before,
+            "the unrelated sponsor deposit is untouched, so the debit is attributable")
+    c.check(relay_after - relay_before == settled - fixed_fee,
+            "the relay's net position moves by the settlement minus the fee it paid")
+    c.records.append({"step": "settlement of the SDK sponsored operation", "requestedDatoshi": requested,
+                      "settledDatoshi": settled, "relayNetDatoshi": relay_after - relay_before,
+                      "feePaidDatoshi": fixed_fee, "gasConsumed": rec.get("gas"),
+                      "innerGasConsumed": inner_probe.get("gasconsumed"),
+                      "reimbursed": int(fields[3]["value"]) if len(fields) > 3 else None})
+
+    # 5. The bound below the real fee refuses on chain and moves nothing; above it, the same payload settles.
+    c.send("sponsor re-binds the policy to a 1 GAS per-operation bound", [{"w": "sponsor"}], pm, "setPolicy",
+           [H(acct), H(target), S("transfer"), I(1 * GAS), I(0), I(0), I(0)])
+    dep_probe, relay_probe = c.read(pm, "getSponsorDeposit", H(sponsor)), c.gas("relay")
+    nonce_probe = x.nonce(acct)
+    refused, exit_code = sdk_payload(nonce_probe)
+    if not refused.get("ok"):
+        raise Fail(f"the SDK refused a well-formed payload: {refused.get('error')}")
+    refused_rec = c.send_params("broadcast the SDK payload whose settlement exceeds the 1 GAS bound",
+                                [{"w": "relay"}], core, "executeSponsoredUserOp", harness_params(nonce_probe),
+                                script=base64.b64decode(refused["script"]), probe_fault_ok=True,
+                                fixed_sysfee=GAS * 5 // 2, netfee=GAS // 2, onchain_fault="Exceeds per-operation limit")
+    c.check(refused_rec.get("outcome") == "FAULT" and refused_rec.get("onChain") is True,
+            "the 1 GAS bound refuses the SDK payload on chain")
+    c.check(c.read(pm, "getSponsorDeposit", H(sponsor)) == dep_probe, "the refused SDK payload left the deposit untouched")
+    c.check(x.nonce(acct) == nonce_probe, "the refused SDK payload left the account nonce unconsumed")
+    c.check(_notification(c, refused_rec["txid"], "Reimbursed") is None, "the refused SDK payload emitted no Reimbursed event")
+    c.check(c.gas("relay") == relay_probe - fixed_fee, "the refused SDK payload cost the relay its own fee")
+    c.send("sponsor re-binds the policy to a 6 GAS per-operation bound", [{"w": "sponsor"}], pm, "setPolicy",
+           [H(acct), H(target), S("transfer"), I(6 * GAS), I(0), I(0), I(0)])
+    allowed, exit_code = sdk_payload(nonce_probe)
+    if not allowed.get("ok"):
+        raise Fail(f"the SDK refused a well-formed payload: {allowed.get('error')}")
+    dep_allowed, relay_allowed = c.read(pm, "getSponsorDeposit", H(sponsor)), c.gas("relay")
+    allowed_rec = c.send_params("the same SDK payload settles inside the 6 GAS bound",
+                                [{"w": "relay"}], core, "executeSponsoredUserOp", harness_params(nonce_probe),
+                                script=base64.b64decode(allowed["script"]), probe_fault_ok=True,
+                                fixed_sysfee=GAS * 5 // 2, netfee=GAS // 2)
+    allowed_settled = dep_allowed - c.read(pm, "getSponsorDeposit", H(sponsor))
+    c.check(allowed_rec.get("outcome") == "HALT", "the same SDK payload HALTed inside the 6 GAS bound")
+    c.check(0 < allowed_settled < requested, "the allowed SDK payload settled below the requested amount again")
+    c.check(c.gas("relay") - relay_allowed == allowed_settled - fixed_fee,
+            "the relay is made whole on the allowed side of the bound")
+
+    # 6. The SDK refuses a zero or negative sponsorship request before anything is built.
+    for label, amount in (("zero", 0), ("negative", -1)):
+        body, exit_code = sdk_payload(nonce_probe, amount=amount)
+        c.check(exit_code != 0 and body.get("ok") is not True, f"the SDK refuses a {label} reimbursement request")
+
+    return {"sdkScriptSimulation": sponsored_probe.get("state"), "settled": settled, "requested": requested,
+            "innerGasConsumed": inner_probe.get("gasconsumed"), "sponsoredGasConsumed": rec.get("gas"),
+            "argumentTypes": shape.get("types")}
 
 
 def sc_timelock_boundaries(c, x):
@@ -949,6 +1126,7 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
         attempt("AA-07b social recovery phase 2", sc_recovery_phase2, c, x)
         attempt("AA-03b value flow (session key + proxy witness + daily limit)", sc_value_flow, c, x)
         attempt("AA-08 on-chain paymaster", sc_paymaster, c, x)
+        attempt("AA-11 SDK sponsored operation end to end", sc_sdk_sponsored, c, x)
         attempt("AA-09 relay route", sc_relay_route, c, x)
         receipt["status"] = "DONE"
     except Exception as e:
