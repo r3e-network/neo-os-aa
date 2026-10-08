@@ -24,8 +24,9 @@
     "test:operator-recovery:browser": "node --test tests/operatorKeyRecovery.browser.mjs",
     "test:native:browser": "node --test tests/nativeWorkspace.browser.mjs",
     "prebuild": "node scripts/sync-native-shared.mjs",
-    "audit:all": "npm audit --audit-level=moderate",
-    "test:web3auth:browser": "node --test tests/web3AuthPackage.browser.mjs"
+    "audit:all": "node ../scripts/check_frontend_audit_allowlist.mjs --all",
+    "test:web3auth:browser": "node --test tests/web3AuthPackage.browser.mjs",
+    "test:docs-security:browser": "node --test tests/docsDependencySecurity.browser.mjs"
   },
   "dependencies": {
     "@cityofzion/neon-js": "5.9.0",
@@ -60,7 +61,7 @@
       ".": "5.9.0",
       "lodash": "4.18.1"
     },
-    "dompurify": "3.4.15",
+    "dompurify": "3.4.16",
     "js-cookie": "3.0.8",
     "postcss": "8.5.28",
     "h3": {
@@ -91,6 +92,9 @@
     "source-map-js": "1.2.2",
     "@tailwindcss/typography": {
       "postcss-selector-parser": "7.1.6"
+    },
+    "mermaid": {
+      "katex": "0.18.2"
     }
   }
 }
