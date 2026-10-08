@@ -34,7 +34,16 @@ namespace AbstractAccount.Verifiers
         public static bool SupportsV3() => true;
 
         [Safe]
+        public static bool SupportsComposition() => false;
+
+        [Safe]
         public static bool SupportsMessageSignatures() => false;
+
+        // Subscription authorization is a dynamic merchant-witness policy selected by
+        // the subscription id in the operation. It is intentionally not a child of the
+        // static threshold-composition profile in version 1.
+        [Safe]
+        public static ByteString[] GetSignerDomains(UInt160 accountId) => new ByteString[] { };
 
         [Safe]
         public static UInt160 AuthorizedCore() => VerifierAuthority.AuthorizedCore();

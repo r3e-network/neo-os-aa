@@ -15,8 +15,13 @@ namespace AbstractAccount.Verifiers
     /// signature checking without any external crypto calls.
     /// </summary>
     [DisplayName("NeoNativeVerifier")]
+#if SMARTACCOUNT_NATIVE
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext")]
+    [ManifestExtra("SmartAccountProfile", "native-v1")]
+#else
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "computeArgsHash")]
+#endif
     [ManifestExtra("Description", "Neo N3 Native Witness Verifier Plugin")]
     public class NeoNativeVerifier : SmartContract
     {
@@ -30,6 +35,9 @@ namespace AbstractAccount.Verifiers
 
         [Safe]
         public static bool SupportsV3() => true;
+
+        [Safe]
+        public static bool SupportsComposition() => false;
 
         [Safe]
         public static bool SupportsMessageSignatures() => false;
@@ -106,7 +114,24 @@ namespace AbstractAccount.Verifiers
             return data == null ? 0 : (int)(BigInteger)data!;
         }
 
+        [Safe]
+        public static ByteString[] GetSignerDomains(UInt160 accountId)
+        {
+            NativeVerifierConfig? config = GetConfig(accountId);
+            ExecutionEngine.Assert(config != null, "No NeoNativeVerifier config");
+            ByteString[] domains = new ByteString[config!.Signers.Length];
+            for (int i = 0; i < config.Signers.Length; i++)
+            {
+                domains[i] = SignerDomain.NativeScript(config.Signers[i]);
+            }
+            return domains;
+        }
+
+#if SMARTACCOUNT_NATIVE
+        public static void PostExecute(UInt160 accountId, object[] op, object result)
+#else
         public static void PostExecute(UInt160 accountId, UserOperation op, object result)
+#endif
         {
             // Invariant (audit low): every exec path validates its caller, even a
             // no-op — future logic added here is guarded by construction.
@@ -121,7 +146,24 @@ namespace AbstractAccount.Verifiers
         /// The UserOperation's Signature field is NOT used - instead, Neo's native
         /// transaction witnesses are checked via Runtime.CheckWitness.
         /// </remarks>
+#if SMARTACCOUNT_NATIVE
+        public static bool ValidateSignature(UInt160 accountId, object[] op)
+        {
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "validation");
+            return ValidateNativeWitnesses(accountId);
+        }
+
+        [Safe]
+        public static bool ValidateSignatureForPostExecute(UInt160 accountId, object[] fields)
+        {
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "postExecute");
+            return ValidateNativeWitnesses(accountId);
+        }
+
+        private static bool ValidateNativeWitnesses(UInt160 accountId)
+#else
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
+#endif
         {
             byte[] key = Helper.Concat(Prefix_AuthorizedSigners, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
@@ -145,7 +187,11 @@ namespace AbstractAccount.Verifiers
 
         public static void ClearAccount(UInt160 accountId)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "cleanup");
+#else
             VerifierAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
+#endif
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_AuthorizedSigners, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_Threshold, (byte[])accountId));
         }

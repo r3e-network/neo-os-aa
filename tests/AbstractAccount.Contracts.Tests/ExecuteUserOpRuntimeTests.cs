@@ -220,6 +220,102 @@ public class ExecuteUserOpRuntimeTests
     }
 
     [TestMethod]
+    public void ExecuteUserOp_HookCallbackUsesIndependentBoundedBudget()
+    {
+        WalletHarness h = new();
+        UInt160 hook = h.Target;
+        UInt160 accountId = h.Fx.CallUInt160(
+            h.Wallet, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), hook, BackupOwner, EscapeTimelockSeconds);
+
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(
+            h.Wallet, "registerAccount",
+            accountId, UInt160.Zero, Array.Empty<byte>(), hook, BackupOwner, EscapeTimelockSeconds);
+        h.Fx.SetSigners(h.Fx.Engine.ValidatorsAddress);
+        h.Fx.CallVoid(h.Target, "setBurnGas", true);
+        h.Fx.SetSigners(BackupOwner);
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteUserOp(accountId, h.TransferOp(accountId, 0, h.Fx.Now() + 3_600_000)));
+        StringAssert.Contains(rejected.Message, "gas limit");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0),
+            "Hook exhaustion must roll back nonce consumption");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", accountId));
+    }
+
+    [TestMethod]
+    public void ExecuteUserOp_HookPostCallbackUsesIndependentBoundedBudget()
+    {
+        WalletHarness h = new();
+        UInt160 hook = h.Target;
+        UInt160 accountId = h.Fx.CallUInt160(
+            h.Wallet, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), hook, BackupOwner, EscapeTimelockSeconds);
+
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(
+            h.Wallet, "registerAccount",
+            accountId, UInt160.Zero, Array.Empty<byte>(), hook, BackupOwner, EscapeTimelockSeconds);
+        h.Fx.SetSigners(h.Fx.Engine.ValidatorsAddress);
+        h.Fx.CallVoid(h.Target, "setBurnPostGas", true);
+        h.Fx.SetSigners(BackupOwner);
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteUserOp(accountId, h.TransferOp(accountId, 0, h.Fx.Now() + 3_600_000)));
+        StringAssert.Contains(rejected.Message, "gas limit");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0),
+            "Post-hook exhaustion must roll back nonce consumption");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", accountId));
+    }
+
+    [TestMethod]
+    public void ExecuteUserOp_VerifierPostCallbackUsesIndependentBoundedBudget()
+    {
+        WalletHarness h = new();
+        UInt160 accountId = h.RegisterAccount(h.Core, BackupOwner, EscapeTimelockSeconds);
+
+        h.Fx.SetSigners(h.Fx.Engine.ValidatorsAddress);
+        h.Fx.CallVoid(h.Core, "setBurnPostGas", true);
+        h.Fx.SetSigners(BackupOwner);
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteUserOp(accountId, h.TransferOp(accountId, 0, h.Fx.Now() + 3_600_000)));
+        StringAssert.Contains(rejected.Message, "gas limit");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0),
+            "Verifier post-callback exhaustion must roll back nonce consumption");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", accountId));
+    }
+
+    [TestMethod]
+    public void ModuleCleanupCallbackUsesIndependentMaintenanceBudget()
+    {
+        WalletHarness h = new();
+        UInt160 accountId = h.Fx.CallUInt160(
+            h.Wallet, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), h.Target, BackupOwner, EscapeTimelockSeconds);
+
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(
+            h.Wallet, "registerAccount",
+            accountId, UInt160.Zero, Array.Empty<byte>(), h.Target, BackupOwner, EscapeTimelockSeconds);
+
+        h.Fx.SetSigners(h.Fx.Engine.ValidatorsAddress);
+        h.Fx.CallVoid(h.Target, "setBurnClearGas", true);
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(h.Wallet, "updateHook", accountId, UInt160.Zero);
+        h.Fx.AdvanceTime(TimeSpan.FromDays(1));
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Wallet, "confirmHookUpdate", accountId));
+        StringAssert.Contains(rejected.Message, "gas limit");
+        Assert.AreEqual(h.Target, h.Fx.CallUInt160(h.Wallet, "getHook", accountId),
+            "Maintenance-budget exhaustion must preserve the old hook binding");
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "hasPendingHookUpdate", accountId),
+            "Maintenance-budget exhaustion must preserve the pending transition");
+    }
+
+    [TestMethod]
     public void ExecuteUserOp_RejectsOversizedSignatureBeforeVerifierCall()
     {
         using P256SessionKey key = new();

@@ -16,9 +16,15 @@ namespace AbstractAccount.Hooks
     /// the rest of the AA account remains broadly usable.
     /// </remarks>
     [DisplayName("TokenRestrictedHook")]
+#if SMARTACCOUNT_NATIVE
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAccountAddress")]
+    [ContractPermission("*", "balanceOf")]
+    [ManifestExtra("SmartAccountProfile", "native-v1")]
+#else
     [ContractPermission("*", "canExecuteHook")]
     [ContractPermission("*", "canConfigureHook")]
     [ContractPermission("*", "getProxyScriptHash")]
+#endif
     [ManifestExtra("Description", "Hook to restrict interacting with specific high-value tokens")]
     public class TokenRestrictedHook : SmartContract
     {
@@ -31,6 +37,9 @@ namespace AbstractAccount.Hooks
 
         [Safe]
         public static bool SupportsV3() => true;
+
+        [Safe]
+        public static bool SupportsComposition() => false;
 
         [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
@@ -60,6 +69,9 @@ namespace AbstractAccount.Hooks
         public static void SetRestrictedToken(UInt160 accountId, UInt160 token, bool isRestricted)
         {
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
+#if SMARTACCOUNT_NATIVE
+            ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid restricted token");
+#endif
             byte[] key = Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId);
             key = Helper.Concat(key, (byte[])token);
             
@@ -70,6 +82,9 @@ namespace AbstractAccount.Hooks
             else
             {
                 Storage.Delete(Storage.CurrentContext, key);
+#if SMARTACCOUNT_NATIVE
+                Storage.Delete(Storage.CurrentContext, SnapshotKey(accountId, token));
+#endif
             }
         }
 
@@ -78,7 +93,13 @@ namespace AbstractAccount.Hooks
         /// </summary>
         public static void PreExecute(UInt160 accountId, object[] opParams)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "preExecute");
+            ExecutionEngine.Assert(opParams.Length == 6 && opParams[0] is ByteString && ((ByteString)opParams[0]).Length == 20,
+                "Invalid native operation shape");
+#else
             HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+#endif
 
             // Audit fix M-5: snapshot every restricted token's balance BEFORE the op runs. The
             // direct-target check below only sees op.TargetContract, so a call routed through a
@@ -99,7 +120,11 @@ namespace AbstractAccount.Hooks
 
         public static void PostExecute(UInt160 accountId, object[] opParams, object result)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "postExecute");
+#else
             HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+#endif
             // Audit fix M-5: a restricted token's balance must not have decreased during the op,
             // no matter which contract was called directly.
             EnforceRestrictedBalances(accountId);
@@ -116,11 +141,24 @@ namespace AbstractAccount.Hooks
         {
             UInt160 core = HookAuthority.AuthorizedCore();
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "authorized core not set");
+#if SMARTACCOUNT_NATIVE
+            return (UInt160)Contract.Call(core, "getAccountAddress", CallFlags.ReadOnly, accountId);
+#else
             return (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId);
+#endif
         }
 
+#if SMARTACCOUNT_NATIVE
+        private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account)
+        {
+            object value = Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
+            ExecutionEngine.Assert(value is BigInteger && (BigInteger)value >= 0, "Invalid restricted token balance");
+            return (BigInteger)value;
+        }
+#else
         private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account) =>
             (BigInteger)Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
+#endif
 
         /// <summary>
         /// Records the account's current balance of every restricted token so PostExecute can
@@ -150,8 +188,14 @@ namespace AbstractAccount.Hooks
             {
                 UInt160 token = (UInt160)(ByteString)iterator.Value;
                 ByteString snapKey = SnapshotKey(accountId, token);
+#if SMARTACCOUNT_NATIVE
+                ByteString? raw = Storage.Get(Storage.CurrentContext, snapKey);
+                ExecutionEngine.Assert(raw != null, "Missing restricted balance snapshot");
+                BigInteger before = (BigInteger)raw!;
+#else
                 ByteString raw = Storage.Get(Storage.CurrentContext, snapKey);
                 BigInteger before = raw == null ? 0 : (BigInteger)raw;
+#endif
                 BigInteger after = TokenBalanceOf(token, AssetAddressOf(accountId));
                 Storage.Delete(Storage.CurrentContext, snapKey);
                 ExecutionEngine.Assert(after >= before, "Restricted token outflow (incl. via intermediary) is forbidden");
@@ -160,6 +204,11 @@ namespace AbstractAccount.Hooks
 
         public static void ClearAccount(UInt160 accountId)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "cleanup");
+            ClearPrefix(Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId));
+            ClearPrefix(Helper.Concat(Prefix_RestrictedSnapshot, (byte[])accountId));
+#else
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
 
             byte[] prefix = Helper.Concat(Prefix_RestrictedTokens, (byte[])accountId);
@@ -168,6 +217,16 @@ namespace AbstractAccount.Hooks
             {
                 Storage.Delete(Storage.CurrentContext, (ByteString)iterator.Value);
             }
+#endif
         }
+
+#if SMARTACCOUNT_NATIVE
+        private static void ClearPrefix(byte[] prefix)
+        {
+            Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly);
+            while (iterator.Next())
+                Storage.Delete(Storage.CurrentContext, (ByteString)iterator.Value);
+        }
+#endif
     }
 }

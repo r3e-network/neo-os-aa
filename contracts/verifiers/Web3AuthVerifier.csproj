@@ -15,6 +15,7 @@
   <ItemGroup>
     <Compile Include="VerifierAuthority.cs" />
     <Compile Include="VerifierModels.cs" />
+    <Compile Include="SignerDomain.cs" />
     <Compile Include="Web3AuthVerifier.cs" />
   </ItemGroup>
 

@@ -23,6 +23,19 @@ namespace AbstractAccount
         // including nested verifier calls; NeoVM enforces the ancestor budget transitively.
         private const long VerifierGasLimit = 1_000_000_000;
 
+        // Hook callbacks run in the application trigger and therefore use a separate
+        // profile budget.  This is deliberately independent from the verifier budget:
+        // a policy hook must not be able to consume the verifier's verification envelope,
+        // and an untrusted hook must not inherit the full enclosing transaction budget.
+        // Nested calls from the hook inherit this ancestor budget transitively.
+        private const long HookGasLimit = 250_000_000;
+
+        // Lifecycle and discovery calls are also untrusted module callbacks. They
+        // run outside UserOperation execution, but an installed module must not be
+        // able to consume the entire enclosing transaction while it is being
+        // inspected, configured, rotated, or cleaned up.
+        private const long ModuleMaintenanceGasLimit = 250_000_000;
+
         // ========================================================================
         // 3. Core Routing: Validation and Execution (aligned with 4337 Validate & Call)
         // ========================================================================
@@ -101,10 +114,11 @@ namespace AbstractAccount
                     SetHookExecutionContext(accountId, state.HookId);
                     try
                     {
-                        Contract.Call(
+                        Contract.CallWithGasLimit(
                             state.HookId,
                             "preExecute",
                             CallFlags.All,
+                            HookGasLimit,
                             new object[] { accountId, BuildHookOperationParams(op) });
                     }
                     catch
@@ -125,10 +139,11 @@ namespace AbstractAccount
                     // [Hook phase] post-execution hook
                     if (state.HookId != UInt160.Zero)
                     {
-                        Contract.Call(
+                        Contract.CallWithGasLimit(
                             state.HookId,
                             "postExecute",
                             CallFlags.All,
+                            HookGasLimit,
                             new object[] { accountId, BuildHookOperationParams(op), result });
                     }
                     if (state.Verifier != UInt160.Zero)

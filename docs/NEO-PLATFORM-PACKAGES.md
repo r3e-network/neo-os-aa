@@ -1,5 +1,27 @@
 # Private Neo platform packages (R-11 / N-DEP-1)
 
+## Current private-runtime revalidation (2026-10-06)
+
+The installed public `neoxp` runner remains incompatible with the SmartAccount
+artifact: a fresh run faults when the VM resolves the
+`System.Contract.CallWithGasLimit` interop hash. This is a runner/runtime
+mismatch, not evidence that the callback cap is optional, and the failed receipt
+is retained separately from release evidence at
+`docs/reports/aa-neoexpress-validation-20261006-v2.json`.
+
+An independent local NeoExpress build linked to the matching private Neo runtime
+packages was then run against the current artifacts. It deployed 25 contracts,
+completed all 14 scenarios with no skipped scenario, persisted 108 transactions,
+and read back all 25 NEF/manifest pairs. The release-eligible receipt is
+`docs/reports/aa-neoexpress-validation-20261006-custom-did.json`; runner source,
+package hashes, and the temporary API-adapter boundary are recorded in
+`docs/reports/aa-neoexpress-runner-provenance-20261006.json`.
+
+This closes the private NeoExpress execution/readback evidence for the matching
+runtime. It does not alter the separate owner action for making the private
+packages reproducibly available to clean CI, and it does not establish public
+network activation or deployment parity.
+
 Status on 2026-09-28: **known red, owner action required.** A clean CI runner cannot restore
 the packages that `contracts/Directory.Build.props` pins, so the contract build, the contract
 tests and the deploy-tool tests do not run in CI. The `Check pinned Neo platform packages`

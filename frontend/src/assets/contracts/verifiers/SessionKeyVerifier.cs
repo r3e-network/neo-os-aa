@@ -17,10 +17,15 @@ namespace AbstractAccount.Verifiers
     /// call only one contract and one method until a fixed expiry time.
     /// </remarks>
     [DisplayName("SessionKeyVerifier")]
+#if SMARTACCOUNT_NATIVE
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorizationDomain", "getOperationDigest", "getAccountAddress")]
+    [ManifestExtra("SmartAccountProfile", "native-v1")]
+#else
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ContractPermission("*", "getBackupOwner")]
+#endif
     [ManifestExtra("Description", "Temporary Session Key Verifier for High Frequency Actions")]
     [ManifestExtra("Version", "2.0.0")]
     public class SessionKeyVerifier : SmartContract
@@ -63,6 +68,9 @@ namespace AbstractAccount.Verifiers
 
         [Safe]
         public static bool SupportsV3() => true;
+
+        [Safe]
+        public static bool SupportsComposition() => false;
 
         [Safe]
         public static bool SupportsMessageSignatures() => false;
@@ -201,6 +209,14 @@ namespace AbstractAccount.Verifiers
         }
 
         [Safe]
+        public static ByteString[] GetSignerDomains(UInt160 accountId)
+        {
+            SessionKeyData? sessionKey = GetSessionKey(accountId);
+            ExecutionEngine.Assert(sessionKey != null, "No session key active");
+            return new ByteString[] { SignerDomain.Secp256r1(sessionKey!.PubKey) };
+        }
+
+        [Safe]
         public static BigInteger GetSpentAmount(UInt160 accountId)
         {
             byte[] key = Helper.Concat(Prefix_SpentAmount, (byte[])accountId);
@@ -210,7 +226,16 @@ namespace AbstractAccount.Verifiers
 
         public static void ClearAccount(UInt160 accountId)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "cleanup");
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_SessionKeys, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_SessionMetadata, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_SpentAmount, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_LastKeyRotation, (byte[])accountId));
+            OnSessionKeyRevoked(accountId);
+#else
             ClearSessionKey(accountId);
+#endif
         }
 
         [Safe]
@@ -225,13 +250,35 @@ namespace AbstractAccount.Verifiers
         /// <summary>
         /// Validates the delegated session signature and enforces its contract/method/expiry scope.
         /// </summary>
+#if SMARTACCOUNT_NATIVE
+        public static bool ValidateSignature(UInt160 accountId, object[] fields)
+        {
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "validation");
+            return ValidateNativeSignature(accountId, NativeOperation.Decode(fields));
+        }
+
+        [Safe]
+        public static bool ValidateSignatureForPostExecute(UInt160 accountId, object[] fields)
+        {
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "postExecute");
+            return ValidateNativeSignature(accountId, NativeOperation.Decode(fields));
+        }
+
+        private static bool ValidateNativeSignature(UInt160 accountId, UserOperation op)
+        {
+#else
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
+#endif
             SessionKeyData? sk = GetSessionKey(accountId);
             ExecutionEngine.Assert(sk != null, "No session key active");
             SessionKeyData sessionKey = sk!;
 
+#if SMARTACCOUNT_NATIVE
+            ExecutionEngine.Assert(VerifierClock.Now() <= sessionKey.ValidUntil, "Session key expired");
+#else
             ExecutionEngine.Assert(Runtime.Time <= sessionKey.ValidUntil, "Session key expired");
+#endif
             ExecutionEngine.Assert(op.TargetContract == sessionKey.TargetContract, "Target contract not permitted");
             if (sessionKey.Method != "*") // Allow wildcard method if configured
             {
@@ -248,12 +295,19 @@ namespace AbstractAccount.Verifiers
             if (isValid && sessionKey.SpendingLimit > 0)
             {
                 BigInteger spent = GetSpentAmount(accountId);
+#if SMARTACCOUNT_NATIVE
+                BigInteger operationValue = NativeTransferValue(accountId, op);
+                // A lowered cap can already be below historical spending. Zero value
+                // must not bypass that policy boundary merely because it adds no debit.
+                ExecutionEngine.Assert(spent + operationValue <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
+#else
                 BigInteger operationValue = ExtractTransferValue(op);
                 if (operationValue > 0)
                 {
                     BigInteger newSpent = spent + operationValue;
                     ExecutionEngine.Assert(newSpent <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
                 }
+#endif
             }
 
             return isValid;
@@ -275,8 +329,26 @@ namespace AbstractAccount.Verifiers
             return 0;
         }
 
+#if SMARTACCOUNT_NATIVE
+        private static BigInteger NativeTransferValue(UInt160 accountId, UserOperation op)
+        {
+            ExecutionEngine.Assert(op.Method == "transfer" && op.Args.Length == 4, "Capped session requires an exact transfer");
+            object[] args = op.Args;
+            ExecutionEngine.Assert(args[0] is ByteString && ((ByteString)args[0]).Length == 20, "Invalid transfer source");
+            UInt160 proxy = (UInt160)Contract.Call(NativeAuthority.Service, "getAccountAddress", CallFlags.ReadOnly, new object[] { accountId });
+            ExecutionEngine.Assert((UInt160)args[0] == proxy, "Transfer source is not the account address");
+            ExecutionEngine.Assert(args[1] is ByteString && ((ByteString)args[1]).Length == 20 && (UInt160)args[1] != UInt160.Zero, "Invalid transfer recipient");
+            ExecutionEngine.Assert(args[2] is BigInteger && (BigInteger)args[2] >= 0, "Invalid transfer amount");
+            return (BigInteger)args[2];
+        }
+
+        public static void PostExecute(UInt160 accountId, object[] fields, object result)
+        {
+            UserOperation op = NativeOperation.Decode(fields);
+#else
         public static void PostExecute(UInt160 accountId, UserOperation op, object result)
         {
+#endif
             VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
             SessionKeyData? sk = GetSessionKey(accountId);
             if (sk == null) return;
@@ -284,7 +356,13 @@ namespace AbstractAccount.Verifiers
             SessionKeyData sessionKey = sk!;
             if (sessionKey.SpendingLimit > 0)
             {
+#if SMARTACCOUNT_NATIVE
+                ExecutionEngine.Assert(result is bool && (bool)result, "Session transfer did not succeed");
+                BigInteger operationValue = NativeTransferValue(accountId, op);
+                ExecutionEngine.Assert(GetSpentAmount(accountId) + operationValue <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
+#else
                 BigInteger operationValue = ExtractTransferValue(op);
+#endif
                 if (operationValue > 0)
                 {
                     BigInteger spent = GetSpentAmount(accountId);
@@ -306,6 +384,9 @@ namespace AbstractAccount.Verifiers
 
         private static void ValidateSessionConfigCaller(UInt160 accountId)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "configuration");
+#else
             UInt160 core = VerifierAuthority.AuthorizedCore();
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
 
@@ -322,6 +403,7 @@ namespace AbstractAccount.Verifiers
                 new object[] { accountId });
             ExecutionEngine.Assert(backupOwner != UInt160.Zero && backupOwner.IsValid, "AA account not found");
             ExecutionEngine.Assert(Runtime.CheckWitness(backupOwner), "Backup owner witness required");
+#endif
         }
     }
 }

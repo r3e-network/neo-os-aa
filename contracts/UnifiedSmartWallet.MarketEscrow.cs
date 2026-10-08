@@ -93,7 +93,8 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId, previousVerifier);
                 try
                 {
-                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallModuleWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All,
+                        new object[] { accountId });
                 }
                 finally
                 {
@@ -105,7 +106,8 @@ namespace AbstractAccount
                 SetHookConfigContext(accountId, previousHook);
                 try
                 {
-                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallModuleWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All,
+                        new object[] { accountId });
                 }
                 finally
                 {
@@ -128,6 +130,7 @@ namespace AbstractAccount
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId));
+            ClearPendingVerifierChildCalls(accountId);
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookCall, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_EscapeLastInitiated, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_MetadataUri, (byte[])accountId));

@@ -16,5 +16,8 @@ namespace AbstractAccount.Mocks
     {
         [Safe]
         public static bool SupportsV3() => true;
+
+        [Safe]
+        public static bool SupportsComposition() => false;
     }
 }

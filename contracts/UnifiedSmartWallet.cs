@@ -56,11 +56,14 @@ namespace AbstractAccount
         // 0x0E  Prefix_VerifierExecutionContext    Internal.cs               +acctId
         // 0x0F  Prefix_PendingVerifierCall         Internal.cs               +acctId
         // 0x10  Prefix_PendingHookCall             Internal.cs               +acctId
+        // 0x22  Prefix_PendingVerifierChildCall   Internal.cs               +acctId+child
         // 0x11  Prefix_ContractAdmin               Admin.cs                  bare
         // 0x1A  Prefix_PendingUpdateNefHash        Admin.cs                  bare
         // 0x1B  Prefix_PendingUpdateManifestHash   Admin.cs                  bare
         // 0x1C  Prefix_VerifyScopeTarget           Internal.cs               +acctId
         // 0x1D  Prefix_MarketEscrowCancelInitiated MarketEscrow.cs           +acctId
+        // 0x20  Prefix_VerifierDependencies       Internal.cs               +acctId
+        // 0x21  Prefix_HookDependencies           Internal.cs               +acctId
         // 0x14  Prefix_UpdateTimelock              Admin.cs                  bare
         // 0x15  Prefix_PendingContractAdmin        Admin.cs                  bare
         // 0x16  Prefix_AdminTransferTimelock       Admin.cs                  bare

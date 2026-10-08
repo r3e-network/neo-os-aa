@@ -127,6 +127,7 @@ public class ContractTests
             "UpdateVerifier",
             "ConfirmVerifierUpdate",
             "CallVerifier",
+            "CallVerifierChild",
             "CallHook",
             "PreviewUserOpValidation",
             "ExecuteUserOp",
@@ -181,6 +182,7 @@ public class ContractTests
         StringAssert.Contains(executionSource, "\"validateSignature\"");
         StringAssert.Contains(executionSource, "CallFlags.ReadOnly");
         StringAssert.Contains(executionSource, "private const long VerifierGasLimit = 1_000_000_000;");
+        StringAssert.Contains(executionSource, "private const long HookGasLimit = 250_000_000;");
         Assert.IsFalse(executionSource.Contains("Contract.Call(state.Verifier", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "VerifierGasLimit");
     }
@@ -209,9 +211,13 @@ public class ContractTests
         string allowlistBlock = ExtractSourceBlock(
             accountsSource,
             "private static readonly string[] AllowedVerifierMethods = new string[]",
-            "private static readonly string[] AllowedHookMethods = new string[]");
+            "private static readonly string[] AllowedVerifierChildMethods = new string[]");
 
         Assert.IsFalse(allowlistBlock.Contains("\"setPublicKey\"", StringComparison.Ordinal));
+        StringAssert.Contains(accountsSource,
+            "private static readonly string[] AllowedVerifierChildMethods = new string[]");
+        StringAssert.Contains(accountsSource,
+            "IsMethodAllowed(method, AllowedVerifierChildMethods)");
     }
 
     [TestMethod]
@@ -241,6 +247,84 @@ public class ContractTests
     }
 
     [TestMethod]
+    public void ExecutionPathOrdersHookPostBeforeVerifierPostAndEmission()
+    {
+        string executionSource = ReadContractFile("UnifiedSmartWallet.Execution.cs");
+        string postExecution = ExtractSourceBlock(
+            executionSource,
+            "// [Hook phase] post-execution hook",
+            "return result;");
+
+        int hookPost = postExecution.IndexOf("\"postExecute\"", StringComparison.Ordinal);
+        int verifierPost = postExecution.IndexOf("state.Verifier", StringComparison.Ordinal);
+        int emit = postExecution.IndexOf("OnUserOpExecuted", StringComparison.Ordinal);
+
+        Assert.IsTrue(hookPost >= 0, "Hook post callback must be present");
+        Assert.IsTrue(verifierPost > hookPost, "Verifier post callback must follow hook post callback");
+        Assert.IsTrue(emit > verifierPost, "Execution notification must follow both post callbacks");
+    }
+
+    [TestMethod]
+    public void ModuleLifecycleCallbacksUseAnIndependentMaintenanceBudget()
+    {
+        string[] sources =
+        {
+            ReadContractFile("UnifiedSmartWallet.Accounts.cs"),
+            ReadContractFile("UnifiedSmartWallet.Escape.cs"),
+            ReadContractFile("UnifiedSmartWallet.MarketEscrow.cs"),
+            ReadContractFile("UnifiedSmartWallet.VerifyContext.cs")
+        };
+
+        foreach (string source in sources)
+        {
+            Assert.IsFalse(source.Contains("Contract.Call(previousVerifier, \"clearAccount\"", StringComparison.Ordinal));
+            Assert.IsFalse(source.Contains("Contract.Call(previousHook, \"clearAccount\"", StringComparison.Ordinal));
+            Assert.IsFalse(source.Contains("Contract.Call(verifier, \"setPublicKey\"", StringComparison.Ordinal));
+            Assert.IsFalse(source.Contains("Contract.Call(newVerifier, \"setPublicKey\"", StringComparison.Ordinal));
+            Assert.IsFalse(source.Contains("Contract.Call(pending.NewVerifier, \"setPublicKey\"", StringComparison.Ordinal));
+        }
+
+        foreach (string sourceName in new[]
+        {
+            "UnifiedSmartWallet.Accounts.cs",
+            "UnifiedSmartWallet.Escape.cs",
+            "UnifiedSmartWallet.MarketEscrow.cs"
+        })
+        {
+            StringAssert.Contains(ReadContractFile(sourceName), "CallModuleWithMaintenanceBudget(",
+                "Core module lifecycle calls must use the bounded callback syscall");
+        }
+
+        string executionSource = ReadContractFile("UnifiedSmartWallet.Execution.cs");
+        StringAssert.Contains(executionSource, "private const long ModuleMaintenanceGasLimit = 250_000_000;");
+        string internalSource = ReadContractFile("UnifiedSmartWallet.Internal.cs");
+        StringAssert.Contains(internalSource, "Contract.CallWithGasLimit(");
+        StringAssert.Contains(internalSource, "ModuleMaintenanceGasLimit");
+        string compositeSource = ReadContractFile("UnifiedSmartWallet.VerifyContext.cs");
+        StringAssert.Contains(compositeSource, "bounded composite-root context");
+        StringAssert.Contains(compositeSource, "active root budget");
+    }
+
+    [TestMethod]
+    public void MessageSignatureVerifierCallbacksUseTheVerifierBudget()
+    {
+        string source = ReadContractFile("UnifiedSmartWallet.State.cs");
+        int firstCall = source.IndexOf("supportsMessageSignatures", StringComparison.Ordinal);
+        int secondCall = source.IndexOf("isValidSignature", firstCall + 1, StringComparison.Ordinal);
+        int blockEnd = source.IndexOf("[Safe]", secondCall + 1, StringComparison.Ordinal);
+        Assert.IsTrue(firstCall >= 0 && secondCall > firstCall, "Message-signature verifier calls must be present");
+        Assert.IsTrue(blockEnd > secondCall, "Message-signature callback block must be bounded");
+
+        string callbackBlock = source[firstCall..blockEnd];
+        Assert.IsFalse(callbackBlock.Contains("Contract.Call(", StringComparison.Ordinal),
+            "Message-signature verifier callbacks must not use an unbounded call");
+        Assert.IsTrue(callbackBlock.Contains("Contract.CallWithGasLimit(", StringComparison.Ordinal),
+            "Message-signature verifier callbacks must use the verifier gas budget");
+        Assert.IsTrue(callbackBlock.Contains("VerifierGasLimit", StringComparison.Ordinal),
+            "Message-signature verifier callbacks must use the canonical verifier budget");
+    }
+
+    [TestMethod]
     public void HookCallbacksUseTheCanonicalOperationTupleForPreAndPostPhases()
     {
         string executionSource = ReadContractFile("UnifiedSmartWallet.Execution.cs");
@@ -255,6 +339,12 @@ public class ContractTests
 
         StringAssert.Contains(preHookBlock, "BuildHookOperationParams(op)");
         StringAssert.Contains(postHookBlock, "BuildHookOperationParams(op)");
+        StringAssert.Contains(preHookBlock, "Contract.CallWithGasLimit(");
+        StringAssert.Contains(postHookBlock, "Contract.CallWithGasLimit(");
+        StringAssert.Contains(preHookBlock, "HookGasLimit");
+        StringAssert.Contains(postHookBlock, "HookGasLimit");
+        Assert.IsFalse(preHookBlock.Contains("Contract.Call(", StringComparison.Ordinal));
+        Assert.IsFalse(postHookBlock.Contains("Contract.Call(", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "private static object[] BuildHookOperationParams(UserOperation op)");
         StringAssert.Contains(executionSource, "op.TargetContract,");
         StringAssert.Contains(executionSource, "op.Method,");

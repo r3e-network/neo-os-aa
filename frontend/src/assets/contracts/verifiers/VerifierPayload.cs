@@ -63,6 +63,16 @@ namespace AbstractAccount.Verifiers
         /// <returns>The byte array that should be signed by the verifying identity</returns>
         internal static byte[] BuildPayload(UInt160 accountId, UInt160 targetContract, string method, object[] args, BigInteger nonce, BigInteger deadline)
         {
+#if SMARTACCOUNT_NATIVE
+            UInt160 core = VerifierAuthority.AuthorizedCore();
+            ExecutionEngine.Assert(core == NativeAuthority.Service, "Wrong native SmartAccount service");
+            object[] unsigned = new object[] { targetContract, method, args, nonce, deadline, (ByteString)new byte[0] };
+            ByteString domain = (ByteString)Contract.Call(core, "getAuthorizationDomain", CallFlags.ReadOnly, new object[] { accountId });
+            byte[] payload = Helper.Concat((byte[])domain, (byte[])StdLib.Serialize(unsigned));
+            ByteString digest = (ByteString)Contract.Call(core, "getOperationDigest", CallFlags.ReadOnly, new object[] { accountId, unsigned });
+            ExecutionEngine.Assert(CryptoLib.Sha256((ByteString)payload) == digest, "Native signing preimage mismatch");
+            return payload;
+#else
             byte[] argsSerialized = (byte[])StdLib.Serialize(args);
             byte[] methodBytes = (byte[])StdLib.Serialize(method);
             return Helper.Concat(
@@ -84,6 +94,7 @@ namespace AbstractAccount.Verifiers
                 ),
                 Helper.Concat(ToUint256Word(nonce), ToUint256Word(deadline))
             );
+#endif
         }
 
         /// <summary>

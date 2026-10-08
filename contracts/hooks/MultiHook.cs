@@ -30,6 +30,8 @@ namespace AbstractAccount.Hooks
     [DisplayName("MultiHook")]
     [ContractPermission("*", "canExecuteHook")]
     [ContractPermission("*", "canConfigureHook")]
+    [ContractPermission("*", "setHookDependencies")]
+    [ContractPermission("*", "clearHookDependencies")]
     [ContractPermission("*", "preExecute")]
     [ContractPermission("*", "postExecute")]
     [ContractPermission("*", "supportsV3")]
@@ -45,6 +47,9 @@ namespace AbstractAccount.Hooks
 
         [Safe]
         public static bool SupportsV3() => true;
+
+        [Safe]
+        public static bool SupportsComposition() => true;
 
         [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
@@ -78,6 +83,9 @@ namespace AbstractAccount.Hooks
             if (hooks == null || hooks.Length == 0)
             {
                 Storage.Delete(Storage.CurrentContext, key);
+                UInt160 core = HookAuthority.AuthorizedCore();
+                Contract.Call(core, "setHookDependencies", CallFlags.All,
+                    new object[] { accountId, new UInt160[0] });
             }
             else
             {
@@ -93,6 +101,9 @@ namespace AbstractAccount.Hooks
                     AssertChildHook(hooks[i]);
                 }
                 Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(hooks));
+                UInt160 core = HookAuthority.AuthorizedCore();
+                Contract.Call(core, "setHookDependencies", CallFlags.All,
+                    new object[] { accountId, hooks });
             }
         }
 
@@ -103,6 +114,7 @@ namespace AbstractAccount.Hooks
 
             ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
             ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsV3", ContractParameterType.Boolean), "Child hook V3 marker missing");
+            ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsComposition", ContractParameterType.Boolean), "Child hook composition marker missing");
             ExecutionEngine.Assert(ExposesMethod(methods, "preExecute", ContractParameterType.Void,
                 ContractParameterType.Hash160, ContractParameterType.Array), "Child hook pre ABI missing");
             ExecutionEngine.Assert(ExposesMethod(methods, "postExecute", ContractParameterType.Void,
@@ -112,6 +124,8 @@ namespace AbstractAccount.Hooks
 
             bool supported = (bool)Contract.Call(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Child hook does not implement V3 interface");
+            bool composite = (bool)Contract.Call(hook, "supportsComposition", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(!composite, "Composite hook cannot be a child");
         }
 
         private static bool ExposesSafeMethod(ContractMethodDescriptor[] methods, string name,
@@ -256,6 +270,8 @@ namespace AbstractAccount.Hooks
         public static void ClearAccount(UInt160 accountId)
         {
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
+            UInt160 core = HookAuthority.AuthorizedCore();
+            Contract.Call(core, "clearHookDependencies", CallFlags.All, new object[] { accountId });
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_Hooks, (byte[])accountId));
         }
     }

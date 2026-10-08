@@ -16,6 +16,7 @@
     <Compile Include="VerifierAuthority.cs" />
     <Compile Include="VerifierPayload.cs" />
     <Compile Include="VerifierModels.cs" />
+    <Compile Include="SignerDomain.cs" />
     <Compile Include="SubscriptionVerifier.cs" />
   </ItemGroup>
 

@@ -15,18 +15,41 @@ ROOT = Path(__file__).resolve().parent
 ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
              "coq/ProxyWitnessScript.v",
              "coq/CallbackPluginTopology.v", "coq/VerifierGasBudget.v",
+             "coq/AuthorizationEvidence.v", "coq/WitnessRuleSemantics.v",
+             "coq/NeoVmCallSubset.v", "coq/AttestationProofBinding.v",
+             "coq/SignerIndependence.v", "coq/PluginLifecycle.v",
+             "coq/WitnessRuleFaultSemantics.v", "coq/SignerDomainSeparation.v",
+             "coq/AbiManifestProjection.v", "coq/NeoVmContinuationSemantics.v",
+             "coq/WitnessRuleRefinement.v",
+             "coq/NativeIntegerDomain.v", "coq/NativeLifecycle.v", "coq/NativeDispatch.v", "coq/NativeInvocation.v",
+             "coq/NativeSessionPolicy.v",
+             "coq/NativeSessionScope.v",
+             "coq/NativeDailyPolicy.v",
+             "coq/NativeRestrictedPolicy.v", "coq/NativeCompositePhase.v",
              "tla/UnifiedSmartWalletAA.tla",
              "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
 SOURCE_FILES = {"contracts/UnifiedSmartWallet.Execution.cs",
                 "contracts/UnifiedSmartWallet.Accounts.cs",
+                "contracts/UnifiedSmartWallet.Internal.cs",
                 "contracts/UnifiedSmartWallet.Models.cs",
                 "contracts/UnifiedSmartWallet.State.cs",
                 "contracts/UnifiedSmartWallet.Escape.cs",
                 "contracts/UnifiedSmartWallet.Paymaster.cs",
                 "contracts/paymaster/Paymaster.cs",
                 "contracts/verifiers/VerifierPayload.cs",
+                "contracts/verifiers/SignerDomain.cs",
                 "contracts/verifiers/MultiSigVerifier.cs",
                 "contracts/hooks/MultiHook.cs",
+                "contracts/native/NativeAuthority.cs",
+                "contracts/verifiers/VerifierAuthority.cs",
+                "contracts/verifiers/NeoNativeVerifier.cs",
+                "contracts/verifiers/SessionKeyVerifier.cs",
+                "contracts/verifiers/NativeOperation.cs",
+                "contracts/verifiers/VerifierClock.cs",
+                "contracts/hooks/HookAuthority.cs",
+                "contracts/hooks/WhitelistHook.cs",
+                "contracts/hooks/DailyLimitHook.cs",
+                "contracts/hooks/TokenRestrictedHook.cs",
                 "contracts/UnifiedSmartWallet.VerifyContext.cs"}
 MULTISIG_SOURCE = "contracts/verifiers/MultiSigVerifier.cs"
 MULTISIG_SOURCE_GUARDS = {
@@ -85,10 +108,35 @@ CALLBACK_PLUGIN_COQ_MUTATIONS = {
     # mean the closed theorem roster did not depend on that condition.
     "callback-target-binding": ("Nat.eqb t (target op)", "true"),
     "callback-signature-binding": ("Nat.eqb s (signature op)", "true"),
-    "callback-post-order": ("&& target_ok && post_ok\n  then [Validate; PreHook; TargetCall; PostHook; Emit]",
-                             "&& target_ok && true\n  then [Validate; PreHook; TargetCall; PostHook; Emit]"),
+    "callback-post-order": (
+        "&& target_ok && hook_post_ok && verifier_post_ok\n  then [Validate; PreHook; TargetCall; PostHook; VerifierPost; Emit]",
+        "&& target_ok && true\n  then [Validate; PreHook; TargetCall; PostHook; VerifierPost; Emit]"),
+    "verifier-post-order": (
+        "&& target_ok && hook_post_ok && verifier_post_ok\n  then [Validate; PreHook; TargetCall; PostHook; VerifierPost; Emit]",
+        "&& target_ok && hook_post_ok && true\n  then [Validate; PreHook; TargetCall; PostHook; VerifierPost; Emit]"),
     "scope-entry-binding": ("CalledByEntry => Nat.eqb entry target", "CalledByEntry => true"),
     "cleanup-fail-closed": ("if cleanup_ok\n  then", "if true\n  then"),
+    "composite-cleanup-all-children": (
+        "Nat.eqb (length children) (length results) &&\n  forallb (fun result => result) results",
+        "true"),
+    "composite-root-clear": (
+        "then mkCompositeState (composite_pointer new) 0\n         (clear_child_storage",
+        "then mkCompositeState (composite_pointer new) 1\n         (clear_child_storage"),
+    "composite-failure-rollback": (
+        "if children_cleanup_ok (composite_children old) child_results\n  then mkCompositeState (composite_pointer new) 0\n         (clear_child_storage (composite_children old))\n  else old.",
+        "if children_cleanup_ok (composite_children old) child_results\n  then mkCompositeState (composite_pointer new) 0\n         (clear_child_storage (composite_children old))\n  else mkCompositeState (composite_pointer new) 0\n         (clear_child_storage (composite_children old))."),
+    "leaf-mutation-invalidates-root-intent": (
+        "mkRootConfigIntent false (S (child_state_version intent))",
+        "mkRootConfigIntent true (S (child_state_version intent))"),
+    "dependency-replacement-skips-cleanup": (
+        "if children_cleanup_ok (removed_children old new) cleanup_results\n  then new\n  else old.",
+        "if true\n  then new\n  else old."),
+    "dependency-replacement-publishes-on-failure": (
+        "if children_cleanup_ok (removed_children old new) cleanup_results\n  then new\n  else old.",
+        "if children_cleanup_ok (removed_children old new) cleanup_results\n  then new\n  else new."),
+    "topology-all-children-leaf": (
+        "forallb (fun child => negb (composite child)) children.",
+        "true."),
 }
 VERIFIER_GAS_BUDGET_COQ_MUTATIONS = {
     # These mutations remove the concrete budget obligations.  They must make
@@ -107,12 +155,364 @@ VERIFIER_GAS_BUDGET_COQ_MUTATIONS = {
         "all_can_charge rest amount",
         "true"),
 }
+AUTHORIZATION_EVIDENCE_COQ_MUTATIONS = {
+    # These mutations remove one binding or replay condition from the
+    # protocol-level evidence gate. They do not claim to mutate a primitive
+    # cryptographic implementation; the primitive result is an explicit input
+    # to the model and remains outside its proof boundary.
+    "evidence-validity": (
+        "evidence_valid evidence &&",
+        "true &&"),
+    "evidence-account-binding": (
+        "Nat.eqb (evidence_account evidence) (claim_account claim) &&",
+        "true &&"),
+    "evidence-target-binding": (
+        "Nat.eqb (evidence_target evidence) (claim_target claim) &&",
+        "true &&"),
+    "evidence-nonce-binding": (
+        "Nat.eqb (evidence_nonce evidence) (claim_nonce claim) &&",
+        "true &&"),
+    "evidence-provider-binding": (
+        "Nat.eqb (evidence_provider evidence) (claim_provider claim)",
+        "true"),
+    "evidence-nullifier-nonzero": (
+        "negb (Nat.eqb (evidence_nullifier evidence) 0)",
+        "true"),
+    "evidence-replay-freshness": (
+        "evidence_preconditions claim evidence && nullifier_fresh used evidence",
+        "evidence_preconditions claim evidence && true"),
+}
+WITNESS_RULE_COQ_MUTATIONS = {
+    # These mutations remove one protocol-semantic condition.  The model is
+    # still deliberately bounded and does not claim to refine ApplicationEngine.
+    "witness-first-match-action": (
+        "then rule_allow rule\n      else eval_rules ctx rest",
+        "then true\n      else eval_rules ctx rest"),
+    "witness-default-deny": (
+        "| [] => false\n  | rule :: rest =>",
+        "| [] => true\n  | rule :: rest =>"),
+    "witness-called-by-entry-depth": (
+        "Nat.leb (call_depth ctx) 1",
+        "Nat.eqb (call_depth ctx) 0"),
+    "witness-condition-nonempty": (
+        "(0 <? length expressions) &&\n      (length expressions <=? 16)",
+        "true &&\n      (length expressions <=? 16)"),
+    "witness-condition-child-limit": (
+        "(length expressions <=? 16) &&\n      forallb",
+        "true &&\n      forallb"),
+    "witness-condition-depth-guard": (
+        "| CBoolean _ | CScriptHash _ | CGroup _ | CCalledByEntry\n"
+        "  | CCalledByContract _ | CCalledByGroup _ => (1 <=? depth)",
+        "| CBoolean _ | CScriptHash _ | CGroup _ | CCalledByEntry\n"
+        "  | CCalledByContract _ | CCalledByGroup _ => true"),
+}
+NEO_VM_CALL_SUBSET_COQ_MUTATIONS = {
+    # The bounded execution-shape examples must fail if any one of their
+    # protocol-relevant acceptance conditions is removed.
+    "neo-vm-safe-prefix": (
+        "forallb pure_push (firstn split program) &&",
+        "true &&"),
+    "neo-vm-exact-tail": (
+        "exact_call_return (skipn split program).",
+        "true."),
+    "neo-vm-tail-boundary": (
+        "let split := length program - 2 in",
+        "let split := length program - 1 in"),
+}
+ATTESTATION_PROOF_COQ_MUTATIONS = {
+    # The primitive proof/attestation result is an explicit oracle. These
+    # mutations verify that the protocol envelope still depends on every
+    # binding and replay condition that it can enforce locally.
+    "proof-validity": (
+        "  proof_valid proof &&",
+        "  true &&"),
+    "proof-account-binding": (
+        "  Nat.eqb (proof_account proof) (claim_account claim) &&",
+        "  true &&"),
+    "proof-target-binding": (
+        "  Nat.eqb (proof_target proof) (claim_target claim) &&",
+        "  true &&"),
+    "proof-nonce-binding": (
+        "  Nat.eqb (proof_nonce proof) (claim_nonce claim) &&",
+        "  true &&"),
+    "proof-issuer-binding": (
+        "  Nat.eqb (proof_issuer proof) (claim_issuer claim) &&",
+        "  true &&"),
+    "proof-measurement-binding": (
+        "  Nat.eqb (proof_measurement proof) (claim_measurement claim).",
+        "  true."),
+    "proof-nullifier-nonzero": (
+        "  negb (Nat.eqb (proof_nullifier proof) 0) &&",
+        "  true &&"),
+    "proof-replay-freshness": (
+        "  nullifier_fresh used proof.",
+        "  true."),
+}
+SIGNER_INDEPENDENCE_COQ_MUTATIONS = {
+    "signer-domain-uniqueness": (
+        "unique (map signer_domain signers)",
+        "unique (map signer_secret signers)"),
+}
+PLUGIN_LIFECYCLE_COQ_MUTATIONS = {
+    "plugin-admission": (
+        "Definition admitted (plugin : Plugin) : bool := lifecycle_abi plugin.",
+        "Definition admitted (plugin : Plugin) : bool := false."),
+}
+WITNESS_RULE_FAULT_COQ_MUTATIONS = {
+    "witness-group-permission": (
+        "if fault_read_states ctx\n  then EValue (member_nat group (fault_current_groups ctx))\n  else EFault.",
+        "if fault_read_states ctx\n  then EValue (member_nat group (fault_current_groups ctx))\n  else EValue false."),
+    "witness-caller-group-permission": (
+        "if fault_read_states ctx\n  then EValue (member_nat group (fault_calling_groups ctx))\n  else EFault.",
+        "if fault_read_states ctx\n  then EValue (member_nat group (fault_calling_groups ctx))\n  else EValue false."),
+    "witness-negation-fault": (
+        "| EFault => EFault\n          end\n      | FAnd expressions",
+        "| EFault => EValue false\n          end\n      | FAnd expressions"),
+    "witness-and-short-circuit": (
+        "| EValue false => EValue false\n          | EValue true => eval_fault_and fuel' ctx rest",
+        "| EValue false => EValue true\n          | EValue true => eval_fault_and fuel' ctx rest"),
+    "witness-or-short-circuit": (
+        "| EValue true => EValue true\n          | EValue false => eval_fault_or fuel' ctx rest",
+        "| EValue true => EValue false\n          | EValue false => eval_fault_or fuel' ctx rest"),
+    "witness-rule-fault": (
+        "| EFault => EFault\n          | EValue true => EValue (fault_rule_allow rule)\n          | EValue false => eval_fault_rules fuel' ctx rest",
+        "| EFault => eval_fault_rules fuel' ctx rest\n          | EValue true => EValue (fault_rule_allow rule)\n          | EValue false => eval_fault_rules fuel' ctx rest"),
+}
+SIGNER_DOMAIN_SEPARATION_COQ_MUTATIONS = {
+    "signer-domain-binding": (
+        "Nat.eqb (domain_scheme (signature_domain actual))\n"
+        "    (domain_scheme (signature_domain expected)) &&",
+        "true &&"),
+}
+ABI_MANIFEST_PROJECTION_COQ_MUTATIONS = {
+    "abi-requires-initializer": (
+        "Nat.eqb (length manifest) (S (length source)).",
+        "Nat.eqb (length manifest) (length source)."),
+    "abi-requires-unique-dispatch-keys": (
+        "unique_keys (map dispatch_key_manifest manifest) &&",
+        "true &&"),
+    "abi-requires-every-manifest-method": (
+        "manifest_methods_match source manifest &&",
+        "true &&"),
+    "abi-requires-safe-flag-equality": (
+        "Bool.eqb (manifest_safe manifest) (source_safe source).",
+        "true."),
+}
+NEO_VM_CONTINUATION_COQ_MUTATIONS = {
+    "neo-vm-child-budget-bound": (
+        "if requested <=? parent then Some requested else None.",
+        "if true then Some requested else None."),
+    "neo-vm-hardfork-gate": (
+        "if callback_gas_cap_enabled config\n          then match callback_budget",
+        "if true\n          then match callback_budget"),
+    "neo-vm-loadscript-continuation": (
+        "          push_continuation state target\n      | ICallback",
+        "          mkVmState target (vm_stack state) (vm_continuations state)\n            (vm_budget state) (vm_storage state) Running\n      | ICallback"),
+    "neo-vm-callt-return-address": (
+        "Definition push_continuation (state : VmState) (target : nat) : VmState :=\n  mkVmState target (vm_stack state) (S (vm_pc state) :: vm_continuations state)",
+        "Definition push_continuation (state : VmState) (target : nat) : VmState :=\n  mkVmState target (vm_stack state) (vm_pc state :: vm_continuations state)"),
+    "neo-vm-rollback-storage": (
+        "(vm_budget final) (vm_storage initial) Faulted",
+        "(vm_budget final) (vm_storage final) Faulted"),
+    "neo-vm-ancestor-charge": (
+        "then Some (map (fun budget => budget - amount) budgets)",
+        "then Some budgets"),
+}
+WITNESS_RULE_REFINEMENT_COQ_MUTATIONS = {
+    # These mutations remove one correspondence condition from the executable
+    # fault-aware evaluator.  The refinement theorem must fail closed rather
+    # than silently proving the Boolean model for a changed evaluator.
+    "witness-refinement-readstates": (
+        "if read_states ctx\n  then EValue (member_nat group (current_groups ctx))\n  else EFault.",
+        "if read_states ctx\n  then EValue (member_nat group (current_groups ctx))\n  else EValue false."),
+    "witness-refinement-not-fault": (
+        "| EFault => EFault\n          end\n      | CAnd expressions",
+        "| EFault => EValue false\n          end\n      | CAnd expressions"),
+    "witness-refinement-and-short-circuit": (
+        "| EValue false => EValue false\n          | EValue true => eval_fault_and fuel' ctx rest",
+        "| EValue false => EValue true\n          | EValue true => eval_fault_and fuel' ctx rest"),
+    "witness-refinement-or-short-circuit": (
+        "| EValue true => EValue true\n          | EValue false => eval_fault_or fuel' ctx rest",
+        "| EValue true => EValue false\n          | EValue false => eval_fault_or fuel' ctx rest"),
+    "witness-refinement-rule-action": (
+        "| EValue true => EValue (rule_allow rule)\n          | EValue false => eval_fault_rules fuel' ctx rest",
+        "| EValue true => EValue true\n          | EValue false => eval_fault_rules fuel' ctx rest"),
+    "witness-parser-width": (
+        "(length expressions <=? 16) &&\n      forallb (parser_condition_admissible",
+        "(length expressions <=? 17) &&\n      forallb (parser_condition_admissible"),
+    "witness-parser-nonempty": (
+        "(0 <? length expressions) &&\n      (length expressions <=? 16)",
+        "true &&\n      (length expressions <=? 16)"),
+    "witness-parser-depth": (
+        "| CCalledByContract _ | CCalledByGroup _ => (1 <=? depth)",
+        "| CCalledByContract _ | CCalledByGroup _ => true"),
+    "witness-parser-rule-depth": (
+        "forallb (fun rule => parser_condition_admissible 3 (rule_condition rule)) rules.",
+        "forallb (fun rule => parser_condition_admissible 4 (rule_condition rule)) rules."),
+    "witness-fuel-bound": (
+        "| S predecessor => S (16 + uniform_condition_fuel predecessor)",
+        "| S predecessor => S predecessor"),
+}
+NATIVE_INTEGER_DOMAIN_COQ_MUTATIONS = {
+    "native-integer-upper-bound": ("Definition nonce_limit : Z := 2 ^ 255.",
+                                   "Definition nonce_limit : Z := 2 ^ 256."),
+    "native-channel-width": ("Definition channel_limit : Z := 2 ^ 191.",
+                             "Definition channel_limit : Z := 2 ^ 192."),
+    "native-nonce-consumption": ("then Some (cursor + 1)", "then Some (cursor + 2)"),
+    "native-nonce-exhaustion": ("if Z.eqb cursor sequence_limit then None",
+                                "if Z.eqb cursor sequence_limit then Some 0"),
+    "native-batch-shadow-update": (
+        "verify_nonce_batch (update_cursor cursors (channel nonce) next) rest",
+        "verify_nonce_batch cursors rest"),
+    "native-batch-cross-channel": (
+        "if Z.eqb query changed then value else cursors query",
+        "if Z.eqb query changed then value else value"),
+    "native-batch-failure-acceptance": (
+        "| None => None\n      end\n  end.",
+        "| None => Some cursors\n      end\n  end."),
+}
+NATIVE_LIFECYCLE_COQ_MUTATIONS = {
+    "native-config-root-postcheck": ("Z.eqb r root_pin && Z.eqb c child_pin", "true && Z.eqb c child_pin"),
+    "native-config-child-postcheck": ("Z.eqb r root_pin && Z.eqb c child_pin", "Z.eqb r root_pin && true"),
+    "native-config-missing-binding": ("| _, _ => false\n  end.", "| _, _ => true\n  end."),
+    "native-config-fault-rollback": ("then (true, staged) else (false, before).", "then (true, staged) else (false, staged)."),
+    "native-config-success-commit": ("then (true, staged) else (false, before).", "then (true, before) else (false, before)."),
+    "native-lifecycle-frozen-config": ("active s && negb (pending_recovery s)", "true && negb (pending_recovery s)"),
+    "native-lifecycle-recovery-config": ("active s && negb (pending_recovery s)", "active s && true"),
+    "native-lifecycle-joint-unfreeze": ("(negb (has_recovery s) || recovery)", "true"),
+    "native-lifecycle-cancel-boundary": ("(custody && (now <? maturity))", "(custody && (now <=? maturity))"),
+    "native-lifecycle-clear-recovery": ("                  false false false false)", "                  false false false (pending_recovery s))"),
+    "native-lifecycle-epoch-increment": ("(epoch s + 1)", "(epoch s + 2)"),
+    "native-lifecycle-epoch-overflow": ("if (0 <=? epoch s) && (epoch s <? epoch_limit - 1) then", "if (0 <=? epoch s) && (epoch s <=? epoch_limit - 1) then"),
+}
+NATIVE_DISPATCH_COQ_MUTATIONS = {
+    "native-dispatch-missing-activation": ("| None => false end.", "| None => true end."),
+    "native-dispatch-future-height": ("Some boundary => (boundary <=? height)", "Some boundary => true"),
+    "native-dispatch-ledger-height": ("| None => ledger end.", "| None => 0 end."),
+    "native-dispatch-caller-identity": ("native && same_caller && read_states && allow_call", "native && true && read_states && allow_call"),
+    "native-dispatch-read-permission": ("native && same_caller && read_states && allow_call", "native && same_caller && true && allow_call"),
+    "native-dispatch-fee-attribution": ("if caller_white then 0 else fee", "if child_white then 0 else fee"),
+    "native-dispatch-return-policy": ("else fee, child_white", "else fee, caller_white"),
+}
+NATIVE_INVOCATION_COQ_MUTATIONS = {
+    "module-service-identity": ("(configured =? expected) && context.", "true && context."),
+    "module-phase-grant": ("(configured =? expected) && context.", "(configured =? expected) && true."),
+    "service-witness-gate": ("if active then negb service &&", "if true then negb service &&"),
+    "service-witness-identity": ("if active then negb service &&", "if active then true &&"),
+    "service-proxy-frame": ("if registered_proxy then target_frame && legacy else legacy", "if registered_proxy then legacy else legacy"),
+    "service-proxy-legacy": ("if registered_proxy then target_frame && legacy else legacy", "if registered_proxy then target_frame else legacy"),
+    "service-unregistered-legacy": ("if registered_proxy then target_frame && legacy else legacy", "if registered_proxy then target_frame && legacy else true"),
+    "invocation-account": ("(a =? account g) &&", "true &&"),
+    "invocation-phase": ("(p =? phase g) &&", "true &&"),
+    "invocation-frame": ("(current =? frame g)", "true"),
+    "invocation-parent": ("(parent =? frame g)", "true"),
+    "invocation-target-kind": ("(k <? 2) &&", "true &&"),
+    "invocation-fault-reset": ("Definition on_fault (_ : option Grant) : option Grant := None.", "Definition on_fault (active : option Grant) : option Grant := active."),
+    "invocation-config-delegation": ("Definition may_delegate (p : nat) : bool := p <? 3.", "Definition may_delegate (p : nat) : bool := p <? 4."),
+    "invocation-witness-substitution": ("grant && original_witness.", "grant || original_witness."),
+}
+NATIVE_SESSION_COQ_MUTATIONS = {
+    "session-rotation-reset-spent": ("then Some (Policy true (consumed s) (Some now))", "then Some (Policy true 0 (Some now))"),
+    "session-rotation-timestamp": ("then Some (Policy true (consumed s) (Some now))", "then Some (Policy true (consumed s) (rotated_at s))"),
+    "session-rotation-cooldown": ("timestamp + cooldown <=? now end.", "true end."),
+    "session-revocation-key": ("Policy false 0 (rotated_at s).", "Policy (has_session s) 0 (rotated_at s)."),
+    "session-revocation-spent": ("Policy false 0 (rotated_at s).", "Policy false (consumed s) (rotated_at s)."),
+    "session-revocation-cooldown": ("Policy false 0 (rotated_at s).", "Policy false 0 None."),
+    "session-cleanup-cooldown": ("Definition cleanup_policy (_ : SessionPolicy) : SessionPolicy :=\n  Policy false 0 None.", "Definition cleanup_policy (s : SessionPolicy) : SessionPolicy :=\n  Policy false 0 (rotated_at s)."),
+    "session-verification-clock": ("if verification then ledger else Some persisting.", "if verification then Some persisting else Some persisting."),
+    "session-application-clock": ("if verification then ledger else Some persisting.", "if verification then ledger else ledger."),
+    "session-context": ("context && signature", "true && signature"),
+    "session-signature": ("context && signature", "context && true"),
+    "session-scope": ("&& scope && live", "&& true && live"),
+    "session-expiry": ("&& live && shape", "&& true && shape"),
+    "session-shape": ("&& shape && (spent", "&& true && (spent"),
+    "session-cap": ("(spent + amount <=? cap).", "true."),
+    "session-zero-cap-bypass": ("(spent + amount <=? cap).", "((amount =? 0) || (spent + amount <=? cap))."),
+    "session-target-result": ("cap && target_success", "cap && true"),
+    "session-fault-rollback": ("else (false, spent).", "else (false, S spent)."),
+    "session-exact-debit": ("then (true, spent + amount)", "then (true, S (spent + amount))"),
+}
+NATIVE_SESSION_SCOPE_COQ_MUTATIONS = {
+    "scope-target": ("target_match && (wildcard || method_match).", "true && (wildcard || method_match)."),
+    "scope-wildcard": ("(wildcard || method_match).", "method_match."),
+    "scope-exact-method": ("(wildcard || method_match).", "(wildcard || true)."),
+    "scope-cap-configuration": ("(cap =? 0) || transfer_method.", "true."),
+    "scope-context": ("ctx && sig && live && method_scope target_match", "true && sig && live && method_scope target_match"),
+    "scope-signature": ("ctx && sig && live && method_scope target_match", "ctx && true && live && method_scope target_match"),
+    "scope-expiry": ("ctx && sig && live && method_scope target_match", "ctx && sig && true && method_scope target_match"),
+    "scope-zero-cap-shape": ("if cap =? 0 then true else shape", "if cap =? 0 then shape else shape"),
+    "scope-capped-shape": ("then true else shape &&", "then true else true &&"),
+    "scope-capped-budget": ("shape && (spent + amount <=? cap)", "shape && true"),
+    "scope-uncapped-false": ("((cap =? 0) || true_result)", "true_result"),
+    "scope-uncapped-debit": ("then spent else spent + amount", "then spent + amount else spent + amount"),
+    "scope-target-fault": ("authorized && halted &&", "authorized && true &&"),
+    "scope-capped-false": ("((cap =? 0) || true_result)", "true"),
+    "scope-revoked-key": ("| None => false", "| None => true"),
+    "scope-replaced-key": ("(key =? signing_key) && valid_signature", "true && valid_signature"),
+    "scope-nonce-replay": ("&& nonce_current && unexpired", "&& true && unexpired"),
+    "scope-expired-signature": ("&& nonce_current && unexpired", "&& nonce_current && true"),
+}
+NATIVE_DAILY_COQ_MUTATIONS = {
+    "daily-moving-anchor": ("then timestamp else now end.", "then now else now end."),
+    "daily-expiry-boundary": ("now <? timestamp + window_ms.", "now <=? timestamp + window_ms."),
+    "daily-retains-expired-spend": ("then used w else 0 end.", "then used w else used w end."),
+    "daily-cap-removed": ("if current_spent w now + delta <=? cap", "if true"),
+    "daily-false-result-bypass": ("Definition observed_outflow (_result : bool) (before after : nat) : nat := before - after.", "Definition observed_outflow (result : bool) (before after : nat) : nat := if result then before - after else 0."),
+    "daily-reversed-delta": ("Definition observed_outflow (_result : bool) (before after : nat) : nat := before - after.", "Definition observed_outflow (_result : bool) (before after : nat) : nat := after - before."),
+    "daily-expired-record-retained": ("now - window_ms <=? timestamp.", "true."),
+    "daily-history-cap-removed": ("&& (count <? 50).", "&& true."),
+    "daily-scan-ignores-amount": ("then (payment_amount r + fst tail, S (snd tail)) else tail", "then (fst tail, S (snd tail)) else tail"),
+    "daily-scan-ignores-count": ("then (payment_amount r + fst tail, S (snd tail)) else tail", "then (payment_amount r + fst tail, snd tail) else tail"),
+    "daily-prune-live-records": ("filter (fun r => rolling_live (payment_time r) now) rows.", "filter (fun r => false) rows."),
+    "daily-negative-balance-coercion": ("if Z.geb value 0 then Some (Z.to_nat value) else None", "if true then Some (Z.to_nat value) else None"),
+    "daily-noninteger-balance-coercion": ("| OtherBalanceType => None", "| OtherBalanceType => Some 0"),
+    "daily-query-fault-coercion": ("| BalanceQueryFault => None", "| BalanceQueryFault => Some 0"),
+    "daily-invalid-delta-fallback": ("| _, _ => None\n  end.", "| _, _ => Some 0\n  end."),
+}
+NATIVE_RESTRICTED_COQ_MUTATIONS = {
+    "restricted-missing-snapshot": ("match snapshot with\n  | None => false", "match snapshot with\n  | None => true"),
+    "restricted-invalid-query": ("match reply with\n    | None => false", "match reply with\n    | None => true"),
+    "restricted-outflow": ("| Some after => before <=? after", "| Some after => true"),
+    "restricted-direct-target": ("context && negb direct_restricted && queries_valid.", "context && true && queries_valid."),
+    "restricted-ignore-later-token": ("check && all_restrictions rest end.", "check end."),
+    "restricted-false-result-bypass": ("context && all_restrictions checks.", "context && (negb target_result || all_restrictions checks)."),
+    "restricted-removal-snapshot": ("(without_token token (snapshots s)).", "(snapshots s)."),
+    "restricted-cleanup-snapshot": ("RestrictionState := State [] [].", "RestrictionState := State [] (snapshots s)."),
+}
+NATIVE_COMPOSITE_PHASE_MUTATIONS = {
+    "composite-old-entry-post": ("| PostEntry, PostPhase => true", "| PostEntry, PostPhase | ValidationEntry, PostPhase => true"),
+    "composite-post-entry-validation": ("| ValidationEntry, ValidationPhase => true", "| ValidationEntry, ValidationPhase | PostEntry, ValidationPhase => true"),
+    "composite-missing-grant": ("grant && phase_allowed entry phase", "true && phase_allowed entry phase"),
+    "composite-nonboolean-vote": ("TrueReply => true | _ => false", "TrueReply | NonBooleanReply => true | _ => false"),
+    "composite-post-wrong-entry": ("native_approve PostEntry PostPhase grant (reply id)", "native_approve ValidationEntry PostPhase grant (reply id)"),
+    "composite-post-inverts-support": ("filter (fun id => native_approve PostEntry PostPhase grant (reply id)) ids.", "filter (fun id => negb (native_approve PostEntry PostPhase grant (reply id))) ids."),
+}
 COQ_MODULES = {
+    "NativeCompositePhase.v": NATIVE_COMPOSITE_PHASE_MUTATIONS,
+    "NativeRestrictedPolicy.v": NATIVE_RESTRICTED_COQ_MUTATIONS,
+    "NativeSessionScope.v": NATIVE_SESSION_SCOPE_COQ_MUTATIONS,
+    "NativeDailyPolicy.v": NATIVE_DAILY_COQ_MUTATIONS,
+    "NativeSessionPolicy.v": NATIVE_SESSION_COQ_MUTATIONS,
     "UnifiedSmartWalletAA.v": COQ_MUTATIONS,
     "MultiSigPolicy.v": MULTISIG_COQ_MUTATIONS,
     "ProxyWitnessScript.v": PROXY_WITNESS_COQ_MUTATIONS,
     "CallbackPluginTopology.v": CALLBACK_PLUGIN_COQ_MUTATIONS,
     "VerifierGasBudget.v": VERIFIER_GAS_BUDGET_COQ_MUTATIONS,
+    "AuthorizationEvidence.v": AUTHORIZATION_EVIDENCE_COQ_MUTATIONS,
+    "WitnessRuleSemantics.v": WITNESS_RULE_COQ_MUTATIONS,
+    "NeoVmCallSubset.v": NEO_VM_CALL_SUBSET_COQ_MUTATIONS,
+    "AttestationProofBinding.v": ATTESTATION_PROOF_COQ_MUTATIONS,
+    "SignerIndependence.v": SIGNER_INDEPENDENCE_COQ_MUTATIONS,
+    "PluginLifecycle.v": PLUGIN_LIFECYCLE_COQ_MUTATIONS,
+    "WitnessRuleFaultSemantics.v": WITNESS_RULE_FAULT_COQ_MUTATIONS,
+    "SignerDomainSeparation.v": SIGNER_DOMAIN_SEPARATION_COQ_MUTATIONS,
+    "AbiManifestProjection.v": ABI_MANIFEST_PROJECTION_COQ_MUTATIONS,
+    "NeoVmContinuationSemantics.v": NEO_VM_CONTINUATION_COQ_MUTATIONS,
+    "WitnessRuleRefinement.v": WITNESS_RULE_REFINEMENT_COQ_MUTATIONS,
+    "NativeIntegerDomain.v": NATIVE_INTEGER_DOMAIN_COQ_MUTATIONS,
+    "NativeLifecycle.v": NATIVE_LIFECYCLE_COQ_MUTATIONS,
+    "NativeDispatch.v": NATIVE_DISPATCH_COQ_MUTATIONS,
+    "NativeInvocation.v": NATIVE_INVOCATION_COQ_MUTATIONS,
 }
 TLA_MUTATIONS = {
     "authorization": ("SuccessAuthorizationGuard == pendingAuthorized",
@@ -234,10 +634,16 @@ def parse_tlc(output, returncode):
                        output, re.M)
     require(len(final) == 1 and int(final[0][1]) > 1, "Missing/non-trivial final TLC summary")
     rows = re.findall(r"^<(\w+) line .*?>: (\d+):(\d+)$", output, re.M)
-    expected_actions = {"Init", "Tick", "Begin", "CompleteSuccess", "CompleteFailure"}
-    require(len(rows) == len(expected_actions) and {name for name, _, _ in rows} == expected_actions,
+    expected_actions = ("Init", "Tick", "Begin", "CompleteSuccess", "CompleteFailure")
+    # TLC emits one coverage sample per -coverage interval.  The final sample
+    # is the only one that represents the completed run; earlier samples are
+    # expected when model checking takes longer than the interval.  Select one
+    # complete final roster while rejecting missing, reordered, or extra rows.
+    require(len(rows) >= len(expected_actions), "TLC action coverage roster missing")
+    final_rows = rows[-len(expected_actions):]
+    require(tuple(name for name, _, _ in final_rows) == expected_actions,
             "TLC action coverage roster mismatch")
-    actions = dict((name, int(generated)) for name, distinct, generated in rows)
+    actions = dict((name, int(generated)) for name, distinct, generated in final_rows)
     require(all(actions.values()), "Unreachable TLC action")
     return {"generated": int(final[0][0]), "distinct": int(final[0][1]), "actions": actions}
 

@@ -247,25 +247,26 @@ The review used the following process:
 4. Analysis of cryptographic implementations and replay protection mechanisms
 5. Review of authorization, reentrancy, and gas DoS vectors
 
-> **Current-status boundary (2026-09-20):** The findings below are retained as
+> **Current-status boundary (2026-10-03):** The findings below are retained as
 > historical/pre-V3 audit material. They are not the current V3 remediation
 > ledger. Current V3 status is defined by `docs/SECURITY_MODEL.md`,
 > `docs/AA-FORMAL-VERIFICATION.md`, and the dated receipts in
-> `docs/reports/`. In particular, the current artifact still has no
-> non-bypassable verifier gas cap; the platform extension proposal is tracked
-> in `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`.
+> `docs/reports/`. The matching private-chain artifact now routes both verifier
+> and hook callbacks through the platform bounded-call syscall. Native
+> `AccountManagement` activation, public deployment parity, and independent
+> review remain separate gates.
 
 ---
 
 ## Critical Findings
 
-### 1. CRITICAL: No Verifier Gas Limit - DoS Vector
+### 1. CRITICAL (historical): No Verifier Gas Limit - DoS Vector
 
 **Severity:** Critical
 
 **Affected File:** `contracts/UnifiedSmartWallet.Execution.cs:42`
 
-**Issue:**
+**Historical issue:**
 The core contract calls `validateSignature` on verifiers without any gas limit:
 
 ```csharp
@@ -274,10 +275,10 @@ bool isValid = (bool)Contract.Call(state.Verifier, "validateSignature", CallFlag
 
 A malicious or buggy verifier plugin could consume excessive gas, causing legitimate user operations to fail due to gas exhaustion. This is a well-known DoS vector in ERC-4337 implementations.
 
-**Risk:**
+**Historical risk:**
 An attacker could deploy a malicious verifier that consumes gas during validation (e.g., infinite loops, expensive hash operations). When installed on an account, the account becomes unusable. While the backup owner escape hatch is available, it requires a 7-90 day timelock.
 
-**Mitigation Required:**
+**Historical mitigation required:**
 1. Add a dynamic gas limit for verifier calls based on a reasonable maximum (e.g., 50,000 gas)
 2. Use `CallFlags.States` or implement a gas metering wrapper
 3. Consider a verifier blacklist/registry for known malicious verifiers
@@ -564,7 +565,12 @@ Market escrow properly blocks normal execution via `AssertNoMarketEscrow()`.
 
 ---
 
-## Summary of Findings
+## Historical Summary of Findings
+
+The following table and issue list are retained for audit traceability only. They
+describe the pre-remediation snapshot and must not be read as the current V3
+closure status. The current ledger is maintained in `docs/SECURITY_MODEL.md`,
+`docs/AA-FORMAL-VERIFICATION.md`, and the dated private-chain receipts.
 
 | Severity | Count | Status |
 | --- | --- | --- |
@@ -574,7 +580,7 @@ Market escrow properly blocks normal execution via `AssertNoMarketEscrow()`.
 | Low | 3 | **Open** |
 | Positive | 5 | ✓ Verified |
 
-**Open Issues Requiring Fix:**
+**Historical Open Issues Requiring Fix:**
 1. VULN-001 (Critical): Verifier gas limit - DoS vector
 2. VULN-002 (High): Session key revocation race condition
 3. VULN-003 (High): Escape hatch bypass via market escrow
@@ -587,7 +593,7 @@ Market escrow properly blocks normal execution via `AssertNoMarketEscrow()`.
 
 ---
 
-## Recommended Next Steps
+## Historical Recommended Next Steps
 
 1. **Address Critical Findings:** Implement verifier gas limits and escape escrow protection before mainnet deployment
 2. **Plugin Developer Education:** Ensure all new plugin developers review `PLUGIN_DEVELOPER_GUIDE.md`

@@ -82,9 +82,11 @@ exact signatures `preExecute(Hash160, Array) -> Void`,
 not prove the method's cryptographic or storage semantics, so new modules still
 require an audited implementation and concrete runtime/refinement evidence. `MultiSigVerifier`
 and `MultiHook` apply the same manifest/deployment preflight to their configured child
-modules; self-reference is rejected by `MultiSigVerifier`, while `MultiHook` also
-maintains a bounded execution-depth guard. These checks are ABI/topology guards, not
-proofs of arbitrary child-call graphs or cryptographic independence.
+modules. Both are composite modules, are rejected as children, and publish a safe
+`supportsComposition() -> Boolean` marker; the core-owned dependency registry retains
+only leaf children and performs their cleanup on replacement or removal. These checks
+are ABI/topology/lifecycle guards, not proofs of cryptographic independence or arbitrary
+future-plugin storage semantics.
 
 ### 2.2 Security Checklist for Verifiers
 
@@ -94,7 +96,7 @@ proofs of arbitrary child-call graphs or cryptographic independence.
 | **Account ID in payload** | Prevent account confusion | Include `accountId` in hash |
 | **Deadline in payload** | Prevent old signature use | Include `deadline` in hash |
 | **No side effects** | Validation must be read-only | Use `CallFlags.ReadOnly` where applicable |
-| **Bounded gas** | *(CRITICAL)* Prevent DoS | The current AA artifact has no non-bypassable per-call cap; do not claim voluntary metering closes it. Use the platform extension in `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md` once activated. |
+| **Bounded gas** | *(CRITICAL)* Prevent DoS | The matching private AA artifact uses `System.Contract.CallWithGasLimit` for verifier and hook callbacks; ordinary descendants inherit the callback's ancestor budget. Native activation and public deployment remain separate gates. |
 | **Signature length check** | Prevent malformed input | Assert `signature.Length == expected` |
 | **Return boolean only** | Validation pattern | Don't throw on normal rejections |
 | **No state mutation** | Pure validation | Never write storage in `ValidateSignature` |

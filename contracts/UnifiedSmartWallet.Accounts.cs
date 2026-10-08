@@ -115,7 +115,8 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId!, verifier);
                 try
                 {
-                    Contract.Call(verifier, "setPublicKey", CallFlags.All, new object[] { accountId!, verifierParams });
+                    CallModuleWithMaintenanceBudget(verifier, "setPublicKey", CallFlags.All,
+                        new object[] { accountId!, verifierParams });
                 }
                 finally
                 {
@@ -216,7 +217,8 @@ namespace AbstractAccount
                 SetHookConfigContext(accountId, previousHook);
                 try
                 {
-                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallModuleWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All,
+                        new object[] { accountId });
                 }
                 finally
                 {
@@ -269,7 +271,8 @@ namespace AbstractAccount
                     SetVerifierConfigContext(accountId, newVerifier);
                     try
                     {
-                        Contract.Call(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
+                        CallModuleWithMaintenanceBudget(newVerifier, "setPublicKey", CallFlags.All,
+                            new object[] { accountId, verifierParams });
                     }
                     finally
                     {
@@ -294,6 +297,10 @@ namespace AbstractAccount
                 VerifierParams = verifierParams,
                 InitiatedAt = Runtime.Time
             };
+            // A child configuration is scoped to the currently installed
+            // composite root. Proposing a root replacement invalidates every
+            // in-flight child call before the root can change.
+            ClearPendingVerifierChildCalls(accountId);
             Storage.Put(Storage.CurrentContext, key2, StdLib.Serialize(update));
             OnModuleUpdateInitiated(accountId, ModuleTypeVerifier, newVerifier);
             OnVerifierUpdateInitiated(accountId, newVerifier);
@@ -314,6 +321,10 @@ namespace AbstractAccount
             PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
             ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + ConfigUpdateTimelockMs, "Timelock not elapsed");
 
+            // Repeat the invalidation at confirmation so a future lifecycle
+            // change cannot resurrect a child call armed under the old root.
+            ClearPendingVerifierChildCalls(accountId);
+
             if (pending.NewVerifier != UInt160.Zero)
             {
                 AssertV3Verifier(pending.NewVerifier);
@@ -329,7 +340,8 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId, previousVerifier);
                 try
                 {
-                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallModuleWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All,
+                        new object[] { accountId });
                 }
                 finally
                 {
@@ -346,7 +358,8 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId, pending.NewVerifier);
                 try
                 {
-                    Contract.Call(pending.NewVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, pending.VerifierParams });
+                    CallModuleWithMaintenanceBudget(pending.NewVerifier, "setPublicKey", CallFlags.All,
+                        new object[] { accountId, pending.VerifierParams });
                 }
                 finally
                 {
@@ -381,6 +394,38 @@ namespace AbstractAccount
                 ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any), "Verifier V3 post ABI missing");
             ExecutionEngine.Assert(ModuleExposesMethod(verifier, "clearAccount", ContractParameterType.Void,
                 ContractParameterType.Hash160), "Verifier V3 cleanup ABI missing");
+            bool supported = (bool)CallModuleWithMaintenanceBudget(
+                verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(supported, "Verifier does not implement V3 interface");
+        }
+
+        private static void AssertV3LeafVerifierAbi(UInt160 verifier)
+        {
+            AssertV3Verifier(verifier);
+            Contract? deployed = ContractManagement.GetContract(verifier);
+            ExecutionEngine.Assert(deployed != null, "Verifier is not deployed");
+            ExecutionEngine.Assert(ModuleExposesSafeMethod(verifier, "supportsComposition",
+                ContractParameterType.Boolean), "Verifier composition marker missing");
+            ExecutionEngine.Assert(ModuleExposesSafeMethod(verifier, "getSignerDomains",
+                ContractParameterType.Array, ContractParameterType.Hash160),
+                "Verifier signer-domain ABI missing");
+            bool composite = (bool)CallModuleWithMaintenanceBudget(
+                verifier, "supportsComposition", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(!composite, "Child verifier cannot be composite");
+        }
+
+        private static void AssertV3VerifierDescendant(UInt160 verifier)
+        {
+            ExecutionEngine.Assert(ModuleExposesSafeMethod(verifier, "supportsV3", ContractParameterType.Boolean), "Verifier V3 marker missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "validateSignature", ContractParameterType.Boolean,
+                ContractParameterType.Hash160, ContractParameterType.Any), "Verifier V3 validation ABI missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "postExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any), "Verifier V3 post ABI missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "clearAccount", ContractParameterType.Void,
+                ContractParameterType.Hash160), "Verifier V3 cleanup ABI missing");
+            // This verifier is a descendant of an already bounded composite root.
+            // An additional fixed budget would make child validation fail on the
+            // parent's dispatch overhead instead of consuming the inherited bound.
             bool supported = (bool)Contract.Call(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Verifier does not implement V3 interface");
         }
@@ -394,6 +439,22 @@ namespace AbstractAccount
                 ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any), "Hook V3 post ABI missing");
             ExecutionEngine.Assert(ModuleExposesMethod(hook, "clearAccount", ContractParameterType.Void,
                 ContractParameterType.Hash160), "Hook V3 cleanup ABI missing");
+            bool supported = (bool)CallModuleWithMaintenanceBudget(
+                hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(supported, "Hook does not implement V3 interface");
+        }
+
+        private static void AssertV3HookDescendant(UInt160 hook)
+        {
+            ExecutionEngine.Assert(ModuleExposesSafeMethod(hook, "supportsV3", ContractParameterType.Boolean), "Hook V3 marker missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(hook, "preExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Array), "Hook V3 pre ABI missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(hook, "postExecute", ContractParameterType.Void,
+                ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any), "Hook V3 post ABI missing");
+            ExecutionEngine.Assert(ModuleExposesMethod(hook, "clearAccount", ContractParameterType.Void,
+                ContractParameterType.Hash160), "Hook V3 cleanup ABI missing");
+            // Child discovery inherits the composite root's active maintenance
+            // budget; it must not allocate a second equal fixed budget.
             bool supported = (bool)Contract.Call(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Hook does not implement V3 interface");
         }
@@ -456,6 +517,17 @@ namespace AbstractAccount
         private static readonly string[] AllowedVerifierMethods = new string[]
         {
             "clearAccount",
+            "setSessionKey",
+            "clearSessionKey",
+            "setConfig",
+            "createSubscription",
+            "setDKIMRegistry"
+        };
+
+        private static readonly string[] AllowedVerifierChildMethods = new string[]
+        {
+            "clearAccount",
+            "setPublicKey",
             "setSessionKey",
             "clearSessionKey",
             "setConfig",
@@ -543,11 +615,62 @@ namespace AbstractAccount
             SetVerifierConfigContext(accountId, state.Verifier!);
             try
             {
-                return Contract.Call(state.Verifier!, method, CallFlags.All, args);
+                return CallModuleWithMaintenanceBudget(state.Verifier!, method, CallFlags.All, args);
             }
             finally
             {
                 ClearVerifierConfigContext(accountId!);
+            }
+        }
+
+        /// <summary>
+        /// Configures a leaf verifier that will be used by an installed composite
+        /// verifier. The child is selected by the backup owner, but the active root
+        /// must explicitly advertise composition and the child must pass the exact
+        /// leaf lifecycle/domain ABI pre-check. The call uses its own 24-hour
+        /// timelock and the child's normal AA-core configuration context.
+        /// </summary>
+        public static object CallVerifierChild(UInt160 accountId, UInt160 childVerifier, string method, object[] args)
+        {
+            ExecutionEngine.Assert(IsMethodAllowed(method, AllowedVerifierChildMethods), "Verifier method not allowed");
+            AssertBackupOwner(accountId);
+            AssertNoMarketEscrow(accountId);
+
+            AccountState state = GetAccountState(accountId);
+            ExecutionEngine.Assert(state.Verifier != UInt160.Zero, "Verifier not configured");
+            ExecutionEngine.Assert(childVerifier != UInt160.Zero && childVerifier != state.Verifier,
+                "Invalid child verifier");
+
+            ExecutionEngine.Assert(ModuleExposesSafeMethod(state.Verifier, "supportsComposition",
+                ContractParameterType.Boolean), "Verifier composition marker missing");
+            bool rootIsComposite = (bool)CallModuleWithMaintenanceBudget(
+                state.Verifier, "supportsComposition", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(rootIsComposite, "Active verifier is not composite");
+
+            AssertV3LeafVerifierAbi(childVerifier);
+
+            byte[] pendingKey = Helper.Concat(
+                Helper.Concat(Prefix_PendingVerifierChildCall, (byte[])accountId),
+                (byte[])childVerifier);
+            if (!TryConfirmPendingModuleCall(pendingKey, childVerifier, method, args))
+            {
+                return false;
+            }
+
+            // A successful leaf mutation changes the inputs observed by any
+            // pending root configuration call.  Invalidate that root intent so
+            // a failed root call cannot be replayed after the child state has
+            // changed without a fresh root timelock.
+            ClearPendingVerifierCall(accountId);
+
+            SetVerifierConfigContext(accountId, childVerifier);
+            try
+            {
+                return CallModuleWithMaintenanceBudget(childVerifier, method, CallFlags.All, args);
+            }
+            finally
+            {
+                ClearVerifierConfigContext(accountId);
             }
         }
 
@@ -572,7 +695,7 @@ namespace AbstractAccount
             SetHookConfigContext(accountId, state.HookId!);
             try
             {
-                return Contract.Call(state.HookId!, method, CallFlags.All, args);
+                return CallModuleWithMaintenanceBudget(state.HookId!, method, CallFlags.All, args);
             }
             finally
             {

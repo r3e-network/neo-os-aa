@@ -2,6 +2,23 @@
 
 This index keeps the root documentation set visible and easy to browse.
 
+## Native SmartAccount validation
+
+- `docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md` — native module ABI, authority, signing and lifecycle requirements
+- `docs/AA-FORMAL-VERIFICATION.md` — current bounded proof scope and remaining refinement boundaries
+- `docs/proposals/SMARTACCOUNT-NATIVE-NEF-PROBES.md` — unchanged-bytecode host probes, fault-injection boundary and complete coverage denominators
+- `docs/reports/aa-native-nef-phases-validation-20261008.json` — current pre/post balance-type representatives, phase and callback shape rejection, rollback and measured incomplete bytecode coverage
+- `docs/reports/aa-native-nef-probe-validation-20261008.json` — earlier pre-phase probe with missing/stale snapshots, administration and historical coverage measurements
+- `docs/reports/aa-native-restricted-validation-20261008.json` — native restricted-token adaptation, indirect movement, hostile-query rollback, independent replay and five-profile regression evidence
+- `docs/reports/aa-native-session-scope-validation-20261007.json` — current uncapped/wildcard semantics, complete grant/storage observations and identical-signature key-reuse counterexamples on two private chains
+- `docs/reports/aa-native-session-lifecycle-validation-20261007.json` — actual P-256/GAS witness, rotation, cap, revocation and independent private replay evidence
+- `docs/reports/aa-native-daily-balance-validation-20261007.json` — current native daily-limit malformed/faulting query rejection, raw-storage rollback, delayed recovery and independent private replay evidence
+- `docs/reports/aa-native-daily-capacity-validation-20261007.json` — earlier capacity repair, actual false-result outflow and callback-isolation evidence
+- `docs/reports/aa-native-daily-validation-20261007.json` — earlier daily-limit snapshot before the single-pass capacity repair
+- `docs/reports/aa-formal-gate-native-nef-phases-20261008.json` — current host-only gate: 24 Coq modules, 349 closed declarations and 192 rejected mutations; not implementation refinement
+- `docs/reports/aa-artifact-reproducibility-native-restricted-20261008.json` — current legacy-profile rebuild comparison: 76 artifacts; native artifacts have separate build receipts
+- `docs/reports/aa-open-formal-boundaries-20261007.json` — unclosed proof obligations; public-chain deployment remains excluded
+
 ## Core Explainers
 
 - `docs/HOW_IT_WORKS.md` — end-to-end mental model and usage guide
@@ -51,13 +68,21 @@ This index keeps the root documentation set visible and easy to browse.
 - `docs/reports/aa-neoexpress-readback-20260919.json` — historical pre-callback-ABI-fix NeoExpress readback; superseded by the 2026-09-20 receipt
 - `docs/reports/aa-neoexpress-readback-20260920.json` — historical post-callback-ABI readback; superseded by the current post-remediation receipt
 - `docs/reports/aa-neoexpress-readback-20260920-current.json` — post-remediation core NeoExpress readback of the core artifact before the branch-free reimbursement cap; local NEF/manifest parity verified then, public artifacts differ
-- `docs/reports/aa-neoexpress-validation-20260920.json` — full private-chain validation of the current artifacts: all 24 deployed to a fresh NeoExpress chain, 10 transaction-driven scenarios (65 halted transactions, 23 expected faults, 51 on-chain assertions), RPC readback parity for every contract; local-chain evidence only
-- `docs/reports/aa-neoexpress-gas-cap-20260921.json` — current matching-core private-chain validation: 25 artifacts, 12 scenarios, adversarial verifier gas-cap fault and nonce rollback, and RPC readback parity; no public network touched
+- `docs/reports/aa-neoexpress-validation-20260920.json` — historical private-chain validation of that snapshot: all 24 deployed to a fresh NeoExpress chain, 10 transaction-driven scenarios (65 halted transactions, 23 expected faults, 51 on-chain assertions), RPC readback parity for every contract; local-chain evidence only
+- `docs/reports/aa-artifact-reproducibility-20261006.json` — historical source-to-release rebuild certificate: 76 artifacts compared, with no drift or missing artifacts at that snapshot
+- `docs/reports/aa-neoexpress-validation-20261006.json` — matching-core NeoExpress validation of that snapshot: 25 deployments, 14 scenarios, 108 persisted transactions, 84 assertions, and complete private RPC readback parity; not a release approval
+- `docs/reports/aa-neo-core-semantic-validation-20261006.json` — read-only Neo core executable validation at `c033cd55`: 1,453/1,453 core tests passed, including 26 WitnessCondition and 150 ApplicationEngine/interop tests
+- `docs/reports/aa-neoexpress-validation-20261005-unmatched-runner.json` — failed fail-closed rerun with the incompatible installed 3.10.1.18 runner; retained as runner-incompatibility evidence, not protocol evidence
+- `docs/reports/aa-neoexpress-gas-cap-20260921.json` — historical matching-core private-chain validation: 25 artifacts, 12 scenarios, adversarial verifier gas-cap fault and nonce rollback, and RPC readback parity; no public network touched
 - `docs/reports/aa-public-readback-20260920.json` — read-only TestNet/MainNet AA core readback; known public artifacts differ from the current local artifact
 - `docs/reports/aa-platform-gas-cap-20260920.json` — isolated Neo core/DevPack verifier-budget prototype receipt; AA integration and hardfork activation remain pending
-- `docs/reports/aa-platform-gas-cap-20260921.json` — current Neo core/DevPack plus AA integration receipt; private NeoExpress verified, public activation/deployment pending
-- `docs/reports/aa-formal-gate-20260921.json` — current 5-Coq-module/30-mutation formal gate with cached-base Docker BuildKit evidence and 20/20 runner tests
-- `docs/reports/aa-artifact-reproducibility-20260921.json` — 76 current NEF/manifest artifacts reproduced byte-for-byte from the source tree; the historical `contracts/build` anchor is explicitly reported as intentional drift
+- `docs/reports/aa-platform-gas-cap-20260921.json` — historical Neo core/DevPack plus AA integration receipt; private NeoExpress verified at that snapshot, public activation/deployment pending
+- `docs/reports/aa-formal-gate-20260921.json` — historical 5-Coq-module/30-mutation formal gate with cached-base Docker BuildKit evidence and 20/20 runner tests
+- `docs/reports/aa-artifact-reproducibility-20260921.json` — 76 NEF/manifest artifacts reproduced byte-for-byte from that source snapshot; the historical `contracts/build` anchor is explicitly reported as intentional drift
+- `docs/reports/aa-private-artifact-provenance-20261006.json` — historical read-only join of a 74-input source/rebuild certificate to 24 local artifacts and the matching private NeoExpress RPC readback
+- `docs/reports/aa-formal-gate-20261006-witness-refinement.json` — historical fail-closed formal gate: 16 Coq modules, 86 semantic mutations rejected, 61,460 TLC states, 6 SMT obligations, and 37/37 runner tests
+- That earlier formal receipt records a pinned Docker reproduction: Coq 8.18, Z3 4.8.12, OpenJDK 21, TLA+ 2026.10.04, and 37/37 runner tests. It does not cover the current model set, whose container execution remains unverified.
+- `docs/reports/aa-open-formal-boundaries-20261006.json` — explicit open-boundary ledger; no complete NeoVM/compiler refinement, primitive crypto/attestation/ZK soundness proof, private-key independence proof, or arbitrary-future-plugin storage proof is claimed
 - `docs/reports/aa-current-revalidation-20260920.json` — independent read-only revalidation receipt; local runtime gates pass, while that environment's formal runner was unavailable and public parity remains open
 - `docs/SECURITY_AUDIT.md`
 - `docs/ETHEREUM_AA_COMPARISON.md`

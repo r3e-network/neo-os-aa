@@ -29,7 +29,8 @@ and tla2tools.jar (TLA_JAR); a missing tool is a failure, never a simulated pass
 Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) to also deploy every artifact to a
 fresh private NeoExpress chain, drive the protocol with real transactions, read every
 contract back over JSON-RPC and write a dated receipt under docs/reports/. It needs the
-neoxp tool (~/.dotnet/tools/neoxp) and openssl; it never touches a public network.
+neoxp tool (~/.dotnet/tools/neoxp, or NEOOS_NEOXP for a core-matched runner) and openssl;
+it never touches a public network.
 
 Runs the full local validation gate:
 - contracts: build + nccs compile + solution tests + deployment-tool tests + format verify
@@ -96,13 +97,18 @@ if [[ $run_contracts -eq 1 ]]; then
     echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
   fi
   dotnet test neo-abstract-account.sln -c Release --nologo
+  python3 -m unittest discover -s scripts -p 'test_neoexpress_*.py'
+  python3 -m unittest discover -s scripts -p 'test_native_module_*.py'
+  python3 -m unittest discover -s scripts -p 'test_build_native_*.py'
   node --test scripts/lib/deploy-helpers.test.mjs \
     scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
     scripts/upgrade_testnet_unified_smart_wallet.test.mjs \
     scripts/deploy_latest_aa_verifiers.test.mjs \
     scripts/check_neo_platform_packages.test.mjs \
+    scripts/check-artifact-reproducibility.test.mjs \
     scripts/fuzz_continuous.test.mjs \
-    scripts/repo_hygiene.test.mjs
+    scripts/repo_hygiene.test.mjs \
+    scripts/verify-private-artifact-provenance.test.mjs
   dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal
   # The formal gate is opt-in because CI's ubuntu image ships neither Rocq/Coq 9 nor the TLA
   # tools; formal/verify.py refuses to substitute a simulated result for a missing tool, so an
@@ -119,7 +125,19 @@ if [[ $run_contracts -eq 1 ]]; then
   # takes several minutes, and a missing tool must read as NOT RUN, never as a pass.
   if [[ $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ]]; then
     echo "neoexpress gate: deploying every artifact to a fresh private chain and driving the protocol"
-    python3 scripts/neoexpress_validate.py
+    neoxp_tool="${NEOOS_NEOXP:-$HOME/.dotnet/tools/neoxp}"
+    neoexpress_date="$(date -u +%Y%m%d)"
+    repro_receipt="$ROOT_DIR/docs/reports/aa-artifact-reproducibility-$neoexpress_date.json"
+    neoexpress_receipt="$ROOT_DIR/docs/reports/aa-neoexpress-validation-$neoexpress_date.json"
+    provenance_receipt="$ROOT_DIR/docs/reports/aa-private-artifact-provenance-$neoexpress_date.json"
+    echo "reproducibility gate: rebuilding release artifacts and writing ${repro_receipt#$ROOT_DIR/}"
+    node scripts/check-artifact-reproducibility.mjs --json > "$repro_receipt"
+    python3 scripts/neoexpress_validate.py --neoxp "$neoxp_tool" --output "$neoexpress_receipt"
+    echo "neoexpress gate: joining source/rebuild certificate to private-chain RPC readback"
+    node scripts/verify-private-artifact-provenance.mjs \
+      --repro "$repro_receipt" \
+      --receipt "$neoexpress_receipt" > "$provenance_receipt"
+    echo "neoexpress gate: provenance receipt written to ${provenance_receipt#$ROOT_DIR/}"
   else
     echo "neoexpress gate: NOT RUN - scripts/neoexpress_validate.py (private-chain deployment, transactions, RPC readback) was skipped."
     echo "neoexpress gate:   pass --neoexpress or set NEOOS_REQUIRE_NEOEXPRESS=1 to run it."

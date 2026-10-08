@@ -62,10 +62,16 @@ deploy-tooling fix.
 scratch directory, replays the `contracts/compile.sh` command sequence there, and compares
 every `.nef` / `.manifest.json` with `contracts/bin/v3` byte-for-byte.
 
-Current result: **70 artifacts compared, release matches a fresh build: YES**. The tracked
+Current result: **76 artifacts compared, release matches a fresh build: YES**. The tracked
 `contracts/build/UnifiedSmartWalletV3.nef` is reported separately as the deployed-mainnet
 bytecode anchor and is *expected* to differ from the working-tree source; it must not be
 regenerated while it is the only artifact-level evidence of what mainnet runs.
+
+The 2026-10-04 receipt also carries a source-to-artifact certificate: all **74** C# and
+project inputs under `contracts/` are hashed with repository-relative names, the matching
+`nccs` version and compile recipe are recorded, and every fresh artifact hash is listed.
+This closes practical provenance and byte-rebuild drift for the private artifact. It is
+not a mechanized C#-to-NEF compiler-correctness theorem or a full NeoVM refinement proof.
 
 Run it before publishing or upgrading:
 

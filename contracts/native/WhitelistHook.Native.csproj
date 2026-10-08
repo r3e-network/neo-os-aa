@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);SMARTACCOUNT_NATIVE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+    <Compile Include="NativeAuthority.cs" />
+    <Compile Include="../hooks/HookAuthority.cs" />
+    <Compile Include="../hooks/WhitelistHook.cs" />
+  </ItemGroup>
+</Project>

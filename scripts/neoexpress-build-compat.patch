@@ -1,0 +1,235 @@
+diff --git a/src/bctklib/persistence/CheckpointStore.cs b/src/bctklib/persistence/CheckpointStore.cs
+index 5ee27853..86f0d600 100644
+--- a/src/bctklib/persistence/CheckpointStore.cs
++++ b/src/bctklib/persistence/CheckpointStore.cs
+@@ -95,7 +95,7 @@ namespace Neo.BlockchainToolkit.Persistence
+         [Obsolete("use Find(byte[]? key_prefix, SeekDirection direction) instead.")]
+         public IEnumerable<(byte[] Key, byte[] Value)> Seek(byte[] key, SeekDirection direction) => store.Seek(key, direction);
+ 
+-        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward) => store.Find(key_prefix, direction);
++        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0) => store.Find(key_prefix, direction, skip);
+ 
+         // IReadOnlyStore<StorageKey, StorageItem> implementation
+         public StorageItem this[StorageKey key]
+@@ -134,10 +134,10 @@ namespace Neo.BlockchainToolkit.Persistence
+             return store.Contains(keyBytes);
+         }
+ 
+-        public IEnumerable<(StorageKey Key, StorageItem Value)> Find(StorageKey? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++        public IEnumerable<(StorageKey Key, StorageItem Value)> Find(StorageKey? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+         {
+             var prefixBytes = key_prefix?.ToArray();
+-            foreach (var (keyBytes, valueBytes) in store.Find(prefixBytes, direction))
++            foreach (var (keyBytes, valueBytes) in store.Find(prefixBytes, direction, skip))
+             {
+                 yield return ((StorageKey)keyBytes, new StorageItem(valueBytes));
+             }
+diff --git a/src/bctklib/persistence/MemoryTrackingStore.Snapshot.cs b/src/bctklib/persistence/MemoryTrackingStore.Snapshot.cs
+index e6b3bbce..76e43593 100644
+--- a/src/bctklib/persistence/MemoryTrackingStore.Snapshot.cs
++++ b/src/bctklib/persistence/MemoryTrackingStore.Snapshot.cs
+@@ -85,8 +85,8 @@ namespace Neo.BlockchainToolkit.Persistence
+             public IEnumerable<(byte[] Key, byte[] Value)> Seek(byte[]? key, SeekDirection direction)
+                 => MemoryTrackingStore.Seek(key, direction, GetSnapshotTrackingMap(), store);
+ 
+-            public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
+-                => MemoryTrackingStore.Seek(key_prefix, direction, GetSnapshotTrackingMap(), store);
++            public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
++                => MemoryTrackingStore.Seek(key_prefix, direction, GetSnapshotTrackingMap(), store, skip);
+ 
+             TrackingMap GetSnapshotTrackingMap()
+             {
+diff --git a/src/bctklib/persistence/MemoryTrackingStore.cs b/src/bctklib/persistence/MemoryTrackingStore.cs
+index 2cfc6a99..2a694332 100644
+--- a/src/bctklib/persistence/MemoryTrackingStore.cs
++++ b/src/bctklib/persistence/MemoryTrackingStore.cs
+@@ -83,10 +83,10 @@ namespace Neo.BlockchainToolkit.Persistence
+         public IEnumerable<(byte[] Key, byte[] Value)> Seek(byte[]? key, SeekDirection direction)
+             => Seek(key, direction, trackingMap, store);
+ 
+-        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
+-            => Seek(key_prefix, direction, trackingMap, store);
++        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
++            => Seek(key_prefix, direction, trackingMap, store, skip);
+ 
+-        static IEnumerable<(byte[] Key, byte[] Value)> Seek(byte[]? key, SeekDirection direction, TrackingMap trackingMap, IReadOnlyStore<byte[], byte[]> store)
++        static IEnumerable<(byte[] Key, byte[] Value)> Seek(byte[]? key, SeekDirection direction, TrackingMap trackingMap, IReadOnlyStore<byte[], byte[]> store, int skip = 0)
+         {
+             var normalizedKey = NormalizeKey(key);
+             if (normalizedKey.Length == 0 && direction == SeekDirection.Backward)
+@@ -110,7 +110,7 @@ namespace Neo.BlockchainToolkit.Persistence
+                 .Find(normalizedKey, direction)
+                 .Where<(byte[] Key, byte[] Value)>(kvp => !trackingMap.ContainsKey(kvp.Key));
+ 
+-            return memoryItems.MergeSorted(storeItems, comparer);
++            return memoryItems.MergeSorted(storeItems, comparer).Skip(skip);
+         }
+ 
+         public void Put(byte[]? key, byte[]? value)
+diff --git a/src/bctklib/persistence/NullCheckpointStore.cs b/src/bctklib/persistence/NullCheckpointStore.cs
+index abd9207c..11395658 100644
+--- a/src/bctklib/persistence/NullCheckpointStore.cs
++++ b/src/bctklib/persistence/NullCheckpointStore.cs
+@@ -42,7 +42,7 @@ namespace Neo.BlockchainToolkit.Persistence
+             return false;
+         }
+         public bool Contains(byte[] key) => false;
+-        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+             => Enumerable.Empty<(byte[], byte[])>();
+ 
+         // IReadOnlyStore<StorageKey, StorageItem> implementation
+@@ -62,7 +62,7 @@ namespace Neo.BlockchainToolkit.Persistence
+ 
+         public bool Contains(StorageKey key) => false;
+ 
+-        public IEnumerable<(StorageKey Key, StorageItem Value)> Find(StorageKey? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++        public IEnumerable<(StorageKey Key, StorageItem Value)> Find(StorageKey? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+             => Enumerable.Empty<(StorageKey, StorageItem)>();
+     }
+ }
+diff --git a/src/bctklib/persistence/NullStore.cs b/src/bctklib/persistence/NullStore.cs
+index a9625098..5b7e3367 100644
+--- a/src/bctklib/persistence/NullStore.cs
++++ b/src/bctklib/persistence/NullStore.cs
+@@ -33,7 +33,7 @@ namespace Neo.BlockchainToolkit.Persistence
+         public IEnumerable<(byte[] Key, byte[]? Value)> Seek(byte[] key, SeekDirection direction)
+             => Enumerable.Empty<(byte[], byte[]?)>();
+ 
+-        public IEnumerable<(byte[] Key, byte[]? Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++        public IEnumerable<(byte[] Key, byte[]? Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+             => Enumerable.Empty<(byte[], byte[]?)>();
+     }
+ }
+diff --git a/src/bctklib/persistence/PersistentTrackingStore.Snapshot.cs b/src/bctklib/persistence/PersistentTrackingStore.Snapshot.cs
+index 7424be11..05283680 100644
+--- a/src/bctklib/persistence/PersistentTrackingStore.Snapshot.cs
++++ b/src/bctklib/persistence/PersistentTrackingStore.Snapshot.cs
+@@ -114,11 +114,11 @@ namespace Neo.BlockchainToolkit.Persistence
+                 return FindWithUncommittedChanges(key, direction);
+             }
+ 
+-            public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++            public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+             {
+                 if (snapshot.Handle == IntPtr.Zero)
+                     throw new ObjectDisposedException(nameof(Snapshot));
+-                return FindWithUncommittedChanges(key_prefix, direction);
++                return FindWithUncommittedChanges(key_prefix, direction).Skip(skip);
+             }
+ 
+             IEnumerable<(byte[] Key, byte[] Value)> FindWithUncommittedChanges(byte[]? key, SeekDirection direction)
+diff --git a/src/bctklib/persistence/PersistentTrackingStore.cs b/src/bctklib/persistence/PersistentTrackingStore.cs
+index 3ec18727..416f4a16 100644
+--- a/src/bctklib/persistence/PersistentTrackingStore.cs
++++ b/src/bctklib/persistence/PersistentTrackingStore.cs
+@@ -150,11 +150,11 @@ namespace Neo.BlockchainToolkit.Persistence
+             return Seek(key, direction, db, columnFamily, null, store);
+         }
+ 
+-        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+         {
+             if (disposed || db.Handle == IntPtr.Zero)
+                 throw new ObjectDisposedException(nameof(RocksDbStore));
+-            return Seek(key_prefix, direction, db, columnFamily, null, store);
++            return Seek(key_prefix, direction, db, columnFamily, null, store).Skip(skip);
+         }
+ 
+         public static IEnumerable<(byte[] Key, byte[] Value)> Seek(byte[]? key, SeekDirection direction, RocksDb db, ColumnFamilyHandle columnFamily, ReadOptions? readOptions, IReadOnlyStore<byte[], byte[]> store)
+diff --git a/src/bctklib/persistence/RocksDbStore.Snapshot.cs b/src/bctklib/persistence/RocksDbStore.Snapshot.cs
+index 5490582d..9fd3c79c 100644
+--- a/src/bctklib/persistence/RocksDbStore.Snapshot.cs
++++ b/src/bctklib/persistence/RocksDbStore.Snapshot.cs
+@@ -91,11 +91,11 @@ namespace Neo.BlockchainToolkit.Persistence
+                 return FindWithPendingWrites(key, direction);
+             }
+ 
+-            public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++            public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+             {
+                 if (snapshot.Handle == IntPtr.Zero)
+                     throw new ObjectDisposedException(nameof(Snapshot));
+-                return FindWithPendingWrites(key_prefix, direction);
++                return FindWithPendingWrites(key_prefix, direction).Skip(skip);
+             }
+ 
+             IEnumerable<(byte[] Key, byte[] Value)> FindWithPendingWrites(byte[]? key, SeekDirection direction)
+diff --git a/src/bctklib/persistence/RocksDbStore.cs b/src/bctklib/persistence/RocksDbStore.cs
+index 2cbae873..9ba26dc1 100644
+--- a/src/bctklib/persistence/RocksDbStore.cs
++++ b/src/bctklib/persistence/RocksDbStore.cs
+@@ -80,11 +80,11 @@ namespace Neo.BlockchainToolkit.Persistence
+             return Seek(key, direction, db, columnFamily);
+         }
+ 
+-        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+         {
+             if (disposed || db.Handle == IntPtr.Zero)
+                 throw new ObjectDisposedException(nameof(RocksDbStore));
+-            return Seek(key_prefix, direction, db, columnFamily);
++            return Seek(key_prefix, direction, db, columnFamily).Skip(skip);
+         }
+ 
+         public static IEnumerable<(byte[] Key, byte[] Value)> Seek(
+diff --git a/src/bctklib/persistence/StateServiceStore.cs b/src/bctklib/persistence/StateServiceStore.cs
+index ebe1f443..704923a5 100644
+--- a/src/bctklib/persistence/StateServiceStore.cs
++++ b/src/bctklib/persistence/StateServiceStore.cs
+@@ -476,8 +476,8 @@ namespace Neo.BlockchainToolkit.Persistence
+             }
+         }
+ 
+-        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
+-            => Seek(key_prefix, direction);
++        public IEnumerable<(byte[] Key, byte[] Value)> Find(byte[]? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
++            => Seek(key_prefix, direction).Skip(skip);
+ 
+         // IReadOnlyStore<StorageKey, StorageItem> implementation
+         public StorageItem this[StorageKey key]
+@@ -516,10 +516,10 @@ namespace Neo.BlockchainToolkit.Persistence
+             return Contains(keyBytes);
+         }
+ 
+-        public IEnumerable<(StorageKey Key, StorageItem Value)> Find(StorageKey? key_prefix = null, SeekDirection direction = SeekDirection.Forward)
++        public IEnumerable<(StorageKey Key, StorageItem Value)> Find(StorageKey? key_prefix = null, SeekDirection direction = SeekDirection.Forward, int skip = 0)
+         {
+             var prefixBytes = key_prefix?.ToArray();
+-            foreach (var (keyBytes, valueBytes) in Find(prefixBytes, direction))
++            foreach (var (keyBytes, valueBytes) in Find(prefixBytes, direction, skip))
+             {
+                 yield return ((StorageKey)keyBytes, new StorageItem(valueBytes));
+             }
+diff --git a/src/bctklib/smart-contract/TestApplicationEngine.cs b/src/bctklib/smart-contract/TestApplicationEngine.cs
+index b530a558..d773dbc0 100644
+--- a/src/bctklib/smart-contract/TestApplicationEngine.cs
++++ b/src/bctklib/smart-contract/TestApplicationEngine.cs
+@@ -274,9 +274,9 @@ namespace Neo.BlockchainToolkit.SmartContract
+                 };
+         }
+ 
+-        protected override void PostExecuteInstruction(Instruction instruction)
++        protected override void PostExecuteInstruction(Instruction instruction, RunStats priceArgs)
+         {
+-            base.PostExecuteInstruction(instruction);
++            base.PostExecuteInstruction(instruction, priceArgs);
+ 
+             // if branchInstructionInfo is null, instruction is not a branch instruction
+             if (branchInstructionInfo is null
+diff --git a/src/bctklib/smart-contract/TraceApplicationEngine.cs b/src/bctklib/smart-contract/TraceApplicationEngine.cs
+index ab6d3542..65b44574 100644
+--- a/src/bctklib/smart-contract/TraceApplicationEngine.cs
++++ b/src/bctklib/smart-contract/TraceApplicationEngine.cs
+@@ -97,9 +97,9 @@ namespace Neo.BlockchainToolkit.SmartContract
+             return base.Execute();
+         }
+ 
+-        protected override void PostExecuteInstruction(Instruction instruction)
++        protected override void PostExecuteInstruction(Instruction instruction, RunStats priceArgs)
+         {
+-            base.PostExecuteInstruction(instruction);
++            base.PostExecuteInstruction(instruction, priceArgs);
+ 
+             if (State == VMState.HALT)
+             {

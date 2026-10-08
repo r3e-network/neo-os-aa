@@ -188,6 +188,9 @@ namespace AbstractAccount.Hooks
 
         internal static void ValidateConfigCaller(UInt160 accountId, UInt160 hookContract)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(AuthorizedCore(), accountId, "hook", "configuration");
+#else
             UInt160 core = AuthorizedCore();
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
             ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
@@ -198,6 +201,7 @@ namespace AbstractAccount.Hooks
                 CallFlags.ReadOnly,
                 new object[] { accountId, hookContract });
             ExecutionEngine.Assert(authorized, "Unauthorized");
+#endif
         }
 
         internal static void ValidateExecutionCaller(UInt160 accountId, UInt160 callerContract, UInt160 hookContract)

@@ -373,6 +373,275 @@ namespace AbstractAccount
         }
 
         /// <summary>
+        /// Records the leaf verifier dependencies owned by the currently bound
+        /// composite verifier.  The registry is written by the AA core, not by
+        /// the composite, so cleanup cannot be redirected to an arbitrary child.
+        /// Composite children are rejected: the V3 lifecycle boundary is a
+        /// finite root-to-leaf graph, which makes cleanup and gas accounting
+        /// independently auditable.
+        /// </summary>
+        public static void SetVerifierDependencies(UInt160 accountId, UInt160[] children)
+        {
+            AccountState state = GetAccountState(accountId);
+            UInt160 caller = Runtime.CallingScriptHash;
+            ExecutionEngine.Assert(state.Verifier == caller, "Only active verifier may set dependencies");
+            AssertVerifierConfigContext(accountId, caller);
+            ExecutionEngine.Assert(children != null && children.Length <= 10, "Invalid verifier dependencies");
+
+            UInt160[] dependencyList = children!;
+            ByteString[] signerDomains = new ByteString[dependencyList.Length * MaxSignerDomainsPerChild];
+            int signerDomainCount = 0;
+            for (int i = 0; i < dependencyList.Length; i++)
+            {
+                UInt160 child = dependencyList[i];
+                ExecutionEngine.Assert(child != UInt160.Zero && child.IsValid && child != caller,
+                    "Invalid verifier dependency");
+                for (int j = i + 1; j < dependencyList.Length; j++)
+                {
+                    ExecutionEngine.Assert(child != dependencyList[j], "Duplicate verifier dependency");
+                }
+
+                AssertV3VerifierDescendant(child);
+                ExecutionEngine.Assert(ModuleExposesSafeMethod(child, "supportsComposition", ContractParameterType.Boolean),
+                    "Verifier composition marker missing");
+                // This discovery call is already a descendant of the bounded root
+                // module configuration callback.  Creating another fixed-size child
+                // budget here would make a valid composite fail merely because the
+                // parent has paid its dispatch overhead; the active root budget
+                // remains the non-bypassable bound.
+                bool composite = (bool)Contract.Call(child, "supportsComposition", CallFlags.ReadOnly, new object[] { });
+                ExecutionEngine.Assert(!composite, "Composite verifier cannot be a child");
+
+                ByteString[] childDomains = ReadVerifierSignerDomains(accountId, child);
+                for (int j = 0; j < childDomains.Length; j++)
+                {
+                    for (int k = 0; k < signerDomainCount; k++)
+                    {
+                        ExecutionEngine.Assert(!EqualByteStrings(signerDomains[k], childDomains[j]),
+                            "Duplicate signer domain");
+                    }
+                    signerDomains[signerDomainCount++] = childDomains[j];
+                }
+            }
+
+            // A roster update changes which leaf configuration calls are owned
+            // by the root. No delayed child call may survive that boundary,
+            // including a call for a child that remains in the new roster.
+            ClearPendingVerifierChildCalls(accountId);
+
+            byte[] key = Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId);
+            ByteString? previousData = Storage.Get(Storage.CurrentContext, key);
+            if (previousData != null)
+            {
+                UInt160[] previousChildren = (UInt160[])StdLib.Deserialize(previousData!);
+                for (int i = 0; i < previousChildren.Length; i++)
+                {
+                    bool retained = false;
+                    for (int j = 0; j < dependencyList.Length; j++)
+                    {
+                        if (previousChildren[i] == dependencyList[j])
+                        {
+                            retained = true;
+                            break;
+                        }
+                    }
+                    if (!retained) ClearVerifierDependencyChild(accountId, previousChildren[i]);
+                }
+                SetVerifierConfigContext(accountId, caller);
+            }
+            // Reconfiguration retires removed children before the root
+            // registry is replaced.  Retained children remain configured;
+            // the enclosing transaction makes the replacement atomic if
+            // validation or child cleanup faults.
+            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(dependencyList));
+        }
+
+        /// <summary>
+        /// Clears the previously registered leaf verifier dependencies.  The
+        /// core invokes every child under the child's normal configuration
+        /// context; any fault aborts the enclosing rotation, escape, or sale.
+        /// </summary>
+        public static void ClearVerifierDependencies(UInt160 accountId)
+        {
+            AccountState state = GetAccountState(accountId);
+            UInt160 caller = Runtime.CallingScriptHash;
+            ExecutionEngine.Assert(state.Verifier == caller, "Only active verifier may clear dependencies");
+            AssertVerifierConfigContext(accountId, caller);
+
+            byte[] key = Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data == null) return;
+
+            UInt160[] children = (UInt160[])StdLib.Deserialize(data!);
+            for (int i = 0; i < children.Length; i++)
+            {
+                ClearVerifierDependencyChild(accountId, children[i]);
+            }
+
+            SetVerifierConfigContext(accountId, caller);
+            Storage.Delete(Storage.CurrentContext, key);
+        }
+
+        /// <summary>Records leaf hook dependencies in the core-owned registry.</summary>
+        public static void SetHookDependencies(UInt160 accountId, UInt160[] children)
+        {
+            AccountState state = GetAccountState(accountId);
+            UInt160 caller = Runtime.CallingScriptHash;
+            ExecutionEngine.Assert(state.HookId == caller, "Only active hook may set dependencies");
+            AssertHookConfigContext(accountId, caller);
+            ExecutionEngine.Assert(children != null && children.Length <= 8, "Invalid hook dependencies");
+
+            UInt160[] dependencyList = children!;
+            for (int i = 0; i < dependencyList.Length; i++)
+            {
+                UInt160 child = dependencyList[i];
+                ExecutionEngine.Assert(child != UInt160.Zero && child.IsValid && child != caller,
+                    "Invalid hook dependency");
+                for (int j = i + 1; j < dependencyList.Length; j++)
+                {
+                    ExecutionEngine.Assert(child != dependencyList[j], "Duplicate hook dependency");
+                }
+
+                AssertV3HookDescendant(child);
+                ExecutionEngine.Assert(ModuleExposesSafeMethod(child, "supportsComposition", ContractParameterType.Boolean),
+                    "Hook composition marker missing");
+                // Child discovery inherits the already bounded composite callback;
+                // do not allocate a second fixed budget beneath that parent.
+                bool composite = (bool)Contract.Call(child, "supportsComposition", CallFlags.ReadOnly, new object[] { });
+                ExecutionEngine.Assert(!composite, "Composite hook cannot be a child");
+            }
+
+            byte[] key = Helper.Concat(Prefix_HookDependencies, (byte[])accountId);
+            ByteString? previousData = Storage.Get(Storage.CurrentContext, key);
+            if (previousData != null)
+            {
+                UInt160[] previousChildren = (UInt160[])StdLib.Deserialize(previousData!);
+                for (int i = 0; i < previousChildren.Length; i++)
+                {
+                    bool retained = false;
+                    for (int j = 0; j < dependencyList.Length; j++)
+                    {
+                        if (previousChildren[i] == dependencyList[j])
+                        {
+                            retained = true;
+                            break;
+                        }
+                    }
+                    if (!retained) ClearHookDependencyChild(accountId, previousChildren[i]);
+                }
+                SetHookConfigContext(accountId, caller);
+            }
+            // Retire removed children before publishing the new registry;
+            // retained children keep their account-scoped configuration.
+            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(dependencyList));
+        }
+
+        /// <summary>Clears all registered leaf hook dependencies atomically.</summary>
+        public static void ClearHookDependencies(UInt160 accountId)
+        {
+            AccountState state = GetAccountState(accountId);
+            UInt160 caller = Runtime.CallingScriptHash;
+            ExecutionEngine.Assert(state.HookId == caller, "Only active hook may clear dependencies");
+            AssertHookConfigContext(accountId, caller);
+
+            byte[] key = Helper.Concat(Prefix_HookDependencies, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data == null) return;
+
+            UInt160[] children = (UInt160[])StdLib.Deserialize(data!);
+            for (int i = 0; i < children.Length; i++)
+            {
+                ClearHookDependencyChild(accountId, children[i]);
+            }
+
+            SetHookConfigContext(accountId, caller);
+            Storage.Delete(Storage.CurrentContext, key);
+        }
+
+        private static void ClearVerifierDependencyChild(UInt160 accountId, UInt160 child)
+        {
+            SetVerifierConfigContext(accountId, child);
+            try
+            {
+                // The composite root is already executing under the fixed
+                // maintenance budget. Child cleanup inherits that ancestor
+                // budget; a second fixed child cap would reject valid cleanup
+                // after the root's dispatch cost.
+                Contract.Call(child, "clearAccount", CallFlags.All, new object[] { accountId });
+            }
+            finally
+            {
+                ClearVerifierConfigContext(accountId);
+            }
+        }
+
+        private static ByteString[] ReadVerifierSignerDomains(UInt160 accountId, UInt160 child)
+        {
+            Contract? deployed = ContractManagement.GetContract(child);
+            ExecutionEngine.Assert(deployed != null, "Verifier child is not deployed");
+            ExecutionEngine.Assert(ModuleExposesSafeMethod(child,
+                "getSignerDomains", ContractParameterType.Array, ContractParameterType.Hash160),
+                "Verifier signer-domain ABI missing");
+
+            ByteString[] domains = (ByteString[])Contract.Call(
+                child, "getSignerDomains", CallFlags.ReadOnly, new object[] { accountId });
+            ExecutionEngine.Assert(domains.Length > 0,
+                "Child signer-domain set is empty");
+            ExecutionEngine.Assert(domains.Length <= MaxSignerDomainsPerChild,
+                "Child signer-domain set is too large");
+            for (int i = 0; i < domains.Length; i++)
+            {
+                ByteString? domain = domains[i];
+                ExecutionEngine.Assert(domain != null && domain.Length == 32,
+                    "Invalid signer domain");
+                for (int j = 0; j < i; j++)
+                {
+                    ExecutionEngine.Assert(!EqualByteStrings(domain!, domains[j]!),
+                        "Duplicate signer domain");
+                }
+            }
+            return domains;
+        }
+
+        private static bool EqualByteStrings(ByteString left, ByteString right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i]) return false;
+            }
+            return true;
+        }
+
+        private static void ClearHookDependencyChild(UInt160 accountId, UInt160 child)
+        {
+            SetHookConfigContext(accountId, child);
+            try
+            {
+                // Child cleanup inherits the bounded composite-root context.
+                Contract.Call(child, "clearAccount", CallFlags.All, new object[] { accountId });
+            }
+            finally
+            {
+                ClearHookConfigContext(accountId);
+            }
+        }
+
+        private static void AssertVerifierConfigContext(UInt160 accountId, UInt160 verifier)
+        {
+            byte[] key = Helper.Concat(Prefix_VerifierConfigContext, (byte[])accountId);
+            ByteString? value = Storage.Get(Storage.CurrentContext, key);
+            ExecutionEngine.Assert(value != null && (UInt160)value == verifier, "Verifier config context missing");
+        }
+
+        private static void AssertHookConfigContext(UInt160 accountId, UInt160 hook)
+        {
+            byte[] key = Helper.Concat(Prefix_HookConfigContext, (byte[])accountId);
+            ByteString? value = Storage.Get(Storage.CurrentContext, key);
+            ExecutionEngine.Assert(value != null && (UInt160)value == hook, "Hook config context missing");
+        }
+
+        /// <summary>
         /// Authorizes a verifier plugin to apply post-execution effects during the verifier phase.
         /// </summary>
         [Safe]

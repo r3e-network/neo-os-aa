@@ -1,0 +1,8 @@
+{
+  "NeoNativeVerifier": {"project": "NeoNativeVerifier.Native.csproj", "role": "verifier", "configurationMethods": ["setConfig"]},
+  "WhitelistHook": {"project": "WhitelistHook.Native.csproj", "role": "hook", "configurationMethods": ["setWhitelist"]},
+  "SessionKeyVerifier": {"project": "SessionKeyVerifier.Native.csproj", "role": "verifier", "configurationMethods": ["setSessionKey", "clearSessionKey"]},
+  "DailyLimitHook": {"project": "DailyLimitHook.Native.csproj", "role": "hook", "configurationMethods": ["setDailyLimit"]},
+  "TokenRestrictedHook": {"project": "TokenRestrictedHook.Native.csproj", "role": "hook", "configurationMethods": ["setRestrictedToken"]},
+  "MultiSigVerifier": {"project": "MultiSigVerifier.Native.csproj", "role": "verifier", "configurationMethods": ["setConfig"]}
+}

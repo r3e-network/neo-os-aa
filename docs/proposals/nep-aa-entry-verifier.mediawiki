@@ -57,14 +57,14 @@ The ABI representation of <code>UserOperation</code> is an Array of exactly six 
 |-
 | 2 || args || Array || Ordered target method arguments
 |-
-| 3 || nonce || Integer || Unsigned 256-bit two-dimensional nonce
+| 3 || nonce || Integer || Non-negative NeoVM Integer with a two-dimensional nonce
 |-
 | 4 || deadline || Integer || Non-negative expiry timestamp in milliseconds
 |-
 | 5 || signature || ByteArray || Authorization data interpreted by the configured verifier
 |}
 
-The core MUST reject invalid field shapes and numeric ranges before target execution. <code>targetContract</code> MUST be non-zero. <code>method</code> MUST be a non-empty UTF-8 string of at most 128 bytes. <code>args</code> MUST contain at most 64 items and its canonical serialization MUST be at most 4096 bytes. <code>signature</code> MUST be at most 1024 bytes. <code>nonce</code> and <code>deadline</code> MUST each be in the unsigned 256-bit range.
+The core MUST reject invalid field shapes and numeric ranges before target execution. <code>targetContract</code> MUST be non-zero. <code>method</code> MUST be a non-empty UTF-8 string of at most 128 bytes. <code>args</code> MUST contain at most 64 items and its canonical serialization MUST be at most 4096 bytes. <code>signature</code> MUST be at most 1024 bytes. <code>nonce</code> and <code>deadline</code> MUST each be non-negative and strictly less than <code>2^255</code>. NeoVM Integers use signed 256-bit representation; the upper half of an unsigned 256-bit value requires 33 bytes and is not representable by this ABI. An implementation MUST NOT truncate, wrap, or reinterpret a negative Integer as an unsigned value.
 
 A zero-length signature is permitted only when the configured authorization scheme explicitly permits it, such as a native-witness scheme. A zero-length signature is not authorization by itself.
 
@@ -118,8 +118,8 @@ A batch executes operations in order and is all-or-nothing. A profile MAY impose
 ===Replay protection===
 
 <pre>
-0 <= nonce < 2^256
-channel  = nonce >> 64             // 0 <= channel < 2^192
+0 <= nonce < 2^255
+channel  = nonce >> 64             // 0 <= channel < 2^191
 sequence = nonce & (2^64 - 1)       // 0 <= sequence < 2^64
 </pre>
 

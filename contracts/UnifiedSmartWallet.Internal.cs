@@ -1,5 +1,6 @@
 using System.Numerics;
 using Neo;
+using Neo.SmartContract;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Services;
@@ -25,12 +26,29 @@ namespace AbstractAccount
         private static readonly byte[] Prefix_VerifierExecutionContext = new byte[] { 0x0E };
         private static readonly byte[] Prefix_PendingVerifierCall = new byte[] { 0x0F };
         private static readonly byte[] Prefix_PendingHookCall = new byte[] { 0x10 };
+        private static readonly byte[] Prefix_PendingVerifierChildCall = new byte[] { 0x22 };
         private static readonly byte[] Prefix_VerifyScopeTarget = new byte[] { 0x1C };
+        // Composite verifier/hook dependency registries.  They are owned by the
+        // core so a composite cannot select an arbitrary account-scoped child
+        // during cleanup; only dependencies registered during its config call
+        // may be cleared by the core.
+        private static readonly byte[] Prefix_VerifierDependencies = new byte[] { 0x20 };
+        private static readonly byte[] Prefix_HookDependencies = new byte[] { 0x21 };
 
         private static readonly BigInteger MaxMetadataUriLength = 240;
 
         private static readonly BigInteger EscapeCooldownMs = 60L * 60 * 1000;
         private static readonly BigInteger ConfigUpdateTimelockMs = 24L * 60 * 60 * 1000;
+        private const int MaxSignerDomainsPerChild = 10;
+
+        private static object CallModuleWithMaintenanceBudget(
+            UInt160 module,
+            string method,
+            CallFlags flags,
+            object[] args)
+        {
+            return Contract.CallWithGasLimit(module, method, flags, ModuleMaintenanceGasLimit, args);
+        }
 
         private static void SetVerifyContext(UInt160 accountId, UInt160 targetContract)
         {
@@ -85,6 +103,22 @@ namespace AbstractAccount
         {
             byte[] key = Helper.Concat(Prefix_HookConfigContext, (byte[])accountId);
             Storage.Delete(Storage.CurrentContext, key);
+        }
+
+        private static void ClearPendingVerifierChildCalls(UInt160 accountId)
+        {
+            byte[] prefix = Helper.Concat(Prefix_PendingVerifierChildCall, (byte[])accountId);
+            Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly);
+            while (iterator.Next())
+            {
+                Storage.Delete(Storage.CurrentContext, (ByteString)iterator.Value);
+            }
+        }
+
+        private static void ClearPendingVerifierCall(UInt160 accountId)
+        {
+            Storage.Delete(Storage.CurrentContext,
+                Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId));
         }
 
         private static void SetHookExecutionContext(UInt160 accountId, UInt160 hookContract)

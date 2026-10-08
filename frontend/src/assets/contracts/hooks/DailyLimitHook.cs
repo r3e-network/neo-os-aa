@@ -17,9 +17,15 @@ namespace AbstractAccount.Hooks
     /// inside its own storage. It is meant for treasury and user-wallet safety policies.
     /// </remarks>
     [DisplayName("DailyLimitHook")]
+#if SMARTACCOUNT_NATIVE
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAccountAddress")]
+    [ContractPermission("*", "balanceOf")]
+    [ManifestExtra("SmartAccountProfile", "native-v1")]
+#else
     [ContractPermission("*", "canExecuteHook")]
     [ContractPermission("*", "canConfigureHook")]
     [ContractPermission("*", "getProxyScriptHash")]
+#endif
     [ManifestExtra("Description", "Daily Limit Policy Hook Plugin for Neo N3 AA")]
     public class DailyLimitHook : SmartContract
     {
@@ -38,6 +44,9 @@ namespace AbstractAccount.Hooks
 
         [Safe]
         public static bool SupportsV3() => true;
+
+        [Safe]
+        public static bool SupportsComposition() => false;
 
         [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
@@ -81,6 +90,10 @@ namespace AbstractAccount.Hooks
         public static void SetDailyLimit(UInt160 accountId, UInt160 token, BigInteger maxAmount, bool useRollingWindow)
         {
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
+#if SMARTACCOUNT_NATIVE
+            ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid limited token");
+            ExecutionEngine.Assert(maxAmount >= 0, "Negative daily limit");
+#endif
             byte[] key = Helper.Concat(Helper.Concat(Prefix_DailyLimit, (byte[])accountId), (byte[])token);
             if (maxAmount <= 0)
             {
@@ -88,6 +101,11 @@ namespace AbstractAccount.Hooks
                 // Clear history when removing limit
                 byte[] historyPrefix = Helper.Concat(Prefix_TransactionHistory, (byte[])accountId);
                 ClearHistoryForToken(historyPrefix, token);
+#if SMARTACCOUNT_NATIVE
+                Storage.Delete(Storage.CurrentContext, BuildTrackedKey(Prefix_SpentToday, accountId, token));
+                Storage.Delete(Storage.CurrentContext, BuildTrackedKey(Prefix_LastReset, accountId, token));
+                Storage.Delete(Storage.CurrentContext, BuildBalanceSnapshotKey(accountId, token));
+#endif
             }
             else
             {
@@ -130,7 +148,11 @@ namespace AbstractAccount.Hooks
         /// </summary>
         public static void PreExecute(UInt160 accountId, object[] opParams)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "preExecute");
+#else
             HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+#endif
 
             // Audit fix HIGH (daily-limit bypass): the per-token, direct-target check below only
             // inspects op.TargetContract, so a call routed through a router/intermediary contract
@@ -156,9 +178,18 @@ namespace AbstractAccount.Hooks
 
             BigInteger currentTime = Runtime.Time;
             BigInteger spentToday;
+#if SMARTACCOUNT_NATIVE
+            BigInteger liveRecords = 0;
+#endif
             if (config.UseRollingWindow)
             {
+#if SMARTACCOUNT_NATIVE
+                BigInteger[] usage = ReadRollingUsage(accountId, targetContract, currentTime, false);
+                spentToday = usage[0];
+                liveRecords = usage[1];
+#else
                 spentToday = GetRollingWindowSpent(accountId, targetContract, currentTime);
+#endif
             }
             else
             {
@@ -171,12 +202,22 @@ namespace AbstractAccount.Hooks
             ExecutionEngine.Assert(newTotal <= config.MaxAmount, "Daily limit exceeded");
             if (config.UseRollingWindow)
             {
+#if SMARTACCOUNT_NATIVE
+                ExecutionEngine.Assert(liveRecords < MaxHistorySize, "Daily limit history full");
+#else
                 ExecutionEngine.Assert(GetRollingWindowRecordCount(accountId, targetContract, currentTime) < MaxHistorySize, "Daily limit history full");
+#endif
             }
         }
 
         public static void PostExecute(UInt160 accountId, object[] opParams, object result)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "postExecute");
+            // A business-level false return does not imply storage rollback. Meter
+            // observed net outflow and clear every snapshot regardless of that value.
+            MeterAllLimitedOutflows(accountId, UInt160.Zero);
+#else
             HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
 
             // A failed op moves no funds, so nothing is accrued. The transient PreExecute
@@ -214,17 +255,25 @@ namespace AbstractAccount.Hooks
             // being the direct "transfer" target is still counted. Reverts the whole tx if any
             // token's limit would be exceeded. Fails closed.
             MeterAllLimitedOutflows(accountId, directlyRecorded);
+#endif
         }
 
         public static void ClearAccount(UInt160 accountId)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "cleanup");
+#else
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
+#endif
 
             ClearPrefixForAccount(Prefix_DailyLimit, accountId);
             ClearPrefixForAccount(Prefix_SpentToday, accountId);
             ClearPrefixForAccount(Prefix_LastReset, accountId);
             ClearPrefixForAccount(Prefix_TransactionHistory, accountId);
             ClearPrefixForAccount(Prefix_TransactionCounter, accountId);
+#if SMARTACCOUNT_NATIVE
+            ClearPrefixForAccount(Prefix_BalanceSnapshot, accountId);
+#endif
         }
 
         private static void ClearPrefixForAccount(byte[] prefix, UInt160 accountId)
@@ -260,7 +309,14 @@ namespace AbstractAccount.Hooks
             if (method != "transfer") return false;
 
             object[] args = (object[])opParams[2];
+#if SMARTACCOUNT_NATIVE
+            ExecutionEngine.Assert(opParams.Length == 6 && args.Length == 4, "Invalid native transfer shape");
+            ExecutionEngine.Assert(args[0] is ByteString && ((ByteString)args[0]).Length == 20, "Invalid transfer source");
+            ExecutionEngine.Assert(args[1] is ByteString && ((ByteString)args[1]).Length == 20 && (UInt160)args[1] != UInt160.Zero, "Invalid transfer recipient");
+            ExecutionEngine.Assert(args[2] is BigInteger, "Invalid transfer amount type");
+#else
             if (args.Length < 3) return false;
+#endif
 
             fromAccount = (UInt160)args[0];
             amount = (BigInteger)args[2];
@@ -295,12 +351,22 @@ namespace AbstractAccount.Hooks
         {
             UInt160 core = HookAuthority.AuthorizedCore();
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "authorized core not set");
+#if SMARTACCOUNT_NATIVE
+            return (UInt160)Contract.Call(core, "getAccountAddress", CallFlags.ReadOnly, accountId);
+#else
             return (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId);
+#endif
         }
 
         private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account)
         {
+#if SMARTACCOUNT_NATIVE
+            object balance = Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
+            ExecutionEngine.Assert(balance is BigInteger && (BigInteger)balance >= 0, "Invalid token balance");
+            return (BigInteger)balance;
+#else
             return (BigInteger)Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
+#endif
         }
 
         /// <summary>
@@ -341,6 +407,9 @@ namespace AbstractAccount.Hooks
                 UInt160 token = (UInt160)(ByteString)iterator.Value;
                 byte[] snapKey = BuildBalanceSnapshotKey(accountId, token);
                 ByteString? snap = Storage.Get(Storage.CurrentContext, snapKey);
+#if SMARTACCOUNT_NATIVE
+                ExecutionEngine.Assert(snap != null, "Missing daily balance snapshot");
+#endif
                 // Always clear the transient snapshot so it cannot bleed into a future op.
                 Storage.Delete(Storage.CurrentContext, snapKey);
 
@@ -356,9 +425,21 @@ namespace AbstractAccount.Hooks
                 BigInteger outflow = before - after;
                 if (outflow <= 0) continue;            // inflow or no movement
 
+#if SMARTACCOUNT_NATIVE
+                BigInteger liveRecords = 0;
+                BigInteger spentToday;
+                if (config.UseRollingWindow)
+                {
+                    BigInteger[] usage = ReadRollingUsage(accountId, token, currentTime, true);
+                    spentToday = usage[0];
+                    liveRecords = usage[1];
+                }
+                else spentToday = GetFixedWindowSpent(accountId, token, currentTime);
+#else
                 BigInteger spentToday = config.UseRollingWindow
                     ? GetRollingWindowSpent(accountId, token, currentTime)
                     : GetFixedWindowSpent(accountId, token, currentTime);
+#endif
 
                 BigInteger newTotal = spentToday + outflow;
                 ExecutionEngine.Assert(newTotal >= spentToday, "Integer overflow in daily limit check");
@@ -366,7 +447,11 @@ namespace AbstractAccount.Hooks
 
                 if (config.UseRollingWindow)
                 {
+#if SMARTACCOUNT_NATIVE
+                    ExecutionEngine.Assert(liveRecords < MaxHistorySize, "Daily limit history full");
+#else
                     ExecutionEngine.Assert(GetRollingWindowRecordCount(accountId, token, currentTime) < MaxHistorySize, "Daily limit history full");
+#endif
                     RecordTransaction(accountId, token, currentTime, outflow);
                 }
                 else
@@ -399,9 +484,42 @@ namespace AbstractAccount.Hooks
         {
             byte[] spentKey = BuildTrackedKey(Prefix_SpentToday, accountId, token);
             byte[] resetKey = BuildTrackedKey(Prefix_LastReset, accountId, token);
+#if SMARTACCOUNT_NATIVE
+            ByteString? anchor = Storage.Get(Storage.CurrentContext, resetKey);
+            if (anchor == null || currentTime >= (BigInteger)anchor + OneDayMs)
+                Storage.Put(Storage.CurrentContext, resetKey, currentTime);
+#else
             Storage.Put(Storage.CurrentContext, resetKey, currentTime);
+#endif
             Storage.Put(Storage.CurrentContext, spentKey, amount);
         }
+
+#if SMARTACCOUNT_NATIVE
+        // Read each record once per callback. Pruning in postExecute is atomic
+        // with the target operation; no live spending is discarded on overflow.
+        private static BigInteger[] ReadRollingUsage(UInt160 accountId, UInt160 token, BigInteger currentTime, bool prune)
+        {
+            byte[] prefix = BuildTrackedKey(Prefix_TransactionHistory, accountId, token);
+            BigInteger cutoff = currentTime - OneDayMs;
+            BigInteger total = 0;
+            BigInteger count = 0;
+            Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.None);
+            while (iterator.Next())
+            {
+                object[] item = (object[])iterator.Value;
+                TransactionRecord record = (TransactionRecord)StdLib.Deserialize((ByteString)item[1]);
+                if (record.Timestamp >= cutoff)
+                {
+                    BigInteger prior = total;
+                    total += record.Amount;
+                    ExecutionEngine.Assert(total >= prior, "Integer overflow in rolling window calculation");
+                    count++;
+                }
+                else if (prune) Storage.Delete(Storage.CurrentContext, (ByteString)item[0]);
+            }
+            return new BigInteger[] { total, count };
+        }
+#endif
 
         // Rolling window - tracks individual transactions and sums only those within 24h
         private static BigInteger GetRollingWindowSpent(UInt160 accountId, UInt160 token, BigInteger currentTime)
@@ -449,9 +567,12 @@ namespace AbstractAccount.Hooks
         {
             byte[] historyPrefix = Helper.Concat(Helper.Concat(Prefix_TransactionHistory, (byte[])accountId), (byte[])token);
 
-            // Remove expired records first, then refuse to discard live spend records.
+#if !SMARTACCOUNT_NATIVE
+            // Native postExecute already pruned and checked count in one scan.
+            // Keep the deployed-contract profile's accounting unchanged.
             PruneOldRecords(historyPrefix, timestamp - OneDayMs);
             ExecutionEngine.Assert(GetRollingWindowRecordCount(accountId, token, timestamp) < MaxHistorySize, "Daily limit history full");
+#endif
 
             // Get and increment sub-counter to handle multiple transactions in the same block
             byte[] counterKey = Helper.Concat(Prefix_TransactionCounter, (byte[])accountId);

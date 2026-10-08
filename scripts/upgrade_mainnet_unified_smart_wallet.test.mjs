@@ -33,7 +33,7 @@ test("mainnet candidate removes the instant admin transfer surface", () => {
   const artifact = script.candidateArtifact();
   assert.equal(script.REMOVED_METHODS.includes("transferAdmin"), true);
   assert.equal(artifact.methodCount > 0, true);
-  assert.equal(artifact.methodCount, 89);
+  assert.equal(artifact.methodCount, 94);
 });
 
 test("mainnet candidate contains the governed upgrade surface", () => {
