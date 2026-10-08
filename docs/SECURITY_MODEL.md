@@ -491,9 +491,9 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 | --- | --- |
 | **Deposit-Backed** | Sponsorship is only possible with pre-deposited GAS |
 | **Policy Enforcement** | Per-account or global policies with target/method restrictions |
-| **Per-Op Limits** | Each operation capped to `MaxPerOp` GAS |
-| **Daily Budget** | Rolling 24-hour spend cap per (sponsor, account) pair |
-| **Total Budget** | Lifetime spend cap with overflow protection |
+| **Per-Op Limits** | `MaxPerOp` caps the settled sponsor reimbursement, not the enclosing transaction fee |
+| **Daily Budget** | Rolling 24-hour settlement cap per resolved policy scope; global policies require a positive budget shared across all sponsored accounts |
+| **Total Budget** | Lifetime settlement cap per resolved policy scope, with overflow protection |
 | **Expiry Timestamps** | Policies auto-expire at `ValidUntil` |
 | **Core-Only Settlement** | Only the authorized AA core contract can call `settleReimbursement` |
 | **Checks-Effects-Interactions** | Deposit deducted before GAS transferred to relay |
@@ -508,8 +508,16 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 | **Network Isolation** | Testnet/Mainnet separation |
 | **Reason Disclosure** | Explain rejections to users |
 
-**Reimbursement cap and fee estimation:** `executeSponsoredUserOp` caps the settled
-reimbursement at the enclosing transaction's system fee plus network fee. A container whose
+**Reimbursement cap and fee estimation:** For a fee-bearing transaction,
+`executeSponsoredUserOp` and its batch variant settle
+`min(requested reimbursement, transaction.SystemFee + transaction.NetworkFee)`.
+The policy's `MaxPerOp`, daily budget and total budget apply to that settled amount.
+A transaction fee above `MaxPerOp` does not by itself cause rejection: for example,
+fees of 150 datoshi, a request of 70 and a limit of 100 settle 70. A settled amount
+above the limit faults atomically, reverting the deposit and nonce changes.
+The relay pays any fee portion that the sponsor does not reimburse.
+
+A container whose
 fees are both zero can only be an `invokescript`/`invokefunction` estimation (a persisted
 transaction must pay for its consumed gas and for witness verification), so that container
 caps at the requested amount, the largest amount the chain could settle; every transaction

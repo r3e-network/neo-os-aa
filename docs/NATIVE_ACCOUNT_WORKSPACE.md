@@ -23,6 +23,8 @@ service hash/name, exact ABI, profile digest and successful getVersion=2.
    7-day custody recovery delay; activation is a separate transaction. Native ABI
    2 recovery detaches old modules without requiring their callbacks, advances
    authority epoch and preserves funding address, nonces and frozen state.
+   The configured recovery authority may cancel any still-pending recovery;
+   custody may cancel only strictly before maturity.
 5. **Restricted sessions / multiple approvals**: build declared module calls
    with typed values, finite session expiry and an explicit positive spending
    cap. Session configuration excludes the automatically prepended account id.

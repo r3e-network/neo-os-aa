@@ -1,64 +1,129 @@
 {
-  "schema": "aa-formal-source-lock/v2",
-  "boundary": "Manual correspondence snapshot for explicitly scoped public, PLATFORM, and native ABI 2 abstractions; NOT a C#/NeoVM/NEF refinement proof, arbitrary-plugin liveness proof, or deployed-artifact attestation. External native core content, not its checkout path or HEAD alone, identifies the implementation.",
-  "sources": {
-    "Directory.Build.props": "c003c09715a996e268136c35e7e8555f9bcb376cdebc40a250b07f73e86c6799",
-    "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
-    "contracts/UnifiedSmartWallet.Escape.cs": "433b064b7bb06f1344e5ac8977fa0e2323c588a82963c55f82a53d162059aee6",
-    "contracts/UnifiedSmartWallet.Execution.cs": "441c7213440125196d505c5b843af5a6b2f975e524d6e44aa3b1b88b1027f7c3",
-    "contracts/UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
-    "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
-    "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
-    "contracts/UnifiedSmartWallet.State.cs": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f",
-    "contracts/UnifiedSmartWallet.VerifierChildren.cs": "38d414912d0fafc678d4e7c49000c6c7dc5e817ba6e21db7074c0d66f060ab5a",
-    "contracts/UnifiedSmartWallet.VerifyContext.cs": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7",
-    "contracts/UnifiedSmartWallet.csproj": "701a59fc3ea905c7ee37f246759a7f3e558e30a57f6b515eb107f4c5e248f20e",
-    "contracts/compile.sh": "103974fbd139c55d87d6d3af0698f4dc7f6b63fab1fafe416ef3fa82cb285225",
-    "contracts/hooks/DailyLimitHook.cs": "2ea97d9c0d4a78570543e89d4eafba4f41000018c95670e87caee29193240f19",
-    "contracts/hooks/HookAuthority.cs": "971083370fa07a2cec32493a8566ab8246d478c9fa86da9b6338355b5996aca1",
-    "contracts/hooks/MultiHook.cs": "537f4b5bc4fabe70dc54ea2c66636911853797f1090b4af323b5ae17e6d6afcd",
-    "contracts/hooks/TokenRestrictedHook.cs": "a7f0d51a288b0c7ebec9908583e77e74b9926fd4d139abda64c27b5dfcfca249",
-    "contracts/hooks/WhitelistHook.cs": "27f43ccb43c29a37495d13da7e2a1e5d4119420a08cdf04a160059b9dea7b09f",
-    "contracts/native/DailyLimitHook.Native.csproj": "e3766888d043e00a2217a90ccba604ec7f3ba3db92ed1c5ddc5c1fac49713f9d",
-    "contracts/native/MultiSigVerifier.Native.csproj": "030c194051033ef45a53a57813926fb87ef1af50212212503a62d64f8b5ddb53",
-    "contracts/native/NativeAuthority.cs": "78c74c0d4fec03d5c8d68a6ac7b2c289f9dc3468fe9cddbbf593e350cabd4f3d",
-    "contracts/native/NeoNativeVerifier.Native.csproj": "d864c9b85e229dfd3ee91a487fa20cfec8337f4d1d6499c955527dc4036635b9",
-    "contracts/native/SessionKeyVerifier.Native.csproj": "c2b3ad5b3a2a9592db788211899df533dd248eec36446153340a6c24dbb996c1",
-    "contracts/native/TokenRestrictedHook.Native.csproj": "746a44316721f7497a784e3baf1acf0947753e9e07734fe859148b7df8c8806e",
-    "contracts/native/WhitelistHook.Native.csproj": "fe67014420dd66169afbf810c5ab80435beb47cb68ab317a0d700210e16f3745",
-    "contracts/native/packages.DailyLimitHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
-    "contracts/native/packages.MultiSigVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
-    "contracts/native/packages.NeoNativeVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
-    "contracts/native/packages.SessionKeyVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
-    "contracts/native/packages.TokenRestrictedHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
-    "contracts/native/packages.WhitelistHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
-    "contracts/native/profiles.json": "461aca674b5062d0642d282b3a1c14766f03dfc80da9830f4c1c2f7fad8b985e",
-    "contracts/neo-platform-packages.json": "c58f09322b80cfe665f221f025cc6a1d60d0ba2030451c9c437f6a6687048f74",
-    "contracts/paymaster/Paymaster.cs": "c04511d90eff0e97fabb94d17c38c80de4287186138dcdf01073ee2a16cada87",
-    "contracts/verifiers/MultiSigVerifier.cs": "f3dcdcd30914a14f2d3a06dd4795500ae75d1ebdf0cbd69ee6da3d6a4aab41de",
-    "contracts/verifiers/NativeOperation.cs": "682e6a13c7aa7eeb6987bd32668439dde76fb6dd9b24746d724dccda5024254f",
-    "contracts/verifiers/NeoNativeVerifier.cs": "e8bf031d41bb5bbd745e01d51b703aeb60f948f0177ab63a597623fac841763e",
-    "contracts/verifiers/SessionKeyVerifier.cs": "5f31d1e42d24f4a8abfe1f7529462b6d9047c2276e4bb9125f74a28c44812a29",
-    "contracts/verifiers/SignerDomain.cs": "107ab905f362fd661b9c24585a23a79a7ecf7bce1370c97bc0beb6d3ca4afaf6",
-    "contracts/verifiers/VerifierAuthority.cs": "b964e3e2886718075f9b30f74e3a26c70e7d3d77af9f63f2ba22e4a16626993e",
-    "contracts/verifiers/VerifierClock.cs": "e3e2fb7ef5eccf95cac5384bb7bb4e7341a774c31f49128174d722dd1adf4f2c",
-    "contracts/verifiers/VerifierPayload.cs": "f2fc6713d49b49054dd9f2a833d8be93d40bd521ce03d8868391036706d78c80",
-    "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md": "99122c0d38f8720b1137a8d1760899abb9e191c556da60b0d28e256324c4ce60",
-    "docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md": "d6001c46de89caea2d28271c5bdf391397fec98fb9d74e0cf1f672a022526f08",
-    "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md": "8533ab8115667fab3b1b2c9d20d3d5c8825b2bb05dc4d8cb091a2efcecd26f93",
-    "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md": "4f9a11cd06ef3f67854e9e2a5e6fcef7978acb436f22a4a8cc9718e12d8b795d",
-    "docs/proposals/smartaccount-native-profile-v2-parameters.json": "b7e4d88a516d5d2340bb6c2ecdec7d46ceffab47798c900bd8b7ea3d5f6218ea",
-    "docs/proposals/smartaccount-native-profile-v2-vectors.json": "b934135041e7224fa4b53afe1f55bd2489a7d78d8c049807abf4b27b09d9ae92",
-    "docs/proposals/validate-native-smartaccount-profile.py": "88c81deb5b7de68e099487279f1208454f5c522dc75ab545301ba15f8f2508a5",
-    "formal/verify-in-docker.sh": "c2e99bdc5329ed7b525b04682354cfbe99f9a25fc5a7faf0aa0e681e40af418f",
-    "formal/verify.py": "6041b08be48ca30dddfddbf7f5304f50e02a2cced2aa8524c0b0390f6af33065",
-    "nuget.config": "d03316715c5c46428149533dbd994d81a9fcdf97c8981a05083113523db82797",
-    "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
-    "scripts/check_neo_platform_packages.mjs": "3e59f2002a67fdf8ffb995834f707e984ce3260628521348b09754362bb9ba30",
-    "scripts/native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
-    "scripts/verify_repo.sh": "caa4c66d7481b20d227e0c339866faa9e5419c873079eb6bc2a2ccbdd5615bbf"
+  "modelChecksPassed": true,
+  "implementationVerified": false,
+  "boundary": "Hand-written abstractions; no VM/source/NEF refinement or liveness proof",
+  "runtimeProfiles": {
+    "v3": {
+      "artifactDirectory": "contracts/bin/v3",
+      "define": null,
+      "verifierCall": "System.Contract.Call",
+      "verifierChildBudgetEnforced": false
+    },
+    "platform": {
+      "artifactDirectory": "contracts/bin/platform",
+      "define": "PLATFORM",
+      "verifierCall": "System.Contract.CallWithGasLimit",
+      "verifierChildBudgetEnforced": true
+    },
+    "native": {
+      "artifactDirectory": "explicit native build output",
+      "define": "SMARTACCOUNT_NATIVE",
+      "core": "AccountManagement",
+      "abiVersion": 2,
+      "identityVersion": 1,
+      "verifierCall": "bounded native callback",
+      "verifierChildBudgetEnforced": true,
+      "verifierBudgetDatoshi": 100000000,
+      "hookBudgetDatoshi": 250000000
+    }
   },
-  "nativeCoreSources": {
+  "modelProfiles": {
+    "coq/AbiManifestProjection.v": [
+      "native"
+    ],
+    "coq/AttestationProofBinding.v": [
+      "native"
+    ],
+    "coq/AuthorizationEvidence.v": [
+      "native"
+    ],
+    "coq/CallbackPluginTopology.v": [
+      "native"
+    ],
+    "coq/MultiSigPolicy.v": [
+      "v3",
+      "platform"
+    ],
+    "coq/NativeAuthorityEpoch.v": [
+      "native"
+    ],
+    "coq/NativeCompositePhase.v": [
+      "native"
+    ],
+    "coq/NativeDailyPolicy.v": [
+      "native"
+    ],
+    "coq/NativeDispatch.v": [
+      "native"
+    ],
+    "coq/NativeIntegerDomain.v": [
+      "native"
+    ],
+    "coq/NativeInvocation.v": [
+      "native"
+    ],
+    "coq/NativeLifecycle.v": [
+      "native"
+    ],
+    "coq/NativeRestrictedPolicy.v": [
+      "native"
+    ],
+    "coq/NativeSessionPolicy.v": [
+      "native"
+    ],
+    "coq/NativeSessionScope.v": [
+      "native"
+    ],
+    "coq/NeoVmCallSubset.v": [
+      "native"
+    ],
+    "coq/NeoVmContinuationSemantics.v": [
+      "native"
+    ],
+    "coq/PluginLifecycle.v": [
+      "native"
+    ],
+    "coq/ProxyWitnessScript.v": [
+      "v3",
+      "platform"
+    ],
+    "coq/SignerDomainSeparation.v": [
+      "native"
+    ],
+    "coq/SignerIndependence.v": [
+      "native"
+    ],
+    "coq/UnifiedSmartWalletAA.v": [
+      "v3",
+      "platform"
+    ],
+    "coq/VerifierGasBudget.v": [
+      "platform",
+      "native"
+    ],
+    "coq/WitnessRuleFaultSemantics.v": [
+      "native"
+    ],
+    "coq/WitnessRuleRefinement.v": [
+      "native"
+    ],
+    "coq/WitnessRuleSemantics.v": [
+      "native"
+    ],
+    "smt/aa_core.smt2": [
+      "v3",
+      "platform"
+    ],
+    "tla/UnifiedSmartWalletAA.cfg": [
+      "v3",
+      "platform"
+    ],
+    "tla/UnifiedSmartWalletAA.tla": [
+      "v3",
+      "platform"
+    ]
+  },
+  "nativeCoreSourceSha256": {
     "src/Directory.Build.props": "b6cb09e9b9112c2ff2007cad2e387edaa5cb85fc4094dfb70fbf37bd96a02c50",
     "src/Neo.Extensions/AssemblyExtensions.cs": "8ca0facf6d8115fcd3a418d10e65c3df638e257c4d38b68c4a05422b0d3a0392",
     "src/Neo.Extensions/BigIntegerExtensions.cs": "7a41465ebb4dbe5c149dae68ff55b19476994c5a8cedbb9d54f9be9a8b2bdcb9",
@@ -370,125 +435,482 @@
     "src/Neo/Wallets/Wallet.cs": "7602afc8408134d40466866f75e2817b9a5011dbab719c9b274278201fa3d9a3",
     "src/Neo/Wallets/WalletAccount.cs": "711c61a96f1761629ef4b3bdd88488684198c7ef0255cf19ace2a3809e765cde"
   },
-  "runtimeProfiles": {
-    "v3": {
-      "artifactDirectory": "contracts/bin/v3",
-      "define": null,
-      "verifierCall": "System.Contract.Call",
-      "verifierChildBudgetEnforced": false
+  "multisigBoundedModel": {
+    "profiles": [
+      "v3",
+      "platform"
+    ],
+    "configCases": 104,
+    "acceptanceCases": 206846,
+    "sourceGuards": 6,
+    "sourceMutationsRejected": [
+      "non_empty",
+      "maximum_size",
+      "threshold_range",
+      "address_validity",
+      "no_duplicates",
+      "post_execute_threshold"
+    ]
+  },
+  "nativeCompositeBoundedModel": {
+    "profiles": [
+      "native"
+    ],
+    "caps": {
+      "children": 3,
+      "threshold": 2,
+      "approved": 2,
+      "domains": 3
     },
-    "platform": {
-      "artifactDirectory": "contracts/bin/platform",
-      "define": "PLATFORM",
-      "verifierCall": "System.Contract.CallWithGasLimit",
-      "verifierChildBudgetEnforced": true
-    },
-    "native": {
-      "artifactDirectory": "explicit native build output",
-      "define": "SMARTACCOUNT_NATIVE",
-      "core": "AccountManagement",
-      "abiVersion": 2,
-      "identityVersion": 1,
-      "verifierCall": "bounded native callback",
-      "verifierChildBudgetEnforced": true,
-      "verifierBudgetDatoshi": 100000000,
-      "hookBudgetDatoshi": 250000000
+    "configCases": 475,
+    "selectionCases": 3124,
+    "validationCases": 64096,
+    "receiptCases": 159744,
+    "completionCases": 8,
+    "allActivePinCases": 32,
+    "lifetime": "oneApplicationOperation",
+    "postSignatureRevalidation": false,
+    "boundary": "Finite abstract conditions; byte copy/hash/crypto/VM refinement and gas feasibility external"
+  },
+  "artifactSha256": {
+    "coq/AbiManifestProjection.v": "2f493bdab71a43aa64ca05d224c0430276c6cbf6322d9c3ef51dc07b936109bb",
+    "coq/AttestationProofBinding.v": "d354a57a9366101140fa9f104fb7c25583ef7e37042c9110fec13e58892c874e",
+    "coq/AuthorizationEvidence.v": "9341879ef7356afe9d850695b544a1a8a1050a2f84afd85c4863ee5d20ee5f23",
+    "coq/CallbackPluginTopology.v": "b64f4a7e76266999051f08a92ffe7f203ed69869f7af8b487a591f666a98cb20",
+    "coq/MultiSigPolicy.v": "d60feb81ddb946175f41ca3cbc58df26feed3b64fec94fcd5a3f4b95c1fb0806",
+    "coq/NativeAuthorityEpoch.v": "9e2b5808ea568e39f41307fac1f2e2594585a0d80a944342965bf3995c99b7df",
+    "coq/NativeCompositePhase.v": "0371c03df489c619256f6788b4c47350be06e67221723bcd14b3782aed0a8648",
+    "coq/NativeDailyPolicy.v": "c7111e64c2bb5f532b9424e60c28f3ea157bf5c5359c62d2631338e1dfc95ce4",
+    "coq/NativeDispatch.v": "57f8ee4abaab289aae773bdc8c79edf2f77a9ad84c46c24cdf8d8aec1c20a6f1",
+    "coq/NativeIntegerDomain.v": "197a6a1a13eca4198795d28ae712d7d58ca2104dc8f1efc8c581c6e69dd03207",
+    "coq/NativeInvocation.v": "e11d8be09c8b63aeba143801bdabcf1d9e681d49a89a9fa7a978ba7c3478be0c",
+    "coq/NativeLifecycle.v": "2d220b9e214e65ee43845600d827d179810ebd87553b90eca74b1bb6bc09ceb6",
+    "coq/NativeRestrictedPolicy.v": "65a24bb861c68e91def6161714839299988e88f80beb0aab38c251e33112d0c5",
+    "coq/NativeSessionPolicy.v": "cf46d220c883baa9a40b9aa01f01ed05deec508dbafe97d658a3890a34422079",
+    "coq/NativeSessionScope.v": "77dcf998dad91b31d102952f3755b3f1224b9e28639fff3fae6c25360623711b",
+    "coq/NeoVmCallSubset.v": "48c2473f90b1353da974dba19cad99c4aa5c627c73ac33646f4da19e9a4a2cb0",
+    "coq/NeoVmContinuationSemantics.v": "64ea06713a8e530d7b5e054d3278d1aa3488175346a604908920abccafe9d8a6",
+    "coq/PluginLifecycle.v": "3478f557b92d53f75c22d597a4ec79a0cc3589bea2fcbff5e4e7e8be6d47ccac",
+    "coq/ProxyWitnessScript.v": "030d190b9ae73a63ee9c201a9a45b6d6b3d49384f57104951399580f0fd6c340",
+    "coq/SignerDomainSeparation.v": "77757a3f6a0a9d3e55c09b4216880aedf05e093b0e25a3115170c41c12924607",
+    "coq/SignerIndependence.v": "d5128e1ff9fd1fec883d4bd62c3d6cfeccd1efec3bc4eaa872bd0d25da9dc9f3",
+    "coq/UnifiedSmartWalletAA.v": "6f6c67b2f780b3a3d0c8413085be6225a6c10ef4599e130fd5630b5e10b0ee68",
+    "coq/VerifierGasBudget.v": "fbcc215d1adc357e99670537f493fbaa29f2f6c721eb67c700a6c9eedfe746bc",
+    "coq/WitnessRuleFaultSemantics.v": "4496876430fcb8606c6312ba8e129915eb3b5aed9e2d8d23299e6a9514225ddb",
+    "coq/WitnessRuleRefinement.v": "e3d03b6f6c117a9d9317e8e09af9fa7866fdd22c9982ab2171edbc81cac6d30b",
+    "coq/WitnessRuleSemantics.v": "b8592d8e5b8225463506943e9564277e88ba44def81382206d8891990ba03c27",
+    "smt/aa_core.smt2": "49a2f207a175e07138f9ffd1d2b49200a3db1dd37394e188053cbc8d164b05e8",
+    "tla/UnifiedSmartWalletAA.cfg": "268386d69c8b18f3cbe464a300e16ca9ecba0abe635d609ee6e0e85ec91ef333",
+    "tla/UnifiedSmartWalletAA.tla": "226957a7a494545eed044a647a292f133be53376e7b717537169e6696e730766"
+  },
+  "sourceSha256": {
+    "Directory.Build.props": "c003c09715a996e268136c35e7e8555f9bcb376cdebc40a250b07f73e86c6799",
+    "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
+    "contracts/UnifiedSmartWallet.Escape.cs": "433b064b7bb06f1344e5ac8977fa0e2323c588a82963c55f82a53d162059aee6",
+    "contracts/UnifiedSmartWallet.Execution.cs": "441c7213440125196d505c5b843af5a6b2f975e524d6e44aa3b1b88b1027f7c3",
+    "contracts/UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
+    "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
+    "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
+    "contracts/UnifiedSmartWallet.State.cs": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f",
+    "contracts/UnifiedSmartWallet.VerifierChildren.cs": "38d414912d0fafc678d4e7c49000c6c7dc5e817ba6e21db7074c0d66f060ab5a",
+    "contracts/UnifiedSmartWallet.VerifyContext.cs": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7",
+    "contracts/UnifiedSmartWallet.csproj": "701a59fc3ea905c7ee37f246759a7f3e558e30a57f6b515eb107f4c5e248f20e",
+    "contracts/compile.sh": "103974fbd139c55d87d6d3af0698f4dc7f6b63fab1fafe416ef3fa82cb285225",
+    "contracts/hooks/DailyLimitHook.cs": "2ea97d9c0d4a78570543e89d4eafba4f41000018c95670e87caee29193240f19",
+    "contracts/hooks/HookAuthority.cs": "971083370fa07a2cec32493a8566ab8246d478c9fa86da9b6338355b5996aca1",
+    "contracts/hooks/MultiHook.cs": "537f4b5bc4fabe70dc54ea2c66636911853797f1090b4af323b5ae17e6d6afcd",
+    "contracts/hooks/TokenRestrictedHook.cs": "a7f0d51a288b0c7ebec9908583e77e74b9926fd4d139abda64c27b5dfcfca249",
+    "contracts/hooks/WhitelistHook.cs": "27f43ccb43c29a37495d13da7e2a1e5d4119420a08cdf04a160059b9dea7b09f",
+    "contracts/native/DailyLimitHook.Native.csproj": "e3766888d043e00a2217a90ccba604ec7f3ba3db92ed1c5ddc5c1fac49713f9d",
+    "contracts/native/MultiSigVerifier.Native.csproj": "030c194051033ef45a53a57813926fb87ef1af50212212503a62d64f8b5ddb53",
+    "contracts/native/NativeAuthority.cs": "78c74c0d4fec03d5c8d68a6ac7b2c289f9dc3468fe9cddbbf593e350cabd4f3d",
+    "contracts/native/NeoNativeVerifier.Native.csproj": "d864c9b85e229dfd3ee91a487fa20cfec8337f4d1d6499c955527dc4036635b9",
+    "contracts/native/SessionKeyVerifier.Native.csproj": "c2b3ad5b3a2a9592db788211899df533dd248eec36446153340a6c24dbb996c1",
+    "contracts/native/TokenRestrictedHook.Native.csproj": "746a44316721f7497a784e3baf1acf0947753e9e07734fe859148b7df8c8806e",
+    "contracts/native/WhitelistHook.Native.csproj": "fe67014420dd66169afbf810c5ab80435beb47cb68ab317a0d700210e16f3745",
+    "contracts/native/packages.DailyLimitHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "contracts/native/packages.MultiSigVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "contracts/native/packages.NeoNativeVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "contracts/native/packages.SessionKeyVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "contracts/native/packages.TokenRestrictedHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "contracts/native/packages.WhitelistHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "contracts/native/profiles.json": "461aca674b5062d0642d282b3a1c14766f03dfc80da9830f4c1c2f7fad8b985e",
+    "contracts/neo-platform-packages.json": "c58f09322b80cfe665f221f025cc6a1d60d0ba2030451c9c437f6a6687048f74",
+    "contracts/paymaster/Paymaster.cs": "c04511d90eff0e97fabb94d17c38c80de4287186138dcdf01073ee2a16cada87",
+    "contracts/verifiers/MultiSigVerifier.cs": "f3dcdcd30914a14f2d3a06dd4795500ae75d1ebdf0cbd69ee6da3d6a4aab41de",
+    "contracts/verifiers/NativeOperation.cs": "682e6a13c7aa7eeb6987bd32668439dde76fb6dd9b24746d724dccda5024254f",
+    "contracts/verifiers/NeoNativeVerifier.cs": "e8bf031d41bb5bbd745e01d51b703aeb60f948f0177ab63a597623fac841763e",
+    "contracts/verifiers/SessionKeyVerifier.cs": "5f31d1e42d24f4a8abfe1f7529462b6d9047c2276e4bb9125f74a28c44812a29",
+    "contracts/verifiers/SignerDomain.cs": "107ab905f362fd661b9c24585a23a79a7ecf7bce1370c97bc0beb6d3ca4afaf6",
+    "contracts/verifiers/VerifierAuthority.cs": "b964e3e2886718075f9b30f74e3a26c70e7d3d77af9f63f2ba22e4a16626993e",
+    "contracts/verifiers/VerifierClock.cs": "e3e2fb7ef5eccf95cac5384bb7bb4e7341a774c31f49128174d722dd1adf4f2c",
+    "contracts/verifiers/VerifierPayload.cs": "f2fc6713d49b49054dd9f2a833d8be93d40bd521ce03d8868391036706d78c80",
+    "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md": "99122c0d38f8720b1137a8d1760899abb9e191c556da60b0d28e256324c4ce60",
+    "docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md": "d6001c46de89caea2d28271c5bdf391397fec98fb9d74e0cf1f672a022526f08",
+    "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md": "8533ab8115667fab3b1b2c9d20d3d5c8825b2bb05dc4d8cb091a2efcecd26f93",
+    "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md": "4f9a11cd06ef3f67854e9e2a5e6fcef7978acb436f22a4a8cc9718e12d8b795d",
+    "docs/proposals/smartaccount-native-profile-v2-parameters.json": "b7e4d88a516d5d2340bb6c2ecdec7d46ceffab47798c900bd8b7ea3d5f6218ea",
+    "docs/proposals/smartaccount-native-profile-v2-vectors.json": "b934135041e7224fa4b53afe1f55bd2489a7d78d8c049807abf4b27b09d9ae92",
+    "docs/proposals/validate-native-smartaccount-profile.py": "88c81deb5b7de68e099487279f1208454f5c522dc75ab545301ba15f8f2508a5",
+    "formal/verify-in-docker.sh": "c2e99bdc5329ed7b525b04682354cfbe99f9a25fc5a7faf0aa0e681e40af418f",
+    "formal/verify.py": "6041b08be48ca30dddfddbf7f5304f50e02a2cced2aa8524c0b0390f6af33065",
+    "nuget.config": "d03316715c5c46428149533dbd994d81a9fcdf97c8981a05083113523db82797",
+    "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
+    "scripts/check_neo_platform_packages.mjs": "3e59f2002a67fdf8ffb995834f707e984ce3260628521348b09754362bb9ba30",
+    "scripts/native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
+    "scripts/verify_repo.sh": "caa4c66d7481b20d227e0c339866faa9e5419c873079eb6bc2a2ccbdd5615bbf"
+  },
+  "tlcJarSha256": "7beec0f04818732a62fa193731711a99aa4f11279499b2360a7d156c519ea78d",
+  "toolVersions": {
+    "java": "openjdk version \"26.0.2.1\" 2026-08-18",
+    "coq": "The Rocq Prover, version 9.2",
+    "z3": "Z3 version 5.1.0 - 64 bit",
+    "tlc": "TLC2 Version 2026.10.06.014338 (rev: 94d0c50)"
+  },
+  "coqDeclarations": {
+    "NativeAuthorityEpoch.v": 44,
+    "NativeCompositePhase.v": 45,
+    "NativeRestrictedPolicy.v": 15,
+    "NativeSessionScope.v": 22,
+    "NativeDailyPolicy.v": 24,
+    "NativeSessionPolicy.v": 23,
+    "UnifiedSmartWalletAA.v": 23,
+    "MultiSigPolicy.v": 13,
+    "ProxyWitnessScript.v": 25,
+    "CallbackPluginTopology.v": 23,
+    "VerifierGasBudget.v": 6,
+    "AuthorizationEvidence.v": 7,
+    "WitnessRuleSemantics.v": 15,
+    "NeoVmCallSubset.v": 5,
+    "AttestationProofBinding.v": 7,
+    "SignerIndependence.v": 3,
+    "PluginLifecycle.v": 3,
+    "WitnessRuleFaultSemantics.v": 11,
+    "SignerDomainSeparation.v": 4,
+    "AbiManifestProjection.v": 8,
+    "NeoVmContinuationSemantics.v": 16,
+    "WitnessRuleRefinement.v": 21,
+    "NativeIntegerDomain.v": 24,
+    "NativeLifecycle.v": 22,
+    "NativeDispatch.v": 13,
+    "NativeInvocation.v": 21
+  },
+  "coqMutationsRejected": {
+    "NativeAuthorityEpoch.v": [
+      "epoch-bound-inclusive",
+      "recovery-authority-bypass",
+      "recovery-timelock-bypass",
+      "recovery-stale-proposal-bypass",
+      "recovery-epoch-overflow-bypass",
+      "recovery-config-overflow-bypass",
+      "recovery-retains-old-epoch",
+      "recovery-retains-old-config",
+      "recovery-retains-verifier",
+      "recovery-retains-hook",
+      "recovery-retains-dependencies",
+      "recovery-retains-pending",
+      "recovery-unfreezes",
+      "recovery-resets-target-nonces",
+      "failed-recovery-commits",
+      "configuration-changes-epoch",
+      "namespace-ignores-epoch",
+      "namespace-ignores-account",
+      "signature-ignores-epoch",
+      "signature-ignores-configuration",
+      "epoch-unreachable-state-admission",
+      "execution-envelope-arity-bypass"
+    ],
+    "NativeCompositePhase.v": [
+      "composite-validation-grant",
+      "composite-validation-phase",
+      "composite-signature-count",
+      "composite-insufficient-support",
+      "composite-selection-last-children",
+      "composite-nonboolean-vote",
+      "composite-max-children",
+      "composite-max-threshold",
+      "composite-max-domains",
+      "composite-duplicate-roster",
+      "composite-zero-roster",
+      "composite-zero-threshold",
+      "composite-threshold-over-roster",
+      "composite-post-grant",
+      "composite-post-phase",
+      "composite-verification-reuse",
+      "composite-cross-operation",
+      "composite-receipt-arity",
+      "composite-commitment-type",
+      "composite-commitment-length",
+      "composite-approved-count",
+      "composite-approved-order",
+      "composite-all-active-pins",
+      "composite-pre-policy",
+      "composite-post-policy",
+      "composite-post-pins",
+      "composite-post-ready",
+      "composite-retain-verification",
+      "composite-retain-after-completion",
+      "composite-skips-unapproved-pins",
+      "composite-mint-without-validation"
+    ],
+    "NativeRestrictedPolicy.v": [
+      "restricted-missing-snapshot",
+      "restricted-invalid-query",
+      "restricted-outflow",
+      "restricted-direct-target",
+      "restricted-ignore-later-token",
+      "restricted-false-result-bypass",
+      "restricted-removal-snapshot",
+      "restricted-cleanup-snapshot"
+    ],
+    "NativeSessionScope.v": [
+      "scope-target",
+      "scope-wildcard",
+      "scope-exact-method",
+      "scope-cap-configuration",
+      "scope-context",
+      "scope-signature",
+      "scope-expiry",
+      "scope-zero-cap-shape",
+      "scope-capped-shape",
+      "scope-capped-budget",
+      "scope-uncapped-false",
+      "scope-uncapped-debit",
+      "scope-target-fault",
+      "scope-capped-false",
+      "scope-revoked-key",
+      "scope-replaced-key",
+      "scope-nonce-replay",
+      "scope-expired-signature"
+    ],
+    "NativeDailyPolicy.v": [
+      "daily-moving-anchor",
+      "daily-expiry-boundary",
+      "daily-retains-expired-spend",
+      "daily-cap-removed",
+      "daily-false-result-bypass",
+      "daily-reversed-delta",
+      "daily-expired-record-retained",
+      "daily-history-cap-removed",
+      "daily-scan-ignores-amount",
+      "daily-scan-ignores-count",
+      "daily-prune-live-records",
+      "daily-negative-balance-coercion",
+      "daily-noninteger-balance-coercion",
+      "daily-query-fault-coercion",
+      "daily-invalid-delta-fallback"
+    ],
+    "NativeSessionPolicy.v": [
+      "session-rotation-reset-spent",
+      "session-rotation-timestamp",
+      "session-rotation-cooldown",
+      "session-revocation-key",
+      "session-revocation-spent",
+      "session-revocation-cooldown",
+      "session-cleanup-cooldown",
+      "session-verification-clock",
+      "session-application-clock",
+      "session-context",
+      "session-signature",
+      "session-scope",
+      "session-expiry",
+      "session-shape",
+      "session-cap",
+      "session-zero-cap-bypass",
+      "session-target-result",
+      "session-fault-rollback",
+      "session-exact-debit"
+    ],
+    "UnifiedSmartWalletAA.v": [
+      "authorization",
+      "nonce-check",
+      "nonce-increment",
+      "reentrancy",
+      "escape-owner",
+      "rollback",
+      "operation-shape",
+      "reject-all"
+    ],
+    "MultiSigPolicy.v": [
+      "multisig-threshold",
+      "multisig-signature-count",
+      "multisig-uniqueness"
+    ],
+    "ProxyWitnessScript.v": [
+      "witness-prefix-check",
+      "witness-account-binding",
+      "witness-core-binding",
+      "witness-flags-range",
+      "witness-method-arity",
+      "witness-entrypoint-allowlist",
+      "witness-syscall-tail",
+      "witness-unknown-opcode"
+    ],
+    "CallbackPluginTopology.v": [
+      "callback-target-binding",
+      "callback-signature-binding",
+      "callback-post-order",
+      "verifier-post-order",
+      "scope-entry-binding",
+      "cleanup-fail-closed",
+      "composite-cleanup-all-children",
+      "composite-root-clear",
+      "composite-failure-rollback",
+      "leaf-mutation-invalidates-root-intent",
+      "dependency-replacement-skips-cleanup",
+      "dependency-replacement-publishes-on-failure",
+      "topology-all-children-leaf"
+    ],
+    "VerifierGasBudget.v": [
+      "budget-limit-check",
+      "ancestor-conjunction",
+      "atomic-failure-state",
+      "nested-ancestor-requirement"
+    ],
+    "AuthorizationEvidence.v": [
+      "evidence-validity",
+      "evidence-account-binding",
+      "evidence-target-binding",
+      "evidence-nonce-binding",
+      "evidence-provider-binding",
+      "evidence-nullifier-nonzero",
+      "evidence-replay-freshness"
+    ],
+    "WitnessRuleSemantics.v": [
+      "witness-first-match-action",
+      "witness-default-deny",
+      "witness-called-by-entry-depth",
+      "witness-condition-nonempty",
+      "witness-condition-child-limit",
+      "witness-condition-depth-guard"
+    ],
+    "NeoVmCallSubset.v": [
+      "neo-vm-safe-prefix",
+      "neo-vm-exact-tail",
+      "neo-vm-tail-boundary"
+    ],
+    "AttestationProofBinding.v": [
+      "proof-validity",
+      "proof-account-binding",
+      "proof-target-binding",
+      "proof-nonce-binding",
+      "proof-issuer-binding",
+      "proof-measurement-binding",
+      "proof-nullifier-nonzero",
+      "proof-replay-freshness"
+    ],
+    "SignerIndependence.v": [
+      "signer-domain-uniqueness"
+    ],
+    "PluginLifecycle.v": [
+      "plugin-admission"
+    ],
+    "WitnessRuleFaultSemantics.v": [
+      "witness-group-permission",
+      "witness-caller-group-permission",
+      "witness-negation-fault",
+      "witness-and-short-circuit",
+      "witness-or-short-circuit",
+      "witness-rule-fault"
+    ],
+    "SignerDomainSeparation.v": [
+      "signer-domain-binding"
+    ],
+    "AbiManifestProjection.v": [
+      "abi-requires-initializer",
+      "abi-requires-unique-dispatch-keys",
+      "abi-requires-every-manifest-method",
+      "abi-requires-safe-flag-equality"
+    ],
+    "NeoVmContinuationSemantics.v": [
+      "neo-vm-child-budget-bound",
+      "neo-vm-hardfork-gate",
+      "neo-vm-loadscript-continuation",
+      "neo-vm-callt-return-address",
+      "neo-vm-rollback-storage",
+      "neo-vm-ancestor-charge"
+    ],
+    "WitnessRuleRefinement.v": [
+      "witness-refinement-readstates",
+      "witness-refinement-not-fault",
+      "witness-refinement-and-short-circuit",
+      "witness-refinement-or-short-circuit",
+      "witness-refinement-rule-action",
+      "witness-parser-width",
+      "witness-parser-nonempty",
+      "witness-parser-depth",
+      "witness-parser-rule-depth",
+      "witness-fuel-bound"
+    ],
+    "NativeIntegerDomain.v": [
+      "native-integer-upper-bound",
+      "native-channel-width",
+      "native-nonce-consumption",
+      "native-nonce-exhaustion",
+      "native-batch-shadow-update",
+      "native-batch-cross-channel",
+      "native-batch-failure-acceptance"
+    ],
+    "NativeLifecycle.v": [
+      "native-config-root-postcheck",
+      "native-config-child-postcheck",
+      "native-config-missing-binding",
+      "native-config-fault-rollback",
+      "native-config-success-commit",
+      "native-lifecycle-frozen-config",
+      "native-lifecycle-recovery-config",
+      "native-lifecycle-joint-unfreeze",
+      "native-lifecycle-cancel-boundary",
+      "native-lifecycle-clear-recovery",
+      "native-lifecycle-epoch-increment",
+      "native-lifecycle-epoch-overflow"
+    ],
+    "NativeDispatch.v": [
+      "native-dispatch-missing-activation",
+      "native-dispatch-future-height",
+      "native-dispatch-ledger-height",
+      "native-dispatch-caller-identity",
+      "native-dispatch-read-permission",
+      "native-dispatch-fee-attribution",
+      "native-dispatch-return-policy"
+    ],
+    "NativeInvocation.v": [
+      "module-service-identity",
+      "module-phase-grant",
+      "service-witness-gate",
+      "service-witness-identity",
+      "service-proxy-frame",
+      "service-proxy-legacy",
+      "service-unregistered-legacy",
+      "invocation-account",
+      "invocation-phase",
+      "invocation-frame",
+      "invocation-parent",
+      "invocation-target-kind",
+      "invocation-fault-reset",
+      "invocation-config-delegation",
+      "invocation-witness-substitution"
+    ]
+  },
+  "tlc": {
+    "generated": 11859476,
+    "distinct": 61460,
+    "actions": {
+      "Init": 4,
+      "Tick": 24592,
+      "Begin": 11804160,
+      "CompleteSuccess": 120,
+      "CompleteFailure": 30600
     }
   },
-  "modelProfiles": {
-    "coq/AbiManifestProjection.v": [
-      "native"
-    ],
-    "coq/AttestationProofBinding.v": [
-      "native"
-    ],
-    "coq/AuthorizationEvidence.v": [
-      "native"
-    ],
-    "coq/CallbackPluginTopology.v": [
-      "native"
-    ],
-    "coq/MultiSigPolicy.v": [
-      "v3",
-      "platform"
-    ],
-    "coq/NativeAuthorityEpoch.v": [
-      "native"
-    ],
-    "coq/NativeCompositePhase.v": [
-      "native"
-    ],
-    "coq/NativeDailyPolicy.v": [
-      "native"
-    ],
-    "coq/NativeDispatch.v": [
-      "native"
-    ],
-    "coq/NativeIntegerDomain.v": [
-      "native"
-    ],
-    "coq/NativeInvocation.v": [
-      "native"
-    ],
-    "coq/NativeLifecycle.v": [
-      "native"
-    ],
-    "coq/NativeRestrictedPolicy.v": [
-      "native"
-    ],
-    "coq/NativeSessionPolicy.v": [
-      "native"
-    ],
-    "coq/NativeSessionScope.v": [
-      "native"
-    ],
-    "coq/NeoVmCallSubset.v": [
-      "native"
-    ],
-    "coq/NeoVmContinuationSemantics.v": [
-      "native"
-    ],
-    "coq/PluginLifecycle.v": [
-      "native"
-    ],
-    "coq/ProxyWitnessScript.v": [
-      "v3",
-      "platform"
-    ],
-    "coq/SignerDomainSeparation.v": [
-      "native"
-    ],
-    "coq/SignerIndependence.v": [
-      "native"
-    ],
-    "coq/UnifiedSmartWalletAA.v": [
-      "v3",
-      "platform"
-    ],
-    "coq/VerifierGasBudget.v": [
-      "platform",
-      "native"
-    ],
-    "coq/WitnessRuleFaultSemantics.v": [
-      "native"
-    ],
-    "coq/WitnessRuleRefinement.v": [
-      "native"
-    ],
-    "coq/WitnessRuleSemantics.v": [
-      "native"
-    ],
-    "smt/aa_core.smt2": [
-      "v3",
-      "platform"
-    ],
-    "tla/UnifiedSmartWalletAA.cfg": [
-      "v3",
-      "platform"
-    ],
-    "tla/UnifiedSmartWalletAA.tla": [
-      "v3",
-      "platform"
-    ]
+  "tlcMutationsRejected": [
+    "authorization",
+    "operation-shape",
+    "nonce-increment",
+    "rollback"
+  ],
+  "smt": {
+    "obligations": 6,
+    "controls": 6
   }
 }

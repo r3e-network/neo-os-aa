@@ -27,6 +27,23 @@ VM_URL = f"https://www.myget.org/F/neo/api/v3/flatcontainer/neo.vm/{VM_VERSION}/
 CORE_PROJECTS = ("Neo", "Neo.Extensions", "Neo.IO", "Neo.Json")
 PROBE_FILES = ("Program.cs", "NativeMultiSigProbe.csproj", "packages.lock.json")
 PROBE_MODULES = ("SessionKeyVerifier", "NeoNativeVerifier", "MultiSigVerifier")
+# Schema v1 is a reviewed finite matrix, not a count threshold. Adding a case
+# requires changing the producer and this evidence boundary together.
+PROBE_SCENARIOS = {
+    ("SN", "11", False, False, False), ("SN", "11", True, False, False),
+    ("SS", "11", False, False, False), ("SS", "11", True, False, False),
+    ("SSN", "110", False, False, False), ("SSN", "101", False, False, False),
+    ("SSN", "011", False, False, False), ("SSN", "111", False, False, False),
+    ("SSN", "111", False, True, False), ("SSN", "111", True, False, False),
+    ("SSN", "110", True, False, False), ("SSN", "101", True, False, False),
+    ("SSN", "011", True, False, False), ("SSS", "111", True, True, False),
+    ("SSS", "111", True, False, False), ("SSS", "110", True, False, False),
+    ("SSN", "100", False, False, False), ("SSN", "111", False, False, True),
+}
+PROBE_PRICING = {"executionFeeFactor": 30, "storagePriceDatoshi": 100000,
+                 "globalVerificationLimitDatoshi": 150000000, "rootCallbackLimitDatoshi": 100000000,
+                 "internalFeeScale": "10000000"}
+PROBE_DOMAIN = "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528"
 
 
 def sha256(path):
@@ -163,10 +180,81 @@ def parse_probe_output(output):
     return candidates[0]
 
 
+def validate_probe_cases(receipt):
+    """Require the reviewed matrix and measured outcome, including negative cases."""
+    require(receipt.get("pricing") == PROBE_PRICING, "Probe pricing differs from the reviewed measurement conditions")
+    cases = receipt.get("cases")
+    require(isinstance(cases, list) and len(cases) == len(PROBE_SCENARIOS) + 2, "Native VM scenario matrix is incomplete or contains unknown cases")
+    seen, aliases = set(), set()
+    for case in cases:
+        require(isinstance(case, dict), "Probe case must be an object")
+        if "label" in case:
+            require(case["label"] == "session-native-same-key-rejected" and type(case.get("uncompressed")) is bool, "Unknown signer-alias scenario")
+            encoding = case["uncompressed"]
+            require(encoding not in aliases, "Duplicate signer-alias scenario")
+            aliases.add(encoding)
+            require(all(case.get(key) is True for key in ("configurationRollback", "invalidPointRollback", "revocationClearsDomainAndLastUse")), "Signer-alias rejection or rollback did not pass")
+            require(case.get("standardAccount") == "0x7efe7ee0d3e349e085388c351955e5172605de66" and case.get("domain") == PROBE_DOMAIN and case.get("initialLastUseHex") == "", "Signer-alias vector or initial policy state differs")
+            continue
+        require(all(type(case.get(key)) is bool for key in ("Maximum", "BadSignature", "Malformed")), "Scenario selectors must be exact Booleans")
+        require(type(case.get("Roster")) is str and type(case.get("Slots")) is str, "Scenario identity must be strings")
+        identity = tuple(case.get(key) for key in ("Roster", "Slots", "Maximum", "BadSignature", "Malformed"))
+        require(identity in PROBE_SCENARIOS and identity not in seen, "Unknown or duplicate execution scenario")
+        seen.add(identity)
+        roster, slots, maximum, bad_signature, malformed = identity
+        deep = roster == "SSS" and maximum and not bad_signature
+        grow_spent = roster == "SSN" and slots == "111" and maximum
+        signature_bytes = 2 + sum(1 if slot == "0" else 3 if malformed and i == len(roster) - 1 else 66 if kind == "S" else 2
+                                  for i, (kind, slot) in enumerate(zip(roster, slots)))
+        # The 4096-byte args envelope contains 84 fixed bytes (two Hash160s,
+        # one 32-byte positive Integer and byte-string framing); depth 8 adds
+        # seven two-byte Array wrappers. Check measured inputs, not Maximum alone.
+        measurements = {
+            "descriptionBytes": 128 if maximum else 16,
+            "amount": str(2 ** 255 - (2 if grow_spent else 1)) if maximum else "1000000",
+            "dataLength": (3998 if deep else 4012) if maximum else 0,
+            "argumentDepth": 8 if deep else 1,
+            "methodBytes": 128 if roster == "SSS" and slots == "110" else 8,
+            "priorSpent": "1" if grow_spent else "0",
+            "signatureBytes": 1024 if grow_spent else signature_bytes,
+            "timestamp": str(2 ** 64 - 1 - (24 - len(roster)) * 86400000) if maximum else str(1468595302000 + (len(roster) + 1) * 86400000),
+            "lastUsePostRollbackNegativeControls": 4 if roster == "SN" and not maximum else 0,
+            "canonicalDomain": PROBE_DOMAIN,
+        }
+        require(all(type(case.get(key)) is type(value) and case[key] == value for key, value in measurements.items()), "Probe measured inputs or negative-control coverage differ from the scenario")
+        expected = not case["Malformed"] and case["Slots"].count("1") >= 2
+        state = "HALT" if expected else "FAULT"
+        result, verification = case.get("result"), case.get("verification")
+        require(isinstance(result, dict) and isinstance(verification, dict), "Probe omitted trigger results")
+        require(result.get("state") == state and verification.get("state") == state, "Probe trigger outcome differs from the expected approval")
+        require(type(result.get("gas")) is int and type(result.get("minimum")) is int and 0 < result["gas"] <= result["minimum"], "Probe admission fee is absent or below consumption")
+        require(type(result.get("notifications")) is int and result["notifications"] == (1 if expected else 0), "Probe target notification outcome differs")
+        require(type(verification.get("gasConsumedDatoshi")) is int and 0 < verification["gasConsumedDatoshi"] <= PROBE_PRICING["globalVerificationLimitDatoshi"], "Verification exceeds its global budget")
+        require(verification.get("gasLimitDatoshi") == PROBE_PRICING["globalVerificationLimitDatoshi"], "Verification budget differs from the reviewed limit")
+        require(verification.get("authorized") is expected, "Verification did not report the expected authorization")
+        if expected:
+            require(type(verification.get("resultCount")) is int and verification["resultCount"] == 1
+                    and verification.get("resultType") == "Boolean" and verification.get("booleanResult") is True,
+                    "Verification HALT must return exactly one Boolean true")
+            require(result.get("error") is None and verification.get("exception") is None, "Successful scenario contains a VM failure")
+        else:
+            reason = "Invalid child signature type" if case["Malformed"] else "Verifier rejected signature"
+            require(all(isinstance(error, str) and reason in error for error in (result.get("error"), verification.get("exception"))), "Negative scenario failed for an unrelated reason")
+        phases = case.get("phases")
+        names = ["validateCompositeSignature", "postExecuteComposite"] if expected else ["validateCompositeSignature"]
+        require(isinstance(phases, list) and [p.get("phase") if isinstance(p, dict) else None for p in phases] == names, "Probe callback phases are absent, duplicated or incorrect")
+        for phase in phases:
+            values = [phase.get(key) for key in ("limitDatoshi", "consumedDatoshi", "remainingDatoshi")]
+            require(all(isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]*", value) for value in values), "Callback measurements must be canonical nonnegative integers")
+            limit, consumed, remaining = map(int, values)
+            require(limit == PROBE_PRICING["rootCallbackLimitDatoshi"] and 0 < consumed < limit and remaining == limit - consumed, "Callback exceeds or misreports its fixed budget")
+    require(seen == PROBE_SCENARIOS and aliases == {False, True}, "Probe omitted a required execution or signer-alias scenario")
+
+
 def validate_probe(receipt, runtime, modules, probe_sources):
     require(receipt.get("schema") == "smartaccount-native-multisig-probe/v1" and receipt.get("status") == "PASS", "Native VM probe did not pass")
     require(receipt.get("publicNetworksTouched") is False, "Unexpected probe network mode")
-    require(isinstance(receipt.get("cases"), list) and len(receipt["cases"]) >= 20, "Native VM scenario matrix is incomplete")
+    validate_probe_cases(receipt)
     require(receipt.get("probeSourceHashes") == probe_sources, "Executed probe source differs from the reviewed source")
     expected_artifacts = {f"{name}{suffix}": modules[f"{name}{suffix}"] for name in PROBE_MODULES for suffix in (".nef", ".manifest.json")}
     require(receipt.get("artifactHashes") == expected_artifacts, "Probe did not execute the reproducible module bytes")

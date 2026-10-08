@@ -128,6 +128,11 @@ test('client read methods invoke manifest methods with matching arity', async ()
   });
 
   client.rpcClient = {
+    async send(method, [scriptHash, operation, params = []]) {
+      assert.equal(method, 'invokefunction');
+      recorded.push({ target: scriptHash.replace(/^0x/, ''), operation, paramCount: params.length });
+      return genericResponse();
+    },
     async invokeFunction(scriptHash, operation, params = []) {
       recorded.push({ target: scriptHash.replace(/^0x/, ''), operation, paramCount: params.length });
       return genericResponse();

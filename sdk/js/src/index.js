@@ -20,6 +20,8 @@ const { createRegistrationAccountIdDeriver } = require('../../../shared/registra
 
 // Result rules for token transfers, shared with the relay route and the wallet (shared/transferOutcome.mjs).
 const transferOutcome = require('../../../shared/transferOutcome.mjs');
+const { normalizeRelayContractParameter } = require('../../../shared/relayContractParameter.mjs');
+const { toMultiSigRpcParameter } = require('../../../shared/multiSigCore.mjs');
 
 const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({
   hash160: (value) => sanitizeHex(u.hash160(value)),
@@ -77,6 +79,33 @@ function decodeByteStringStackText(item) {
 
 // Stack-item decode helpers shared with the frontend via shared/metaTxCore.mjs.
 const { decodeStackBoolean, decodeHash160Stack, decodeValidationPreviewStack } = metaTxExports;
+
+// Both sponsored builders and the signing hash use the same typed byte boundary.
+function userOpArgsParameter(args, depth = 2) {
+  try {
+    return normalizeRelayContractParameter({ type: 'Array', value: args ?? [] }, {
+      depth: depth - 1, byteEncoding: 'mixed', allowClasses: true,
+    });
+  } catch (error) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `userOp.Args: ${error.message}` });
+  }
+}
+
+function sponsoredUserOpParameter(op, depth) {
+  try {
+    return normalizeRelayContractParameter({ type: 'Array', value: [
+      { type: 'Hash160', value: normalizeAddress(op.TargetContract) },
+      { type: 'String', value: op.Method },
+      userOpArgsParameter(op.Args, depth),
+      { type: 'Integer', value: op.Nonce },
+      { type: 'Integer', value: op.Deadline },
+      { type: 'ByteArray', value: `0x${sanitizeHex(op.Signature || '')}` },
+    ] }, { depth: depth - 2 });
+  } catch (error) {
+    if (error.code === EC.VALIDATION_OPTIONS_REQUIRED.code) throw error;
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `userOp: ${error.message}` });
+  }
+}
 
 const DEFAULT_RPC_READ_RETRY_ATTEMPTS = 4;
 const DEFAULT_RPC_READ_RETRY_DELAY_MS = 250;
@@ -463,12 +492,11 @@ class AbstractAccountClient {
    * @throws {Error} If computation fails or returns empty result
    */
   async computeArgsHash(args = []) {
-    const response = await this.invokeFunctionWithRetry(
-      this.masterContractHash,
-      'computeArgsHash',
-      [{ type: 'Array', value: args }],
-      []
-    );
+    const parameter = toMultiSigRpcParameter(userOpArgsParameter(args));
+    // Bypass neonCompat.fromJson: it supports fewer types and assumes hex bytes.
+    const response = await invokeRpcReadWithRetry(() => this.rpcClient.send('invokefunction', [
+      `0x${this.masterContractHash}`, 'computeArgsHash', [parameter], [],
+    ]));
 
     if (response?.state === 'FAULT') {
       const mappedError = mapRpcError({ message: response.exception });
@@ -1300,6 +1328,9 @@ class AbstractAccountClient {
   /**
    * Creates the payload for executing a sponsored UserOperation via Paymaster.
    * The relay (transaction sender) is reimbursed from the sponsor's deposit.
+   * Args accept typed DTOs or ContractParam instances. Plain ByteArray values
+   * must be 0x hex or unambiguous canonical base64; bare hex is rejected.
+   * The result is a relay DTO (hex ByteArray), not direct Neo RPC JSON.
    *
    * @param {Object} options - Sponsored operation options
    * @param {string} [options.accountScriptHash] - Account script hash (40 hex)
@@ -1345,16 +1376,7 @@ class AbstractAccountClient {
       operation: 'executeSponsoredUserOp',
       args: [
         sc.ContractParam.hash160(resolvedAccountHash),
-        sc.ContractParam.array(
-          sc.ContractParam.hash160(normalizeAddress(userOp.TargetContract)),
-          sc.ContractParam.string(userOp.Method),
-          { type: 'Array', value: userOp.Args || [] },
-          sc.ContractParam.integer(userOp.Nonce),
-          sc.ContractParam.integer(userOp.Deadline),
-          sc.ContractParam.byteArray(
-            u.HexString.fromHex(sanitizeHex(userOp.Signature || ''), true)
-          ),
-        ),
+        sponsoredUserOpParameter(userOp, 2),
         sc.ContractParam.hash160(normalizeAddress(paymasterHash)),
         sc.ContractParam.hash160(normalizeAddress(sponsorAddress)),
         sc.ContractParam.integer(reimbursementAmount),
@@ -1403,16 +1425,7 @@ class AbstractAccountClient {
       ? normalizeAddress(accountScriptHash)
       : normalizeAddress(accountAddress);
 
-    const opsArray = userOps.map(op => sc.ContractParam.array(
-      sc.ContractParam.hash160(normalizeAddress(op.TargetContract)),
-      sc.ContractParam.string(op.Method),
-      { type: 'Array', value: op.Args || [] },
-      sc.ContractParam.integer(op.Nonce),
-      sc.ContractParam.integer(op.Deadline),
-      sc.ContractParam.byteArray(
-        u.HexString.fromHex(sanitizeHex(op.Signature || ''), true)
-      ),
-    ));
+    const opsArray = userOps.map(op => sponsoredUserOpParameter(op, 3));
 
     return {
       scriptHash: this.masterContractHash,

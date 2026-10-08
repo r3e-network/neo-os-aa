@@ -36,6 +36,23 @@ class NativeProfileV2Tests(unittest.TestCase):
         self.assertEqual({v["name"] for v in controls}, {"initial", "epoch-advanced", "configuration-advanced", "both-advanced", "maximum-counters"})
         self.assertEqual(len({v["authorizationDigest"] for v in controls}), len(controls))
 
+    def test_active_version_and_callback_overviews_cannot_revert_to_prior_draft(self):
+        required = (
+            "Version 2 uses\n`Active = 0` and `Frozen = 1`",
+            "Version 2 composites\nare the protocol-defined",
+            "Version 2 exposes the following Application methods:",
+            "`validateCompositeSignature` for an admitted composite",
+            "verifier `postExecuteComposite` for an admitted composite",
+        )
+        document = (ROOT / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md").read_text()
+        for clause in required:
+            with self.subTest(clause=clause):
+                self.assertIn(clause, document)
+                def mutate(root):
+                    p = root / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md"
+                    p.write_text(p.read_text().replace(clause, "stale draft clause"))
+                self.assertNotEqual(self.check(mutate).returncode, 0)
+
     def test_mutated_profile_parameters_are_rejected(self):
         def mutate(root):
             p = root / PARAMETERS

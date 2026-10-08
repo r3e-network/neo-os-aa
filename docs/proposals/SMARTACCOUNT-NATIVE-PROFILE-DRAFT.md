@@ -288,8 +288,9 @@ After envelope validation, `verify(accountId)` MUST:
 3. recompute the address from `accountId` and require an exact match;
 4. validate the operation shape, deadline, current nonce, module code identity,
    and authorization without mutating state;
-5. call the configured verifier's read-only `validateSignature`, or use the
-   native-witness fallback when no verifier is installed;
+5. call read-only `validateCompositeSignature` for an admitted composite
+   verifier, or `validateSignature` for a scalar verifier; use the native-witness
+   fallback when no verifier is installed;
 6. return the authorization result without consuming a nonce, executing a
    hook, invoking the target, or emitting a notification.
 
@@ -395,7 +396,7 @@ Array with exactly these 14 positions (positions 0 through 12 retain their meani
 
 `version` is exactly `2`; `status` is a canonical non-negative Integer.
 `authorityEpoch` at index 13 and `configurationNonce` at index 8 are distinct
-unsigned 64-bit Integers, initially zero. Counter overflow MUST fault before mutation. Version 1 uses
+unsigned 64-bit Integers, initially zero. Counter overflow MUST fault before mutation. Version 2 uses
 `Active = 0` and `Frozen = 1`; all other status values MUST be rejected. `accountId`,
 `accountAddress`, and `custodyAddress` are 20-byte ByteStrings. A zero optional
 address is a 20-byte all-zero ByteString. A missing optional record is `Null`.
@@ -630,7 +631,7 @@ SHA256(ASCII("NeoSmartAccount/SignerDomain") || UInt8(1) ||
        schemeTag || canonicalSignerMaterial)
 ```
 
-`schemeTag` and `canonicalSignerMaterial` are profile-defined. Version 1
+`schemeTag` and `canonicalSignerMaterial` are profile-defined. Signer-domain encoding version 1
 assigns `0x01` to secp256k1, `0x02` to secp256r1, `0x03` to native script
 identities, and `0x04` to DKIM registry authority. It uses compressed
 public-key encoding for secp256k1 and secp256r1 identities, the canonical
@@ -732,7 +733,7 @@ under the authenticated `cleanup` context and the fixed maintenance budget;
 ABI admission alone does not establish complete removal of arbitrary plugin storage.
 
 A leaf module MUST return `false`. A composite module MUST return `true` and
-MUST NOT be installed as a child of another composite. Version 1 composites
+MUST NOT be installed as a child of another composite. Version 2 composites
 are the protocol-defined `MultiSigVerifier` and `MultiHook` profiles; arbitrary
 recursive composition is not part of this profile.
 
@@ -855,7 +856,9 @@ The service grants a direct context only to the specific callback it schedules.
 Initialization and internal VM calls share that grant, but a new cross-contract
 call to the same script hash does not. For validation, preExecute and
 postExecute only, a composite may delegate the current phase to a validated,
-registered leaf called directly by that root invocation. A grandchild,
+registered leaf called directly by that root invocation. A composite verifier's
+postExecute grant MUST additionally be limited to the receipt's approved children.
+A grandchild,
 unregistered child, intermediary, or LoadScript context MUST NOT inherit it.
 Configuration and cleanup always give each affected module an individual
 direct context; they do not authorize all children at once.
@@ -875,7 +878,7 @@ after a native continuation has executed but before its child's RET is charged.
 
 ### 8.2 Delayed account-scoped module configuration
 
-Version 1 exposes the following Application methods:
+Version 2 exposes the following Application methods:
 
 ```text
 callVerifier(accountId: Hash160, method: String, args: Array) -> Any
@@ -1094,7 +1097,8 @@ The execution order is:
 6. consume the nonce;
 7. call hook `preExecute`;
 8. call the target with exactly the supplied method and arguments;
-9. call hook `postExecute`, then verifier `postExecute` or `postExecuteComposite`;
+9. call hook `postExecute`, then verifier `postExecuteComposite` for an admitted composite
+   or verifier `postExecute` for a scalar;
 10. emit `UserOpExecuted` and clear temporary state.
 
 `executeUserOps` MUST validate that `ops` is non-empty, contains no more than
