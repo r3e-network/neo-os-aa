@@ -87,7 +87,9 @@ async function startPaymaster() {
         approve: { status: 200, body: echo },
         deny: { status: 200, body: { approved: false, reason: 'no_budget' } },
         'wrong-hash': { status: 200, body: { ...echo, operation_hash: 'de'.repeat(32) } },
-        unapproved: { status: 200, body: { status: 'ok' } },
+        // Echoes the operation hash but never says approved: true, so only the positive-approval rule
+        // can reject this answer and the operation-hash rule cannot mask it.
+        unapproved: { status: 200, body: { operation_hash: operationHash, max_fee: '2000000000' } },
         'low-ceiling': { status: 200, body: { ...echo, approved_max_fee: '1' } },
       };
       const reply = replies[state.mode] || replies.approve;
