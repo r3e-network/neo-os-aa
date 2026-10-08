@@ -78,6 +78,10 @@ test('the real npm tarball is a self-contained, reproducible production package'
         stack: [{ type: 'Boolean', value: false }],
       }), [0]);
       assert.equal(typeof sdk.simulateUserOperation, 'function');
+      const native = new sdk.NativeSmartAccountClient({rpcUrl:'http://127.0.0.1:9',networkMagic:12345});
+      assert.equal(sdk.NATIVE_ABI_VERSION,2);
+      assert.equal(native.deriveIdentity({custodyAddress:'22'.repeat(20),salt:'33'.repeat(32)}).accountId.length,40);
+      assert.equal(sdk.nativeCodec.composeNonce(3n,5n),(3n<<64n)|5n);
       for (const [key, value] of Object.entries(sdk)) assert.notEqual(value, undefined, key);
       process.stdout.write(JSON.stringify(Object.keys(sdk).sort()));
     `], consumer));

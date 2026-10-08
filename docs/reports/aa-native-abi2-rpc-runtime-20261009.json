@@ -1,0 +1,71 @@
+{
+  "schema": "aa-native-rpc-compatible-runtime/v1",
+  "date": "2026-10-09",
+  "status": "BUILD_PASS",
+  "runnerReceipt": "aa-native-abi2-runner-build-20261009.json",
+  "runnerReceiptSha256": "1dc95dee249795033d01edec9c8c5539f963bb242bc68a1d255bc89360ff52b3",
+  "rpcCompatibilityEvidence": {
+    "nodeBase": "6d011e3d231e5f27cfc7c8cd0c5f3d7f9d6189c6",
+    "corePin": "a898d728986a5679dbd7df50467972e68bf477b5",
+    "publishedNeo": "3.10.2-CI02099",
+    "mstest": "4.2.3",
+    "red": {
+      "failed": 5,
+      "passed": 0,
+      "log": "/tmp/aa-rpc-compat-red.log"
+    },
+    "lanes": {
+      "native": {
+        "clientPassed": 114,
+        "serverPassed": 228,
+        "failed": 0,
+        "skipped": 0,
+        "capabilityRequired": true,
+        "clientLog": "/tmp/aa-rpc-compat-native-client.log",
+        "serverLog": "/tmp/aa-rpc-compat-native-server.log",
+        "serverTrx": "/tmp/aa-rpc-compat-evidence/native-server-compat.trx"
+      },
+      "published": {
+        "clientPassed": 114,
+        "serverPassed": 228,
+        "failed": 0,
+        "skipped": 0,
+        "capabilityRequired": false,
+        "clientLog": "/tmp/aa-rpc-compat-published-client.log",
+        "serverLog": "/tmp/aa-rpc-compat-published-server.log",
+        "serverTrx": "/tmp/aa-rpc-compat-evidence/published-server-compat.trx"
+      }
+    },
+    "formatPassed": true,
+    "formatVerificationPassed": true,
+    "diffCheckPassed": true,
+    "sourceSha256": {
+      "plugins/RpcServer/MinimumRequiredFeeReader.cs": "17e674703f213253e862f7d3ad5ad291e99b03209a72858f61f2dc620d53dd17",
+      "plugins/RpcServer/RpcServer.SmartContract.cs": "9545fe4187e64a33811bb9886f6f9a0b4bd27d2c8485e6b1ea04153f62e99828",
+      "plugins/RpcServer/RpcServer.TransactionPreview.cs": "a70cacdb69a0fba9796d007b1a8b968642ea767dcfbf524b30f603aead246666",
+      "tests/Neo.Plugins.RpcServer.Tests/UT_MinimumRequiredFeeReader.cs": "15281fff6ca7299f66feb72074b78d7d96816d4c7946f1cd3160ca0702780074",
+      "tests/Neo.Plugins.RpcServer.Tests/UT_RpcServer.SmartContract.cs": "b1396c1e4fd57db0c1cda82726efccc284f5c1170946383a3c30167090c7e8dc",
+      "tests/Neo.Plugins.RpcServer.Tests/UT_RpcServer.TransactionPreview.cs": "14ac482bb896e78a4b0ccb4ae7afb14fa6aea4a36b2cabaf8dbbf4707efba75a",
+      "tests/Neo.Plugins.RpcServer.Tests/Neo.Plugins.RpcServer.Tests.csproj": "f69c2c3bc3cc00515573f58131db2382e363be1a484fe4df46e0a871d33d62d4",
+      ".github/workflows/main.yml": "0188198c8a29c638bfb236514cff5a448d82f7538aae75d2c41f4866d87a941b",
+      "docs/native-smartaccount-fees.md": "c80e8782d944cca8ea6939a39734581a403addba28e7a67408bc54d782050265"
+    },
+    "remoteWrites": false,
+    "independentReview": {
+      "reviewer": "native_client_review",
+      "decision": "GO",
+      "blockingFindings": 0
+    },
+    "workflowYamlValid": true,
+    "existingWorkflowJobsUnchanged": true
+  },
+  "sourceFileCounts": {
+    "core": 313,
+    "node": 123,
+    "express": 182
+  },
+  "runtimeFiles": 104,
+  "dependencyArchives": 50,
+  "independentBuilds": 2,
+  "boundary": "This records the final RPC compatibility source candidate and source-built runtime only. Native module optimization and final private-chain/SDK acceptance use separate receipts; no public activation or deployment is implied."
+}

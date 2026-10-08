@@ -23,16 +23,22 @@ Set NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 for the release-grade cross-repository ga
 neo-os-services NeoDIDRegistry artifact, or a missing neo-os-services checkout for the Morpheus
 canonical-sync test (MORPHEUS_ORACLE_ROOT, else ../neo-os-services), then fails instead of skipping.
 Pass --formal (or set NEOOS_REQUIRE_FORMAL=1) to also run the fail-closed AA model-checking
-gate (formal/verify.py plus its runner tests). It needs Coq 8.16+ (including Rocq 9), Z3, a real JDK (JAVA_BIN)
+gate (formal/verify.py plus its runner tests). Set NEOOS_NATIVE_CORE_SOURCE to the reviewed
+core checkout matching formal/source-lock.json. It needs Coq 8.16+ (including Rocq 9), Z3, a real JDK (JAVA_BIN)
 and tla2tools.jar (TLA_JAR); a missing tool is a failure, never a simulated pass.
+
+Set NEOOS_NATIVE_EPOCH_RECEIPT to retain the native-module VM regression JSON at an explicit
+path; otherwise the contract gate writes and prints a temporary receipt path. This test-only
+public-VM harness does not establish native-chain admission or recovery.
 
 Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) to also deploy every artifact to a
 fresh private NeoExpress chain, drive the protocol with real transactions, read every
 contract back over JSON-RPC and write a dated receipt under docs/reports/. It needs the
-neoxp tool (~/.dotnet/tools/neoxp) and openssl; it never touches a public network.
+neoxp tool (~/.dotnet/tools/neoxp, or NEOOS_NEOXP for a core-matched runner) and openssl;
+it never touches a public network.
 
 Runs the full local validation gate:
-- contracts: build + nccs compile + solution tests + deployment-tool tests + format verify
+- contracts: build + nccs compile + solution tests + native-module VM regression + deployment-tool tests + format verify
   (+ formal model checks with --formal, + private-chain validation with --neoexpress)
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
 - sdk: unit tests + declaration types check + installed-package smoke test + production dependency audit
@@ -70,7 +76,7 @@ if [[ $run_contracts -eq 1 ]]; then
   # Restores the pinned Neo packages in locked mode first (every package is published on
   # nuget.org), so a changed resolution, different package bytes or a different nccs stop here
   # with the pinned versions named (docs/AA-REPRODUCIBLE-BUILD.md) instead of deep inside the build.
-  node scripts/check_neo_platform_packages.mjs
+  node scripts/check_neo_platform_packages.mjs --include-native
   node scripts/check_neo_platform_packages.mjs --compiler-only
   if [[ $skip_contract_build -eq 0 ]]; then
     dotnet build contracts/UnifiedSmartWallet.csproj -c Release -p:WarningsAsErrors=nullable -nologo
@@ -98,6 +104,20 @@ if [[ $run_contracts -eq 1 ]]; then
   fi
   echo "public-profile gate: verifier-callback tests run on the published TestEngine; private PLATFORM bytecode is checked separately."
   dotnet test neo-abstract-account.sln -c Release --nologo
+  python3 -m unittest discover -s scripts -p 'test_neoexpress_*.py'
+  python3 docs/proposals/validate-native-smartaccount-profile.py
+  python3 -m unittest discover -s docs/proposals -p 'test_native_profile*.py'
+  python3 -m unittest discover -s scripts -p 'test_native_module_*.py'
+  python3 -m unittest discover -s scripts -p 'test_build_native_*.py'
+  # Real production module bytecode runs in the public NeoVM with a test-only ABI
+  # fixture. This proves module storage/object isolation, not native-chain admission.
+  native_epoch_probe_receipt="${NEOOS_NATIVE_EPOCH_RECEIPT:-}"
+  if [[ -z "$native_epoch_probe_receipt" ]]; then
+    native_epoch_probe_receipt="$(mktemp "${TMPDIR:-/tmp}/aa-native-epoch.XXXXXX")"
+  fi
+  echo "native module VM regression: locked production build + test-only public-VM fixture (not native-chain proof)"
+  echo "native module VM receipt: $native_epoch_probe_receipt"
+  python3 scripts/native_epoch_probe.py --compiler "$NCCS_BIN" --output "$native_epoch_probe_receipt"
   node --test scripts/lib/deploy-helpers.test.mjs \
     scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
     scripts/upgrade_testnet_unified_smart_wallet.test.mjs \
@@ -105,7 +125,8 @@ if [[ $run_contracts -eq 1 ]]; then
     scripts/check_neo_platform_packages.test.mjs \
     scripts/check-artifact-reproducibility.test.mjs \
     scripts/fuzz_continuous.test.mjs \
-    scripts/repo_hygiene.test.mjs
+    scripts/repo_hygiene.test.mjs \
+    scripts/verify-private-artifact-provenance.test.mjs
   dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal
   # The formal gate is opt-in because CI's ubuntu image ships neither Rocq/Coq 9 nor the TLA
   # tools; formal/verify.py refuses to substitute a simulated result for a missing tool, so an
@@ -122,7 +143,19 @@ if [[ $run_contracts -eq 1 ]]; then
   # takes several minutes, and a missing tool must read as NOT RUN, never as a pass.
   if [[ $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ]]; then
     echo "neoexpress gate: deploying every artifact to a fresh private chain and driving the protocol"
-    python3 scripts/neoexpress_validate.py
+    neoxp_tool="${NEOOS_NEOXP:-$HOME/.dotnet/tools/neoxp}"
+    neoexpress_date="$(date -u +%Y%m%d)"
+    repro_receipt="$ROOT_DIR/docs/reports/aa-artifact-reproducibility-$neoexpress_date.json"
+    neoexpress_receipt="$ROOT_DIR/docs/reports/aa-neoexpress-validation-$neoexpress_date.json"
+    provenance_receipt="$ROOT_DIR/docs/reports/aa-private-artifact-provenance-$neoexpress_date.json"
+    echo "reproducibility gate: rebuilding release artifacts and writing ${repro_receipt#$ROOT_DIR/}"
+    node scripts/check-artifact-reproducibility.mjs --json > "$repro_receipt"
+    python3 scripts/neoexpress_validate.py --neoxp "$neoxp_tool" --output "$neoexpress_receipt"
+    echo "neoexpress gate: joining source/rebuild certificate to private-chain RPC readback"
+    node scripts/verify-private-artifact-provenance.mjs \
+      --repro "$repro_receipt" \
+      --receipt "$neoexpress_receipt" > "$provenance_receipt"
+    echo "neoexpress gate: provenance receipt written to ${provenance_receipt#$ROOT_DIR/}"
   else
     echo "neoexpress gate: NOT RUN - scripts/neoexpress_validate.py (private-chain deployment, transactions, RPC readback) was skipped."
     echo "neoexpress gate:   pass --neoexpress or set NEOOS_REQUIRE_NEOEXPRESS=1 to run it."
@@ -140,6 +173,7 @@ if [[ $run_frontend -eq 1 ]]; then
   if [[ $skip_e2e -eq 0 ]]; then
     npm run test:e2e:browser:built
     npm run test:operator-recovery:browser
+    npm run test:native:browser
     npm run test:web3auth:browser
     npm run test:docs-security:browser
     npm run test:bundle:browser

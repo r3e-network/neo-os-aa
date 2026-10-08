@@ -1,0 +1,835 @@
+{
+  "schema": "smartaccount-native-multisig-probe/v1",
+  "status": "PASS",
+  "publicNetworksTouched": false,
+  "execution": "ApplicationEngine host probe; synthetic transaction signers, real module NEFs and P256 operation signatures",
+  "pricing": {
+    "executionFeeFactor": 30,
+    "storagePriceDatoshi": 100000,
+    "globalVerificationLimitDatoshi": 150000000,
+    "rootCallbackLimitDatoshi": 100000000,
+    "internalFeeScale": "10000000"
+  },
+  "artifactHashes": {
+    "SessionKeyVerifier.nef": "c67516ba7886943bd7c2bd6e827de9bdf04d472fdf8475a99da5ddddb6d94bc3",
+    "SessionKeyVerifier.manifest.json": "22b30c9ea84b7c28cbbd0511772179b0b973846442db581cfd9c13c93e54a4d2",
+    "NeoNativeVerifier.nef": "015a18eef74343cc2b9c06efc819d7d36bdb68216b66c1ede83e3906ae9be4a0",
+    "NeoNativeVerifier.manifest.json": "c159e1dbc0d8cde3ca48354a465847b2a95feee66c110076a10ecf4a03902520",
+    "MultiSigVerifier.nef": "250fad484fbf0e07a4f7d6e0c32d4ab7c7dde12975f5b5693e40429e4cf1d1f1",
+    "MultiSigVerifier.manifest.json": "95f744391ea6f09cab935bbac36c64d27752ce8c014d18a814db2cf45b1560df"
+  },
+  "runtimeAssemblyHashes": {
+    "Neo.dll": "bd63a67a18642bcf78897b99de1c236e0da73877ebd4321fe08c2a4e9a6a5faf",
+    "Neo.IO.dll": "5d1c8c7c1ed39c123546d09d566b604c59b7dd7931056c2d81ef487c7a9b4905",
+    "Neo.VM.dll": "ccd160139cb55fec9d9656dc5a36e222b79e99a7b81888da598a1bd04cbaac97",
+    "Neo.Extensions.dll": "0d58f382321eefd9314445882bd817b5511cd9b0fdfcb8aa99f4f85794d995ca",
+    "Neo.Json.dll": "2e4db2e6f91bfb829603cc0551048f41c84e0542016c3de35c18f5298e5c4d86"
+  },
+  "probeSourceHashes": {
+    "Program.cs": "bc41d7715f1de816136bf404b1860ac8bbde5b79e638913f18c0396bedaf2c54",
+    "NativeMultiSigProbe.csproj": "7fc3deff5e9315fb588208ff2c44ce990f676eb8f47afabfcafaa157e77d7430",
+    "packages.lock.json": "a29c6aa8cfb81874ff8bb78dc369d7416f28c9b8cc47e99592bfc019b20c41eb"
+  },
+  "cases": [
+    {
+      "Roster": "SN",
+      "Slots": "11",
+      "Maximum": false,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468854502000",
+      "priorSpent": "0",
+      "signatureBytes": 70,
+      "lastUsePostRollbackNegativeControls": 4,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 146779346,
+        "minimum": 171919169,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 65690273,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "52909940",
+          "remainingDatoshi": "47090060"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "71419472",
+          "remainingDatoshi": "28580528"
+        }
+      ]
+    },
+    {
+      "Roster": "SN",
+      "Slots": "11",
+      "Maximum": true,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "dataLength": 4012,
+      "methodBytes": 8,
+      "timestamp": "18446744071808751615",
+      "priorSpent": "0",
+      "signatureBytes": 70,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 149982107,
+        "minimum": 171921930,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 65692965,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "52912632",
+          "remainingDatoshi": "47087368"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "74619472",
+          "remainingDatoshi": "25380528"
+        }
+      ]
+    },
+    {
+      "Roster": "SS",
+      "Slots": "11",
+      "Maximum": false,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468854502000",
+      "priorSpent": "0",
+      "signatureBytes": 134,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 167570130,
+        "minimum": 182856434,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 80560045,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "63847205",
+          "remainingDatoshi": "36152795"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "81272991",
+          "remainingDatoshi": "18727009"
+        }
+      ]
+    },
+    {
+      "Roster": "SS",
+      "Slots": "11",
+      "Maximum": true,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "dataLength": 4012,
+      "methodBytes": 8,
+      "timestamp": "18446744071808751615",
+      "priorSpent": "0",
+      "signatureBytes": 134,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 173975583,
+        "minimum": 182861887,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 80565429,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "63852590",
+          "remainingDatoshi": "36147410"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "87672991",
+          "remainingDatoshi": "12327009"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "110",
+      "Maximum": false,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468940902000",
+      "priorSpent": "0",
+      "signatureBytes": 135,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 183534957,
+        "minimum": 189816983,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 86537553,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "67858634",
+          "remainingDatoshi": "32141366"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "89294229",
+          "remainingDatoshi": "10705771"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "101",
+      "Maximum": false,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468940902000",
+      "priorSpent": "0",
+      "signatureBytes": 71,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 162738669,
+        "minimum": 178878328,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 71666391,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "56919979",
+          "remainingDatoshi": "43080021"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "79436596",
+          "remainingDatoshi": "20563404"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "011",
+      "Maximum": false,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468940902000",
+      "priorSpent": "0",
+      "signatureBytes": 71,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 162738669,
+        "minimum": 178878328,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 71666391,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "56919979",
+          "remainingDatoshi": "43080021"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "79436596",
+          "remainingDatoshi": "20563404"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "111",
+      "Maximum": false,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468940902000",
+      "priorSpent": "0",
+      "signatureBytes": 136,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 183535212,
+        "minimum": 189817110,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 86537681,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "67858761",
+          "remainingDatoshi": "32141239"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "89294357",
+          "remainingDatoshi": "10705643"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "111",
+      "Maximum": false,
+      "BadSignature": true,
+      "Malformed": false,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468940902000",
+      "priorSpent": "0",
+      "signatureBytes": 136,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 178631245,
+        "minimum": 194770777,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 91491347,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "72812428",
+          "remainingDatoshi": "27187572"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "79436724",
+          "remainingDatoshi": "20563276"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "111",
+      "Maximum": true,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819966",
+      "dataLength": 4012,
+      "methodBytes": 8,
+      "timestamp": "18446744071895151615",
+      "priorSpent": "1",
+      "signatureBytes": 1024,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 183941053,
+        "minimum": 189822757,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 86543259,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "67864340",
+          "remainingDatoshi": "32135660"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "89694551",
+          "remainingDatoshi": "10305449"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "110",
+      "Maximum": true,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "dataLength": 4012,
+      "methodBytes": 8,
+      "timestamp": "18446744071895151615",
+      "priorSpent": "0",
+      "signatureBytes": 135,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 189940410,
+        "minimum": 189940410,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 86542938,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "67864018",
+          "remainingDatoshi": "32135982"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "95694229",
+          "remainingDatoshi": "4305771"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "101",
+      "Maximum": true,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "dataLength": 4012,
+      "methodBytes": 8,
+      "timestamp": "18446744071895151615",
+      "priorSpent": "0",
+      "signatureBytes": 71,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 165941430,
+        "minimum": 178881089,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 71669083,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "56922671",
+          "remainingDatoshi": "43077329"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "82636596",
+          "remainingDatoshi": "17363404"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "011",
+      "Maximum": true,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "dataLength": 4012,
+      "methodBytes": 8,
+      "timestamp": "18446744071895151615",
+      "priorSpent": "0",
+      "signatureBytes": 71,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 165941430,
+        "minimum": 178881089,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 71669083,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "56922671",
+          "remainingDatoshi": "43077329"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "82636596",
+          "remainingDatoshi": "17363404"
+        }
+      ]
+    },
+    {
+      "Roster": "SSS",
+      "Slots": "111",
+      "Maximum": true,
+      "BadSignature": true,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "dataLength": 4012,
+      "methodBytes": 8,
+      "timestamp": "18446744071895151615",
+      "priorSpent": "0",
+      "signatureBytes": 200,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 205830173,
+        "minimum": 205830173,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 106369195,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "83757769",
+          "remainingDatoshi": "16242231"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "95690242",
+          "remainingDatoshi": "4309758"
+        }
+      ]
+    },
+    {
+      "Roster": "SSS",
+      "Slots": "111",
+      "Maximum": true,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "dataLength": 3998,
+      "methodBytes": 8,
+      "timestamp": "18446744071895151615",
+      "priorSpent": "0",
+      "signatureBytes": 200,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 8,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 189933415,
+        "minimum": 189933415,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 86540305,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "67861385",
+          "remainingDatoshi": "32138615"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "95688816",
+          "remainingDatoshi": "4311184"
+        }
+      ]
+    },
+    {
+      "Roster": "SSS",
+      "Slots": "110",
+      "Maximum": true,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 128,
+      "amount": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "dataLength": 3998,
+      "methodBytes": 128,
+      "timestamp": "18446744071895151615",
+      "priorSpent": "0",
+      "signatureBytes": 135,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 8,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "HALT",
+        "gas": 159696521,
+        "minimum": 179941352,
+        "error": null,
+        "notifications": 1
+      },
+      "verification": {
+        "state": "HALT",
+        "gasConsumedDatoshi": 76660802,
+        "gasLimitDatoshi": 150000000,
+        "exception": null
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "57981882",
+          "remainingDatoshi": "42018118"
+        },
+        {
+          "phase": "postExecuteComposite",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "75331424",
+          "remainingDatoshi": "24668576"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "100",
+      "Maximum": false,
+      "BadSignature": false,
+      "Malformed": false,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468940902000",
+      "priorSpent": "0",
+      "signatureBytes": 70,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "FAULT",
+        "gas": 54891946,
+        "minimum": 107865766,
+        "error": "ABORTMSG is executed. Reason: Verifier rejected signature",
+        "notifications": 0
+      },
+      "verification": {
+        "state": "FAULT",
+        "gasConsumedDatoshi": 58823441,
+        "gasLimitDatoshi": 150000000,
+        "exception": "ABORTMSG is executed. Reason: Verifier rejected signature"
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "47026181",
+          "remainingDatoshi": "52973819"
+        }
+      ]
+    },
+    {
+      "Roster": "SSN",
+      "Slots": "111",
+      "Maximum": false,
+      "BadSignature": false,
+      "Malformed": true,
+      "descriptionBytes": 16,
+      "amount": "1000000",
+      "dataLength": 0,
+      "methodBytes": 8,
+      "timestamp": "1468940902000",
+      "priorSpent": "0",
+      "signatureBytes": 137,
+      "lastUsePostRollbackNegativeControls": 0,
+      "argumentDepth": 1,
+      "canonicalDomain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "result": {
+        "state": "FAULT",
+        "gas": 32944897,
+        "minimum": 107865766,
+        "error": "ABORTMSG is executed. Reason: Invalid child signature type",
+        "notifications": 0
+      },
+      "verification": {
+        "state": "FAULT",
+        "gasConsumedDatoshi": 32943884,
+        "gasLimitDatoshi": 150000000,
+        "exception": "ABORTMSG is executed. Reason: Invalid child signature type"
+      },
+      "phases": [
+        {
+          "phase": "validateCompositeSignature",
+          "limitDatoshi": "100000000",
+          "consumedDatoshi": "25079131",
+          "remainingDatoshi": "74920869"
+        }
+      ]
+    },
+    {
+      "label": "session-native-same-key-rejected",
+      "uncompressed": false,
+      "standardAccount": "0x7efe7ee0d3e349e085388c351955e5172605de66",
+      "domain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "initialLastUseHex": "",
+      "configurationRollback": true,
+      "invalidPointRollback": true,
+      "revocationClearsDomainAndLastUse": true
+    },
+    {
+      "label": "session-native-same-key-rejected",
+      "uncompressed": true,
+      "standardAccount": "0x7efe7ee0d3e349e085388c351955e5172605de66",
+      "domain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+      "initialLastUseHex": "",
+      "configurationRollback": true,
+      "invalidPointRollback": true,
+      "revocationClearsDomainAndLastUse": true
+    }
+  ]
+}

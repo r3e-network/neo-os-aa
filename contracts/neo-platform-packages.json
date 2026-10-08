@@ -19,7 +19,7 @@
       "sha512": "5Pa/qy80dNgNH+T9Wfl4sfvdeFsdqj/Hbu9IN8idsE8DdeBXMs8iLaZJRBsTmOJmZCBhnFaniDw/GgXV0H/iQw==",
       "sha256": "e59c42fef8b983ad5dd7644f06ebd431664d6dca92eacebfe1c1c6f7a6837cac",
       "size": 170915,
-      "requiredBy": "every contract project (contracts/**/*.csproj) and, through the project reference, the contract tests",
+      "requiredBy": "every contract project (contracts/**/*.csproj), the NativeEpochProbe contract fixture and, through the project reference, the contract tests",
       "repositoryCommit": "5c5fb79e3411a09e5cbfc59901edeadab5a0e60f",
       "availableOn": "nuget.org"
     },
@@ -29,7 +29,7 @@
       "sha512": "dur8MIiwl8YCDDunlHkKJyCQunBuHltAbd67iNzWamzWnufy9X59Ig4kTshGnxp2DOd44geEsvym/N2dO++spg==",
       "sha256": "cc2b1bf6413911bf1cb10c6f5c15c536edc8918cbb1f2fcc0e59f048c220a2f0",
       "size": 102832,
-      "requiredBy": "tests/AbstractAccount.Contracts.Tests",
+      "requiredBy": "tests/AbstractAccount.Contracts.Tests and tests/NativeEpochProbe",
       "repositoryCommit": "37c03d3e7db8d125efb968a1f1da455f3d205b26",
       "availableOn": "nuget.org"
     },
@@ -103,5 +103,9 @@
       "repositoryCommit": "055f250413bb6a3d13c5a37c74e595f219056d29",
       "availableOn": "nuget.org"
     }
+  ],
+  "sourceRuntimeProbeProjects": [
+    "tests/NativeModuleProbe/NativeModuleProbe.csproj",
+    "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj"
   ]
 }

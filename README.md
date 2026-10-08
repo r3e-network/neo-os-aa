@@ -2,6 +2,19 @@
 
 `neo-os-aa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Abstract Accounts on Neo N3.
 
+The target architecture is **Neo N3 native SmartAccount**, implemented by the
+protocol's `AccountManagement` service. Start with the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
+[native SDK](docs/NATIVE_SDK.md), and [native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md)
+at `/native`. The service uses stable account identity, explicitly scoped
+authorization, bounded module callbacks, independent fee payment, and recovery
+that revokes old modules without calling them.
+
+This branch implements the unactivated ABI 2 draft associated with
+[proposal #243](https://github.com/neo-project/proposals/pull/243) and
+[discussion #242](https://github.com/neo-project/proposals/issues/242).
+Selecting a public RPC endpoint cannot enable it. The workspace verifies native
+activation and the exact protocol profile before enabling account actions.
+
 Current status note:
 
 - The current `main` branch runs `UnifiedSmartWalletV3`.
@@ -26,7 +39,7 @@ checked by the architecture source-coverage gate.
 Proposed v2 binding: in `neo-os-web/docs/workspace/neoos-target-architecture.v2.json` (status `PROPOSED`, validated by `npm run check:architecture:v2` in `neo-os-web`) this repository is v2 layer L1 (chain-protocol) and owns C03 account. The v1 binding above remains the enforced contract until the v2 adoption procedure completes.
 
 
-## Features
+## Public V3 features
 - **Deterministic V3 Accounts**: Each account is keyed by a 20-byte `accountId` and derives a stable Neo virtual address without deploying per-user wallet logic.
 - **Verifier Plugin Authorization**: Bind Web3Auth, TEE, WebAuthn, session keys, multisig, or other verifier plugins per account.
 - **Hook Plugin Policy Enforcement**: Attach optional hook plugins for daily limits, token restrictions, credential gates, and post-execution controls.

@@ -1058,3 +1058,6 @@ export interface MultiSigClient {
 export declare function createMultiSigClient(input: { rpcUrl?: string; rpcClient?: { getVersion(): Promise<{ protocol: { network: number } }>; send(method: string, params: unknown[]): ReturnType<MultiSigRead> }; signers?: unknown[] }): MultiSigClient;
 
 export declare function fetchMultiSigChildPayload(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160; read: MultiSigRead }): Promise<{ childVerifierHash: Hash160; operation: MultiSigOperation; payloadHex: string }>;
+
+// Native protocol profile is separate from deployed public V3.
+export * from './native';

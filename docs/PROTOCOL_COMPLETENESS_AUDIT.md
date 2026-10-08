@@ -335,17 +335,29 @@ Response: { approved: boolean, reason?: string }
 - ✓ Market escrow with clean state management
 
 **Known Limitations (as documented):**
-- **VULN-001:** The current AA artifact has no non-bypassable verifier gas cap;
-  the platform extension is prototyped but not integrated or activated.
+- **VULN-001:** The matching private AA artifact uses the non-bypassable
+  platform bounded-call syscall and has a NeoExpress adversarial-callback
+  receipt; native AccountManagement activation and public deployment remain
+  pending.
 - **VULN-002:** Market/escape and settlement cleanup require deployed/refinement
-  evidence; current source paths are hardened and tested fail-closed.
+  evidence; the current private artifact now has source-to-artifact certification,
+  368 VM tests and NeoExpress execution/readback. Public deployment parity is
+  intentionally excluded.
 - **VULN-003:** Session-key revocation follows canonical execution order and
   cannot retroactively cancel an already ordered transaction.
-- **VULN-004:** MultiSig configuration guards now include self-reference and
-  child lifecycle-ABI/deployment preflight; bounded policy proofs exist, while
-  child-key independence, arbitrary cycles and cryptographic refinement remain open.
-- **VULN-005:** Known-plugin cleanup faults closed; arbitrary future-plugin
-  cleanup remains outside the generic proof boundary.
+- **VULN-004:** MultiSig configuration guards include self-reference, child
+  lifecycle-ABI/deployment preflight, and a safe leaf-only composition marker;
+  16 formal Coq modules, including the attestation/proof-envelope, exact signer-domain binding, and structural WitnessRule refinement models,
+  private runtime vectors, and NeoExpress preflight/revalidation
+  cover the shipped boundary. The concrete crypto vectors cover the shipped P-256
+  profiles and fail-closed proof placeholder, but no public key test can prove
+  private-key independence; arbitrary future-plugin behavior and complete VM
+  refinement remain explicit trust/model boundaries. Arbitrary composite nesting
+  is rejected in version 1.
+- **VULN-005:** The core-owned dependency registry closes orphaning for the
+  shipped MultiSig/MultiHook leaf-child profile, including replacement and
+  detach cleanup; arbitrary future-plugin storage and refinement remain outside
+  the generic proof boundary.
 
 **Assessment:** ✓ Documentation accurately reflects implementation and known limitations
 
@@ -368,9 +380,10 @@ Response: { approved: boolean, reason?: string }
 ### Areas Where Neo Exceeds ERC-4337
 
 1. **On-chain Paymaster Verification** - Neo uses off-chain only (reduced transparency)
-2. **Per-Operation Gas Limits** - the current AA artifact still lacks a
-   non-bypassable verifier cap; a platform extension is drafted and prototyped
-   separately in `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`
+2. **Per-Operation Gas Limits** - the matching private AA artifact now uses
+   the non-bypassable platform bounded-call syscall; the native profile and
+   public activation/deployment are still approval-gated and separately
+   specified in `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`
 3. **Staking Sponsorships** - Off-chain model vs ERC-4337 on-chain staking
 
 ### Areas Where ERC-4337 Exceeds Neo
@@ -385,41 +398,50 @@ Response: { approved: boolean, reason?: string }
 
 ### High Priority (Security)
 
-1. **Integrate the platform verifier gas budget** (VULN-001)
+1. **Complete public platform verifier-gas activation parity** (VULN-001)
    - Do not add a caller-controlled `maxVerificationGas` parameter to
      `validateSignature()`; an ABI parameter alone cannot cap VM execution.
-   - Activate and version `System.Contract.CallWithGasLimit` as specified in
-     `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`.
-   - Recompile the AA core against the matching DevPack, then complete private
-     NeoExpress and deployed-byte parity gates before changing the status.
+   - The matching private AA artifact already uses the versioned
+     `System.Contract.CallWithGasLimit` capability and has a fresh NeoExpress
+   receipt. Native AccountManagement activation, target-node parity, and public
+   deployment remain approval-gated deployment work and are intentionally outside
+   this private validation closure.
 
 2. **Preserve the current market/escape hardening**
    - Keep `IsMarketEscrowActive()` checks on normal escape/configuration paths.
    - Keep market settlement and owner-force-cancel cleanup fail-closed, and
      add a concrete cleanup/refinement proof for every future plugin profile.
      The manifest lifecycle preflight rejects marker-only, wrong-typed, or incomplete
-     modules, including nested MultiSig/MultiHook children, but cannot prove the
-     implementation of a declared method is semantically correct.
+     modules. Version 1 rejects MultiSig/MultiHook as children, records leaf
+     dependencies in a core-owned registry, and tests cleanup on replacement and
+     detach; it cannot prove the implementation of a declared method is
+     semantically correct.
 
 3. **Keep explicit session-key execution-order semantics**
    - Canonical state is read when validation executes; a later clear rejects a
      later operation but cannot retroactively cancel an already ordered one.
    - Wallets and relayers must re-check canonical state before submission.
 
-4. **Extend MultiSig refinement coverage**
+4. **Complete the remaining MultiSig boundary proofs**
    - The empty, oversized, invalid-threshold and duplicate configuration
-     checks now also reject self-reference and undeployed/incomplete or
-     wrong-typed child lifecycle ABIs before storage. This is a concrete
-     deployment/ABI guard,
-     not a proof of independent child keys, arbitrary-cycle freedom,
-     cryptographic correctness or full child-call refinement.
+     checks now also reject self-reference, composite children, and
+     undeployed/incomplete or wrong-typed child lifecycle ABIs before storage.
+     Core-owned registries and private-chain tests cover leaf cleanup and
+     retained-child reconfiguration. The shipped profile now requires a
+     non-empty canonical signer-domain set for every MultiSig child, rejects
+     duplicate domains at configuration time, and re-checks the set before
+     validation and child post-execution. This closes accidental configured-key
+     reuse for the protocol-defined profiles. It does not prove private-key
+     independence, cryptographic correctness, witness semantics, or full
+     child-call refinement; arbitrary third-party plugins remain an audited
+     trust boundary.
 
 ### Medium Priority (Enhancement)
 
-5. **Complete plugin cleanup refinement**
-   - Known-plugin cleanup now faults closed when `clearAccount` fails, and
-     binding rejects a marker-only, wrong-typed, or incomplete module before
-     storing its address.
+5. **Complete generic plugin cleanup refinement**
+   - Shipped MultiSig/MultiHook cleanup now faults closed, owns its dependency
+     registry in the core, cleans removed children on replacement, and is
+     exercised in unit and NeoExpress tests.
    - A generic proof for arbitrary future plugins is not possible from a
      manifest alone; require an audited plugin manifest/profile and a concrete
      storage/refinement proof.

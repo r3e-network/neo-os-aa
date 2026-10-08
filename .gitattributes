@@ -1,0 +1,3 @@
+# Unified diff blank context lines contain a required literal space. Preserve
+# the byte-exact compatibility patch consumed by the source-runner build.
+scripts/neoexpress-build-compat.patch whitespace=-blank-at-eol

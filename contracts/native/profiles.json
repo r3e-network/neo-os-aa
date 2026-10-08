@@ -1,0 +1,51 @@
+{
+  "NeoNativeVerifier": {
+    "project": "NeoNativeVerifier.Native.csproj",
+    "role": "verifier",
+    "configurationMethods": [
+      "setConfig"
+    ],
+    "compositeVerifier": false
+  },
+  "WhitelistHook": {
+    "project": "WhitelistHook.Native.csproj",
+    "role": "hook",
+    "configurationMethods": [
+      "setWhitelist"
+    ],
+    "compositeVerifier": false
+  },
+  "SessionKeyVerifier": {
+    "project": "SessionKeyVerifier.Native.csproj",
+    "role": "verifier",
+    "configurationMethods": [
+      "setSessionKey",
+      "clearSessionKey"
+    ],
+    "compositeVerifier": false
+  },
+  "DailyLimitHook": {
+    "project": "DailyLimitHook.Native.csproj",
+    "role": "hook",
+    "configurationMethods": [
+      "setDailyLimit"
+    ],
+    "compositeVerifier": false
+  },
+  "TokenRestrictedHook": {
+    "project": "TokenRestrictedHook.Native.csproj",
+    "role": "hook",
+    "configurationMethods": [
+      "setRestrictedToken"
+    ],
+    "compositeVerifier": false
+  },
+  "MultiSigVerifier": {
+    "project": "MultiSigVerifier.Native.csproj",
+    "role": "verifier",
+    "configurationMethods": [
+      "setConfig"
+    ],
+    "compositeVerifier": true
+  }
+}

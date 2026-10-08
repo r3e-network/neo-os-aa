@@ -1,0 +1,873 @@
+{
+  "schema": "neoos-aa-artifact-reproducibility/v2",
+  "generated_at": "2026-10-08T15:38:14.344Z",
+  "release_dir": "contracts/bin/v3",
+  "profiles": {
+    "v3": {
+      "artifact_dir": "contracts/bin/v3",
+      "artifacts_compared": 78,
+      "required_core_present": true,
+      "matches_fresh_build": true,
+      "drifted": [],
+      "missing": [],
+      "artifacts": [
+        {
+          "artifact": "AAAddressMarket.manifest.json",
+          "expected_sha256": "5a566e145e98a21a4d4fdcfb518772647f410b788fa23bc792836b3ae351861a",
+          "actual_sha256": "5a566e145e98a21a4d4fdcfb518772647f410b788fa23bc792836b3ae351861a",
+          "match": true
+        },
+        {
+          "artifact": "AAAddressMarket.nef",
+          "expected_sha256": "6cc8dd93ad96d79c81f02ebfada9bab28b8fe4f6eeb0c0ddff7a2a6516543328",
+          "actual_sha256": "6cc8dd93ad96d79c81f02ebfada9bab28b8fe4f6eeb0c0ddff7a2a6516543328",
+          "match": true
+        },
+        {
+          "artifact": "AAPaymaster.manifest.json",
+          "expected_sha256": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54",
+          "actual_sha256": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54",
+          "match": true
+        },
+        {
+          "artifact": "AAPaymaster.nef",
+          "expected_sha256": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
+          "actual_sha256": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
+          "match": true
+        },
+        {
+          "artifact": "DailyLimitHook.manifest.json",
+          "expected_sha256": "0a020a6a89bc852ad59484f478ad9201ac45ed328dbe42f5291af713b55069b5",
+          "actual_sha256": "0a020a6a89bc852ad59484f478ad9201ac45ed328dbe42f5291af713b55069b5",
+          "match": true
+        },
+        {
+          "artifact": "DailyLimitHook.nef",
+          "expected_sha256": "3d51b5fca94f74c1b7594f5bdb884d8625db8f14ea9b1402e164271b218b0e8a",
+          "actual_sha256": "3d51b5fca94f74c1b7594f5bdb884d8625db8f14ea9b1402e164271b218b0e8a",
+          "match": true
+        },
+        {
+          "artifact": "MarkerOnlyModule.manifest.json",
+          "expected_sha256": "0ad3093b7f5bdada8319a9a13becef55b844e1af9a2ce5a58d4b542cd608b046",
+          "actual_sha256": "0ad3093b7f5bdada8319a9a13becef55b844e1af9a2ce5a58d4b542cd608b046",
+          "match": true
+        },
+        {
+          "artifact": "MarkerOnlyModule.nef",
+          "expected_sha256": "aff6624a898dacdfc48355d4cd4fb07f61e40be4a2bdf935829ebcb9c834f9b9",
+          "actual_sha256": "aff6624a898dacdfc48355d4cd4fb07f61e40be4a2bdf935829ebcb9c834f9b9",
+          "match": true
+        },
+        {
+          "artifact": "MockTransferTarget.manifest.json",
+          "expected_sha256": "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c",
+          "actual_sha256": "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c",
+          "match": true
+        },
+        {
+          "artifact": "MockTransferTarget.nef",
+          "expected_sha256": "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
+          "actual_sha256": "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
+          "match": true
+        },
+        {
+          "artifact": "MockVerifierCore.manifest.json",
+          "expected_sha256": "b1cb996174e50f3066376eacb2a02c6a048f31b5e43d2adb3c3c59217ff650e3",
+          "actual_sha256": "b1cb996174e50f3066376eacb2a02c6a048f31b5e43d2adb3c3c59217ff650e3",
+          "match": true
+        },
+        {
+          "artifact": "MockVerifierCore.nef",
+          "expected_sha256": "d14cd34a5e546eced6d05f28ca4d8238a905004a2e96d08b67a89222f1c3879c",
+          "actual_sha256": "d14cd34a5e546eced6d05f28ca4d8238a905004a2e96d08b67a89222f1c3879c",
+          "match": true
+        },
+        {
+          "artifact": "MultiHook.manifest.json",
+          "expected_sha256": "e05d2cad8562b138e0e4b52c63b3bce9cad918b1a300d3ea7564e9a38a7a662e",
+          "actual_sha256": "e05d2cad8562b138e0e4b52c63b3bce9cad918b1a300d3ea7564e9a38a7a662e",
+          "match": true
+        },
+        {
+          "artifact": "MultiHook.nef",
+          "expected_sha256": "bc42c1bb3eb58ec171bc390e93b95f0c29b0ee1d4d5f51470e86909cdbd1ae81",
+          "actual_sha256": "bc42c1bb3eb58ec171bc390e93b95f0c29b0ee1d4d5f51470e86909cdbd1ae81",
+          "match": true
+        },
+        {
+          "artifact": "MultiSigVerifier.manifest.json",
+          "expected_sha256": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
+          "actual_sha256": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
+          "match": true
+        },
+        {
+          "artifact": "MultiSigVerifier.nef",
+          "expected_sha256": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67",
+          "actual_sha256": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67",
+          "match": true
+        },
+        {
+          "artifact": "NeoDIDCredentialHook.manifest.json",
+          "expected_sha256": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8",
+          "actual_sha256": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8",
+          "match": true
+        },
+        {
+          "artifact": "NeoDIDCredentialHook.nef",
+          "expected_sha256": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+          "actual_sha256": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+          "match": true
+        },
+        {
+          "artifact": "NeoNativeVerifier.manifest.json",
+          "expected_sha256": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f",
+          "actual_sha256": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f",
+          "match": true
+        },
+        {
+          "artifact": "NeoNativeVerifier.nef",
+          "expected_sha256": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+          "actual_sha256": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+          "match": true
+        },
+        {
+          "artifact": "PlatformRegistrarMock.manifest.json",
+          "expected_sha256": "6f32bd40460b9e14b848f84f7a54f68e45b502096e3714746b7725019c69a8e2",
+          "actual_sha256": "6f32bd40460b9e14b848f84f7a54f68e45b502096e3714746b7725019c69a8e2",
+          "match": true
+        },
+        {
+          "artifact": "PlatformRegistrarMock.nef",
+          "expected_sha256": "514eddaf4701d2d2679c28a75de589096df105cc3fc9ecae393b3297181b85fe",
+          "actual_sha256": "514eddaf4701d2d2679c28a75de589096df105cc3fc9ecae393b3297181b85fe",
+          "match": true
+        },
+        {
+          "artifact": "PolicyExecutionProbe.manifest.json",
+          "expected_sha256": "084bafbb151859b2dab51b9fc9fe7e83188c7c947e094fae773c13e219caff6f",
+          "actual_sha256": "084bafbb151859b2dab51b9fc9fe7e83188c7c947e094fae773c13e219caff6f",
+          "match": true
+        },
+        {
+          "artifact": "PolicyExecutionProbe.nef",
+          "expected_sha256": "08ad2d87a45d7a374e83bdb926b8f3d03be115d42c04afe57b64d1d1468482c9",
+          "actual_sha256": "08ad2d87a45d7a374e83bdb926b8f3d03be115d42c04afe57b64d1d1468482c9",
+          "match": true
+        },
+        {
+          "artifact": "SessionKeyVerifier.manifest.json",
+          "expected_sha256": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4",
+          "actual_sha256": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4",
+          "match": true
+        },
+        {
+          "artifact": "SessionKeyVerifier.nef",
+          "expected_sha256": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+          "actual_sha256": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+          "match": true
+        },
+        {
+          "artifact": "SocialRecoveryVerifier.manifest.json",
+          "expected_sha256": "c4ca1b2842dde80c878790b21941045a9d041e74c8556eaf9f0ed79067c00e97",
+          "actual_sha256": "c4ca1b2842dde80c878790b21941045a9d041e74c8556eaf9f0ed79067c00e97",
+          "match": true
+        },
+        {
+          "artifact": "SocialRecoveryVerifier.nef",
+          "expected_sha256": "3d5d846b3e0a7697d2fc510d43c2128a0c194215ed30e0484d50ec0de71ceac2",
+          "actual_sha256": "3d5d846b3e0a7697d2fc510d43c2128a0c194215ed30e0484d50ec0de71ceac2",
+          "match": true
+        },
+        {
+          "artifact": "SubscriptionVerifier.manifest.json",
+          "expected_sha256": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff",
+          "actual_sha256": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff",
+          "match": true
+        },
+        {
+          "artifact": "SubscriptionVerifier.nef",
+          "expected_sha256": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+          "actual_sha256": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+          "match": true
+        },
+        {
+          "artifact": "TEEVerifier.manifest.json",
+          "expected_sha256": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77",
+          "actual_sha256": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77",
+          "match": true
+        },
+        {
+          "artifact": "TEEVerifier.nef",
+          "expected_sha256": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+          "actual_sha256": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+          "match": true
+        },
+        {
+          "artifact": "TokenRestrictedHook.manifest.json",
+          "expected_sha256": "e04c35b45416a74d1d7f732a48e93fd015c14b2cc2a79efb1848251a65e2df3d",
+          "actual_sha256": "e04c35b45416a74d1d7f732a48e93fd015c14b2cc2a79efb1848251a65e2df3d",
+          "match": true
+        },
+        {
+          "artifact": "TokenRestrictedHook.nef",
+          "expected_sha256": "e90fe66791c4b054a38d07a85ea479da703e554f54f9ee16c779170acf16ddbb",
+          "actual_sha256": "e90fe66791c4b054a38d07a85ea479da703e554f54f9ee16c779170acf16ddbb",
+          "match": true
+        },
+        {
+          "artifact": "UnifiedSmartWalletV3.manifest.json",
+          "expected_sha256": "48fda3ed98a26961c647b220144604df494c65f6026e963b3c916bf0f51e658c",
+          "actual_sha256": "48fda3ed98a26961c647b220144604df494c65f6026e963b3c916bf0f51e658c",
+          "match": true
+        },
+        {
+          "artifact": "UnifiedSmartWalletV3.nef",
+          "expected_sha256": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+          "actual_sha256": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+          "match": true
+        },
+        {
+          "artifact": "Web3AuthVerifier.manifest.json",
+          "expected_sha256": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
+          "actual_sha256": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
+          "match": true
+        },
+        {
+          "artifact": "Web3AuthVerifier.nef",
+          "expected_sha256": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
+          "actual_sha256": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
+          "match": true
+        },
+        {
+          "artifact": "WebAuthnVerifier.manifest.json",
+          "expected_sha256": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
+          "actual_sha256": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
+          "match": true
+        },
+        {
+          "artifact": "WebAuthnVerifier.nef",
+          "expected_sha256": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+          "actual_sha256": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+          "match": true
+        },
+        {
+          "artifact": "WhitelistHook.manifest.json",
+          "expected_sha256": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791",
+          "actual_sha256": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791",
+          "match": true
+        },
+        {
+          "artifact": "WhitelistHook.nef",
+          "expected_sha256": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+          "actual_sha256": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+          "match": true
+        },
+        {
+          "artifact": "WrongHookLifecycleAbiModule.manifest.json",
+          "expected_sha256": "48f582388ed626fd895980e6a426c8ac41447ed02333176efdf7f478e1f043ef",
+          "actual_sha256": "48f582388ed626fd895980e6a426c8ac41447ed02333176efdf7f478e1f043ef",
+          "match": true
+        },
+        {
+          "artifact": "WrongHookLifecycleAbiModule.nef",
+          "expected_sha256": "2814d80eb1007765b8543b30c54e48782e5183d8f00345b85fdc5ddb7ed6ce3d",
+          "actual_sha256": "2814d80eb1007765b8543b30c54e48782e5183d8f00345b85fdc5ddb7ed6ce3d",
+          "match": true
+        },
+        {
+          "artifact": "WrongLifecycleAbiModule.manifest.json",
+          "expected_sha256": "f9494bb848f0bbfcd6dde4cf52c1ba277b8d8e6902d02dd1ba313ea19a02570a",
+          "actual_sha256": "f9494bb848f0bbfcd6dde4cf52c1ba277b8d8e6902d02dd1ba313ea19a02570a",
+          "match": true
+        },
+        {
+          "artifact": "WrongLifecycleAbiModule.nef",
+          "expected_sha256": "dce2b08a7dd2c48d01c32254e00eac76d6bcbeb76bbbc2add831bace6c666fd5",
+          "actual_sha256": "dce2b08a7dd2c48d01c32254e00eac76d6bcbeb76bbbc2add831bace6c666fd5",
+          "match": true
+        },
+        {
+          "artifact": "ZKEmailVerifier.manifest.json",
+          "expected_sha256": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110",
+          "actual_sha256": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110",
+          "match": true
+        },
+        {
+          "artifact": "ZKEmailVerifier.nef",
+          "expected_sha256": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+          "actual_sha256": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+          "match": true
+        },
+        {
+          "artifact": "ZkLoginVerifier.manifest.json",
+          "expected_sha256": "f70672ae73097282ee2d85aa8ef7b6a040bf49e4fbede90ebf4c686f19a9cfa0",
+          "actual_sha256": "f70672ae73097282ee2d85aa8ef7b6a040bf49e4fbede90ebf4c686f19a9cfa0",
+          "match": true
+        },
+        {
+          "artifact": "ZkLoginVerifier.nef",
+          "expected_sha256": "dbb29d01b24a706a843192265c325eff37ef4252f3611e0e9cf0366f1c1a0710",
+          "actual_sha256": "dbb29d01b24a706a843192265c325eff37ef4252f3611e0e9cf0366f1c1a0710",
+          "match": true
+        },
+        {
+          "artifact": "hooks/DailyLimitHook.manifest.json",
+          "expected_sha256": "0a020a6a89bc852ad59484f478ad9201ac45ed328dbe42f5291af713b55069b5",
+          "actual_sha256": "0a020a6a89bc852ad59484f478ad9201ac45ed328dbe42f5291af713b55069b5",
+          "match": true
+        },
+        {
+          "artifact": "hooks/DailyLimitHook.nef",
+          "expected_sha256": "3d51b5fca94f74c1b7594f5bdb884d8625db8f14ea9b1402e164271b218b0e8a",
+          "actual_sha256": "3d51b5fca94f74c1b7594f5bdb884d8625db8f14ea9b1402e164271b218b0e8a",
+          "match": true
+        },
+        {
+          "artifact": "hooks/MultiHook.manifest.json",
+          "expected_sha256": "e05d2cad8562b138e0e4b52c63b3bce9cad918b1a300d3ea7564e9a38a7a662e",
+          "actual_sha256": "e05d2cad8562b138e0e4b52c63b3bce9cad918b1a300d3ea7564e9a38a7a662e",
+          "match": true
+        },
+        {
+          "artifact": "hooks/MultiHook.nef",
+          "expected_sha256": "bc42c1bb3eb58ec171bc390e93b95f0c29b0ee1d4d5f51470e86909cdbd1ae81",
+          "actual_sha256": "bc42c1bb3eb58ec171bc390e93b95f0c29b0ee1d4d5f51470e86909cdbd1ae81",
+          "match": true
+        },
+        {
+          "artifact": "hooks/NeoDIDCredentialHook.manifest.json",
+          "expected_sha256": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8",
+          "actual_sha256": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8",
+          "match": true
+        },
+        {
+          "artifact": "hooks/NeoDIDCredentialHook.nef",
+          "expected_sha256": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+          "actual_sha256": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+          "match": true
+        },
+        {
+          "artifact": "hooks/TokenRestrictedHook.manifest.json",
+          "expected_sha256": "e04c35b45416a74d1d7f732a48e93fd015c14b2cc2a79efb1848251a65e2df3d",
+          "actual_sha256": "e04c35b45416a74d1d7f732a48e93fd015c14b2cc2a79efb1848251a65e2df3d",
+          "match": true
+        },
+        {
+          "artifact": "hooks/TokenRestrictedHook.nef",
+          "expected_sha256": "e90fe66791c4b054a38d07a85ea479da703e554f54f9ee16c779170acf16ddbb",
+          "actual_sha256": "e90fe66791c4b054a38d07a85ea479da703e554f54f9ee16c779170acf16ddbb",
+          "match": true
+        },
+        {
+          "artifact": "hooks/WhitelistHook.manifest.json",
+          "expected_sha256": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791",
+          "actual_sha256": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791",
+          "match": true
+        },
+        {
+          "artifact": "hooks/WhitelistHook.nef",
+          "expected_sha256": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+          "actual_sha256": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/MultiSigVerifier.manifest.json",
+          "expected_sha256": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
+          "actual_sha256": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/MultiSigVerifier.nef",
+          "expected_sha256": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67",
+          "actual_sha256": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/NeoNativeVerifier.manifest.json",
+          "expected_sha256": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f",
+          "actual_sha256": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/NeoNativeVerifier.nef",
+          "expected_sha256": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+          "actual_sha256": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/SessionKeyVerifier.manifest.json",
+          "expected_sha256": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4",
+          "actual_sha256": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/SessionKeyVerifier.nef",
+          "expected_sha256": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+          "actual_sha256": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/SubscriptionVerifier.manifest.json",
+          "expected_sha256": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff",
+          "actual_sha256": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/SubscriptionVerifier.nef",
+          "expected_sha256": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+          "actual_sha256": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/TEEVerifier.manifest.json",
+          "expected_sha256": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77",
+          "actual_sha256": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/TEEVerifier.nef",
+          "expected_sha256": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+          "actual_sha256": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/Web3AuthVerifier.manifest.json",
+          "expected_sha256": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
+          "actual_sha256": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/Web3AuthVerifier.nef",
+          "expected_sha256": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
+          "actual_sha256": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/WebAuthnVerifier.manifest.json",
+          "expected_sha256": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
+          "actual_sha256": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/WebAuthnVerifier.nef",
+          "expected_sha256": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+          "actual_sha256": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/ZKEmailVerifier.manifest.json",
+          "expected_sha256": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110",
+          "actual_sha256": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/ZKEmailVerifier.nef",
+          "expected_sha256": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+          "actual_sha256": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/ZkLoginVerifier.manifest.json",
+          "expected_sha256": "f70672ae73097282ee2d85aa8ef7b6a040bf49e4fbede90ebf4c686f19a9cfa0",
+          "actual_sha256": "f70672ae73097282ee2d85aa8ef7b6a040bf49e4fbede90ebf4c686f19a9cfa0",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/ZkLoginVerifier.nef",
+          "expected_sha256": "dbb29d01b24a706a843192265c325eff37ef4252f3611e0e9cf0366f1c1a0710",
+          "actual_sha256": "dbb29d01b24a706a843192265c325eff37ef4252f3611e0e9cf0366f1c1a0710",
+          "match": true
+        }
+      ]
+    },
+    "platform": {
+      "artifact_dir": "contracts/bin/platform",
+      "artifacts_compared": 2,
+      "required_core_present": true,
+      "matches_fresh_build": true,
+      "drifted": [],
+      "missing": [],
+      "artifacts": [
+        {
+          "artifact": "UnifiedSmartWalletV3.manifest.json",
+          "expected_sha256": "c0760a43c0c635c66681eab3c1296ddbff8438cf186f095c0a0b32944e57e4e2",
+          "actual_sha256": "c0760a43c0c635c66681eab3c1296ddbff8438cf186f095c0a0b32944e57e4e2",
+          "match": true
+        },
+        {
+          "artifact": "UnifiedSmartWalletV3.nef",
+          "expected_sha256": "badf94b2384227434792a97e52aebf68e756da745f5a5322099352462a898af3",
+          "actual_sha256": "badf94b2384227434792a97e52aebf68e756da745f5a5322099352462a898af3",
+          "match": true
+        }
+      ]
+    }
+  },
+  "artifacts_compared": 80,
+  "release_matches_fresh_build": true,
+  "drifted": [],
+  "missing": [],
+  "tracked_anchor": [
+    {
+      "artifact": "UnifiedSmartWalletV3.nef",
+      "expected_sha256": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+      "actual_sha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+      "match": false,
+      "provenance": "tracked contracts/build; deployed-mainnet bytecode anchor"
+    }
+  ],
+  "tracked_tree_drift": [
+    "AAAddressMarket.manifest.json",
+    "AAAddressMarket.nef",
+    "AAPaymaster.manifest.json",
+    "AAPaymaster.nef",
+    "DailyLimitHook.manifest.json",
+    "DailyLimitHook.nef",
+    "MockTransferTarget.manifest.json",
+    "MockTransferTarget.nef",
+    "MockVerifierCore.manifest.json",
+    "MockVerifierCore.nef",
+    "MultiHook.manifest.json",
+    "MultiHook.nef",
+    "MultiSigVerifier.manifest.json",
+    "MultiSigVerifier.nef",
+    "NeoDIDCredentialHook.manifest.json",
+    "NeoDIDCredentialHook.nef",
+    "NeoNativeVerifier.manifest.json",
+    "NeoNativeVerifier.nef",
+    "SessionKeyVerifier.manifest.json",
+    "SessionKeyVerifier.nef",
+    "SocialRecoveryVerifier.manifest.json",
+    "SocialRecoveryVerifier.nef",
+    "SubscriptionVerifier.manifest.json",
+    "SubscriptionVerifier.nef",
+    "TEEVerifier.manifest.json",
+    "TEEVerifier.nef",
+    "TokenRestrictedHook.manifest.json",
+    "TokenRestrictedHook.nef",
+    "UnifiedSmartWalletV3.manifest.json",
+    "UnifiedSmartWalletV3.nef",
+    "Web3AuthVerifier.manifest.json",
+    "Web3AuthVerifier.nef",
+    "WebAuthnVerifier.manifest.json",
+    "WebAuthnVerifier.nef",
+    "WhitelistHook.manifest.json",
+    "WhitelistHook.nef",
+    "ZKEmailVerifier.manifest.json",
+    "ZKEmailVerifier.nef",
+    "ZkLoginVerifier.manifest.json",
+    "ZkLoginVerifier.nef"
+  ],
+  "tracked_tree_note": "Files under contracts/build whose bytes differ from a fresh build. Reported, not failing: UnifiedSmartWalletV3 is intentionally pinned to the deployed mainnet bytecode and that exception must be decided before this becomes a gate.",
+  "certificate": {
+    "schema": "neoos-aa-source-to-artifact-certificate/v1",
+    "source_root": "repository",
+    "source_files": {
+      "contracts/compile.sh": "103974fbd139c55d87d6d3af0698f4dc7f6b63fab1fafe416ef3fa82cb285225",
+      "contracts/hooks/DailyLimitHook.cs": "2ea97d9c0d4a78570543e89d4eafba4f41000018c95670e87caee29193240f19",
+      "contracts/hooks/DailyLimitHook.csproj": "dc3e58ffcff6e72e3121ad970a20437958611badb3b7f54d7292db571852d18b",
+      "contracts/hooks/HookAuthority.cs": "971083370fa07a2cec32493a8566ab8246d478c9fa86da9b6338355b5996aca1",
+      "contracts/hooks/MultiHook.cs": "537f4b5bc4fabe70dc54ea2c66636911853797f1090b4af323b5ae17e6d6afcd",
+      "contracts/hooks/MultiHook.csproj": "07d13f326572c6c0004eb842760419cf551e1d169166d58917e89864958cba22",
+      "contracts/hooks/NeoDIDCredentialHook.cs": "b4c4ae5a8a6053fd92a37d5db6281c880143e266000cef15c2c7439a2aa87228",
+      "contracts/hooks/NeoDIDCredentialHook.csproj": "3729ca53d3d612c09bc14ad0eed3795ee1f748d970e0fd42b3e1d2086be8e6a4",
+      "contracts/hooks/packages.DailyLimitHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/hooks/packages.MultiHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/hooks/packages.NeoDIDCredentialHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/hooks/packages.TokenRestrictedHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/hooks/packages.WhitelistHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/hooks/TokenRestrictedHook.cs": "a7f0d51a288b0c7ebec9908583e77e74b9926fd4d139abda64c27b5dfcfca249",
+      "contracts/hooks/TokenRestrictedHook.csproj": "a189e2d2c204b31581fb2c4bf4ece61cd760d5ba79666927b6340cda2b4bfbe8",
+      "contracts/hooks/WhitelistHook.cs": "27f43ccb43c29a37495d13da7e2a1e5d4119420a08cdf04a160059b9dea7b09f",
+      "contracts/hooks/WhitelistHook.csproj": "30d4c0fd1fe1bc140cca3b71926e4202eec8a9b42bf3f6b23d41177ff592eea2",
+      "contracts/market/AAAddressMarket.cs": "7f9b16f6fc1869bf1341b4c97049878a584b5bc7d5bc40fe1f37824af54b300a",
+      "contracts/market/AAAddressMarket.csproj": "3917604e16f7a88c8c25bbd3c810609b49616cffb6968b86b83795c74d6ca310",
+      "contracts/market/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/mocks/MarkerOnlyModule.cs": "9d4b594b923c55c12b4de4a495469193fb584c3b77d4ffd47d6c9754ed1ba18e",
+      "contracts/mocks/MarkerOnlyModule.csproj": "2eede6c9f6b04140b568ef5efc2d1107152620f96457c7afe0a3d0ab70d9dd90",
+      "contracts/mocks/MockTransferTarget.cs": "aa53c1fb0354d51efcb9acd6518a81635be6f07b5fd7e5f1158a9bec70e0cb3a",
+      "contracts/mocks/MockTransferTarget.csproj": "c08a000c02eed60900d3d3c87cbf0e3d6cdcee953e47c31400cdfd1b6f9d177b",
+      "contracts/mocks/MockVerifierCore.cs": "a334ff753377ec5e75e6a3aebf3267feb00d7e8cd0e390c4f512d3fa4b90df4c",
+      "contracts/mocks/MockVerifierCore.csproj": "d8e4363563ececd72ab5109f1747e44443406b497dca7bc4489558fabba9d03c",
+      "contracts/mocks/packages.MarkerOnlyModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/mocks/packages.MockTransferTarget.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/mocks/packages.MockVerifierCore.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/mocks/packages.PlatformRegistrarMock.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/mocks/packages.PolicyExecutionProbe.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/mocks/packages.WrongHookLifecycleAbiModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/mocks/packages.WrongLifecycleAbiModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/mocks/PlatformRegistrarMock.cs": "4e0719fae5718a3cee42e7e97b50a2d56b44296bf1c7fe7b836ad3142de65bd6",
+      "contracts/mocks/PlatformRegistrarMock.csproj": "32c7ede85254e723e71d1c63a67ffb6e75c362be2a79289f7fbbdc7d261b1b00",
+      "contracts/mocks/PolicyExecutionProbe.cs": "9b95099bc8f83a8ad45241084b584860654746d3b2c4d4ebdd8b3847e23dee9b",
+      "contracts/mocks/PolicyExecutionProbe.csproj": "e508a0da7e03fd07426927e674662af5a6229f4b37bf957aedda5cb4feab60a9",
+      "contracts/mocks/WrongHookLifecycleAbiModule.cs": "e45b45ad91e94818d3fdef0d3a98d4c6b8ebef5e6ee2f31cf6411e75fa37e0a9",
+      "contracts/mocks/WrongHookLifecycleAbiModule.csproj": "787cda3138cc4ed21c05a3aad7b0687e8b7f4722f9deb0bbfa879d3c9dea1055",
+      "contracts/mocks/WrongLifecycleAbiModule.cs": "de8444f2cc03889398bdb108f4ac625c7db469fd6417eeb0228a355968d6fa5f",
+      "contracts/mocks/WrongLifecycleAbiModule.csproj": "f97dd521b7dc2972dfc63d2c17312c2c6fe5bb5d85c10bb6cc0302261a6618e7",
+      "contracts/native/DailyLimitHook.Native.csproj": "e3766888d043e00a2217a90ccba604ec7f3ba3db92ed1c5ddc5c1fac49713f9d",
+      "contracts/native/MultiSigVerifier.Native.csproj": "030c194051033ef45a53a57813926fb87ef1af50212212503a62d64f8b5ddb53",
+      "contracts/native/NativeAuthority.cs": "78c74c0d4fec03d5c8d68a6ac7b2c289f9dc3468fe9cddbbf593e350cabd4f3d",
+      "contracts/native/NeoNativeVerifier.Native.csproj": "d864c9b85e229dfd3ee91a487fa20cfec8337f4d1d6499c955527dc4036635b9",
+      "contracts/native/packages.DailyLimitHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/native/packages.MultiSigVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/native/packages.NeoNativeVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/native/packages.SessionKeyVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/native/packages.TokenRestrictedHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/native/packages.WhitelistHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/native/profiles.json": "abbce0d9d64b15b916899ec987aa77a6851adf6e780d2f367528b24870bd28d9",
+      "contracts/native/SessionKeyVerifier.Native.csproj": "c2b3ad5b3a2a9592db788211899df533dd248eec36446153340a6c24dbb996c1",
+      "contracts/native/TokenRestrictedHook.Native.csproj": "746a44316721f7497a784e3baf1acf0947753e9e07734fe859148b7df8c8806e",
+      "contracts/native/WhitelistHook.Native.csproj": "fe67014420dd66169afbf810c5ab80435beb47cb68ab317a0d700210e16f3745",
+      "contracts/neo-platform-packages.json": "2f205c6700969e8f5662e72ac6f85e02e6fd24672a272adcf48b1a4831454c3a",
+      "contracts/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/paymaster/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/paymaster/Paymaster.cs": "c04511d90eff0e97fabb94d17c38c80de4287186138dcdf01073ee2a16cada87",
+      "contracts/paymaster/Paymaster.csproj": "db4eb4f1980fcaf349d6ae42e081773bcb7d28187e3188275a263b2aeae7a89a",
+      "contracts/paymaster/PaymasterAuthority.cs": "219433044b4636a109595f9209153e33c652237671baa485d48e64c47acc5b5c",
+      "contracts/recovery/MorpheusSocialRecoveryVerifier.csproj": "c29e9476630b2ff557d569f88588711fb7e43a604edabd460010c01991f947ba",
+      "contracts/recovery/MorpheusSocialRecoveryVerifier.Fixed.cs": "87a3d43c81a3fbfbb58b63b3c2986a0e74e614496b86788682a9aada10d50b0c",
+      "contracts/recovery/MorpheusSocialRecoveryVerifier.Flows.cs": "1aa08ac5484bb237323c848c375c38b0be4957c8ca68d88381e15f50772fbe63",
+      "contracts/recovery/MorpheusSocialRecoveryVerifier.Lifecycle.cs": "a6af68e2b0f729f44534dd29372f88463c7b8a2d58c1120de34f31cb0105134d",
+      "contracts/recovery/MorpheusSocialRecoveryVerifier.Queries.cs": "cbb48267a4eec9477cb72e562a24ba1dbe22c74ed82d729fa02faf2c8a78a0cd",
+      "contracts/recovery/MorpheusSocialRecoveryVerifier.Storage.cs": "9c0c7083c40bfc95d4ae88eae3aaf6ef5d58f667c6f4c4d940c4f433ddd8acbe",
+      "contracts/recovery/MorpheusSocialRecoveryVerifier.V3.cs": "8491e0b58721f35c3f5ec5c3ae88abf6826edd730d1811883a0bfd6f7c1e4a43",
+      "contracts/recovery/MorpheusSocialRecoveryVerifier.Validation.cs": "747ef44e566aaeb81255fe1adddb994447014f9e9c9bfd2e4b4f7e645da3f859",
+      "contracts/recovery/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
+      "contracts/UnifiedSmartWallet.Admin.cs": "74fa83c1f5e39a3cc1661a71efa5b061e87374b8d7904b9d61e9662c39738f52",
+      "contracts/UnifiedSmartWallet.cs": "acae71beecf5fac6886117293b0ab2ca4358c1c6bf1685576561200462b45f46",
+      "contracts/UnifiedSmartWallet.csproj": "701a59fc3ea905c7ee37f246759a7f3e558e30a57f6b515eb107f4c5e248f20e",
+      "contracts/UnifiedSmartWallet.Escape.cs": "433b064b7bb06f1344e5ac8977fa0e2323c588a82963c55f82a53d162059aee6",
+      "contracts/UnifiedSmartWallet.Events.cs": "361b616f6557bd8b845c2c790d32152653e0b09668ac4c2baeea302429fa8f2f",
+      "contracts/UnifiedSmartWallet.Execution.cs": "441c7213440125196d505c5b843af5a6b2f975e524d6e44aa3b1b88b1027f7c3",
+      "contracts/UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
+      "contracts/UnifiedSmartWallet.MarketEscrow.cs": "870f06a58e7c61bd7d31243b8fd63a7626e1b192e08ef847ecd4d0f2b4b450ab",
+      "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
+      "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
+      "contracts/UnifiedSmartWallet.PlatformRegistrar.cs": "9c729c0a5778484cf1b4e23122eed5b077bcd80f0e33b8e6a428c60a93a91abb",
+      "contracts/UnifiedSmartWallet.Proxy.cs": "46427b4d2046f03d29bd51130c902d2ef7e2239f97617e85c6e0d51d1bb123e6",
+      "contracts/UnifiedSmartWallet.State.cs": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f",
+      "contracts/UnifiedSmartWallet.VerifierChildren.cs": "38d414912d0fafc678d4e7c49000c6c7dc5e817ba6e21db7074c0d66f060ab5a",
+      "contracts/UnifiedSmartWallet.VerifyContext.cs": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7",
+      "contracts/verifiers/MultiSigVerifier.cs": "77dadc702a57f78bd4198e8ef5688253838196d42dba19c8ff71fdfa67dbe547",
+      "contracts/verifiers/MultiSigVerifier.csproj": "7ea0f896fc2348ef3e46c605f013144c91ec4a700d22ce9812106a5ed8bde1f0",
+      "contracts/verifiers/NativeOperation.cs": "682e6a13c7aa7eeb6987bd32668439dde76fb6dd9b24746d724dccda5024254f",
+      "contracts/verifiers/NeoNativeVerifier.cs": "ebd8cbeb6b1ab96b778681c08d8e11a83bfed2c2553f857a01694764b4abc30e",
+      "contracts/verifiers/NeoNativeVerifier.csproj": "9185028c3430fe35752a911d61f64ed6349e255256444c74455bc5c816518413",
+      "contracts/verifiers/packages.MultiSigVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/packages.NeoNativeVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/packages.SessionKeyVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/packages.SubscriptionVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/packages.TEEVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/packages.Web3AuthVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/packages.WebAuthnVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/packages.ZKEmailVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/packages.ZkLoginVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+      "contracts/verifiers/SessionKeyVerifier.cs": "032de15f44c1a3114a72f5551bec3f1f1f8fa459c41225f39d1da0a11e80838b",
+      "contracts/verifiers/SessionKeyVerifier.csproj": "73de60fcdcfe4ecd5052a7602122cb03ea24edf9ca27afb35e44c4a0b2dbf78a",
+      "contracts/verifiers/SignerDomain.cs": "107ab905f362fd661b9c24585a23a79a7ecf7bce1370c97bc0beb6d3ca4afaf6",
+      "contracts/verifiers/SubscriptionVerifier.cs": "200b15570eaff7e5bf39acd62a1d398106a6d977c5af08c57ea890862eec320c",
+      "contracts/verifiers/SubscriptionVerifier.csproj": "96edd5377eeee49ac71e0e61cab8adee9e38213d9ac61412cba1d66c1d95c9a0",
+      "contracts/verifiers/TEEVerifier.cs": "ca04a531248408b6e55782ba8c343593622943450619c737fe01f805038fa1ed",
+      "contracts/verifiers/TEEVerifier.csproj": "1ec0a38cec4389c49bfebb28ec480872b7de761fe42ccb65092a32477e36b75a",
+      "contracts/verifiers/VerifierAuthority.cs": "b964e3e2886718075f9b30f74e3a26c70e7d3d77af9f63f2ba22e4a16626993e",
+      "contracts/verifiers/VerifierClock.cs": "e3e2fb7ef5eccf95cac5384bb7bb4e7341a774c31f49128174d722dd1adf4f2c",
+      "contracts/verifiers/VerifierModels.cs": "d4a562022946f427b96ca16b073ce8de45bd9bc920dec455d2c306b6d924c6b5",
+      "contracts/verifiers/VerifierPayload.cs": "8ed0276898a93aa0eb00ad18d95c4f4a19f63ea7dfdcf7fb822b613f939d473f",
+      "contracts/verifiers/Web3AuthVerifier.cs": "85b925f0fe55f3682cda07d8c1bbf6c345f6a6f04806a9b5a5f0626f9a03866e",
+      "contracts/verifiers/Web3AuthVerifier.csproj": "e461de1a2b38003918de3e721b757689fafa7aa4ff4282eb384585d41d26c3ac",
+      "contracts/verifiers/WebAuthnVerifier.cs": "6299697159b3e4e5474797f6a5b6e098af5b8db43d3182bab8d9063b9378ad05",
+      "contracts/verifiers/WebAuthnVerifier.csproj": "308a133cf9f231c2c246e9adbcd46bdad5120d1075dacb3b7f549175f6bbb2c3",
+      "contracts/verifiers/ZKEmailVerifier.cs": "07bb130f48ce1b488a4811a92a090bbbaf3f4ae11775d3ae8c88a22871cf52c7",
+      "contracts/verifiers/ZKEmailVerifier.csproj": "bf1476d311c3e1dd96477fc3f0777b73adf80c58f0baf2ac855bd5ddb3cba83d",
+      "contracts/verifiers/ZkLoginVerifier.cs": "82f200ab025fb3e71bb8eb15786d22dd158560841affef68b055828ed22df22e",
+      "contracts/verifiers/ZkLoginVerifier.csproj": "0d5e4b385849680ca922ca274e5ed2d226efcc0e4f5a8a804d9b33b4aedbbc8e",
+      "Directory.Build.props": "c003c09715a996e268136c35e7e8555f9bcb376cdebc40a250b07f73e86c6799",
+      "nuget.config": "d03316715c5c46428149533dbd994d81a9fcdf97c8981a05083113523db82797",
+      "scripts/check_neo_platform_packages.mjs": "f7357fa9e2e5bb58b4e0f61fa9a8c4afe4f141f853392f77a2ee345b33d4da64",
+      "scripts/dotnet_env.sh": "8b7e70f90584bbb2664716ec8ae1a373e314ef04185860455c28cc3ff5e9a39b"
+    },
+    "source_snapshot_sha256": "04159f22651e42dcdbeb0d11094212140c048990763be68332e7ee7c2994cd63",
+    "compiler": {
+      "tool": "nccs",
+      "version": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"
+    },
+    "compile_recipe": [
+      "bash contracts/compile.sh"
+    ],
+    "compile_recipe_sources": {
+      "contracts/compile.sh": "103974fbd139c55d87d6d3af0698f4dc7f6b63fab1fafe416ef3fa82cb285225",
+      "scripts/dotnet_env.sh": "8b7e70f90584bbb2664716ec8ae1a373e314ef04185860455c28cc3ff5e9a39b",
+      "scripts/check_neo_platform_packages.mjs": "f7357fa9e2e5bb58b4e0f61fa9a8c4afe4f141f853392f77a2ee345b33d4da64"
+    },
+    "compile_recipe_sha256": "b3b18a21b9e5f2acb2ce8b680984ec0ae378fac34f4a117ec0a0905582abb43b",
+    "fresh_artifact_sha256": {
+      "v3/AAAddressMarket.manifest.json": "5a566e145e98a21a4d4fdcfb518772647f410b788fa23bc792836b3ae351861a",
+      "v3/AAAddressMarket.nef": "6cc8dd93ad96d79c81f02ebfada9bab28b8fe4f6eeb0c0ddff7a2a6516543328",
+      "v3/AAPaymaster.manifest.json": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54",
+      "v3/AAPaymaster.nef": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
+      "v3/DailyLimitHook.manifest.json": "0a020a6a89bc852ad59484f478ad9201ac45ed328dbe42f5291af713b55069b5",
+      "v3/DailyLimitHook.nef": "3d51b5fca94f74c1b7594f5bdb884d8625db8f14ea9b1402e164271b218b0e8a",
+      "v3/MarkerOnlyModule.manifest.json": "0ad3093b7f5bdada8319a9a13becef55b844e1af9a2ce5a58d4b542cd608b046",
+      "v3/MarkerOnlyModule.nef": "aff6624a898dacdfc48355d4cd4fb07f61e40be4a2bdf935829ebcb9c834f9b9",
+      "v3/MockTransferTarget.manifest.json": "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c",
+      "v3/MockTransferTarget.nef": "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
+      "v3/MockVerifierCore.manifest.json": "b1cb996174e50f3066376eacb2a02c6a048f31b5e43d2adb3c3c59217ff650e3",
+      "v3/MockVerifierCore.nef": "d14cd34a5e546eced6d05f28ca4d8238a905004a2e96d08b67a89222f1c3879c",
+      "v3/MultiHook.manifest.json": "e05d2cad8562b138e0e4b52c63b3bce9cad918b1a300d3ea7564e9a38a7a662e",
+      "v3/MultiHook.nef": "bc42c1bb3eb58ec171bc390e93b95f0c29b0ee1d4d5f51470e86909cdbd1ae81",
+      "v3/MultiSigVerifier.manifest.json": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
+      "v3/MultiSigVerifier.nef": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67",
+      "v3/NeoDIDCredentialHook.manifest.json": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8",
+      "v3/NeoDIDCredentialHook.nef": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+      "v3/NeoNativeVerifier.manifest.json": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f",
+      "v3/NeoNativeVerifier.nef": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+      "v3/PlatformRegistrarMock.manifest.json": "6f32bd40460b9e14b848f84f7a54f68e45b502096e3714746b7725019c69a8e2",
+      "v3/PlatformRegistrarMock.nef": "514eddaf4701d2d2679c28a75de589096df105cc3fc9ecae393b3297181b85fe",
+      "v3/PolicyExecutionProbe.manifest.json": "084bafbb151859b2dab51b9fc9fe7e83188c7c947e094fae773c13e219caff6f",
+      "v3/PolicyExecutionProbe.nef": "08ad2d87a45d7a374e83bdb926b8f3d03be115d42c04afe57b64d1d1468482c9",
+      "v3/SessionKeyVerifier.manifest.json": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4",
+      "v3/SessionKeyVerifier.nef": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+      "v3/SocialRecoveryVerifier.manifest.json": "c4ca1b2842dde80c878790b21941045a9d041e74c8556eaf9f0ed79067c00e97",
+      "v3/SocialRecoveryVerifier.nef": "3d5d846b3e0a7697d2fc510d43c2128a0c194215ed30e0484d50ec0de71ceac2",
+      "v3/SubscriptionVerifier.manifest.json": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff",
+      "v3/SubscriptionVerifier.nef": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+      "v3/TEEVerifier.manifest.json": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77",
+      "v3/TEEVerifier.nef": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+      "v3/TokenRestrictedHook.manifest.json": "e04c35b45416a74d1d7f732a48e93fd015c14b2cc2a79efb1848251a65e2df3d",
+      "v3/TokenRestrictedHook.nef": "e90fe66791c4b054a38d07a85ea479da703e554f54f9ee16c779170acf16ddbb",
+      "v3/UnifiedSmartWalletV3.manifest.json": "48fda3ed98a26961c647b220144604df494c65f6026e963b3c916bf0f51e658c",
+      "v3/UnifiedSmartWalletV3.nef": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+      "v3/Web3AuthVerifier.manifest.json": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
+      "v3/Web3AuthVerifier.nef": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
+      "v3/WebAuthnVerifier.manifest.json": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
+      "v3/WebAuthnVerifier.nef": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+      "v3/WhitelistHook.manifest.json": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791",
+      "v3/WhitelistHook.nef": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+      "v3/WrongHookLifecycleAbiModule.manifest.json": "48f582388ed626fd895980e6a426c8ac41447ed02333176efdf7f478e1f043ef",
+      "v3/WrongHookLifecycleAbiModule.nef": "2814d80eb1007765b8543b30c54e48782e5183d8f00345b85fdc5ddb7ed6ce3d",
+      "v3/WrongLifecycleAbiModule.manifest.json": "f9494bb848f0bbfcd6dde4cf52c1ba277b8d8e6902d02dd1ba313ea19a02570a",
+      "v3/WrongLifecycleAbiModule.nef": "dce2b08a7dd2c48d01c32254e00eac76d6bcbeb76bbbc2add831bace6c666fd5",
+      "v3/ZKEmailVerifier.manifest.json": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110",
+      "v3/ZKEmailVerifier.nef": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+      "v3/ZkLoginVerifier.manifest.json": "f70672ae73097282ee2d85aa8ef7b6a040bf49e4fbede90ebf4c686f19a9cfa0",
+      "v3/ZkLoginVerifier.nef": "dbb29d01b24a706a843192265c325eff37ef4252f3611e0e9cf0366f1c1a0710",
+      "v3/hooks/DailyLimitHook.manifest.json": "0a020a6a89bc852ad59484f478ad9201ac45ed328dbe42f5291af713b55069b5",
+      "v3/hooks/DailyLimitHook.nef": "3d51b5fca94f74c1b7594f5bdb884d8625db8f14ea9b1402e164271b218b0e8a",
+      "v3/hooks/MultiHook.manifest.json": "e05d2cad8562b138e0e4b52c63b3bce9cad918b1a300d3ea7564e9a38a7a662e",
+      "v3/hooks/MultiHook.nef": "bc42c1bb3eb58ec171bc390e93b95f0c29b0ee1d4d5f51470e86909cdbd1ae81",
+      "v3/hooks/NeoDIDCredentialHook.manifest.json": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8",
+      "v3/hooks/NeoDIDCredentialHook.nef": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+      "v3/hooks/TokenRestrictedHook.manifest.json": "e04c35b45416a74d1d7f732a48e93fd015c14b2cc2a79efb1848251a65e2df3d",
+      "v3/hooks/TokenRestrictedHook.nef": "e90fe66791c4b054a38d07a85ea479da703e554f54f9ee16c779170acf16ddbb",
+      "v3/hooks/WhitelistHook.manifest.json": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791",
+      "v3/hooks/WhitelistHook.nef": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+      "v3/verifiers/MultiSigVerifier.manifest.json": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
+      "v3/verifiers/MultiSigVerifier.nef": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67",
+      "v3/verifiers/NeoNativeVerifier.manifest.json": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f",
+      "v3/verifiers/NeoNativeVerifier.nef": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+      "v3/verifiers/SessionKeyVerifier.manifest.json": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4",
+      "v3/verifiers/SessionKeyVerifier.nef": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+      "v3/verifiers/SubscriptionVerifier.manifest.json": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff",
+      "v3/verifiers/SubscriptionVerifier.nef": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+      "v3/verifiers/TEEVerifier.manifest.json": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77",
+      "v3/verifiers/TEEVerifier.nef": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+      "v3/verifiers/Web3AuthVerifier.manifest.json": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
+      "v3/verifiers/Web3AuthVerifier.nef": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
+      "v3/verifiers/WebAuthnVerifier.manifest.json": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
+      "v3/verifiers/WebAuthnVerifier.nef": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+      "v3/verifiers/ZKEmailVerifier.manifest.json": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110",
+      "v3/verifiers/ZKEmailVerifier.nef": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+      "v3/verifiers/ZkLoginVerifier.manifest.json": "f70672ae73097282ee2d85aa8ef7b6a040bf49e4fbede90ebf4c686f19a9cfa0",
+      "v3/verifiers/ZkLoginVerifier.nef": "dbb29d01b24a706a843192265c325eff37ef4252f3611e0e9cf0366f1c1a0710",
+      "platform/UnifiedSmartWalletV3.manifest.json": "c0760a43c0c635c66681eab3c1296ddbff8438cf186f095c0a0b32944e57e4e2",
+      "platform/UnifiedSmartWalletV3.nef": "badf94b2384227434792a97e52aebf68e756da745f5a5322099352462a898af3"
+    },
+    "release_artifact_sha256": {
+      "v3/AAAddressMarket.manifest.json": "5a566e145e98a21a4d4fdcfb518772647f410b788fa23bc792836b3ae351861a",
+      "v3/AAAddressMarket.nef": "6cc8dd93ad96d79c81f02ebfada9bab28b8fe4f6eeb0c0ddff7a2a6516543328",
+      "v3/AAPaymaster.manifest.json": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54",
+      "v3/AAPaymaster.nef": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
+      "v3/DailyLimitHook.manifest.json": "0a020a6a89bc852ad59484f478ad9201ac45ed328dbe42f5291af713b55069b5",
+      "v3/DailyLimitHook.nef": "3d51b5fca94f74c1b7594f5bdb884d8625db8f14ea9b1402e164271b218b0e8a",
+      "v3/MarkerOnlyModule.manifest.json": "0ad3093b7f5bdada8319a9a13becef55b844e1af9a2ce5a58d4b542cd608b046",
+      "v3/MarkerOnlyModule.nef": "aff6624a898dacdfc48355d4cd4fb07f61e40be4a2bdf935829ebcb9c834f9b9",
+      "v3/MockTransferTarget.manifest.json": "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c",
+      "v3/MockTransferTarget.nef": "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
+      "v3/MockVerifierCore.manifest.json": "b1cb996174e50f3066376eacb2a02c6a048f31b5e43d2adb3c3c59217ff650e3",
+      "v3/MockVerifierCore.nef": "d14cd34a5e546eced6d05f28ca4d8238a905004a2e96d08b67a89222f1c3879c",
+      "v3/MultiHook.manifest.json": "e05d2cad8562b138e0e4b52c63b3bce9cad918b1a300d3ea7564e9a38a7a662e",
+      "v3/MultiHook.nef": "bc42c1bb3eb58ec171bc390e93b95f0c29b0ee1d4d5f51470e86909cdbd1ae81",
+      "v3/MultiSigVerifier.manifest.json": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
+      "v3/MultiSigVerifier.nef": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67",
+      "v3/NeoDIDCredentialHook.manifest.json": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8",
+      "v3/NeoDIDCredentialHook.nef": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+      "v3/NeoNativeVerifier.manifest.json": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f",
+      "v3/NeoNativeVerifier.nef": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+      "v3/PlatformRegistrarMock.manifest.json": "6f32bd40460b9e14b848f84f7a54f68e45b502096e3714746b7725019c69a8e2",
+      "v3/PlatformRegistrarMock.nef": "514eddaf4701d2d2679c28a75de589096df105cc3fc9ecae393b3297181b85fe",
+      "v3/PolicyExecutionProbe.manifest.json": "084bafbb151859b2dab51b9fc9fe7e83188c7c947e094fae773c13e219caff6f",
+      "v3/PolicyExecutionProbe.nef": "08ad2d87a45d7a374e83bdb926b8f3d03be115d42c04afe57b64d1d1468482c9",
+      "v3/SessionKeyVerifier.manifest.json": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4",
+      "v3/SessionKeyVerifier.nef": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+      "v3/SocialRecoveryVerifier.manifest.json": "c4ca1b2842dde80c878790b21941045a9d041e74c8556eaf9f0ed79067c00e97",
+      "v3/SocialRecoveryVerifier.nef": "3d5d846b3e0a7697d2fc510d43c2128a0c194215ed30e0484d50ec0de71ceac2",
+      "v3/SubscriptionVerifier.manifest.json": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff",
+      "v3/SubscriptionVerifier.nef": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+      "v3/TEEVerifier.manifest.json": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77",
+      "v3/TEEVerifier.nef": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+      "v3/TokenRestrictedHook.manifest.json": "e04c35b45416a74d1d7f732a48e93fd015c14b2cc2a79efb1848251a65e2df3d",
+      "v3/TokenRestrictedHook.nef": "e90fe66791c4b054a38d07a85ea479da703e554f54f9ee16c779170acf16ddbb",
+      "v3/UnifiedSmartWalletV3.manifest.json": "48fda3ed98a26961c647b220144604df494c65f6026e963b3c916bf0f51e658c",
+      "v3/UnifiedSmartWalletV3.nef": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+      "v3/Web3AuthVerifier.manifest.json": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
+      "v3/Web3AuthVerifier.nef": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
+      "v3/WebAuthnVerifier.manifest.json": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
+      "v3/WebAuthnVerifier.nef": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+      "v3/WhitelistHook.manifest.json": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791",
+      "v3/WhitelistHook.nef": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+      "v3/WrongHookLifecycleAbiModule.manifest.json": "48f582388ed626fd895980e6a426c8ac41447ed02333176efdf7f478e1f043ef",
+      "v3/WrongHookLifecycleAbiModule.nef": "2814d80eb1007765b8543b30c54e48782e5183d8f00345b85fdc5ddb7ed6ce3d",
+      "v3/WrongLifecycleAbiModule.manifest.json": "f9494bb848f0bbfcd6dde4cf52c1ba277b8d8e6902d02dd1ba313ea19a02570a",
+      "v3/WrongLifecycleAbiModule.nef": "dce2b08a7dd2c48d01c32254e00eac76d6bcbeb76bbbc2add831bace6c666fd5",
+      "v3/ZKEmailVerifier.manifest.json": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110",
+      "v3/ZKEmailVerifier.nef": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+      "v3/ZkLoginVerifier.manifest.json": "f70672ae73097282ee2d85aa8ef7b6a040bf49e4fbede90ebf4c686f19a9cfa0",
+      "v3/ZkLoginVerifier.nef": "dbb29d01b24a706a843192265c325eff37ef4252f3611e0e9cf0366f1c1a0710",
+      "v3/hooks/DailyLimitHook.manifest.json": "0a020a6a89bc852ad59484f478ad9201ac45ed328dbe42f5291af713b55069b5",
+      "v3/hooks/DailyLimitHook.nef": "3d51b5fca94f74c1b7594f5bdb884d8625db8f14ea9b1402e164271b218b0e8a",
+      "v3/hooks/MultiHook.manifest.json": "e05d2cad8562b138e0e4b52c63b3bce9cad918b1a300d3ea7564e9a38a7a662e",
+      "v3/hooks/MultiHook.nef": "bc42c1bb3eb58ec171bc390e93b95f0c29b0ee1d4d5f51470e86909cdbd1ae81",
+      "v3/hooks/NeoDIDCredentialHook.manifest.json": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8",
+      "v3/hooks/NeoDIDCredentialHook.nef": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+      "v3/hooks/TokenRestrictedHook.manifest.json": "e04c35b45416a74d1d7f732a48e93fd015c14b2cc2a79efb1848251a65e2df3d",
+      "v3/hooks/TokenRestrictedHook.nef": "e90fe66791c4b054a38d07a85ea479da703e554f54f9ee16c779170acf16ddbb",
+      "v3/hooks/WhitelistHook.manifest.json": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791",
+      "v3/hooks/WhitelistHook.nef": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+      "v3/verifiers/MultiSigVerifier.manifest.json": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
+      "v3/verifiers/MultiSigVerifier.nef": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67",
+      "v3/verifiers/NeoNativeVerifier.manifest.json": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f",
+      "v3/verifiers/NeoNativeVerifier.nef": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+      "v3/verifiers/SessionKeyVerifier.manifest.json": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4",
+      "v3/verifiers/SessionKeyVerifier.nef": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+      "v3/verifiers/SubscriptionVerifier.manifest.json": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff",
+      "v3/verifiers/SubscriptionVerifier.nef": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+      "v3/verifiers/TEEVerifier.manifest.json": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77",
+      "v3/verifiers/TEEVerifier.nef": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+      "v3/verifiers/Web3AuthVerifier.manifest.json": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
+      "v3/verifiers/Web3AuthVerifier.nef": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
+      "v3/verifiers/WebAuthnVerifier.manifest.json": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
+      "v3/verifiers/WebAuthnVerifier.nef": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+      "v3/verifiers/ZKEmailVerifier.manifest.json": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110",
+      "v3/verifiers/ZKEmailVerifier.nef": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+      "v3/verifiers/ZkLoginVerifier.manifest.json": "f70672ae73097282ee2d85aa8ef7b6a040bf49e4fbede90ebf4c686f19a9cfa0",
+      "v3/verifiers/ZkLoginVerifier.nef": "dbb29d01b24a706a843192265c325eff37ef4252f3611e0e9cf0366f1c1a0710",
+      "platform/UnifiedSmartWalletV3.manifest.json": "c0760a43c0c635c66681eab3c1296ddbff8438cf186f095c0a0b32944e57e4e2",
+      "platform/UnifiedSmartWalletV3.nef": "badf94b2384227434792a97e52aebf68e756da745f5a5322099352462a898af3"
+    },
+    "byte_equal_release": true,
+    "semantic_scope": "Rebuild and byte comparison; not a mechanized C# to NEF or full NeoVM refinement proof"
+  },
+  "chain_writes_performed": false
+}

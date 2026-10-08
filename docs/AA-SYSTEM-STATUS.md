@@ -17,7 +17,16 @@ The public profile has no per-child verifier gas budget. Relays and sponsors mus
 bound transaction fees and review the selected modules and their mutable child
 configuration. Private-profile proofs do not close this public-runtime limitation.
 
-## Account and operator workflows
+## Native account workflow
+
+The native ABI 2 implementation has independent custody recovery, authority-epoch
+module storage, explicit epoch/configuration commitments in execution, bounded
+callbacks, complete witness fee estimation and signed-transaction preview. See
+[the native architecture](NATIVE_SYSTEM_ARCHITECTURE.md), [SDK](NATIVE_SDK.md) and
+[workspace](NATIVE_ACCOUNT_WORKSPACE.md). It requires the matching native runtime
+and activation; public V3 deployment is not evidence of native availability.
+
+## Public V3 account and operator workflows
 
 | Capability | Supported contract | Remaining boundary |
 | --- | --- | --- |
@@ -30,7 +39,7 @@ configuration. Private-profile proofs do not close this public-runtime limitatio
 | Direct proxy transfer | Derived witness, core scope readback and explicit bounded fee reserve | Relay mode and administrator-configured scope; ordinary wallet invoke APIs cannot add this witness |
 | Sponsored execution | Existing policy-checked paymaster execution for supported operations | Sponsored proxy witnesses are refused; arbitrary settlement must not inherit proxy asset authority |
 | Operator key recovery | Durable browser key storage and passphrase-encrypted backup | Import requires the draft's already-pinned public key; a link alone cannot replace it |
-| Backup-owner escape | Timelock, owner witness, replacement ABI validation and atomic cleanup | A faulting old plugin can block finalization; authority-epoch recovery remains a proposal |
+| Backup-owner escape | Timelock, owner witness, replacement ABI validation and atomic cleanup | A faulting old plugin can block finalization; native authority-epoch recovery is a different profile |
 
 ## Plugin names are not full product guarantees
 

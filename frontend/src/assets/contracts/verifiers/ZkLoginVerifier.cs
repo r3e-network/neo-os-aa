@@ -54,6 +54,9 @@ namespace AbstractAccount.Verifiers
         public static bool SupportsV3() => true;
 
         [Safe]
+        public static bool SupportsComposition() => false;
+
+        [Safe]
         public static bool SupportsMessageSignatures() => false;
 
         [Safe]
@@ -134,6 +137,13 @@ namespace AbstractAccount.Verifiers
         public static ByteString GetMasterNullifier(UInt160 accountId)
         {
             return GetConfig(accountId).MasterNullifier;
+        }
+
+        [Safe]
+        public static ByteString[] GetSignerDomains(UInt160 accountId)
+        {
+            ZkLoginConfig config = GetConfig(accountId);
+            return new ByteString[] { SignerDomain.Secp256r1(config.SignerPublicKey) };
         }
 
         [Safe]

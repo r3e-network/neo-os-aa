@@ -8,7 +8,7 @@
 // package source. The gate stops a build whose packages are not exactly the audited ones:
 //
 //   * the props pin, the tests project and contracts/neo-platform-packages.json must agree;
-//   * every project must have a committed lock file (packages.lock.json, or
+//   * every project in the selected profile must have a committed lock file (packages.lock.json, or
 //     packages.ProjectName.lock.json where a directory holds several projects) whose Neo packages
 //     are the audited versions with the audited content hashes;
 //   * the tests project, which also builds the AA core, must restore in locked mode, and every
@@ -16,7 +16,10 @@
 //     the manifest is refused too);
 //   * with --compiler-only, the installed nccs must be the pinned compiler package, byte for byte.
 //
-// Usage: node scripts/check_neo_platform_packages.mjs [--compiler-only]
+// Public/platform gates exclude the separately built native profile. --include-native
+// also checks six native modules, both test-only epoch probes, and two hosts
+// that reference a validated source runtime instead of Neo NuGet assemblies.
+// Usage: node scripts/check_neo_platform_packages.mjs [--compiler-only | --include-native]
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -31,6 +34,10 @@ export const PATHS = {
   nugetConfig: "nuget.config",
   testsProject: "tests/AbstractAccount.Contracts.Tests/AbstractAccount.Contracts.Tests.csproj",
   contractsDir: "contracts",
+  nativeProbeProject: "tests/NativeEpochProbe/NativeEpochProbe.csproj",
+  nativeProbeContractProject: "tests/NativeEpochProbe/contracts/NativeEpochCore.csproj",
+  nativeRuntimeProbeProject: "tests/NativeModuleProbe/NativeModuleProbe.csproj",
+  nativeMultiSigProbeProject: "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj",
   coreAssets: "contracts/obj/project.assets.json",
   testsAssets: "tests/AbstractAccount.Contracts.Tests/obj/project.assets.json",
   manifest: "contracts/neo-platform-packages.json",
@@ -90,6 +97,10 @@ export function parseManifest(text, file = PATHS.manifest) {
 /** Returns human-readable problems when the pins and the audited manifest disagree. */
 export function pinConsistencyProblems({ propsVersion, testsVersion = null, manifest }) {
   const problems = [];
+  if (JSON.stringify(manifest.sourceRuntimeProbeProjects)
+    !== JSON.stringify([PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject])) {
+    problems.push(`${PATHS.manifest} source runtime probe project inventory is missing or changed`);
+  }
   if (testsVersion !== null && testsVersion !== propsVersion) {
     problems.push(`${PATHS.testsProject} pins ${testsVersion} but ${PATHS.props} pins ${propsVersion}`);
   }
@@ -105,19 +116,23 @@ export function pinConsistencyProblems({ propsVersion, testsVersion = null, mani
   return problems;
 }
 
-/** Lists every project that restores Neo packages, relative to the repository root. */
-export function listProjects(root = repoRoot) {
+/** Lists projects in the selected build scope, relative to the repository root. */
+export function listProjects(root = repoRoot, { includeNative = false } = {}) {
   const found = [];
   const walk = (relative) => {
     for (const entry of fs.readdirSync(path.join(root, relative), { withFileTypes: true })) {
       if (entry.name === "bin" || entry.name === "obj" || entry.name === "node_modules") continue;
       const child = `${relative}/${entry.name}`;
+      if (!includeNative && child === "contracts/native") continue;
       if (entry.isDirectory()) walk(child);
       else if (entry.name.endsWith(".csproj")) found.push(child);
     }
   };
   walk(PATHS.contractsDir);
-  return [...found.sort(), PATHS.testsProject];
+  return [...found.sort(), PATHS.testsProject, ...(includeNative
+    ? [PATHS.nativeProbeProject, PATHS.nativeProbeContractProject,
+      PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject]
+    : [])];
 }
 
 /**
@@ -153,8 +168,17 @@ export function lockFileProblems(locks, manifest) {
       continue;
     }
     const entries = lockedDependencies(lock);
+    if ([PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject].includes(project)) {
+      if (lock.version !== 1 || Object.keys(lock.dependencies ?? {}).length !== 1
+        || !Object.hasOwn(lock.dependencies ?? {}, "net10.0") || entries.length !== 0) {
+        problems.push(`${file} must lock an empty net10.0 NuGet graph; Neo assemblies come from the validated source runtime`);
+      }
+      continue;
+    }
     const names = new Set(entries.map((entry) => entry.id.toLowerCase()));
-    const required = ["Neo.SmartContract.Framework"];
+    const required = project === PATHS.nativeProbeProject
+      ? ["Neo.SmartContract.Testing"]
+      : ["Neo.SmartContract.Framework"];
     if (project === PATHS.testsProject) required.push("Neo.SmartContract.Testing");
     for (const id of required) {
       if (!names.has(id.toLowerCase())) problems.push(`${file} does not lock ${id}`);
@@ -291,7 +315,7 @@ function readLock(file) {
   return fs.existsSync(absolute) ? JSON.parse(fs.readFileSync(absolute, "utf8")) : null;
 }
 
-function checkPackages(manifest) {
+function checkPackages(manifest, { includeNative = false } = {}) {
   const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
   const propsVersion = readPinnedVersion(read(PATHS.props), PATHS.props);
   const testsVersion = readOptionalPinnedVersion(read(PATHS.testsProject), PATHS.testsProject);
@@ -303,7 +327,7 @@ function checkPackages(manifest) {
     return 1;
   }
 
-  const projects = listProjects();
+  const projects = listProjects(repoRoot, { includeNative });
   const locks = projects.map((project) => {
     const file = lockFileFor(project, projects);
     return { project, file, lock: readLock(file) };
@@ -408,7 +432,7 @@ function checkCompiler(manifest) {
 
 function main(argv) {
   const manifest = parseManifest(fs.readFileSync(path.join(repoRoot, PATHS.manifest), "utf8"));
-  return argv.includes("--compiler-only") ? checkCompiler(manifest) : checkPackages(manifest);
+  return argv.includes("--compiler-only") ? checkCompiler(manifest) : checkPackages(manifest, { includeNative: argv.includes("--include-native") });
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

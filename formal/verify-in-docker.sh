@@ -11,11 +11,35 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="${AA_FORMAL_IMAGE:-neo-os-aa-formal:local}"
 
-docker build -f "$ROOT_DIR/formal/Dockerfile" -t "$IMAGE" "$ROOT_DIR/formal"
+build_args=()
+# Docker Desktop/Colima may inject a stale localhost proxy from the user's
+# Docker config. Allow the caller to provide the host-reachable proxy without
+# changing the pinned image or silently falling back to an unverified toolchain.
+if [[ -n "${AA_FORMAL_HTTP_PROXY:-}" ]]; then
+  build_args+=(--build-arg "HTTP_PROXY=$AA_FORMAL_HTTP_PROXY"
+               --build-arg "http_proxy=$AA_FORMAL_HTTP_PROXY")
+fi
+if [[ -n "${AA_FORMAL_HTTPS_PROXY:-${AA_FORMAL_HTTP_PROXY:-}}" ]]; then
+  build_args+=(--build-arg "HTTPS_PROXY=${AA_FORMAL_HTTPS_PROXY:-$AA_FORMAL_HTTP_PROXY}"
+               --build-arg "https_proxy=${AA_FORMAL_HTTPS_PROXY:-$AA_FORMAL_HTTP_PROXY}")
+fi
+if [[ -n "${AA_FORMAL_NO_PROXY:-}" ]]; then
+  build_args+=(--build-arg "NO_PROXY=$AA_FORMAL_NO_PROXY"
+               --build-arg "no_proxy=$AA_FORMAL_NO_PROXY")
+fi
+
+if [[ -z "${NEOOS_NATIVE_CORE_SOURCE:-}" || ! -d "$NEOOS_NATIVE_CORE_SOURCE" ]]; then
+  echo "Set NEOOS_NATIVE_CORE_SOURCE to the reviewed native core checkout" >&2
+  exit 1
+fi
+native_core_root="$(cd "$NEOOS_NATIVE_CORE_SOURCE" && pwd)"
+
+docker build "${build_args[@]}" -f "$ROOT_DIR/formal/Dockerfile" -t "$IMAGE" "$ROOT_DIR/formal"
 mkdir -p "$ROOT_DIR/formal/.runs/docker"
 
 echo "formal gate (docker): running formal/verify.py in $IMAGE"
-docker run --rm -v "$ROOT_DIR:/work" -w /work -e HOME=/tmp "$IMAGE" \
+docker run --rm -v "$ROOT_DIR:/work" -v "$native_core_root:/native-core:ro" \
+  -w /work -e HOME=/tmp -e NEOOS_NATIVE_CORE_SOURCE=/native-core "$IMAGE" \
   --output formal/.runs/docker "$@"
 
 echo "formal gate (docker): running the runner's own regression tests"

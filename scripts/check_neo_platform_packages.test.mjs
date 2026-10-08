@@ -35,7 +35,7 @@ const STALE_LOCK_RESTORE = `
 const FORGED_LOCK_RESTORE = `
   Determining projects to restore...
 /w/contracts/UnifiedSmartWallet.csproj : error NU1403: Package content hash validation failed for Neo.SmartContract.Framework.3.10.1. The package is different than the last restore.
-/w/contracts/UnifiedSmartWallet.csproj : error NU1403: 
+/w/contracts/UnifiedSmartWallet.csproj : error NU1403:
   Failed to restore /w/contracts/UnifiedSmartWallet.csproj (in 487 ms).
 `;
 
@@ -115,6 +115,56 @@ test("every project that restores Neo packages has a committed lock file that ag
   const locks = locksFromRepository();
   assert.deepEqual(lockFileProblems(locks, manifest), []);
   assert.ok(locks.every(({ lock }) => lock !== null));
+});
+
+test("public restore gate excludes native projects while explicit native scope includes six modules and the epoch probe", () => {
+  const all = listProjects(repoRoot, { includeNative: true });
+  const native = all.filter((project) => project.startsWith("contracts/native/"));
+  assert.equal(projects.length, 26);
+  assert.equal(all.length, 36);
+  assert.ok(all.includes("tests/NativeEpochProbe/NativeEpochProbe.csproj"));
+  assert.ok(all.includes("tests/NativeEpochProbe/contracts/NativeEpochCore.csproj"));
+  assert.ok(projects.every((project) => !project.startsWith("tests/NativeEpochProbe/")));
+  assert.equal(native.length, 6);
+  assert.ok(projects.every((project) => !native.includes(project)));
+  assert.ok(native.every((project) => lockFileFor(project, all).endsWith(`packages.${path.basename(project, ".csproj")}.lock.json`)));
+  const missing = native.map((project) => ({ project, file: lockFileFor(project, all), lock: null }));
+  assert.equal(lockFileProblems(missing, manifest).length, 6);
+});
+
+test("runtime probe project inventory is explicit in the audited manifest", () => {
+  const changed = { ...manifest, sourceRuntimeProbeProjects: [] };
+  assert.match(pinConsistencyProblems({ propsVersion: manifest.frameworkVersion, manifest: changed }).join("\n"), /source runtime probe project inventory/);
+});
+
+test("source-runtime probe hosts lock no NuGet dependency graph", () => {
+  const all = listProjects(repoRoot, { includeNative: true });
+  for (const project of ["tests/NativeModuleProbe/NativeModuleProbe.csproj", "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj"]) {
+    assert.ok(all.includes(project));
+    assert.ok(!projects.includes(project));
+    const file = lockFileFor(project, all);
+    const empty = { version: 1, dependencies: { "net10.0": {} } };
+    assert.deepEqual(lockFileProblems([{ project, file, lock: empty }], manifest), []);
+    for (const lock of [{}, { version: 1, dependencies: {} }, { version: 1, dependencies: { "net10.0": { Neo: { type: "Direct", resolved: "3.10.1" } } } }]) {
+      assert.ok(lockFileProblems([{ project, file, lock }], manifest).length > 0);
+    }
+  }
+});
+
+test("epoch probe locks the actual Testing and Framework dependencies independently", () => {
+  const all = listProjects(repoRoot, { includeNative: true });
+  const host = "tests/NativeEpochProbe/NativeEpochProbe.csproj";
+  const fixture = "tests/NativeEpochProbe/contracts/NativeEpochCore.csproj";
+  const entries = [host, fixture].map((project) => {
+    const file = lockFileFor(project, all);
+    return { project, file, lock: JSON.parse(read(file)) };
+  });
+  assert.deepEqual(lockFileProblems(entries, manifest), []);
+  const withoutTesting = structuredClone(entries[0]);
+  for (const dependencies of Object.values(withoutTesting.lock.dependencies)) delete dependencies["Neo.SmartContract.Testing"];
+  assert.deepEqual(lockFileProblems([withoutTesting], manifest), [
+    "tests/NativeEpochProbe/packages.lock.json does not lock Neo.SmartContract.Testing",
+  ]);
 });
 
 test("projects that share a directory get their own lock file, the others use packages.lock.json", () => {
@@ -302,7 +352,7 @@ test("CI installs exactly the pinned compiler and names the pinned versions", ()
 
 test("verify_repo.sh runs the package and compiler gates before the first contract build", () => {
   const script = read("scripts/verify_repo.sh");
-  const gate = script.indexOf("node scripts/check_neo_platform_packages.mjs\n");
+  const gate = script.indexOf("node scripts/check_neo_platform_packages.mjs --include-native\n");
   const compiler = script.indexOf("node scripts/check_neo_platform_packages.mjs --compiler-only");
   assert.notEqual(gate, -1);
   assert.notEqual(compiler, -1);

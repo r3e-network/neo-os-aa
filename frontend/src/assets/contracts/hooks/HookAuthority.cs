@@ -27,6 +27,15 @@ namespace AbstractAccount.Hooks
         private static readonly byte[] Prefix_RegistryTimelock = new byte[] { 0xFA };
         private static readonly BigInteger AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000;
 
+        internal static byte[] AccountKey(byte[] prefix, UInt160 accountId)
+        {
+#if SMARTACCOUNT_NATIVE
+            return NativeAuthority.AccountKey(prefix, accountId);
+#else
+            return Helper.Concat(prefix, (byte[])accountId);
+#endif
+        }
+
         internal static void Initialize(object data, bool update)
         {
             if (update) return;
@@ -188,6 +197,9 @@ namespace AbstractAccount.Hooks
 
         internal static void ValidateConfigCaller(UInt160 accountId, UInt160 hookContract)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(AuthorizedCore(), accountId, "hook", "configuration");
+#else
             UInt160 core = AuthorizedCore();
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
             ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
@@ -198,6 +210,7 @@ namespace AbstractAccount.Hooks
                 CallFlags.ReadOnly,
                 new object[] { accountId, hookContract });
             ExecutionEngine.Assert(authorized, "Unauthorized");
+#endif
         }
 
         internal static void ValidateExecutionCaller(UInt160 accountId, UInt160 callerContract, UInt160 hookContract)

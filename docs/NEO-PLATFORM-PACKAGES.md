@@ -5,18 +5,67 @@ published on nuget.org. Public verifier execution and private callback gas isola
 separate profiles, with separate artifact directories and evidence
 ([AA-REPRODUCIBLE-BUILD.md](AA-REPRODUCIBLE-BUILD.md)).
 
+## Historical private-runtime revalidation (2026-10-06)
+
+The installed public `neoxp` runner remains incompatible with the SmartAccount
+artifact: a fresh run faults when the VM resolves the
+`System.Contract.CallWithGasLimit` interop hash. This is a runner/runtime
+mismatch, not evidence that the callback cap is optional, and the failed receipt
+is retained separately from release evidence at
+`docs/reports/aa-neoexpress-validation-20261006-v2.json`.
+
+An independent local NeoExpress build linked to the matching private Neo runtime
+packages was then run against that snapshot of the artifacts. It deployed 25 contracts,
+completed all 14 scenarios with no skipped scenario, persisted 108 transactions,
+and read back all 25 NEF/manifest pairs. The receipt for that historical snapshot is
+`docs/reports/aa-neoexpress-validation-20261006-custom-did.json`; runner source,
+package hashes, and the temporary API-adapter boundary are recorded in
+`docs/reports/aa-neoexpress-runner-provenance-20261006.json`.
+
+This closes the private NeoExpress execution/readback evidence for the matching
+runtime. It does not alter the separate owner action for making the private
+packages reproducibly available to clean CI, and it does not establish public
+network activation or deployment parity.
+
+Historical status on 2026-09-28: **known red, owner action required.** A clean CI runner cannot restore
+the packages that `contracts/Directory.Build.props` pins, so the contract build, the contract
+tests and the deploy-tool tests do not run in CI. The `Check pinned Neo platform packages`
+step in `.github/workflows/ci.yml` (and the first contract gate in `scripts/verify_repo.sh`)
+runs `scripts/check_neo_platform_packages.mjs`, which stops within seconds with the owner
+action below instead of a bare `NU1102` from deep inside the build.
+
 ## Runtime profiles
 
 | Profile | Artifact directory | Verifier callback | Runtime requirement |
 | --- | --- | --- | --- |
 | Public `v3` | `contracts/bin/v3` | Standard `System.Contract.Call`; validation is read-only and post-execution accounting retains write access | Published Neo runtime; no isolated verifier child gas budget |
+| Native ABI 2 | Explicit native-module build output | AccountManagement bounded native callbacks: verifier 1 GAS, hook/maintenance 2.5 GAS | Source-built native service, `HF_SmartAccountV1`, ABI 2 metadata and epoch-aware modules |
 | Private `PLATFORM` | `contracts/bin/platform` | `System.Contract.CallWithGasLimit`, 10 GAS per verifier callback | Matching private runtime and activation; cannot run on an ordinary public node |
 
-`bash contracts/compile.sh` builds both profiles from the pinned published compiler and
+`bash contracts/compile.sh` builds public `v3` and private `PLATFORM` profiles from the pinned published compiler and
 framework. The script defines `PLATFORM` only in a disposable copy of the execution source;
 `--platform` builds only the private core. Public deploy/upgrade helpers select `bin/v3`.
 The two-profile reproducibility gate compares both output directories; byte identity alone
 does not establish runtime support or deployment parity.
+
+Native modules are built separately by `scripts/build_native_modules.py`. Its
+six projects obey the same root `Directory.Build.props`, `nuget.config` and
+reviewed per-project locks; a missing or changed lock is a build failure. The
+packager requires `native-v2`, exact Array callbacks, ABI 2 metadata and explicit
+`getAuthorityEpoch` permission. SessionKeyVerifier additionally requires explicit
+`canonicalP256PublicKey` permission on the fixed native service. Every module
+declares the exact parameter
+fingerprint and a Boolean verifier-composition marker; composite verifiers must
+expose the additional receipt validation and post-execution callbacks. It records original/prepared sources and both
+raw/packaged artifact bytes, then compares two independent scratch builds.
+Run `node scripts/check_neo_platform_packages.mjs --include-native` for all
+36 projects, including two test-only epoch probe projects and two source-runtime
+probe hosts, before building. The runtime hosts use no NuGet packages: their
+committed locks must contain an empty net10.0 dependency graph, and their Neo
+assemblies must come from an explicitly validated source-built runtime. Native
+runner provenance must independently pin the
+reviewed core and node/RPC sources; public compile success does not establish
+native activation or fee-estimation compatibility.
 
 The four verifier-path tests
 (`ExecuteUserOp_VerifierPath_AcceptsValidSessionSignatureWithoutOwnerWitness`,
@@ -32,7 +81,7 @@ The private profile declares the syscall with `[Syscall]` because the pinned pub
 framework does not expose it. This makes it compile, not execute on a runtime lacking the
 interop. The historical private Neo 3.10.1.1 build below registers it behind `HF_Iara`.
 Historical gas-cap receipts apply only to their exact private runtime/source/artifact
-snapshot. The `VerifierGasBudget.v` proof is scoped to `PLATFORM`; the public profile has
+snapshot. The abstract `VerifierGasBudget.v` obligations apply only to bounded `PLATFORM` and native callbacks; the public profile has
 no such child budget and public arbitrary-module sponsorship remains a separate resource
 and admission-policy concern. Public activation is a platform decision.
 

@@ -22,6 +22,8 @@
     "test:e2e:browser": "npm run build && npm run test:e2e:browser:built",
     "test:e2e:browser:built": "node tests/browserSmoke.e2e.mjs",
     "test:operator-recovery:browser": "node --test tests/operatorKeyRecovery.browser.mjs",
+    "test:native:browser": "node --test tests/nativeWorkspace.browser.mjs",
+    "prebuild": "node scripts/sync-native-shared.mjs",
     "audit:all": "node ../scripts/check_frontend_audit_allowlist.mjs --all",
     "test:web3auth:browser": "node --test tests/web3AuthPackage.browser.mjs",
     "test:docs-security:browser": "node --test tests/docsDependencySecurity.browser.mjs",

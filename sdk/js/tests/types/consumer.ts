@@ -239,3 +239,11 @@ const fromProxy: boolean = isProxySourcedTransfer({ method: 'transfer', from: AC
 const transferVerdictCode: 'transfer_returned_false' = TRANSFER_RETURNED_FALSE;
 const transferVerdictMessage: string = TRANSFER_RETURNED_FALSE_MESSAGE;
 void [failedPositions, failedInLog, fromProxy, transferVerdictCode, transferVerdictMessage];
+
+// Native ABI 2 exports resolve in both a source checkout and real npm package.
+import { NativeSmartAccountClient, nativeCodec, createNativeCodec, NATIVE_ABI_VERSION, NATIVE_PROFILE_PARAMETER_DIGEST, type NativeValue } from 'neo-abstract-account';
+const nativeClient = new NativeSmartAccountClient({ rpcUrl: 'http://127.0.0.1:10332', networkMagic: 12345 });
+const nativeIdentity = nativeClient.deriveIdentity({ custodyAddress: '22'.repeat(20), salt: '33'.repeat(32) });
+const nativeArgs: NativeValue[] = [nativeCodec.hashValue(nativeIdentity.accountAddress), {type:'Struct',value:[{type:'Boolean',value:true}]}];
+const nativePrepare = nativeClient.prepareOperation({ accountId: nativeIdentity.accountId, targetContract: '44'.repeat(20), method: 'ping', args: nativeArgs, channel: 3n, deadline: '9999999999999' });
+void nativePrepare; void createNativeCodec; void NATIVE_ABI_VERSION; void NATIVE_PROFILE_PARAMETER_DIGEST;

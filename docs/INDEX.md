@@ -2,6 +2,22 @@
 
 This index keeps the root documentation set visible and easy to browse.
 
+## Native SmartAccount
+
+- [System architecture](NATIVE_SYSTEM_ARCHITECTURE.md) — identity, authorities, execution, recovery, fees and activation
+- [Native SDK](NATIVE_SDK.md) — exact ABI discovery, account plans and signed transactions
+- [Native workspace](NATIVE_ACCOUNT_WORKSPACE.md) — account discovery, registration, backup and wallet boundaries
+- [Protocol profile](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) — normative ABI 2 draft for Neo proposals #242 and #243
+- [Module profiles](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md) — supported native modules and lifecycle requirements
+- [Authority epochs](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md) — recovery revocation and module storage isolation
+- [ABI 2 vectors](proposals/smartaccount-native-profile-v2-vectors.json) — current authorization and execution commitments
+- [Formal scope](AA-FORMAL-VERIFICATION.md) — bounded models and remaining refinement boundaries
+- [Open proof boundaries](reports/aa-native-open-boundaries-20261008.json) — claims that local tests and model proofs do not establish
+
+Historical validation applies only to its recorded source and runtime. Earlier
+native receipts do not validate the current ABI 2 execution envelope or recovery
+semantics. Receipts absent from this checkout are not current release evidence.
+
 ## Core Explainers
 
 - `docs/AA-SYSTEM-STATUS.md` — capability boundaries and operational prerequisites
@@ -29,10 +45,6 @@ This index keeps the root documentation set visible and easy to browse.
 
 ## Recovery Verifier
 
-- `contracts/recovery/README.md`
-- `contracts/recovery/PRE_DEPLOYMENT_CHECKLIST.md`
-- `contracts/recovery/TEST_STATUS.md`
-- `contracts/recovery/TESTNET_VALIDATION_2026-03-09.md`
 - `docs/MORPHEUS_PRIVATE_ACTIONS.md`
 - `docs/MORPHEUS_PRIVATE_ACTIONS.zh-CN.md`
 
@@ -45,6 +57,9 @@ This index keeps the root documentation set visible and easy to browse.
 
 ## Security Notes
 
+- `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md` — normative native profile draft for Issue #242, including identity, activation, state, lifecycle, resource, governance, migration, and conformance rules
+- `docs/proposals/smartaccount-native-profile-v1-vectors.json` — machine-readable version-1 identity and authorization vectors
+- `docs/proposals/validate-native-smartaccount-profile.py` — deterministic profile and vector validation
 - `docs/AA-FORMAL-VERIFICATION.md` — AA formal-model, runtime-correspondence and boundary report
 - `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md` — exact NeoVM/DevPack verifier-budget extension and integration gates
 - `docs/SECURITY_MODEL.md` — current threat model and trust assumptions
@@ -53,13 +68,13 @@ This index keeps the root documentation set visible and easy to browse.
 - `docs/reports/aa-neoexpress-readback-20260919.json` — historical pre-callback-ABI-fix NeoExpress readback; superseded by the 2026-09-20 receipt
 - `docs/reports/aa-neoexpress-readback-20260920.json` — historical post-callback-ABI readback; superseded by the current post-remediation receipt
 - `docs/reports/aa-neoexpress-readback-20260920-current.json` — post-remediation core NeoExpress readback of the core artifact before the branch-free reimbursement cap; local NEF/manifest parity verified then, public artifacts differ
-- `docs/reports/aa-neoexpress-validation-20260920.json` — full private-chain validation of the current artifacts: all 24 deployed to a fresh NeoExpress chain, 10 transaction-driven scenarios (65 halted transactions, 23 expected faults, 51 on-chain assertions), RPC readback parity for every contract; local-chain evidence only
-- `docs/reports/aa-neoexpress-gas-cap-20260921.json` — current matching-core private-chain validation: 25 artifacts, 12 scenarios, adversarial verifier gas-cap fault and nonce rollback, and RPC readback parity; no public network touched
+- `docs/reports/aa-neoexpress-validation-20260920.json` — historical private-chain validation of that snapshot: all 24 deployed to a fresh NeoExpress chain, 10 transaction-driven scenarios (65 halted transactions, 23 expected faults, 51 on-chain assertions), RPC readback parity for every contract; local-chain evidence only
+- `docs/reports/aa-neoexpress-gas-cap-20260921.json` — historical matching-core private-chain validation: 25 artifacts, 12 scenarios, adversarial verifier gas-cap fault and nonce rollback, and RPC readback parity; no public network touched
 - `docs/reports/aa-public-readback-20260920.json` — read-only TestNet/MainNet AA core readback; known public artifacts differ from the current local artifact
 - `docs/reports/aa-platform-gas-cap-20260920.json` — isolated Neo core/DevPack verifier-budget prototype receipt; AA integration and hardfork activation remain pending
-- `docs/reports/aa-platform-gas-cap-20260921.json` — current Neo core/DevPack plus AA integration receipt; private NeoExpress verified, public activation/deployment pending
-- `docs/reports/aa-formal-gate-20260921.json` — current 5-Coq-module/30-mutation formal gate with cached-base Docker BuildKit evidence and 20/20 runner tests
-- `docs/reports/aa-artifact-reproducibility-20260921.json` — 76 current NEF/manifest artifacts reproduced byte-for-byte from the source tree; the historical `contracts/build` anchor is explicitly reported as intentional drift
+- `docs/reports/aa-platform-gas-cap-20260921.json` — historical Neo core/DevPack plus AA integration receipt; private NeoExpress verified at that snapshot, public activation/deployment pending
+- `docs/reports/aa-formal-gate-20260921.json` — historical 5-Coq-module/30-mutation formal gate with cached-base Docker BuildKit evidence and 20/20 runner tests
+- `docs/reports/aa-artifact-reproducibility-20260921.json` — 76 NEF/manifest artifacts reproduced byte-for-byte from that source snapshot; the historical `contracts/build` anchor is explicitly reported as intentional drift
 - `docs/reports/aa-current-revalidation-20260920.json` — independent read-only revalidation receipt; local runtime gates pass, while that environment's formal runner was unavailable and public parity remains open
 - `docs/SECURITY_AUDIT.md`
 - `docs/ETHEREUM_AA_COMPARISON.md`

@@ -119,4 +119,3 @@ export async function post(body) {
   }, response);
   return { status: response.statusCode, body: response.payload };
 }
-

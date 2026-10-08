@@ -1501,6 +1501,7 @@ class AbstractAccountClient {
 
 module.exports = {
   AbstractAccountClient,
+  ...require('./native'),
   ...require('./proxyWitness'),
   ...require('./multisig'),
   // Meta-tx exports

@@ -1,8 +1,133 @@
 # Neo N3 Abstract Account Security Model
 
+## Runtime and authority versions (2026-10-09 convergence)
+
+Ordinary deployed `UnifiedSmartWallet` remains the public `v3` implementation
+from the tested main branch; its separate `PLATFORM` build retains 10 GAS bounded
+verifier callbacks. Neither is the native AccountManagement service. Native ABI 2
+uses a 1 GAS verifier budget (within the 1.5 GAS verification envelope), 2.5 GAS
+hook/maintenance budgets, and explicit epoch-aware module packaging.
+
+Native recovery now requires a checked authority-epoch and configuration-nonce
+advance, detaches old roots/dependencies without calling old modules, and leaves
+identity, asset address, execution nonce and frozen state unchanged. All module
+storage uses `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`. The native four-argument execution envelope commits both counters in the unsigned
+transaction script, covering custody fallback and native transaction witnesses;
+operation-signature preimages also bind them. Prior-generation
+keys or signatures cannot be restored by reinstalling a module. This is distinct
+from ordinary `finalizeEscape`, whose old-module cleanup can still fail closed.
+The normative rules are in `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`.
+The amended native composite path uses a core-owned, single-operation receipt:
+only the first threshold of valid children obtains post-execution authority.
+Validation and post-execution still check current policy and all active binding
+pins; an Application receipt is created afresh and never reused from Verification
+or another operation. Modules require an exact current profile fingerprint and
+an explicit Boolean verifier-composition marker. The shipped native P-256
+profiles map a session key and its standard-account witness to the same signer
+domain, preventing those two representations from supplying separate votes.
+Independent control of arbitrary script accounts is not established by that rule.
+
+Historical receipts below identify their own pinned ABI 1, preceding ABI 2, or
+ordinary-contract snapshots. They do not certify this amended ABI 2 source,
+SDK or runtime. Its three-child/two-approval/three-domain limits require actual
+VM budget evidence, separate from the bounded policy proofs.
+
+
 ## Executive Summary
 
 The Neo N3 Abstract Account system implements a policy-gated, plugin-based account abstraction architecture. This document defines the threat model, trust assumptions, security properties, and defense-in-depth mechanisms across all layers of the system.
+
+The deployed-contract profile is not automatically compatible with native
+AccountManagement. The native NeoNativeVerifier, WhitelistHook, SessionKeyVerifier,
+DailyLimitHook and TokenRestrictedHook historical ABI 1 profiles
+have private-chain evidence for actual witnesses, exact invocation grants,
+delayed configuration, rollback and cleanup. The remaining modules still require
+their own native-profile adaptation and validation. The consolidated evidence is
+`docs/reports/aa-native-restricted-validation-20261008.json`; the detailed
+scope is `docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md`. None of these
+receipts establishes complete cryptographic or compiler refinement.
+
+The native SessionKey profile uses the canonical operation preimage, actual
+P-256 signatures and the registered asset proxy. Its Verification clock must
+use persisted ledger time: Runtime.Time is unavailable when no persisting block
+exists. The private matrix distinguishes witness admission rejection from
+persisted Application FAULT and checks real GAS transfer rollback when a capped
+transfer returns false. Ordinary session configuration/revocation remains delayed;
+immediate freeze requires a configured recovery authority. This is not a promise
+of immediate session revocation or proof of an arbitrary token's semantics.
+Rotation preserves spent allowance. Reducing a positive cap below the amount
+already spent blocks even zero-amount transfers; at the exact cap, zero transfers
+remain admissible. Explicit delayed revocation clears the key and allowance but
+retains the rotation timestamp, whereas account cleanup removes all session
+prefixes (four in the legacy profile, six in amended native ABI 2). Native
+prefix `0x05` holds the canonical signer domain, written atomically with session
+configuration and freshly read during discovery; missing or malformed values
+fail closed, with no fallback to old layouts. Native
+prefix `0x06` holds a canonical UInt64 last-use Integer; metadata reads project it
+into the original three-field record, avoiding repeated description writes on
+execution. Invalid or missing timestamps fail closed, including negative,
+overflowing and noncanonical byte encodings. The historical lifecycle matrix
+covers the four-prefix layout; amended ABI 2 requires new replay for both split
+entries.
+The additional scope matrix is
+`docs/reports/aa-native-session-scope-validation-20261007.json`. Zero means no
+session spending cap, not zero allowance. A wildcard method remains bound to one
+target but can authorize its entire value-moving surface; a whole-balance GAS
+transfer is exercised. Uncapped Boolean-false HALT consumes nonce and updates
+last-use metadata, whereas target FAULT rolls back. Capped false transfers still
+fault. The event exposes the exact scope and uncapped flag.
+
+The historical ABI 1 replay restored identical signature bytes after regrant
+when nonce/deadline still permitted them. ABI 2 closes that behavior: every
+configuration transition changes configurationNonce in the signing domain;
+recovery additionally advances authorityEpoch. Regranting the same public key
+cannot revive a pre-transition signature. The ABI 2 matrix must retain the old
+bytes and reject them after regrant, then accept a freshly signed operation.
+Old ABI 1 receipts remain historical evidence and must not be relabelled.
+
+DailyLimitHook native-profile evidence is recorded separately in
+`docs/reports/aa-native-daily-balance-validation-20261007.json`. Its net-outflow meter
+uses every configured token's proxy balance rather than inferring success from
+the target return value. False results leave no persistent snapshot. Fixed
+window anchors do not slide on subsequent transfers; rolling history has an
+explicit live-record bound. Arbitrary tokens must still provide honest balances,
+and callback-budget sufficiency for arbitrary configurations remains unproven.
+The single-token fifty-record capacity was initially unreachable: repeated
+history scans exhausted a callback budget on record 21. Single-pass sum/count
+and post-execution pruning fix that measured case without changing the budget.
+The diagnostic token's real balance writes verify false-result accounting and
+over-limit rollback; it deliberately violates NEP-17 success semantics and is
+not a production token. Nested GAS calls do not inherit the proxy witness from
+the active target; this restriction is tested, not relaxed.
+Negative and non-Integer balance replies, query faults and query gas exhaustion
+are rejected in both hook phases on two private chains. Post-hook rejection
+rolls back the diagnostic token's actual raw balance/mode storage together with
+nonce and policy state. Removing the faulty token limit through delayed
+configuration restores a successful GAS operation without querying that token.
+This is bounded recovery evidence, not immediate availability or a proof that
+arbitrary tokens report honest balances. No callback budget was raised.
+
+The native TokenRestrictedHook rejects direct interaction with a restricted
+token and rejects any observed restricted-token net outflow through another
+target, independently of the target's return value. Its private diagnostic
+router has an explicit token-side delegation; it does not inherit native proxy
+witness authority. Inflows and zero-net movement remain allowed. Strict balance
+types, query faults, inherited gas exhaustion, raw-storage rollback, delayed
+removal and both-prefix cleanup are exercised. Missing-snapshot rejection has a
+source guard and an abstract proof; a separate unchanged-NEF host probe now
+deletes an actual snapshot between authenticated callbacks and verifies
+rejection and parent-store rollback. That diagnostic injection is not a
+persisted on-chain attack. The host also covers every VM stack-item type with
+representative balance replies in both phases and verifies stale-snapshot cleanup
+isolation. Post-phase type rejection rolls back the diagnostic mode write,
+account nonce and transient snapshot. Direct calls without phase authority and
+host-injected malformed callback Arrays reject. These diagnostic injections do
+not establish that malformed callbacks are reachable through the native parser.
+Full-NEF measured instruction/conditional-edge coverage is 83.64%/68.13%, below
+the completion threshold; it is not C# source coverage. See
+`docs/reports/aa-native-nef-phases-validation-20261008.json`. Arbitrary token
+honesty, gross intermediate movement, large configured sets and complete C#/NEF
+branch coverage remain outside the demonstrated scope.
 
 ---
 
@@ -40,7 +165,7 @@ The Neo N3 Abstract Account system implements a policy-gated, plugin-based accou
 | --- | --- | --- |
 | **NeoVM is sound** | Code execution is deterministic | Global consensus failure |
 | **Cryptography is secure** | secp256k1/r1 are battle-tested | Private key recovery via weaknesses |
-| **Network is Byzantine** | < 1/3 honest nodes | Chain reorganizations |
+| **Consensus fault bound holds** | Byzantine validators remain within the deployed consensus protocol's tolerated fault bound | Safety or liveness can fail beyond that bound |
 
 ### 2.2 Layer 2: Core Contract
 
@@ -77,7 +202,7 @@ The Neo N3 Abstract Account system implements a policy-gated, plugin-based accou
 | Property | Implementation | Threat Mitigated |
 | --- | --- | --- |
 | **Integrity** | State in `UnifiedSmartWallet` | Contract can't be modified without deployer |
-| **Confidentiality** | Public ledger | No private data on-chain |
+| **Confidentiality** | No confidentiality guarantee from account abstraction | Transaction and stored contract data are public; secrets must not be placed on-chain |
 | **Availability** | No per-account deployment | Single point of failure |
 | **Non-repudiation** | Nonce + Deadline | Sender can't deny transaction |
 | **Replay Protection** | Nonce + Network ID + Deadline | Can't replay on same/different chain |
@@ -222,9 +347,9 @@ rejects an unlisted target before dispatch, and rolls back the nonce on rejectio
 | **VULN-001** | Critical | **Verifier Gas DoS** | Public `v3` permits lifecycle-compatible verifier callbacks through standard `Contract.Call` without a child budget | Open for public arbitrary-verifier sponsorship; historical private `PLATFORM` evidence only |
 | **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Mitigated in source; refinement/deployment unverified |
 | **VULN-003** | Medium | **Session Key Ordering** | A signed operation can execute before a later revocation transaction is ordered | Defined execution-order semantics; residual pre-inclusion operational risk |
-| **VULN-004** | Medium | **MultiSig Empty Array** | Empty, oversized, invalid-threshold, duplicate, self-referential and incomplete-child configurations | Bounded Coq policy + 11 real Neo VM vectors + child manifest preflight; key independence, cycles, crypto/VM/refinement boundary remains open |
-| **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Manifest lifecycle preflight for core, MultiSig and MultiHook plus fail-closed cleanup; arbitrary-plugin storage/refinement coverage remains open |
-| **VULN-006** | Low | **Nonce Collision** | Legacy salt wording; current core uses 192-bit channel + 64-bit sequence with uint256 bound | Fixed in protocol core; transport/refinement unverified |
+| **VULN-004** | Medium | **MultiSig Composition Boundary** | Empty, oversized, invalid-threshold, duplicate, self-referential, incomplete-child, and signer-domain-reuse configurations | Bounded Coq policy + 368 VM tests + private NeoExpress child manifest/domain preflight and revalidation; shipped-profile cryptographic vectors are covered, while private-key independence is not inferable from public keys and arbitrary future plugins remain a declared trust boundary |
+| **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Core-owned leaf dependency registries, manifest lifecycle preflight, and fail-closed cleanup for MultiSig/MultiHook; arbitrary-plugin storage/refinement coverage remains open |
+| **VULN-006** | Low | **Nonce Collision** | Executable nonces use 191-bit channel + 64-bit sequence within the non-negative signed NeoVM Integer range | Replay/sequence properties verified within the representable domain; the foundation query API still admits wider non-executable channels and is not native-profile conformance; public deployment is excluded |
 
 **VULN-001 closure gate:** a transaction-wide gas limit or voluntary
 `Runtime.GasLeft`/`BurnGas` accounting is insufficient. The current private
@@ -240,8 +365,10 @@ burning verifier to `Contract call gas limit exceeded` with nonce rollback and
 `docs/reports/aa-neoexpress-gas-cap-20260921.json`. VULN-001 is mitigated for
 this private integrated artifact; public activation and deployment remain
 pending. These dated receipts describe the private artifact tested then, not the
-current public `contracts/bin/v3` build. The source lock explicitly scopes
-`VerifierGasBudget.v` to `PLATFORM`; a passing formal run does not close public VULN-001.
+current public `contracts/bin/v3` build. The source lock scopes
+`VerifierGasBudget.v` to bounded `PLATFORM` and native callbacks; native ABI 2
+uses a separate 1 GAS verifier budget and 2.5 GAS hook/maintenance budget. A
+passing formal run does not close public VULN-001.
 
 **Public admission policy:** the on-chain lifecycle ABI preflight is a compatibility
 check and does not certify a module's trustworthiness, resource use, upgrade policy or
@@ -259,17 +386,23 @@ cases) and the shipped hook callback tuple, and the transaction-script shape par
 closed Coq model (`formal/coq/ProxyWitnessScript.v`) proving that an accepted script is data
 pushes followed by exactly the expected core call, with the account id and core hash bound.
 The bounded callback model (`formal/coq/CallbackPluginTopology.v`) additionally proves the
-six-field callback binding, success/callback order, CalledByEntry/Custom target binding, and
+six-field callback binding, the complete success order through hook and verifier post-callbacks,
+CalledByEntry/Custom target binding, and
 fail-closed cleanup/rotation invariant. These are implementation evidence plus abstract proofs,
 not a formal proof of NeoVM witness-condition evaluation, signer scopes, cryptographic
 primitives, arbitrary plugins, or C#-to-NEF callback refinement.
-The isolated NeoExpress receipt now also drives the concrete boundary with a hand-built,
+The isolated NeoExpress receipt now also drives the concrete boundary with independently
+bounded verifier and hook callbacks plus a hand-built,
 P-256-signed transaction: a real proxy verification script is carried by a `WitnessRules`
 signer scoped to both the AA core and `NeoDIDRegistry`, consumes an action ticket, and rejects
-same-nullifier replay and action-id retargeting. The receipt deploys 25 artifacts, runs 12
-scenarios, and reads every deployed artifact back byte-identically over RPC. This is private-chain
+same-nullifier replay and action-id retargeting. The receipt deploys 25 artifacts, runs 14
+scenarios, and reads every deployed artifact back with byte-identical NEF scripts, matching
+checksums, and semantically equal manifests over RPC. This is private-chain
 evidence only; it does not prove arbitrary witness rules, cryptography, full NeoVM semantics,
-or public deployment parity.
+or public deployment parity. The same receipt includes bare P-256 WebAuthn/TEE payload
+vectors, delegated ZkLogin provider/nullifier binding, and the disabled ZKEmail fail-closed
+path. The formal `NeoVmCallSubset.v` model closes only the proxy-relevant bounded instruction
+shape; complete NeoVM/ApplicationEngine semantics remain outside this model.
 The core also rejects oversized verifier signatures and argument arrays before nonce
 consumption or external dispatch. This is input-amplification mitigation only; it cannot cap a
 verifier that is already executing inside the shared NeoVM gas budget.
@@ -320,7 +453,7 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 
 - **SHA256:** Used for payload hashing in most verifiers
 - **Keccak256:** Used for `Web3AuthVerifier` EIP-712 compatibility
-- **Nonce Storage:** Storage key includes `accountId` + a uint192 channel; the uint64 sequence is the stored cursor
+- **Nonce Storage:** Executable nonces have a 191-bit channel and 64-bit sequence. Native-profile keys reserve 24 bytes for the channel with the high bit clear; cursor `2^64` is an explicit exhaustion sentinel. The ordinary foundation uses its existing variable-width key encoding and still admits wider, non-executable channel queries.
 
 ### 7.3 Replay Protection Mechanisms
 
@@ -465,7 +598,9 @@ authority-revocation and plugin-state design; it is not implemented by these cha
 1. **Verifier Gas Limits:** Publish/activate the matching Neo core and DevPack,
    then verify target-node NEF/manifest/runtime parity; do not rely on an ABI
    gas parameter or voluntary verifier accounting.
-2. **Deployed Refinement:** Prove/read back that the hardened source and formal boundary match deployed NEF
+2. **Private Artifact Refinement:** The current private artifact has a source-to-artifact
+   certificate, strict NEF/manifest structure tests, and NeoExpress RPC readback; public
+   deployment parity is intentionally excluded.
 3. **Session Key Cancellation UX:** Relayers and wallets must re-check canonical key state before submission; cancellation is not a chain-level rollback primitive
 
 ### 11.2 Medium Priority
@@ -476,9 +611,11 @@ authority-revocation and plugin-state design; it is not implemented by these cha
 
 ### 11.3 Low Priority
 
-7. **Protocol Conformance:** Add canonical vectors for uint256 nonce encoding, UTF-8 method bounds and nested-argument limits
+7. **Protocol Conformance:** Use signed-Integer-compatible nonce vectors (`0 <= nonce < 2^255`), UTF-8 method bounds and nested-argument limits; do not claim an unsigned-256 ABI
 8. **Account-Based Rate Limiting:** Per-account limits in relay
-9. **Formal Verification:** Independent review of the remaining refinement and callback boundaries
+9. **Formal Verification:** Independent review of the complete NeoVM/compiler refinement
+   boundary and third-party plugin behavior remains an optional external-audit item; the
+   bounded private-profile gates are current and passing.
 
 ---
 

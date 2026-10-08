@@ -6,7 +6,7 @@
   budget before any counter is changed.  A failed charge therefore has no
   partial state update, and a nested callback cannot escape its ancestor.
 
-  Applies only to the private PLATFORM profile using CallWithGasLimit. The
+  Applies to private PLATFORM CallWithGasLimit and bounded native callbacks. The
   public v3 profile uses standard Contract.Call and has no such child budget.
 
   The model is intentionally independent of cryptography, witness parsing and

@@ -1,0 +1,1602 @@
+<template>
+  <div class="native-workspace" :aria-busy="busy">
+    <header class="native-heading">
+      <div>
+        <p class="eyebrow">NEO · NATIVE ABI 2</p>
+        <h1>{{ L("Native accounts", "原生智能账户") }}</h1>
+        <p>
+          {{
+            L(
+              "Stable identity. Explicit authority. Verifiable recovery.",
+              "稳定身份，明确权限，可验证的恢复路径。",
+            )
+          }}
+        </p>
+      </div>
+      <span class="pill" :class="{ verified: profile }">{{
+        profile
+          ? L("Profile verified", "协议信息已核对")
+          : L("Read only · not verified", "只读 · 尚未验证")
+      }}</span>
+    </header>
+    <section class="card endpoint-card" aria-labelledby="node-title">
+      <h2 id="node-title">1. {{ L("Verify the network", "验证网络") }}</h2>
+      <p>
+        {{
+          L(
+            "This exact node must prove native activation. Public V3 contracts cannot activate this workspace.",
+            "当前节点必须证明原生服务已激活。公共 V3 合约无法启用本工作区。",
+          )
+        }}
+      </p>
+      <div class="endpoint-fields">
+        <label
+          >{{ L("RPC endpoint", "RPC 节点")
+          }}<input
+            v-model.trim="endpoint"
+            data-testid="native-endpoint"
+            type="url"
+            autocomplete="off"
+            spellcheck="false" /></label
+        ><label
+          >{{ L("Expected network magic", "预期网络 Magic")
+          }}<input
+            v-model.trim="network"
+            data-testid="native-network"
+            inputmode="numeric" /></label
+        ><button :disabled="busy || !endpoint || !network" @click="connectNode">
+          {{ L("Verify node", "验证节点") }}
+        </button>
+      </div>
+      <p v-if="profile" class="small mono">
+        AccountManagement · ABI {{ profile.abiVersion }} · Network
+        {{ profile.networkMagic }}<br />{{ profile.profileParameterDigest }}
+      </p>
+      <p v-else class="callout">
+        {{
+          L(
+            "Registration and wallet hand-off are disabled until native discovery succeeds.",
+            "在原生能力验证成功前，注册和钱包提交保持禁用。",
+          )
+        }}
+      </p>
+    </section>
+    <div v-if="error" role="alert" class="notice error">{{ error }}</div>
+    <div v-if="notice" role="status" class="notice success">{{ notice }}</div>
+    <p v-if="busy" role="status">
+      {{ L("Checking native state…", "正在检查原生状态…") }}
+    </p>
+    <nav class="tabs" :aria-label="L('Native account tasks', '原生账户任务')">
+      <button
+        v-for="item in tabs"
+        :key="item.id"
+        :aria-pressed="tab === item.id"
+        @click="tab = item.id"
+      >
+        {{ L(item.en, item.zh) }}
+      </button>
+    </nav>
+    <div class="columns">
+      <section class="card task-card">
+        <template v-if="tab === 'account'">
+          <h2>2. {{ L("Load and manage", "加载与管理") }}</h2>
+          <label
+            >{{
+              L(
+                "Account ID (identity, not the funding address)",
+                "账户 ID（身份标识，不是收款地址）",
+              )
+            }}<input
+              v-model.trim="accountId"
+              data-testid="native-account-id"
+              spellcheck="false"
+              placeholder="0x…"
+          /></label>
+          <div class="actions">
+            <button
+              :disabled="!profile || busy || !accountId"
+              @click="loadAccount"
+            >
+              {{ L("Load account", "加载账户") }}</button
+            ><label class="file-button"
+              >{{ L("Import recovery descriptor", "导入恢复信息")
+              }}<input
+                type="file"
+                accept="application/json,.json"
+                @change="importDescriptor"
+            /></label>
+          </div>
+          <p class="small">
+            {{
+              L(
+                "The descriptor restores discovery. Back up custody and recovery wallet keys separately.",
+                "恢复信息用于找回账户；托管和恢复钱包私钥需要单独备份。",
+              )
+            }}
+          </p>
+          <template v-if="snapshot">
+            <div class="account-summary" data-testid="native-account-summary">
+              <div class="summary-top">
+                <strong>{{ snapshot.account.status }}</strong
+                ><span
+                  >Epoch {{ snapshot.account.authorityEpoch }} · Config
+                  {{ snapshot.account.configurationNonce }}</span
+                >
+              </div>
+              <dl>
+                <dt>{{ L("Identity", "身份标识") }}</dt>
+                <dd class="mono">0x{{ snapshot.account.accountId }}</dd>
+                <dt>{{ L("Funding address", "收款地址") }}</dt>
+                <dd class="mono">
+                  {{ addressOf(snapshot.account.accountAddress) }}<br />0x{{
+                    snapshot.account.accountAddress
+                  }}
+                </dd>
+                <dt>{{ L("Custody", "托管权限") }}</dt>
+                <dd class="mono">0x{{ snapshot.account.custodyAddress }}</dd>
+                <dt>{{ L("Recovery", "恢复权限") }}</dt>
+                <dd class="mono">
+                  {{
+                    snapshot.account.recoveryAddress === ZERO_HASH
+                      ? L("Not configured", "未配置")
+                      : "0x" + snapshot.account.recoveryAddress
+                  }}
+                </dd>
+                <dt>{{ L("Verifier", "验证插件") }}</dt>
+                <dd class="mono">
+                  {{
+                    snapshot.account.verifier
+                      ? "0x" + snapshot.account.verifier.contract
+                      : L("Custody witness fallback", "托管钱包见证")
+                  }}
+                </dd>
+                <dt>{{ L("Hook", "策略插件") }}</dt>
+                <dd class="mono">
+                  {{
+                    snapshot.account.hook
+                      ? "0x" + snapshot.account.hook.contract
+                      : L("None", "无")
+                  }}
+                </dd>
+                <dt>Nonce channel 0</dt>
+                <dd>{{ snapshot.nonce }}</dd>
+                <dt>{{ L("Chain time", "链上时间") }}</dt>
+                <dd>{{ time(snapshot.chainTime) }}</dd>
+              </dl>
+            </div>
+            <div v-if="pendingIntents.length" class="callout">
+              <strong>{{ L("Pending changes", "待生效变更") }}</strong>
+              <p v-for="intent in pendingIntents" :key="intent.key">
+                {{ intent.key }}: {{ time(intent.matureAt) }} ·
+                {{
+                  BigInt(intent.matureAt) <= BigInt(snapshot.chainTime)
+                    ? L(
+                        "Separate activation transaction required",
+                        "需要另发激活交易",
+                      )
+                    : L("Waiting for chain time", "等待链上时间")
+                }}
+              </p>
+            </div>
+            <h3>{{ L("Authority and recovery", "权限与恢复") }}</h3>
+            <label
+              >{{ L("Action", "操作")
+              }}<select v-model="action" :aria-label="L('Action', '操作')">
+                <option
+                  v-for="item in NATIVE_ACTIONS"
+                  :key="item.value"
+                  :value="item.value"
+                >
+                  {{ item.label }}
+                </option>
+              </select></label
+            >
+            <p class="callout">{{ selectedAction.detail }}</p>
+            <label v-if="selectedAction.address"
+              >{{
+                action === "proposeRecovery"
+                  ? L(
+                      "New custody Neo address / script hash",
+                      "新托管 Neo 地址 / 脚本哈希",
+                    )
+                  : L(
+                      "New Neo address / contract hash (zero removes optional role)",
+                      "新 Neo 地址 / 合约哈希（全零移除可选角色）",
+                    )
+              }}<input
+                v-model.trim="actionAddress"
+                spellcheck="false"
+                placeholder="0x…"
+            /></label>
+            <p v-if="actionBlocked" class="small">{{ actionBlocked }}</p>
+            <button
+              :disabled="
+                busy ||
+                !profile ||
+                !!actionBlocked ||
+                (selectedAction.address && !actionAddress)
+              "
+              @click="reviewAction"
+            >
+              {{ L("Review management action", "审核管理操作") }}
+            </button>
+            <p class="small">
+              {{
+                L(
+                  "ABI 2 recovery detaches old plugins without cleanup callbacks. Address and frozen state remain unchanged. Unfreeze needs both authorities.",
+                  "ABI 2 恢复无需旧插件清理回调即可撤销其权限。地址和冻结状态保留；解冻需要双方权限。",
+                )
+              }}
+            </p>
+          </template>
+        </template>
+        <template v-else-if="tab === 'create'">
+          <h2>2. {{ L("Create an account", "创建账户") }}</h2>
+          <p>
+            {{
+              L(
+                "Start with custody witness. Add plugins later through delayed configuration.",
+                "先使用托管钱包见证，后续通过延迟配置添加插件。",
+              )
+            }}
+          </p>
+          <label
+            >{{
+              L(
+                "Custody Neo address / script hash",
+                "托管 Neo 地址 / 脚本哈希",
+              )
+            }}<input
+              v-model.trim="registration.custodyAddress"
+              data-testid="native-custody"
+              spellcheck="false"
+              placeholder="N… or 0x…" /></label
+          ><label
+            >{{
+              L(
+                "Independent recovery Neo address / script hash",
+                "独立恢复 Neo 地址 / 脚本哈希",
+              )
+            }}<input
+              v-model.trim="registration.recoveryAddress"
+              data-testid="native-recovery"
+              spellcheck="false"
+              placeholder="N… or 0x…"
+          /></label>
+          <p class="small">
+            {{
+              L(
+                "Use a separately controlled Neo wallet you can access. An Ethereum-shaped hash does not prove Neo wallet control.",
+                "请选择可实际使用、独立保管的 Neo 钱包。Ethereum 地址外形并不证明具备 Neo 钱包控制权。",
+              )
+            }}
+          </p>
+          <label v-if="!registration.recoveryAddress" class="check"
+            ><input v-model="registration.allowNoRecovery" type="checkbox" />{{
+              L(
+                "I understand: without recovery, lost custody keys may permanently lock this account.",
+                "我理解：没有恢复权限时，丢失托管私钥可能永久失去账户。",
+              )
+            }}</label
+          ><label
+            >{{
+              L(
+                "Account salt (32 bytes, public)",
+                "账户随机盐（32 字节，公开信息）",
+              )
+            }}<input
+              v-model.trim="registration.salt"
+              data-testid="native-salt"
+              spellcheck="false" /></label
+          ><button class="secondary" :disabled="busy" @click="generateSalt">
+            {{ L("Generate new salt", "生成新的随机盐") }}
+          </button>
+          <div v-if="derived" class="account-summary">
+            <dl>
+              <dt>{{ L("Account ID", "账户 ID") }}</dt>
+              <dd class="mono">0x{{ derived.accountId }}</dd>
+              <dt>{{ L("Funding address", "收款地址") }}</dt>
+              <dd class="mono">
+                {{ addressOf(derived.accountAddress) }}<br />0x{{
+                  derived.accountAddress
+                }}
+              </dd>
+            </dl>
+          </div>
+          <p class="callout">
+            {{
+              L(
+                "No verifier or hook is installed at creation. Custody can authorize spending after confirmed registration.",
+                "初始不安装验证或策略插件。注册链上确认后，托管钱包即可授权操作。",
+              )
+            }}
+          </p>
+          <div class="actions">
+            <button
+              :disabled="
+                !profile ||
+                busy ||
+                !derived ||
+                (!registration.recoveryAddress && !registration.allowNoRecovery)
+              "
+              @click="reviewRegistration"
+            >
+              {{ L("Review registration", "审核注册") }}</button
+            ><button
+              class="secondary"
+              :disabled="!profile || !derived || busy"
+              @click="exportDescriptor"
+            >
+              {{ L("Save recovery descriptor", "保存恢复信息") }}
+            </button>
+          </div>
+        </template>
+        <template v-else-if="tab === 'policy'">
+          <h2>2. {{ L("Set bounded permissions", "设置受限权限") }}</h2>
+          <p>
+            {{
+              L(
+                "Load an account first. Configure an installed verifier with custody authority.",
+                "请先加载账户，以托管权限配置已安装的验证模块。",
+              )
+            }}
+          </p>
+          <label
+            >{{ L("Policy", "权限类型")
+            }}<select
+              v-model="policy.kind"
+              :aria-label="L('Policy', '权限类型')"
+            >
+              <option value="session">
+                {{ L("Limited token-transfer session", "受限代币转账会话") }}
+              </option>
+              <option value="revoke">
+                {{ L("Revoke session key", "撤销会话密钥") }}
+              </option>
+              <option value="multisig">
+                {{ L("Multiple verifier approvals", "多个验证模块授权") }}
+              </option>
+            </select></label
+          ><label
+            >{{
+              L(
+                "Child verifier hash (empty for root)",
+                "子验证模块哈希（根模块留空）",
+              )
+            }}<input
+              v-model.trim="policy.child"
+              spellcheck="false"
+              placeholder="0x…"
+          /></label>
+          <template v-if="policy.kind === 'session'"
+            ><label
+              >{{
+                L(
+                  "Session public key (compressed P-256)",
+                  "会话公钥（压缩 P-256）",
+                )
+              }}<input
+                v-model.trim="policy.publicKey"
+                spellcheck="false"
+                placeholder="02… / 03…" /></label
+            ><label
+              >{{ L("Token contract", "代币合约")
+              }}<input
+                v-model.trim="policy.target"
+                spellcheck="false"
+                placeholder="0x…"
+            /></label>
+            <div class="form-row">
+              <label
+                >{{ L("Expiry UTC (milliseconds)", "到期时间 UTC（毫秒）")
+                }}<input
+                  v-model.trim="policy.expiresAt"
+                  inputmode="numeric" /></label
+              ><label
+                >{{
+                  L(
+                    "Total spending cap (base units)",
+                    "累计支出上限（最小单位）",
+                  )
+                }}<input
+                  v-model.trim="policy.spendingLimit"
+                  inputmode="numeric"
+                  placeholder="100000000"
+              /></label>
+            </div>
+            <p class="callout">
+              {{
+                L(
+                  "Only transfer on this token. A positive cap is required; zero means unlimited on chain. Keep the session private key in its wallet. Configuration takes 24 hours; expiry must leave time after activation. Freeze is immediate containment.",
+                  "仅允许对此代币调用 transfer。上限必须为正；链上零表示无限。会话私钥由钱包保管。配置需等待 24 小时，到期时间须晚于激活时间；紧急控制请使用冻结。",
+                )
+              }}
+            </p></template
+          >
+          <template v-else-if="policy.kind === 'multisig'"
+            ><label
+              >{{
+                L(
+                  "Ordered verifier child hashes (one per line)",
+                  "有序子验证模块哈希（每行一个）",
+                )
+              }}<textarea
+                v-model.trim="policy.children"
+                rows="4"
+                spellcheck="false"
+              /></label
+            ><label
+              >{{ L("Required modules", "所需模块数")
+              }}<input
+                v-model.trim="policy.threshold"
+                type="number"
+                min="1"
+                :max="NATIVE_MULTISIG_LIMITS.maxThreshold"
+            /></label>
+            <p class="callout">
+              {{
+                L(
+                  "Use 1–3 children and a threshold of 1–2. Thresholds count modules, not independent humans. Configure each child before activating the delayed roster. An empty native-child proof still requires a real transaction witness.",
+                  "可配置 1–3 个子模块，阈值为 1–2。阈值计算模块数量，不证明由不同人控制。先配置子模块，再激活延迟成员列表。原生子模块即使证明为空，也需要真实交易见证。",
+                )
+              }}
+            </p></template
+          >
+          <p v-if="policy.kind === 'revoke'" class="callout">
+            {{
+              L(
+                "Session revocation is a delayed configuration call. To stop spending immediately, use the recovery authority to freeze the account.",
+                "会话撤销是延迟配置操作；如需立即停止支出，请由恢复权限冻结账户。",
+              )
+            }}
+          </p>
+          <div class="actions">
+            <button
+              :disabled="!profile || !snapshot || busy"
+              @click="reviewPolicy"
+            >
+              {{ L("Review delayed policy", "审核延迟权限配置") }}</button
+            ><button
+              class="secondary"
+              :disabled="!profile || !snapshot || busy"
+              @click="activatePolicy"
+            >
+              {{ L("Review pending activation", "审核待生效配置") }}
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <h2>2. {{ L("Prepare a native operation", "准备原生业务操作") }}</h2>
+          <p>
+            {{
+              L(
+                "Uses live nonce and authority epoch. The node must agree with the exact operation digest.",
+                "使用实时 Nonce 和权限代际，节点必须确认完全一致的摘要。",
+              )
+            }}
+          </p>
+          <div class="form-row">
+            <label
+              >{{ L("Target contract", "目标合约")
+              }}<input
+                v-model.trim="operation.targetContract"
+                spellcheck="false"
+                placeholder="0x…" /></label
+            ><label
+              >{{ L("Method", "方法")
+              }}<input v-model.trim="operation.method" spellcheck="false"
+            /></label>
+          </div>
+          <label
+            >{{
+              L(
+                "Typed NeoVM arguments (JSON array)",
+                "NeoVM 类型化参数（JSON 数组）",
+              )
+            }}<textarea v-model="operation.args" rows="6" spellcheck="false" />
+          </label>
+          <p class="small">
+            {{
+              L(
+                "Types: Null, Boolean, Integer, ByteString (hex), Array, Struct. Integers are decimal strings; ByteString hashes use native little-endian bytes.",
+                "类型：Null、Boolean、Integer、ByteString（十六进制）、Array、Struct。整数使用十进制字符串；ByteString 中的哈希使用小端字节。",
+              )
+            }}
+          </p>
+          <div class="form-row">
+            <label
+              >{{ L("Nonce channel", "Nonce 通道")
+              }}<input
+                v-model.trim="operation.channel"
+                inputmode="numeric" /></label
+            ><label
+              >{{ L("Deadline UTC (milliseconds)", "截止时间 UTC（毫秒）")
+              }}<input v-model.trim="operation.deadline" inputmode="numeric"
+            /></label>
+          </div>
+          <label
+            >{{
+              L(
+                "Verifier proof hex (empty for custody witness)",
+                "验证证明十六进制（托管见证留空）",
+              )
+            }}<textarea
+              v-model.trim="operation.signature"
+              rows="2"
+              spellcheck="false"
+            />
+          </label>
+          <p class="callout">
+            {{
+              L(
+                "Native sponsorship is unavailable. A fee payer needs GAS. Execution needs an exact-script wallet or SDK with the proxy witness; ordinary invoke cannot safely submit it.",
+                "原生赞助付费不可用，付费者需要 GAS。执行必须使用支持精确脚本和代理见证的钱包或 SDK，普通 invoke 无法安全提交。",
+              )
+            }}
+          </p>
+          <p class="small">
+            {{
+              L(
+                "Bounds: 64 arguments · 4,096 serialized bytes · 1,024 proof bytes · depth 8 · deadline within 1 hour.",
+                "边界：64 个参数 · 序列化 4,096 字节 · 证明 1,024 字节 · 深度 8 · 截止时间 1 小时内。",
+              )
+            }}
+          </p>
+          <button
+            :disabled="
+              !profile ||
+              !snapshot ||
+              snapshot.account.status !== 'Active' ||
+              busy
+            "
+            @click="reviewOperation"
+          >
+            {{ L("Preview exact operation", "预览精确操作") }}
+          </button>
+        </template>
+      </section>
+      <aside class="card review-card" aria-labelledby="review-title">
+        <h2 id="review-title">
+          3. {{ L("Review and authorize", "审核与授权") }}
+        </h2>
+        <label
+          >{{
+            L(
+              "Fee payer Neo address / script hash",
+              "付费者 Neo 地址 / 脚本哈希",
+            )
+          }}<input
+            v-model.trim="feePayer"
+            spellcheck="false"
+            placeholder="N… or 0x…"
+        /></label>
+        <label v-if="tab === 'account' || tab === 'create'"
+          >{{ L("Signing path", "签名路径") }}
+          <select
+            v-model="signingPath"
+            :aria-label="L('Signing path', '签名路径')"
+          >
+            <option value="wallet-invoke">
+              {{ L("Wallet invoke · management", "钱包 invoke · 管理操作") }}
+            </option>
+            <option value="native-sdk">
+              {{ L("Native SDK · exact script", "原生 SDK · 精确脚本") }}
+            </option>
+          </select>
+        </label>
+        <button class="secondary" :disabled="busy" @click="useWallet">
+          {{ L("Use connected Neo wallet", "使用已连接的 Neo 钱包") }}
+        </button>
+        <p class="small">
+          {{
+            L(
+              "The actor pays network and system fees. Confirm actual transaction fees in the wallet.",
+              "所选钱包承担网络费和系统费，实际费用请在钱包确认页核对。",
+            )
+          }}
+        </p>
+        <template v-if="review"
+          ><div class="review-heading">
+            <strong>{{ review.plan.method || "executeUserOp" }}</strong
+            ><span
+              class="pill"
+              :class="{ verified: !review.simulationError }"
+              >{{ review.simulation.state }}</span
+            >
+          </div>
+          <p>{{ review.description }}</p>
+          <dl>
+            <dt>{{ L("Signing path", "签名路径") }}</dt>
+            <dd>{{ review.submission }}</dd>
+            <dt>{{ L("Network / ABI", "网络 / ABI") }}</dt>
+            <dd>
+              {{ review.profile.networkMagic }} /
+              {{ review.profile.abiVersion }}
+            </dd>
+            <dt>{{ L("Account ID", "账户 ID") }}</dt>
+            <dd class="mono">0x{{ review.plan.accountId }}</dd>
+            <dt>{{ L("Fee payer", "付费者") }}</dt>
+            <dd class="mono">0x{{ review.feePayer }}</dd>
+            <dt>{{ L("Required authorities", "所需权限") }}</dt>
+            <dd class="mono">
+              {{
+                review.plan.requiredAuthorities
+                  .map((h) => "0x" + h)
+                  .join(", ") ||
+                L(
+                  "Permissionless executor / verifier proof",
+                  "任何执行者 / 验证证明",
+                )
+              }}
+            </dd>
+            <dt>{{ L("Signer scopes", "签名范围") }}</dt>
+            <dd class="mono">
+              {{
+                review.signers
+                  .map(
+                    (s) =>
+                      s.scopes +
+                      (s.allowedcontracts?.length
+                        ? " · " + s.allowedcontracts.join(", ")
+                        : ""),
+                  )
+                  .join(" / ")
+              }}
+            </dd>
+            <dt>{{ L("Simulation fee estimate", "模拟费用估算") }}</dt>
+            <dd>
+              {{ formatGas(review.simulation.gasConsumed) }}
+            </dd>
+            <dt>{{ L("Script bytes", "脚本字节数") }}</dt>
+            <dd>{{ review.plan.script.length / 2 }}</dd>
+          </dl>
+          <div v-if="review.plan.preparedOperations" class="small mono">
+            <p v-for="p in review.plan.preparedOperations" :key="p.digest">
+              {{ p.operation.method }} · 0x{{ p.operation.targetContract
+              }}<br />Nonce {{ p.operation.nonce }} ·
+              {{ time(p.operation.deadline) }}<br />Digest {{ p.digest }}
+            </p>
+          </div>
+          <div v-if="review.simulationError" role="alert" class="notice error">
+            {{ review.simulationError }}
+          </div>
+          <details>
+            <summary>
+              {{
+                L(
+                  "Exact script, signer scopes and request",
+                  "精确脚本、签名范围及请求",
+                )
+              }}
+            </summary>
+            <p class="small">
+              {{ L("Simulation consumption", "模拟消耗") }}:
+              {{ review.simulation.gasConsumed ?? "—" }} datoshi
+            </p>
+            <pre>{{ jsonText(review) }}</pre>
+          </details>
+          <label class="check"
+            ><input v-model="accepted" type="checkbox" :disabled="busy" />{{
+              L(
+                "I reviewed the network, authority, target, scope and fee payer.",
+                "我已核对网络、权限、目标、范围和付费者。",
+              )
+            }}</label
+          >
+          <div class="actions">
+            <button
+              :disabled="
+                !accepted ||
+                busy ||
+                !review.walletSupported ||
+                !!review.simulationError ||
+                submitted
+              "
+              @click="sendToWallet"
+            >
+              {{ L("Send to wallet for approval", "交给钱包确认") }}</button
+            ><button
+              class="secondary"
+              :disabled="!accepted || busy"
+              @click="exportRequest"
+            >
+              {{ L("Export reviewed request", "导出审核请求") }}
+            </button>
+          </div>
+          <p v-if="!review.walletSupported" class="callout">
+            {{
+              L(
+                "This needs exact-script or multiple-authority signing. Export it for the native SDK. Ordinary wallet invoke is disabled.",
+                "此请求需要精确脚本或多权限签名，请导出后使用原生 SDK。普通钱包 invoke 已禁用。",
+              )
+            }}
+          </p>
+          <label
+            >{{
+              L(
+                "Submitted transaction hash (optional)",
+                "已提交交易哈希（可选）",
+              )
+            }}<input
+              v-model.trim="txid"
+              :disabled="busy"
+              spellcheck="false" /></label
+          ><button
+            class="secondary"
+            :disabled="busy || !txid"
+            @click="confirmTransaction"
+          >
+            {{ L("Check chain confirmation", "检查链上确认") }}
+          </button>
+          <p class="small">
+            {{
+              L(
+                "A wallet response is not confirmation. Check the exact script and application result on this node.",
+                "钱包返回不代表链上成功。请检查当前节点上的精确脚本和执行结果。",
+              )
+            }}
+          </p></template
+        >
+        <div v-else class="empty-review">
+          <span aria-hidden="true">◎</span>
+          <h3>{{ L("Your review appears here", "审核内容将显示在这里") }}</h3>
+          <p>
+            {{
+              L(
+                "Verify a node and preview a task. Loading and previewing never request a signature.",
+                "验证节点并预览任务。加载和预览不会请求签名。",
+              )
+            }}
+          </p>
+        </div>
+      </aside>
+    </div>
+  </div>
+</template>
+<script setup>
+import {
+  computed,
+  onBeforeUnmount,
+  reactive,
+  ref,
+  shallowRef,
+  watch,
+} from "vue";
+import { useI18n } from "../../i18n/index.js";
+import { RUNTIME_CONFIG } from "../../config/runtimeConfig.js";
+import { walletService } from "../../services/walletService.js";
+import { getAddressFromScriptHash } from "../../utils/neo.js";
+import {
+  createNativeWorkspace,
+  createNativeWalletAdapter,
+  nativeCodec,
+  nativeAddress,
+  ZERO_HASH,
+  NATIVE_ACTIONS,
+  actionBlockReason,
+  buildRecoveryDescriptor,
+  readRecoveryDescriptor,
+  buildSessionArguments,
+  buildMultiSigArguments,
+  NATIVE_MULTISIG_LIMITS,
+  jsonText,
+} from "./nativeWorkspace.js";
+const { locale } = useI18n();
+const L = (en, zh) => (locale.value === "zh-CN" ? zh : en);
+const endpoint = ref(RUNTIME_CONFIG.rpcUrl),
+  network = ref(String(RUNTIME_CONFIG.networkMagic)),
+  profile = shallowRef(null),
+  snapshot = shallowRef(null),
+  review = shallowRef(null);
+const tab = ref("account"),
+  busy = ref(false),
+  error = ref(""),
+  notice = ref(""),
+  accepted = ref(false),
+  submitted = ref(false),
+  txid = ref(""),
+  feePayer = ref(""),
+  signingPath = ref("wallet-invoke"),
+  accountId = ref("");
+const registration = reactive({
+  custodyAddress: "",
+  recoveryAddress: "",
+  salt: "",
+  allowNoRecovery: false,
+});
+const policy = reactive({
+  kind: "session",
+  child: "",
+  publicKey: "",
+  target: "",
+  expiresAt: String(Date.now() + 2 * 86400000),
+  spendingLimit: "",
+  children: "",
+  threshold: "2",
+});
+const operation = reactive({
+  targetContract: "",
+  method: "transfer",
+  args: "[]",
+  channel: "0",
+  deadline: String(Date.now() + 15 * 60000),
+  signature: "",
+});
+const action = ref("freeze"),
+  actionAddress = ref("");
+const workspace = createNativeWorkspace({
+  wallet: createNativeWalletAdapter(walletService),
+});
+const tabs = [
+  { id: "account", en: "Account & recovery", zh: "账户与恢复" },
+  { id: "create", en: "Create account", zh: "创建账户" },
+  { id: "policy", en: "Sessions & approvals", zh: "会话与授权" },
+  { id: "operation", en: "Native operation", zh: "原生操作" },
+];
+const selectedAction = computed(() =>
+  NATIVE_ACTIONS.find((a) => a.value === action.value),
+);
+const actionBlocked = computed(() =>
+  actionBlockReason(
+    snapshot.value?.account,
+    action.value,
+    snapshot.value?.chainTime ?? 0,
+  ),
+);
+const derived = computed(() => {
+  try {
+    if (!profile.value) return null;
+    return nativeCodec.deriveIdentity({
+      networkMagic: profile.value.networkMagic,
+      custodyAddress: nativeAddress(registration.custodyAddress),
+      salt: registration.salt,
+    });
+  } catch {
+    return null;
+  }
+});
+const pendingIntents = computed(() =>
+  snapshot.value
+    ? [
+        "pendingVerifier",
+        "pendingHook",
+        "pendingRecoveryAddress",
+        "pendingRecovery",
+      ].flatMap((key) =>
+        snapshot.value.account[key]
+          ? [{ key, ...snapshot.value.account[key] }]
+          : [],
+      )
+    : [],
+);
+function addressOf(hash) {
+  try {
+    return getAddressFromScriptHash(hash);
+  } catch {
+    return "";
+  }
+}
+function formatGas(value) {
+  if (typeof value !== "string" || !/^[0-9]+$/.test(value))
+    return L("Unavailable", "不可用");
+  const amount = BigInt(value),
+    whole = amount / 100000000n,
+    fraction = (amount % 100000000n)
+      .toString()
+      .padStart(8, "0")
+      .replace(/0+$/, "");
+  return whole.toString() + (fraction ? "." + fraction : "") + " GAS";
+}
+function time(value) {
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n <= 8640000000000000
+    ? new Date(n).toISOString()
+    : String(value) + " ms";
+}
+function clearReview() {
+  review.value = null;
+  workspace.clearReview();
+  accepted.value = false;
+  submitted.value = false;
+  txid.value = "";
+}
+function invalidate() {
+  workspace.invalidate();
+  profile.value = null;
+  snapshot.value = null;
+  clearReview();
+  notice.value = "";
+}
+watch([endpoint, network], invalidate, { flush: "sync" });
+watch(
+  [
+    () => ({ ...registration }),
+    () => ({ ...policy }),
+    () => ({ ...operation }),
+    action,
+    actionAddress,
+    feePayer,
+    signingPath,
+    tab,
+  ],
+  clearReview,
+  { flush: "sync" },
+);
+watch(
+  accountId,
+  () => {
+    snapshot.value = null;
+    clearReview();
+  },
+  { flush: "sync" },
+);
+function walletChanged() {
+  invalidate();
+  notice.value = L(
+    "Wallet changed. Verify the node and review again.",
+    "钱包已切换，请重新验证节点并审核。",
+  );
+}
+const walletEvents = [
+  "NEOLine.NEO.EVENT.ACCOUNT_CHANGED",
+  "Neo.DapiProvider.ACCOUNT_CHANGED",
+  "NEOLine.NEO.EVENT.NETWORK_CHANGED",
+  "Neo.DapiProvider.NETWORK_CHANGED",
+];
+for (const event of walletEvents) window.addEventListener(event, walletChanged);
+onBeforeUnmount(() => {
+  for (const event of walletEvents)
+    window.removeEventListener(event, walletChanged);
+  workspace.invalidate();
+});
+async function run(fn) {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = "";
+  notice.value = "";
+  try {
+    await fn();
+  } catch (e) {
+    if (!workspace.profile) {
+      profile.value = null;
+      snapshot.value = null;
+      clearReview();
+    }
+    error.value = String(e.message || "Request failed.").slice(0, 400);
+  } finally {
+    busy.value = false;
+  }
+}
+async function connectNode() {
+  await run(async () => {
+    clearReview();
+    snapshot.value = null;
+    profile.value = null;
+    profile.value = await workspace.connect({
+      rpcUrl: endpoint.value,
+      networkMagic: network.value,
+    });
+    notice.value = L(
+      "Native ABI 2 and network verified.",
+      "原生 ABI 2 和网络验证通过。",
+    );
+  });
+}
+async function loadAccount() {
+  await run(async () => {
+    clearReview();
+    snapshot.value = await workspace.load(accountId.value);
+    if (!feePayer.value) feePayer.value = snapshot.value.account.custodyAddress;
+    policy.expiresAt = String(snapshot.value.chainTime + 2 * 86400000);
+    operation.deadline = String(snapshot.value.chainTime + 15 * 60000);
+    notice.value = L(
+      "Account loaded from the selected node.",
+      "账户已从验证节点加载。",
+    );
+  });
+}
+function generateSalt() {
+  registration.salt = nativeCodec.bytesToHex(
+    crypto.getRandomValues(new Uint8Array(32)),
+  );
+}
+generateSalt();
+async function useWallet() {
+  await run(async () => {
+    await walletService.connect();
+    const wallet = createNativeWalletAdapter(walletService);
+    const actor = await wallet.account();
+    const magic = await wallet.network();
+    if (profile.value && magic !== profile.value.networkMagic)
+      throw Error(
+        L(
+          "Wallet network does not match this node.",
+          "钱包网络与当前节点不匹配。",
+        ),
+      );
+    feePayer.value = actor;
+    if (!registration.custodyAddress) registration.custodyAddress = actor;
+    notice.value = L(
+      "Live wallet identity checked. No transaction was signed.",
+      "已读取钱包身份，未签署交易。",
+    );
+  });
+}
+function setReview(value) {
+  review.value = value;
+  accepted.value = false;
+  submitted.value = false;
+  txid.value = "";
+}
+async function reviewRegistration() {
+  await run(async () =>
+    setReview(
+      await workspace.registration({
+        ...registration,
+        submission: signingPath.value,
+        feePayer: feePayer.value,
+      }),
+    ),
+  );
+}
+async function reviewAction() {
+  await run(async () =>
+    setReview(
+      await workspace.lifecycle({
+        accountId: accountId.value,
+        action: action.value,
+        submission: signingPath.value,
+        address: actionAddress.value,
+        feePayer: feePayer.value,
+      }),
+    ),
+  );
+}
+async function reviewPolicy() {
+  await run(async () => {
+    let args, method;
+    if (policy.kind === "revoke") {
+      args = [];
+      method = "clearSessionKey";
+    } else if (policy.kind === "session") {
+      args = buildSessionArguments(policy, snapshot.value.chainTime);
+      method = "setSessionKey";
+    } else {
+      args = buildMultiSigArguments(
+        policy,
+        L(
+          "Use 1–3 unique modules and a reachable threshold of 1–2.",
+          "请填写 1–3 个不重复模块，并设置 1–2 之间且可满足的阈值。",
+        ),
+      );
+      method = "setConfig";
+    }
+    setReview(
+      await workspace.policy({
+        accountId: accountId.value,
+        role: "verifier",
+        child: policy.child || undefined,
+        method,
+        args,
+        feePayer: feePayer.value,
+      }),
+    );
+  });
+}
+async function activatePolicy() {
+  await run(async () =>
+    setReview(
+      await workspace.activatePolicy({
+        accountId: accountId.value,
+        feePayer: feePayer.value,
+      }),
+    ),
+  );
+}
+async function reviewOperation() {
+  await run(async () => {
+    let args;
+    try {
+      args = JSON.parse(operation.args);
+    } catch {
+      throw Error(
+        L(
+          "Arguments must be a typed JSON array.",
+          "参数必须是类型化 JSON 数组。",
+        ),
+      );
+    }
+    setReview(
+      await workspace.operation({
+        ...operation,
+        accountId: accountId.value,
+        targetContract: nativeAddress(operation.targetContract),
+        args,
+        feePayer: feePayer.value,
+      }),
+    );
+  });
+}
+function download(name, value) {
+  const url = URL.createObjectURL(
+    new Blob([jsonText(value)], { type: "application/json" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function exportDescriptor() {
+  run(async () => {
+    const descriptor = buildRecoveryDescriptor({
+      ...profile.value,
+      ...derived.value,
+      custodyAddress: registration.custodyAddress,
+      salt: registration.salt,
+    });
+    download(
+      "neo-native-account-" + descriptor.accountId + ".json",
+      descriptor,
+    );
+    notice.value = L(
+      "Public descriptor saved. Back up wallet keys separately.",
+      "公开恢复信息已保存，请另行备份钱包私钥。",
+    );
+  });
+}
+async function importDescriptor(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  await run(async () => {
+    if (file.size > 16384) throw Error("Descriptor exceeds 16 KiB.");
+    if (!profile.value)
+      throw Error(
+        L(
+          "Verify the native node before importing a descriptor.",
+          "请先验证原生节点，再导入恢复信息。",
+        ),
+      );
+    const reviewedProfile = profile.value;
+    const text = await file.text();
+    if (profile.value !== reviewedProfile || !workspace.profile)
+      throw Error(
+        L(
+          "Network changed during descriptor import. Select the file again after verification.",
+          "导入过程中网络已改变，请验证后重新选择恢复文件。",
+        ),
+      );
+    const descriptor = readRecoveryDescriptor(text, reviewedProfile);
+    registration.custodyAddress = descriptor.custodyAddress;
+    registration.salt = descriptor.salt;
+    accountId.value = descriptor.accountId;
+    notice.value = L(
+      "Descriptor identity verified. Load the account; wallet keys are still required.",
+      "恢复身份已验证。请加载账户，操作仍需要钱包私钥。",
+    );
+  });
+}
+async function sendToWallet() {
+  await run(async () => {
+    const result = await workspace.submit(review.value);
+    submitted.value = true;
+    txid.value = result.txid || result.tx || result.hash || "";
+    notice.value = L(
+      "Sent to wallet. Check chain confirmation before treating the change as complete.",
+      "已交给钱包，请检查链上确认后再视为完成。",
+    );
+  });
+}
+async function exportRequest() {
+  await run(async () => {
+    download(
+      "neo-native-reviewed-request.json",
+      await workspace.exportReview(review.value),
+    );
+    notice.value = L(
+      "Reviewed request exported. It is not a signed transaction.",
+      "已导出审核请求，此文件不是已签名交易。",
+    );
+  });
+}
+async function confirmTransaction() {
+  await run(async () => {
+    await workspace.confirm(review.value, txid.value);
+    notice.value = L(
+      "Reviewed script and authorities confirmed with HALT. Reload the account for current state.",
+      "审核的脚本与权限已确认且执行 HALT，请重新加载账户查看当前状态。",
+    );
+  });
+}
+</script>
+<style scoped>
+.native-workspace {
+  max-width: 1240px;
+  margin: auto;
+  padding: 36px 24px 64px;
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.native-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+.native-heading h1 {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  margin: 3px 0 8px;
+}
+.native-heading p {
+  color: #58657b;
+  margin: 0;
+}
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+.pill {
+  display: inline-flex;
+  border: 1px solid #d8dde5;
+  background: #f3f5f8;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  color: #58657b;
+}
+.pill.verified {
+  background: #e9f6ee;
+  border-color: #b7d9c3;
+  color: #24593a;
+}
+.card {
+  border: 1px solid #dbe1ea;
+  border-radius: 16px;
+  padding: 24px;
+  background: #fff;
+  box-shadow: 0 2px 6px #14203604;
+}
+.card h2 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0 0 10px;
+}
+.card h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 22px 0 12px;
+}
+.card p {
+  margin: 8px 0 16px;
+  color: #59667b;
+}
+.endpoint-card {
+  margin-bottom: 16px;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.endpoint-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px auto;
+  gap: 14px;
+  align-items: end;
+}
+.native-workspace label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 14px 0;
+  color: #42516a;
+}
+.native-workspace input:not([type="checkbox"]):not([type="file"]),
+.native-workspace select,
+.native-workspace textarea {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #18253d;
+  border-radius: 8px;
+  padding: 10px 11px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.native-workspace input:focus,
+.native-workspace select:focus,
+.native-workspace textarea:focus {
+  outline: 2px solid #2157a8;
+  outline-offset: 2px;
+}
+.native-workspace button,
+.file-button {
+  background: #172d4c;
+  border: 1px solid #172d4c;
+  border-radius: 8px;
+  color: white;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: normal;
+}
+.native-workspace button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.native-workspace button:hover:enabled {
+  filter: brightness(1.12);
+}
+.native-workspace button:focus-visible,
+.file-button:focus-within {
+  outline: 2px solid #2157a8;
+  outline-offset: 3px;
+}
+.native-workspace button.secondary,
+.file-button {
+  color: #26446b;
+  background: white;
+  border-color: #cbd5e1;
+}
+.endpoint-fields button {
+  margin-bottom: 14px;
+}
+.small {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.callout {
+  background: #f2f6fb;
+  border-left: 3px solid #7790b2;
+  border-radius: 0 7px 7px 0;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: #405773 !important;
+}
+.notice {
+  padding: 12px 16px;
+  border-radius: 9px;
+  margin: 12px 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.notice.error {
+  background: #fff1f0;
+  border: 1px solid #e9b9b3;
+  color: #8d2d28;
+}
+.notice.success {
+  background: #edf8f0;
+  border: 1px solid #c5dfce;
+  color: #285d38;
+}
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  background: #eaf0f6;
+  border: 1px solid #dee6ef;
+  border-radius: 10px;
+  margin: 24px 0 18px;
+  overflow-x: auto;
+}
+.tabs button {
+  background: transparent;
+  color: #4e6079;
+  border: 0;
+  flex: 1;
+  white-space: nowrap;
+}
+.tabs button[aria-pressed="true"] {
+  background: white;
+  color: #172d4c;
+  box-shadow: 0 1px 5px #1d3d6020;
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 20px;
+  align-items: start;
+}
+.card dl {
+  display: grid;
+  grid-template-columns: 135px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 12px;
+  margin: 14px 0;
+}
+.card dt {
+  color: #66748a;
+}
+.card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.account-summary {
+  border: 1px solid #dce5ef;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 14px;
+  margin: 20px 0;
+}
+.summary-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+.summary-top strong {
+  color: #235b3a;
+}
+.summary-top span {
+  color: #67768b;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+}
+.actions .file-button {
+  margin: 0;
+}
+.file-button {
+  position: relative;
+  display: inline-flex !important;
+  overflow: hidden;
+}
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+.native-workspace label.check {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 400;
+  font-size: 12px;
+}
+.check input {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 2px 0 0;
+  accent-color: #244973;
+}
+.review-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 24px 0 10px;
+}
+.review-heading strong {
+  font-family: ui-monospace, monospace;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.empty-review {
+  text-align: center;
+  padding: 56px 22px;
+  color: #789;
+}
+.empty-review span {
+  font-size: 40px;
+  color: #94a5bb;
+}
+.empty-review h3 {
+  margin-top: 12px !important;
+}
+.empty-review p {
+  font-size: 12px;
+}
+.native-workspace details {
+  border: 1px solid #dbe1ea;
+  border-radius: 8px;
+  margin: 18px 0;
+  padding: 12px;
+  min-width: 0;
+}
+.native-workspace summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.native-workspace pre {
+  font-size: 10px;
+  line-height: 1.5;
+  max-height: 330px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  margin-top: 12px;
+  color: #42536b;
+}
+.review-card {
+  position: sticky;
+  top: 20px;
+}
+@media (max-width: 850px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+  .review-card {
+    position: static;
+  }
+  .endpoint-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+  .endpoint-fields label:first-child {
+    grid-column: 1/-1;
+  }
+  .native-heading {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .native-heading h1 {
+    font-size: 28px;
+  }
+}
+@media (max-width: 500px) {
+  .native-workspace {
+    padding: 24px 14px 40px;
+  }
+  .card {
+    padding: 18px;
+  }
+  .form-row,
+  .endpoint-fields {
+    grid-template-columns: 1fr;
+  }
+  .endpoint-fields label:first-child {
+    grid-column: auto;
+  }
+  .endpoint-fields button {
+    margin-bottom: 4px;
+  }
+  .card dl {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .card dd {
+    margin-bottom: 8px;
+  }
+  .tabs button {
+    padding: 9px 12px;
+    flex: none;
+  }
+  .summary-top {
+    flex-direction: column;
+  }
+  .actions button {
+    flex: 1;
+  }
+  .native-heading p {
+    font-size: 13px;
+  }
+}
+</style>
