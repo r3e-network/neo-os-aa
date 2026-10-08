@@ -158,6 +158,9 @@ test('the real npm tarball is a self-contained, reproducible production package'
       },
       files: ['consumer.cts', 'consumer.mts'],
     }));
-    run(process.execPath, [require.resolve('typescript/bin/tsc'), '--project', 'tsconfig.json'], consumer);
+    const typescriptManifestPath = require.resolve('typescript/package.json');
+    const typescriptManifest = JSON.parse(await fs.readFile(typescriptManifestPath, 'utf8'));
+    const tsc = path.resolve(path.dirname(typescriptManifestPath), typescriptManifest.bin.tsc);
+    run(process.execPath, [tsc, '--project', 'tsconfig.json'], consumer);
   });
 });
