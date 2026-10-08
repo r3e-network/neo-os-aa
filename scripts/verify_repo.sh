@@ -135,6 +135,7 @@ if [[ $run_frontend -eq 1 ]]; then
   cd frontend
   npm test
   npm run audit:prod
+  npm run audit:all
   npm run build
   if [[ $skip_e2e -eq 0 ]]; then
     npm run test:e2e:browser:built
