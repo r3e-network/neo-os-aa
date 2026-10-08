@@ -18,10 +18,20 @@ const sdkRequire = createRequire(`${AA}/sdk/js/package.json`);
 const { AbstractAccountClient } = sdkRequire(`${AA}/sdk/js/src/index.js`);
 const { sc } = sdkRequire('@cityofzion/neon-js');
 
-function fail(message) {
-  process.stdout.write(`${JSON.stringify({ ok: false, error: message })}\n`);
-  process.exit(1);
+function emit(body) {
+  process.stdout.write(`${JSON.stringify(body)}\n`);
+  process.exit(body.ok ? 0 : 1);
 }
+
+function fail(message) {
+  emit({ ok: false, error: message });
+}
+
+// An SDK refusal is the answer to an invalid request, not a crash: report the code and the hint, so a
+// caller can tell "the builder refused this" from "the fixture could not run".
+process.on('uncaughtException', (error) => {
+  emit({ ok: false, error: String(error?.message || error), code: error?.code || '', hint: error?.details?.hint || '' });
+});
 
 function same(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);

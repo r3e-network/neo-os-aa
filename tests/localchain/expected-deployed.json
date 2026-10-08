@@ -2,7 +2,7 @@
   "variant": "deployed",
   "totals": {
     "checks": 129,
-    "executedTransactions": 87,
+    "executedTransactions": 88,
     "simulatedFaults": 30,
     "nodeRefusals": 6
   },
@@ -199,8 +199,8 @@
     {
       "name": "AA-11 SDK sponsored operation end to end",
       "checks": [
-        "the SDK sponsor deposit is credited",
-        "the policy records the 5 GAS maxPerOp bound",
+        "the SDK sponsor deposit grows by the 100 GAS deposited",
+        "the paymaster preflight accepts the 5 GAS bound and refuses one datoshi above it",
         "the SDK payload carries the inner argument list as 4 typed parameters",
         "no parameter of the SDK payload is an untyped carrier",
         "the SDK payload survives a JSON round trip unchanged",

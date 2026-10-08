@@ -24,8 +24,8 @@ setup failure or interruption. It does not accept an existing chain or RPC URL.
 The relay subprocess receives only basic process variables and its freshly
 created relay key; no configured remote relay, paymaster or Redis is used.
 
-Expect approximately six minutes, 100 successful checks, 78 RPC-driver executed
-transactions, 29 simulated faults and 6 node refusals. Of the faults, one is a
+Expect approximately six minutes, 129 successful checks, 88 RPC-driver executed
+transactions, 30 simulated faults and 6 node refusals. Of the faults, one is a
 broadcast transaction that faults on chain (the paymaster's per-operation bound,
 asserted by its text and by the untouched deposit and nonce); the rest are
 simulations and nothing is broadcast for them. The additional relay broadcast
@@ -68,6 +68,25 @@ submission, which `AA-08` covers. The frontend has no sponsored-invocation
 builder either, so the probe composes that wire shape itself and the SDK's
 `createSponsoredUserOpPayload` wraps the inner argument array in an `Any`
 parameter a relay-ready JSON payload cannot carry; both are inputs for CU-162.
+
+`AA-11` drives the SDK sponsored-operation end to end. The invocation is composed by the SDK's own
+payload builder (`scripts/localchain/sdk_paymaster_fixture.mjs`), not by the harness: the fixture
+checks that the payload reproduces the requested operation field by field with its argument types
+intact, that no parameter is an untyped carrier, that a batch of one operation describes that
+operation exactly as the single-operation builder does, and that the payload survives a JSON round
+trip. It refuses a malformed request with a JSON answer instead of crashing. The script the SDK
+built is then driven on the deployed core and read back: the SDK invocation and the harness
+parameter path produce the same VM state, the same `gasconsumed` and the same fault text, the
+broadcast HALTs, consumes the account nonce, emits `SponsoredUserOpExecuted` and one `Reimbursed`
+naming the sponsor and the relay, and the sponsor deposit falls by exactly the amount the relay was
+reimbursed — 3 GAS of the 5 GAS requested — while an unrelated sponsor's deposit is untouched. The
+scenario then re-binds the bound to 1 GAS, where the same payload faults on chain with
+`Exceeds per-operation limit` and moves neither the deposit nor the nonce, and to 6 GAS, where it
+settles below the request again. The bound is read through the paymaster's own preflight (inside at
+5 GAS, outside one datoshi above it). The scenario's own session key is separate from the one
+`AA-08` and `AA-09` use. Two readings it records are what a relay can price from: the sponsored
+envelope faults in a fee-less container on its settlement cap, while the inner operation prices
+cleanly there.
 
 `AA-08` funds the sponsor deposit, executes a sponsored operation at a fixed
 2.5 GAS system fee plus 0.5 GAS network fee while requesting 5 GAS back, and

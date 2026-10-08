@@ -137,7 +137,8 @@ function brief(r) {
            validationPreview: b.validationPreview, paymaster: b.paymaster };
 }
 const out = [];
-const rec = async (name, fn) => { try { out.push({ case: name, ...brief(await fn()) }); } catch (e) { out.push({ case: name, thrown: String(e?.message || e).slice(0, 300) }); } };
+const debug = process.env.RELAY_PROBE_DEBUG === '1';
+const rec = async (name, fn) => { try { out.push({ case: name, ...brief(await fn()) }); } catch (e) { out.push({ case: name, thrown: String(e?.message || e).slice(0, 300), ...(debug ? { stack: String(e?.stack || '').slice(0, 1200), rpcDetail: String(e?.rpcDetail ?? e?.details?.rpcDetail ?? '').slice(0, 600), shape: Object.keys(e || {}) } : {}) }); } };
 
 // 1. read-only simulation (what the UI "relay preflight" calls)
 baseEnv(); process.env.AA_RELAY_ALLOW_UNSPONSORED = '1';

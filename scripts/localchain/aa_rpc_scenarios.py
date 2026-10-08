@@ -458,21 +458,34 @@ def sc_sdk_sponsored(c, x):
     c.records.append({"scenario": "AA-11 SDK sponsored operation end to end (payload built by the SDK)"})
     core, pm, target, sess_v = x.core, c.contracts["AAPaymaster"], c.contracts["MockTransferTarget"], c.contracts["SessionKeyVerifier"]
     buyer, sponsor = c.hashes["buyer"], c.hashes["sponsor"]
-    x.sesskey = v.P256Key(x.workdir, "session")
-    x.valid_until = c.now_ms() + 20 * DAY * 1000
+    # The SDK account gets its own key: the session key AA-08 and AA-09 use belongs to their accounts
+    # and must keep signing for them after this scenario has run.
+    sdk_key = v.P256Key(x.workdir, "session-sdk-key")
+    valid_until = c.now_ms() + 20 * DAY * 1000
     acct, proxy = x.register("session-sdk", verifier=sess_v)
-    sess_args = [H(acct), B(x.sesskey.compressed), H(target), S("transfer"), I(x.valid_until), I(0), S("session-sdk")]
+    sess_args = [H(acct), B(sdk_key.compressed), H(target), S("transfer"), I(valid_until), I(0), S("session-sdk")]
     c.send("arm setSessionKey for the SDK account (24 h timelock)", [{"w": "owner"}], core, "callVerifier",
            [H(acct), S("setSessionKey"), A(*sess_args)])
     c.fastforward(DAY + 3600)
     c.send("execute setSessionKey for the SDK account", [{"w": "owner"}], core, "callVerifier",
            [H(acct), S("setSessionKey"), A(*sess_args)])
+    # The shared sponsor still holds change from AA-08, so the deposit is judged by its increase.
+    deposit_before = c.read(pm, "getSponsorDeposit", H(sponsor))
     c.send("sponsor deposits 100 GAS into the paymaster", [{"w": "sponsor"}], GAS_HASH, "transfer",
            [H(sponsor), H(pm), I(100 * GAS), B(b"")])
-    c.check(c.read(pm, "getSponsorDeposit", H(sponsor)) == 100 * GAS, "the SDK sponsor deposit is credited")
+    deposit_after = c.read(pm, "getSponsorDeposit", H(sponsor))
+    c.check(deposit_after - deposit_before == 100 * GAS, "the SDK sponsor deposit grows by the 100 GAS deposited")
     c.send("sponsor binds a 5 GAS per-operation policy for the SDK account", [{"w": "sponsor"}], pm, "setPolicy",
            [H(acct), H(target), S("transfer"), I(5 * GAS), I(0), I(0), I(0)])
-    c.check(c.read(pm, "getPolicy", H(sponsor), H(acct))[3] == 5 * GAS, "the policy records the 5 GAS maxPerOp bound")
+    # The bound is read through the paymaster's own preflight: a request at the bound is inside it and a
+    # request above it is not. The policy record itself is kept for the receipt, not asserted by index,
+    # because the deserialised struct's field order is the serialiser's business.
+    inside = c.read(pm, "validatePaymasterOp", H(sponsor), H(acct), H(target), S("transfer"), I(5 * GAS))
+    outside = c.read(pm, "validatePaymasterOp", H(sponsor), H(acct), H(target), S("transfer"), I(5 * GAS + 1))
+    c.check(inside is True and outside is False, "the paymaster preflight accepts the 5 GAS bound and refuses one datoshi above it")
+    c.records.append({"step": "the SDK sponsor deposit before the sponsored operation",
+                      "depositBeforeDatoshi": deposit_after, "depositGrowthDatoshi": deposit_after - deposit_before,
+                      "policyRecord": c.read(pm, "getPolicy", H(sponsor), H(acct))})
     # The second sponsor is the attribution control: nothing in this scenario may touch its deposit.
     c.send("an unrelated sponsor deposits 10 GAS", [{"w": "buyer"}], GAS_HASH, "transfer",
            [H(buyer), H(pm), I(10 * GAS), B(b"")])
@@ -490,7 +503,7 @@ def sc_sdk_sponsored(c, x):
         if args is None:
             sig_args = [H(proxy), H(buyer), I(1000), B(b"")]
             payload = c.read(sess_v, "getPayload", H(acct), H(target), S("transfer"), A(*sig_args), I(nonce), I(FAR_DEADLINE))
-            body["signatureHex"] = x.sesskey.sign(payload).hex()
+            body["signatureHex"] = sdk_key.sign(payload).hex()
         body.update(overrides or {})
         request_path = c.workdir / f"sdk-request-{nonce}-{amount}.json"
         request_path.write_text(json.dumps(body))
@@ -504,7 +517,7 @@ def sc_sdk_sponsored(c, x):
     def harness_params(nonce, args=None, amount=requested):
         sig_args = list(args if args is not None else ar)
         payload = c.read(sess_v, "getPayload", H(acct), H(target), S("transfer"), A(*sig_args), I(nonce), I(FAR_DEADLINE))
-        op = A(H(target), S("transfer"), A(*sig_args), I(nonce), I(FAR_DEADLINE), B(x.sesskey.sign(payload)))
+        op = A(H(target), S("transfer"), A(*sig_args), I(nonce), I(FAR_DEADLINE), B(sdk_key.sign(payload)))
         return [H(acct), op, H(pm), H(sponsor), I(amount)]
 
     # 1. The SDK builder produces a relay-ready invocation: typed arguments, no untyped carrier.
