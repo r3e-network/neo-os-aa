@@ -36,6 +36,7 @@ const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({
  * @throws {Error} If address is invalid
  * @private
  */
+
 function normalizeAddress(addressHex) {
   if (!addressHex) {
     throw createError(EC.VALIDATION_ADDRESS_INVALID);
