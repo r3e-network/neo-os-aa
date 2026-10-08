@@ -1,0 +1,465 @@
+{
+  "schema": "aa-mirror-dependency-convergence/v1",
+  "status": "PASS",
+  "decision": "Adopt both narrowly scoped upgrades; no compatibility or audit regression found in these gates.",
+  "reviewedAtUtc": "2026-10-08T18:55:47.717240+00:00",
+  "baseHead": "5e7428272775393a57d5f52781daf5bb633f69ba",
+  "branch": "codex/aa-mirror-patch-convergence",
+  "packages": [
+    {
+      "name": "autoprefixer",
+      "classification": "devDependencies",
+      "manifestRange": "^10.6.1",
+      "fromLockedVersion": "10.5.5",
+      "toLockedVersion": "10.6.1",
+      "officialRegistry": "https://registry.npmjs.org/autoprefixer/10.6.1",
+      "tarball": "https://registry.npmjs.org/autoprefixer/-/autoprefixer-10.6.1.tgz",
+      "integrity": "sha512-cL1Qz6ADZhcEbny/8HPfe99J6HhNoYtpX2LFLIbhgGE7Q1hlQVkYFdetDN7Id3KiQxhDrHwzlHr/YQCnZ8+xSA==",
+      "officialMetadata": "/tmp/aa-mirror-dependencies-20261009/autoprefixer-registry.json",
+      "officialMetadataSha256": "6017f6fa397fc9cb4f2edbe60269cfb3e887c189f39dad129e286eafa88e2685"
+    },
+    {
+      "name": "jose",
+      "classification": "dependencies",
+      "manifestRange": "^6.2.12",
+      "fromLockedVersion": "6.2.1",
+      "toLockedVersion": "6.2.12",
+      "officialRegistry": "https://registry.npmjs.org/jose/6.2.12",
+      "tarball": "https://registry.npmjs.org/jose/-/jose-6.2.12.tgz",
+      "integrity": "sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==",
+      "officialMetadata": "/tmp/aa-mirror-dependencies-20261009/jose-registry.json",
+      "officialMetadataSha256": "ed4237398c6f9b4cb1c1bc823d7f61b64a4eb1eedb87034c251ab68d49ed60bb"
+    }
+  ],
+  "lockScope": {
+    "changedPackageKeys": [
+      "",
+      "node_modules/autoprefixer",
+      "node_modules/jose"
+    ],
+    "addedPackageKeys": [],
+    "removedPackageKeys": [],
+    "allUtf8ValidateOptionalEntriesPreserved": true,
+    "rangeStylePreserved": "caret",
+    "dependencyClassificationsPreserved": true
+  },
+  "releaseAssessment": {
+    "autoprefixer": "10.6.0 adds initial-letter support; 10.6.1 fixes grid gap longhand handling. Same major, same engine/peer/dependency requirements in the compared lock entries; production PostCSS configuration unchanged.",
+    "autoprefixerOfficialReleases": [
+      "https://github.com/postcss/autoprefixer/releases/tag/10.6.0",
+      "https://github.com/postcss/autoprefixer/releases/tag/10.6.1"
+    ],
+    "jose": "Same-major patch update; package-integrity/source and true crypto/JWKS comparisons recorded by independent reviewer."
+  },
+  "validation": {
+    "node": "v24.4.1",
+    "npm": "11.15.0",
+    "npmCi": "PASS",
+    "fullFrontendGate": {
+      "command": [
+        "bash",
+        "scripts/verify_repo.sh",
+        "--frontend-only"
+      ],
+      "environment": {
+        "NEOOS_REQUIRE_SERVICES_ARTIFACTS": "1",
+        "MORPHEUS_ORACLE_ROOT": "/Users/jinghuiliao/git/neo-os/neo-os-services",
+        "AA_FRONTEND_E2E_SCREENSHOT_DIR": "/tmp/aa-mirror-dependencies-20261009/screenshots"
+      },
+      "exitCode": 0,
+      "durationSeconds": 57.609,
+      "unit": {
+        "passed": 620,
+        "failed": 0,
+        "skipped": 0
+      },
+      "realBrowser": {
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      "productionBuild": "PASS",
+      "sourceInputsUnchanged": true,
+      "sourceInputCount": 371,
+      "receipt": "/tmp/aa-mirror-dependencies-20261009/frontend-full-gate.json",
+      "receiptSha256": "60461c1fe8473ed0562b9b8b170889b0af2df592cb4e2becde88a49e14534d29",
+      "log": "/tmp/aa-mirror-dependencies-20261009/frontend-full-gate.log",
+      "logSha256": "41899172f272e72289c1184cb9974ce260090d1850d0b46abad9d35f0c1ced7e"
+    },
+    "css": {
+      "status": "PASS",
+      "autoprefixer": "10.6.1",
+      "postcss": "8.5.28",
+      "targetBrowsers": [
+        "ie 11",
+        "safari 9"
+      ],
+      "checks": [
+        "grid row-gap longhand",
+        "grid column-gap longhand",
+        "webkit user-select",
+        "ms user-select",
+        "webkit appearance"
+      ],
+      "warnings": []
+    },
+    "cssProbeDesignNote": "The initial supplemental CSS probe omitted grid-template-areas under grid:true and therefore incorrectly expected synthesized gap tracks for an unpositioned grid. The complete explicitly named grid fixture checks documented gap and vendor-prefix behavior and passes. No production failure or source fix occurred. Initial probe log retained.",
+    "independentJoseReview": {
+      "path": "/tmp/aa-mirror-jose-independent-review-20261009.json",
+      "sha256": "9bd8040885eacd65d3832b1717f29a7753a2e418024cfe907c748c38ebb5691a",
+      "result": {
+        "status": "GO_PATCH_UPGRADE",
+        "date": "2026-10-09",
+        "scope": "Independent read-only JOSE 6.2.1 to 6.2.12 compatibility and server JWT/JWKS authorization review. No repository/dependency/provider mutation or full build by this reviewer.",
+        "headAtReview": "5e7428272775393a57d5f52781daf5bb633f69ba",
+        "reviewedSourceSha256": {
+          "frontend/api/did-verify.js": "b732261ea69a1acb04927e060bf410bd85c049686018e83564f6826f1d66a4bf",
+          "frontend/api/did-notify.js": "7ef8a19ead0d76d9d54ad1d1f137ed2a5fe66756221bbc6ee27b0631742cee03",
+          "frontend/api/account-metadata.js": "a74ae2cfa4e924d70065442f0d244be04eaa1a180fd1610829c0fcb60df5abbf",
+          "frontend/src/services/verifiedDidProfile.js": "071c6ebc49e9727e723de139dff66278fb81576a550990cb9031ea924dbaec53"
+        },
+        "versions": {
+          "6.2.1": {
+            "version": "6.2.1",
+            "tarball": "https://registry.npmjs.org/jose/-/jose-6.2.1.tgz",
+            "integrity": "sha512-jUaKr1yrbfaImV7R2TN/b3IcZzsw38/chqMpo2XJ7i2F8AfM/lA4G1goC3JVEwg0H7UldTmSt3P68nt31W7/mw==",
+            "tarballSha256": "37ff518c6576518c690b1f784f0876bd38edc240b57bc8be5549607d02d2c07f",
+            "gitHead": "d491aa9f0adf2886f43856a3b0cdd1f8ea4c924e"
+          },
+          "6.2.12": {
+            "version": "6.2.12",
+            "tarball": "https://registry.npmjs.org/jose/-/jose-6.2.12.tgz",
+            "integrity": "sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==",
+            "tarballSha256": "32d9da2aaa0e110cacef2ae21e8dae866201f1428424f839001085fe7351ebfe",
+            "gitHead": null
+          }
+        },
+        "primarySources": [
+          {
+            "url": "https://github.com/panva/jose/releases/tag/v6.2.12",
+            "use": "Official release refactoring and JWKS import/selection performance notes."
+          },
+          {
+            "url": "https://raw.githubusercontent.com/panva/jose/v6.2.12/CHANGELOG.md",
+            "use": "Intervening patch input validation, JWT policy validation and JWK metadata changes."
+          },
+          {
+            "url": "https://docs.metamask.io/embedded-wallets/features/server-side-verification/",
+            "use": "Provider documents ES256 server-side token verification and wallet ownership claims."
+          },
+          {
+            "url": "https://api-auth.web3auth.io/.well-known/jwks.json",
+            "use": "Read-only current public key metadata and key import compatibility; not an authenticated identity token."
+          }
+        ],
+        "packageCompatibility": {
+          "exportsRemoved": [],
+          "exportsAdded": [],
+          "usedFunctionsBothPresent": true,
+          "publicJwks": {
+            "keyCount": 2,
+            "keys": [
+              {
+                "kty": "EC",
+                "alg": "ES256",
+                "crv": "P-256",
+                "use": "sig",
+                "hasKid": true,
+                "keyOps": null,
+                "acceptedByVersions": [
+                  "6.2.1",
+                  "6.2.12"
+                ]
+              },
+              {
+                "kty": "EC",
+                "alg": "ES256",
+                "crv": "P-256",
+                "use": "sig",
+                "hasKid": true,
+                "keyOps": null,
+                "acceptedByVersions": [
+                  "6.2.1",
+                  "6.2.12"
+                ]
+              }
+            ],
+            "status": "PUBLIC_KEYS_ONLY_NO_AUTHENTICATED_TOKEN"
+          }
+        },
+        "upstreamChangeAssessment": "Used root exports jwtVerify and createRemoteJWKSet remain present with the application call shape unchanged. Root export names are identical. Internal JWS/JWT/JWKS processing and declarations were refactored; stricter malformed-input/JWK metadata validation is expected. No compatible verified identity flow regressed in the exercised matrix.",
+        "authorizationPaths": [
+          {
+            "path": "frontend/api/did-verify.js:86",
+            "boundary": "Server-owned JWKS URL and nonempty configured audience; verified payload alone creates DID/profile."
+          },
+          {
+            "path": "frontend/api/did-notify.js:50",
+            "boundary": "Same JOSE validation; derived DID must match any caller-supplied DID, and recipient must equal the verified email or phone before webhook submission."
+          },
+          {
+            "path": "frontend/api/account-metadata.js:158",
+            "boundary": "Same JOSE validation; attested wallet public key script hash must match the separately queried on-chain backup owner before metadata writes. This is distinct from the alternate ownerProof path."
+          },
+          {
+            "path": "frontend/src/services/verifiedDidProfile.js:1",
+            "boundary": "Client obtains idToken and consumes server verification; failures do not fall back to unverified browser claims."
+          }
+        ],
+        "bindingAssessment": {
+          "signature": "Real cryptographic verification against server-configured JWKS; unsigned and untrusted-signature tokens rejected.",
+          "audience": "Explicit audience option required and verified; missing/wrong aud rejected.",
+          "keyId": "A supplied kid must match a usable trusted key; unknown/ambiguous keys rejected. Missing kid can resolve a unique usable trusted key by JOSE design.",
+          "algorithm": "No application algorithms allowlist. JOSE constrains algorithms to compatible asymmetric key type, curve, declared JWK alg/use/key_ops; HS256 with public JWKS rejected. Current provider public keys are ES256/P-256.",
+          "issuer": "No application issuer option. A different iss signed by an already trusted fixture key is accepted in both versions.",
+          "expiration": "An included exp is validated; absence of exp is not rejected by current application policy in either version.",
+          "remoteKeyAuthority": "JWT jku does not override the server-configured JWKS URL."
+        },
+        "preExistingPolicyObservations": [
+          {
+            "id": "existing-explicit-issuer-exp-alg-policy",
+            "introducedByUpgrade": false,
+            "confirmedBehavior": "Both versions accept a trusted-key valid-audience token with alternate issuer or no exp; both can accept a trusted RSA key when that key is deliberately included in configured JWKS.",
+            "exploitability": "No production bypass or ability to obtain such a provider-signed token has been established. These observations require a trusted issuer/key and are not evidence that arbitrary client tokens bypass verification.",
+            "recommendation": "In a separate provider-contract-backed change, centralize token verification, explicitly allow ES256, require exp, and bind the documented accepted issuer. Do not invent the provider issuer or claim real OAuth coverage from fixtures."
+          }
+        ],
+        "tests": {
+          "isolatedVersions": {
+            "6.2.1": 19,
+            "6.2.12": 19,
+            "total": 38,
+            "result": "/tmp/aa-mirror-jose-review-20261009/crypto-probe-results.json",
+            "resultSha256": "5fe79620a0c35d336a1a77fdd430e8cd2dbf83026bf24e416ef4b4631cfb018c",
+            "cryptoReal": true,
+            "jwksLoopbackHttp": true
+          },
+          "actualApiHandlers": {
+            "passed": 14,
+            "result": "/tmp/aa-mirror-jose-review-20261009/api-probe-results.json",
+            "resultSha256": "4e67511a0f79a42818241c9878a47242dfb94e7aae93350c95b0b21e1310e97c",
+            "boundary": "Actual API handlers plus real JOSE signatures and loopback HTTP JWKS. Chain owner, Supabase and webhook are local fixtures; no external OAuth, blockchain authorization state, database or recipient was contacted. Ephemeral private keys and tokens were never persisted."
+          },
+          "existingTargeted": {
+            "didAndCrypto": 7,
+            "metadata": 5,
+            "adapter": 6,
+            "total": 18,
+            "logs": [
+              "/tmp/aa-mirror-jose-targeted-tests-20261009.log",
+              "/tmp/aa-mirror-jose-metadata-tests-20261009.log",
+              "/tmp/aa-mirror-jose-adapter-tests-20261009.log"
+            ]
+          }
+        },
+        "blockingUpgradeFindings": [],
+        "limitations": [
+          "No live Web3Auth OAuth login or provider-issued authenticated token was used.",
+          "Metadata chain owner and database, and notification delivery, use explicit local fixtures; those tests prove API enforcement against inputs, not public-chain or external service deployment.",
+          "The independent review did not run the full build; the owning agent separately owns build and browser acceptance."
+        ],
+        "repositoryFilesChangedByReviewer": [],
+        "providerWrites": false
+      }
+    }
+  },
+  "audits": {
+    "prod": {
+      "unchangedPackageSeverityNodeAndAdvisoryIdentity": true,
+      "counts": {
+        "info": 0,
+        "low": 19,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 19
+      },
+      "advisoryUrls": [
+        "https://github.com/advisories/GHSA-848j-6mx2-7j84"
+      ],
+      "baseline": "/tmp/aa-mirror-dependencies-20261009/baseline-audit-prod.json",
+      "candidate": "/tmp/aa-mirror-dependencies-20261009/candidate-audit-prod.json",
+      "rawMetadataNote": "Some npm effects, fixAvailable and range metadata differs; the affected package/node set, severity, directness, advisory identity and counts do not change."
+    },
+    "all": {
+      "unchangedPackageSeverityNodeAndAdvisoryIdentity": true,
+      "counts": {
+        "info": 0,
+        "low": 24,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 24
+      },
+      "advisoryUrls": [
+        "https://github.com/advisories/GHSA-848j-6mx2-7j84"
+      ],
+      "baseline": "/tmp/aa-mirror-dependencies-20261009/baseline-audit-all.json",
+      "candidate": "/tmp/aa-mirror-dependencies-20261009/candidate-audit-all.json",
+      "rawMetadataNote": "Some npm effects, fixAvailable and range metadata differs; the affected package/node set, severity, directness, advisory identity and counts do not change."
+    }
+  },
+  "qa": {
+    "browserPath": "Regular Playwright repository suites; Browser plugin/skill not available in this session.",
+    "flow": "Production app routes load -> navigation/market controls update -> identity provider loads; operator backup survives restart; native workspace and docs security controls pass.",
+    "host": "127.0.0.1 (ports selected by repository runners)",
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 960
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "visualEvidenceDirectory": "/tmp/aa-mirror-dependencies-20261009/screenshots",
+    "manuallyInspectedScreenshots": [
+      "desktop-home.png",
+      "mobile-app.png"
+    ],
+    "visibleResult": "Meaningful page content and readable desktop/mobile layout; no framework overlay in inspected screenshots.",
+    "runtimeErrorEvidence": "Existing real browser suites include page-error and trust-boundary assertions; all seven tests pass.",
+    "remainingBoundary": "No external Web3Auth OAuth login, live user wallet, public-chain transaction, or production deployment was performed."
+  },
+  "sourceSha256": {
+    "frontend/package.json": "9dd8d2d5d5260660ee3467b1fa3cf8e155e584635d36e569694a469043f6aadf",
+    "frontend/package-lock.json": "8d6746f14f137b40efd721d2372a4bb7b7f2d59447590b484ca0becfa76f256e",
+    "frontend/postcss.config.js": "47f2dff3208826bf663a9ca490b376a130a8153e0e8e713aed09b9f42289a3bd",
+    "scripts/verify_repo.sh": "caa4c66d7481b20d227e0c339866faa9e5419c873079eb6bc2a2ccbdd5615bbf"
+  },
+  "evidenceFiles": {
+    "/tmp/aa-mirror-dependencies-20261009/autoprefixer-10.6.0-release.json": "e0d2a79b73fcc349e9a77d027925cc4a94c87ed3ec277e40ff936f38577c1310",
+    "/tmp/aa-mirror-dependencies-20261009/autoprefixer-10.6.1-release.json": "ed7551f111df4ead0191fcbfe5131704417a6b9954f57e822a426d932c5eb06e",
+    "/tmp/aa-mirror-dependencies-20261009/autoprefixer-registry.json": "6017f6fa397fc9cb4f2edbe60269cfb3e887c189f39dad129e286eafa88e2685",
+    "/tmp/aa-mirror-dependencies-20261009/baseline-audit-all.json": "1599deb44764cffa7f706114b7c866b7dde940784db78d9a96215cebebba5b22",
+    "/tmp/aa-mirror-dependencies-20261009/baseline-audit-prod.json": "4204b0f736c92310a485d9598b235f7070a41b0e1aebb3914d0cdc90074085b1",
+    "/tmp/aa-mirror-dependencies-20261009/candidate-audit-all.json": "556b436363ba30c2959759b398578f8bd8eb6b0fe6b533f0379f11562462649b",
+    "/tmp/aa-mirror-dependencies-20261009/candidate-audit-prod.json": "fdb7d571050f4557f5e03de7d65a4721df7c78c058b3dd59c5046b8ffefa1fe6",
+    "/tmp/aa-mirror-dependencies-20261009/css-check.cjs": "ff0d07296a71f1a778065cb0aa7ce680d077034d482d456f74e4cdba9c03a2aa",
+    "/tmp/aa-mirror-dependencies-20261009/css-check.json": "41da65ba160846f1dd2bb5f4aba87001cc40f7acaf9afa6d1bfdf5cdeb2a2d33",
+    "/tmp/aa-mirror-dependencies-20261009/css-check.log": "f59aa581aa64159df2b2cdaa867e01fc26d5c71932cdcc63387c8a9b69d4854f",
+    "/tmp/aa-mirror-dependencies-20261009/css-output.css": "e9112f4d9ccc54709c3371eb23e0266ffec2965710ae0105c110a9fdccd0fb7a",
+    "/tmp/aa-mirror-dependencies-20261009/css-probe-initial-unpositioned-grid.log": "0db196afea43487162a8632966adabf8929e78c8743bed01d1319a8c64910642",
+    "/tmp/aa-mirror-dependencies-20261009/frontend-full-gate.json": "60461c1fe8473ed0562b9b8b170889b0af2df592cb4e2becde88a49e14534d29",
+    "/tmp/aa-mirror-dependencies-20261009/frontend-full-gate.log": "41899172f272e72289c1184cb9974ce260090d1850d0b46abad9d35f0c1ced7e",
+    "/tmp/aa-mirror-dependencies-20261009/install-autoprefixer.log": "a3bb6a68b234acc48c4f9d24f2b25bc3ca281a5cc2f8063ebeb614a9801f43aa",
+    "/tmp/aa-mirror-dependencies-20261009/install-jose.log": "a3bb6a68b234acc48c4f9d24f2b25bc3ca281a5cc2f8063ebeb614a9801f43aa",
+    "/tmp/aa-mirror-dependencies-20261009/jose-registry.json": "ed4237398c6f9b4cb1c1bc823d7f61b64a4eb1eedb87034c251ab68d49ed60bb",
+    "/tmp/aa-mirror-dependencies-20261009/npm-ci.log": "36aa35e568980f6c093dc69096ac4e6b37604eb7f798e9b5f7b9b87dbfc97cf4"
+  },
+  "mutationBoundary": "Only frontend/package.json, frontend/package-lock.json and this report are assigned for tracked changes. No commit/push/provider write.",
+  "commands": [
+    {
+      "cwd": "frontend",
+      "argv": [
+        "npm",
+        "view",
+        "autoprefixer@10.6.1",
+        "--json",
+        "--registry=https://registry.npmjs.org/"
+      ],
+      "output": "/tmp/aa-mirror-dependencies-20261009/autoprefixer-registry.json"
+    },
+    {
+      "cwd": "frontend",
+      "argv": [
+        "npm",
+        "view",
+        "jose@6.2.12",
+        "--json",
+        "--registry=https://registry.npmjs.org/"
+      ],
+      "output": "/tmp/aa-mirror-dependencies-20261009/jose-registry.json"
+    },
+    {
+      "cwd": "frontend",
+      "argv": [
+        "npm",
+        "install",
+        "--package-lock-only",
+        "--ignore-scripts",
+        "--save-dev",
+        "autoprefixer@10.6.1"
+      ],
+      "output": "/tmp/aa-mirror-dependencies-20261009/install-autoprefixer.log"
+    },
+    {
+      "cwd": "frontend",
+      "argv": [
+        "npm",
+        "install",
+        "--package-lock-only",
+        "--ignore-scripts",
+        "--save-prod",
+        "jose@6.2.12"
+      ],
+      "output": "/tmp/aa-mirror-dependencies-20261009/install-jose.log"
+    },
+    {
+      "cwd": ".",
+      "argv": [
+        "npm",
+        "ci",
+        "--prefix",
+        "frontend"
+      ],
+      "output": "/tmp/aa-mirror-dependencies-20261009/npm-ci.log",
+      "exitCode": 0
+    },
+    {
+      "cwd": ".",
+      "argv": [
+        "bash",
+        "scripts/verify_repo.sh",
+        "--frontend-only"
+      ],
+      "environment": {
+        "NEOOS_REQUIRE_SERVICES_ARTIFACTS": "1",
+        "MORPHEUS_ORACLE_ROOT": "/Users/jinghuiliao/git/neo-os/neo-os-services",
+        "AA_FRONTEND_E2E_SCREENSHOT_DIR": "/tmp/aa-mirror-dependencies-20261009/screenshots"
+      },
+      "output": "/tmp/aa-mirror-dependencies-20261009/frontend-full-gate.log",
+      "exitCode": 0
+    },
+    {
+      "cwd": "frontend",
+      "argv": [
+        "npm",
+        "audit",
+        "--json"
+      ],
+      "baselineOutput": "/tmp/aa-mirror-dependencies-20261009/baseline-audit-all.json",
+      "candidateOutput": "/tmp/aa-mirror-dependencies-20261009/candidate-audit-all.json",
+      "expectedExitCode": 1,
+      "reason": "The unchanged allowlisted low advisory is reported by raw npm audit."
+    },
+    {
+      "cwd": "frontend",
+      "argv": [
+        "npm",
+        "audit",
+        "--omit=dev",
+        "--json"
+      ],
+      "baselineOutput": "/tmp/aa-mirror-dependencies-20261009/baseline-audit-prod.json",
+      "candidateOutput": "/tmp/aa-mirror-dependencies-20261009/candidate-audit-prod.json",
+      "expectedExitCode": 1,
+      "reason": "The unchanged allowlisted low advisory is reported by raw npm audit."
+    },
+    {
+      "cwd": "frontend",
+      "argv": [
+        "node",
+        "/tmp/aa-mirror-dependencies-20261009/css-check.cjs"
+      ],
+      "output": "/tmp/aa-mirror-dependencies-20261009/css-check.log",
+      "exitCode": 0
+    }
+  ],
+  "lockRepairNote": "npm11 package-lock-only attempted to remove two unrelated nested utf-8-validate optional entries. Their exact base entries and original manifest key order were restored before npm ci; npm ci and all gates pass with those entries preserved.",
+  "finalSourceHashReadback": {
+    "matched": 371,
+    "mismatches": []
+  }
+}
