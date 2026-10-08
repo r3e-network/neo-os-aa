@@ -20,7 +20,7 @@ function normalizeHex(value) {
 }
 
 function getSdkRequire() {
-  return createRequire(new URL('../../sdk/js/package.json', import.meta.url));
+  return createRequire(new URL('../package.json', import.meta.url));
 }
 
 function getNeonWallet() {

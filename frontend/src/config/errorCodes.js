@@ -108,6 +108,12 @@ export function extractErrorCode(message) {
 }
 
 const EC_I18N_KEY = {
+  EC_operator_key_storage_unavailable: 'operatorBackup.storageUnavailable',
+  EC_operator_key_storage_corrupt: 'operatorBackup.storageCorrupt',
+  EC_operator_key_recovery_required: 'operatorBackup.recoveryRequired',
+  EC_operator_backup_invalid: 'operatorBackup.invalidBackup',
+  EC_operator_backup_wrong_draft: 'operatorBackup.wrongDraft',
+  EC_operator_backup_password_weak: 'operatorBackup.weakPassword',
   EC_draft_storage_unavailable: 'errors.draftStorageUnavailable',
   EC_draft_not_found: 'errors.draftNotFound',
   EC_collaborator_access_required: 'errors.collaboratorAccessRequired',

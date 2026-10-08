@@ -9,6 +9,25 @@ export const SUPPORTED_LOCALES = Object.freeze([
 
 const MESSAGES = {
   en: {
+    operatorBackup: {
+      title: 'Operator key backup and recovery',
+      description: 'This browser keeps your draft operator key. Save an encrypted backup before clearing browser data or switching devices. Keep the current operator link separately; both are needed to recover access.',
+      password: 'Backup password (at least 12 characters)',
+      confirmPassword: 'Confirm password for export',
+      file: 'Encrypted operator backup file',
+      export: 'Download encrypted backup',
+      import: 'Restore operator key',
+      exported: 'Encrypted backup downloaded. Keep its password separately and retain the current operator link.',
+      imported: 'Operator key restored and checked against this draft. You can continue managing it.',
+      mismatch: 'The two export passwords do not match.',
+      weakPassword: 'Use a unique backup password of at least 12 characters.',
+      invalidBackup: 'Could not open this backup. Check the password and select an intact operator backup file.',
+      wrongDraft: 'This backup belongs to a different draft. Open its matching operator link.',
+      storageUnavailable: 'This browser cannot safely save the operator key. Enable site storage and try again.',
+      storageCorrupt: 'The saved operator key cannot be read. Restore a valid backup; existing data has been preserved.',
+      recoveryRequired: 'This draft is bound to another operator key. Restore its backup or use the original browser. If both are lost, create a new draft.',
+      failed: 'The operator key operation failed. Check your operator link and connection, then try again.',
+    },
     nav: {
       home: 'Home',
       app: 'App',

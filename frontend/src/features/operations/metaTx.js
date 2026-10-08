@@ -2,6 +2,7 @@ import { Signature, SigningKey, TypedDataEncoder, keccak256 } from 'ethers';
 import { EC } from '../../config/errorCodes.js';
 import { sanitizeHex } from '../../utils/hex.js';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout.js';
+import { toMultiSigRpcParameter } from '../../shared/multiSigCore.mjs';
 import {
   createMetaTxBuilders,
   decodeByteStringStackHex,
@@ -40,7 +41,7 @@ async function invokeRead({ rpcUrl, scriptHash, operation, args = [], fetchImpl 
       jsonrpc: '2.0',
       id: 1,
       method: 'invokefunction',
-      params: [scriptHash, operation, args],
+      params: [scriptHash, operation, args.map(toMultiSigRpcParameter)],
     }),
   }, { fetchImpl });
 

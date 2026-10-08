@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
 
 import {
   appendSignatureEntries,
@@ -284,11 +285,7 @@ test('executeBroadcast relay submit can use meta invocation carried by collected
       signerId: 'evm:bob',
       kind: 'evm',
       metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUserOp',
-          args: [{ type: 'String', value: 'ok' }],
-        },
+        metaInvocation: executeUserOpInvocation(),
       },
     }],
     walletService: wallet,
@@ -300,11 +297,7 @@ test('executeBroadcast relay submit can use meta invocation carried by collected
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUserOp',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
   });
 });
 
@@ -451,11 +444,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
       signerId: 'evm:bob',
       kind: 'evm',
       metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUserOp',
-          args: [{ type: 'String', value: 'ok' }],
-        },
+        metaInvocation: executeUserOpInvocation(),
       },
     }],
   });
@@ -464,11 +453,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUserOp',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
     paymaster: {
       account_id: 'aa-test',
       zerc20Proof: {
@@ -502,11 +487,7 @@ function metaSignature() {
     signerId: 'evm:bob',
     kind: 'evm',
     metadata: {
-      metaInvocation: {
-        scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-        operation: 'executeUserOp',
-        args: [{ type: 'String', value: 'ok' }],
-      },
+      metaInvocation: executeUserOpInvocation(),
     },
   }];
 }

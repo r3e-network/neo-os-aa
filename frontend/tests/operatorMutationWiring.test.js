@@ -14,14 +14,12 @@ import {
 function createMemoryStorage() {
   const values = new Map();
   return {
-    getItem(key) {
+    async read(key) {
       return values.has(key) ? values.get(key) : null;
     },
-    setItem(key, value) {
-      values.set(key, String(value));
-    },
-    removeItem(key) {
-      values.delete(key);
+    async write(key, value, { ifAbsent = false } = {}) {
+      if (!ifAbsent || !values.has(key)) values.set(key, value);
+      return values.get(key);
     },
   };
 }
@@ -99,7 +97,7 @@ test('Supabase draft store works end-to-end with the real operator mutation tran
     supabase,
     operatorMutationTransport: createOperatorMutationTransport({
       fetchImpl,
-      storage: createMemoryStorage(),
+      keyStore: createMemoryStorage(),
     }),
   });
 
@@ -124,7 +122,7 @@ test('the real transport reuses its claimed key and advances the counter across 
     supabase,
     operatorMutationTransport: createOperatorMutationTransport({
       fetchImpl,
-      storage: createMemoryStorage(),
+      keyStore: createMemoryStorage(),
     }),
   });
 

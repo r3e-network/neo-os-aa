@@ -1501,6 +1501,8 @@ class AbstractAccountClient {
 
 module.exports = {
   AbstractAccountClient,
+  ...require('./proxyWitness'),
+  ...require('./multisig'),
   // Meta-tx exports
   buildMetaTransactionTypedData: metaTxExports.buildMetaTransactionTypedData,
   buildV3UserOperationTypedData: metaTxExports.buildV3UserOperationTypedData,

@@ -974,3 +974,87 @@ export declare class AbstractAccountClient {
   /** @deprecated Removed in V3; always throws. */
   getAccountAddressesByManager(): Promise<never>;
 }
+
+/** Exact virtual account witness preimage; Hash160 inputs use display byte order. */
+export function createProxyVerificationScript(options: { coreHash: Hash160; accountId: Hash160 }): string;
+/** Build a restricted proxy signer and empty-invocation witness after reading the on-chain scope. */
+export function createProxyWitness(options: {
+  coreHash: Hash160; accountId: Hash160; targetContract: Hash160;
+  scopeTarget: Hash160; feePayer: Hash160; expectedProxyHash?: Hash160;
+}): {
+  signer: { account: string; scopes: 'WitnessRules'; rules: Array<{ action: 'Allow'; condition: {
+    type: 'Or'; expressions: Array<{ type: 'CalledByContract'; hash: string }>;
+  } }> };
+  witness: { invocationScript: string; verificationScript: string };
+};
+
+/** MultiSig config read from the bound verifier. configDigest pins order and threshold; no client claim of quorum. */
+export interface MultiSigContext {
+  readonly version: 1;
+  readonly networkMagic: string;
+  readonly coreContractHash: Hash160;
+  readonly accountIdHash: Hash160;
+  readonly verifierHash: Hash160;
+  readonly verifiers: readonly Hash160[];
+  readonly threshold: number;
+  readonly configDigest: string;
+}
+export interface MultiSigOperation {
+  coreContractHash: Hash160;
+  accountIdHash: Hash160;
+  networkMagic: string;
+  configDigest: string;
+  targetContract: Hash160;
+  method: string;
+  args: ContractParameter[];
+  argsHashHex: string;
+  nonce: string;
+  deadline: string;
+}
+export interface MultiSigChildProof {
+  childVerifierHash: Hash160;
+  kind: 'evm' | 'opaque';
+  operation: MultiSigOperation;
+  signatureHex: string;
+  typedData?: UserOperationTypedData;
+  signatureFullHex?: string;
+  signerAddress?: string;
+}
+export interface MultiSigBundle {
+  signatureHex: string;
+  invocation: ContractInvocationPayload;
+  context: MultiSigContext;
+  operation: MultiSigOperation;
+  slots: (string | null)[];
+  /** Signature simulation passed at read time; not transaction execution/finality. */
+  chainValidated: boolean;
+}
+export type MultiSigRead = (contract: Hash160, method: string, args: ContractParameter[]) => Promise<{ state: string; stack: unknown[]; exception?: string }>;
+export interface MultiSigBundleInput { context: MultiSigContext; operation: MultiSigOperation; childProofs: MultiSigChildProof[]; }
+export interface MultiSigPrepareInput {
+  context: MultiSigContext;
+  operation: { targetContract: Hash160; method: string; args: ContractParameter[]; deadline: IntegerLike; channel?: IntegerLike };
+}
+export interface MultiSigConfigurationInput { context: MultiSigContext; childVerifierHash: Hash160; method: 'setPublicKey' | 'setConfig'; args: ContractParameter[]; }
+export interface MultiSigPendingConfiguration { moduleHash: Hash160; callHash: string; initiatedAt: string; }
+export declare function serializeMultiSigSignatures(signatures: (string | null)[]): string;
+export declare function fetchMultiSigContext(input: { coreContractHash: Hash160; accountIdHash: Hash160; networkMagic: IntegerLike; expectedVerifierHash?: Hash160; read: MultiSigRead }): Promise<MultiSigContext>;
+export declare function prepareMultiSigOperation(input: MultiSigPrepareInput & { read: MultiSigRead }): Promise<MultiSigOperation>;
+export declare function buildMultiSigChildTypedData(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160 }): UserOperationTypedData;
+export declare function buildMultiSigBundle(input: MultiSigBundleInput): MultiSigBundle;
+export declare function validateMultiSigBundle(input: MultiSigBundleInput & { read: MultiSigRead; networkMagic: IntegerLike }): Promise<MultiSigBundle>;
+export declare function buildMultiSigChildConfigurationInvocation(input: MultiSigConfigurationInput): ContractInvocationPayload;
+export declare function readMultiSigPendingConfiguration(input: { context: MultiSigContext; read: MultiSigRead }): Promise<MultiSigPendingConfiguration>;
+export interface MultiSigClient {
+  fetchContext(input: { coreContractHash: Hash160; accountIdHash: Hash160; expectedVerifierHash?: Hash160 }): Promise<MultiSigContext>;
+  prepareOperation(input: MultiSigPrepareInput): Promise<MultiSigOperation>;
+  buildChildTypedData: typeof buildMultiSigChildTypedData;
+  fetchChildPayload(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160 }): Promise<{ childVerifierHash: Hash160; operation: MultiSigOperation; payloadHex: string }>;
+  buildBundle: typeof buildMultiSigBundle;
+  buildChildConfiguration: typeof buildMultiSigChildConfigurationInvocation;
+  readPendingConfiguration(input: { context: MultiSigContext }): Promise<MultiSigPendingConfiguration>;
+  validateBundle(input: MultiSigBundleInput): Promise<MultiSigBundle>;
+}
+export declare function createMultiSigClient(input: { rpcUrl?: string; rpcClient?: { getVersion(): Promise<{ protocol: { network: number } }>; send(method: string, params: unknown[]): ReturnType<MultiSigRead> }; signers?: unknown[] }): MultiSigClient;
+
+export declare function fetchMultiSigChildPayload(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160; read: MultiSigRead }): Promise<{ childVerifierHash: Hash160; operation: MultiSigOperation; payloadHex: string }>;

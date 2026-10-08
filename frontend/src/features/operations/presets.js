@@ -100,6 +100,7 @@ export function isOperationPresetRefusal(error) {
 
 export function buildOperationFromPreset({
   preset = 'invoke',
+  broadcastMode = 'client',
   account = {},
   invoke = {},
   transfer = {},
@@ -114,13 +115,12 @@ export function buildOperationFromPreset({
     const fromHash = normalizeHash160(transfer.from || account.accountAddressScriptHash || '');
     const recipientHash = normalizeHash160(transfer.recipient || '');
     const tokenHash = sanitizeHex(transfer.tokenScriptHash || '');
-    // A transfer out of the account's own proxy address cannot be authorised by the owner or relay witness this
-    // preset's transaction carries: the token checks the proxy address as a witness, answers false, and the
-    // account still burns its nonce and the fee (recorded on the deployed core, AA-03 case a). No deployed token
-    // is known to authorise through the account's `verify` instead, so every token is refused until a
-    // proxy-witness transaction can be built. Refused here, before an operation exists to stage or relay.
+    // Client wallet invoke APIs cannot supply the proxy verification script. The
+    // relay resolves the exact script and on-chain scope before simulating/signing;
+    // a relay without that capability still refuses the resulting false transfer.
     const proxyHash = normalizeHash160(account.accountAddressScriptHash || '');
-    if (isProxySourcedTransfer({ method: TRANSFER_METHOD, from: fromHash, proxy: proxyHash })) {
+    const requiresProxyWitness = isProxySourcedTransfer({ method: TRANSFER_METHOD, from: fromHash, proxy: proxyHash });
+    if (requiresProxyWitness && broadcastMode !== 'relay') {
       throw new OperationPresetRefusedError(EC.presetProxyTransferRefused, {
         preset,
         from: fromHash,
@@ -139,6 +139,7 @@ export function buildOperationFromPreset({
       ],
       metadata: {
         assetStandard: 'NEP-17',
+        ...(requiresProxyWitness ? { requiresProxyWitness: true } : {}),
       },
     };
   }

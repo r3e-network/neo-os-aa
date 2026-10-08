@@ -142,9 +142,11 @@ function buildResponseKey(routeName, idempotencyKey) {
   return `aa:request:response:${routeName}:${sha256Hex(idempotencyKey)}`;
 }
 
-export async function beginDurableRequest({ req, routeName, payload = {}, fingerprint = null, journalTtlMs = DEFAULT_JOURNAL_TTL_MS, lockTtlMs = 30_000, responseTtlMs = 15 * 60_000 } = {}) {
+export async function beginDurableRequest({ req, routeName, payload = {}, fingerprint = null, replay = true, journalTtlMs = DEFAULT_JOURNAL_TTL_MS, lockTtlMs = 30_000, responseTtlMs = 15 * 60_000 } = {}) {
   const requestId = deriveRequestId(req, payload);
-  const idempotencyKey = deriveIdempotencyKey(req, payload, fingerprint);
+  // Authorization reads must observe current pins, links and counters. They keep
+  // request journaling but cannot reuse a cached authorization response.
+  const idempotencyKey = replay ? deriveIdempotencyKey(req, payload, fingerprint) : '';
   const journalKey = buildJournalKey(routeName, requestId);
   const context = {
     requestId,
