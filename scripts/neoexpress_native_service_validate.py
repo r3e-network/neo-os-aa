@@ -16,12 +16,12 @@ from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require,
 
 CORE = "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
 STDLIB = "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0"
-DIGEST = "a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e"
+DIGEST = "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"
 REQUIRED_METHODS = {"registerAccount", "getAccount", "getNonce", "getAccountAddress", "getVersion", "getAuthorityEpoch", "getAuthorizationDomain", "getOperationDigest", "verify",
                     "executeUserOp", "executeUserOps", "callVerifier", "callHook", "callVerifierChild", "callHookChild",
                     "setVerifierDependencies", "setHookDependencies", "clearVerifierDependencies", "clearHookDependencies",
                     "getModuleDependencies", "cancelModuleCall", "getPendingModuleCall", "proposeRecoveryAddress",
-                    "activateRecoveryAddress", "freeze", "unfreeze"}
+                    "activateRecoveryAddress", "freeze", "unfreeze", "canonicalP256PublicKey"}
 REQUIRED_EVENTS = {"AccountCreated", "UserOpExecuted", "RecoveryAddressChangeProposed", "RecoveryAddressChanged", "AccountFrozen"}
 
 
@@ -38,6 +38,51 @@ def check_native(state):
         methods=[m for m in abi.get("methods",[]) if m.get("name")==name]
         require(len(methods)==1 and [p.get("type") for p in methods[0].get("parameters",[])]==["Hash160","Array","Integer","Integer"],
                 "Native execution ABI must commit account, operation, authority epoch and configuration nonce")
+    methods = [m for m in abi.get('methods', []) if m.get('name') == 'canonicalP256PublicKey']
+    require(len(methods) == 1 and methods[0].get('safe') is True and methods[0].get('returntype') == 'ByteArray' and
+            [p.get('type') for p in methods[0].get('parameters', [])] == ['ByteArray'],
+            'Native P-256 canonicalization must be a unique safe ByteArray-to-ByteArray method')
+
+
+def canonical_p256_readback(chain):
+    """Read-only public vectors with no account argument, signer or call capability."""
+    compressed = bytes.fromhex('036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296')
+    uncompressed = b'\x04' + compressed[1:] + bytes.fromhex('4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5')
+    push = lambda value: b'\x0c' + bytes([len(value)]) + value
+    # One argument, PACK, then CallFlags.None; the native helper needs no account state.
+    suffix = b'\x11\xc0\x10' + push(b'canonicalP256PublicKey') + push(hash_le(CORE)) + b'\x41' + hashlib.sha256(b'System.Contract.Call').digest()[:4]
+    expected = base64.b64encode(compressed).decode('ascii')
+
+    def invoke(argument, reason=None):
+        script = argument + suffix
+        result = chain.rpc('invokescript', [base64.b64encode(script).decode('ascii'), []])
+        require(type(result) is dict and result.get('notifications', []) == [], 'P-256 readback emitted notifications or returned invalid RPC data')
+        if reason is not None:
+            require(result.get('state') == 'FAULT' and type(result.get('exception')) is str and
+                    result['exception'] and reason in result['exception'], 'Invalid P-256 input was accepted or faulted for the wrong reason')
+        else:
+            stack = result.get('stack')
+            require(result.get('state') == 'HALT' and type(stack) is list and len(stack) == 1 and
+                    stack[0].get('type') == 'ByteString' and stack[0].get('value') == expected,
+                    'P-256 canonicalization did not return the exact compressed ByteString')
+
+    for value in (compressed, uncompressed): invoke(push(value))
+    invalid = [
+        ('Buffer', push(compressed) + b'\xdb\x30', 'exact ByteString'),
+        ('Integer', b'\x11', 'exact ByteString'),
+        ('Boolean', b'\x08', 'exact ByteString'),
+        ('Array', b'\xc2', 'exact ByteString'),
+        ('Null', b'\x0b', "can't be null"),
+        ('invalid-length', push(bytes(32)), 'requires a 33-byte compressed or 65-byte uncompressed encoding'),
+        ('invalid-uncompressed-y', push(uncompressed[:-1] + bytes([uncompressed[-1] ^ 2])), 'not a point on the curve'),
+        ('outside-field', push(b'\x02' + b'\xff' * 32), ''),
+        ('no-square-root', push(b'\x02' + bytes(31) + b'\x01'), ''),
+        ('hybrid-encoding', push(b'\x06' + uncompressed[1:]), 'requires a 33-byte compressed or 65-byte uncompressed encoding'),
+    ]
+    for _, argument, reason in invalid: invoke(argument, reason)
+    return {'acceptedInputBytes': [33, 65], 'outputType': 'ByteString', 'outputBytes': 33,
+            'canonicalPublicKeyHex': compressed.hex(), 'callFlags': 'None', 'signers': [],
+            'rejectedInputs': [name for name, _, _ in invalid], 'notifications': []}
 
 
 def check_account_record(record):
@@ -151,6 +196,13 @@ def validate(runtime, dotnet, output):
                     with socket.socket() as sock:
                         sock.bind(("127.0.0.1", 0)); config["consensus-nodes"][0][field] = sock.getsockname()[1]
                 chain.file.write_text(json.dumps(config)); chain.magic = config["magic"]; chain.rpc_port = config["consensus-nodes"][0]["rpc-port"]
+                stage = 'public-key-canonicalization'
+                chain.start_node()
+                require(chain.rpc('getversion', [])['protocol']['network'] == chain.magic, 'Wrong loopback network')
+                check_native(chain.rpc('getcontractstate', [CORE]))
+                report['canonicalP256PublicKey'] = canonical_p256_readback(chain)
+                report['canonicalP256PublicKey']['beforeAccountRegistration'] = True
+                chain.stop_node()
                 for wallet in ("owner", "guardian"):
                     chain.nx("wallet", "create", wallet)
                 _, listing = chain.nx("wallet", "list", "-j"); wallets = chain.json_from(listing)

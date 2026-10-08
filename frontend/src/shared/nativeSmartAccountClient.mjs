@@ -1,6 +1,8 @@
 const SERVICE = "d9421d07adf206e9dc4be746a02e8e087fa61741";
 export const NATIVE_PROFILE_PARAMETER_DIGEST =
-  "a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e";
+  "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4";
+export const NATIVE_COMPOSITE_MAX_CHILDREN = 3;
+const NATIVE_COMPOSITE_MAX_THRESHOLD = 2;
 const ZERO = "00".repeat(20);
 const error = (message) => {
   throw new Error(`Native SmartAccount: ${message}`);
@@ -17,6 +19,7 @@ const A = (value) => ({ type: "Array", value });
 export const NATIVE_REQUIRED_ABI = {
   verify: [["Hash160"], "Boolean", true],
   getVersion: [[], "Integer", true],
+  canonicalP256PublicKey: [["ByteArray"], "ByteArray", true],
   getAccount: [["Hash160"], "Any", true],
   getAccountAddress: [["Hash160"], "Hash160", true],
   getAuthorityEpoch: [["Hash160"], "Integer", true],
@@ -135,6 +138,20 @@ export function validateNativeInvocationResult(plan, stack) {
       ? [index]
       : [],
   );
+}
+export function validateNativeModuleProfile(deployed, profileDigest) {
+  const metadata = deployed?.manifest?.extra?.smartAccount;
+  if (
+    metadata?.abiVersion !== 2 ||
+    typeof metadata.profileDigest !== "string" ||
+    !/^[0-9a-f]{64}$/.test(metadata.profileDigest) ||
+    metadata.profileDigest !== profileDigest ||
+    typeof metadata.compositeVerifier !== "boolean"
+  )
+    error(
+      "module profile ABI version, digest or composition metadata does not match the native service",
+    );
+  return metadata;
 }
 export function createNativeClientClass(codec) {
   const H = codec.hashValue,
@@ -688,14 +705,24 @@ export function createNativeClientClass(codec) {
         3,
         "module dependencies",
       );
-      return freeze({
+      const dependencies = {
         root: binding(d[0]),
         cleanupBindings: array(d[1], undefined, "cleanup roster").map(binding),
         activeChildren: array(d[2], undefined, "active children").map((x) =>
           hash(x),
         ),
-      });
+      };
+      if (
+        role === "verifier" &&
+        (dependencies.cleanupBindings.length > NATIVE_COMPOSITE_MAX_CHILDREN ||
+          dependencies.activeChildren.length > NATIVE_COMPOSITE_MAX_CHILDREN)
+      )
+        error(
+          "native composite verifier dependency roster exceeds the three-child profile limit",
+        );
+      return freeze(dependencies);
     }
+
     _role(role) {
       if (role !== "verifier" && role !== "hook")
         error("module role must be verifier or hook");
@@ -721,6 +748,9 @@ export function createNativeClientClass(codec) {
         method.startsWith("_") ||
         [
           "validateSignature",
+          "validateSignatureForPostExecute",
+          "validateCompositeSignature",
+          "postExecuteComposite",
           "preExecute",
           "postExecute",
           "clearAccount",
@@ -738,8 +768,28 @@ export function createNativeClientClass(codec) {
       const deployed = await this.rpc.send("getcontractstate", [
         "0x" + selected,
       ]);
-      const capabilities =
-        deployed?.manifest?.extra?.smartAccount?.configurationMethods;
+      const metadata = validateNativeModuleProfile(
+        deployed,
+        this.profileParameterDigest,
+      );
+      if (role === "hook" && metadata.compositeVerifier)
+        error("hook cannot declare composite verifier capability");
+      if (role === "verifier") {
+        const composition = await this._read(
+          "supportsComposition",
+          [],
+          selected,
+        );
+        if (
+          typeof composition !== "boolean" ||
+          composition !== metadata.compositeVerifier ||
+          (child && composition)
+        )
+          error(
+            "module composition capability does not match the declared profile",
+          );
+      }
+      const capabilities = metadata.configurationMethods;
       const matches = deployed?.manifest?.abi?.methods?.filter(
         (m) => m.name === method,
       );
@@ -752,6 +802,46 @@ export function createNativeClientClass(codec) {
         matches[0].parameters[0]?.type !== "Hash160"
       )
         error("module has no declared account-scoped configuration capability");
+      // This convenience applies only to the declared built-in native schema.
+      // Third-party configuration names do not imply these argument semantics.
+      if (
+        role === "verifier" &&
+        method === "setConfig" &&
+        deployed.manifest.name === "MultiSigVerifier" &&
+        deployed.manifest.extra.SmartAccountProfile === "native-v2" &&
+        metadata.abiVersion === 2 &&
+        metadata.compositeVerifier &&
+        matches[0].parameters[1]?.type === "Array" &&
+        matches[0].parameters[2]?.type === "Integer"
+      ) {
+        const [roster, threshold] = canonicalArgs.value;
+        if (
+          roster?.type !== "Array" ||
+          roster.value.length < 1 ||
+          roster.value.length > NATIVE_COMPOSITE_MAX_CHILDREN ||
+          threshold?.type !== "Integer" ||
+          BigInt(threshold.value) < 1n ||
+          BigInt(threshold.value) > BigInt(NATIVE_COMPOSITE_MAX_THRESHOLD) ||
+          BigInt(threshold.value) > BigInt(roster.value.length)
+        )
+          error(
+            "native MultiSig requires 1–3 children and a reachable threshold of 1–2",
+          );
+        const seen = new Set();
+        const forbidden = new Set([ZERO, H(SERVICE).value, H(selected).value]);
+        for (const entry of roster.value) {
+          if (
+            entry.type !== "ByteString" ||
+            entry.value.length !== 40 ||
+            forbidden.has(entry.value) ||
+            seen.has(entry.value)
+          )
+            error(
+              "native MultiSig requires unique nonzero 20-byte child hashes, excluding its root and service",
+            );
+          seen.add(entry.value);
+        }
+      }
       const route =
         "call" +
         (role === "verifier" ? "Verifier" : "Hook") +

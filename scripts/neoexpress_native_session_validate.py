@@ -15,7 +15,7 @@ import tempfile
 import time
 
 from neoexpress_validate import (Chain, RawKey, P256Key, ValidationFailure, H, B, I, S, A, ZERO,
-                                decode, hash_le, varint, serialize_unsigned, serialize_witnesses, aa_proxy_rules)
+                                decode, hash_le, hash160, varint, serialize_unsigned, serialize_witnesses, aa_proxy_rules)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
 from neoexpress_native_service_validate import CORE, check_native, persist, check_account_record, module_storage_key, transaction_system_fee, execution_arguments
 from neoexpress_native_proxy_validate import (GAS, GAS_TOKEN, push_bytes, proxy_address, verification_script,
@@ -26,6 +26,14 @@ from neoexpress_native_modules_validate import nef_from_rpc, check_module_build,
 from neoexpress_reproducible_build import check_runtime_receipt, sha256
 
 NULL = {'type':'Any','value':None}
+
+
+def native_session_signer_domain(public_key):
+    """Canonical P-256 authority, shared with standard-account native witnesses."""
+    require(type(public_key) is bytes and len(public_key)==33 and public_key[0] in (2,3),
+            'Native session oracle requires a compressed P-256 public key')
+    verification=b'\x0c\x21'+public_key+b'\x41\x56\xe7\xb3\x27'
+    return hashlib.sha256(b'NeoSmartAccount/SignerDomain\x01\x03'+hash160(verification)).digest()
 
 
 def serialize_value(item):
@@ -49,6 +57,13 @@ def serialize_value(item):
     elif kind=='String':data=value.encode('utf-8',errors='strict')
     else:raise ValidationFailure('Unsupported signing value')
     return b'\x28'+varint(len(data))+data
+
+
+def session_last_used_change(state, timestamp):
+    """Project the native timestamp getter while preserving the stored metadata bytes."""
+    require(type(timestamp) is int and 0 <= timestamp < 2**64, 'Last-used timestamp must be UInt64')
+    state['metadata'][1]=timestamp
+    state['raw'][5]=base64.b64encode(serialize_value(I(timestamp))[2:]).decode()
 
 
 def signing_preimage(network, account, operation, core=CORE, *, authority_epoch=0, configuration_nonce=0):
@@ -76,7 +91,7 @@ class SessionTransactions:
     def storage(self,account,*,authority_epoch=None):
         epoch=self.epoch(account) if authority_epoch is None else authority_epoch
         values=[]
-        for prefix in (1,2,3,4):
+        for prefix in (1,2,3,4,5,6):
             key=base64.b64encode(module_storage_key(account,prefix,epoch)).decode()
             try: data=self.chain.rpc('getstorage',[self.verifier,key])
             except ValidationFailure as error:
@@ -221,7 +236,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                     state=chain.rpc('getcontractstate',[verifier]);require(nef_from_rpc(state['nef'])==path.read_bytes(),'Session NEF readback mismatch')
                     require(state['manifest']==json.loads(path.with_suffix('.manifest.json').read_text()),'Session manifest readback mismatch')
                 readback();driver=SessionTransactions(chain,account,other,verifier,keys['relay'],addresses['recipient'],report)
-                initial=driver.state(account);require(initial['key'] is None and initial['nonce']==0 and initial['balance']==2*GAS and initial['raw']==[None]*4,'Unexpected initial session state')
+                initial=driver.state(account);require(initial['key'] is None and initial['nonce']==0 and initial['balance']==2*GAS and initial['raw']==[None]*6,'Unexpected initial session state')
                 custodian=[keys['owner']]
                 def core(label,method,args,**kw):return driver.send(label,CORE,method,[H(account),*args],key=custodian[0],**kw)
                 def wait_delay():chain.stop_node();chain.nx('fastfwd','1','-t','86401');chain.start_node()
@@ -240,11 +255,12 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 wait_delay()
                 def configure(state,timestamp):
                     state['account'][8]+=1;state['pending']=None;state['key']=[session.compressed,hash_le(GAS_TOKEN),b'transfer',until,cap]
+                    state['raw'][4]=base64.b64encode(native_session_signer_domain(session.compressed)).decode();state['raw'][5]=''
                     state['metadata']=[timestamp,0,b'native session validation']
                 core('confirm-session','callVerifier',[S('setSessionKey'),A(*configuration)],events=[(verifier,'SessionKeyGranted')],change=configure,raw_changes=(0,1,3))
                 require(driver.storage(account)[3] is not None,'Rotation state was not persisted')
                 domains=driver.value(verifier,'getSignerDomains',[H(account)])
-                require(domains==[hashlib.sha256(b'NeoSmartAccount/SignerDomain\x01\x02'+session.compressed).digest()],'Session signer domain mismatch')
+                require(domains==[native_session_signer_domain(session.compressed)],'Session signer domain mismatch')
                 stage='authorization-negatives'
                 def execute(label,payload,**kw):return driver.send(label,CORE,'executeUserOp',[H(account),payload],**kw)
                 for label,options,key in [('foreign-key',{},attacker),('wrong-account',{'account':other},session),
@@ -265,13 +281,13 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 stage='real-asset-transfers'
                 signed=driver.signed(session,op(0,GAS//2))
                 def transfer_state(state,timestamp):
-                    state['nonce']+=1;state['spent']+=GAS//2;state['balance']-=GAS//2;state['metadata'][1]=timestamp
-                execute('signed-proxy-transfer',signed,proxy=True,expected=True,events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=transfer_state,raw_changes=(1,2),recipient_delta=GAS//2)
+                    state['nonce']+=1;state['spent']+=GAS//2;state['balance']-=GAS//2;session_last_used_change(state,timestamp)
+                execute('signed-proxy-transfer',signed,proxy=True,expected=True,events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=transfer_state,raw_changes=(2,),recipient_delta=GAS//2)
                 execute('replay-operation',signed,fault='sequence is not current')
                 # An actual GAS transfer with enough cap but insufficient balance returns false.
                 # PostExecute must fault rather than consume nonce or spend allowance.
                 execute('false-transfer-result',driver.signed(session,op(1,2*GAS)),proxy=True,fault='Session transfer did not succeed')
-                execute('post-fault-transfer',driver.signed(session,op(1,GAS//2)),proxy=True,expected=True,events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=transfer_state,raw_changes=(1,2),recipient_delta=GAS//2)
+                execute('post-fault-transfer',driver.signed(session,op(1,GAS//2)),proxy=True,expected=True,events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=transfer_state,raw_changes=(2,),recipient_delta=GAS//2)
                 stage='rotation-cap-and-revocation'
                 def configure_session(label,key,limit):
                     args=[B(key.compressed),H(GAS_TOKEN),S('transfer'),I(until),I(limit),S(label)]
@@ -283,6 +299,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                     def confirmed(state,timestamp):
                         state['account'][8]+=1;state['pending']=None
                         state['key']=[key.compressed,hash_le(GAS_TOKEN),b'transfer',until,limit]
+                        state['raw'][4]=base64.b64encode(native_session_signer_domain(key.compressed)).decode();state['raw'][5]=''
                         state['metadata']=[timestamp,0,label.encode()]
                     core(label+'-confirm','callVerifier',[S('setSessionKey'),A(*args)],events=[(verifier,'SessionKeyGranted')],change=confirmed,raw_changes=(0,1,3))
                 configure_session('rotate-preserve-spending',attacker,5*GAS//4)
@@ -290,18 +307,18 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 execute('retired-session-key',stale,fault='The verifier must return exactly Boolean true.')
                 execute('retired-session-key-witness',stale,proxy=True,admission_rejection=True)
                 def quarter_transfer(state,timestamp):
-                    state['nonce']+=1;state['spent']+=GAS//4;state['balance']-=GAS//4;state['metadata'][1]=timestamp
+                    state['nonce']+=1;state['spent']+=GAS//4;state['balance']-=GAS//4;session_last_used_change(state,timestamp)
                 execute('rotated-key-exact-cap',driver.signed(attacker,op(2,GAS//4)),proxy=True,expected=True,
-                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=quarter_transfer,raw_changes=(1,2),recipient_delta=GAS//4)
+                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=quarter_transfer,raw_changes=(2,),recipient_delta=GAS//4)
                 execute('rotated-key-cap-plus-one',driver.signed(attacker,op(3,1)),fault='Session key spending limit exceeded')
                 configure_session('lower-cap-below-spent',attacker,GAS)
                 zero=driver.signed(attacker,op(3,0))
                 execute('zero-amount-overdrawn-cap',zero,fault='Session key spending limit exceeded')
                 execute('zero-amount-overdrawn-cap-witness',zero,proxy=True,admission_rejection=True)
                 configure_session('restore-exact-cap',attacker,5*GAS//4)
-                def zero_transfer(state,timestamp):state['nonce']+=1;state['metadata'][1]=timestamp
+                def zero_transfer(state,timestamp):state['nonce']+=1;session_last_used_change(state,timestamp)
                 execute('zero-amount-exact-cap',driver.signed(attacker,op(3,0)),proxy=True,expected=True,
-                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=zero_transfer,raw_changes=(1,))
+                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=zero_transfer,raw_changes=())
                 def revoke_proposal(state,timestamp):
                     binding=state['account'][5];state['pending']=[1,hash_le(account),0,binding,binding,b'clearSessionKey',
                         [hash_le(account)],timestamp,timestamp+86400000,state['account'][8]]
@@ -309,7 +326,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 wait_delay()
                 def revoked(state,timestamp):
                     state['account'][8]+=1;state['pending']=None;state['key']=None;state['metadata']=None
-                    state['spent']=0;state['raw'][:3]=[None]*3
+                    state['spent']=0;state['raw'][:3]=[None]*3;state['raw'][4:6]=[None,None]
                 core('revoke-confirm','callVerifier',[S('clearSessionKey'),A()],events=[(verifier,'SessionKeyRevoked')],change=revoked)
                 require(driver.storage(account)[3] is not None,'Ordinary revocation erased the rotation cooldown')
                 revoked_signature=driver.signed(attacker,op(4,1))
@@ -317,11 +334,11 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 execute('revoked-session-key-witness',revoked_signature,proxy=True,admission_rejection=True)
                 configure_session('grant-after-revocation',session,GAS//4)
                 execute('fresh-allowance-after-revocation',driver.signed(session,op(4,GAS//4)),proxy=True,expected=True,
-                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=quarter_transfer,raw_changes=(1,2),recipient_delta=GAS//4)
+                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=quarter_transfer,raw_changes=(2,),recipient_delta=GAS//4)
                 stage='recovery-epoch-and-reinstallation'
                 prior=driver.state(account);old_epoch=prior['account'][13];binding=copy.deepcopy(prior['account'][5])
                 old_raw=driver.storage(account,authority_epoch=old_epoch)
-                require(old_raw[0] is not None and old_raw[2] is not None,'Recovery needs a configured and spent session')
+                require(old_raw[0] is not None and old_raw[2] is not None and old_raw[4] is not None and old_raw[5] is not None,'Recovery needs a configured and spent session')
                 stale_before_recovery=driver.signed(session,op(prior['nonce'],1))
                 def recovery_proposal(state,timestamp):
                     state['account'][12]=[hash_le(addresses['replacement']),timestamp,timestamp+604800000,state['account'][8]]
@@ -331,7 +348,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 def recovered(state,timestamp):
                     state['account'][3]=hash_le(addresses['replacement']);state['account'][5:7]=[None,None]
                     state['account'][8]+=1;state['account'][13]+=1;state['account'][9:13]=[None]*4
-                    state['pending']=None;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*4
+                    state['pending']=None;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*6
                 driver.send('recover-session-authority-epoch',CORE,'executeRecovery',[H(account)],key=keys['relay'],
                     events=[(CORE,'RecoveryExecuted')],change=recovered)
                 custodian[0]=keys['replacement'];recovered_state=driver.state(account)
@@ -348,14 +365,14 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 def reinstalled(state,timestamp):
                     state['account'][5]=binding;state['account'][8]+=1;state['account'][9:13]=[None]*4
                 core('reinstall-same-session-confirm','activateVerifier',[],events=[(CORE,'VerifierChanged')],change=reinstalled)
-                require(driver.state(account)['key'] is None and driver.storage(account)==[None]*4,'Old session configuration resurrected')
+                require(driver.state(account)['key'] is None and driver.storage(account)==[None]*6,'Old session configuration resurrected')
                 execute('pre-recovery-session-signature-rejected',stale_before_recovery,fault='No session key active')
                 execute('pre-recovery-session-witness-rejected',stale_before_recovery,proxy=True,admission_rejection=True)
                 configure_session('configure-new-epoch-session',attacker,GAS)
                 fresh_nonce=driver.state(account)['nonce']
                 execute('retired-key-new-domain-rejected',driver.signed(session,op(fresh_nonce,1)),fault='The verifier must return exactly Boolean true.')
                 execute('new-epoch-session-transfer',driver.signed(attacker,op(fresh_nonce,GAS//4)),proxy=True,expected=True,
-                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=quarter_transfer,raw_changes=(1,2),recipient_delta=GAS//4)
+                    events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=quarter_transfer,raw_changes=(2,),recipient_delta=GAS//4)
                 require(driver.storage(account,authority_epoch=old_epoch)==old_raw,'New authority modified old epoch storage')
                 report['recoveryEpoch']={'before':old_epoch,'after':driver.epoch(account),'oldConfigurationDidNotResurrect':True,
                     'oldNamespaceUnchanged':True,'newAuthorityTransferSucceeded':True,'operationNoncePreservedAtRecovery':prior['nonce']}
@@ -369,9 +386,9 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 core('propose-remove-session','proposeVerifier',[H(ZERO)],events=[(CORE,'VerifierChangeProposed')],change=propose_remove)
                 wait_delay()
                 def remove(state,timestamp):
-                    state['account'][5]=None;state['account'][8]+=1;state['account'][9:13]=[None]*4;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*4
+                    state['account'][5]=None;state['account'][8]+=1;state['account'][9:13]=[None]*4;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*6
                 core('activate-remove-session','activateVerifier',[],events=[(verifier,'SessionKeyRevoked'),(CORE,'VerifierChanged')],change=remove)
-                require(driver.storage(account)==[None]*4,'Session cleanup left account-scoped storage')
+                require(driver.storage(account)==[None]*6,'Session cleanup left account-scoped storage')
                 readback();report.update(networkMagic=chain.magic,accountId=account,otherAccountId=other,
                     finalOperationNonce=driver.state(account)['nonce'],finalConfigurationNonce=driver.state(account)['account'][8],
                     fullNefReadbackMatched=True,manifestReadbackMatched=True,currentEpochSessionStoragePrefixesCleared=True)

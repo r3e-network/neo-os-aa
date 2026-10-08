@@ -21,7 +21,7 @@ from neoexpress_native_proxy_validate import push_bytes, check_transaction, chec
 from neoexpress_native_configuration_validate import call_script, pending_log
 from neoexpress_native_recovery_validate import equal_typed
 from neoexpress_reproducible_build import check_runtime_receipt, sha256
-from native_module_profile import validate_descriptor
+from native_module_profile import validate_descriptor, profile_digest, package_manifest
 from build_native_modules import collect_inputs
 
 NULL = {"type": "Any", "value": None}
@@ -75,6 +75,40 @@ def check_module_build(compiled, artifacts, contracts):
     scripts = Path(__file__).parent
     require(compiled["recipeSha256"] == sha256(scripts/"build_native_modules.py") and
             compiled["packagingRecipeSha256"] == sha256(scripts/"native_module_profile.py"), "Native recipe changed after build")
+    parameters = contracts.parent / "docs/proposals/smartaccount-native-profile-v2-parameters.json"
+    parameter_digest = profile_digest(parameters)
+    packaging = json.loads((artifacts / "native-profile-packaging.json").read_text())
+    require(packaging.get("status") == "PASS" and packaging.get("nefRewritten") is False,
+            "Native packaging did not preserve compiler NEF bytes")
+    require(packaging.get("profileParametersSha256") == sha256(parameters) and
+            packaging.get("profileDigest") == parameter_digest,
+            "Native packaged profile parameters or digest are stale")
+    require(packaging.get("descriptorSha256") == sha256(contracts / "native/profiles.json") and
+            packaging.get("recipeSha256") == compiled["packagingRecipeSha256"],
+            "Native packaging descriptor or recipe changed")
+    require(type(packaging.get("artifacts")) is dict and set(packaging["artifacts"]) == set(profiles),
+            "Native packaging certificate roster mismatch")
+    for name, spec in profiles.items():
+        certificate = packaging["artifacts"][name]
+        require(type(certificate) is dict and certificate.get("nefSha256") == pins[name + ".nef"] and
+                certificate.get("packagedManifestSha256") == pins[name + ".manifest.json"],
+                "Native packaging artifact certificate mismatch")
+        manifest = json.loads((artifacts / (name + ".manifest.json")).read_text())
+        require(manifest.get("name") == name, "Native manifest name mismatch")
+        extra = manifest.get("extra")
+        require(type(extra) is dict and type(extra.get("smartAccount")) is dict,
+                "Native manifest capability metadata is missing")
+        metadata = extra["smartAccount"]
+        require(type(metadata.get("abiVersion")) is int and type(metadata.get("compositeVerifier")) is bool,
+                "Native manifest ABI or composite marker has an incorrect type")
+        raw_manifest = copy.deepcopy(manifest)
+        del raw_manifest["extra"]["smartAccount"]
+        try:
+            expected = package_manifest(raw_manifest, spec["role"], spec["configurationMethods"],
+                                        spec["compositeVerifier"], parameter_digest)
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValidationFailure("Native packaged lifecycle ABI is invalid: " + str(error)) from error
+        require(manifest == expected, "Native packaged capability metadata differs from the current profile")
     return pins
 
 
@@ -101,18 +135,34 @@ def check_outcome(execution, expected, event, fault):
         require(notifications[0].get("contract") == CORE and notifications[0].get("eventname") == event, "Wrong native event")
 
 
+def native_signer_domain_storage(signers):
+    require(type(signers) is list and 0 < len(signers) <= 10 and len(set(signers)) == len(signers),
+            "Native signer-domain oracle requires distinct configured signers")
+    return base64.b64encode(b''.join(hashlib.sha256(b'NeoSmartAccount/SignerDomain\x01\x03'+hash_le(signer)).digest()
+                                   for signer in signers)).decode()
+
+
 class ModuleTransactions:
     def __init__(self, chain, account, other, verifier, hook, report):
         self.chain, self.account, self.other, self.verifier, self.hook, self.report = chain, account, other, verifier, hook, report
 
     def value(self, target, method, args): return self.chain.rpc_invoke(target, method, args)[0]
 
+    def signer_domain_storage(self, account, epoch):
+        key = base64.b64encode(module_storage_key(account, 3, epoch)).decode()
+        try: return self.chain.rpc("getstorage", [self.verifier, key])
+        except ValidationFailure as error:
+            require(str(error) == "rpc getstorage: Unknown storage item", "Unexpected signer-domain storage lookup failure")
+            return None
+
     def state(self, account):
-        return [self.value(CORE, "getAccount", [H(account)]), self.value(CORE, "getNonce", [H(account), I(0)]),
+        record = self.value(CORE, "getAccount", [H(account)])
+        return [record, self.value(CORE, "getNonce", [H(account), I(0)]),
                 self.value(CORE, "getPendingModuleCall", [H(account), S("verifier")]),
                 self.value(CORE, "getPendingModuleCall", [H(account), S("hook")]),
                 self.value(self.verifier, "getConfig", [H(account)]), self.value(self.verifier, "getThreshold", [H(account)]),
-                self.value(self.hook, "isWhitelisted", [H(account), H(STDLIB)])]
+                self.value(self.hook, "isWhitelisted", [H(account), H(STDLIB)]),
+                self.signer_domain_storage(account, record[13])]
 
     def send(self, label, target, method, args, keys, *, module_scope=False, expected=None, event=None, fault=None,
              state_change=None, pending=None, root_pending=None, recovery_pending=None):
@@ -239,7 +289,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                         row["fullNefByteReadbackMatched"] = True
                 readback(); driver = ModuleTransactions(chain, *accounts, verifier, hook, report); account = accounts[0]
                 initial = driver.state(account)
-                require(initial[0][8] == 0 and initial[1:] == [0, None, None, None, 0, False], "Unexpected initial module state")
+                require(initial[0][8] == 0 and initial[1:] == [0, None, None, None, 0, False, None], "Unexpected initial module state")
                 def send(label, method, args, **kw): return driver.send(label, CORE, method, [H(account), *args], [owner], **kw)
                 def wait_delay():
                     chain.stop_node(); chain.nx("fastfwd", "1", "-t", "86401"); chain.start_node()
@@ -257,6 +307,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 wait_delay()
                 def configure(state):
                     commit_config(state); state[4] = [[hash_le(a) for a in addresses], 2]; state[5] = 2
+                    state[7] = native_signer_domain_storage(addresses)
                 send("confirm-threshold", "callVerifier", [S("setConfig"), A(*config_args)], state_change=configure)
                 def execute(label, op, signing_keys=keys, **kw):
                     driver.send(label, CORE, "executeUserOp", [H(account), op], signing_keys, **kw)
@@ -283,7 +334,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                     def remove(state, role=role):
                         commit_config(state)
                         if role == "Hook": state[0][6] = None; state[6] = False
-                        else: state[0][5] = None; state[4] = None; state[5] = 0
+                        else: state[0][5] = None; state[4] = None; state[5] = 0; state[7] = None
                     send("activate-remove-" + role.lower(), "activate" + role, [], event=role + "Changed", state_change=remove)
                     if role == "Hook":
                         confused = A(H(verifier), S("postExecute"), A(H(account), operation(1), NULL), I(1), I(4_102_444_800_000), B(b""))
@@ -306,7 +357,9 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                     send(label+"-threshold-propose","callVerifier",[S("setConfig"),A(*args)],expected=False,
                          pending=(2,0,"setConfig",[[hash_le(a) for a in signer_addresses],2],5))
                     wait_delay()
-                    def configured(state):commit_config(state);state[4]=[[hash_le(a) for a in signer_addresses],2];state[5]=2
+                    def configured(state):
+                        commit_config(state);state[4]=[[hash_le(a) for a in signer_addresses],2];state[5]=2
+                        state[7]=native_signer_domain_storage(signer_addresses)
                     send(label+"-threshold-confirm","callVerifier",[S("setConfig"),A(*args)],state_change=configured)
                     send(label+"-allowlist-propose","callHook",[S("setWhitelist"),A(*allow_args)],expected=False,
                          pending=(3,1,"setWhitelist",[hash_le(STDLIB),True],6))
@@ -314,7 +367,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 configure_again("before-recovery",addresses)
                 before_recovery=driver.state(account);old_epoch=before_recovery[0][13]
                 def old_namespace():
-                    keys=[(verifier,module_storage_key(account,p,old_epoch))for p in (1,2)]
+                    keys=[(verifier,module_storage_key(account,p,old_epoch))for p in (1,2,3)]
                     keys.append((hook,module_storage_key(account,1,old_epoch,hash_le(STDLIB))))
                     return [chain.rpc("getstorage",[contract,base64.b64encode(key).decode()])for contract,key in keys]
                 old_storage=old_namespace();require(all(v is not None for v in old_storage),"Recovery requires initialized native and hook storage")
@@ -324,7 +377,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 chain.stop_node();chain.nx("fastfwd","1","-t","604801");chain.start_node()
                 def recovered(state):
                     state[0][3]=hash_le(recovery_addresses["replacement"]);state[0][5:7]=[None,None]
-                    commit_config(state);state[0][13]+=1;state[4:7]=[None,0,False]
+                    commit_config(state);state[0][13]+=1;state[4:8]=[None,0,False,None]
                 driver.send("execute-module-authority-recovery",CORE,"executeRecovery",[H(account)],[replacement],
                     event="RecoveryExecuted",state_change=recovered)
                 recovered_state=driver.state(account)
@@ -334,7 +387,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                     require(driver.value(CORE,"getModuleDependencies",[H(account),S(role)])==[None,[],[]],"Recovery retained dependency authority")
                 owner=replacement
                 install_same("Verifier",verifier_binding);install_same("Hook",hook_binding)
-                require(driver.state(account)[4:7]==[None,0,False],"Same-module reinstall resurrected old native/hook configuration")
+                require(driver.state(account)[4:8]==[None,0,False,None],"Same-module reinstall resurrected old native/hook configuration")
                 execute("old-native-signers-after-recovery",operation(driver.state(account)[1]),keys,module_scope=True,fault="No NeoNativeVerifier config")
                 new_addresses=[recovery_addresses["replacement"],addresses[1]]
                 configure_again("after-recovery",new_addresses)

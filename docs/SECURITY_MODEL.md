@@ -1,6 +1,6 @@
 # Neo N3 Abstract Account Security Model
 
-## Runtime and authority versions (2026-10-08 convergence)
+## Runtime and authority versions (2026-10-09 convergence)
 
 Ordinary deployed `UnifiedSmartWallet` remains the public `v3` implementation
 from the tested main branch; its separate `PLATFORM` build retains 10 GAS bounded
@@ -17,8 +17,20 @@ operation-signature preimages also bind them. Prior-generation
 keys or signatures cannot be restored by reinstalling a module. This is distinct
 from ordinary `finalizeEscape`, whose old-module cleanup can still fail closed.
 The normative rules are in `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`.
-Historical receipts below describe their pinned ABI 1 or ordinary-contract
-snapshots. They do not certify the changed ABI 2 source, SDK or runtime.
+The amended native composite path uses a core-owned, single-operation receipt:
+only the first threshold of valid children obtains post-execution authority.
+Validation and post-execution still check current policy and all active binding
+pins; an Application receipt is created afresh and never reused from Verification
+or another operation. Modules require an exact current profile fingerprint and
+an explicit Boolean verifier-composition marker. The shipped native P-256
+profiles map a session key and its standard-account witness to the same signer
+domain, preventing those two representations from supplying separate votes.
+Independent control of arbitrary script accounts is not established by that rule.
+
+Historical receipts below identify their own pinned ABI 1, preceding ABI 2, or
+ordinary-contract snapshots. They do not certify this amended ABI 2 source,
+SDK or runtime. Its three-child/two-approval/three-domain limits require actual
+VM budget evidence, separate from the bounded policy proofs.
 
 
 ## Executive Summary
@@ -46,8 +58,17 @@ of immediate session revocation or proof of an arbitrary token's semantics.
 Rotation preserves spent allowance. Reducing a positive cap below the amount
 already spent blocks even zero-amount transfers; at the exact cap, zero transfers
 remain admissible. Explicit delayed revocation clears the key and allowance but
-retains the rotation timestamp, whereas account cleanup removes all four session
-prefixes. The private lifecycle matrix checks these distinct effects.
+retains the rotation timestamp, whereas account cleanup removes all session
+prefixes (four in the legacy profile, six in amended native ABI 2). Native
+prefix `0x05` holds the canonical signer domain, written atomically with session
+configuration and freshly read during discovery; missing or malformed values
+fail closed, with no fallback to old layouts. Native
+prefix `0x06` holds a canonical UInt64 last-use Integer; metadata reads project it
+into the original three-field record, avoiding repeated description writes on
+execution. Invalid or missing timestamps fail closed, including negative,
+overflowing and noncanonical byte encodings. The historical lifecycle matrix
+covers the four-prefix layout; amended ABI 2 requires new replay for both split
+entries.
 The additional scope matrix is
 `docs/reports/aa-native-session-scope-validation-20261007.json`. Zero means no
 session spending cap, not zero allowance. A wildcard method remains bound to one

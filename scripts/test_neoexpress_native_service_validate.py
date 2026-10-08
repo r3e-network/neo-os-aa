@@ -12,11 +12,73 @@ class NativeServiceReceiptTests(unittest.TestCase):
         return {"hash": native.CORE, "id": -13, "manifest": {"name": "AccountManagement",
             "extra": {"smartAccount": {"abiVersion": 2, "profileParameterDigest": native.DIGEST}},
             "abi": {"methods": [{"name": n, "parameters": [{"type":t} for t in ('Hash160','Array','Integer','Integer')]}
-                                 if n in ('executeUserOp','executeUserOps') else {"name":n} for n in native.REQUIRED_METHODS],
+                                 if n in ('executeUserOp','executeUserOps') else
+                                 {"name": n, "parameters": [{"type": "ByteArray"}], "returntype": "ByteArray", "safe": True}
+                                 if n == 'canonicalP256PublicKey' else {"name":n}
+                                 for n in native.REQUIRED_METHODS | {'canonicalP256PublicKey'}],
                     "events": [{"name": n} for n in native.REQUIRED_EVENTS]}}}
 
     def test_valid_native_identity(self):
         native.check_native(self.manifest())
+
+    def test_service_digest_matches_the_canonical_current_parameters(self):
+        import hashlib
+        import json
+        from pathlib import Path
+        parameters = json.loads((Path(__file__).resolve().parent.parent / 'docs/proposals/smartaccount-native-profile-v2-parameters.json').read_text())
+        canonical = json.dumps(parameters, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode()
+        self.assertEqual(hashlib.sha256(b'NeoSmartAccount/Profile\x02' + canonical).hexdigest(), native.DIGEST)
+        self.assertEqual('4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4', native.DIGEST)
+
+    def test_p256_canonicalization_abi_is_unique_safe_and_account_independent(self):
+        item = self.manifest(); native.check_native(item)
+        methods = item['manifest']['abi']['methods']
+        canonical = next(row for row in methods if row['name'] == 'canonicalP256PublicKey')
+        for field, value in (('parameters', []), ('parameters', [{'type': 'Hash160'}, {'type': 'ByteArray'}]),
+                             ('parameters', [{'type': 'Any'}]), ('returntype', 'Array'), ('safe', False), ('safe', 1)):
+            wrong = copy.deepcopy(item)
+            next(row for row in wrong['manifest']['abi']['methods'] if row['name'] == canonical['name'])[field] = value
+            with self.assertRaises(ValidationFailure): native.check_native(wrong)
+        for rows in ([row for row in methods if row['name'] != canonical['name']], [*methods, copy.deepcopy(canonical)]):
+            wrong = copy.deepcopy(item); wrong['manifest']['abi']['methods'] = rows
+            with self.assertRaises(ValidationFailure): native.check_native(wrong)
+
+    def p256_results(self):
+        compressed = bytes.fromhex('036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296')
+        success = {'state': 'HALT', 'stack': [{'type': 'ByteString', 'value': base64.b64encode(compressed).decode()}], 'notifications': []}
+        reasons = ['exact ByteString'] * 4 + ["can't be null", 'requires a 33-byte compressed or 65-byte uncompressed encoding',
+            'not a point on the curve', 'Invalid ECPoint', 'Invalid ECPoint',
+            'requires a 33-byte compressed or 65-byte uncompressed encoding']
+        return [copy.deepcopy(success), copy.deepcopy(success), *[{'state': 'FAULT', 'exception': reason, 'notifications': []} for reason in reasons]]
+
+    def test_p256_readback_uses_none_flags_without_an_account_or_witness(self):
+        chain = Mock(); chain.rpc.side_effect = self.p256_results()
+        result = native.canonical_p256_readback(chain)
+        self.assertEqual([33, 65], result['acceptedInputBytes'])
+        self.assertEqual('ByteString', result['outputType'])
+        self.assertEqual(33, result['outputBytes'])
+        self.assertEqual(10, len(result['rejectedInputs']))
+        self.assertEqual(12, chain.rpc.call_count)
+        call_suffix = b'\x11\xc0\x10\x0c\x16canonicalP256PublicKey\x0c\x14' + bytes.fromhex(native.CORE[2:])[::-1] + bytes.fromhex('41627d5b52')
+        for call in chain.rpc.call_args_list:
+            self.assertEqual('invokescript', call.args[0]); self.assertEqual([], call.args[1][1])
+            self.assertTrue(base64.b64decode(call.args[1][0]).endswith(call_suffix))
+
+    def test_p256_readback_rejects_wrong_output_types_bytes_events_and_unexpected_acceptance(self):
+        bad_outputs = [
+            {'state': 'FAULT', 'exception': 'missing method'},
+            {'state': 'HALT', 'stack': []},
+            {'state': 'HALT', 'stack': [{'type': 'Buffer', 'value': self.p256_results()[0]['stack'][0]['value']}]},
+            {'state': 'HALT', 'stack': [{'type': 'ByteString', 'value': base64.b64encode(bytes(33)).decode()}]},
+        ]
+        with_event = self.p256_results()[0]; with_event['notifications'] = [{'eventname': 'Unexpected'}]; bad_outputs.append(with_event)
+        for bad in bad_outputs:
+            chain = Mock(); chain.rpc.side_effect = [bad]
+            with self.assertRaises(ValidationFailure): native.canonical_p256_readback(chain)
+        for index in range(2, 12):
+            rows = self.p256_results(); rows[index] = copy.deepcopy(rows[0])
+            chain = Mock(); chain.rpc.side_effect = rows
+            with self.assertRaises(ValidationFailure): native.canonical_p256_readback(chain)
 
     def test_mismatched_native_identity_is_rejected(self):
         for key, value in (("hash", "0x" + "00" * 20), ("id", 1)):
@@ -25,6 +87,8 @@ class NativeServiceReceiptTests(unittest.TestCase):
         item = self.manifest(); item["manifest"]["extra"]["smartAccount"]["abiVersion"] = 1
         with self.assertRaises(ValidationFailure): native.check_native(item)
         item = self.manifest(); item["manifest"]["extra"]["smartAccount"]["profileParameterDigest"] = "00" * 32
+        with self.assertRaises(ValidationFailure): native.check_native(item)
+        item = self.manifest(); item["manifest"]["extra"]["smartAccount"]["profileParameterDigest"] = "a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e"
         with self.assertRaises(ValidationFailure): native.check_native(item)
 
     def test_record_requires_version_two_and_unsigned_authority_counters(self):

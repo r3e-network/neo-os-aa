@@ -4,7 +4,7 @@
   "serviceName": "AccountManagement",
   "serviceHashDisplay": "0xd9421d07adf206e9dc4be746a02e8e087fa61741",
   "serviceHashWire": "4117a67f088e2ea046e74bdce906f2ad071d42d9",
-  "profileParameterDigest": "a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e",
+  "profileParameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4",
   "identity": {
     "custodyAddressWire": "202122232425262728292a2b2c2d2e2f30313233",
     "salt": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
@@ -223,6 +223,111 @@
       "authorityEpoch": "18446744073709551615",
       "suffix": "aabb",
       "key": "a201ac2000a06cb36878e05328fe553c56080033253effffffffffffffffaabb"
+    }
+  ],
+  "nativeP256SignerDomain": {
+    "publicKey": "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
+    "standardAccountScript": "0c21036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964156e7b327",
+    "scriptHashWire": "66de052617e55519358c3885e049e3d3e07efe7e",
+    "scriptHashDisplay": "0x7efe7ee0d3e349e085388c351955e5172605de66",
+    "domain": "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528",
+    "nativeDomainsPerKey": 1
+  },
+  "compositeReceipt": {
+    "threshold": 2,
+    "orderedChildrenWire": [
+      "1111111111111111111111111111111111111111",
+      "2222222222222222222222222222222222222222",
+      "3333333333333333333333333333333333333333"
+    ],
+    "orderedChildDomains": [
+      [
+        "4141414141414141414141414141414141414141414141414141414141414141"
+      ],
+      [
+        "4242424242424242424242424242424242424242424242424242424242424242"
+      ],
+      [
+        "4343434343434343434343434343434343434343434343434343434343434343"
+      ]
+    ],
+    "childApprovals": [
+      true,
+      false,
+      true
+    ],
+    "approvedChildrenWire": [
+      "1111111111111111111111111111111111111111",
+      "3333333333333333333333333333333333333333"
+    ],
+    "canonicalPolicy": "400321010240032814111111111111111111111111111111111111111128142222222222222222222222222222222222222222281433333333333333333333333333333333333333334003400128204141414141414141414141414141414141414141414141414141414141414141400128204242424242424242424242424242424242424242424242424242424242424242400128204343434343434343434343434343434343434343434343434343434343434343",
+    "policyCommitment": "a1982c146a03b8333913222a9f851b825361532e8b1c879c778c83bf0afa13ef",
+    "canonicalReceipt": "40032001400228141111111111111111111111111111111111111111281433333333333333333333333333333333333333332820a1982c146a03b8333913222a9f851b825361532e8b1c879c778c83bf0afa13ef",
+    "scope": "Synthetic identity/domain bytes for canonical policy serialization; not a signature or runtime test."
+  },
+  "p256Canonicalization": [
+    {
+      "name": "compressed-generator",
+      "stackType": "ByteString",
+      "publicKey": "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
+      "accepted": true,
+      "canonicalPublicKey": "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"
+    },
+    {
+      "name": "uncompressed-generator",
+      "stackType": "ByteString",
+      "publicKey": "046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+      "accepted": true,
+      "canonicalPublicKey": "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"
+    },
+    {
+      "name": "invalid-uncompressed-y",
+      "stackType": "ByteString",
+      "publicKey": "046b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f4",
+      "accepted": false,
+      "canonicalPublicKey": null
+    },
+    {
+      "name": "hybrid-prefix",
+      "stackType": "ByteString",
+      "publicKey": "066b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
+      "accepted": false,
+      "canonicalPublicKey": null
+    },
+    {
+      "name": "outside-field",
+      "stackType": "ByteString",
+      "publicKey": "02ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "accepted": false,
+      "canonicalPublicKey": null
+    },
+    {
+      "name": "non-residue-x",
+      "stackType": "ByteString",
+      "publicKey": "020000000000000000000000000000000000000000000000000000000000000001",
+      "accepted": false,
+      "canonicalPublicKey": null
+    },
+    {
+      "name": "empty",
+      "stackType": "ByteString",
+      "publicKey": "",
+      "accepted": false,
+      "canonicalPublicKey": null
+    },
+    {
+      "name": "wrong-length",
+      "stackType": "ByteString",
+      "publicKey": "0200000000000000000000000000000000000000000000000000000000000000",
+      "accepted": false,
+      "canonicalPublicKey": null
+    },
+    {
+      "name": "mutable-buffer",
+      "stackType": "Buffer",
+      "publicKey": "036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
+      "accepted": false,
+      "canonicalPublicKey": null
     }
   ]
 }

@@ -18,11 +18,62 @@ class VerificationGateTests(unittest.TestCase):
     def test_native_composite_phase_model_is_registered(self):
         self.assertIn('coq/NativeCompositePhase.v', verify.ARTIFACTS)
         model = (verify.ROOT / 'coq/NativeCompositePhase.v').read_text()
-        for name in ('old_entry_rejects_post', 'post_entry_rejects_validation', 'missing_grant_rejects',
-                     'both_entries_use_same_policy', 'nonboolean_not_support', 'post_plan_exact_support',
-                     'post_plan_preserves_membership', 'post_plan_preserves_uniqueness'):
+        for name in ('selection_preserves_membership', 'selection_preserves_uniqueness',
+                     'selection_has_exact_threshold', 'post_requires_application_operation',
+                     'local_receipt_requires_fresh_application_validation',
+                     'post_requires_current_policy', 'post_requires_all_active_pins',
+                     'post_plan_checks_even_unapproved_pins',
+                     'completion_rechecks_policy', 'verification_receipt_is_discarded',
+                     'operation_completion_discards_receipt', 'valid_receipt_completes'):
             self.assertIn(name, verify.coq_declarations(model))
-        self.assertEqual(6, len(verify.COQ_MODULES['NativeCompositePhase.v']))
+        self.assertGreaterEqual(len(verify.COQ_MODULES['NativeCompositePhase.v']), 20)
+        self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/MultiSigPolicy.v'])
+        self.assertEqual(['native'], verify.MODEL_PROFILES['coq/NativeCompositePhase.v'])
+
+    def test_native_composite_bounds_and_receipt_lifetime(self):
+        result = verify.check_native_composite_bounded()
+        self.assertEqual({'children': 3, 'threshold': 2, 'approved': 2, 'domains': 3}, result['caps'])
+        self.assertGreater(result['selectionCases'], 100)
+        self.assertGreater(result['validationCases'], 1000)
+        self.assertEqual(32, result['allActivePinCases'])
+        self.assertGreater(result['receiptCases'], 1000)
+        self.assertEqual('oneApplicationOperation', result['lifetime'])
+
+    def test_native_composite_post_checks_unapproved_children(self):
+        active = [1, 2, 3]
+        self.assertEqual([1, 2], verify.native_composite_post_plan([1, 2], active, 2, 3,
+                                                                {1: True, 2: True, 3: True}))
+        self.assertEqual([], verify.native_composite_post_plan([1, 2], active, 2, 3,
+                                                             {1: True, 2: True, 3: False}))
+        for reply in ('false', 'nonboolean', 'rejected'):
+            self.assertEqual([2], verify.native_composite_selection([1, 2], 1, [reply, 'true']))
+
+    def test_native_composite_profile_drift_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            relative = Path('docs/proposals/smartaccount-native-profile-v2-parameters.json')
+            destination = root / relative
+            destination.parent.mkdir(parents=True)
+            profile = json.loads((verify.ROOT.parent / relative).read_text())
+            for field, value in (('compositeVerifierMaxChildren', 10),
+                                 ('compositeVerifierMaxThreshold', 3),
+                                 ('compositeVerifierMaxApprovedChildren', 3),
+                                 ('compositeVerifierMaxSignerDomains', 4)):
+                changed = copy.deepcopy(profile); changed[field] = value
+                destination.write_text(json.dumps(changed))
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'Native composite profile'):
+                    verify.check_native_composite_bounded(root)
+            for section, field, value in (('compositeReceipt', 'verificationReceiptReused', True),
+                                          ('compositeReceipt', 'version', True),
+                                          ('compositeReceipt', 'selection', 'allValidChildren')):
+                changed = copy.deepcopy(profile); changed[section][field] = value
+                destination.write_text(json.dumps(changed))
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'Native composite profile'):
+                    verify.check_native_composite_bounded(root)
+            profile['compositeVerifierCallbacks']['validation']['safe'] = 0
+            destination.write_text(json.dumps(profile))
+            with self.assertRaisesRegex(ValueError, 'Native composite profile'):
+                verify.check_native_composite_bounded(root)
 
     def test_native_restricted_policy_is_registered_and_fail_closed(self):
         self.assertIn('coq/NativeRestrictedPolicy.v', verify.ARTIFACTS)

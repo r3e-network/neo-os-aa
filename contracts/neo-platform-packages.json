@@ -103,5 +103,9 @@
       "repositoryCommit": "055f250413bb6a3d13c5a37c74e595f219056d29",
       "availableOn": "nuget.org"
     }
+  ],
+  "sourceRuntimeProbeProjects": [
+    "tests/NativeModuleProbe/NativeModuleProbe.csproj",
+    "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj"
   ]
 }

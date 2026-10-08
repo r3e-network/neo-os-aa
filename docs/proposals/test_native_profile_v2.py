@@ -43,6 +43,129 @@ class NativeProfileV2Tests(unittest.TestCase):
             p.write_text(json.dumps(data))
         self.assertNotEqual(self.check(mutate).returncode, 0)
 
+    def test_composite_receipt_contract_cannot_be_weakened(self):
+        for old, replacement in (
+            ("validateCompositeSignature(accountId: Hash160, op: Array) -> Array",
+             "validateCompositeSignature(accountId: Hash160, op: Array) -> Boolean"),
+            ("postExecuteComposite(accountId: Hash160, op: Array, result: Any, receipt: Array) -> Void",
+             "postExecuteComposite(accountId: Hash160, op: Array, result: Any) -> Void"),
+            ("`[Boolean true, orderedApprovedChildren, policyCommitment32]`",
+             "`[true, anyChildren]`"),
+            ("Verification parses\nand discards its receipt.",
+             "Verification persists its receipt for Application."),
+            ("Recovery revokes both roots\nand deletes the registry without an external cleanup callback",
+             "Recovery preserves the registry until external cleanup succeeds"),
+        ):
+            def mutate(root):
+                p = root / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md"
+                text = p.read_text(); self.assertEqual(1, text.count(old))
+                p.write_text(text.replace(old, replacement))
+            with self.subTest(contract=old):
+                self.assertNotEqual(self.check(mutate).returncode, 0)
+
+    def test_self_consistent_digest_cannot_hide_weakened_composite_profile(self):
+        for field, changed in (("compositeVerifierMaxChildren", 10),
+                ("compositeVerifierMaxThreshold", 3),
+                ("moduleProfileDigestRequired", False),
+                ("compositeReceipt", {"version": 1, "verificationReceiptReused": True}),
+                ("nativeP256SignerDomain", {"scheme": "Secp256r1", "domainsPerKey": 2}),
+                ("nativeSessionSignerDomainStorage", {"policyPrefix": "05", "legacyFallback": True})):
+            def mutate(root):
+                path = root / PARAMETERS; data = json.loads(path.read_text())
+                old = json.dumps(data, sort_keys=True, separators=(",", ":"))
+                old_hash = hashlib.sha256(b"NeoSmartAccount/Profile\x02" + old.encode()).hexdigest()
+                data[field] = changed
+                new = json.dumps(data, sort_keys=True, separators=(",", ":"))
+                new_hash = hashlib.sha256(b"NeoSmartAccount/Profile\x02" + new.encode()).hexdigest()
+                path.write_text(json.dumps(data))
+                doc = root / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md"
+                doc.write_text(doc.read_text().replace(old, new).replace(old_hash, new_hash))
+                path = root / VECTORS; vectors = json.loads(path.read_text())
+                vectors["profileParameterDigest"] = new_hash; path.write_text(json.dumps(vectors))
+            with self.subTest(field=field): self.assertNotEqual(self.check(mutate).returncode, 0)
+
+    def test_self_consistent_profile_rejects_numeric_boolean_aliases(self):
+        for field, nested in (("compositeVerifierCallbacks", ("validation", "safe")),
+                ("compositeReceipt", ("verificationReceiptReused",)),
+                ("nativeSessionSignerDomainStorage", ("legacyFallback",)),
+                ("nativeSessionMetadataStorage", ("legacyFallback",)),
+                ("nativeWitnessSignerDomainStorage", ("legacyFallback",))):
+            def mutate(root):
+                path = root / PARAMETERS; data = json.loads(path.read_text())
+                old = json.dumps(data, sort_keys=True, separators=(",", ":"))
+                old_hash = hashlib.sha256(b"NeoSmartAccount/Profile\x02" + old.encode()).hexdigest()
+                target = data[field]
+                for key in nested[:-1]: target = target[key]
+                self.assertIs(target[nested[-1]], False); target[nested[-1]] = 0
+                new = json.dumps(data, sort_keys=True, separators=(",", ":"))
+                new_hash = hashlib.sha256(b"NeoSmartAccount/Profile\x02" + new.encode()).hexdigest()
+                path.write_text(json.dumps(data))
+                doc = root / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md"
+                doc.write_text(doc.read_text().replace(old, new).replace(old_hash, new_hash))
+                path = root / VECTORS; data = json.loads(path.read_text())
+                data["profileParameterDigest"] = new_hash; path.write_text(json.dumps(data))
+            with self.subTest(field=field): self.assertNotEqual(self.check(mutate).returncode, 0)
+
+    def test_session_domain_storage_preserves_public_record_and_fails_closed(self):
+        data = json.loads((ROOT / PARAMETERS).read_text())
+        self.assertEqual(data["nativeSessionSignerDomainStorage"], {
+            "policyPrefix": "05", "valueBytes": 32, "sessionRecordFields": 5,
+            "namespace": "authorityEpoch", "atomicWithSessionConfiguration": True,
+            "deletedWithSession": True, "readFresh": True, "legacyFallback": False,
+        })
+
+    def test_session_storage_optimization_keeps_metadata_abi_and_canonical_key(self):
+        data = json.loads((ROOT / PARAMETERS).read_text())
+        self.assertEqual(data["nativeSessionMetadataStorage"], {
+            "policyPrefix": "06", "valueType": "CanonicalUInt64NeoInteger", "metadataRecordFields": 3,
+            "storedMetadataLastUsedAt": 0, "sessionConfigurationInitialValue": 0,
+            "namespace": "authorityEpoch", "atomicWithSessionConfiguration": True,
+            "deletedWithSession": True, "readFresh": True, "legacyFallback": False,
+        })
+        self.assertEqual(data["nativeSessionPublicKey"], {
+            "acceptedEncodingBytes": [33, 65], "storedEncodingBytes": 33,
+            "normalization": "secp256r1DecodeThenCompress", "invalidPoint": "rejectAtomically",
+            "normalizationServiceMethod": "canonicalP256PublicKey",
+        })
+
+    def test_native_witness_domain_storage_preserves_configuration_abi(self):
+        data = json.loads((ROOT / PARAMETERS).read_text())
+        self.assertEqual(data["nativeWitnessSignerDomainStorage"], {
+            "policyPrefix": "03", "encoding": "orderedPackedByteString32", "maxDomains": 10,
+            "configurationRecordFields": 2, "namespace": "authorityEpoch", "atomicWithConfiguration": True,
+            "deletedWithAccountCleanup": True, "readFresh": True, "legacyFallback": False,
+        })
+
+    def test_p256_helper_abi_and_strict_point_vectors_are_bound(self):
+        data = json.loads((ROOT / PARAMETERS).read_text())
+        self.assertEqual(data["nativeP256Canonicalization"], {
+            "name": "canonicalP256PublicKey", "parameters": ["ByteArray"], "returnType": "ByteArray",
+            "safe": True, "requiredCallFlags": "None", "cpuFeeUnits": 32768,
+            "argumentStackType": "ByteString", "accountRegistrationRequired": False,
+            "algorithm": "compressedDecodeThenExactUncompressedRoundTrip", "ownedResult": True,
+        })
+        vectors = json.loads((ROOT / VECTORS).read_text())["p256Canonicalization"]
+        self.assertGreaterEqual(len(vectors), 8)
+        self.assertEqual(2, sum(v["accepted"] for v in vectors))
+        def mutate(root):
+            path = root / VECTORS; data = json.loads(path.read_text())
+            case = next(v for v in data["p256Canonicalization"] if v["name"] == "invalid-uncompressed-y")
+            case["accepted"] = True; case["canonicalPublicKey"] = data["nativeP256SignerDomain"]["publicKey"]
+            path.write_text(json.dumps(data))
+        self.assertNotEqual(self.check(mutate).returncode, 0)
+
+    def test_native_key_alias_and_receipt_vectors_are_independently_checked(self):
+        for variant in ("script", "domain", "approved-order", "policy", "receipt"):
+            def mutate(root):
+                p = root / VECTORS; data = json.loads(p.read_text())
+                if variant == "script": data["nativeP256SignerDomain"]["standardAccountScript"] = "40"
+                elif variant == "domain": data["nativeP256SignerDomain"]["domain"] = "00" * 32
+                elif variant == "approved-order": data["compositeReceipt"]["approvedChildrenWire"].reverse()
+                elif variant == "policy": data["compositeReceipt"]["threshold"] = 1
+                else: data["compositeReceipt"]["canonicalReceipt"] = "4000"
+                p.write_text(json.dumps(data))
+            with self.subTest(variant=variant): self.assertNotEqual(self.check(mutate).returncode, 0)
+
     def test_domain_counter_reorder_and_old_version_are_rejected_even_with_matching_hash(self):
         for variant in ("swap", "old-version", "omit-epoch"):
             def mutate(root):

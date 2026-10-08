@@ -12,27 +12,130 @@
   "authorizationVersion": 2,
   "batchMax": 32,
   "childConfiguration": true,
+  "compositeReceipt": {
+    "fields": [
+      "BooleanTrue",
+      "OrderedApprovedHash160Array",
+      "PolicyCommitmentByteString32"
+    ],
+    "lifetime": "oneApplicationOperation",
+    "policyCommitment": "SHA256(NeoBinarySerialize([threshold,orderedChildren,orderedChildSignerDomains]))",
+    "postSignatureRevalidation": false,
+    "selection": "firstThresholdValidChildren",
+    "verificationReceiptReused": false,
+    "version": 1
+  },
+  "compositeVerifierCallbacks": {
+    "postExecute": {
+      "name": "postExecuteComposite",
+      "parameters": [
+        "Hash160",
+        "Array",
+        "Any",
+        "Array"
+      ],
+      "returnType": "Void",
+      "safe": false
+    },
+    "validation": {
+      "name": "validateCompositeSignature",
+      "parameters": [
+        "Hash160",
+        "Array"
+      ],
+      "returnType": "Array",
+      "safe": false
+    }
+  },
+  "compositeVerifierMaxApprovedChildren": 2,
+  "compositeVerifierMaxChildren": 3,
+  "compositeVerifierMaxSignerDomains": 3,
+  "compositeVerifierMaxThreshold": 2,
   "configurationNonceWidthBits": 64,
   "custodyRecoveryDelayMs": 604800000,
-  "hookBudgetDatoshi": 250000000,
-  "identityVersion": 1,
-  "maintenanceBudgetDatoshi": 250000000,
-  "methodBytesMax": 128,
-  "moduleChangeDelayMs": 86400000,
-  "nativeSponsorship": false,
-  "profileVersion": 2,
-  "recoveryRevokesModules": true,
-  "serviceName": "AccountManagement",
-  "signatureBytesMax": 1024,
-  "verifierBudgetDatoshi": 100000000,
-  "executionCounterCommitments": [
-    "authorityEpoch",
-    "configurationNonce"
-  ],
   "executionArgumentOrder": [
     "accountId",
     "operationOrBatch",
     "expectedAuthorityEpoch",
     "expectedConfigurationNonce"
-  ]
+  ],
+  "executionCounterCommitments": [
+    "authorityEpoch",
+    "configurationNonce"
+  ],
+  "hookBudgetDatoshi": 250000000,
+  "identityVersion": 1,
+  "maintenanceBudgetDatoshi": 250000000,
+  "methodBytesMax": 128,
+  "moduleChangeDelayMs": 86400000,
+  "moduleCompositeVerifierMarkerRequired": true,
+  "moduleProfileDigestRequired": true,
+  "nativeP256Canonicalization": {
+    "accountRegistrationRequired": false,
+    "algorithm": "compressedDecodeThenExactUncompressedRoundTrip",
+    "argumentStackType": "ByteString",
+    "cpuFeeUnits": 32768,
+    "name": "canonicalP256PublicKey",
+    "ownedResult": true,
+    "parameters": [
+      "ByteArray"
+    ],
+    "requiredCallFlags": "None",
+    "returnType": "ByteArray",
+    "safe": true
+  },
+  "nativeP256SignerDomain": {
+    "canonicalSigner": "CreateStandardAccount(compressedSecp256r1PublicKey)",
+    "domainsPerKey": 1,
+    "scheme": "NativeScript"
+  },
+  "nativeSessionMetadataStorage": {
+    "atomicWithSessionConfiguration": true,
+    "deletedWithSession": true,
+    "legacyFallback": false,
+    "metadataRecordFields": 3,
+    "namespace": "authorityEpoch",
+    "policyPrefix": "06",
+    "readFresh": true,
+    "sessionConfigurationInitialValue": 0,
+    "storedMetadataLastUsedAt": 0,
+    "valueType": "CanonicalUInt64NeoInteger"
+  },
+  "nativeSessionPublicKey": {
+    "acceptedEncodingBytes": [
+      33,
+      65
+    ],
+    "invalidPoint": "rejectAtomically",
+    "normalization": "secp256r1DecodeThenCompress",
+    "normalizationServiceMethod": "canonicalP256PublicKey",
+    "storedEncodingBytes": 33
+  },
+  "nativeSessionSignerDomainStorage": {
+    "atomicWithSessionConfiguration": true,
+    "deletedWithSession": true,
+    "legacyFallback": false,
+    "namespace": "authorityEpoch",
+    "policyPrefix": "05",
+    "readFresh": true,
+    "sessionRecordFields": 5,
+    "valueBytes": 32
+  },
+  "nativeSponsorship": false,
+  "nativeWitnessSignerDomainStorage": {
+    "atomicWithConfiguration": true,
+    "configurationRecordFields": 2,
+    "deletedWithAccountCleanup": true,
+    "encoding": "orderedPackedByteString32",
+    "legacyFallback": false,
+    "maxDomains": 10,
+    "namespace": "authorityEpoch",
+    "policyPrefix": "03",
+    "readFresh": true
+  },
+  "profileVersion": 2,
+  "recoveryRevokesModules": true,
+  "serviceName": "AccountManagement",
+  "signatureBytesMax": 1024,
+  "verifierBudgetDatoshi": 100000000
 }

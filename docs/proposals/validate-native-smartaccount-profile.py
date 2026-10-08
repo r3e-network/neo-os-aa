@@ -53,6 +53,11 @@ for required in (
     "System.Contract.CallWithGasLimit",
     "validateSignature(accountId: Hash160, op: Array) -> Boolean",
     "postExecute(accountId: Hash160, op: Array, result: Any) -> Void",
+    "validateCompositeSignature(accountId: Hash160, op: Array) -> Array",
+    "postExecuteComposite(accountId: Hash160, op: Array, result: Any, receipt: Array) -> Void",
+    "`[Boolean true, orderedApprovedChildren, policyCommitment32]`",
+    "Verification parses\nand discards its receipt.",
+    "Recovery revokes both roots\nand deletes the registry without an external cleanup callback",
     "getSignerDomains(accountId: Hash160) -> Array",
     "preExecute(accountId: Hash160, op: Array) -> Void",
     "executeUserOp(accountId: Hash160, op: Array, expectedAuthorityEpoch: Integer, expectedConfigurationNonce: Integer) -> Any",
@@ -121,6 +126,11 @@ assert script == (
 )
 assert "0x" + hash160(script)[::-1].hex() == identity["accountAddressDisplay"]
 
+def exact_json_equal(actual, expected):
+    # Python considers False == 0 and True == 1; profile JSON does not.
+    return json.dumps(actual, sort_keys=True, separators=(",", ":")) == json.dumps(expected, sort_keys=True, separators=(",", ":"))
+
+
 PARAMETERS = json.loads((ROOT / "smartaccount-native-profile-v2-parameters.json").read_text())
 profile_json = json.dumps(PARAMETERS, sort_keys=True, separators=(",", ":"))
 assert PARAMETERS["abiVersion"] == PARAMETERS["accountRecordVersion"] == PARAMETERS["authorizationVersion"] == PARAMETERS["profileVersion"] == 2
@@ -130,6 +140,61 @@ assert PARAMETERS["authorizationDomainSuffix"] == ["authorityEpochLE64", "config
 assert PARAMETERS["recoveryRevokesModules"] is True
 assert PARAMETERS["executionArgumentOrder"] == ["accountId", "operationOrBatch", "expectedAuthorityEpoch", "expectedConfigurationNonce"]
 assert PARAMETERS["executionCounterCommitments"] == ["authorityEpoch", "configurationNonce"]
+assert PARAMETERS["moduleProfileDigestRequired"] is True
+assert PARAMETERS["moduleCompositeVerifierMarkerRequired"] is True
+assert PARAMETERS["compositeVerifierMaxChildren"] == PARAMETERS["compositeVerifierMaxSignerDomains"] == 3
+assert PARAMETERS["compositeVerifierMaxApprovedChildren"] == PARAMETERS["compositeVerifierMaxThreshold"] == 2
+assert exact_json_equal(PARAMETERS["compositeVerifierCallbacks"], {
+    "validation": {"name": "validateCompositeSignature", "parameters": ["Hash160", "Array"], "returnType": "Array", "safe": False},
+    "postExecute": {"name": "postExecuteComposite", "parameters": ["Hash160", "Array", "Any", "Array"], "returnType": "Void", "safe": False},
+})
+assert exact_json_equal(PARAMETERS["compositeReceipt"], {
+    "version": 1, "fields": ["BooleanTrue", "OrderedApprovedHash160Array", "PolicyCommitmentByteString32"],
+    "lifetime": "oneApplicationOperation", "verificationReceiptReused": False,
+    "policyCommitment": "SHA256(NeoBinarySerialize([threshold,orderedChildren,orderedChildSignerDomains]))",
+    "selection": "firstThresholdValidChildren", "postSignatureRevalidation": False,
+})
+assert exact_json_equal(PARAMETERS["nativeP256SignerDomain"], {
+    "scheme": "NativeScript", "canonicalSigner": "CreateStandardAccount(compressedSecp256r1PublicKey)", "domainsPerKey": 1,
+})
+assert exact_json_equal(PARAMETERS["nativeSessionSignerDomainStorage"], {
+    "policyPrefix": "05", "valueBytes": 32, "sessionRecordFields": 5,
+    "namespace": "authorityEpoch", "atomicWithSessionConfiguration": True,
+    "deletedWithSession": True, "readFresh": True, "legacyFallback": False,
+})
+assert "native SessionKey profile retains the five-field `getSessionKey` record" in DOCUMENT
+assert "stored separately under policy prefix `0x05`" in DOCUMENT
+assert "without falling back to the older storage layout" in DOCUMENT
+assert exact_json_equal(PARAMETERS["nativeSessionMetadataStorage"], {
+    "policyPrefix": "06", "valueType": "CanonicalUInt64NeoInteger", "metadataRecordFields": 3,
+    "storedMetadataLastUsedAt": 0, "sessionConfigurationInitialValue": 0,
+    "namespace": "authorityEpoch", "atomicWithSessionConfiguration": True,
+    "deletedWithSession": True, "readFresh": True, "legacyFallback": False,
+})
+assert exact_json_equal(PARAMETERS["nativeSessionPublicKey"], {
+    "acceptedEncodingBytes": [33, 65], "storedEncodingBytes": 33,
+    "normalization": "secp256r1DecodeThenCompress", "invalidPoint": "rejectAtomically",
+    "normalizationServiceMethod": "canonicalP256PublicKey",
+})
+assert "last-use time is stored separately under policy prefix `0x06`" in DOCUMENT
+assert "Negative, overflowing or redundantly encoded values MUST reject" in DOCUMENT
+assert "canonical compressed 33-byte representation" in DOCUMENT
+assert exact_json_equal(PARAMETERS["nativeWitnessSignerDomainStorage"], {
+    "policyPrefix": "03", "encoding": "orderedPackedByteString32", "maxDomains": 10,
+    "configurationRecordFields": 2, "namespace": "authorityEpoch", "atomicWithConfiguration": True,
+    "deletedWithAccountCleanup": True, "readFresh": True, "legacyFallback": False,
+})
+assert "native NeoNativeVerifier profile retains its two-field `getConfig` record" in DOCUMENT
+assert "values under policy prefix `0x03` in the same authority-epoch namespace" in DOCUMENT
+assert "missing, empty, misaligned or over-limit values without a legacy fallback" in DOCUMENT
+assert exact_json_equal(PARAMETERS["nativeP256Canonicalization"], {
+    "name": "canonicalP256PublicKey", "parameters": ["ByteArray"], "returnType": "ByteArray",
+    "safe": True, "requiredCallFlags": "None", "cpuFeeUnits": 32768,
+    "argumentStackType": "ByteString", "accountRegistrationRequired": False,
+    "algorithm": "compressedDecodeThenExactUncompressedRoundTrip", "ownedResult": True,
+})
+assert "canonicalP256PublicKey(publicKey: ByteArray) -> ByteArray" in DOCUMENT
+assert "compare the full\nuncompressed point encoding with the original bytes" in DOCUMENT
 assert "former two-argument entrypoints MUST NOT remain callable" in DOCUMENT
 assert PARAMETERS["verifierBudgetDatoshi"] == 100_000_000
 assert PARAMETERS["hookBudgetDatoshi"] == PARAMETERS["maintenanceBudgetDatoshi"] == 250_000_000
@@ -182,6 +247,76 @@ for name, vector in VECTORS["signerDomains"].items():
     material = signer_domain_prefix + bytes.fromhex(vector["schemeTag"])
     material += bytes.fromhex(vector["canonicalSignerMaterial"])
     assert hashlib.sha256(material).hexdigest() == vector["commitment"], name
+
+native_key = VECTORS["nativeP256SignerDomain"]
+public_key = bytes.fromhex(native_key["publicKey"])
+assert len(public_key) == 33 and public_key[0] in (2, 3)
+standard_script = b"\x0c\x21" + public_key + bytes.fromhex("4156e7b327")
+standard_hash = hash160(standard_script)
+assert native_key["standardAccountScript"] == standard_script.hex()
+assert native_key["scriptHashWire"] == standard_hash.hex()
+assert native_key["scriptHashDisplay"] == "0x" + standard_hash[::-1].hex()
+assert native_key["domain"] == hashlib.sha256(signer_domain_prefix + b"\x03" + standard_hash).hexdigest()
+assert native_key["nativeDomainsPerKey"] == 1
+
+def serialize_receipt_value(value):
+    # Deliberately small independent vector encoder, not a general Neo serializer.
+    if type(value) is bool:
+        return bytes([0x20, int(value)])
+    if type(value) is int:
+        assert 0 < value < 128
+        return bytes([0x21, 1, value])
+    if type(value) is bytes:
+        assert len(value) < 253
+        return bytes([0x28, len(value)]) + value
+    assert type(value) is list and len(value) < 253
+    return bytes([0x40, len(value)]) + b"".join(serialize_receipt_value(item) for item in value)
+
+# Independently check the curve equation rather than mirroring the host ECPoint
+# decoder. These public-key vectors establish shape/point identity, not ECDSA.
+def canonical_p256(raw):
+    prime = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff
+    curve_b = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b
+    if len(raw) == 33 and raw[0] in (2, 3):
+        x = int.from_bytes(raw[1:], "big")
+        if x >= prime: return None
+        square = (x*x*x - 3*x + curve_b) % prime
+        y = pow(square, (prime+1)//4, prime)
+        if y*y % prime != square: return None
+        if y % 2 != raw[0] % 2: y = prime-y
+    elif len(raw) == 65 and raw[0] == 4:
+        x, y = int.from_bytes(raw[1:33], "big"), int.from_bytes(raw[33:], "big")
+        if x >= prime or y >= prime or (y*y - x*x*x + 3*x - curve_b) % prime: return None
+    else: return None
+    return bytes([2 + y % 2]) + x.to_bytes(32, "big")
+
+p256_vectors = VECTORS["p256Canonicalization"]
+assert {v["name"] for v in p256_vectors} == {"compressed-generator", "uncompressed-generator", "invalid-uncompressed-y", "hybrid-prefix", "outside-field", "non-residue-x", "empty", "wrong-length", "mutable-buffer"}
+for vector in p256_vectors:
+    normalized = canonical_p256(bytes.fromhex(vector["publicKey"])) if vector["stackType"] == "ByteString" else None
+    assert type(vector["accepted"]) is bool and vector["accepted"] == (normalized is not None)
+    assert vector["canonicalPublicKey"] == (normalized.hex() if normalized is not None else None)
+
+receipt_vector = VECTORS["compositeReceipt"]
+children = [bytes.fromhex(value) for value in receipt_vector["orderedChildrenWire"]]
+domains = [[bytes.fromhex(value) for value in child] for child in receipt_vector["orderedChildDomains"]]
+threshold = receipt_vector["threshold"]
+assert 0 < len(children) <= PARAMETERS["compositeVerifierMaxChildren"] and len(set(children)) == len(children)
+assert all(len(child) == 20 for child in children) and len(domains) == len(children)
+assert all(child and all(len(domain) == 32 for domain in child) for child in domains)
+all_domains = [domain for child in domains for domain in child]
+assert len(set(all_domains)) == len(all_domains) <= PARAMETERS["compositeVerifierMaxSignerDomains"]
+assert type(threshold) is int and 0 < threshold <= min(len(children), PARAMETERS["compositeVerifierMaxThreshold"])
+approvals = receipt_vector["childApprovals"]
+assert len(approvals) == len(children) and all(type(value) is bool for value in approvals)
+selected = [child for child, approved in zip(children, approvals) if approved][:threshold]
+assert len(selected) == threshold <= PARAMETERS["compositeVerifierMaxApprovedChildren"]
+assert [value.hex() for value in selected] == receipt_vector["approvedChildrenWire"]
+policy = serialize_receipt_value([threshold, children, domains])
+commitment = hashlib.sha256(policy).digest()
+assert receipt_vector["canonicalPolicy"] == policy.hex()
+assert receipt_vector["policyCommitment"] == commitment.hex()
+assert receipt_vector["canonicalReceipt"] == serialize_receipt_value([True, selected, commitment]).hex()
 
 operation = VECTORS["operation"]
 # Reconstruct the domain from independent state fields; self-consistent message/hash

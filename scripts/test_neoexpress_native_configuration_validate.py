@@ -2,6 +2,7 @@
 import hashlib
 import unittest
 import neoexpress_native_configuration_validate as config
+from neoexpress_native_service_validate import DIGEST
 from neoexpress_validate import ValidationFailure
 
 
@@ -18,6 +19,28 @@ class NativeConfigurationTests(unittest.TestCase):
                 self.assertEqual("Void", methods["clearAccount"]["returntype"])
                 self.assertEqual(["Hash160", "Integer"], [a["type"] for a in methods["configure"]["parameters"]])
                 self.assertEqual(["configure"], manifest["extra"]["smartAccount"]["configurationMethods"])
+
+    def test_diagnostics_declare_exact_profile_and_verifier_only_composition(self):
+        for hook in (False, True):
+            for root in (False, True):
+                script, _, manifest = config.module_fixture(hook, root)
+                metadata = manifest['extra']['smartAccount']
+                self.assertEqual(DIGEST, metadata['profileDigest'])
+                self.assertIs(root and not hook, metadata['compositeVerifier'])
+                methods = {m['name']:m for m in manifest['abi']['methods']}
+                callbacks = {'validateCompositeSignature':('Array',['Hash160','Array']),
+                             'postExecuteComposite':('Void',['Hash160','Array','Any','Array'])}
+                for name,(result,types) in callbacks.items():
+                    if hook or not root:
+                        self.assertNotIn(name,methods)
+                    else:
+                        method=methods[name]
+                        self.assertEqual(result,method['returntype'])
+                        self.assertEqual(types,[p['type'] for p in method['parameters']])
+                        self.assertIs(False,method['safe'])
+                        self.assertEqual(b'\x57\x00'+bytes([len(types)])+b'\x38\x40',
+                                         script[method['offset']:method['offset']+5],
+                                         'Configuration-only diagnostic must abort execution callbacks')
 
     def test_destructive_fixture_contains_targeted_call_after_write(self):
         root = "0x" + "01" * 20

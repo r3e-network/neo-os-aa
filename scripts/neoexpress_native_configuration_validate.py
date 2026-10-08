@@ -13,7 +13,7 @@ import tempfile
 import time
 from neoexpress_validate import Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO, decode, hash_le, varint, serialize_unsigned, serialize_witnesses
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
-from neoexpress_native_service_validate import CORE, check_native, persist, transaction_system_fee
+from neoexpress_native_service_validate import CORE, DIGEST, check_native, persist, transaction_system_fee
 from neoexpress_native_proxy_validate import encode_value, push_bytes, check_transaction, check_fault, GAS
 
 MANAGEMENT = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"
@@ -39,6 +39,11 @@ def module_fixture(hook, root, destroy_target=None):
     method("preExecute" if hook else "validateSignature", "Void" if hook else "Boolean", False,
            ["Hash160", "Array"], b"" if hook else b"\x08")
     method("postExecute", "Void", False, ["Hash160", "Array", "Any"], b"")
+    if root and not hook:
+        # This fixture tests configuration rollback only. Its required composite
+        # entrypoints deliberately abort instead of inventing an approval receipt.
+        method("validateCompositeSignature", "Array", False, ["Hash160", "Array"], b"\x38")
+        method("postExecuteComposite", "Void", False, ["Hash160", "Array", "Any", "Array"], b"\x38")
     method("clearAccount", "Void", False, ["Hash160"], push_bytes(b"x") + syscall("System.Storage.GetContext") + syscall("System.Storage.Delete"))
     if not hook: method("getSignerDomains", "Array", True, ["Hash160"], encode_value(A(B(bytes([7]) * 32))))
     body = b"\x79" + push_bytes(b"x") + syscall("System.Storage.GetContext") + syscall("System.Storage.Put")
@@ -50,7 +55,8 @@ def module_fixture(hook, root, destroy_target=None):
     if destroy_target: name += "Destructive"
     manifest = {"name": name, "groups": [], "features": {}, "supportedstandards": [], "abi": {"methods": methods, "events": []},
                 "permissions": [{"contract": "*", "methods": "*"}], "trusts": [],
-                "extra": {"smartAccount": {"abiVersion": 2, "configurationMethods": ["configure"]}}}
+                "extra": {"smartAccount": {"abiVersion": 2, "profileDigest": DIGEST,
+                    "compositeVerifier": root and not hook, "configurationMethods": ["configure"]}}}
     script = bytes(script)
     body = b"NEF3" + b"Native configuration diagnostic".ljust(64, b"\x00") + bytes(5) + varint(len(script)) + script
     return script, body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4], manifest

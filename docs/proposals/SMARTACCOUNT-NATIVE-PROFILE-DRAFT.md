@@ -43,6 +43,9 @@ does not reverse the byte order a second time.
 | Account record version | `2` |
 | Authority epoch and configuration nonce | Separate unsigned 64-bit counters |
 | Native ABI version | `2` |
+| Maximum native verifier children | `3` |
+| Maximum native verifier threshold / approved children | `2` / `2` |
+| Maximum aggregate native signer domains | `3` |
 | Maximum batch size | `32` operations |
 | Maximum method length | `128` UTF-8 bytes |
 | Maximum argument count | `64` values |
@@ -78,13 +81,13 @@ For version 2, `CanonicalProfileParameterJsonUtf8` is exactly the following
 byte sequence:
 
 ```text
-{"abiVersion":2,"accountRecordVersion":2,"argumentCountMax":64,"argumentDepthMax":8,"argumentSizeMax":4096,"authorityEpochWidthBits":64,"authorizationDomainSuffix":["authorityEpochLE64","configurationNonceLE64"],"authorizationVersion":2,"batchMax":32,"childConfiguration":true,"configurationNonceWidthBits":64,"custodyRecoveryDelayMs":604800000,"executionArgumentOrder":["accountId","operationOrBatch","expectedAuthorityEpoch","expectedConfigurationNonce"],"executionCounterCommitments":["authorityEpoch","configurationNonce"],"hookBudgetDatoshi":250000000,"identityVersion":1,"maintenanceBudgetDatoshi":250000000,"methodBytesMax":128,"moduleChangeDelayMs":86400000,"nativeSponsorship":false,"profileVersion":2,"recoveryRevokesModules":true,"serviceName":"AccountManagement","signatureBytesMax":1024,"verifierBudgetDatoshi":100000000}
+{"abiVersion":2,"accountRecordVersion":2,"argumentCountMax":64,"argumentDepthMax":8,"argumentSizeMax":4096,"authorityEpochWidthBits":64,"authorizationDomainSuffix":["authorityEpochLE64","configurationNonceLE64"],"authorizationVersion":2,"batchMax":32,"childConfiguration":true,"compositeReceipt":{"fields":["BooleanTrue","OrderedApprovedHash160Array","PolicyCommitmentByteString32"],"lifetime":"oneApplicationOperation","policyCommitment":"SHA256(NeoBinarySerialize([threshold,orderedChildren,orderedChildSignerDomains]))","postSignatureRevalidation":false,"selection":"firstThresholdValidChildren","verificationReceiptReused":false,"version":1},"compositeVerifierCallbacks":{"postExecute":{"name":"postExecuteComposite","parameters":["Hash160","Array","Any","Array"],"returnType":"Void","safe":false},"validation":{"name":"validateCompositeSignature","parameters":["Hash160","Array"],"returnType":"Array","safe":false}},"compositeVerifierMaxApprovedChildren":2,"compositeVerifierMaxChildren":3,"compositeVerifierMaxSignerDomains":3,"compositeVerifierMaxThreshold":2,"configurationNonceWidthBits":64,"custodyRecoveryDelayMs":604800000,"executionArgumentOrder":["accountId","operationOrBatch","expectedAuthorityEpoch","expectedConfigurationNonce"],"executionCounterCommitments":["authorityEpoch","configurationNonce"],"hookBudgetDatoshi":250000000,"identityVersion":1,"maintenanceBudgetDatoshi":250000000,"methodBytesMax":128,"moduleChangeDelayMs":86400000,"moduleCompositeVerifierMarkerRequired":true,"moduleProfileDigestRequired":true,"nativeP256Canonicalization":{"accountRegistrationRequired":false,"algorithm":"compressedDecodeThenExactUncompressedRoundTrip","argumentStackType":"ByteString","cpuFeeUnits":32768,"name":"canonicalP256PublicKey","ownedResult":true,"parameters":["ByteArray"],"requiredCallFlags":"None","returnType":"ByteArray","safe":true},"nativeP256SignerDomain":{"canonicalSigner":"CreateStandardAccount(compressedSecp256r1PublicKey)","domainsPerKey":1,"scheme":"NativeScript"},"nativeSessionMetadataStorage":{"atomicWithSessionConfiguration":true,"deletedWithSession":true,"legacyFallback":false,"metadataRecordFields":3,"namespace":"authorityEpoch","policyPrefix":"06","readFresh":true,"sessionConfigurationInitialValue":0,"storedMetadataLastUsedAt":0,"valueType":"CanonicalUInt64NeoInteger"},"nativeSessionPublicKey":{"acceptedEncodingBytes":[33,65],"invalidPoint":"rejectAtomically","normalization":"secp256r1DecodeThenCompress","normalizationServiceMethod":"canonicalP256PublicKey","storedEncodingBytes":33},"nativeSessionSignerDomainStorage":{"atomicWithSessionConfiguration":true,"deletedWithSession":true,"legacyFallback":false,"namespace":"authorityEpoch","policyPrefix":"05","readFresh":true,"sessionRecordFields":5,"valueBytes":32},"nativeSponsorship":false,"nativeWitnessSignerDomainStorage":{"atomicWithConfiguration":true,"configurationRecordFields":2,"deletedWithAccountCleanup":true,"encoding":"orderedPackedByteString32","legacyFallback":false,"maxDomains":10,"namespace":"authorityEpoch","policyPrefix":"03","readFresh":true},"profileVersion":2,"recoveryRevokesModules":true,"serviceName":"AccountManagement","signatureBytesMax":1024,"verifierBudgetDatoshi":100000000}
 ```
 
 The resulting version-2 digest is:
 
 ```text
-a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e
+4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4
 ```
 
 ## 4. Native identity and activation
@@ -104,7 +107,7 @@ The service MUST publish the following native manifest metadata:
 {
   "smartAccount": {
     "abiVersion": 2,
-    "profileParameterDigest": "a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e"
+    "profileParameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"
   }
 }
 ```
@@ -563,6 +566,16 @@ recovery/reinstall isolation vectors. Migration of an existing ABI 1 account
 record requires a separately activated, deterministic migration routine; there
 is no implicit interpretation of a 13-field record as ABI 2.
 
+Every module manifest MUST additionally declare `extra.smartAccount.profileDigest`
+as exactly 64 lowercase hexadecimal characters equal to the service's
+`profileParameterDigest`, and `extra.smartAccount.compositeVerifier` as an exact
+JSON Boolean. The latter is `true` only for a verifier using the composite receipt
+callbacks; verifier `supportsComposition()` MUST return the same value. Hooks
+MUST declare `false`; their independent hook-composition discovery is unchanged.
+Missing, mismatched or incorrectly typed declarations MUST fail admission. The
+packager computes the fingerprint from the canonical parameter JSON; it MUST NOT
+infer compatibility from a compiler label or silently supply an old fingerprint.
+
 ## 8. Module binding and code identity
 
 An installed verifier MUST expose exactly:
@@ -571,6 +584,37 @@ An installed verifier MUST expose exactly:
 validateSignature(accountId: Hash160, op: Array) -> Boolean
 postExecute(accountId: Hash160, op: Array, result: Any) -> Void
 ```
+
+A composite verifier MUST additionally expose both non-safe callback descriptors:
+
+```text
+validateCompositeSignature(accountId: Hash160, op: Array) -> Array
+postExecuteComposite(accountId: Hash160, op: Array, result: Any, receipt: Array) -> Void
+```
+
+The first callback is invoked with `ReadOnly` despite its non-safe descriptor.
+It MUST return an exact three-element Array:
+`[Boolean true, orderedApprovedChildren, policyCommitment32]`. The approved
+children MUST form a nonempty, ordered, unique subset of the current active
+verifier children, represented by exact 20-byte ByteStrings. The policy
+commitment MUST be an exact 32-byte ByteString. The fixed profile bounds apply
+to child count, approved count, threshold and aggregate signer domains.
+
+`AccountManagement` MUST strictly parse and copy the result before any target
+call. The receipt is owned by one Application operation; it MUST NOT be stored
+in contract storage, accepted from transaction arguments, shared with another
+operation, or carried from Verification into Application. Verification parses
+and discards its receipt. Application performs fresh validation and retains its
+own receipt only until that operation's post callback completes or faults.
+Batch operations each produce a new receipt. The composite post callback uses
+the validated selection without repeating child signature verification. Its
+authenticated child grant is restricted to the approved subset, while the core
+still checks the code bindings of every currently active child.
+
+This is an amendment to the unreleased ABI 2 draft. Profile discovery MUST bind
+the composite callback and receipt semantics, together with the measured fixed
+composition limits, into the authoritative parameter digest. Matching only the
+ABI number or a `native-v2` label is insufficient to admit a prior draft module.
 
 A leaf verifier MUST additionally expose the safe discovery method:
 
@@ -596,6 +640,73 @@ the complete set of signer domains that can authorize the account, not only
 the signer used by the current operation. A dynamic policy whose signer set
 cannot be represented statically MUST return an empty array and is not an
 eligible child of `MultiSigVerifier` in version 2.
+
+Native ABI 2 normalizes every P-256 public-key authorizer to exactly one native
+standard-account domain: `NativeScript(CreateStandardAccount(compressedPublicKey))`.
+Its scheme tag is `0x03`, and its signer material is the standard account's
+20-byte script hash in wire order. Session-key and native-witness verifiers
+using the same private key therefore expose the same domain and cannot count
+as two independent approvals. The legacy non-native `0x02` key domain remains
+separate. This rule does not establish independent ownership of arbitrary scripts.
+
+The native SessionKey profile retains the five-field `getSessionKey` record.
+Its canonical signer domain is stored separately under policy prefix `0x05`
+in the same authority-epoch namespace, as exactly 32 raw bytes. Configuring a
+session MUST derive this value from the configured public key and write both
+entries atomically; clearing the session MUST delete both entries. Signer-domain
+discovery MUST freshly read this entry and reject a missing or malformed value,
+without falling back to the older storage layout. This is deterministic
+configuration data, not an approval receipt or cache; recovery isolates it by
+advancing the authority epoch. Domain discovery and policy commitments are still
+checked during validation and before and after composite post-execution.
+
+Native session configuration accepts valid compressed 33-byte and uncompressed
+65-byte secp256r1 public keys, decodes the curve point before use, and stores the
+canonical compressed 33-byte representation. Invalid curve encodings MUST reject
+the whole configuration transaction. Both encodings of the same point MUST
+produce the same standard account and signer domain.
+
+`canonicalP256PublicKey(publicKey: ByteArray) -> ByteArray` is a safe, pure native
+method with required call flags `None` and a base CPU fee of `32768` units (before
+the execution-fee factor). Its VM argument MUST be an exact ByteString; Buffer,
+Integer, Boolean, Array and null are rejected. It requires no registered account.
+The method MUST decode a valid 33-byte compressed point. For a 65-byte input,
+it MUST decompress the supplied X coordinate and Y parity, then compare the full
+uncompressed point encoding with the original bytes before returning an owned
+33-byte compressed encoding. Checking length or parity alone is insufficient.
+The native SessionKey module MUST invoke this helper before configuration writes
+and explicitly declare its service-method permission in the manifest. The helper
+has no storage writes, notifications, module grants or external callbacks.
+
+Native session last-use time is stored separately under policy prefix `0x06`
+in the same authority-epoch namespace, as an unsigned 64-bit value in canonical
+NeoVM Integer byte encoding, initialized to zero atomically with session
+configuration. Negative, overflowing or redundantly encoded values MUST reject.
+Prefix `0x02` retains the three-field metadata record `[CreatedAt, 0, Description]`; the public metadata getter MUST
+freshly read `0x06` and project the original `[CreatedAt, LastUsedAt, Description]`
+shape. Post-execution updates `0x06` without rewriting the description. Missing or
+malformed `0x06` values MUST fail closed without a legacy fallback. Session
+revocation removes prefixes `0x01`, `0x02`, `0x03`, `0x05`, and `0x06` while
+retaining the `0x04` rotation timestamp; account cleanup removes all six prefixes.
+
+The native NeoNativeVerifier profile retains its two-field `getConfig` record.
+It stores the configured signer domains, in signer order, as concatenated 32-byte
+values under policy prefix `0x03` in the same authority-epoch namespace. `setConfig`
+MUST derive and atomically replace this entry with the signer configuration;
+account cleanup MUST delete it. Discovery MUST freshly read this entry and reject
+missing, empty, misaligned or over-limit values without a legacy fallback. The
+storage supports the existing maximum of ten configured witness signers; the
+native composite still independently enforces at most three aggregate signer
+domains. This stores deterministic identities, not witness or signature approvals.
+
+For the native MultiSig profile, the policy commitment is exactly
+`SHA256(NeoBinarySerialize([Integer threshold, Array orderedChildren, Array orderedChildSignerDomains]))`.
+Each child identity is a 20-byte ByteString; each child-domain entry is an Array
+of exact 32-byte ByteStrings in discovery order. Validation selects the first
+`threshold` valid children in configured order, and passes only that selection
+to post-execution. The root checks a fresh policy commitment before and after
+the child post callbacks. It never replaces cryptographic validation with a
+persistent approval cache.
 
 An installed hook MUST expose exactly:
 
@@ -628,13 +739,13 @@ recursive composition is not part of this profile.
 When a composite is bound, `AccountManagement` MUST validate every child as a
 deployed module with the exact lifecycle ABI above, require a `false`
 `supportsComposition()` result, reject zero, duplicate, and self identities,
-and enforce a maximum of 10 verifier children and 8 hook children.
+and enforce the fixed verifier composition limits and a maximum of 8 hook children.
 Signer-domain discovery applies to verifier children only: each MUST return a
 non-empty `getSignerDomains` result, with no duplicate commitments within or
 across children. Hook children do not implement signer-domain discovery.
-`MultiSigVerifier` MUST repeat the domain
-separation check before validation and before verifier post-execution so a
-child configuration change cannot invalidate the binding invariant. The
+`MultiSigVerifier` MUST bind its configured policy and approved child selection
+to the transient receipt. Its post callback MUST reject a policy commitment
+that does not match the current configured policy. The
 native core MUST record the validated child list in a core-owned,
 account-scoped dependency registry; the composite MUST NOT own the
 authoritative cleanup roster.
@@ -683,8 +794,9 @@ module if its current code identity differs from the stored binding.
 Native contracts, including `AccountManagement` itself, MUST NOT be installed as
 verifiers or hooks in version 2.
 
-The native service MUST call `validateSignature` with `ReadOnly`, and MUST call
-the verifier's `postExecute`, every hook callback, and the target method with
+The native service MUST call `validateSignature` or `validateCompositeSignature`
+with `ReadOnly`, and MUST call the verifier's `postExecute` or
+`postExecuteComposite`, every hook callback, and the target method with
 `All`. The fixed flags are not operation fields and cannot be weakened or
 expanded by a caller.
 
@@ -815,7 +927,8 @@ A configurable module MUST declare an array of unique method names at
 configuration capability. The selected deployed ABI method MUST be listed,
 non-safe, have exactly one more parameter than the supplied argument count,
 and have `Hash160` as its first parameter. The lifecycle methods
-`validateSignature`, `preExecute`, `postExecute`, `clearAccount`,
+`validateSignature`, `validateCompositeSignature`, `postExecuteComposite`,
+`validateSignatureForPostExecute`, `preExecute`, `postExecute`, `clearAccount`,
 `supportsComposition` and `getSignerDomains` MUST NOT appear in this list.
 Metadata is part of the pinned code identity. It is a capability declaration,
 not a proof that an arbitrary plugin confines its own writes to that account.
@@ -871,7 +984,7 @@ The core keeps, separately for each account and role:
    leaves not yet published as active;
 3. the ordered active child hash list.
 
-Both rosters are bounded by 10 verifier leaves or 8 hook leaves. Each identity is
+Both rosters are bounded by the fixed verifier child limit or 8 hook leaves. Each identity is
 non-zero, distinct from the root and all other entries, non-native, deployed,
 unblocked, and pinned to its current code. The active list is a subset of the
 cleanup roster. Leaf admission and, for verifier children, non-empty disjoint
@@ -884,7 +997,9 @@ active leaves and enrolled-but-inactive leaves retain their state. Publishing an
 empty active list cleans previously active leaves; final root removal additionally
 cleans every enrolled-but-inactive leaf. The core then empties the registry before
 calling the old root's cleanup. Root or leaf faults roll back the entire update.
-Recovery and freeze preserve the registry because they preserve installed roots.
+Freeze preserves the installed roots and registry. Recovery revokes both roots
+and deletes the registry without an external cleanup callback, as specified in
+section 7; old module state remains unreachable through its prior authority epoch.
 
 The registry query is safe and faults for an unknown account:
 
@@ -899,15 +1014,14 @@ A composite's claimed profile name does not establish honest behavior; only
 conforming, independently reviewed MultiSigVerifier and MultiHook profiles may
 be treated as those profiles. Arbitrary module behavior remains a trust boundary.
 
-The native MultiSig module profile uses a separate read-only leaf method,
-`validateSignatureForPostExecute(accountId: Hash160, op: Array) -> Boolean`,
-for post-execution approval checks. It requires the exact `postExecute` grant;
-it MUST NOT broaden the ordinary `validateSignature` entry to accept that phase.
-The same leaf policy is evaluated without state debit, after which only approving
-children receive their post callbacks. The module-specific requirements are in
-`SMARTACCOUNT-NATIVE-MULTISIG.md`; this additional leaf method is not a new native
-service method or a new authority phase. Descendant calls still share the root
-callback's fixed budget.
+The native MultiSig module profile uses the core-owned transient receipt for
+post-execution approval selection. The historical leaf
+`validateSignatureForPostExecute` method, if retained for compatibility, is not
+used by this composite path and MUST NOT be exposed as a configuration capability.
+Ordinary `validateSignature` remains restricted to the validation grant. Receipt
+handling creates no new authority phase. Descendant calls still share the root
+callback's fixed budget. Module policy commitment rules are defined in
+`SMARTACCOUNT-NATIVE-MULTISIG.md`.
 
 Discovery and cleanup performed by a registry continuation inside a composite
 maintenance callback inherit that callback's remaining budget and fixed flags;
@@ -915,7 +1029,7 @@ they MUST NOT allocate another equal maintenance budget beneath it. Direct
 maintenance roots still receive the full fixed callback cap, subject to the
 transaction and ancestor admission checks in section 10.
 
-Pending call records and dependency records do not alter the thirteen-field
+Pending call records and dependency records do not alter the fourteen-field
 account record. Implementations MUST preserve these logical records across
 serialization and rollback; no client may infer authorization from storage keys.
 
@@ -980,7 +1094,7 @@ The execution order is:
 6. consume the nonce;
 7. call hook `preExecute`;
 8. call the target with exactly the supplied method and arguments;
-9. call hook `postExecute`, then verifier `postExecute`;
+9. call hook `postExecute`, then verifier `postExecute` or `postExecuteComposite`;
 10. emit `UserOpExecuted` and clear temporary state.
 
 `executeUserOps` MUST validate that `ops` is non-empty, contains no more than
@@ -996,12 +1110,12 @@ The effective normative order, without shorthand, is:
 lock
 validate
 deadline-and-nonce-check
-validateSignature or native-witness fallback
+validateSignature, validateCompositeSignature, or native-witness fallback
 consume-nonce
 hook.preExecute
 target call
 hook.postExecute
-verifier.postExecute
+verifier.postExecute or verifier.postExecuteComposite(owned receipt)
 UserOpExecuted
 unlock
 ```
@@ -1211,6 +1325,7 @@ getAccount(accountId: Hash160) -> Any
 getAccountAddress(accountId: Hash160) -> Hash160
 getNonce(accountId: Hash160, channel: Integer) -> Integer
 getAuthorityEpoch(accountId: Hash160) -> Integer
+canonicalP256PublicKey(publicKey: ByteArray) -> ByteArray
 getAuthorizationDomain(accountId: Hash160) -> ByteArray
 getOperationDigest(accountId: Hash160, op: Array) -> ByteArray
 verify(accountId: Hash160) -> Boolean
@@ -1304,7 +1419,7 @@ The normative event parameter types and order are:
 
 Unknown-account queries for `getAccountAddress`, `getNonce`, and
 `getOperationDigest`, `getAuthorizationDomain`, and `getAuthorityEpoch` MUST fault.
-Only `getVersion` remains callable after activation without an account record. Every malformed
+`getVersion` and `canonicalP256PublicKey` require no account record after activation. Every malformed
 ABI value, invalid authority, stale delayed transition, missing module, blocked
 module, callback budget exhaustion, target fault, and wrong callback result
 type MUST fault and MUST preserve the outer application-state rollback rule.

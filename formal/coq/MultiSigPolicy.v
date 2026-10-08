@@ -1,4 +1,6 @@
-(* Independent threshold-policy model, manually related to MultiSigVerifier.cs.
+(* PUBLIC V3 / PLATFORM ONLY: ten-child threshold policy. Native ABI 2 uses
+   NativeCompositePhase.v and its bounded per-operation receipt instead.
+   Independent threshold-policy model, manually related to MultiSigVerifier.cs.
    IDs abstract nonzero contract hashes; approve abstracts normal true returns.
    A null signature, false return or catchable child failure maps to false.
    Distinct contract IDs do NOT imply distinct owners/keys/trust domains.

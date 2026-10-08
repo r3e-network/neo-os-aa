@@ -1,7 +1,10 @@
 const test = require("node:test"),
   assert = require("node:assert/strict"),
   crypto = require("node:crypto");
-const { nativeCodec: c } = require("../src/native");
+const {
+  nativeCodec: c,
+  NATIVE_PROFILE_PARAMETER_DIGEST: PROFILE,
+} = require("../src/native");
 const { createNativeTransactionTools } = require("../src/native/transaction");
 function signer() {
   const { privateKey, publicKey } = crypto.generateKeyPairSync("ec", {
@@ -79,6 +82,7 @@ function fixture() {
   const calls = [];
   const client = {
     networkMagic: 123,
+    profileParameterDigest: PROFILE,
     revalidatePlan: async () => true,
     simulate: async () => ({
       state: "HALT",
@@ -326,7 +330,12 @@ function verifierFixture(multi = false) {
         trusts: [],
         extra: {
           SmartAccountProfile: "native-v2",
-          smartAccount: { configurationMethods: ["setConfig"] },
+          smartAccount: {
+            abiVersion: 2,
+            profileDigest: PROFILE,
+            compositeVerifier: name === "MultiSigVerifier",
+            configurationMethods: ["setConfig"],
+          },
         },
       },
     };
@@ -636,5 +645,35 @@ test("malformed simulation and non-true transfer results cannot reach transactio
       await f.tool.signNativeTransaction(f.client, prepared);
     }, /stack|result|transfer/i);
     assert.equal(signatures, 0);
+  }
+});
+
+test("verifier admission refuses even code-pinned modules with mismatched profile or composition metadata", async () => {
+  const { moduleCodeHash } =
+    require("../src/native/moduleIdentity").codeIdentityTools(c);
+  for (const change of [
+    (m) => delete m.abiVersion,
+    (m) => (m.abiVersion = 1),
+    (m) => (m.abiVersion = "2"),
+    (m) => delete m.profileDigest,
+    (m) => (m.profileDigest = "00".repeat(32)),
+    (m) => delete m.compositeVerifier,
+    (m) => (m.compositeVerifier = "false"),
+    (m) => (m.compositeVerifier = true),
+  ]) {
+    const f = verifierFixture();
+    const module = f.contracts.get(f.root);
+    change(module.manifest.extra.smartAccount);
+    const pin = { contract: f.root, codeHash: moduleCodeHash(module) };
+    f.plan.preparedOperations[0].account.verifier = pin;
+    f.setRegistry({ root: pin, cleanupBindings: [], activeChildren: [] });
+    await assert.rejects(
+      () =>
+        f.tool.prepareNativeTransaction(f.client, f.plan, {
+          ...f.options,
+          verifierSigners: [f.payer],
+        }),
+      /profile|composition/i,
+    );
   }
 });

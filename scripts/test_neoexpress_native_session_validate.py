@@ -12,6 +12,15 @@ from neoexpress_native_session_validate import signing_preimage, serialize_value
 
 
 class NativeSessionTests(unittest.TestCase):
+    def test_native_session_domain_equals_the_standard_account_authority(self):
+        import neoexpress_native_session_validate as session
+        key=bytes.fromhex('036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296')
+        expected=bytes.fromhex('95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528')
+        self.assertEqual(expected,session.native_session_signer_domain(key))
+        self.assertNotEqual(hashlib.sha256(b'NeoSmartAccount/SignerDomain\x01\x02'+key).digest(),expected)
+        for invalid in (b'',bytes(33),b'\x04'+bytes(32),b'\x04'+bytes(64),key.hex(),bytearray(key)):
+            with self.assertRaises(ValidationFailure):session.native_session_signer_domain(invalid)
+
     def test_explicit_target_scope_preserves_default_and_allows_negative_controls(self):
         from neoexpress_native_proxy_validate import GAS_TOKEN
         from neoexpress_validate import aa_proxy_rules
@@ -110,7 +119,7 @@ class NativeSessionTests(unittest.TestCase):
         from neoexpress_native_daily_validate import DailyTransactions
         from neoexpress_native_restricted_validate import RestrictedTransactions
         from neoexpress_validate import hash_le
-        for cls,count in ((SessionTransactions,4),(DailyTransactions,6),(RestrictedTransactions,2)):
+        for cls,count in ((SessionTransactions,6),(DailyTransactions,6),(RestrictedTransactions,2)):
             calls=[]
             def rpc(method,args):
                 calls.append((method,args))

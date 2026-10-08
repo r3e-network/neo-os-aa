@@ -121,7 +121,7 @@ test("public restore gate excludes native projects while explicit native scope i
   const all = listProjects(repoRoot, { includeNative: true });
   const native = all.filter((project) => project.startsWith("contracts/native/"));
   assert.equal(projects.length, 26);
-  assert.equal(all.length, 34);
+  assert.equal(all.length, 36);
   assert.ok(all.includes("tests/NativeEpochProbe/NativeEpochProbe.csproj"));
   assert.ok(all.includes("tests/NativeEpochProbe/contracts/NativeEpochCore.csproj"));
   assert.ok(projects.every((project) => !project.startsWith("tests/NativeEpochProbe/")));
@@ -130,6 +130,25 @@ test("public restore gate excludes native projects while explicit native scope i
   assert.ok(native.every((project) => lockFileFor(project, all).endsWith(`packages.${path.basename(project, ".csproj")}.lock.json`)));
   const missing = native.map((project) => ({ project, file: lockFileFor(project, all), lock: null }));
   assert.equal(lockFileProblems(missing, manifest).length, 6);
+});
+
+test("runtime probe project inventory is explicit in the audited manifest", () => {
+  const changed = { ...manifest, sourceRuntimeProbeProjects: [] };
+  assert.match(pinConsistencyProblems({ propsVersion: manifest.frameworkVersion, manifest: changed }).join("\n"), /source runtime probe project inventory/);
+});
+
+test("source-runtime probe hosts lock no NuGet dependency graph", () => {
+  const all = listProjects(repoRoot, { includeNative: true });
+  for (const project of ["tests/NativeModuleProbe/NativeModuleProbe.csproj", "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj"]) {
+    assert.ok(all.includes(project));
+    assert.ok(!projects.includes(project));
+    const file = lockFileFor(project, all);
+    const empty = { version: 1, dependencies: { "net10.0": {} } };
+    assert.deepEqual(lockFileProblems([{ project, file, lock: empty }], manifest), []);
+    for (const lock of [{}, { version: 1, dependencies: {} }, { version: 1, dependencies: { "net10.0": { Neo: { type: "Direct", resolved: "3.10.1" } } } }]) {
+      assert.ok(lockFileProblems([{ project, file, lock }], manifest).length > 0);
+    }
+  }
 });
 
 test("epoch probe locks the actual Testing and Framework dependencies independently", () => {

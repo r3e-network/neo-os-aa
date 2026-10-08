@@ -52,10 +52,18 @@ Native modules are built separately by `scripts/build_native_modules.py`. Its
 six projects obey the same root `Directory.Build.props`, `nuget.config` and
 reviewed per-project locks; a missing or changed lock is a build failure. The
 packager requires `native-v2`, exact Array callbacks, ABI 2 metadata and explicit
-`getAuthorityEpoch` permission. It records original/prepared sources and both
+`getAuthorityEpoch` permission. SessionKeyVerifier additionally requires explicit
+`canonicalP256PublicKey` permission on the fixed native service. Every module
+declares the exact parameter
+fingerprint and a Boolean verifier-composition marker; composite verifiers must
+expose the additional receipt validation and post-execution callbacks. It records original/prepared sources and both
 raw/packaged artifact bytes, then compares two independent scratch builds.
 Run `node scripts/check_neo_platform_packages.mjs --include-native` for all
-34 projects, including the two test-only epoch probe projects, before building. Native runner provenance must independently pin the
+36 projects, including two test-only epoch probe projects and two source-runtime
+probe hosts, before building. The runtime hosts use no NuGet packages: their
+committed locks must contain an empty net10.0 dependency graph, and their Neo
+assemblies must come from an explicitly validated source-built runtime. Native
+runner provenance must independently pin the
 reviewed core and node/RPC sources; public compile success does not establish
 native activation or fee-estimation compatibility.
 

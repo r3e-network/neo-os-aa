@@ -6,11 +6,23 @@ using Neo.SmartContract.Framework.Services;
 
 // Test-only service ABI fixture. Installed into an in-memory public NeoVM at the
 // private service hash; it is not the native service or recovery implementation.
-[ContractPermission("*", "postExecute")]
+[ContractPermission("*", "validateCompositeSignature", "postExecuteComposite")]
 public class NativeEpochCore : SmartContract
 {
     [Safe]
     public static bool HasModuleContext(UInt160 account, string role, UInt160 module, string phase) => true;
+
+    // This deliberately narrow epoch fixture receives only known compressed keys.
+    // The production native helper's full 33/65 normalization is covered separately
+    // by core NeoVM tests and the real native module probe.
+    [Safe]
+    public static ByteString CanonicalP256PublicKey(ByteString publicKey)
+    {
+        ExecutionEngine.Assert(publicKey.Length == 33 && (publicKey[0] == 2 || publicKey[0] == 3),
+            "Epoch fixture requires a canonical compressed P-256 key");
+        ExecutionEngine.Assert(Contract.CreateStandardAccount((ECPoint)publicKey).IsValid);
+        return publicKey;
+    }
 
     [Safe]
     public static object GetAuthorityEpoch(UInt160 account)
@@ -30,13 +42,15 @@ public class NativeEpochCore : SmartContract
 
     public static object CallPostAndReturn(UInt160 root, UInt160 account, object[] operation, object result)
     {
-        Contract.Call(root, "postExecute", CallFlags.All, new object[] { account, operation, result });
+        object[] receipt = (object[])Contract.Call(root, "validateCompositeSignature", CallFlags.ReadOnly, new object[] { account, operation });
+        Contract.Call(root, "postExecuteComposite", CallFlags.All, new object[] { account, operation, result, receipt });
         return result;
     }
 
     public static void CallPostWithIterator(UInt160 root, UInt160 account, object[] operation)
     {
         object result = Storage.Find(Storage.CurrentContext, new byte[] { 0xff }, FindOptions.KeysOnly);
-        Contract.Call(root, "postExecute", CallFlags.All, new object[] { account, operation, result });
+        object[] receipt = (object[])Contract.Call(root, "validateCompositeSignature", CallFlags.ReadOnly, new object[] { account, operation });
+        Contract.Call(root, "postExecuteComposite", CallFlags.All, new object[] { account, operation, result, receipt });
     }
 }

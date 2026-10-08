@@ -11,7 +11,41 @@ external cleanup. The six native modules use epoch-scoped state. Ordinary public
 `v3` and private `PLATFORM` sources are retained as separate profiles; native
 claims must bind the external Neo core sources, not the old deployed-core prototype.
 
-The ABI 2 host gate passed on 2026-10-08: **26 Coq modules, 409 closed declarations,
+The unreleased ABI 2 profile now requires the exact profile fingerprint and a
+strict verifier-composition marker on every module. Its native composite model
+uses a transient three-field receipt, first-threshold selection, at most three
+children/two approvals/two threshold/three signer domains, fresh per-operation
+ownership, all-active binding checks and pre/post policy equality. The public
+`MultiSigPolicy.v` ten-child/repeated-validation model applies only to `v3` and
+`PLATFORM`; `NativeCompositePhase.v` covers the separate native receipt design.
+Session's epoch-scoped prefix `0x05` stores deterministic signer-domain
+configuration, and prefix `0x06` holds the independently updated last-use time;
+neither stores a persistent approval. Neither model proves byte copying,
+hashing, cryptography, implementation refinement or gas feasibility.
+
+The frozen composite profile passed its complete host gate on 2026-10-09:
+**26 Coq modules, 443 closed declarations, 247 rejected semantic mutations**
+(243 Coq and four TLA), **61,460 TLC distinct states**, and six SMT obligations
+with six controls. The gate checked 55 AA inputs and 310 external core inputs
+before and after the proofs. `NativeCompositePhase.v` contributes 45 closed
+declarations and 31 definition-valid, proof-rejected mutations. The exact result
+is [`aa-native-composite-final-formal-20261009.json`](reports/aa-native-composite-final-formal-20261009.json).
+Its profile fingerprint is
+`4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4`.
+The runner regression suite passes 60 tests; profile/vector tests pass 16.
+
+Two complete source runtime builds produced identical 104-file outputs, 50
+dependency archives and project-lock maps from core `ff422d940a4722c361c32398c6f28c00fb7f0693`,
+node `fa35e69af130661e2ac60bffd43eb6c6c78aa7d5` and Express
+`da143f8643ebca7841cc7f56e4e3e00293819fbc`. Six native modules reproduce as 13
+packaged files; 80 public/PLATFORM artifacts match fresh builds, and the public
+contract suite passes 396/396 with zero skips and required NeoDID artifacts.
+These build/proof results are consolidated in
+[`aa-native-composite-final-build-proof-20261009.json`](reports/aa-native-composite-final-build-proof-20261009.json).
+Final native private-chain and SDK integration receipts remain separate gates;
+older runtime receipts do not certify this profile.
+
+The preceding ABI 2 snapshot's host gate passed on 2026-10-08: **26 Coq modules, 409 closed declarations,
 222 rejected semantic mutations** (218 Coq and four TLA), 61,460 TLC distinct states,
 and six SMT obligations with six controls. All mutations first passed definition
 compilation and then failed the relevant proof or invariant. The gate pins 55 AA
@@ -26,8 +60,8 @@ execution commitment. Domain hashing, exact byte keys and VM transaction-witness
 behavior remain source/runtime correspondence obligations. The ordinary TLC and
 SMT checks retain their public/private contract scope. Formal models remain
 hand-written abstractions, not C#/VM/NEF refinement or deployment attestations;
-the result therefore retains `implementationVerified: false`. All counts below
-are historical unless explicitly labelled as ABI 2. Module/build and native-chain
+the result therefore retains `implementationVerified: false`. Counts below identify the dated snapshot that produced them; an ABI 2 label
+alone does not establish compatibility with this amended, unreleased profile. Module/build and native-chain
 receipts are separate evidence; a passing proof does not substitute for replay.
 
 
@@ -499,7 +533,8 @@ models under `verified/` for its own `verify.sh`.
 | Artifact | Scope |
 |---|---|
 | `formal/coq/UnifiedSmartWalletAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating and success-only state transitions |
-| `formal/coq/MultiSigPolicy.v` | Closed bounded threshold-policy proofs for configuration validity, exact signature cardinality and threshold support; child identity is abstract |
+| `formal/coq/MultiSigPolicy.v` | **Public V3/PLATFORM only:** bounded ten-child configuration, exact signature cardinality and threshold support; child identity is abstract |
+| `formal/coq/NativeCompositePhase.v` | **Native ABI 2 only:** first-threshold selection, one-operation receipt ownership and discard, approved-child grants, all-active pins, and pre/post policy equality under bounds 3/2/2/3; no byte-copy, hash, crypto or gas-feasibility refinement |
 | `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected direct `executeUserOp`/`executeUserOps` call with its two-argument pack, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
 | `formal/coq/CallbackPluginTopology.v` | Closed abstract correspondence model for the six-field hook callback tuple, success/callback ordering, CalledByEntry/Custom target binding, and fail-closed plugin cleanup/rotation; it is not a proof of NeoVM dispatch or arbitrary plugin storage |
 | `formal/coq/VerifierGasBudget.v` | **Bounded PLATFORM/native profiles only:** closed abstract model of bounded callback charging: every charge checks the callback and all ancestor budgets before mutation, exhaustion is atomic, and nested callbacks cannot escape an ancestor cap; inapplicable to public `v3` |

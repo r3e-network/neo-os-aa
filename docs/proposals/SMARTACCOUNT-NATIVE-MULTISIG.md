@@ -13,13 +13,33 @@ or child keys after recovery does not restore old policy state or signatures.
 
 ## Interfaces and state
 
-The root exposes exact `Array` operations for `validateSignature(accountId, op)`
-and `postExecute(accountId, op, result)`. Its sole configuration capability is
-`setConfig(accountId, children, threshold)`. The ordered child list is nonempty,
-unique, nonzero, excludes the root and contains at most ten leaf verifiers.
-The threshold is between one and the list length. Child lifecycle ABIs and
-public signer-domain commitments must be valid before publishing dependencies.
-Public domain uniqueness does not establish private-key/operator independence.
+The native manifest explicitly declares `compositeVerifier: true` and the exact
+profile parameter digest. Admission requires the non-safe callbacks
+`validateCompositeSignature(Hash160, Array) -> Array` and
+`postExecuteComposite(Hash160, Array, Any, Array) -> Void`. Ordinary leaf
+verifiers retain Boolean validation and three-argument post execution.
+
+The sole root configuration capability is `setConfig(accountId, children,
+threshold)`. The candidate bounded profile admits one to three ordered, unique,
+nonzero leaf verifiers, excluding the root; threshold is one or two and cannot
+exceed the roster length. The aggregate contains at most three distinct
+32-byte signer domains. Root and child reconfiguration must recheck these
+bounds atomically. Actual VM worst-case measurements remain a release gate;
+a declaration or a small successful operation does not establish support.
+
+Domain commitment is `SHA256(StdLib.Serialize([threshold, orderedChildren,
+perChildDomainArrays]))`. Each child boundary and child order are retained.
+Replies must be exact Arrays containing immutable 32-byte ByteStrings. A Struct,
+Buffer, duplicate domain, empty set or over-limit set is rejected. The root owns
+copies of returned domain bytes before invoking the next child.
+
+Native P-256 Session identity is the domain of its canonical Neo standard-account
+script hash, shared with NeoNativeVerifier. Reusing one P-256 key across two
+Sessions or a Session and its standard-account witness cannot supply two votes.
+All future native P-256 profiles must use this canonical identity. Arbitrary
+script or multisig ownership cannot be inferred from an opaque script hash;
+public domains do not prove private-key/operator independence. Legacy public
+profiles are a separate policy and migration boundary.
 
 The signature field is the canonical Neo binary serialization of an exact Array
 with one element per configured child. Each element is Null (skip that child)
@@ -33,24 +53,40 @@ requests both a signature verifier and a native-witness verifier; `[Null,
 ByteString(empty)]` requests only the second. A two-of-two policy rejects the
 latter even when its one supplied witness is valid.
 
-## Phase-specific revalidation
+## Ephemeral approval receipt and post policy
 
-The existing `validateSignature` entry remains restricted to a `validation`
-grant. Calling it under a `postExecute` grant must continue to reject.
-An admitted native leaf additionally exposes the read-only Boolean method
-`validateSignatureForPostExecute(Hash160, Array)`. This method requires the
-account/role/module/frame-specific `postExecute` grant and applies the same
-signature and policy predicate, without debiting state. The root uses it only
-during its own post-execution callback, with ReadOnly call flags.
+Validation checks every signature slot's type before considering a quorum. It
+visits children in configured order, skipping Null slots, and stops after the
+first `threshold` exact Boolean approvals. It returns the exact Array
+`[true, orderedApprovedChildren, policyCommitment32]`. The native service strictly
+checks the shape and ordered subset, deep copies it, and retains it only for
+this one operation. It is never persisted, accepted from the transaction, or
+shared across Verification and Application. Batch operations each create a
+fresh receipt. No transaction-supplied receipt can create a module grant.
 
-The root rechecks every supplied child, requires threshold approval, and calls
-`postExecute` only on approving children, in configuration order. A catchable
-child exception is a rejection; fatal faults and shared callback-budget
-exhaustion are not converted into votes. If post-execution approval falls below
-threshold, or any selected post callback fails, the whole operation must roll
-back. The verifier's existing native gas budget includes all descendants; it
-is never reset or increased per child. Successful small rosters do not prove
-cost sufficiency at maximum roster size.
+The post callback receives the original operation/result and a fresh copy of
+that private receipt. It first reloads configuration and all child domains and
+compares their commitment. Only the approved children receive post grants and
+callbacks, in configured order. Later supplied valid signatures are not part of
+the selected quorum and do not consume Session allowances. The root reloads the
+configuration and domains again after all child callbacks; a changed commitment
+faults the operation. The native service additionally checks current code pins.
+
+Post execution skips only duplicate cryptographic operation-signature work.
+Each Session freshly checks that its key is active, unexpired and permits the
+exact target/method, then applies result/source/amount and cumulative cap rules.
+Each NeoNative child freshly rechecks its transaction-witness quorum, since its
+signer domains alone do not commit its internal threshold. Account, frame,
+phase and current authority-generation checks remain mandatory.
+
+A cryptographically invalid, well-shaped signature which returns Boolean false
+can be skipped in favor of later children. A catchable child exception is also
+a rejection. A fatal VM ASSERT/ABORT or inherited budget exhaustion is not a
+recoverable vote; callers must use Null to omit an expired or inapplicable child.
+Malformed unused slots still reject. Every rejection discards nonce, target and
+policy writes. Each root callback and all descendants share the unchanged 1 GAS
+budget; transaction fee allowance does not increase it. Witness verification
+also remains subject to the global 1.5 GAS limit.
 
 ## Dependency ownership and cleanup
 
@@ -84,13 +120,13 @@ is not considered validated merely because source checks or compilation pass.
 
 ## Abstract phase obligations
 
-The formal gate must distinguish the validation entry from post revalidation,
-reject mismatched phases and missing account/frame grants, preserve the same
-policy predicate across both authorized entries, and exclude non-Boolean replies
-from threshold support. A post callback plan must contain exactly the approving
-children in configuration order. These are abstract obligations; the actual
-native engine grant, compiled dispatch and child policy predicates still need
-runtime correspondence and are not established by source hashes.
+The formal gate must distinguish validation and post grants, reject wrong
+account/module/frame/phase combinations, model a fresh operation-local receipt,
+and reject malformed or unordered approved subsets. Only exact Boolean child
+approvals contribute to the first quorum. Pre/post commitments preserve the
+ordered per-child policy boundary. These are abstract obligations; actual
+native grants, compiled dispatch, cryptography and child policies require
+independent runtime correspondence.
 
 ## Operation argument isolation
 

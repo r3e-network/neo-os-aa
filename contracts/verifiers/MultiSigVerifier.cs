@@ -33,9 +33,13 @@ namespace AbstractAccount.Verifiers
     public class MultiSigVerifier : SmartContract
     {
         private static readonly byte[] Prefix_Config = new byte[] { 0x01 };
-        private const int MaxChildVerifiers = 10;
 #if SMARTACCOUNT_NATIVE
-        private const int MaxDomainsPerChild = 10;
+        private const int MaxChildVerifiers = 3;
+        private const int MaxApprovedChildren = 2;
+        private const int MaxSignerDomains = 3;
+        private const int MaxDomainsPerChild = 3;
+#else
+        private const int MaxChildVerifiers = 10;
 #endif
 
         public static void _deploy(object data, bool update) => VerifierAuthority.Initialize(data, update);
@@ -99,6 +103,7 @@ namespace AbstractAccount.Verifiers
             }
 
 #if SMARTACCOUNT_NATIVE
+            ExecutionEngine.Assert(threshold <= MaxApprovedChildren, "Native threshold exceeds the callback budget profile");
             AssertSignerDomainSeparation(accountId, verifiers);
 #endif
 
@@ -147,38 +152,67 @@ namespace AbstractAccount.Verifiers
         }
 
 #if SMARTACCOUNT_NATIVE
+        // The pinned compiler does not support `is object[]`; emit the exact VM
+        // Array test explicitly so Struct cannot pass through a CLR-style cast.
+        [OpCode(OpCode.ISTYPE, "0x40")]
+        private static extern bool IsExactArray(object value);
+
         private static void AssertSignerDomainSeparation(UInt160 accountId, UInt160[] verifiers) => ReadSignerDomains(accountId, verifiers);
+
+        private static object[] ReadSignerDomainSets(UInt160 accountId, UInt160[] verifiers)
+        {
+            ExecutionEngine.Assert(verifiers.Length > 0 && verifiers.Length <= MaxChildVerifiers, "Invalid native verifier roster");
+            ByteString[] domains = new ByteString[MaxSignerDomains];
+            object[] sets = new object[verifiers.Length];
+            int count = 0;
+            for (int i = 0; i < verifiers.Length; i++)
+            {
+                object raw = Contract.Call(verifiers[i], "getSignerDomains", CallFlags.ReadOnly, new object[] { accountId });
+                ExecutionEngine.Assert(IsExactArray(raw), "Signer domains must be an Array");
+                object[] returned = (object[])raw;
+                ExecutionEngine.Assert(returned.Length > 0 && returned.Length <= MaxDomainsPerChild,
+                    "Invalid child signer-domain count");
+                ByteString[] child = new ByteString[returned.Length];
+                for (int j = 0; j < returned.Length; j++)
+                {
+                    ExecutionEngine.Assert(returned[j] is ByteString && ((ByteString)returned[j]).Length == 32, "Invalid signer domain");
+                    ByteString domain = (ByteString)returned[j];
+                    ExecutionEngine.Assert(count < MaxSignerDomains, "Native aggregate signer-domain limit exceeded");
+                    for (int k = 0; k < count; k++)
+                        ExecutionEngine.Assert(!EqualBytes(domains[k], domain), "Duplicate signer domain");
+                    // The commitment and duplicate check own their domain bytes.
+                    // A later child cannot mutate an earlier child's returned graph.
+                    byte[] owned = new byte[32];
+                    for (int offset = 0; offset < 32; offset++) owned[offset] = domain[offset];
+                    child[j] = (ByteString)owned;
+                    domains[count++] = child[j];
+                }
+                sets[i] = child;
+            }
+            return sets;
+        }
 
         private static ByteString[] ReadSignerDomains(UInt160 accountId, UInt160[] verifiers)
         {
-            ByteString[] domains = new ByteString[MaxChildVerifiers * MaxDomainsPerChild];
-            int domainCount = 0;
-            for (int i = 0; i < verifiers.Length; i++)
+            object[] sets = ReadSignerDomainSets(accountId, verifiers);
+            int count = 0;
+            for (int i = 0; i < sets.Length; i++) count += ((ByteString[])sets[i]).Length;
+            ByteString[] domains = new ByteString[count];
+            int at = 0;
+            for (int i = 0; i < sets.Length; i++)
             {
-                ByteString[] childDomains = (ByteString[])Contract.Call(
-                    verifiers[i], "getSignerDomains", CallFlags.ReadOnly,
-                    new object[] { accountId });
-                ExecutionEngine.Assert(childDomains != null && childDomains.Length > 0,
-                    "Child signer-domain set is empty");
-                ExecutionEngine.Assert(childDomains.Length <= MaxDomainsPerChild,
-                    "Child signer-domain set is too large");
-
-                for (int j = 0; j < childDomains.Length; j++)
-                {
-                    ByteString domain = childDomains[j];
-                    ExecutionEngine.Assert(domain != null && domain.Length == 32,
-                        "Invalid signer domain");
-                    for (int k = 0; k < domainCount; k++)
-                    {
-                        ExecutionEngine.Assert(!EqualBytes(domains[k], domain),
-                            "Duplicate signer domain");
-                    }
-                    domains[domainCount++] = domain;
-                }
+                ByteString[] child = (ByteString[])sets[i];
+                for (int j = 0; j < child.Length; j++) domains[at++] = child[j];
             }
-            ByteString[] result = new ByteString[domainCount];
-            for (int i = 0; i < domainCount; i++) result[i] = domains[i];
-            return result;
+            return domains;
+        }
+
+        private static ByteString PolicyCommitment(UInt160 accountId, MultiSigConfig config)
+        {
+            ExecutionEngine.Assert(config.Threshold > 0 && config.Threshold <= MaxApprovedChildren
+                && config.Threshold <= config.Verifiers.Length, "Invalid native threshold");
+            object[] domains = ReadSignerDomainSets(accountId, config.Verifiers);
+            return CryptoLib.Sha256(StdLib.Serialize(new object[] { config.Threshold, config.Verifiers, domains }));
         }
 
         private static bool EqualBytes(ByteString left, ByteString right)
@@ -261,6 +295,79 @@ namespace AbstractAccount.Verifiers
         {
             return GetConfig(accountId);
         }
+
+#if SMARTACCOUNT_NATIVE
+        // The native service owns this receipt for one operation only. It is never
+        // written to storage or accepted from a transaction-supplied argument.
+        public static object[] ValidateCompositeSignature(UInt160 accountId, object[] fields)
+        {
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "validation");
+            UserOperation op = NativeOperation.Decode(fields);
+            MultiSigConfig? configured = GetConfig(accountId);
+            ExecutionEngine.Assert(configured != null, "No MultiSig config");
+            MultiSigConfig config = configured!;
+            ByteString commitment = PolicyCommitment(accountId, config);
+            object[] signatures = NativeSignatures(op.Signature);
+            ExecutionEngine.Assert(signatures.Length == config.Verifiers.Length, "Signature array length mismatch");
+            ByteString arguments = StdLib.Serialize(op.Args);
+            UInt160[] approved = new UInt160[config.Threshold];
+            int count = 0;
+            for (int i = 0; i < config.Verifiers.Length && count < config.Threshold; i++)
+            {
+                if (signatures[i] == null) continue;
+                object[] childOp = CreateNativeSubOperation(op, signatures[i], arguments);
+                try
+                {
+                    object result = Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly,
+                        new object[] { accountId, childOp });
+                    if (result is bool && (bool)result) approved[count++] = config.Verifiers[i];
+                }
+                catch { }
+            }
+            ExecutionEngine.Assert(count == config.Threshold, "Verifier rejected signature");
+            return new object[] { true, approved, commitment };
+        }
+
+        public static void PostExecuteComposite(UInt160 accountId, object[] fields, object result, object[] receipt)
+        {
+            NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "postExecute");
+            ExecutionEngine.Assert(receipt.Length == 3 && receipt[0] is bool && (bool)receipt[0]
+                && IsExactArray(receipt[1]) && receipt[2] is ByteString, "Invalid composite approval receipt");
+            object[] approved = (object[])receipt[1];
+            ByteString commitment = (ByteString)receipt[2];
+            ExecutionEngine.Assert(commitment.Length == 32, "Invalid policy commitment");
+            MultiSigConfig? configured = GetConfig(accountId);
+            ExecutionEngine.Assert(configured != null, "No MultiSig config");
+            MultiSigConfig config = configured!;
+            ExecutionEngine.Assert(approved.Length == config.Threshold && approved.Length <= MaxApprovedChildren,
+                "Invalid approved child count");
+            ExecutionEngine.Assert(PolicyCommitment(accountId, config) == commitment, "Composite policy changed after validation");
+            UserOperation op = NativeOperation.Decode(fields);
+            object[] signatures = NativeSignatures(op.Signature);
+            ExecutionEngine.Assert(signatures.Length == config.Verifiers.Length, "Signature array length mismatch");
+            ByteString arguments = StdLib.Serialize(op.Args);
+            ByteString resultSnapshot = StdLib.Serialize(result);
+            int next = 0;
+            for (int i = 0; i < approved.Length; i++)
+            {
+                ExecutionEngine.Assert(approved[i] is ByteString && ((ByteString)approved[i]).Length == 20,
+                    "Invalid approved child address");
+                UInt160 child = (UInt160)approved[i];
+                while (next < config.Verifiers.Length && config.Verifiers[next] != child) next++;
+                ExecutionEngine.Assert(next < config.Verifiers.Length && signatures[next] != null,
+                    "Approved children must be an ordered configured subset with signatures");
+                object[] childOp = CreateNativeSubOperation(op, signatures[next], arguments);
+                next++;
+                Contract.Call(child, "postExecute", CallFlags.All,
+                    new object[] { accountId, childOp, StdLib.Deserialize(resultSnapshot) });
+            }
+            // A child cannot leave a changed signer policy for another child or the
+            // next operation, even when its configuration is outside the native service.
+            MultiSigConfig? after = GetConfig(accountId);
+            ExecutionEngine.Assert(after != null && PolicyCommitment(accountId, after!) == commitment,
+                "Composite policy changed during post execution");
+        }
+#endif
 
         /// <summary>
         /// Validates a multi-signature bundle by forwarding to the configured child verifiers.

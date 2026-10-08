@@ -2,6 +2,7 @@
 """Fail-closed, offline AA model checks; never substitutes tests for proofs."""
 import argparse
 import hashlib
+import itertools
 import json
 import os
 from pathlib import Path
@@ -40,11 +41,9 @@ RUNTIME_PROFILES = {
                "verifierCall": "bounded native callback", "verifierChildBudgetEnforced": True,
                "verifierBudgetDatoshi": 100000000, "hookBudgetDatoshi": 250000000},
 }
-SHARED_MODELS = {"coq/MultiSigPolicy.v"}
-PUBLIC_MODELS = {"coq/UnifiedSmartWalletAA.v", "coq/ProxyWitnessScript.v",
+PUBLIC_MODELS = {"coq/UnifiedSmartWalletAA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
                  "tla/UnifiedSmartWalletAA.tla", "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
 MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
-                         ["v3", "platform", "native"] if name in SHARED_MODELS else
                          ["v3", "platform"] if name in PUBLIC_MODELS else ["native"])
                   for name in sorted(ARTIFACTS)}
 # The core checkout is external: no host path is committed or trusted as identity.
@@ -54,7 +53,7 @@ NATIVE_CORE_REQUIRED_FILES = {
     "src/Neo/SmartContract/ApplicationEngine.cs", "src/Neo/SmartContract/ApplicationEngine.Contract.cs",
     "src/Neo/SmartContract/ApplicationEngine.Runtime.cs", "src/Neo/SmartContract/Native/NativeContract.cs",
     *{"src/Neo/SmartContract/Native/" + name for name in (
-        "AccountManagement.cs", "AccountManagement.Execution.cs", "AccountManagement.Modules.cs",
+        "AccountManagement.cs", "AccountManagement.Execution.cs", "AccountManagement.Modules.cs", "AccountManagement.Keys.cs",
         "SmartAccountProtocol.cs", "SmartAccountState.cs", "SmartAccountModulePolicy.cs",
         "SmartAccountCanonicalJson.cs", "SmartAccountInvocationContext.cs", "SmartAccountEnvelope.cs")},
 }
@@ -103,7 +102,7 @@ for _module in ("NeoNativeVerifier", "SessionKeyVerifier", "MultiSigVerifier", "
 MULTISIG_SOURCE = "contracts/verifiers/MultiSigVerifier.cs"
 MULTISIG_SOURCE_GUARDS = {
     "non_empty": "verifiers != null && verifiers.Length > 0",
-    "maximum_size": "verifiers.Length <= MaxChildVerifiers",
+    "maximum_size": 'ExecutionEngine.Assert(verifiers.Length <= MaxChildVerifiers, $"Maximum {MaxChildVerifiers} child verifiers allowed")',
     "threshold_range": "threshold > 0 && threshold <= verifiers.Length",
     "address_validity": "verifiers[i] != UInt160.Zero && verifiers[i].IsValid",
     "no_duplicates": "verifiers[i] != verifiers[j]",
@@ -111,7 +110,7 @@ MULTISIG_SOURCE_GUARDS = {
 }
 MULTISIG_SOURCE_MUTATIONS = {
     "non_empty": ("verifiers != null && verifiers.Length > 0", "true"),
-    "maximum_size": ("verifiers.Length <= MaxChildVerifiers", "true"),
+    "maximum_size": ('ExecutionEngine.Assert(verifiers.Length <= MaxChildVerifiers, $"Maximum {MaxChildVerifiers} child verifiers allowed")', 'ExecutionEngine.Assert(true, "Mutation removed roster cap")'),
     "threshold_range": ("threshold > 0 && threshold <= verifiers.Length", "true"),
     "address_validity": ("verifiers[i] != UInt160.Zero && verifiers[i].IsValid", "true"),
     "no_duplicates": ("verifiers[i] != verifiers[j]", "true"),
@@ -533,14 +532,49 @@ NATIVE_RESTRICTED_COQ_MUTATIONS = {
     "restricted-removal-snapshot": ("(without_token token (snapshots s)).", "(snapshots s)."),
     "restricted-cleanup-snapshot": ("RestrictionState := State [] [].", "RestrictionState := State [] (snapshots s)."),
 }
-NATIVE_COMPOSITE_PHASE_MUTATIONS = {
-    "composite-old-entry-post": ("| PostEntry, PostPhase => true", "| PostEntry, PostPhase | ValidationEntry, PostPhase => true"),
-    "composite-post-entry-validation": ("| ValidationEntry, ValidationPhase => true", "| ValidationEntry, ValidationPhase | PostEntry, ValidationPhase => true"),
-    "composite-missing-grant": ("grant && phase_allowed entry phase", "true && phase_allowed entry phase"),
-    "composite-nonboolean-vote": ("TrueReply => true | _ => false", "TrueReply | NonBooleanReply => true | _ => false"),
-    "composite-post-wrong-entry": ("native_approve PostEntry PostPhase grant (reply id)", "native_approve ValidationEntry PostPhase grant (reply id)"),
-    "composite-post-inverts-support": ("filter (fun id => native_approve PostEntry PostPhase grant (reply id)) ids.", "filter (fun id => negb (native_approve PostEntry PostPhase grant (reply id))) ids."),
-}
+NATIVE_COMPOSITE_PHASE_MUTATIONS = {'composite-validation-grant': ('grant && validation_phase phase &&', 'true && validation_phase phase &&'),
+ 'composite-validation-phase': ('ValidationPhase => true | _ => false',
+                                'ValidationPhase | PostPhase => true | _ => false'),
+ 'composite-signature-count': ('Nat.eqb count (length ids) &&', 'true &&'),
+ 'composite-insufficient-support': ('Nat.eqb (length (selection ids threshold reply)) threshold.', 'true.'),
+ 'composite-selection-last-children': ('firstn threshold (filter (fun id => reply_approved (reply id)) ids).',
+                                       'skipn threshold (filter (fun id => reply_approved (reply id)) ids).'),
+ 'composite-nonboolean-vote': ('TrueReply => true | _ => false',
+                               'TrueReply | NonBooleanReply => true | _ => false'),
+ 'composite-max-children': ('(length ids <=? 3)', '(length ids <=? 4)'),
+ 'composite-max-threshold': ('(threshold <=? 2)', '(threshold <=? 3)'),
+ 'composite-max-domains': ('(domains <=? 3)', '(domains <=? 4)'),
+ 'composite-duplicate-roster': ('&& unique ids &&', '&& true &&'),
+ 'composite-zero-roster': ('forallb (fun id => negb (Nat.eqb id 0)) ids.', 'true.'),
+ 'composite-zero-threshold': ('(0 <? threshold) &&', 'true &&'),
+ 'composite-threshold-over-roster': ('(threshold <=? length ids) &&', 'true &&'),
+ 'composite-post-grant': ('grant && post_phase phase &&', 'true && post_phase phase &&'),
+ 'composite-post-phase': ('PostPhase => true | _ => false',
+                          'PostPhase | ValidationPhase => true | _ => false'),
+ 'composite-verification-reuse': ('application (origin r) &&', 'true &&'),
+ 'composite-cross-operation': ('Nat.eqb (owner_operation r) op &&', 'true &&'),
+ 'composite-receipt-arity': ('Array3 => true | OtherShape => false', 'Array3 => true | OtherShape => true'),
+ 'composite-commitment-type': ('ByteString32 => true | _ => false',
+                               'ByteString32 | WrongCommitmentType => true | _ => false'),
+ 'composite-commitment-length': ('ByteString32 => true | _ => false',
+                                 'ByteString32 | WrongCommitmentLength => true | _ => false'),
+ 'composite-approved-count': ('Nat.eqb (length (approved r)) threshold &&', 'true &&'),
+ 'composite-approved-order': ('ordered_subset (approved r) active &&', 'true &&'),
+ 'composite-all-active-pins': ('  all_active_pins &&', '  true &&'),
+ 'composite-pre-policy': ('Nat.eqb (policy r) current_policy.', 'true.'),
+ 'composite-post-policy': ('Nat.eqb (policy r) after_policy &&', 'true &&'),
+ 'composite-post-pins': ('&& after_pins.', '&& true.'),
+ 'composite-post-ready': ('  ready && Nat.eqb', '  true && Nat.eqb'),
+ 'composite-retain-verification': ('Application => Some receipt | Verification => None',
+                                   'Application => Some receipt | Verification => Some receipt'),
+ 'composite-retain-after-completion': ('option Receipt := None.', 'option Receipt := _receipt.')}
+
+NATIVE_COMPOSITE_PHASE_MUTATIONS["composite-skips-unapproved-pins"] = (
+    "forallb pin active.", "forallb pin (firstn 2 active).")
+
+NATIVE_COMPOSITE_PHASE_MUTATIONS["composite-mint-without-validation"] = (
+    "if validates active threshold domains count reply phase grant", "if true")
+
 NATIVE_AUTHORITY_EPOCH_MUTATIONS = {'epoch-bound-inclusive': ('(0 <=? value) && (value <? maximum).', '(0 <=? value) && (value <=? maximum).'),
  'recovery-authority-bypass': ('authority_valid && has_recovery s && mature_intent',
                                'true && has_recovery s && mature_intent'),
@@ -694,7 +728,7 @@ def check_inventory(root=ROOT):
 
 
 def multisig_config_valid(verifiers, threshold):
-    """Executable bounded specification for MultiSigVerifier.SetConfig."""
+    """Public V3/platform policy only; native receipt bounds are checked separately."""
     return (0 < len(verifiers) <= 10
             and 0 < threshold <= len(verifiers)
             and all(verifier > 0 for verifier in verifiers)
@@ -702,12 +736,12 @@ def multisig_config_valid(verifiers, threshold):
 
 
 def multisig_accepts(verifier_count, threshold, signature_count, valid_children):
-    """Executable bounded specification for both validation and PostExecute gating."""
+    """Public V3/platform validation and repeated PostExecute signature gating only."""
     return signature_count == verifier_count and sum(valid_children) >= threshold
 
 
 def check_multisig_bounded(repo_root=ROOT.parent):
-    """Check the finite MultiSig policy space and reject guard-removal mutants.
+    """Check the PUBLIC finite MultiSig policy space and reject guard-removal mutants.
 
     This is deliberately a bounded correspondence aid, not a claim of cryptographic or
     NeoVM-semantic proof. The concrete VM vectors live in VerifierSignatureRuntimeTests.
@@ -747,9 +781,165 @@ def check_multisig_bounded(repo_root=ROOT.parent):
                             f"MultiSig acceptance model mismatch: count={count}, threshold={threshold}, "
                             f"signature_count={signature_count}, mask={mask}")
                     acceptance_cases += 1
-    return {"configCases": config_cases, "acceptanceCases": acceptance_cases,
+    return {"profiles": ["v3", "platform"], "configCases": config_cases, "acceptanceCases": acceptance_cases,
             "sourceGuards": len(MULTISIG_SOURCE_GUARDS),
             "sourceMutationsRejected": list(MULTISIG_SOURCE_MUTATIONS)}
+
+
+NATIVE_COMPOSITE_CAPS = {"children": 3, "threshold": 2, "approved": 2, "domains": 3}
+
+
+def native_composite_config_valid(active, threshold, domains):
+    """Native profile policy bounds; this is not a callback gas proof."""
+    return (0 < len(active) <= NATIVE_COMPOSITE_CAPS["children"]
+            and 0 < threshold <= min(len(active), NATIVE_COMPOSITE_CAPS["threshold"])
+            and 0 <= domains <= NATIVE_COMPOSITE_CAPS["domains"]
+            and all(child > 0 for child in active) and len(set(active)) == len(active))
+
+
+def native_composite_selection(active, threshold, replies):
+    # Only the exact Boolean true reply constructor votes. "nonboolean" includes
+    # truthy VM integers/arrays; "rejected" includes a catchable child failure.
+    return [child for child, reply in zip(active, replies) if reply == "true"][:threshold]
+
+
+def native_composite_validates(active, threshold, domains, signature_count, replies, *,
+                               validation_phase=True, grant=True):
+    return (grant and validation_phase and native_composite_config_valid(active, threshold, domains)
+            and signature_count == len(active)
+            and len(native_composite_selection(active, threshold, replies)) == threshold)
+
+
+def native_composite_receipt_ready(selected, active, threshold, domains, *, shape=True,
+                                   exact_true=True, commitment32=True, application=True,
+                                   same_operation=True, post_phase=True, grant=True,
+                                   all_active_pins=True, current_policy=True):
+    cursor = iter(active)
+    ordered_subset = all(any(child == candidate for candidate in cursor) for child in selected)
+    return (shape and exact_true and commitment32 and application and same_operation
+            and post_phase and grant and all_active_pins and current_policy
+            and native_composite_config_valid(active, threshold, domains)
+            and len(selected) == threshold and len(selected) <= NATIVE_COMPOSITE_CAPS["approved"]
+            and len(set(selected)) == len(selected) and ordered_subset)
+
+
+def native_composite_post_plan(selected, active, threshold, domains, pins):
+    return list(selected) if native_composite_receipt_ready(
+        selected, active, threshold, domains, all_active_pins=all(pins[child] for child in active)) else []
+
+
+def native_composite_post_complete(ready, same_policy_after, all_active_pins_after):
+    return ready and same_policy_after and all_active_pins_after
+
+
+def native_composite_retained(trigger, receipt):
+    return receipt if trigger == "Application" else None
+
+
+def native_composite_completed(_receipt):
+    return None
+
+
+def check_native_composite_bounded(repo_root=ROOT.parent):
+    """Finite native policy/receipt checks; no raw VM decoding, crypto or copy proof.
+
+    The independent oracle uses ordered combinations of the roster for receipt
+    membership and a first-valid-index scan for selection. Source correspondence
+    still requires the reviewed lock and implementation/runtime evidence.
+    """
+    profile = json.loads((repo_root / "docs/proposals/smartaccount-native-profile-v2-parameters.json").read_text())
+    profile_caps = {name: profile.get(field) for name, field in {
+        "children": "compositeVerifierMaxChildren", "threshold": "compositeVerifierMaxThreshold",
+        "approved": "compositeVerifierMaxApprovedChildren", "domains": "compositeVerifierMaxSignerDomains"}.items()}
+    expected_receipt = {
+        "fields": ["BooleanTrue", "OrderedApprovedHash160Array", "PolicyCommitmentByteString32"],
+        "lifetime": "oneApplicationOperation",
+        "policyCommitment": "SHA256(NeoBinarySerialize([threshold,orderedChildren,orderedChildSignerDomains]))",
+        "postSignatureRevalidation": False, "selection": "firstThresholdValidChildren",
+        "verificationReceiptReused": False, "version": 1,
+    }
+    expected_callbacks = {
+        "validation": {"name": "validateCompositeSignature", "parameters": ["Hash160", "Array"],
+                       "returnType": "Array", "safe": False},
+        "postExecute": {"name": "postExecuteComposite", "parameters": ["Hash160", "Array", "Any", "Array"],
+                        "returnType": "Void", "safe": False},
+    }
+    require(profile_caps == NATIVE_COMPOSITE_CAPS and profile.get("abiVersion") == 2
+            and json.dumps(profile.get("compositeReceipt"), sort_keys=True) == json.dumps(expected_receipt, sort_keys=True)
+            and json.dumps(profile.get("compositeVerifierCallbacks"), sort_keys=True) == json.dumps(expected_callbacks, sort_keys=True),
+            "Native composite profile changed; review bounds and receipt model")
+
+    config_cases = selection_cases = validation_cases = receipt_cases = completion_cases = pin_cases = 0
+    # Include an empty roster, all permutations up to the cap, and one over-cap.
+    rosters = [list(ids) for count in range(4) for ids in itertools.permutations((1, 2, 3), count)]
+    rosters.extend([[1, 2, 3, 4], [1, 1], [0, 1]])
+    for active in rosters:
+        for threshold in range(5):
+            for domains in range(5):
+                expected_config = (1 <= len(active) <= 3 and 1 <= threshold <= 2
+                                   and threshold <= len(active) and domains <= 3
+                                   and 0 not in active and len(set(active)) == len(active))
+                require(native_composite_config_valid(active, threshold, domains) == expected_config,
+                        "Native composite config mismatch")
+                config_cases += 1
+        for threshold in range(4):
+            for replies in itertools.product(("true", "false", "nonboolean", "rejected"), repeat=len(active)):
+                selected = native_composite_selection(active, threshold, replies)
+                indices = [index for index in range(len(active)) if replies[index] == "true"]
+                expected = [active[indices[index]] for index in range(min(threshold, len(indices)))]
+                require(selected == expected, "Native composite first-threshold selection mismatch")
+                if native_composite_config_valid(active, threshold, len(active)):
+                    require(len(selected) <= 2 and len(set(selected)) == len(selected),
+                            "Native composite selection exceeds cap or repeats child")
+                    if len(indices) >= threshold:
+                        require(native_composite_receipt_ready(selected, active, threshold, len(active)),
+                                "Native composite valid selection was rejected")
+                for count in range(len(active) + 2):
+                    for grant, phase in itertools.product((False, True), repeat=2):
+                        expected_valid = (grant and phase and native_composite_config_valid(active, threshold, len(active))
+                                          and count == len(active) and len(indices) >= threshold)
+                        require(native_composite_validates(active, threshold, len(active), count, replies,
+                                                          grant=grant, validation_phase=phase) == expected_valid,
+                                "Native composite validation/count/phase mismatch")
+                        validation_cases += 1
+                selection_cases += 1
+
+    fields = ("shape", "exact_true", "commitment32", "application", "same_operation",
+              "post_phase", "grant", "all_active_pins", "current_policy")
+    active = [3, 1, 2]
+    for threshold in (1, 2):
+        legal = set(itertools.combinations(active, threshold))
+        for count in range(4):
+            for selected in itertools.product((0, 1, 2, 3, 4), repeat=count):
+                for values in itertools.product((False, True), repeat=len(fields)):
+                    expected = selected in legal and all(values)
+                    actual = native_composite_receipt_ready(selected, active, threshold, 3, **dict(zip(fields, values)))
+                    require(actual == expected, "Native composite receipt acceptance mismatch")
+                    receipt_cases += 1
+    for selected in ((3,), (1,), (3, 1), (1, 2)):
+        for values in itertools.product((False, True), repeat=len(active)):
+            actual = native_composite_post_plan(selected, active, len(selected), 3, dict(zip(active, values)))
+            require(actual == (list(selected) if all(values) else []),
+                    "Native composite post grants skipped an unapproved active pin")
+            pin_cases += 1
+    for values in itertools.product((False, True), repeat=3):
+        require(native_composite_post_complete(*values) == (values == (True, True, True)),
+                "Native composite completion skipped readiness/policy/pins")
+        completion_cases += 1
+    # A batch starts another local operation; no receipt is carried into it.
+    for operation in range(3):
+        receipt = (operation, (1, 2), 7)
+        require(native_composite_retained("Verification", receipt) is None,
+                "Native composite Verification receipt escaped")
+        require(native_composite_retained("Application", receipt) == receipt,
+                "Native composite fresh Application receipt missing")
+        require(native_composite_completed(receipt) is None,
+                "Native composite receipt survived operation completion")
+    return {"profiles": ["native"], "caps": dict(NATIVE_COMPOSITE_CAPS),
+            "configCases": config_cases, "selectionCases": selection_cases, "validationCases": validation_cases,
+            "receiptCases": receipt_cases, "completionCases": completion_cases, "allActivePinCases": pin_cases,
+            "lifetime": "oneApplicationOperation", "postSignatureRevalidation": False,
+            "boundary": "Finite abstract conditions; byte copy/hash/crypto/VM refinement and gas feasibility external"}
 
 
 def artifact_hashes():
@@ -896,6 +1086,7 @@ def main():
         source_lock = json.loads((ROOT / "source-lock.json").read_text())
         report["nativeCoreSourceSha256"] = check_native_core_sources(source_lock, args.native_core_root)
         report["multisigBoundedModel"] = check_multisig_bounded()
+        report["nativeCompositeBoundedModel"] = check_native_composite_bounded()
         coqc = executable("COQC", "coqc")
         z3 = executable("Z3", "z3")
         java, java_version = resolve_java(java_candidates(), logs)

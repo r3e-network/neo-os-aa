@@ -43,6 +43,16 @@ account cleanup. They are not test-only accepting verifiers.
 - WhitelistHook: native preExecute/postExecute grants, default-deny target lookup,
   and account-scoped cleanup. Configuration capability: `setWhitelist`.
 
+The native NeoNativeVerifier stores deterministic signer domains as ordered,
+packed 32-byte values under policy prefix `0x03`, atomically with its signer
+configuration in the same authority epoch. The safe getter reads fresh state,
+requires a nonempty multiple of 32 bytes within the existing ten-signer module
+limit, and returns independent ByteStrings. Cleanup deletes this value. The
+public `getConfig` shape remains `[signers, threshold]`, and every validation
+and selected post callback still checks the real witness quorum. The MultiSig
+aggregate domain limit is separately three. These stored identities are not
+operation approvals and do not replace any signature or witness check.
+
 The configured transaction witnesses authorize the native verifier. They are not
 a custom operation-signature format. The SessionKey profile below adds a distinct
 operation-signature adapter; arbitrary proof/attestation plugins remain separate
@@ -50,16 +60,16 @@ work.
 
 The current descriptor also includes SessionKeyVerifier, DailyLimitHook,
 TokenRestrictedHook and MultiSigVerifier. The first three profile requirements
-are defined below; the composite profile and its separate post-revalidation
-entry are defined in `docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md`.
+are defined below; the composite profile and its ephemeral approval-receipt
+callbacks are defined in `docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md`.
 
 ## Artifact construction and security
 
 Compiler output is not hand-edited to hide an ABI mismatch. Native projects use
 source-level Array callback declarations. The current compiler only supports
 string-valued manifest extras, so the native packaging stage adds the structured
-`extra.smartAccount.configurationMethods` value from a checked-in profile
-descriptor. It must reject missing, duplicate, safe, reserved or incorrectly
+`extra.smartAccount.configurationMethods`, `compositeVerifier` and exact profile
+parameter digest from checked-in descriptors and the single parameter source. It must reject missing, duplicate, safe, reserved or incorrectly
 account-scoped ABI methods. Both original compiler bytes and packaged manifest
 bytes, the descriptor, linked source files, compiler identity and packaging
 recipe must be hashed. The deployed code identity uses the packaged manifest.
@@ -123,6 +133,42 @@ hashes the preimage exactly once. Feeding the already-hashed digest to an API th
 hashes internally is not this profile. Signatures are fixed-width 64-byte `r || s`;
 JSON encoding, legacy verifier-specific payloads and DER signatures are rejected.
 
+Native Session configuration stores the canonical signer domain separately under
+policy prefix `0x05`, in the same authority-epoch namespace as its key. The value
+is `NativeScript(CreateStandardAccount(publicKey))` and is written atomically
+with that key. It is deterministic configuration data, not a signature/approval
+cache. Revocation and cleanup delete both values. The domain getter freshly
+reads the current epoch and rejects a missing or malformed domain; no fallback
+exists. Native modules must be freshly deployed and configured. Both profiles
+retain the existing five-field `getSessionKey` result; legacy builds do not
+write the native domain prefix and keep their separate domain semantics.
+Native configuration first decodes a compressed (33-byte) or uncompressed
+(65-byte) secp256r1 point through the native `canonicalP256PublicKey` query,
+which validates full-point round-trip equality and rejects invalid points before
+writes. The generic standard-account syscall alone does not establish this
+property for uncompressed points. It stores the canonical compressed point; both
+encodings therefore derive the same standard-account identity.
+
+Native last-use timestamps live separately under prefix `0x06`. Configuration
+initializes a canonical unsigned UInt64 Neo integer to zero; the immutable
+metadata record stays `[createdAt, 0, description]`. The public metadata getter
+freshly overlays that timestamp and retains its original three-field result.
+Post execution validates and updates only the timestamp, avoiding repeated
+serialization and storage charges for the description. Missing, negative,
+overflowed or noncanonical timestamp bytes fail closed. Revocation and cleanup
+remove both domain and timestamp keys; ordinary revocation retains only the
+rotation cooldown. Same-callback key reuse starts from one freshly derived
+native epoch key and spans only fixed native/storage calls, never arbitrary
+child callbacks or later operations.
+
+The public `getPayload` query verifies its digest against the canonical native
+getter and rejects invalid operation shapes. During an authenticated native
+validation callback, the module constructs that same preimage directly from the
+fresh native authorization domain and canonical unsigned operation, without
+repeating the equivalent digest query. Independent byte vectors, compiled-module
+payload queries and signed operations must prove equality. This removes no
+signature verification or phase/account/epoch check.
+
 Session expiry uses the persisting block timestamp in Application and the latest
 persisted ledger block timestamp in Verification, matching the native service.
 `System.Runtime.GetTime` is not available in an actual witness Verification
@@ -167,7 +213,7 @@ The same canonical proxy script must also admit a valid signed transfer.
 The lifecycle matrix additionally replaces a used key, verifies preserved spend
 and rejection of the previous key, spends exactly the remaining allowance,
 lowers the cap below spent, restores it to the exact boundary, revokes the key,
-and grants a fresh allowance after the protocol delay. It compares all four raw
+and grants a fresh allowance after the protocol delay. It compares all six raw
 storage prefixes, including retention of the ordinary revocation cooldown and
 its removal by account cleanup.
 

@@ -1,4 +1,5 @@
 const { codeIdentityTools } = require("./moduleIdentity");
+const { validateNativeModuleProfile, NATIVE_COMPOSITE_MAX_CHILDREN } = require("./client");
 const fail = (message) => {
   throw new Error(`Native verifier witness: ${message}`);
 };
@@ -18,8 +19,8 @@ function createVerifierWitnessTools(c) {
     if (JSON.stringify(registry.root) !== JSON.stringify(state.verifier))
       fail("verifier registry root changed");
     if (
-      registry.cleanupBindings.length > 10 ||
-      registry.activeChildren.length > 10 ||
+      registry.cleanupBindings.length > NATIVE_COMPOSITE_MAX_CHILDREN ||
+      registry.activeChildren.length > NATIVE_COMPOSITE_MAX_CHILDREN ||
       registry.cleanupBindings.some((x) => !x) ||
       new Set(registry.cleanupBindings.map((x) => x.contract)).size !==
         registry.cleanupBindings.length ||
@@ -53,11 +54,19 @@ function createVerifierWitnessTools(c) {
         deployed.manifest.extra?.SmartAccountProfile !== "native-v2"
       )
         fail("deployed verifier code does not match pinned identity");
+      const metadata = validateNativeModuleProfile(
+        deployed,
+        client.profileParameterDigest,
+      );
       const composition = await client._read(
         "supportsComposition",
         [],
         pin.contract,
       );
+      if (composition !== metadata.compositeVerifier)
+        fail(
+          "module composition capability does not match its profile metadata",
+        );
       if (typeof composition !== "boolean" || (index > 0 && composition))
         fail("unsupported recursive verifier topology");
       if (

@@ -18,7 +18,7 @@ namespace AbstractAccount.Verifiers
     /// </remarks>
     [DisplayName("SessionKeyVerifier")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch", "getAuthorizationDomain", "getOperationDigest", "getAccountAddress")]
+    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch", "getAuthorizationDomain", "getOperationDigest", "getAccountAddress", "canonicalP256PublicKey")]
     [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canConfigureVerifier")]
@@ -39,6 +39,11 @@ namespace AbstractAccount.Verifiers
         private static readonly byte[] Prefix_SpentAmount = new byte[] { 0x03 };
         // AccountId -> LastKeyRotation timestamp (for rotation cooldown)
         private static readonly byte[] Prefix_LastKeyRotation = new byte[] { 0x04 };
+#if SMARTACCOUNT_NATIVE
+        // Deterministic configured identity; never stores an operation approval.
+        private static readonly byte[] Prefix_NativeSignerDomain = new byte[] { 0x05 };
+        private static readonly byte[] Prefix_NativeLastUsedAt = new byte[] { 0x06 };
+#endif
         // Key rotation cooldown: 24 hours in milliseconds to match Runtime.Time
         private static readonly BigInteger KeyRotationCooldownMs = 24L * 60 * 60 * 1000;
 
@@ -121,6 +126,17 @@ namespace AbstractAccount.Verifiers
         {
             ValidateSessionConfigCaller(accountId);
             ExecutionEngine.Assert(pubKey.Length == 33 || pubKey.Length == 65, "Invalid public key length");
+#if SMARTACCOUNT_NATIVE
+            // The native helper validates the complete curve point before returning
+            // its compressed identity. The generic standard-account syscall alone
+            // does not validate the y coordinate of an uncompressed encoding.
+            object normalized = Contract.Call(NativeAuthority.Service, "canonicalP256PublicKey",
+                CallFlags.ReadOnly, new object[] { pubKey });
+            ExecutionEngine.Assert(normalized is ByteString && ((ByteString)normalized).Length == 33,
+                "Invalid canonical P256 public key");
+            pubKey = (ByteString)normalized;
+            UInt160 canonicalSigner = Contract.CreateStandardAccount((ECPoint)pubKey);
+#endif
             ExecutionEngine.Assert(validUntil > Runtime.Time, "Session key must expire in the future");
             ExecutionEngine.Assert(validUntil <= Runtime.Time + MaxSessionDurationMs, "Session key lifetime exceeds maximum of 30 days");
             ExecutionEngine.Assert(spendingLimit >= 0, "Spending limit must be non-negative");
@@ -150,6 +166,11 @@ namespace AbstractAccount.Verifiers
 
             byte[] key = VerifierAuthority.AccountKey(Prefix_SessionKeys, accountId);
             Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(data));
+#if SMARTACCOUNT_NATIVE
+            Storage.Put(Storage.CurrentContext, NativeSiblingKey(key, Prefix_NativeSignerDomain),
+                SignerDomain.NativeScript(canonicalSigner));
+            Storage.Put(Storage.CurrentContext, NativeSiblingKey(key, Prefix_NativeLastUsedAt), 0);
+#endif
 
             // Store metadata
             SessionKeyMetadata metadata = new SessionKeyMetadata
@@ -186,10 +207,38 @@ namespace AbstractAccount.Verifiers
             Storage.Delete(Storage.CurrentContext, metadataKey);
             byte[] spentKey = VerifierAuthority.AccountKey(Prefix_SpentAmount, accountId);
             Storage.Delete(Storage.CurrentContext, spentKey);
+#if SMARTACCOUNT_NATIVE
+            Storage.Delete(Storage.CurrentContext, NativeSiblingKey(spentKey, Prefix_NativeSignerDomain));
+            Storage.Delete(Storage.CurrentContext, NativeSiblingKey(spentKey, Prefix_NativeLastUsedAt));
+#endif
             // A successful clear is an explicit revocation command. Emit even when the key was
             // already absent so indexers can converge on the canonical ordering of the command.
             OnSessionKeyRevoked(accountId);
         }
+
+#if SMARTACCOUNT_NATIVE
+        private static BigInteger NativeLastUsedAt(byte[] key)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            ExecutionEngine.Assert(data != null && data.Length <= 9, "Native last-use state is missing or invalid");
+            BigInteger value = (BigInteger)data!;
+            ExecutionEngine.Assert(value >= 0 && value < (BigInteger.One << 64)
+                && data == (ByteString)value.ToByteArray(), "Invalid native last-use timestamp");
+            return value;
+        }
+
+        // Used only within one callback, after deriving a fresh native account key.
+        // No arbitrary contract call occurs between these sibling storage accesses.
+        private static byte[] NativeSiblingKey(byte[] freshKey, byte[] prefix)
+        {
+            ExecutionEngine.Assert(freshKey.Length == 30 && freshKey[0] == 0xA2 && prefix.Length == 1,
+                "Invalid authority-scoped storage key");
+            byte[] key = new byte[30];
+            for (int i = 0; i < 30; i++) key[i] = freshKey[i];
+            key[1] = prefix[0];
+            return key;
+        }
+#endif
 
         [Safe]
         public static SessionKeyData? GetSessionKey(UInt160 accountId)
@@ -206,15 +255,31 @@ namespace AbstractAccount.Verifiers
             byte[] key = VerifierAuthority.AccountKey(Prefix_SessionMetadata, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             if (data == null) return null;
+#if SMARTACCOUNT_NATIVE
+            SessionKeyMetadata metadata = (SessionKeyMetadata)StdLib.Deserialize(data!);
+            metadata.LastUsedAt = NativeLastUsedAt(NativeSiblingKey(key, Prefix_NativeLastUsedAt));
+            return metadata;
+#else
             return (SessionKeyMetadata)StdLib.Deserialize(data!);
+#endif
         }
 
         [Safe]
         public static ByteString[] GetSignerDomains(UInt160 accountId)
         {
+#if SMARTACCOUNT_NATIVE
+            // One P-256 key has one native authority identity, whether used as a
+            // session signature or as a standard-account transaction witness.
+            // It is written/deleted atomically with the active session key.
+            ByteString? domain = Storage.Get(Storage.CurrentContext,
+                VerifierAuthority.AccountKey(Prefix_NativeSignerDomain, accountId));
+            ExecutionEngine.Assert(domain != null && domain.Length == 32, "Native signer domain is missing");
+            return new ByteString[] { domain! };
+#else
             SessionKeyData? sessionKey = GetSessionKey(accountId);
             ExecutionEngine.Assert(sessionKey != null, "No session key active");
             return new ByteString[] { SignerDomain.Secp256r1(sessionKey!.PubKey) };
+#endif
         }
 
         [Safe]
@@ -233,6 +298,8 @@ namespace AbstractAccount.Verifiers
             Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_SessionMetadata, accountId));
             Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_SpentAmount, accountId));
             Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_LastKeyRotation, accountId));
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_NativeSignerDomain, accountId));
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_NativeLastUsedAt, accountId));
             OnSessionKeyRevoked(accountId);
 #else
             ClearSessionKey(accountId);
@@ -292,7 +359,11 @@ namespace AbstractAccount.Verifiers
 #endif
             ExecutionEngine.Assert(op.Signature != null && op.Signature.Length == 64, "Invalid signature length");
             ByteString signature = op.Signature!;
+#if SMARTACCOUNT_NATIVE
+            byte[] payload = VerifierPayload.BuildValidationPayload(accountId, op.TargetContract, op.Method, op.Args, op.Nonce, op.Deadline);
+#else
             byte[] payload = VerifierPayload.BuildPayload(accountId, op.TargetContract, op.Method, op.Args, op.Nonce, op.Deadline);
+#endif
 
             // Verify against the raw payload; secp256r1SHA256 hashes internally.
             bool isValid = CryptoLib.VerifyWithECDsa((ByteString)payload, (ECPoint)sessionKey.PubKey, signature, NamedCurveHash.secp256r1SHA256);
@@ -358,10 +429,22 @@ namespace AbstractAccount.Verifiers
         {
 #endif
             VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+#if SMARTACCOUNT_NATIVE
+            byte[] freshKey = VerifierAuthority.AccountKey(Prefix_SessionKeys, accountId);
+            ByteString? keyData = Storage.Get(Storage.CurrentContext, freshKey);
+            ExecutionEngine.Assert(keyData != null, "No session key active");
+            SessionKeyData? sk = (SessionKeyData)StdLib.Deserialize(keyData!);
+            ExecutionEngine.Assert(sk != null, "No session key active");
+#else
             SessionKeyData? sk = GetSessionKey(accountId);
             if (sk == null) return;
-
+#endif
             SessionKeyData sessionKey = sk!;
+#if SMARTACCOUNT_NATIVE
+            ExecutionEngine.Assert(VerifierClock.Now() <= sessionKey.ValidUntil, "Session key expired");
+            ExecutionEngine.Assert(op.TargetContract == sessionKey.TargetContract, "Target contract not permitted");
+            ExecutionEngine.Assert(sessionKey.Method == "*" || op.Method == sessionKey.Method, "Method not permitted");
+#endif
 #if !SMARTACCOUNT_NATIVE
             BigInteger operationValue = 0;
             if (op.Method == "transfer")
@@ -377,8 +460,16 @@ namespace AbstractAccount.Verifiers
 #if SMARTACCOUNT_NATIVE
                 ExecutionEngine.Assert(result is bool && (bool)result, "Session transfer did not succeed");
                 BigInteger operationValue = NativeTransferValue(accountId, op);
-                ExecutionEngine.Assert(GetSpentAmount(accountId) + operationValue <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
-#endif
+                // Read the current authority-scoped counter once for this callback.
+                // The cap check and write must use the same fresh key and value.
+                byte[] spentKey = NativeSiblingKey(freshKey, Prefix_SpentAmount);
+                ByteString? spentData = Storage.Get(Storage.CurrentContext, spentKey);
+                BigInteger spent = spentData == null ? 0 : (BigInteger)spentData;
+                BigInteger newSpent = spent + operationValue;
+                ExecutionEngine.Assert(newSpent <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
+                if (operationValue > 0)
+                    Storage.Put(Storage.CurrentContext, spentKey, newSpent);
+#else
                 if (operationValue > 0)
                 {
                     BigInteger spent = GetSpentAmount(accountId);
@@ -387,15 +478,22 @@ namespace AbstractAccount.Verifiers
                     byte[] spentKey = VerifierAuthority.AccountKey(Prefix_SpentAmount, accountId);
                     Storage.Put(Storage.CurrentContext, spentKey, newSpent);
                 }
+#endif
             }
 
+#if SMARTACCOUNT_NATIVE
+            // A fixed-size timestamp update avoids rewriting the immutable description.
+            byte[] lastUsedKey = NativeSiblingKey(freshKey, Prefix_NativeLastUsedAt);
+            NativeLastUsedAt(lastUsedKey);
+            Storage.Put(Storage.CurrentContext, lastUsedKey, Runtime.Time);
+#else
             byte[] metadataKey = VerifierAuthority.AccountKey(Prefix_SessionMetadata, accountId);
             ByteString? metadataData = Storage.Get(Storage.CurrentContext, metadataKey);
             if (metadataData == null) return;
-
             SessionKeyMetadata metadata = (SessionKeyMetadata)StdLib.Deserialize(metadataData);
             metadata.LastUsedAt = Runtime.Time;
             Storage.Put(Storage.CurrentContext, metadataKey, StdLib.Serialize(metadata));
+#endif
         }
 
         private static void ValidateSessionConfigCaller(UInt160 accountId)

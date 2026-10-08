@@ -37,7 +37,8 @@ def collect_inputs(contracts):
     root = contracts.parent
     descriptor = checked_input(contracts, contracts / "native/profiles.json")
     profiles = validate_descriptor(json.loads(descriptor.read_text()))
-    inputs = {"Directory.Build.props", "nuget.config", "contracts/native/profiles.json"}
+    inputs = {"Directory.Build.props", "nuget.config", "contracts/native/profiles.json",
+              "docs/proposals/smartaccount-native-profile-v2-parameters.json"}
     for spec in profiles.values():
         project = checked_input(contracts, contracts / "native" / spec["project"])
         # Directory.Build.props selects the lock name by sibling project count.
@@ -111,7 +112,8 @@ def build(contracts, compiler, cache, output, receipt):
                 if snapshot != {name: digest(scratch / name) for name in pins}:
                     raise ValueError("Native compiler changed a pinned build input or lock")
                 packaged = scratch / "packaged"
-                package(raw, packaged, scratch / "contracts/native/profiles.json")
+                package(raw, packaged, scratch / "contracts/native/profiles.json",
+                        scratch / "docs/proposals/smartaccount-native-profile-v2-parameters.json")
                 artifacts.append({p.name: digest(p) for p in packaged.iterdir() if p.suffix in (".nef", ".json")})
                 if index == 1:
                     retained = scratch / "retained"; shutil.copytree(packaged, retained)

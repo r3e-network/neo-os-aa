@@ -88,7 +88,14 @@ foreach (string profile in new[] { "NeoNativeVerifier", "SessionKeyVerifier", "M
             switch (profile)
             {
                 case "NeoNativeVerifier": return fx.CallInteger(module, "getThreshold", id) == 1;
-                case "SessionKeyVerifier": return !fx.Call(module, "getSessionKey", id).IsNull;
+                case "SessionKeyVerifier":
+                    StackItem current = fx.Call(module, "getSessionKey", id);
+                    if (current.IsNull) return false;
+                    Require(current is Neo.VM.Types.Array fields && fields.Count == 5, "Public session record must remain five fields");
+                    StackItem metadata = fx.Call(module, "getSessionKeyMetadata", id);
+                    Require(metadata is Neo.VM.Types.Array metadataFields && metadataFields.Count == 3,
+                        "Public session metadata must remain three fields");
+                    return true;
                 case "MultiSigVerifier": return !fx.Call(module, "getConfig", id).IsNull;
                 case "WhitelistHook": return fx.CallBoolean(module, "isWhitelisted", id, token);
                 case "DailyLimitHook": return fx.CallInteger(module, "getDailyLimit", id, token) == 100;
@@ -102,7 +109,7 @@ foreach (string profile in new[] { "NeoNativeVerifier", "SessionKeyVerifier", "M
                 default: throw new InvalidOperationException(profile);
             }
         }
-        StorageKey Key(UInt160 id, ulong epoch)
+        StorageKey Key(UInt160 id, ulong epoch, byte prefix = 1)
         {
             byte[] suffix = profile.EndsWith("Hook", StringComparison.Ordinal) ? token.ToArray() : [];
             byte[] epochBytes = new byte[8];
@@ -110,11 +117,21 @@ foreach (string profile in new[] { "NeoNativeVerifier", "SessionKeyVerifier", "M
             return new StorageKey
             {
                 Id = NativeContract.ContractManagement.GetContract(fx.Engine.Storage.Snapshot, module)!.Id,
-                Key = new byte[] { 0xA2, 1 }.Concat(id.ToArray()).Concat(epochBytes).Concat(suffix).ToArray()
+                Key = new byte[] { 0xA2, prefix }.Concat(id.ToArray()).Concat(epochBytes).Concat(suffix).ToArray()
             };
         }
         Configure(account); Configure(other);
         Require(IsLive(account) && IsLive(other), "configured policy must be live before transition");
+        if (profile == "NeoNativeVerifier")
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0, 3))?.Value.Length == 32,
+                "Native signer domains must occupy their packed 03 epoch key");
+        if (profile == "SessionKeyVerifier")
+        {
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0, 5))?.Value.Length == 32,
+                "Native session signer domain must occupy its separate 05 epoch key");
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0, 6)) is not null,
+                "Native session last-used timestamp must be atomically initialized at 06");
+        }
         fx.CallVoid(service, "setEpoch", account, 1);
         Require(fx.CallInteger(service, "getAuthorityEpoch", account) == 1, "fixture epoch did not advance");
         Require(!IsLive(account), "old configured policy resurrected in authority epoch 1");
@@ -126,6 +143,18 @@ foreach (string profile in new[] { "NeoNativeVerifier", "SessionKeyVerifier", "M
         fx.CallVoid(module, "clearAccount", account);
         Require(!IsLive(account) && IsLive(other), "cleanup must clear only current account and epoch");
         Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0)) is not null, "cleanup erased a different epoch");
+        if (profile == "NeoNativeVerifier")
+        {
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0, 3)) is not null, "cleanup erased another epoch native signer domains");
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 1, 3)) is null, "cleanup left current native signer domains live");
+        }
+        if (profile == "SessionKeyVerifier")
+        {
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0, 5)) is not null, "cleanup erased another epoch signer domain");
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 1, 5)) is null, "cleanup left the current signer domain live");
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0, 6)) is not null, "cleanup erased another epoch timestamp");
+            Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 1, 6)) is null, "cleanup left the current timestamp live");
+        }
     });
 }
 
@@ -163,7 +192,7 @@ Run("untagged-keys-cannot-contaminate-epoch-zero-prefix-scans", () =>
     Require(fx.Engine.Storage.Snapshot.TryGet(stale) is not null, "A2 cleanup must not reinterpret old untagged keys");
 });
 
-UInt160 Leaf(RuntimeFixture fx, byte domain, Action<ScriptBuilder> validate, Action<ScriptBuilder> post)
+UInt160 Leaf(RuntimeFixture fx, byte domain, Action<ScriptBuilder> validate, Action<ScriptBuilder> post, Action<ScriptBuilder>? signerDomains = null)
 {
     using ScriptBuilder script = new();
     List<ContractMethodDescriptor> methods = [];
@@ -179,7 +208,9 @@ UInt160 Leaf(RuntimeFixture fx, byte domain, Action<ScriptBuilder> validate, Act
     Method("supportsV3", ContractParameterType.Boolean, true); script.EmitPush(true).Emit(OpCode.RET);
     Method("supportsComposition", ContractParameterType.Boolean, true); script.EmitPush(false).Emit(OpCode.RET);
     Method("getSignerDomains", ContractParameterType.Array, true, ContractParameterType.Hash160);
-    script.EmitPush(Enumerable.Repeat(domain, 32).ToArray()).EmitPush(1).Emit(OpCode.PACK).Emit(OpCode.RET);
+    if (signerDomains is null) script.EmitPush(Enumerable.Repeat(domain, 32).ToArray()).EmitPush(1).Emit(OpCode.PACK);
+    else signerDomains(script);
+    script.Emit(OpCode.RET);
     foreach (string method in new[] { "validateSignature", "validateSignatureForPostExecute" })
     {
         Method(method, ContractParameterType.Boolean, true, ContractParameterType.Hash160, ContractParameterType.Array);
@@ -238,13 +269,17 @@ Run("multisig-single-mutator-cannot-alter-original-result", () =>
     fx.CallVoid(root, "setConfig", account, new[] { child }, 1);
     RequireOriginalResult(CompositePost(fx, root, CompositeOperation(fx, 1)));
 });
-Run("multisig-nested-arguments-isolated-in-both-phases", () =>
+Run("multisig-nested-arguments-isolated-through-receipt-path", () =>
 {
     RuntimeFixture fx = Create(); UInt160 root = Deploy(fx, "MultiSigVerifier");
-    UInt160 first = Leaf(fx, 1, MutateArguments, NoPost), second = Leaf(fx, 2, CheckArguments, NoPost);
+    UInt160 first = Leaf(fx, 1, MutateArguments, script => { MutateArguments(script); script.Emit(OpCode.DROP); }),
+        second = Leaf(fx, 2, CheckArguments, script => { CheckArguments(script); script.Emit(OpCode.ASSERT); });
     fx.CallVoid(root, "setConfig", account, new[] { first, second }, 2);
     object[] op = CompositeOperation(fx, 2);
-    Require(fx.CallBoolean(root, "validateSignature", account, op), "child argument mutation changed another approval");
+    StackItem receipt = fx.Call(root, "validateCompositeSignature", account, op);
+    Require(receipt is Neo.VM.Types.Array values && values.Count == 3 && values[0] is Neo.VM.Types.Boolean && values[0].GetBoolean()
+        && values[1] is Neo.VM.Types.Array approved && approved.Count == 2,
+        "child argument mutation changed another approval receipt");
     RequireOriginalResult(CompositePost(fx, root, op));
 });
 Run("multisig-only-exact-Boolean-true-votes", () =>
@@ -253,9 +288,10 @@ Run("multisig-only-exact-Boolean-true-votes", () =>
     UInt160 child = Leaf(fx, 1, script => script.EmitPush(1), NoPost);
     fx.CallVoid(root, "setConfig", account, new[] { child }, 1);
     object[] op = CompositeOperation(fx, 1);
-    Require(!fx.CallBoolean(root, "validateSignature", account, op), "Integer 1 counted as an approval");
-    try { CompositePost(fx, root, op); throw new InvalidOperationException("Integer 1 counted in post validation"); }
+    try { fx.Call(root, "validateCompositeSignature", account, op); throw new InvalidOperationException("Integer 1 counted as an approval"); }
     catch (TestException error) { Require(error.Message.Contains("Verifier rejected signature"), "wrong strict-vote fault: " + error.Message); }
+    try { CompositePost(fx, root, op); throw new InvalidOperationException("Integer 1 produced a post approval receipt"); }
+    catch (TestException error) { Require(error.Message.Contains("Verifier rejected signature"), "wrong strict-vote post-path fault: " + error.Message); }
 });
 Run("multisig-rejects-unserializable-Interop-result", () =>
 {
@@ -265,6 +301,27 @@ Run("multisig-rejects-unserializable-Interop-result", () =>
     try { fx.CallVoid(service, "callPostWithIterator", root, account, CompositeOperation(fx, 1)); throw new InvalidOperationException("Interop result crossed the ownership boundary"); }
     catch (TestException error) { Require(error.ToString().Contains("serialize", StringComparison.OrdinalIgnoreCase) || error.ToString().Contains("Interop", StringComparison.OrdinalIgnoreCase), "wrong Interop rejection: " + error); }
 });
+
+foreach (bool buffer in new[] { false, true })
+{
+    Run(buffer ? "multisig-rejects-Buffer-signer-domain" : "multisig-rejects-Struct-signer-domain-array", () =>
+    {
+        RuntimeFixture fx = Create(); UInt160 root = Deploy(fx, "MultiSigVerifier");
+        UInt160 child = Leaf(fx, 1, Approve, NoPost, script =>
+        {
+            if (buffer) script.EmitPush(32).Emit(OpCode.NEWBUFFER).EmitPush(1).Emit(OpCode.PACK);
+            else script.EmitPush(1).Emit(OpCode.NEWSTRUCT).Emit(OpCode.DUP).EmitPush(0)
+                .EmitPush(new byte[32]).Emit(OpCode.SETITEM);
+        });
+        try { fx.CallVoid(root, "setConfig", account, new[] { child }, 1); throw new InvalidOperationException("Malformed signer domains were admitted"); }
+        catch (TestException error)
+        {
+            Require(error.Message.Contains(buffer ? "Invalid signer domain" : "Signer domains must be an Array"),
+                "wrong malformed-domain rejection: " + error.Message);
+        }
+        Require(fx.Call(root, "getConfig", account).IsNull, "Failed configuration published a partial root");
+    });
+}
 
 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = failures == 0 ? "PASS" : "FAIL", publicNetworksTouched = false,
     evidence = "Real public NeoVM executes production module NEFs against a test-only epoch service ABI; no native recovery/admission claim.", cases }, new JsonSerializerOptions { WriteIndented = true }));

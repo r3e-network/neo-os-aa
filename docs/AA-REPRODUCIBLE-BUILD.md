@@ -10,7 +10,7 @@ builder gets the same NEF and manifest bytes.
 | --- | --- | --- |
 | `Neo.SmartContract.Framework`, `Neo.SmartContract.Testing` | 3.10.1 | `Directory.Build.props` (`NeoSmartContractFrameworkVersion`) |
 | the Neo packages they pull in | `Neo`, `Neo.Extensions`, `Neo.IO`, `Neo.Json`, `Neo.VM`, `Neo.Disassembler.CSharp` 3.10.1; `Neo.Cryptography.BLS12_381` 3.9.0 | `contracts/neo-platform-packages.json` (SHA-512 of each package) |
-| every other package (MSTest, Akka, ...) | resolved version and content hash | committed locks for 26 public projects; `--include-native` checks all 34, including six native modules and two test-only epoch-probe projects |
+| every other package (MSTest, Akka, ...) | resolved version and content hash | committed locks for 26 public projects; `--include-native` checks all 36, including six native modules, two test-only epoch-probe projects and two runtime probe hosts with empty NuGet dependency locks |
 | package source | nuget.org only, every package id mapped to it | `nuget.config` |
 | compiler | `Neo.Compiler.CSharp` 3.9.1 (`nccs`) | `.github/workflows/ci.yml`; the installed package is checked against `contracts/neo-platform-packages.json` |
 | SDK | .NET 10 (`net10.0`) | `actions/setup-dotnet` in `ci.yml` |
@@ -137,3 +137,31 @@ characters, each with an empty NuGet cache, produced identical bytes and no warn
 
 A Dependabot NuGet pull request that changes a version without regenerating the lock files (and, for a Neo
 package, the manifest) fails the gate; apply steps 2 and 3 to its branch.
+
+Native private-chain consumers verify the packaged profile certificate against
+current profile parameter bytes and their canonical digest, the descriptor and
+the packaging recipe. They also validate each packaged module's exact capability
+metadata and lifecycle ABI against that descriptor. Matching artifact hashes
+alone do not admit an older native ABI 2 profile.
+
+
+## Frozen native composite profile (2026-10-09)
+
+The final build/proof checkpoint binds profile
+`4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4`
+to the core/node/Express commits and complete source maps in
+[`aa-native-composite-final-build-proof-20261009.json`](reports/aa-native-composite-final-build-proof-20261009.json).
+Two independently copied source trees produced identical 104-file runtimes,
+50 dependency archives and lock maps. The six native modules independently
+reproduced their 12 NEF/manifest files and packaging certificate. The consumer
+revalidated current parameter bytes, profile digest, descriptor, recipes,
+capability metadata and lifecycle ABI against all 13 packaged files.
+
+The ordinary `v3` and `PLATFORM` outputs remain byte-identical across all 80
+artifacts. The final public runtime regression passed 396 tests with no skips;
+the required external NeoDID artifact was supplied. The earlier
+`aa-native-abi2-runner-build-20261009.json` and
+`aa-native-abi2-rpc-runtime-20261009.json` describe intermediate source snapshots
+and are not the final composite build. Private-chain/SDK receipts establish
+integration behavior separately; these build results do not establish activation
+on a public network or compiler correctness.

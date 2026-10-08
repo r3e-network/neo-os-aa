@@ -15,7 +15,7 @@ from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
 from neoexpress_native_service_validate import CORE, check_native, persist
 from neoexpress_native_proxy_validate import GAS, GAS_TOKEN, proxy_address
 from neoexpress_native_modules_validate import nef_from_rpc, check_module_build
-from neoexpress_native_session_validate import SessionTransactions, serialize_value, NULL
+from neoexpress_native_session_validate import SessionTransactions, serialize_value, native_session_signer_domain, session_last_used_change, NULL
 from neoexpress_native_recovery_validate import equal_typed
 from neoexpress_reproducible_build import check_runtime_receipt, sha256
 
@@ -26,21 +26,23 @@ def storage_value(item):
 
 def grant_change(state,timestamp,key,target,method,until,limit,description):
     state['account'][8]+=1;state['pending']=None
+    domain=native_session_signer_domain(key)
     state['key']=[key,hash_le(target),method.encode(),until,limit]
     state['metadata']=[timestamp,0,description.encode()]
     state['raw'][0]=storage_value(A(B(key),H(target),S(method),I(until),I(limit)))
     state['raw'][1]=storage_value(A(I(timestamp),I(0),S(description)))
     state['raw'][3]=base64.b64encode(serialize_value(I(timestamp))[2:]).decode()
+    state['raw'][4]=base64.b64encode(domain).decode()
+    state['raw'][5]=''
 
 
 def use_change(state,timestamp,amount):
-    state['nonce']+=1;state['balance']-=amount;state['metadata'][1]=timestamp
-    state['raw'][1]=storage_value(A(I(state['metadata'][0]),I(timestamp),B(state['metadata'][2])))
+    state['nonce']+=1;state['balance']-=amount;session_last_used_change(state,timestamp)
 
 
 def revoke_change(state,timestamp):
     state['account'][8]+=1;state['pending']=None;state['key']=None;state['metadata']=None
-    state['spent']=0;state['raw'][:3]=[None]*3
+    state['spent']=0;state['raw'][:3]=[None]*3;state['raw'][4:6]=[None,None]
 
 
 def check_grant_notification(execution,verifier,expected):
@@ -53,7 +55,7 @@ def check_grant_notification(execution,verifier,expected):
 
 def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
     report={'schema':'smartaccount-native-session-scope-private/v1','status':'RUNNING','publicNetworksTouched':False,
-            'scope':'Zero-cap/exact-method/wildcard scope and identical-signature revival after explicit key regrant. Not permanent revocation, cryptographic or compiler soundness.',
+            'scope':'Zero-cap/exact-method/wildcard scope and identical-signature rejection after explicit key regrant; fresh signatures succeed. Not a cryptographic or compiler soundness proof.',
             'transactions':[],'executions':[],'signingVectors':[],'rejectedWitnesses':[],'grantEvents':[],
             'retainedSignatures':[],'ownedNodesStopped':False}
     output.parent.mkdir(parents=True,exist_ok=True);output.write_text(json.dumps(report)+'\n');stage='provenance'
@@ -96,7 +98,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                     state=chain.rpc('getcontractstate',[verifier]);require(nef_from_rpc(state['nef'])==path.read_bytes(),'Session NEF readback mismatch')
                     require(state['manifest']==json.loads(path.with_suffix('.manifest.json').read_text()),'Session manifest readback mismatch')
                 readback();driver=SessionTransactions(chain,account,other,verifier,keys['relay'],addresses['recipient'],report)
-                initial=driver.state(account);require(initial['key'] is None and initial['nonce']==0 and initial['balance']==2*GAS and initial['raw']==[None]*4,'Unexpected initial session scope state')
+                initial=driver.state(account);require(initial['key'] is None and initial['nonce']==0 and initial['balance']==2*GAS and initial['raw']==[None]*6,'Unexpected initial session scope state')
                 def core(label,method,args,**kw):return driver.send(label,CORE,method,[H(account),*args],key=keys['owner'],**kw)
                 def wait_delay():chain.stop_node();chain.nx('fastfwd','1','-t','86401');chain.start_node()
                 now=chain.rpc('getblockheader',[chain.rpc('getbestblockhash',[]),True])['time']
@@ -188,12 +190,12 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 core('propose-remove-session','proposeVerifier',[H(ZERO)],events=[(CORE,'VerifierChangeProposed')],change=propose_remove)
                 wait_delay()
                 def remove(state,timestamp):
-                    state['account'][5]=None;state['account'][8]+=1;state['account'][9:13]=[None]*4;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*4
+                    state['account'][5]=None;state['account'][8]+=1;state['account'][9:13]=[None]*4;state['key']=None;state['metadata']=None;state['spent']=0;state['raw']=[None]*6
                 core('activate-remove-session','activateVerifier',[],events=[(verifier,'SessionKeyRevoked'),(CORE,'VerifierChanged')],change=remove)
-                require(driver.storage(account)==[None]*4,'Session cleanup left account-scoped storage')
+                require(driver.storage(account)==[None]*6,'Session cleanup left account-scoped storage')
                 readback();report.update(networkMagic=chain.magic,accountId=account,otherAccountId=other,
                     finalOperationNonce=driver.state(account)['nonce'],finalConfigurationNonce=driver.state(account)['account'][8],
-                    fullNefReadbackMatched=True,manifestReadbackMatched=True,allFourSessionStoragePrefixesCleared=True,
+                    fullNefReadbackMatched=True,manifestReadbackMatched=True,allSixSessionStoragePrefixesCleared=True,
                     zeroCapFalseCompletionVerified=True,wildcardTargetBindingVerified=True,keyReuseRevivalRejected=True)
             finally:chain.stop_node();report['ownedNodesStopped']=chain.node is None
         check_runtime_receipt(build,runtime)

@@ -29,6 +29,9 @@ namespace AbstractAccount.Verifiers
         private static readonly byte[] Prefix_AuthorizedSigners = new byte[] { 0x01 };
         // AccountId -> required threshold (for multisig)
         private static readonly byte[] Prefix_Threshold = new byte[] { 0x02 };
+#if SMARTACCOUNT_NATIVE
+        private static readonly byte[] Prefix_NativeSignerDomains = new byte[] { 0x03 };
+#endif
         private const int MaxSigners = 10;
 
         public static void _deploy(object data, bool update) => VerifierAuthority.Initialize(data, update);
@@ -93,6 +96,16 @@ namespace AbstractAccount.Verifiers
 
             byte[] thresholdKey = VerifierAuthority.AccountKey(Prefix_Threshold, accountId);
             Storage.Put(Storage.CurrentContext, thresholdKey, threshold);
+#if SMARTACCOUNT_NATIVE
+            // Deterministic configured identities, atomically replaced with signers.
+            byte[] domains = new byte[signers.Length * 32];
+            for (int i = 0; i < signers.Length; i++)
+            {
+                ByteString domain = SignerDomain.NativeScript(signers[i]);
+                for (int j = 0; j < 32; j++) domains[i * 32 + j] = domain[j];
+            }
+            Storage.Put(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_NativeSignerDomains, accountId), domains);
+#endif
         }
 
         [Safe]
@@ -117,6 +130,16 @@ namespace AbstractAccount.Verifiers
         [Safe]
         public static ByteString[] GetSignerDomains(UInt160 accountId)
         {
+#if SMARTACCOUNT_NATIVE
+            ByteString? data = Storage.Get(Storage.CurrentContext,
+                VerifierAuthority.AccountKey(Prefix_NativeSignerDomains, accountId));
+            ExecutionEngine.Assert(data != null && data.Length > 0 && data.Length <= MaxSigners * 32
+                && data.Length % 32 == 0, "Native signer domains are missing or invalid");
+            ByteString[] domains = new ByteString[data!.Length / 32];
+            for (int i = 0; i < domains.Length; i++)
+                domains[i] = (ByteString)Helper.Range((byte[])data, i * 32, 32);
+            return domains;
+#else
             NativeVerifierConfig? config = GetConfig(accountId);
             ExecutionEngine.Assert(config != null, "No NeoNativeVerifier config");
             ByteString[] domains = new ByteString[config!.Signers.Length];
@@ -125,6 +148,7 @@ namespace AbstractAccount.Verifiers
                 domains[i] = SignerDomain.NativeScript(config.Signers[i]);
             }
             return domains;
+#endif
         }
 
 #if SMARTACCOUNT_NATIVE
@@ -136,6 +160,9 @@ namespace AbstractAccount.Verifiers
             // Invariant (audit low): every exec path validates its caller, even a
             // no-op — future logic added here is guarded by construction.
             VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+#if SMARTACCOUNT_NATIVE
+            ExecutionEngine.Assert(ValidateNativeWitnesses(accountId), "Native witness quorum changed after validation");
+#endif
         }
 
         /// <summary>
@@ -194,6 +221,9 @@ namespace AbstractAccount.Verifiers
 #endif
             Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_AuthorizedSigners, accountId));
             Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_Threshold, accountId));
+#if SMARTACCOUNT_NATIVE
+            Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_NativeSignerDomains, accountId));
+#endif
         }
     }
 }

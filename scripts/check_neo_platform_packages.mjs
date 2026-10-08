@@ -17,7 +17,8 @@
 //   * with --compiler-only, the installed nccs must be the pinned compiler package, byte for byte.
 //
 // Public/platform gates exclude the separately built native profile. --include-native
-// also checks all six native module locks and both test-only epoch probe locks.
+// also checks six native modules, both test-only epoch probes, and two hosts
+// that reference a validated source runtime instead of Neo NuGet assemblies.
 // Usage: node scripts/check_neo_platform_packages.mjs [--compiler-only | --include-native]
 
 import { spawnSync } from "node:child_process";
@@ -35,6 +36,8 @@ export const PATHS = {
   contractsDir: "contracts",
   nativeProbeProject: "tests/NativeEpochProbe/NativeEpochProbe.csproj",
   nativeProbeContractProject: "tests/NativeEpochProbe/contracts/NativeEpochCore.csproj",
+  nativeRuntimeProbeProject: "tests/NativeModuleProbe/NativeModuleProbe.csproj",
+  nativeMultiSigProbeProject: "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj",
   coreAssets: "contracts/obj/project.assets.json",
   testsAssets: "tests/AbstractAccount.Contracts.Tests/obj/project.assets.json",
   manifest: "contracts/neo-platform-packages.json",
@@ -94,6 +97,10 @@ export function parseManifest(text, file = PATHS.manifest) {
 /** Returns human-readable problems when the pins and the audited manifest disagree. */
 export function pinConsistencyProblems({ propsVersion, testsVersion = null, manifest }) {
   const problems = [];
+  if (JSON.stringify(manifest.sourceRuntimeProbeProjects)
+    !== JSON.stringify([PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject])) {
+    problems.push(`${PATHS.manifest} source runtime probe project inventory is missing or changed`);
+  }
   if (testsVersion !== null && testsVersion !== propsVersion) {
     problems.push(`${PATHS.testsProject} pins ${testsVersion} but ${PATHS.props} pins ${propsVersion}`);
   }
@@ -123,7 +130,8 @@ export function listProjects(root = repoRoot, { includeNative = false } = {}) {
   };
   walk(PATHS.contractsDir);
   return [...found.sort(), PATHS.testsProject, ...(includeNative
-    ? [PATHS.nativeProbeProject, PATHS.nativeProbeContractProject]
+    ? [PATHS.nativeProbeProject, PATHS.nativeProbeContractProject,
+      PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject]
     : [])];
 }
 
@@ -160,6 +168,13 @@ export function lockFileProblems(locks, manifest) {
       continue;
     }
     const entries = lockedDependencies(lock);
+    if ([PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject].includes(project)) {
+      if (lock.version !== 1 || Object.keys(lock.dependencies ?? {}).length !== 1
+        || !Object.hasOwn(lock.dependencies ?? {}, "net10.0") || entries.length !== 0) {
+        problems.push(`${file} must lock an empty net10.0 NuGet graph; Neo assemblies come from the validated source runtime`);
+      }
+      continue;
+    }
     const names = new Set(entries.map((entry) => entry.id.toLowerCase()));
     const required = project === PATHS.nativeProbeProject
       ? ["Neo.SmartContract.Testing"]

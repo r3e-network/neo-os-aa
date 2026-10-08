@@ -29,6 +29,17 @@ formatting commit occurred after the build snapshot; the readback report records
 its new HEAD while preserving the original build metadata and matching source
 hashes. Build reproducibility does not itself constitute a native-chain pass.
 
+The 2026-10-09 RPC compatibility rebuild adds the capability reader to the source
+graph: 313 core, **123 node** and 182 Express inputs. Two independent builds again
+matched all 104 runtime files and 50 dependency archives. Native RPC output retains
+the exact `minimumrequiredfee`; a published core without that capability omits
+the field. The native SDK still requires it when preparing native transactions.
+Use [`aa-native-abi2-runner-build-20261009.json`](../reports/aa-native-abi2-runner-build-20261009.json)
+for this runtime and
+[`aa-native-abi2-rpc-runtime-20261009.json`](../reports/aa-native-abi2-rpc-runtime-20261009.json)
+for its source/build and two-lane RPC test evidence. The earlier runner receipt
+remains the dated snapshot and must not be substituted for these changed sources.
+
 ## Historical native module profiles
 
 The real-module matrix entrypoint is `scripts/neoexpress_native_modules_validate.py`.

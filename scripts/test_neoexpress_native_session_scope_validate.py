@@ -1,6 +1,7 @@
 """Exact storage and event oracles for native uncapped session validation."""
 import base64
 import copy
+import hashlib
 import importlib
 from pathlib import Path
 import tempfile
@@ -17,31 +18,38 @@ class NativeSessionScopeTests(unittest.TestCase):
 
     def state(self):
         return {'account':[2]+[None]*7+[7]+[None]*4+[3], 'pending':['old'], 'key':None,'metadata':None,
-                'spent':9,'nonce':3,'balance':100,'raw':[None,None,'CQ==','AA==']}
+                'spent':9,'nonce':3,'balance':100,'raw':[None,None,'CQ==','AA==','previous-domain','previous-time']}
 
     def test_grant_oracle_preserves_spent_and_encodes_exact_storage(self):
         m=self.module();state=self.state();key=b'\x02'+bytes(32)
         m.grant_change(state,123,key,GAS_TOKEN,'*',999,0,'wildcard')
         self.assertEqual(8,state['account'][8]);self.assertEqual(3,state['account'][13]);self.assertIsNone(state['pending'])
         self.assertEqual(9,state['spent']);self.assertEqual('CQ==',state['raw'][2])
+        domain=hashlib.sha256(b'NeoSmartAccount/SignerDomain\x01\x03'+hashlib.new('ripemd160',hashlib.sha256(b'\x0c\x21'+key+b'\x41\x56\xe7\xb3\x27').digest()).digest()).digest()
         self.assertEqual([key,hash_le(GAS_TOKEN),b'*',999,0],state['key'])
         self.assertEqual([123,0,b'wildcard'],state['metadata'])
         expected=A(B(key),H(GAS_TOKEN),S('*'),I(999),I(0))
         self.assertEqual(base64.b64encode(serialize_value(expected)).decode(),state['raw'][0])
         self.assertEqual('ew==',state['raw'][3])
+        self.assertEqual(base64.b64encode(domain).decode(),state['raw'][4])
+        self.assertEqual('',state['raw'][5], 'Native zero timestamp is an existing empty storage value, not a deleted key')
 
     def test_uncapped_completion_advances_nonce_not_spent(self):
-        m=self.module();state=self.state();state['metadata']=[10,0,b'scope']
+        m=self.module();state=self.state();description=b'x'*128;state['metadata']=[10,0,description]
+        unchanged=base64.b64encode(serialize_value(A(I(10),I(0),B(description)))).decode()
+        state['raw'][1]=unchanged
         m.use_change(state,20,40)
         self.assertEqual((4,9,60),(state['nonce'],state['spent'],state['balance']))
-        self.assertEqual([10,20,b'scope'],state['metadata'])
+        self.assertEqual([10,20,description],state['metadata'])
         self.assertEqual('CQ==',state['raw'][2])
-        self.assertEqual(base64.b64encode(serialize_value(A(I(10),I(20),B(b'scope')))).decode(),state['raw'][1])
+        self.assertEqual(unchanged,state['raw'][1], 'PostExecute must leave the stored metadata record byte-identical')
+        self.assertEqual('FA==',state['raw'][5])
         m.use_change(state,21,0);self.assertEqual((5,9,60),(state['nonce'],state['spent'],state['balance']))
+        self.assertEqual('FQ==',state['raw'][5]);self.assertEqual(unchanged,state['raw'][1])
 
-    def test_revocation_clears_three_prefixes_but_not_cooldown_or_nonce(self):
+    def test_revocation_clears_key_metadata_spend_and_domain_but_not_cooldown_or_nonce(self):
         m=self.module();state=self.state();m.revoke_change(state,100)
-        self.assertEqual([None,None,None,'AA=='],state['raw'])
+        self.assertEqual([None,None,None,'AA==',None,None],state['raw'])
         self.assertEqual((0,3,8),(state['spent'],state['nonce'],state['account'][8]))
         self.assertIsNone(state['pending']);self.assertIsNone(state['key']);self.assertIsNone(state['metadata'])
 

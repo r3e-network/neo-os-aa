@@ -86,8 +86,19 @@ current policy and account for the target result without repeating SessionKey
 cryptographic verification. Receipt construction, copying and all descendant
 calls remain inside the fixed verifier budget.
 
+The native MultiSig profile admits at most three child modules, two required
+approvals and three aggregate signer domains. A standalone NeoNativeVerifier
+has its own ten-signer bound; the composite limit does not reduce that separate
+capability. Ordinary witness quorums such as three-of-five belong in that
+standalone verifier; MultiSigVerifier combines different verifier policies.
+Supported combinations still need to pass execution against the
+current fee policy and their actual module bytecode.
+
 Supported native P-256 keys use their standard Neo signature-account identity as
-the canonical signer domain. Reusing one key as both a SessionKey and a
+the canonical signer domain. Configuration strictly validates both compressed
+and uncompressed encodings with `canonicalP256PublicKey` before storing the
+compressed key; invalid curve points are rejected before any policy write.
+Reusing one key as both a SessionKey and a
 NeoNative signer therefore does not create two independent votes. This does not
 prove that distinct keys belong to independent people or reveal who controls an
 arbitrary verification script. Token policies likewise depend on the selected
@@ -112,6 +123,13 @@ consumption is lower. Node simulation therefore reports `minimumrequiredfee` in
 addition to `gasconsumed`; wallet and SDK builders preserve that requirement.
 Custom proxy verification and invocation scripts participate in network-fee
 calculation. A fee increase after signing requires a new reviewed transaction.
+
+Each verifier callback has a fixed 1 GAS budget; each hook and maintenance
+callback has a 2.5 GAS budget. The global Verification limit also applies: a
+32-operation encoding bound does not promise that 32 expensive authorizations
+fit in one transaction. The SDK simulates and quotes the exact batch. Fee-policy
+changes and arbitrary third-party modules can change feasibility, so a measured
+boundary vector establishes support only for its recorded runtime and fee policy.
 
 The workspace starts read-only and shows identity separately from the funding
 address. Recovery descriptors contain public discovery information, not private

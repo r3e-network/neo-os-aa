@@ -59,8 +59,8 @@ function fixture() {
     },
   };
   const response = new Map();
-  const add = (method, args, value) =>
-    response.set(c.dynamicCall(CORE, method, args, 5), value);
+  const add = (method, args, value, contract = CORE) =>
+    response.set(c.dynamicCall(contract, method, args, 5), value);
   const context = () => ({
     accountId: h,
     networkMagic: magic,
@@ -151,6 +151,42 @@ test("strict native discovery refuses wrong network, ABI, profile, native identi
   }
   const f = fixture();
   assert.equal((await f.client.discover()).abiVersion, 2);
+});
+test("native discovery requires the canonical P256 helper ABI without invoking it", async () => {
+  const name = "canonicalP256PublicKey";
+  const valid = {
+    name,
+    parameters: [{ type: "ByteArray" }],
+    returntype: "ByteArray",
+    safe: true,
+  };
+  for (const entry of [
+    null,
+    { ...valid, safe: false },
+    { ...valid, returntype: "Any" },
+    { ...valid, parameters: [{ type: "String" }] },
+  ]) {
+    const f = fixture();
+    f.manifest.abi.methods = f.manifest.abi.methods.filter(
+      (m) => m.name !== name,
+    );
+    if (entry) f.manifest.abi.methods.push(entry);
+    await assert.rejects(() => f.client.discover(), /ABI/);
+  }
+  const f = fixture();
+  f.manifest.abi.methods = f.manifest.abi.methods.filter(
+    (m) => m.name !== name,
+  );
+  f.manifest.abi.methods.push(valid);
+  await f.client.discover();
+  assert.equal(
+    f.calls.some(
+      (call) =>
+        call.method === "invokescript" &&
+        Buffer.from(call.params[0], "base64").includes(Buffer.from(name)),
+    ),
+    false,
+  );
 });
 test("native state is exact14 fields with epoch and independently checked address", async () => {
   const f = fixture();
@@ -369,7 +405,14 @@ test("module configuration prepends account only in core and rejects a changed p
     method === "getcontractstate" && params[0] === "0x" + verifier
       ? {
           manifest: {
-            extra: { smartAccount: { configurationMethods: ["setLimit"] } },
+            extra: {
+              smartAccount: {
+                abiVersion: 2,
+                profileDigest: D,
+                compositeVerifier: false,
+                configurationMethods: ["setLimit"],
+              },
+            },
             abi: {
               methods: [
                 {
@@ -382,6 +425,7 @@ test("module configuration prepends account only in core and rejects a changed p
           },
         }
       : send(method, params);
+  f.add("supportsComposition", [], { type: "Boolean", value: false }, verifier);
   f.add("getPendingModuleCall", [c.hashValue(h), c.stringValue("verifier")], N);
   const plan = await f.client.buildModuleCall({
     accountId: h,
@@ -518,4 +562,231 @@ test("native simulation requires strictly true transfer results but preserves ar
     f.setResult([item]);
     assert.deepEqual((await f.client.simulate(arbitrary)).failedTransfers, []);
   }
+});
+
+test("composite validation and post-execution callbacks are never configuration methods", async () => {
+  const f = fixture();
+  for (const method of [
+    "validateCompositeSignature",
+    "postExecuteComposite",
+    "validateSignatureForPostExecute",
+  ]) {
+    await assert.rejects(
+      () =>
+        f.client.buildModuleCall({ accountId: h, role: "verifier", method }),
+      /invalid module configuration call/,
+    );
+  }
+});
+
+test("module configuration requires the exact service profile and typed composition marker", async () => {
+  for (const change of [
+    (m) => delete m.abiVersion,
+    (m) => (m.abiVersion = 1),
+    (m) => (m.abiVersion = "2"),
+    (m) => delete m.profileDigest,
+    (m) => (m.profileDigest = "00".repeat(32)),
+    (m) => delete m.compositeVerifier,
+    (m) => (m.compositeVerifier = 0),
+    (m) => (m.compositeVerifier = true),
+  ]) {
+    const f = fixture(),
+      send = f.client.rpc.send;
+    const metadata = {
+      abiVersion: 2,
+      profileDigest: D,
+      compositeVerifier: false,
+      configurationMethods: ["setLimit"],
+    };
+    change(metadata);
+    f.client.rpc.send = (method, params) =>
+      method === "getcontractstate" && params[0] === "0x" + verifier
+        ? {
+            manifest: {
+              extra: { smartAccount: metadata },
+              abi: {
+                methods: [
+                  {
+                    name: "setLimit",
+                    safe: false,
+                    parameters: [{ type: "Hash160" }, { type: "Integer" }],
+                  },
+                ],
+              },
+            },
+          }
+        : send(method, params);
+    f.add(
+      "supportsComposition",
+      [],
+      { type: "Boolean", value: false },
+      verifier,
+    );
+    f.add(
+      "getPendingModuleCall",
+      [c.hashValue(h), c.stringValue("verifier")],
+      N,
+    );
+    await assert.rejects(
+      () =>
+        f.client.buildModuleCall({
+          accountId: h,
+          role: "verifier",
+          method: "setLimit",
+          args: [I(7)],
+        }),
+      /module profile|composition/i,
+    );
+  }
+});
+
+test("native verifier dependency readback enforces the profile three-child cleanup and active limits", async () => {
+  for (const [cleanupCount, activeCount] of [
+    [4, 0],
+    [3, 4],
+  ]) {
+    const f = fixture();
+    const children = Array.from({ length: 4 }, (_, index) =>
+      (index + 6).toString().repeat(40),
+    );
+    f.add(
+      "getModuleDependencies",
+      [c.hashValue(h), c.stringValue("verifier")],
+      A([
+        A([H(verifier), B("aa".repeat(32))]),
+        A(
+          children
+            .slice(0, cleanupCount)
+            .map((child) => A([H(child), B("ab".repeat(32))])),
+        ),
+        A(children.slice(0, activeCount).map(H)),
+      ]),
+    );
+    await assert.rejects(
+      () => f.client.getModuleDependencies(h, "verifier"),
+      /three|limit|bound/,
+    );
+  }
+});
+
+function multiSigConfigurationFixture() {
+  const f = fixture(),
+    send = f.client.rpc.send;
+  const manifest = {
+    name: "MultiSigVerifier",
+    extra: {
+      SmartAccountProfile: "native-v2",
+      smartAccount: {
+        abiVersion: 2,
+        profileDigest: D,
+        compositeVerifier: true,
+        configurationMethods: ["setConfig"],
+      },
+    },
+    abi: {
+      methods: [
+        {
+          name: "setConfig",
+          safe: false,
+          parameters: ["Hash160", "Array", "Integer"].map((type) => ({ type })),
+        },
+      ],
+    },
+  };
+  f.client.rpc.send = (method, params) =>
+    method === "getcontractstate" && params[0] === "0x" + verifier
+      ? { manifest }
+      : send(method, params);
+  f.add("supportsComposition", [], { type: "Boolean", value: true }, verifier);
+  f.add("getPendingModuleCall", [c.hashValue(h), c.stringValue("verifier")], N);
+  return {
+    ...f,
+    moduleManifest: manifest,
+    build: (args) =>
+      f.client.buildModuleCall({
+        accountId: h,
+        role: "verifier",
+        method: "setConfig",
+        args,
+      }),
+  };
+}
+
+test("official native MultiSig configuration rejects doomed roster and threshold shapes before staging", async () => {
+  const children = ["67", "78", "89", "9a"].map((x) => x.repeat(20));
+  const roster = (list) => ({ type: "Array", value: list.map(c.hashValue) });
+  for (const args of [
+    [roster([]), I(1)],
+    [roster(children), I(2)],
+    [roster(children.slice(0, 3)), I(3)],
+    [roster(children.slice(0, 1)), I(2)],
+    [roster(children.slice(0, 2)), I(0)],
+    [roster(children.slice(0, 2)), { type: "Boolean", value: true }],
+    [roster([children[0], children[0]]), I(1)],
+    [roster(["00".repeat(20)]), I(1)],
+    [roster([verifier]), I(1)],
+    [roster([CORE]), I(1)],
+    [{ type: "Struct", value: children.slice(0, 2).map(c.hashValue) }, I(1)],
+    [{ type: "Array", value: [I(1)] }, I(1)],
+    [
+      {
+        type: "Array",
+        value: [{ type: "ByteString", value: "67".repeat(19) }],
+      },
+      I(1),
+    ],
+  ]) {
+    const f = multiSigConfigurationFixture();
+    await assert.rejects(() => f.build(args), /native MultiSig/i);
+    assert.equal(
+      f.calls.some(
+        (call) =>
+          call.method === "invokescript" &&
+          Buffer.from(call.params[0], "base64").toString("hex") ===
+            c.dynamicCall(
+              CORE,
+              "getPendingModuleCall",
+              [c.hashValue(h), c.stringValue("verifier")],
+              5,
+            ),
+      ),
+      false,
+    );
+  }
+});
+
+test("official native MultiSig configuration preserves a valid 3-of-roster 2-threshold order", async () => {
+  const f = multiSigConfigurationFixture();
+  const args = [
+    {
+      type: "Array",
+      value: ["89", "67", "78"].map((x) => c.hashValue(x.repeat(20))),
+    },
+    I(2),
+  ];
+  const plan = await f.build(args);
+  assert.equal(
+    plan.script,
+    c.dynamicCall(CORE, "callVerifier", [
+      c.hashValue(h),
+      c.stringValue("setConfig"),
+      { type: "Array", value: args },
+    ]),
+  );
+});
+
+test("MultiSig convenience is bound to the declared official native profile, not a generic setConfig name", async () => {
+  for (const mutate of [
+    (m) => (m.name = "ThirdPartyVerifier"),
+    (m) => delete m.extra.SmartAccountProfile,
+    (m) => (m.abi.methods[0].parameters[1].type = "Any"),
+  ]) {
+    const f = multiSigConfigurationFixture();
+    mutate(f.moduleManifest);
+    // Generic configuration capabilities keep their own semantics; core still validates them.
+    assert.equal((await f.build([I(123), I(456)])).kind, "configuration");
+  }
+  const f = multiSigConfigurationFixture();
+  f.moduleManifest.extra.smartAccount.profileDigest = "00".repeat(32);
+  await assert.rejects(() => f.build([I(123), I(456)]), /module profile/);
 });

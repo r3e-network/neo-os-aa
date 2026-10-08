@@ -15,21 +15,26 @@ import time
 
 from neoexpress_validate import Chain, RawKey, P256Key, ValidationFailure, H, B, I, S, A, ZERO, decode, hash_le, serialize_unsigned, serialize_witnesses, aa_proxy_rules
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
-from neoexpress_native_service_validate import CORE, check_native, persist, execution_arguments, transaction_system_fee
+from neoexpress_native_service_validate import CORE, DIGEST, check_native, persist, execution_arguments, transaction_system_fee
 from neoexpress_native_proxy_validate import GAS, GAS_TOKEN, proxy_address, push_bytes, verification_script, application_script, check_transaction, check_fault, transfer
 from neoexpress_native_configuration_validate import call_script, pending_log
 from neoexpress_native_recovery_validate import equal_typed
 from neoexpress_native_modules_validate import nef_from_rpc, check_module_build, CONTEXT
-from neoexpress_native_session_validate import serialize_value, signing_preimage, NULL
+from neoexpress_native_session_validate import serialize_value, signing_preimage, native_session_signer_domain, NULL
 from neoexpress_native_daily_validate import storage_prefix, raw_integer
 from neoexpress_reproducible_build import check_runtime_receipt, sha256
 
 DAY = 86_400_000
 NAMES = ('MultiSigVerifier', 'SessionKeyVerifier', 'NeoNativeVerifier')
+SESSION_PREFIXES = (1, 2, 3, 4, 5, 6)
+NATIVE_PREFIXES = (1, 2, 3)
+MAX_ROSTER = 3
+MAX_APPROVED = 2
+MAX_SIGNER_DOMAINS = 3
 
 
 def bundle(values):
-    require(type(values) is list and 0 < len(values) <= 10 and all(v is None or type(v) is bytes for v in values), 'Exact child signatures required')
+    require(type(values) is list and 0 < len(values) <= MAX_ROSTER and all(v is None or type(v) is bytes for v in values), 'Exact child signatures within the native roster bound required')
     return serialize_value(A(*(NULL if v is None else B(v) for v in values)))
 
 
@@ -46,6 +51,28 @@ def record(*values):
     return serialize_value(A(*values))
 
 
+def check_module_profile(manifest, composite):
+    metadata = (manifest.get('extra') or {}).get('smartAccount') or {}
+    require(type(metadata.get('abiVersion')) is int and metadata['abiVersion'] == 2 and
+            metadata.get('profileDigest') == DIGEST and metadata.get('compositeVerifier') is composite,
+            'Native module profile digest or composition capability mismatch')
+
+
+def root_configuration(children, threshold):
+    require(type(children) is list and 0 < len(children) <= MAX_ROSTER and len(set(children)) == len(children),
+            'Exact distinct native child roster required')
+    require(type(threshold) is int and 0 < threshold <= min(len(children), MAX_APPROVED),
+            'Native approval threshold exceeds the callback profile')
+    args = [A(*(H(child) for child in children)), I(threshold)]
+    return [decode_arg(value) for value in args], record(*args)
+
+
+def session_configuration(args):
+    require(type(args) is list and len(args) == 6, 'Exact SessionKey configuration arguments required')
+    fields = args[:5]
+    return [decode_arg(value) for value in fields], record(*fields)
+
+
 def native_storage_key(account, prefix, epoch=0):
     require(type(prefix) is int and 0 <= prefix < 256, 'Storage prefix must be UInt8')
     require(type(epoch) is int and 0 <= epoch < 2**64, 'Authority epoch must be UInt64')
@@ -54,6 +81,45 @@ def native_storage_key(account, prefix, epoch=0):
 
 def raw_entry(account, prefix, value, epoch=0):
     return {base64.b64encode(native_storage_key(account, prefix, epoch)).decode(): base64.b64encode(value).decode()}
+
+
+def session_granted(state, account, args, timestamp):
+    epoch = state['account'][13]
+    state['session'], raw = session_configuration(args)
+    state['metadata'] = [timestamp, 0, decode_arg(args[5])]
+    state['raw'][NAMES[1]][0] = raw_entry(account, 1, raw, epoch)
+    state['raw'][NAMES[1]][1] = raw_entry(account, 2, record(I(timestamp), I(0), args[5]), epoch)
+    state['raw'][NAMES[1]][3] = raw_entry(account, 4, raw_integer(timestamp), epoch)
+    state['raw'][NAMES[1]][4] = raw_entry(account, 5, native_session_signer_domain(decode_arg(args[0])), epoch)
+    state['raw'][NAMES[1]][5] = raw_entry(account, 6, raw_integer(0), epoch)
+
+
+def session_consumed(state, account, timestamp):
+    state['nonce'] += 1; state['balance'] -= 1; state['spent'] += 1; state['metadata'][1] = timestamp
+    epoch = state['account'][13]
+    state['raw'][NAMES[1]][2] = raw_entry(account, 3, raw_integer(state['spent']), epoch)
+    # The getter overlays the fresh integer; the metadata/description record stays unchanged.
+    state['raw'][NAMES[1]][5] = raw_entry(account, 6, raw_integer(timestamp), epoch)
+
+
+def session_cleared(state):
+    state.update(session=None, metadata=None, spent=0)
+    state['raw'][NAMES[1]] = [{} for _ in SESSION_PREFIXES]
+
+
+def native_configured(state, account, args):
+    epoch = state['account'][13]
+    state['native'] = [decode_arg(value) for value in args]
+    signers, threshold = state['native']
+    domains = b''.join(hashlib.sha256(b'NeoSmartAccount/SignerDomain\x01\x03' + signer).digest() for signer in signers)
+    state['raw'][NAMES[2]] = [raw_entry(account, 1, record(*args), epoch),
+                            raw_entry(account, 2, raw_integer(threshold), epoch),
+                            raw_entry(account, 3, domains, epoch)]
+
+
+def native_cleared(state):
+    state['native'] = None
+    state['raw'][NAMES[2]] = [{} for _ in NATIVE_PREFIXES]
 
 
 class CompositeTransactions:
@@ -73,7 +139,7 @@ class CompositeTransactions:
                 'spent': self.value(session, 'getSpentAmount', [H(account)]),
                 'balance': self.value(GAS_TOKEN, 'balanceOf', [H(proxy_address(account))]),
                 'raw': {name: [storage_prefix(self.chain, self.modules[name], native_storage_key(account, prefix, self.value(CORE, 'getAuthorityEpoch', [H(account)]))) for prefix in prefixes]
-                        for name, prefixes in [(NAMES[0], (1,)), (NAMES[1], (1, 2, 3, 4)), (NAMES[2], (1, 2))]}}
+                        for name, prefixes in [(NAMES[0], (1,)), (NAMES[1], SESSION_PREFIXES), (NAMES[2], NATIVE_PREFIXES)]}}
 
     def send(self, label, target, method, args, keys, *, scoped=True, proxy=False, fault=None, expected=None, events=(), change=None,
              recipient_delta=0, admission_rejection=False):
@@ -142,6 +208,8 @@ class CompositeTransactions:
 def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
     report = {'schema': 'smartaccount-native-multisig-private/v1', 'status': 'RUNNING', 'publicNetworksTouched': False,
               'scope': 'Shipped native composite with real P-256 and native witnesses; not key independence, arbitrary topology or compiler refinement.',
+              'compositionProfile': {'maxRoster': MAX_ROSTER, 'maxApprovedChildren': MAX_APPROVED,
+                                     'maxAggregateSignerDomains': MAX_SIGNER_DOMAINS, 'profileDigest': DIGEST},
               'transactions': [], 'executions': [], 'rejectedWitnesses': [], 'modules': [], 'ownedNodesStopped': False}
     output.parent.mkdir(parents=True, exist_ok=True); output.write_text(json.dumps(report) + '\n'); stage = 'provenance'
     try:
@@ -172,6 +240,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                     _, text = chain.nx('contract', 'deploy', str(path), 'genesis', '-j', '-d', '0x' + hash_le(CORE).hex())
                     deployed = chain.json_from(text); modules[name] = deployed['contract-hash']
                     manifest = json.loads(path.with_suffix('.manifest.json').read_text())
+                    check_module_profile(manifest, name == NAMES[0])
                     # This checked artifact subset has ASCII property keys and integral numbers.
                     def admissible(value):
                         if type(value) is dict: return all(k.isascii() and admissible(v) for k, v in value.items())
@@ -195,6 +264,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                         path = artifacts / (row['name'] + '.nef'); state = chain.rpc('getcontractstate', [row['contractHash']])
                         require(nef_from_rpc(state['nef']) == path.read_bytes(), 'Composite module NEF mismatch')
                         require(state['manifest'] == json.loads(path.with_suffix('.manifest.json').read_text()), 'Composite manifest mismatch')
+                        check_module_profile(state['manifest'], row['name'] == NAMES[0])
                         row['fullNefAndManifestReadbackMatched'] = True
                 readback(); driver = CompositeTransactions(chain, modules, account, other, addresses['recipient'], report)
                 initial = driver.state(account); require(initial['account'][5] == bindings[NAMES[0]] and initial['dependencies'] == [bindings[NAMES[0]], [], []], 'Independent binding mismatch')
@@ -222,31 +292,34 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 cap = 3 * GAS
                 session_args = [B(session_key.compressed), H(GAS_TOKEN), S('transfer'), I(until), I(cap), S('native composite validation')]
                 def configured_session(state, timestamp):
-                    state['session'] = [decode_arg(v) for v in session_args[:5]]
-                    state['metadata'] = [timestamp, 0, b'native composite validation']
-                    state['raw'][NAMES[1]][0] = raw_entry(account, 1, record(*session_args[:5]), state['account'][13])
-                    state['raw'][NAMES[1]][1] = raw_entry(account, 2, record(I(timestamp), I(0), session_args[5]), state['account'][13])
-                    state['raw'][NAMES[1]][3] = raw_entry(account, 4, raw_integer(timestamp), state['account'][13])
+                    session_granted(state, account, session_args, timestamp)
                 stage = 'leaf-configuration'
                 configure('session-child', NAMES[1], 'setSessionKey', session_args, configured_session, [(modules[NAMES[1]], 'SessionKeyGranted')])
-                native_args = [A(H(addresses['cosigner'])), I(1)]
+                native_args = [A(H(addresses['cosigner']), H(addresses['guardian'])), I(1)]
                 def configured_native(state, timestamp):
-                    state['native'] = [[hash_le(addresses['cosigner'])], 1]
-                    state['raw'][NAMES[2]] = [raw_entry(account, 1, record(*native_args), state['account'][13]), raw_entry(account, 2, raw_integer(1), state['account'][13])]
+                    native_configured(state, account, native_args)
                 configure('witness-child', NAMES[2], 'setConfig', native_args, configured_native)
                 children = [modules[NAMES[1]], modules[NAMES[2]]]
-                def root_config(threshold):
+                def root_config(threshold, roster=None):
+                    roster = children if roster is None else roster
                     def change(state, timestamp):
-                        state['root'] = [[hash_le(x) for x in children], threshold]; state['dependencies'][2] = [hash_le(x) for x in children]
-                        state['raw'][NAMES[0]][0] = raw_entry(account, 1, record(A(*[H(x) for x in children]), I(threshold)), state['account'][13])
+                        state['root'], raw = root_configuration(roster, threshold)
+                        state['dependencies'][2] = [hash_le(x) for x in roster]
+                        state['raw'][NAMES[0]][0] = raw_entry(account, 1, raw, state['account'][13])
                     return change
                 stage = 'root-configuration'
                 configure('two-of-two', NAMES[0], 'setConfig', [A(*[H(x) for x in children]), I(2)], root_config(2))
+                require(len(driver.value(modules[NAMES[0]], 'getSignerDomains', [H(account)])) == MAX_SIGNER_DOMAINS,
+                        'Composite scenario does not exercise the aggregate signer-domain boundary')
                 for label, roster, threshold, reason in [
+                    ('oversized-roster', children * 2, 2, 'Maximum 3 child verifiers allowed'),
                     ('duplicate-child', [children[0], children[0]], 2, 'Duplicate verifier'),
                     ('self-child', [modules[NAMES[0]]], 1, 'MultiSig verifier cannot contain itself'),
                     ('zero-threshold', children, 0, 'Invalid threshold')]:
                     configure(label, NAMES[0], 'setConfig', [A(*[H(x) for x in roster]), I(threshold)], None, fault=reason)
+                configure('aggregate-domain-overflow', NAMES[2], 'setConfig',
+                    [A(H(addresses['cosigner']), H(addresses['guardian']), H(addresses['owner'])), I(1)], None,
+                    fault='The composite verifier exceeds three aggregate signer domains.')
                 stage = 'phase-denial'
                 for name in NAMES:
                     for method, args in [('validateSignature', [transfer(proxy, addresses['recipient'], 0, 1)]),
@@ -254,20 +327,26 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                         driver.send('direct-' + name + '-' + method, modules[name], method, [H(account), *args], [keys['owner']], fault=CONTEXT)
                 for name in NAMES[1:]: driver.send('direct-' + name + '-post-validation', modules[name], 'validateSignatureForPostExecute',
                     [H(account), transfer(proxy, addresses['recipient'], 0, 1)], [keys['owner']], fault=CONTEXT)
+                for method, args in [('validateCompositeSignature', [transfer(proxy, addresses['recipient'], 0, 1)]),
+                    ('postExecuteComposite', [transfer(proxy, addresses['recipient'], 0, 1), NULL,
+                        A({'type': 'Boolean', 'value': True}, A(H(children[0])), B(bytes(32)))])]:
+                    driver.send('direct-root-' + method, modules[NAMES[0]], method, [H(account), *args], [keys['owner']], fault=CONTEXT)
                 def signed(key=session_key, skipped=False, amount=1):
-                    op = transfer(proxy, addresses['recipient'], driver.state(account)['nonce'], amount)
-                    state = driver.state(account)['account']
+                    snapshot = driver.state(account)
+                    op = transfer(proxy, addresses['recipient'], snapshot['nonce'], amount)
+                    state = snapshot['account']
                     payload = signing_preimage(chain.magic, account, op, authority_epoch=state[13], configuration_nonce=state[8])
                     require(driver.value(modules[NAMES[1]], 'getPayload', [H(account), *op['value'][:5]]) == payload, 'Child signing preimage mismatch')
                     require(driver.value(CORE, 'getOperationDigest', [H(account), op]) == hashlib.sha256(payload).digest(), 'Native signing digest mismatch')
-                    op['value'][5] = B(bundle([None if skipped else key.sign(payload), b'']))
+                    signatures = {hash_le(children[0]): None if skipped else key.sign(payload), hash_le(children[1]): b''}
+                    op['value'][5] = B(bundle([signatures[child] for child in snapshot['root'][0]]))
                     return op
                 def execute(label, op, cosigner=True, **kw):
                     return driver.send(label, CORE, 'executeUserOp', [H(account), op], [keys['relay']] + ([keys['cosigner']] if cosigner else []), **kw)
                 stage = 'threshold'
                 for label, op, kw in [('foreign-key', signed(attacker), {}), ('skipped-child', signed(skipped=True), {}),
                                       ('missing-witness', signed(), {'cosigner': False}), ('wrong-witness-scope', signed(), {'scoped': False})]:
-                    execute(label, op, fault='The verifier must return exactly Boolean true.', **kw)
+                    execute(label, op, fault='Verifier rejected signature', **kw)
                 execute('bad-proxy-signature', signed(attacker), proxy=True, admission_rejection=True)
                 for label, data, reason in [('short-bundle', bundle([b'']), 'Signature array length mismatch'),
                     ('struct-bundle', serialize_value({'type': 'Struct', 'value': [NULL, B(b'')]}), 'MultiSig signature bundle must be an Array'),
@@ -276,17 +355,24 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                     ('empty-bundle', bytes.fromhex('4000'), 'Signature array length mismatch')]:
                     op = signed(); op['value'][5] = B(data); execute(label, op, fault=reason)
                 def consumed(state, timestamp):
-                    state['nonce'] += 1; state['balance'] -= 1; state['spent'] += 1; state['metadata'][1] = timestamp
-                    state['raw'][NAMES[1]][1] = raw_entry(account, 2, record(I(state['metadata'][0]), I(timestamp), session_args[5]), state['account'][13])
-                    state['raw'][NAMES[1]][2] = raw_entry(account, 3, raw_integer(state['spent']), state['account'][13])
+                    session_consumed(state, account, timestamp)
                 execute('heterogeneous-proxy-transfer', signed(), proxy=True, expected=True,
                         events=[(GAS_TOKEN, 'Transfer'), (CORE, 'UserOpExecuted')], change=consumed, recipient_delta=1)
                 execute('post-false-transfer-rollback', signed(amount=2 * GAS), proxy=True, fault='Session transfer did not succeed')
+                stage = 'first-quorum-receipt'
+                native_first = children[::-1]
+                configure('native-first-one-of-two', NAMES[0], 'setConfig', [A(*[H(x) for x in native_first]), I(1)], root_config(1, native_first))
+                def native_consumed(state, timestamp):
+                    state['nonce'] += 1; state['balance'] -= 1
+                execute('first-quorum-skips-session-post-execute', signed(), proxy=True, expected=True,
+                    events=[(GAS_TOKEN, 'Transfer'), (CORE, 'UserOpExecuted')], change=native_consumed, recipient_delta=1)
+                configure('restore-two-of-two', NAMES[0], 'setConfig', [A(*[H(x) for x in children]), I(2)], root_config(2))
+                report['firstQuorumReceiptMatched'] = True
                 def remove_session(state, timestamp):
-                    state['root'] = [[hash_le(children[1])], 1]
+                    state['root'], raw = root_configuration([children[1]], 1)
                     state['dependencies'][1] = [bindings[NAMES[2]]]; state['dependencies'][2] = [hash_le(children[1])]
-                    state['raw'][NAMES[0]][0] = raw_entry(account, 1, record(A(H(children[1])), I(1)), state['account'][13])
-                    state.update(session=None, metadata=None, spent=0); state['raw'][NAMES[1]] = [{}] * 4
+                    state['raw'][NAMES[0]][0] = raw_entry(account, 1, raw, state['account'][13])
+                    session_cleared(state)
                 configure('remove-session-from-active-roster', NAMES[0], 'setConfig', [A(H(children[1])), I(1)], remove_session,
                           [(modules[NAMES[1]], 'SessionKeyRevoked')])
                 for method in ('validateSignature', 'validateSignatureForPostExecute'):
@@ -302,7 +388,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 old_operation=signed()
                 def old_namespace():
                     return {name:[storage_prefix(chain,modules[name],native_storage_key(account,prefix,old_epoch)) for prefix in prefixes]
-                        for name,prefixes in ((NAMES[0],(1,)),(NAMES[1],(1,2,3,4)),(NAMES[2],(1,2)))}
+                        for name,prefixes in ((NAMES[0],(1,)),(NAMES[1],SESSION_PREFIXES),(NAMES[2],NATIVE_PREFIXES))}
                 retained_storage=old_namespace()
                 require(all(retained_storage[name][0] for name in NAMES),'Recovery requires initialized root and both child configurations')
                 def propose_recovery(state,timestamp):
@@ -313,8 +399,8 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 def recovered(state,timestamp):
                     state['account'][3]=hash_le(addresses['replacement']);state['account'][5:7]=[None,None]
                     state['account'][8]+=1;state['account'][9:13]=[None]*4;state['account'][13]+=1
-                    state.update(pending=None,dependencies=[None,[],[]],root=None,native=None,session=None,metadata=None,spent=0)
-                    state['raw']={NAMES[0]:[{}],NAMES[1]:[{}]*4,NAMES[2]:[{}]*2}
+                    state.update(pending=None,dependencies=[None,[],[]],root=None)
+                    state['raw']={NAMES[0]:[{}]};native_cleared(state);session_cleared(state)
                 driver.send('neutral-payer-recovers-composite',CORE,'executeRecovery',[H(account)],[keys['relay']],
                     events=[(CORE,'RecoveryExecuted')],change=recovered)
                 recovered_state=driver.state(account)
@@ -341,7 +427,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                     [(modules[NAMES[1]],'SessionKeyGranted')])
                 configure('new-epoch-witness-child',NAMES[2],'setConfig',native_args,configured_native)
                 configure('new-epoch-two-of-two',NAMES[0],'setConfig',[A(*[H(x) for x in children]),I(2)],root_config(2))
-                execute('retired-session-key-after-composite-recovery',signed(session_key),fault='The verifier must return exactly Boolean true.')
+                execute('retired-session-key-after-composite-recovery',signed(session_key),fault='Verifier rejected signature')
                 execute('new-epoch-composite-transfer',signed(attacker),proxy=True,expected=True,
                     events=[(GAS_TOKEN,'Transfer'),(CORE,'UserOpExecuted')],change=consumed,recipient_delta=1)
                 require(old_namespace()==retained_storage,'New composite authority changed old epoch policy storage')
@@ -354,8 +440,8 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 wait_delay()
                 def removed(state, timestamp):
                     state['account'][5] = None; state['account'][8] += 1; state['account'][9:13] = [None] * 4
-                    state.update(dependencies=[None, [], []], root=None, native=None, session=None, metadata=None, spent=0)
-                    state['raw'] = {NAMES[0]: [{}], NAMES[1]: [{}] * 4, NAMES[2]: [{}] * 2}
+                    state.update(dependencies=[None, [], []], root=None)
+                    state['raw'] = {NAMES[0]: [{}]}; native_cleared(state); session_cleared(state)
                 core('remove-root-confirm', 'activateVerifier', [], events=[(modules[NAMES[1]], 'SessionKeyRevoked'), (CORE, 'VerifierChanged')], change=removed)
                 readback(); report.update(networkMagic=chain.magic, finalOperationNonce=driver.state(account)['nonce'], cleanupOfAllEnrolledLeavesVerified=True)
             finally: chain.stop_node(); report['ownedNodesStopped'] = chain.node is None
