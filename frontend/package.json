@@ -27,7 +27,7 @@
     "@cityofzion/neon-js": "5.9.0",
     "@highlightjs/vue-plugin": "^2.1.0",
     "@supabase/supabase-js": "^2.110.5",
-    "@web3auth/modal": "^10.16.0",
+    "@web3auth/modal": "^11.4.2",
     "ethers": "^6.17.0",
     "highlight.js": "^11.11.1",
     "jose": "^6.1.0",
