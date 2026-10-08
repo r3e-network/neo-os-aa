@@ -14,7 +14,7 @@ The implementation target is consensus-native `AccountManagement`, enabled only 
 | Asset authority | The proxy witness is restricted to intended target call frames. The native account cannot be the fee payer; fee payment by itself grants no verifier authority. |
 | Submission | SDK fee ceilings, exact signer scopes, code pins, signed-transaction preflight and persisted raw-byte readback are mandatory. Failed, malformed or stale results refuse broadcast. A `transfer` must return Boolean true. |
 | User workflow | The native workspace shows current authority, modules, lifecycle actions, preflight and transaction state. Stale reviews are invalidated; submission and confirmation are distinct. Unsupported/unactivated services fail discovery. |
-| Client efficiency | Identity-provider dependencies are deferred; the measured native initial JavaScript is 663,571 bytes. Session metadata/domain storage was reduced without caching approval or skipping fresh policy checks. |
+| Client efficiency | Identity-provider dependencies are deferred; the native integration snapshot measured 663,571 bytes of initial JavaScript. Session metadata/domain storage was reduced without caching approval or skipping fresh policy checks. |
 
 The fixed-budget maximum measured verifier callback is **95,694,229 datoshi (0.95694229 GAS)**; the maximum full proxy Verification measurement is **106,369,195 datoshi**, below its 150,000,000 limit. These results use execution fee factor 30 and storage price 100000. They cover the recorded built-in implementations and inputs, not arbitrary modules, every future fee policy or every syntactically valid batch.
 
@@ -38,7 +38,7 @@ The runtime was built completely from these sources twice. No assembly overlay i
 | Native module VM | 20 budget/behavior scenarios plus 16 epoch/key regressions; actual NEF | [Budget matrix](aa-native-multisig-budget-20261009.json) |
 | Private-chain lifecycle | Ten suites pass, including expected persisted FAULT and admission-refusal controls | [Private runtime matrix](aa-native-final-private-runtime-20261009.json) |
 | SDK | 162 unit tests, declarations, four installed-tarball consumer checks; 36 real signed transactions and three rejection controls | [Final SDK runtime](aa-native-final-sdk-runtime-20261009.json) |
-| Frontend | 620 tests + seven actual Chromium suites, zero failed/skipped; all 371 recorded source files rechecked | [Frontend receipt](aa-native-final-frontend-20261009.json) |
+| Frontend | 620 tests + seven actual Chromium suites, zero failed/skipped; all 371 recorded source files rechecked | [Native integration receipt](aa-native-final-frontend-20261009.json); [subsequent dependency validation](aa-mirror-dependencies-20261009.json) |
 | Build identity | Two independent builds: all 104 runtime files and 13 native module artifacts match; all 80 public/PLATFORM artifacts reproduce | [Build/proof index](aa-native-composite-final-build-proof-20261009.json) |
 | Formal models | 26 Coq modules, 443 closed declarations, 247 combined Coq/TLC rejected mutations, 61,460 TLC states, six SMT obligations plus controls | [Formal receipt](aa-native-composite-final-formal-20261009.json) |
 
@@ -56,17 +56,30 @@ Earlier `aa-native-abi2-*` and `*.checkpoint.json` files remain historical check
 | Public dependency/client PR #14 | Merged at `acbf739785737d9207c0cb94325062a918a61d11`; exact reviewed tree, seven successful checks, no unresolved review threads. |
 | Dependency PRs #3/#4/#6/#7 | Changes absorbed through validated integration; closed and remote branches absent. |
 | Dependency PRs #8/#9 | Rejected isolated Router/Web3Auth major bumps that lacked compatible migration and acceptance evidence. Heads preserved before remote cleanup. |
-| AA native PR #13 | Integrate the coherent native modules/SDK/workspace and final receipts once its final-head code checks pass. It does not activate the consensus feature. |
-| Old native profile PR #10 | Superseded by #13; close and remove only its remote ref after preserving its tip. Keep the original dirty local worktree recoverable. |
+| AA native PR #13 | Merged at `5e7428272775393a57d5f52781daf5bb633f69ba`, tree-identical to reviewed `c5306571`. Seven PR build/acceptance checks passed; all five post-merge Actions jobs and Vercel passed. This does not activate the consensus feature. |
+| Old native profile PR #10 | Its tip became reachable through #13, so GitHub automatically marked it merged. The exact reviewed remote ref was removed after backup; the original dirty local worktree is retained. |
 | Core #4766 / node #1114 / proposal #243 | Keep coordinated upstream drafts for protocol and maintainer review. Green implementation tests do not satisfy upstream review or choose public activation policy. |
 
-Original dirty worktrees and historical checked-out contexts are preserved. Obsolete remote branches and unoccupied integration refs are removed only after verified recoverable Git bundles. Final remote merge/readback and cleanup receipts belong to the accompanying maintenance record; this file does not predict a merge before it happens.
+Original dirty worktrees and historical checked-out contexts are preserved. Obsolete remote branches and unoccupied integration refs are removed only after verified recoverable Git bundles. After native integration, `origin` contains only `main`; its two native development refs were deleted with exact-head leases. Final dependency follow-up and mirror cleanup readbacks belong to the accompanying maintenance record.
+
+## Secondary remote review and dependency follow-up
+
+Fresh refs confirm that GitLab and RustForNeo are older copies of the same project. GitLab has only `main`; its rewritten history contains 115 patch-equivalent commits and two remaining market-script commits whose repaired file blobs are already present in the canonical history. There is no missing account implementation fix.
+
+RustForNeo `main` is an ancestor of native integration. Its nine development branches were reviewed individually:
+
+- Tailwind 4.3.3, SDK Neon 5.10.1 and TypeScript 7.0.2 are already integrated.
+- The organization-document branches are patch-equivalent or obsolete documentation, with no unique account fix.
+- Package-only Marked 18 and Vite 8 major upgrades lack the required application/toolchain migration and are rejected as merge candidates.
+- The remaining Autoprefixer 10.6.1 and JOSE 6.2.12 updates are applied narrowly to canonical main. Their old branch patches are not merged wholesale: unrelated optional `utf-8-validate` lock entries are retained. [Dependency validation](aa-mirror-dependencies-20261009.json) records actual authentication/JWKS and CSS checks, the full 620-test/seven-browser gate, production build and unchanged advisory allowance.
+
+The two dependency files are a later frontend source snapshot than the native integration frontend receipt. The supplemental receipt, rather than the old per-file hashes, is authoritative for that update. Native core, modules, SDK runtime producers and profile digest are unchanged. All secondary heads and the seven open mirror PR records were included in a separately restored and verified recovery bundle before any cleanup. Old mirror `main` histories are retained; canonical development continues in `r3e-network/neo-os-aa`.
 
 ## Remaining external and compatibility boundaries
 
 The native direction is tracked in [proposal issue #242](https://github.com/neo-project/proposals/issues/242) and [foundation PR #243](https://github.com/neo-project/proposals/pull/243). This implementation is an unactivated draft profile, not an accepted NEP or a public-chain release. Upstream protocol review, activation parameters and network rollout remain separate decisions.
 
-GitGuardian reports 30 items at the source candidate: 19 public source/project SHA-256 values, one public NEF SHA-256 and ten unsigned conformance vectors. Each detected value was tied to immutable Git bytes and independently recomputed. The provider still reports failure; no status was forged, scan disabled or protected gate bypassed. Additional detections on the final evidence commit require the same individual classification before merge.
+GitGuardian reported 33 items at native candidate `c5306571`: 22 public source/project SHA-256 values, one public NEF SHA-256 and ten unsigned conformance vectors. Each detected value was tied to immutable Git bytes and independently recomputed. The provider still reports failure; no status was forged, scan disabled or protected gate bypassed. Every newly introduced or relocated detection was checked again before the native merge. Future candidate detections require the same individual classification.
 
 The frontend dependency graph retains the explicitly recorded low-severity Elliptic advisory `GHSA-848j-6mx2-7j84` (19 production / 24 full-tree affected package entries). No patched release is available in the validated dependency path. The audit gate permits only that identified low advisory and rejects new advisories, higher severity and malformed registry responses. SDK audit is clean. Older GitHub alert rows were range-checked against current lockfiles; platform dismissal/closure is not claimed.
 
