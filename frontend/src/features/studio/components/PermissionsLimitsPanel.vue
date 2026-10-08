@@ -375,6 +375,7 @@
 import { computed, inject, ref } from "vue";
 import { useI18n } from "@/i18n";
 import { analyzeSessionKeyScope } from "@/features/studio/sessionKeyScope";
+import { createModuleConfigurationPresets, applyModuleConfigurationPreset } from "@/features/studio/modulePresets";
 
 const { t } = useI18n();
 
@@ -450,220 +451,26 @@ const sessionKeyValueWarning = computed(() => {
   if (scope.nativeAsset) {
     return t(
       "studioPanels.sessionKeyUncappedNativeWarning",
-      'This session key is VALUE-UNCAPPED on a native asset ({asset}): a wildcard ("*") method or a zero spending limit lets the delegated signer drain your entire {asset} balance — it is not limited to one method. Set method to "transfer" and add a positive spending limit (7th arg) to enforce a cap.',
+      'This session key is VALUE-UNCAPPED on a native asset ({asset}): a wildcard ("*") method or a zero spending limit lets the delegated signer drain your entire {asset} balance — it is not limited to one method. Set method to "transfer" and add a positive spending limit (6th arg) to enforce a cap.',
     ).replace(/{asset}/g, scope.nativeAsset);
   }
   return t(
     "studioPanels.sessionKeyUncappedWarning",
-    'This session key is VALUE-UNCAPPED: a wildcard ("*") method or a zero spending limit lets the delegated signer move the whole balance on the target contract — it is not limited to one method. Set method to "transfer" and add a positive spending limit (7th arg) to enforce a cap.',
+    'This session key is VALUE-UNCAPPED: a wildcard ("*") method or a zero spending limit lets the delegated signer move the whole balance on the target contract — it is not limited to one method. Set method to "transfer" and add a positive spending limit (6th arg) to enforce a cap.',
   );
 });
 
-const verifierPresets = [
-  {
-    label: t("studioPanels.presetSessionKeyLabel", "SessionKeyVerifier"),
-    description: t(
-      "studioPanels.presetSessionKeyDesc",
-      "Temporary delegated signer for one target + method.",
-    ),
-    method: "setSessionKey",
-    args: [
-      { type: "Hash160", value: "0x<accountId>" },
-      { type: "ByteArray", value: "0x<sessionPubKey>" },
-      { type: "Hash160", value: "0x<targetContract>" },
-      { type: "String", value: "*" },
-      { type: "Integer", value: "1735689600" },
-    ],
-  },
-  {
-    label: t("studioPanels.presetSubscriptionLabel", "SubscriptionVerifier"),
-    description: t(
-      "studioPanels.presetSubscriptionDesc",
-      "Recurring approvals for scheduled pull-style flows.",
-    ),
-    method: "createSubscription",
-    args: [
-      { type: "Hash160", value: "0x<accountId>" },
-      { type: "Hash160", value: "0x<targetContract>" },
-      { type: "String", value: "executeUserOp" },
-      { type: "Integer", value: "86400" },
-    ],
-  },
-  {
-    label: t("studioPanels.presetMultiSigLabel", "MultiSigVerifier"),
-    description: t(
-      "studioPanels.presetMultiSigDesc",
-      "Threshold-based approvals for treasury-style accounts.",
-    ),
-    method: "setSigners",
-    args: [
-      { type: "Hash160", value: "0x<accountId>" },
-      { type: "Array", value: [] },
-      { type: "Integer", value: "2" },
-    ],
-  },
-];
-
-const hookPresets = [
-  {
-    label: t("studioPanels.presetWhitelistLabel", "WhitelistHook"),
-    description: t(
-      "studioPanels.presetWhitelistDesc",
-      "Allow one target contract.",
-    ),
-    method: "setWhitelist",
-    args: [
-      { type: "Hash160", value: "0x<accountId>" },
-      { type: "Hash160", value: "0x<targetContract>" },
-      { type: "Boolean", value: true },
-    ],
-  },
-  {
-    label: t("studioPanels.presetDailyLimitLabel", "DailyLimitHook"),
-    description: t(
-      "studioPanels.presetDailyLimitDesc",
-      "Cap daily token outflow.",
-    ),
-    method: "setDailyLimit",
-    args: [
-      { type: "Hash160", value: "0x<accountId>" },
-      { type: "Hash160", value: "0x<token>" },
-      { type: "Integer", value: "1000000" },
-    ],
-  },
-  {
-    label: t("studioPanels.presetDIDLabel", "NeoDIDCredentialHook"),
-    description: t(
-      "studioPanels.presetDIDDesc",
-      "Require an active NeoDID registry binding before target access.",
-    ),
-    method: "requireCredentialCommitmentForContract",
-    args: [
-      { type: "Hash160", value: "0x<accountId>" },
-      { type: "Hash160", value: "0x<targetContract>" },
-      { type: "String", value: "github" },
-      { type: "String", value: "Github_VerifiedUser" },
-      { type: "ByteArray", value: "0x<32-byte-commitment>" },
-    ],
-  },
-  {
-    label: t("studioPanels.presetMultiHookLabel", "MultiHook"),
-    description: t(
-      "studioPanels.presetMultiHookDesc",
-      "Compose multiple policy hooks behind one slot.",
-    ),
-    method: "setHooks",
-    args: [
-      { type: "Hash160", value: "0x<accountId>" },
-      { type: "Array", value: [] },
-    ],
-  },
-];
-
-const commonExamples = [
-  {
-    label: t("studioPanels.presetWhitelistLabel", "WhitelistHook"),
-    code: `method: setWhitelist
-args: [
- { "type": "Hash160", "value": "0x<account>" },
- { "type": "Hash160", "value": "0x<target>" },
- { "type": "Boolean", "value": true }
-]`,
-    method: "setWhitelist",
-    args: [
-      { type: "Hash160", value: "0x<account>" },
-      { type: "Hash160", value: "0x<target>" },
-      { type: "Boolean", value: true },
-    ],
-  },
-  {
-    label: t("studioPanels.presetDailyLimitLabel", "DailyLimitHook"),
-    code: `method: setDailyLimit
-args: [
- { "type": "Hash160", "value": "0x<account>" },
- { "type": "Hash160", "value": "0x<token>" },
- { "type": "Integer", "value": "1000000" }
-]`,
-    method: "setDailyLimit",
-    args: [
-      { type: "Hash160", value: "0x<account>" },
-      { type: "Hash160", value: "0x<token>" },
-      { type: "Integer", value: "1000000" },
-    ],
-  },
-  {
-    label: t("studioPanels.presetSessionKeyLabel", "SessionKeyVerifier"),
-    code: `method: setSessionKey
-args: [
- { "type": "Hash160", "value": "0x<account>" },
- { "type": "ByteArray", "value": "0x<pubkey>" },
- { "type": "Hash160", "value": "0x<target>" },
- { "type": "String", "value": "*" },
- { "type": "Integer", "value": "1735689600" }
-]`,
-    method: "setSessionKey",
-    args: [
-      { type: "Hash160", value: "0x<account>" },
-      { type: "ByteArray", value: "0x<pubkey>" },
-      { type: "Hash160", value: "0x<target>" },
-      { type: "String", value: "*" },
-      { type: "Integer", value: "1735689600" },
-    ],
-  },
-  {
-    label: t("studioPanels.presetDIDLabel", "NeoDIDCredentialHook"),
-    code: `method: setRegistry
-args: [
- { "type": "Hash160", "value": "0x<neoDidRegistry>" }
-]
-
-method: requireCredentialCommitmentForContract
-args: [
- { "type": "Hash160", "value": "0x<account>" },
- { "type": "Hash160", "value": "0x<target>" },
- { "type": "String", "value": "github" },
- { "type": "String", "value": "Github_VerifiedUser" },
- { "type": "String", "value": "true" }
-]`,
-    method: "requireCredentialCommitmentForContract",
-    args: [
-      { type: "Hash160", value: "0x<account>" },
-      { type: "Hash160", value: "0x<target>" },
-      { type: "String", value: "github" },
-      { type: "String", value: "Github_VerifiedUser" },
-      { type: "ByteArray", value: "0x<32-byte-commitment>" },
-    ],
-  },
-];
+const { verifierPresets, hookPresets, commonExamples } = createModuleConfigurationPresets(t);
 
 function applyVerifierPreset(preset) {
-  permissionsForm.value.verifierMethod = preset.method;
-  permissionsForm.value.verifierArgsJson = JSON.stringify(preset.args, null, 2);
+  applyModuleConfigurationPreset(permissionsForm.value, preset);
 }
 
 function applyHookPreset(preset) {
-  permissionsForm.value.hookMethod = preset.method;
-  permissionsForm.value.hookArgsJson = JSON.stringify(preset.args, null, 2);
+  applyModuleConfigurationPreset(permissionsForm.value, preset);
 }
 
 function applyExample(example) {
-  if (example.method.startsWith("set") && example.args[0]?.type === "Hash160") {
-    const firstArgStr = example.args[0].value;
-    if (firstArgStr.includes("token") || firstArgStr.includes("target")) {
-      permissionsForm.value.hookMethod = example.method;
-      permissionsForm.value.hookArgsJson = JSON.stringify(
-        example.args,
-        null,
-        2,
-      );
-    } else {
-      permissionsForm.value.verifierMethod = example.method;
-      permissionsForm.value.verifierArgsJson = JSON.stringify(
-        example.args,
-        null,
-        2,
-      );
-    }
-  }
+  applyModuleConfigurationPreset(permissionsForm.value, example);
 }
 </script>
