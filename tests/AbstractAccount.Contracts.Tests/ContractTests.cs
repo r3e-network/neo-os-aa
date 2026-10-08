@@ -395,19 +395,19 @@ public class ContractTests
     }
 
     [TestMethod]
-    public void DailyLimitHookOnlyAccruesUsageAfterSuccessfulExecution()
+    public void DailyLimitHookAlwaysMetersActualOutflow()
     {
         string source = ReadContractFile("hooks/DailyLimitHook.cs");
 
         StringAssert.Contains(source, "public static void PostExecute");
-        StringAssert.Contains(source, "if (!DidExecutionSucceed(result)) return;");
+        Assert.IsFalse(source.Contains("if (!DidExecutionSucceed(result)) return;", StringComparison.Ordinal));
         StringAssert.Contains(source, "ExecutionEngine.Assert(IsProtectedTransferSource(accountId, fromAccount), \"Transfer source not permitted\");");
         // Assets leave from the account's holding address (the core's proxy script
         // hash), not from the accountId itself, so the protected-source check has to
         // compare against that address.
         StringAssert.Contains(source, "return from == AssetAddressOf(accountId);");
         StringAssert.Contains(source, "Contract.Call(core, \"getProxyScriptHash\", CallFlags.ReadOnly, accountId)");
-        StringAssert.Contains(source, "StoreFixedWindowSpent(accountId, targetContract, currentTime, spentToday + amount);");
+        StringAssert.Contains(source, "MeterAllLimitedOutflows(accountId, directToken, declaredAmount);");
         Assert.IsFalse(source.Contains("Storage.Put(Storage.CurrentContext, spentKey, newTotal);", StringComparison.Ordinal));
     }
 
@@ -470,7 +470,7 @@ public class ContractTests
         string sessionValidateBlock = ExtractSourceBlock(
             sessionSource,
             "public static bool ValidateSignature(UInt160 accountId, UserOperation op)",
-            "private static BigInteger ExtractTransferValue(UserOperation op)");
+            "private static BigInteger ExtractTransferValue(UInt160 accountId, UserOperation op)");
         string subscriptionValidateBlock = ExtractSourceBlock(
             subscriptionSource,
             "public static bool ValidateSignature(UInt160 accountId, UserOperation op)",
@@ -490,7 +490,7 @@ public class ContractTests
         StringAssert.Contains(source, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
         StringAssert.Contains(
             source,
-            "Contract.Call(config.Verifiers[i], \"postExecute\", CallFlags.All, new object[] { accountId, subOp, result });");
+            "Contract.Call(config.Verifiers[i], \"postExecute\", CallFlags.All, new object[] { accountId, subOp, childResult });");
     }
 
     [TestMethod]
@@ -539,11 +539,14 @@ public class ContractTests
     }
 
     [TestMethod]
-    public void SessionAndSubscriptionPostExecuteDoNotTreatBusinessReturnValuesAsExecutionFailure()
+    public void SessionAndSubscriptionPostExecuteEnforceTransferResultLocally()
     {
         string sessionSource = ReadContractFile("verifiers/SessionKeyVerifier.cs");
         string subscriptionSource = ReadContractFile("verifiers/SubscriptionVerifier.cs");
 
+        StringAssert.Contains(sessionSource, "if (op.Method == \"transfer\")");
+        StringAssert.Contains(sessionSource, "result is bool accepted && accepted");
+        StringAssert.Contains(subscriptionSource, "result is bool accepted && accepted");
         Assert.IsFalse(sessionSource.Contains("DidExecutionSucceed(result)", StringComparison.Ordinal));
         Assert.IsFalse(subscriptionSource.Contains("DidExecutionSucceed(result)", StringComparison.Ordinal));
         Assert.IsFalse(sessionSource.Contains("private static bool DidExecutionSucceed", StringComparison.Ordinal));

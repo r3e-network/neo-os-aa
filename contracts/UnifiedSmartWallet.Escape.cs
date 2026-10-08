@@ -13,7 +13,7 @@ namespace AbstractAccount
         // ========================================================================
 
         /// <summary>
-        /// Starts the backup-owner escape flow for a compromised or unavailable verifier setup.
+        /// Starts the backup-owner escape flow. Finalization requires working plugin cleanup.
         /// </summary>
         public static void InitiateEscape(UInt160 accountId)
         {
@@ -48,6 +48,9 @@ namespace AbstractAccount
         /// exactly as <c>RegisterAccount</c> / <c>ConfirmVerifierUpdate</c> do, and (3) resets the
         /// installed hook — clearing the old hook's per-account config and removing it from state —
         /// so a compromised hook cannot persist across an escape.
+        /// Finalization remains dependent on the old verifier and hook successfully executing
+        /// clearAccount. A faulty or unavailable plugin can block completion after the timelock;
+        /// atomic rollback protects state but does not guarantee recovery liveness.
         /// </remarks>
         public static void FinalizeEscape(UInt160 accountId, UInt160 newVerifier)
         {
@@ -61,6 +64,13 @@ namespace AbstractAccount
             ExecutionEngine.Assert(state.EscapeTriggeredAt > 0, "Escape not initiated");
             ExecutionEngine.Assert(Runtime.Time >= state.EscapeTriggeredAt + ((BigInteger)state.EscapeTimelock * 1000), "Timelock active");
             ExecutionEngine.Assert(Runtime.CheckWitness(state.BackupOwner), "Only backup owner can finalize");
+
+            // Apply the same installation contract as normal verifier rotation before calling
+            // old plugins or changing any state. Zero explicitly restores backup-owner mode.
+            if (newVerifier != UInt160.Zero)
+            {
+                AssertV3Verifier(newVerifier);
+            }
 
             UInt160 previousVerifier = state.Verifier;
             UInt160 previousHook = state.HookId;

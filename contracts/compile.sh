@@ -6,6 +6,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR/contracts"
 source "$ROOT_DIR/scripts/dotnet_env.sh"
 
+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != "--platform" ) ]]; then
+  echo "Usage: contracts/compile.sh [--platform]" >&2
+  exit 1
+fi
+
 # The NEF header names the compiler and its code generation decides the bytes, so artifacts
 # compiled with anything but the pinned nccs package are not the pinned build.
 node "$ROOT_DIR/scripts/check_neo_platform_packages.mjs" --compiler-only
@@ -54,11 +59,11 @@ pushd hooks >/dev/null
 "$NCCS_BIN" ./TokenRestrictedHook.csproj -o ../bin/v3/hooks
 popd >/dev/null
 
-# Test-support mocks. The contract test suite deploys all six from bin/v3
+# Test-support mocks. The contract test suite deploys all seven from bin/v3
 # (MockTransferTarget in the execution/market/escrow suites, PlatformRegistrarMock
 # in the platform-registrar suite, MockVerifierCore in the verifier suites, and
 # MarkerOnlyModule, WrongLifecycleAbiModule and WrongHookLifecycleAbiModule in
-# the lifecycle-ABI negative suite), so they
+# the lifecycle-ABI negative suite, plus PolicyExecutionProbe for policy enforcement), so they
 # are always compiled: a clean checkout that skipped them could not run
 # `dotnet test`. bin/v3 is gitignored and the deploy scripts select artifacts by
 # name, so the mocks never reach a network. INCLUDE_VALIDATION_MOCKS is accepted
@@ -71,6 +76,7 @@ pushd mocks >/dev/null
 "$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../bin/v3
 "$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../bin/v3
 "$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../bin/v3
+"$NCCS_BIN" ./PolicyExecutionProbe.csproj -o ../bin/v3
 popd >/dev/null
 
 echo "Compiling Market Contracts..."

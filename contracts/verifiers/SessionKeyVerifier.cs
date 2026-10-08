@@ -21,6 +21,7 @@ namespace AbstractAccount.Verifiers
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ContractPermission("*", "getBackupOwner")]
+    [ContractPermission("*", "getProxyScriptHash")]
     [ManifestExtra("Description", "Temporary Session Key Verifier for High Frequency Actions")]
     [ManifestExtra("Version", "2.0.0")]
     public class SessionKeyVerifier : SmartContract
@@ -238,6 +239,8 @@ namespace AbstractAccount.Verifiers
                 ExecutionEngine.Assert(op.Method == sessionKey.Method, "Method not permitted");
             }
 
+            // NEP-17 transfers have one precise value-bearing ABI, even for uncapped keys.
+            BigInteger operationValue = op.Method == "transfer" ? ExtractTransferValue(accountId, op) : 0;
             ExecutionEngine.Assert(op.Signature != null && op.Signature.Length == 64, "Invalid signature length");
             ByteString signature = op.Signature!;
             byte[] payload = VerifierPayload.BuildPayload(accountId, op.TargetContract, op.Method, op.Args, op.Nonce, op.Deadline);
@@ -248,7 +251,6 @@ namespace AbstractAccount.Verifiers
             if (isValid && sessionKey.SpendingLimit > 0)
             {
                 BigInteger spent = GetSpentAmount(accountId);
-                BigInteger operationValue = ExtractTransferValue(op);
                 if (operationValue > 0)
                 {
                     BigInteger newSpent = spent + operationValue;
@@ -259,20 +261,21 @@ namespace AbstractAccount.Verifiers
             return isValid;
         }
 
-        /// <summary>
-        /// Extracts the transfer value from a user operation if it's a transfer call.
-        /// Returns 0 if not a transfer or value cannot be determined.
-        /// </summary>
-        private static BigInteger ExtractTransferValue(UserOperation op)
+        /// <summary>Rejects ambiguous transfer encodings before applying the session cap.</summary>
+        private static BigInteger ExtractTransferValue(UInt160 accountId, UserOperation op)
         {
-            if (op.Args == null || op.Args.Length < 3) return 0;
-            if (op.Method != "transfer") return 0;
-
-            object[] args = (object[])op.Args;
-            if (args.Length < 3) return 0;
-
-            if (args[2] is BigInteger amount) return amount;
-            return 0;
+            ExecutionEngine.Assert(op.Args != null && op.Args.Length == 4, "Invalid NEP-17 transfer args");
+            ExecutionEngine.Assert(op.Args[2] is BigInteger, "Transfer amount must be an integer");
+            BigInteger amount = (BigInteger)op.Args[2];
+            ExecutionEngine.Assert(amount >= 0, "Transfer amount must be non-negative");
+            UInt160 from = (UInt160)op.Args[0];
+            UInt160 to = (UInt160)op.Args[1];
+            ExecutionEngine.Assert(from != null && from.IsValid && to != null && to.IsValid, "Invalid transfer address");
+            UInt160 core = VerifierAuthority.AuthorizedCore();
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            UInt160 proxy = (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId);
+            ExecutionEngine.Assert(from == proxy, "Transfer source must be the account asset address");
+            return amount;
         }
 
         public static void PostExecute(UInt160 accountId, UserOperation op, object result)
@@ -282,9 +285,16 @@ namespace AbstractAccount.Verifiers
             if (sk == null) return;
 
             SessionKeyData sessionKey = sk!;
+            BigInteger operationValue = 0;
+            if (op.Method == "transfer")
+            {
+                // A token rejection must revert the entire user operation, including its
+                // nonce and any token writes. Generic non-transfer business values are valid.
+                ExecutionEngine.Assert(result is bool accepted && accepted, "NEP-17 transfer failed");
+                operationValue = ExtractTransferValue(accountId, op);
+            }
             if (sessionKey.SpendingLimit > 0)
             {
-                BigInteger operationValue = ExtractTransferValue(op);
                 if (operationValue > 0)
                 {
                     BigInteger spent = GetSpentAmount(accountId);

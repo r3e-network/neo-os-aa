@@ -167,6 +167,17 @@ namespace AbstractAccount.Verifiers
         }
 
         /// <summary>
+        /// Explicit configuration-delegation capability consumed by the pinned core.
+        /// It returns the same ordered topology and threshold as GetConfig; unrelated
+        /// verifiers with a similarly shaped getConfig do not opt into delegation.
+        /// </summary>
+        [Safe]
+        public static MultiSigConfig? GetChildVerifierConfig(UInt160 accountId)
+        {
+            return GetConfig(accountId);
+        }
+
+        /// <summary>
         /// Validates a multi-signature bundle by forwarding to the configured child verifiers.
         /// </summary>
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
@@ -181,18 +192,22 @@ namespace AbstractAccount.Verifiers
             object[] signatures = (object[])StdLib.Deserialize(op.Signature);
             ExecutionEngine.Assert(signatures.Length == config.Verifiers.Length, "Signature array length mismatch");
 
+            // ReadOnly prevents storage writes, not mutation of shared VM collections.
+            // Each child must receive the original operation arguments in its own graph.
+            ByteString argumentSnapshot = StdLib.Serialize(op.Args);
             int validCount = 0;
             for (int i = 0; i < config.Verifiers.Length; i++)
             {
                 if (signatures[i] != null)
                 {
-                    UserOperation subOp = CreateSubOperation(op, signatures[i]);
+                    UserOperation subOp = CreateSubOperation(op, signatures[i], argumentSnapshot);
 
                     // Wrap in try-catch so a throwing child verifier doesn't block
                     // the entire multisig when threshold can still be met
                     try
                     {
-                        bool isValid = (bool)Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly, new object[] { accountId, subOp });
+                        object approval = Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly, new object[] { accountId, subOp });
+                        bool isValid = approval is bool && (bool)approval;
                         if (isValid) validCount++;
                     }
                     catch { }
@@ -214,16 +229,21 @@ namespace AbstractAccount.Verifiers
             object[] signatures = (object[])StdLib.Deserialize(op.Signature);
             ExecutionEngine.Assert(signatures.Length == config.Verifiers.Length, "Signature array length mismatch");
 
+            ByteString argumentSnapshot = StdLib.Serialize(op.Args);
+            // Any mutable target result is isolated as well. Unsupported Interop/iterator
+            // results fail serialization instead of leaking a shared object between children.
+            ByteString resultSnapshot = StdLib.Serialize(result);
             int validCount = 0;
             bool[] validChildren = new bool[config.Verifiers.Length];
             for (int i = 0; i < config.Verifiers.Length; i++)
             {
                 if (signatures[i] == null) continue;
 
-                UserOperation subOp = CreateSubOperation(op, signatures[i]);
+                UserOperation subOp = CreateSubOperation(op, signatures[i], argumentSnapshot);
                 try
                 {
-                    bool isValid = (bool)Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly, new object[] { accountId, subOp });
+                    object approval = Contract.Call(config.Verifiers[i], "validateSignature", CallFlags.ReadOnly, new object[] { accountId, subOp });
+                    bool isValid = approval is bool && (bool)approval;
                     if (!isValid) continue;
 
                     validChildren[i] = true;
@@ -239,8 +259,9 @@ namespace AbstractAccount.Verifiers
             {
                 if (!validChildren[i]) continue;
 
-                UserOperation subOp = CreateSubOperation(op, signatures[i]);
-                Contract.Call(config.Verifiers[i], "postExecute", CallFlags.All, new object[] { accountId, subOp, result });
+                UserOperation subOp = CreateSubOperation(op, signatures[i], argumentSnapshot);
+                object childResult = StdLib.Deserialize(resultSnapshot);
+                Contract.Call(config.Verifiers[i], "postExecute", CallFlags.All, new object[] { accountId, subOp, childResult });
             }
         }
 
@@ -250,13 +271,13 @@ namespace AbstractAccount.Verifiers
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_Config, (byte[])accountId));
         }
 
-        private static UserOperation CreateSubOperation(UserOperation op, object signature)
+        private static UserOperation CreateSubOperation(UserOperation op, object signature, ByteString argumentSnapshot)
         {
             return new UserOperation
             {
                 TargetContract = op.TargetContract,
                 Method = op.Method,
-                Args = op.Args,
+                Args = (object[])StdLib.Deserialize(argumentSnapshot),
                 Nonce = op.Nonce,
                 Deadline = op.Deadline,
                 Signature = (ByteString)signature
