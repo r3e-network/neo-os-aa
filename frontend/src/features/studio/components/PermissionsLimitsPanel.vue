@@ -464,13 +464,17 @@ const { verifierPresets, hookPresets, commonExamples } = createModuleConfigurati
 
 function applyVerifierPreset(preset) {
   applyModuleConfigurationPreset(permissionsForm.value, preset);
+  validateVerifierArgsJson();
 }
 
 function applyHookPreset(preset) {
   applyModuleConfigurationPreset(permissionsForm.value, preset);
+  validateHookArgsJson();
 }
 
 function applyExample(example) {
   applyModuleConfigurationPreset(permissionsForm.value, example);
+  if (example.role === "verifier") validateVerifierArgsJson();
+  else validateHookArgsJson();
 }
 </script>
