@@ -51,7 +51,7 @@
     "lodash": "4.18.1"
   },
   "devDependencies": {
-    "@cityofzion/neon-js": "^5.9.0",
+    "@cityofzion/neon-js": "^5.10.1",
     "typescript": "^5.4.5"
   }
 }
