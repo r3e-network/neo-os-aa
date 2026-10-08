@@ -48,7 +48,7 @@
     "postcss": "8.5.28",
     "tailwindcss": "^4.3.3",
     "vite": "^6.4.3",
-    "vite-plugin-node-polyfills": "^0.25.0"
+    "vite-plugin-node-polyfills": "^0.28.0"
   },
   "overrides": {
     "@cityofzion/neon-api": "5.9.0",
