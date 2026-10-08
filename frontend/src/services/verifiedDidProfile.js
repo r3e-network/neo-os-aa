@@ -1,7 +1,7 @@
 // Authentication failures never fall back to unverified browser claims.
 export async function authenticateVerifiedDid(client, verify) {
-  if (typeof client?.authenticateUser !== 'function') throw new Error('did_authentication_unavailable');
-  const response = await client.authenticateUser();
+  if (typeof client?.getIdentityToken !== 'function') throw new Error('did_authentication_unavailable');
+  const response = await client.getIdentityToken();
   const token = typeof response === 'string' ? response : response?.idToken;
   if (typeof token !== 'string' || !token.trim() || token !== token.trim()) {
     throw new Error('did_token_missing');

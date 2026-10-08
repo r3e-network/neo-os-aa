@@ -24,7 +24,8 @@
     "test:operator-recovery:browser": "node --test tests/operatorKeyRecovery.browser.mjs",
     "test:native:browser": "node --test tests/nativeWorkspace.browser.mjs",
     "prebuild": "node scripts/sync-native-shared.mjs",
-    "audit:all": "npm audit --audit-level=moderate"
+    "audit:all": "npm audit --audit-level=moderate",
+    "test:web3auth:browser": "node --test tests/web3AuthPackage.browser.mjs"
   },
   "dependencies": {
     "@cityofzion/neon-js": "5.9.0",

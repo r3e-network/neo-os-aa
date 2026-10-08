@@ -174,6 +174,7 @@ if [[ $run_frontend -eq 1 ]]; then
     npm run test:e2e:browser:built
     npm run test:operator-recovery:browser
     npm run test:native:browser
+    npm run test:web3auth:browser
   fi
   cd ..
 fi
