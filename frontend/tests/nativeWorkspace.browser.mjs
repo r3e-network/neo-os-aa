@@ -178,6 +178,21 @@ test(
         await page.getByTestId("native-account-summary").innerText(),
         /Custody witness fallback/,
       );
+      await page.getByRole("button", { name: "Sessions & approvals", exact: true }).click();
+      await page.getByLabel("Policy", { exact: true }).selectOption("multisig");
+      const thresholdInput = page.getByLabel("Required modules", { exact: true });
+      assert.equal(await thresholdInput.getAttribute("max"), "2");
+      const childrenInput = page.getByLabel("Ordered verifier child hashes (one per line)", { exact: true });
+      for (const [count, threshold] of [[4, "2"], [3, "3"]]) {
+        await childrenInput.fill(Array.from({ length: count }, (_, index) => String(index + 4).repeat(40)).join("\n"));
+        await thresholdInput.fill(threshold);
+        const callsBefore = fixture.state.calls.length;
+        await page.getByRole("button", { name: "Review delayed policy", exact: true }).click();
+        await page.getByRole("alert").filter({ hasText: "Use 1–3 unique modules and a reachable threshold of 1–2." }).waitFor();
+        assert.equal(fixture.state.calls.length, callsBefore, "invalid roster must fail before RPC or wallet handoff");
+        assert.equal(requests.length, 1);
+      }
+      await page.getByRole("button", { name: "Account & recovery", exact: true }).click();
       await page
         .getByLabel("Fee payer Neo address / script hash", { exact: true })
         .fill(nativeTestRecovery);

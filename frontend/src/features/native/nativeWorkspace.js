@@ -230,6 +230,29 @@ export function readRecoveryDescriptor(text, profile) {
     fail("Descriptor network or profile mismatch.");
   return buildRecoveryDescriptor(value);
 }
+// SMARTACCOUNT_NATIVE MultiSigVerifier.cs: MaxChildVerifiers / MaxApprovedChildren.
+export const NATIVE_MULTISIG_LIMITS = freeze({ maxChildren: 3, maxThreshold: 2 });
+export function buildMultiSigArguments(
+  { children, threshold },
+  invalidMessage = "Use 1–3 unique modules and a reachable threshold of 1–2.",
+) {
+  if (typeof children !== "string") fail(invalidMessage);
+  const ordered = children.split(/\s+/).filter(Boolean).map((hash) => nativeAddress(hash));
+  const required = Number(threshold);
+  if (
+    ordered.length < 1 ||
+    ordered.length > NATIVE_MULTISIG_LIMITS.maxChildren ||
+    new Set(ordered).size !== ordered.length ||
+    !Number.isInteger(required) ||
+    required < 1 ||
+    required > NATIVE_MULTISIG_LIMITS.maxThreshold ||
+    required > ordered.length
+  ) fail(invalidMessage);
+  return [
+    { type: "Array", value: ordered.map(nativeCodec.hashValue) },
+    { type: "Integer", value: String(required) },
+  ];
+}
 export function buildSessionArguments(
   {
     publicKey,

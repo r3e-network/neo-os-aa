@@ -431,13 +431,13 @@
                 v-model.trim="policy.threshold"
                 type="number"
                 min="1"
-                max="10"
+                :max="NATIVE_MULTISIG_LIMITS.maxThreshold"
             /></label>
             <p class="callout">
               {{
                 L(
-                  "Thresholds count modules, not independent humans. Configure each child before activating the delayed roster. An empty native-child proof still requires a real transaction witness.",
-                  "阈值计算模块数量，不证明由不同人控制。先配置子模块，再激活延迟成员列表。原生子模块即使证明为空，也需要真实交易见证。",
+                  "Use 1–3 children and a threshold of 1–2. Thresholds count modules, not independent humans. Configure each child before activating the delayed roster. An empty native-child proof still requires a real transaction witness.",
+                  "可配置 1–3 个子模块，阈值为 1–2。阈值计算模块数量，不证明由不同人控制。先配置子模块，再激活延迟成员列表。原生子模块即使证明为空，也需要真实交易见证。",
                 )
               }}
             </p></template
@@ -777,6 +777,8 @@ import {
   buildRecoveryDescriptor,
   readRecoveryDescriptor,
   buildSessionArguments,
+  buildMultiSigArguments,
+  NATIVE_MULTISIG_LIMITS,
   jsonText,
 } from "./nativeWorkspace.js";
 const { locale } = useI18n();
@@ -1060,29 +1062,13 @@ async function reviewPolicy() {
       args = buildSessionArguments(policy, snapshot.value.chainTime);
       method = "setSessionKey";
     } else {
-      const children = policy.children
-        .split(/\s+/)
-        .filter(Boolean)
-        .map((h) => nativeAddress(h));
-      const threshold = Number(policy.threshold);
-      if (
-        children.length < 1 ||
-        children.length > 10 ||
-        new Set(children).size !== children.length ||
-        !Number.isInteger(threshold) ||
-        threshold < 1 ||
-        threshold > children.length
-      )
-        throw Error(
-          L(
-            "Use 1–10 unique modules and a reachable threshold.",
-            "请填写 1–10 个不重复模块，并设置可满足的阈值。",
-          ),
-        );
-      args = [
-        { type: "Array", value: children.map(nativeCodec.hashValue) },
-        { type: "Integer", value: String(threshold) },
-      ];
+      args = buildMultiSigArguments(
+        policy,
+        L(
+          "Use 1–3 unique modules and a reachable threshold of 1–2.",
+          "请填写 1–3 个不重复模块，并设置 1–2 之间且可满足的阈值。",
+        ),
+      );
       method = "setConfig";
     }
     setReview(

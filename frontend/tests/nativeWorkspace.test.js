@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   createNativeWorkspace,
   nativeCodec,
@@ -7,6 +8,8 @@ import {
   buildRecoveryDescriptor,
   readRecoveryDescriptor,
   buildSessionArguments,
+  buildMultiSigArguments,
+  NATIVE_MULTISIG_LIMITS,
   nativeWalletNetwork,
   createNativeRpc,
   NATIVE_PROFILE_PARAMETER_DIGEST,
@@ -154,6 +157,33 @@ test("session builder requires finite future expiry, explicit cap, specific tran
         1000,
       ),
     );
+});
+test("native multisig limits track native source markers and the pinned profile", () => {
+  const source = readFileSync(new URL("../../contracts/verifiers/MultiSigVerifier.cs", import.meta.url), "utf8");
+  const nativeCaps = /#if SMARTACCOUNT_NATIVE\s+private const int MaxChildVerifiers = (\d+);\s+private const int MaxApprovedChildren = (\d+);/.exec(source);
+  assert.ok(nativeCaps, "native compile-time cap markers must remain explicit");
+  const profile = JSON.parse(readFileSync(new URL("../../docs/proposals/smartaccount-native-profile-v2-parameters.json", import.meta.url), "utf8"));
+  assert.equal(NATIVE_MULTISIG_LIMITS.maxChildren, Number(nativeCaps[1]));
+  assert.equal(NATIVE_MULTISIG_LIMITS.maxThreshold, Number(nativeCaps[2]));
+  assert.equal(NATIVE_MULTISIG_LIMITS.maxChildren, profile.compositeVerifierMaxChildren);
+  assert.equal(NATIVE_MULTISIG_LIMITS.maxThreshold, profile.compositeVerifierMaxThreshold);
+});
+test("native multisig preserves child order and accepts 1-of-1 through 2-of-3", () => {
+  const children = ["44".repeat(20), "55".repeat(20), "66".repeat(20)];
+  for (const [count, threshold] of [[1, 1], [2, 1], [2, 2], [3, 1], [3, 2]]) {
+    assert.deepEqual(buildMultiSigArguments({ children: children.slice(0, count).join("\n"), threshold: String(threshold) }), [
+      { type: "Array", value: children.slice(0, count).map(nativeCodec.hashValue) },
+      { type: "Integer", value: String(threshold) },
+    ]);
+  }
+});
+test("native multisig rejects oversized, duplicate and unreachable policies before RPC", () => {
+  const hashes = ["44".repeat(20), "55".repeat(20), "66".repeat(20), "77".repeat(20)];
+  for (const [children, threshold] of [["", "1"], [hashes.join(" "), "2"], [hashes.slice(0, 3).join(" "), "3"],
+    [hashes[0], "2"], [hashes[0], "0"], [hashes[0], "1.5"], [hashes[0], "NaN"],
+    [[hashes[0], "0x" + hashes[0]].join(" "), "1"], ["00".repeat(20), "1"], [null, "1"]]) {
+    assert.throws(() => buildMultiSigArguments({ children, threshold }));
+  }
 });
 test("wallet active network cannot be inferred from supported list", () => {
   assert.equal(nativeWalletNetwork({ magic: 123 }), 123);
