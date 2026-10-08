@@ -102,7 +102,7 @@ function createNativeTransactionTools(c) {
     return deepFreeze({
       account,
       verification,
-      sign: input.sign,
+      sign: input.sign.bind(input),
       descriptor: {
         account: "0x" + account,
         scopes: contracts.length ? "CustomContracts" : "None",
@@ -372,8 +372,31 @@ function createNativeTransactionTools(c) {
       fail(
         "signed transaction preflight rejected or returned mismatched identity",
       );
-    c.unsigned(result?.snapshot?.height, 32, "preflight snapshot height");
+    if (!Number.isSafeInteger(result?.snapshot?.height))
+      fail("preflight snapshot height must be a UInt32 number");
+    c.unsigned(result.snapshot.height, 32, "preflight snapshot height");
     c.hex(result?.snapshot?.hash, 32);
+    const simulation = result.simulation;
+    if (
+      simulation?.mode !== "single-transaction-next-block" ||
+      simulation?.onPersist !== "HALT" ||
+      simulation?.view !== 0 ||
+      simulation?.transactionCount !== 1 ||
+      !Number.isSafeInteger(simulation?.height) ||
+      simulation.height !== result.snapshot.height + 1 ||
+      simulation.height > 0xffffffff ||
+      !Number.isSafeInteger(simulation?.primaryIndex) ||
+      simulation.primaryIndex < 0 ||
+      simulation.primaryIndex > 0xff ||
+      typeof simulation?.timestamp !== "string" ||
+      !/^(?:0|[1-9][0-9]{0,19})$/.test(simulation.timestamp) ||
+      typeof simulation?.nextConsensus !== "string" ||
+      !/^0x[0-9a-f]{40}$/.test(simulation.nextConsensus)
+    )
+      fail(
+        "preflight simulation must declare successful single-transaction next-block preparation",
+      );
+    c.unsigned(simulation.timestamp, 64, "preflight simulation timestamp");
     if (
       fee(result.minimumrequiredfee, "final minimum required fee") >
       BigInt(signed.prepared.systemFee)

@@ -152,6 +152,56 @@ test(
           hasText: "Reviewed script and authorities confirmed with HALT.",
         })
         .waitFor();
+      const transactionHash = page.getByLabel(
+        "Submitted transaction hash (optional)",
+        { exact: true },
+      );
+      await transactionHash.fill("bb".repeat(32));
+      assert.equal(
+        await page
+          .getByRole("status")
+          .filter({
+            hasText: "Reviewed script and authorities confirmed with HALT.",
+          })
+          .count(),
+        0,
+        "Changing the transaction hash clears the previous receipt confirmation",
+      );
+      assert.equal(await transactionHash.inputValue(), "bb".repeat(32));
+      await transactionHash.fill("aa".repeat(32));
+      await page
+        .getByRole("button", { name: "Check chain confirmation", exact: true })
+        .click();
+      await page
+        .getByRole("status")
+        .filter({
+          hasText: "Reviewed script and authorities confirmed with HALT.",
+        })
+        .waitFor();
+      await page.getByTestId("native-salt").fill("44".repeat(32));
+      await page.screenshot({
+        path: "/tmp/aa-native-invalidated-confirmation-20261009.png",
+        fullPage: true,
+      });
+      assert.equal(
+        await page
+          .getByRole("status")
+          .filter({
+            hasText: "Reviewed script and authorities confirmed with HALT.",
+          })
+          .count(),
+        0,
+        "Editing the reviewed inputs clears the old transaction confirmation",
+      );
+      assert.equal(
+        await page
+          .getByRole("button", {
+            name: "Check chain confirmation",
+            exact: true,
+          })
+          .count(),
+        0,
+      );
       await page
         .getByRole("button", { name: "Account & recovery", exact: true })
         .click();

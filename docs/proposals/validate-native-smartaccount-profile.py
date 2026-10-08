@@ -36,6 +36,11 @@ for heading in (
     assert heading in DOCUMENT, heading
 
 for required in (
+    "Version 2 uses\n`Active = 0` and `Frozen = 1`",
+    "Version 2 composites\nare the protocol-defined",
+    "Version 2 exposes the following Application methods:",
+    "`validateCompositeSignature` for an admitted composite",
+    "verifier `postExecuteComposite` for an admitted composite",
     "MUST return false, including in a directly dispatched target",
     "Custody and non-zero recovery addresses MUST NOT be native contract hashes.",
     "HF_SmartAccountV1",

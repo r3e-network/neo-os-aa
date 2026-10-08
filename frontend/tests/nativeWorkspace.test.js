@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   createNativeWorkspace,
+  actionBlockReason,
   nativeCodec,
   nativeAddress,
   buildRecoveryDescriptor,
@@ -704,4 +705,57 @@ test("SDK execution signer order is fee payer, proxy, remaining custody authorit
     result.signers.map((s) => s.scopes),
     ["None", "CustomContracts", "CustomContracts"],
   );
+});
+
+test("custody may cancel configuration proposals during recovery without enabling new configuration", async () => {
+  const f = fixture();
+  const pending = { matureAt: "1" };
+  const state = {
+    ...f.state,
+    pendingVerifier: pending,
+    pendingHook: pending,
+    pendingRecoveryAddress: pending,
+    pendingRecovery: { matureAt: "2000" },
+  };
+  f.client.rpc.send = async (method) =>
+    method === "getblockcount" ? 1 : { time: 1000 };
+  f.client.buildAction = async ({ action }) => ({
+    kind: "lifecycle",
+    accountId: state.accountId,
+    accountState: state,
+    method: action,
+    requiredAuthorities: [custody],
+    script: "abcd",
+  });
+  await f.workspace.connect({});
+  for (const target of ["Verifier", "Hook", "RecoveryAddress"]) {
+    const review = await f.workspace.lifecycle({
+      accountId: state.accountId,
+      action: "cancel" + target,
+      feePayer: custody,
+    });
+    assert.deepEqual(review.plan.requiredAuthorities, [custody]);
+    assert.equal(review.walletSupported, true);
+    for (const verb of ["propose", "activate"])
+      assert.match(
+        actionBlockReason(state, verb + target, 1000),
+        /Configuration is blocked/,
+      );
+    assert.match(
+      actionBlockReason(
+        { ...state, ["pending" + target]: null },
+        "cancel" + target,
+        1000,
+      ),
+      /No matching configuration proposal/,
+    );
+    assert.match(
+      actionBlockReason(
+        { ...state, pendingRecovery: null, status: "Frozen" },
+        "propose" + target,
+        1000,
+      ),
+      /Configuration is blocked/,
+    );
+  }
 });

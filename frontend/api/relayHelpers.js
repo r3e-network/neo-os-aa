@@ -1,3 +1,4 @@
+import { normalizeRelayContractParameter } from '../src/shared/relayContractParameter.mjs';
 import { sanitizeHex } from '../src/utils/hex.js';
 
 export const ALLOWED_RELAY_META_OPERATIONS = [
@@ -71,35 +72,24 @@ export function normalizeRelayPayload(body = {}) {
   };
 }
 
-const MAX_PARAM_DEPTH = 8;
-
 export function convertContractParamFromJson(param, { sc, u } = {}, depth = 0) {
-  if (depth > MAX_PARAM_DEPTH) {
-    throw new Error(`Contract parameter nesting exceeds maximum depth of ${MAX_PARAM_DEPTH}`);
+  const normalized = normalizeRelayContractParameter(param, { depth });
+  function convert(parameter) {
+    switch (parameter.type) {
+      case 'Hash160': return sc.ContractParam.hash160(parameter.value);
+      case 'Hash256': return sc.ContractParam.hash256(parameter.value);
+      case 'PublicKey': return sc.ContractParam.publicKey(parameter.value);
+      case 'String': return sc.ContractParam.string(parameter.value);
+      case 'Integer': return sc.ContractParam.integer(parameter.value);
+      case 'ByteArray': return sc.ContractParam.byteArray(u.HexString.fromHex(parameter.value.slice(2), true));
+      case 'Array': return sc.ContractParam.array(...parameter.value.map(convert));
+      // Neo core CreateMap emits pairs in reverse order; Neon emits its list
+      // forwards. Reverse a detached list so PACKMAP preserves RPC insertion order.
+      case 'Map': return sc.ContractParam.map(...[...parameter.value].reverse().map((entry) => ({ key: convert(entry.key), value: convert(entry.value) })));
+      case 'Any': return sc.ContractParam.any(null);
+      case 'Boolean': return sc.ContractParam.boolean(parameter.value);
+      default: throw new Error('Unsupported relay parameter');
+    }
   }
-
-  if (!param || typeof param !== 'object') {
-    return sc.ContractParam.any(null);
-  }
-
-  switch (param.type) {
-    case 'Hash160':
-      return sc.ContractParam.hash160(sanitizeHex(param.value));
-    case 'String':
-      return sc.ContractParam.string(String(param.value || ''));
-    case 'Integer':
-      return sc.ContractParam.integer(param.value);
-    case 'ByteArray':
-      return sc.ContractParam.byteArray(u.HexString.fromHex(sanitizeHex(param.value), true));
-    case 'Array':
-      return sc.ContractParam.array(...asArray(param.value).map((item) => convertContractParamFromJson(item, { sc, u }, depth + 1)));
-    case 'Struct':
-      return sc.ContractParam.array(...asArray(param.value).map((item) => convertContractParamFromJson(item, { sc, u }, depth + 1)));
-    case 'Any':
-      return sc.ContractParam.any(param.value ?? null);
-    case 'Boolean':
-      return sc.ContractParam.bool(Boolean(param.value));
-    default:
-      return sc.ContractParam.any(param.value ?? null);
-  }
+  return convert(normalized);
 }

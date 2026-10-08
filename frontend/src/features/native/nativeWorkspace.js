@@ -365,7 +365,10 @@ export function actionBlockReason(state, action, now) {
       action,
     )
   ) {
-    if (state.status === "Frozen" || state.pendingRecovery)
+    if (
+      !action.startsWith("cancel") &&
+      (state.status === "Frozen" || state.pendingRecovery)
+    )
       return "Configuration is blocked while frozen or custody recovery is pending.";
     const suffix = action.replace(/^(propose|activate|cancel)/, "");
     const pending = state["pending" + suffix];

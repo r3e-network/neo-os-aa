@@ -5,10 +5,15 @@ on:
     branches: [main, master]
     paths:
       - '.github/workflows/native-profile.yml'
+      - '.editorconfig'
+      - 'global.json'
       - 'Directory.Build.props'
+      - 'Directory.Build.targets'
       - 'nuget.config'
       - 'contracts/**'
       - 'docs/proposals/*native*'
+      - 'docs/proposals/SMARTACCOUNT-NATIVE*'
+      - 'docs/reports/aa-native-ci-probe-consistency-20261009.json'
       - 'scripts/*native*'
       - 'scripts/check_neo_platform_packages*'
       - 'scripts/dotnet_env.sh'
@@ -16,10 +21,15 @@ on:
   pull_request:
     paths:
       - '.github/workflows/native-profile.yml'
+      - '.editorconfig'
+      - 'global.json'
       - 'Directory.Build.props'
+      - 'Directory.Build.targets'
       - 'nuget.config'
       - 'contracts/**'
       - 'docs/proposals/*native*'
+      - 'docs/proposals/SMARTACCOUNT-NATIVE*'
+      - 'docs/reports/aa-native-ci-probe-consistency-20261009.json'
       - 'scripts/*native*'
       - 'scripts/check_neo_platform_packages*'
       - 'scripts/dotnet_env.sh'
@@ -83,6 +93,7 @@ jobs:
       - name: Check profile, metadata and evidence guards
         run: |
           python3 docs/proposals/validate-native-smartaccount-profile.py
+          python3 -m unittest discover -s docs/proposals -p test_native_profile_v2.py -v
           python3 -m unittest discover -s scripts -p test_native_profile_ci.py -v
           python3 -m unittest discover -s scripts -p test_native_module_profile.py -v
           python3 -m unittest discover -s scripts -p test_build_native_modules.py -v

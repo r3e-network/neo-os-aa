@@ -2,8 +2,10 @@
 
 import base64
 import copy
+import fnmatch
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 import tempfile
@@ -63,9 +65,79 @@ class NativeProfileCiTests(unittest.TestCase):
         runtime = {name + ".dll": "1" * 64 for name in (*ci.CORE_PROJECTS, "Neo.VM")}
         modules = {name + suffix: "2" * 64 for name in ci.PROBE_MODULES for suffix in (".nef", ".manifest.json")}
         sources = {name: "3" * 64 for name in ci.PROBE_FILES}
-        receipt = {"schema": "smartaccount-native-multisig-probe/v1", "status": "PASS", "publicNetworksTouched": False,
-                   "cases": [{}] * 20, "runtimeAssemblyHashes": copy.deepcopy(runtime), "artifactHashes": copy.deepcopy(modules), "probeSourceHashes": copy.deepcopy(sources)}
+        # Retained real VM trace supplies schema-valid cases, not fabricated PASS
+        # rows. The current source/artifact identity guard is exercised separately.
+        receipt = json.loads((Path(__file__).resolve().parents[1] / "docs/reports/aa-native-ci-probe-consistency-20261009.json").read_text())
+        receipt.update(runtimeAssemblyHashes=copy.deepcopy(runtime), artifactHashes=copy.deepcopy(modules), probeSourceHashes=copy.deepcopy(sources))
         return receipt, runtime, modules, sources
+
+    def test_probe_requires_each_real_scenario_once_and_rejects_unknown_cases(self):
+        for kind in ("empty", "missing", "duplicate", "unknown", "extra", "numeric-boolean", "alias-missing"):
+            receipt, runtime, modules, sources = self.fixture()
+            if kind == "empty": receipt["cases"] = [{}] * 20
+            elif kind == "missing": receipt["cases"].pop(0)
+            elif kind == "duplicate": receipt["cases"][1] = copy.deepcopy(receipt["cases"][0])
+            elif kind == "unknown": receipt["cases"][0]["Roster"] = "NN"
+            elif kind == "extra": receipt["cases"].append({"label": "unreviewed"})
+            elif kind == "numeric-boolean": receipt["cases"][0]["Maximum"] = 0
+            else: receipt["cases"][19] = copy.deepcopy(receipt["cases"][18])
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                ci.validate_probe(receipt, runtime, modules, sources)
+
+    def test_probe_checks_execution_verification_budgets_and_rollback_outcomes(self):
+        changes = (
+            (0, ("result", "state"), "FAULT"), (0, ("verification", "state"), "FAULT"),
+            (16, ("result", "state"), "HALT"), (16, ("verification", "state"), "HALT"),
+            (16, ("result", "error"), "Insufficient GAS"),
+            (0, ("result", "notifications"), 0), (0, ("result", "minimum"), 0),
+            (0, ("result", "minimum"), "1"), (0, ("result", "minimum"), None),
+            (0, ("verification", "authorized"), False), (16, ("verification", "authorized"), True),
+            (0, ("verification", "resultCount"), 0), (0, ("verification", "resultCount"), 2),
+            (0, ("verification", "resultType"), "Integer"), (0, ("verification", "booleanResult"), False),
+            (0, ("verification", "booleanResult"), 1),
+            (0, ("verification", "gasConsumedDatoshi"), 150000001),
+            (0, ("verification", "gasLimitDatoshi"), 150000001),
+            (0, ("phases", 0, "consumedDatoshi"), "100000000"),
+            (0, ("phases", 1, "consumedDatoshi"), "100000001"),
+            (0, ("phases", 1, "limitDatoshi"), "200000000"),
+            (0, ("phases", 0, "remainingDatoshi"), "0"),
+            (0, ("phases", 0, "consumedDatoshi"), "-1"),
+            (0, ("phases", 0, "consumedDatoshi"), True),
+            (0, ("phases",), []),
+            (0, ("phases", 1, "phase"), "validateCompositeSignature"),
+            (18, ("configurationRollback",), False), (19, ("invalidPointRollback",), False),
+            (19, ("revocationClearsDomainAndLastUse",), 1),
+            (19, ("domain",), "0" * 64), (19, ("initialLastUseHex",), "01"),
+            (1, ("descriptionBytes",), 0), (1, ("amount",), "1"), (1, ("dataLength",), 0),
+            (9, ("signatureBytes",), 1), (9, ("priorSpent",), "0"),
+            (9, ("amount",), str(2 ** 255 - 1)), (14, ("argumentDepth",), 1),
+            (15, ("methodBytes",), 8), (0, ("lastUsePostRollbackNegativeControls",), 0),
+            (0, ("canonicalDomain",), "0" * 64), (1, ("timestamp",), "1"),
+        )
+        for index, path, value in changes:
+            receipt, runtime, modules, sources = self.fixture()
+            target = receipt["cases"][index]
+            for key in path[:-1]: target = target[key]
+            target[path[-1]] = value
+            with self.subTest(index=index, path=path, value=value), self.assertRaises(ValueError):
+                ci.validate_probe(receipt, runtime, modules, sources)
+        receipt, runtime, modules, sources = self.fixture()
+        receipt["pricing"]["executionFeeFactor"] = 1
+        with self.assertRaises(ValueError): ci.validate_probe(receipt, runtime, modules, sources)
+
+    def test_workflow_triggers_on_policy_specification_and_evidence_guard_inputs(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/native-profile.yml").read_text()
+        sections = re.findall(r"    paths:\n((?:      - [^\n]+\n)+)", workflow)
+        self.assertEqual(len(sections), 2, "Both push and pull_request must select the input graph")
+        for section in sections:
+            patterns = re.findall(r"      - '([^']+)'", section)
+            for changed in (".editorconfig", "global.json", "Directory.Build.props", "Directory.Build.targets", "nuget.config",
+                    "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md", "docs/proposals/smartaccount-native-profile-v2-parameters.json",
+                    "docs/proposals/test_native_profile_v2.py", "docs/reports/aa-native-ci-probe-consistency-20261009.json",
+                    "scripts/native_profile_ci.py", "scripts/native-profile-core-locks.json", "tests/NativeMultiSigProbe/Program.cs"):
+                with self.subTest(changed=changed):
+                    self.assertTrue(any(fnmatch.fnmatchcase(changed, pattern) for pattern in patterns), changed)
+        self.assertIn("python3 -m unittest discover -s docs/proposals -p test_native_profile_v2.py -v", workflow)
 
     def test_probe_rejects_binary_overlay_wrong_artifacts_and_incomplete_matrix(self):
         receipt, runtime, modules, sources = self.fixture()

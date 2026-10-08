@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 // Full-repository builds consume canonical codecs. A standalone frontend build
 // uses its committed copies; byte identity is enforced by the repository tests.
-for (const name of ["nativeSmartAccount.mjs", "nativeSmartAccountClient.mjs"]) {
+for (const name of ["nativeSmartAccount.mjs", "nativeSmartAccountClient.mjs", "relayContractParameter.mjs"]) {
   const canonical = new URL("../../shared/" + name, import.meta.url);
   const target = new URL("../src/shared/" + name, import.meta.url);
   let source;

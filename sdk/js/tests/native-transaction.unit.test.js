@@ -136,6 +136,16 @@ function fixture() {
         hash: txid,
         network: 123,
         snapshot: { height: 100, hash: "0x" + "aa".repeat(32) },
+        simulation: {
+          mode: "single-transaction-next-block",
+          height: 101,
+          timestamp: "1700000000000",
+          primaryIndex: 0,
+          view: 0,
+          transactionCount: 1,
+          onPersist: "HALT",
+          nextConsensus: "0x" + "bb".repeat(20),
+        },
         verification: "Succeed",
         state: "HALT",
         relayed: false,
@@ -180,6 +190,95 @@ test("native witness fallback adds independent custody authority scoped only to 
     "0xd9421d07adf206e9dc4be746a02e8e087fa61741",
   ]);
   await f.tool.signNativeTransaction(f.client, p);
+});
+test("native wallet methods retain the original receiver for fee payer and authority signing", async () => {
+  class StatefulWallet {
+    #delegate = signer();
+    calls = 0;
+    get account() {
+      return this.#delegate.account;
+    }
+    get verificationScript() {
+      return this.#delegate.verificationScript;
+    }
+    async sign(signDataHex) {
+      const signature = await this.#delegate.sign(signDataHex);
+      this.calls++;
+      return signature;
+    }
+  }
+  const f = fixture(),
+    payer = new StatefulWallet(),
+    custody = new StatefulWallet();
+  f.plan.requiredAuthorities = [custody.account];
+  const prepared = await f.tool.prepareNativeTransaction(f.client, f.plan, {
+    ...f.options,
+    feePayer: payer,
+    authoritySigners: [custody],
+  });
+  assert.equal(payer.calls, 0);
+  assert.equal(custody.calls, 0);
+  const signed = await f.tool.signNativeTransaction(f.client, prepared);
+  assert.equal(signed.kind, "signed-native-transaction");
+  assert.equal(payer.calls, 1);
+  assert.equal(custody.calls, 1);
+});
+test("signed preflight requires a well-typed single-transaction next-block OnPersist context", async () => {
+  const f = fixture();
+  const prepared = await f.tool.prepareNativeTransaction(
+    f.client,
+    f.plan,
+    f.options,
+  );
+  const signed = await f.tool.signNativeTransaction(f.client, prepared);
+  f.setPreflight(signed.txid);
+  const valid = await f.tool.preflightNativeTransaction(f.client, signed);
+  const malformed = [
+    undefined,
+    null,
+    { ...valid.simulation, mode: "ledger-snapshot" },
+    { ...valid.simulation, onPersist: "FAULT" },
+    { ...valid.simulation, height: 100 },
+    { ...valid.simulation, height: "101" },
+    { ...valid.simulation, height: 2 ** 32 },
+    { ...valid.simulation, view: 1 },
+    { ...valid.simulation, view: "0" },
+    { ...valid.simulation, transactionCount: 0 },
+    { ...valid.simulation, transactionCount: 2 },
+    { ...valid.simulation, primaryIndex: -1 },
+    { ...valid.simulation, primaryIndex: 256 },
+    { ...valid.simulation, primaryIndex: "0" },
+    { ...valid.simulation, timestamp: 1700000000000 },
+    { ...valid.simulation, timestamp: "01700000000000" },
+    { ...valid.simulation, timestamp: "-1" },
+    { ...valid.simulation, timestamp: (1n << 64n).toString() },
+    { ...valid.simulation, nextConsensus: "bb".repeat(20) },
+    { ...valid.simulation, nextConsensus: "0x" + "BB".repeat(20) },
+  ];
+  for (const simulation of malformed) {
+    f.setPreflight(signed.txid, { simulation });
+    await assert.rejects(
+      () => f.tool.broadcastNativeTransaction(f.client, signed),
+      /preflight (simulation|snapshot)/,
+    );
+  }
+  f.setPreflight(signed.txid, {
+    snapshot: { ...valid.snapshot, height: "100" },
+  });
+  await assert.rejects(
+    () => f.tool.broadcastNativeTransaction(f.client, signed),
+    /preflight snapshot/,
+  );
+  assert.equal(
+    f.calls.filter((call) => call.method === "sendrawtransaction").length,
+    0,
+  );
+  f.setPreflight(signed.txid);
+  await f.tool.broadcastNativeTransaction(f.client, signed);
+  assert.equal(
+    f.calls.filter((call) => call.method === "sendrawtransaction").length,
+    1,
+  );
 });
 test("system admission field is required for automatic estimates; explicit budgets/caps remain distinct", async () => {
   const f = fixture();

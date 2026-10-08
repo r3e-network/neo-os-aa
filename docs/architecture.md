@@ -139,6 +139,15 @@ The `AAPaymaster` contract enables trustless gasless execution on Neo N3:
 3. **Execution:** Relay calls `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)` on the AA core.
 4. **Settlement:** Core validates policy, executes the UserOp, then calls `paymaster.settleReimbursement()` to atomically deduct from the sponsor deposit and transfer GAS to the relay.
 
+For a fee-bearing transaction the settled reimbursement is
+`min(reimbursementAmount, transaction.SystemFee + transaction.NetworkFee)`. `maxPerOp`
+limits this settlement, not the full transaction fee; a larger fee can still pass if
+its requested reimbursement fits the policy. Daily and total budgets count settlements
+under the resolved policy scope, including the shared scope of a global policy.
+A policy violation faults the complete call. Zero-fee RPC estimation instead uses
+the requested reimbursement as its conservative cap, so standard fee estimation
+remains available; relays should retain a system-fee margin.
+
 The Paymaster never authorizes execution — it only funds the relay after the verifier and hooks have already approved the operation.
 
 ## 10. Security Invariants

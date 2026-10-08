@@ -23,6 +23,13 @@ bool diagnose = args.Length == 2 && args[1] == "--diagnose";
 bool allPassed = true;
 var rows = new List<object>();
 object? pricing = null;
+// Execute wrong result shapes in the actual VM before trusting HALT as approval.
+using (var control = new Harness())
+{
+    Require(control.VerifyResultControl([(byte)OpCode.PUSHT]), "Boolean true verification control failed.");
+    foreach (byte[] script in new byte[][] { [], [(byte)OpCode.PUSHF], [(byte)OpCode.PUSHT, (byte)OpCode.PUSHT], [(byte)OpCode.PUSH1], [(byte)OpCode.PUSHNULL] })
+        Require(!control.VerifyResultControl(script), "Verification result guard accepted false, empty, multiple or non-Boolean results.");
+}
 var scenarios = new (string Roster, string Slots, bool Maximum, bool BadSignature, bool Malformed)[] {
     ("SN", "11", false, false, false), ("SN", "11", true, false, false),
     ("SS", "11", false, false, false), ("SS", "11", true, false, false),
@@ -356,15 +363,33 @@ sealed class Harness : IDisposable
             gas: Neo.SmartContract.Helper.MaxVerificationGas);
         engine.LoadScript(proxy.ToArray(), configureState: state => state.CallFlags = CallFlags.ReadOnly);
         LastState = engine.Execute();
+        if (LastState == VMState.HALT && !IsVerificationAuthorized(engine))
+            throw new InvalidOperationException("Verification HALT must return exactly one Boolean true.");
         if (!before.OrderBy(pair => pair.Key).SequenceEqual(Storage(Snapshot).OrderBy(pair => pair.Key)))
             throw new InvalidOperationException("Verification changed committed state.");
         return new
         {
             state = LastState.ToString(),
+            authorized = IsVerificationAuthorized(engine),
+            resultCount = engine.ResultStack.Count,
+            resultType = engine.ResultStack.Count == 1 ? engine.ResultStack.Peek().Type.ToString() : null,
+            booleanResult = engine.ResultStack.Count == 1 && engine.ResultStack.Peek() is Neo.VM.Types.Boolean value ? (bool?)value.GetBoolean() : null,
             gasConsumedDatoshi = engine.FeeConsumed,
             gasLimitDatoshi = Neo.SmartContract.Helper.MaxVerificationGas,
             exception = engine.FaultException?.Message
         };
+    }
+
+    private static bool IsVerificationAuthorized(ApplicationEngine engine) => engine.State == VMState.HALT
+        && engine.ResultStack.Count == 1 && engine.ResultStack.Peek() is Neo.VM.Types.Boolean value && value.GetBoolean();
+
+    internal bool VerifyResultControl(byte[] script)
+    {
+        using var engine = ApplicationEngine.Create(TriggerType.Verification, null, Snapshot.CloneCache(), null, settings,
+            gas: Neo.SmartContract.Helper.MaxVerificationGas);
+        engine.LoadScript(script);
+        engine.Execute();
+        return IsVerificationAuthorized(engine);
     }
 
     private StorageKey ModuleKey(UInt160 module, UInt160 account, byte prefix) => new()

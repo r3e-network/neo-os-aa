@@ -639,7 +639,9 @@ test('computeArgsHash uses invokefunction for array payloads', async () => {
     async invokeScript() {
       throw new Error('invokeScript should not be used for computeArgsHash');
     },
-    async invokeFunction(_scriptHash, operation) {
+    async send(method, [_scriptHash, operation, params]) {
+      assert.equal(method, 'invokefunction');
+      assert.deepEqual(params, [{ type: 'Array', value: [] }]);
       invokeFunctionCalled = true;
       assert.equal(operation, 'computeArgsHash');
       return {

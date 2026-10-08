@@ -323,6 +323,16 @@ export declare class NativeSmartAccountClient {
     hash: string;
     network: number;
     snapshot: { height: number; hash: string };
+    simulation: {
+      mode: "single-transaction-next-block";
+      height: number;
+      timestamp: string;
+      primaryIndex: number;
+      view: 0;
+      transactionCount: 1;
+      onPersist: "HALT";
+      nextConsensus: string;
+    };
     verification: "Succeed";
     relayed: false;
     mempoolChecked: false;

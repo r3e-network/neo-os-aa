@@ -894,6 +894,7 @@ function time(value) {
     : String(value) + " ms";
 }
 function clearReview() {
+  notice.value = "";
   review.value = null;
   workspace.clearReview();
   accepted.value = false;
@@ -908,6 +909,13 @@ function invalidate() {
   notice.value = "";
 }
 watch([endpoint, network], invalidate, { flush: "sync" });
+watch(
+  txid,
+  () => {
+    notice.value = "";
+  },
+  { flush: "sync" },
+);
 watch(
   [
     () => ({ ...registration }),

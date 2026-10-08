@@ -15,19 +15,25 @@ This branch implements the unactivated ABI 2 draft associated with
 Selecting a public RPC endpoint cannot enable it. The workspace verifies native
 activation and the exact protocol profile before enabling account actions.
 
-Current status note:
+The latest [consistency follow-up](docs/reports/aa-consistency-iteration-20261009.md)
+records the signed-preflight, SDK/relay, workspace and validation-gate fixes,
+with exact-source private-chain evidence and remaining activation boundaries.
 
-- The current `main` branch runs `UnifiedSmartWalletV3`.
+Runtime and deployment boundaries:
+
+- This repository retains `UnifiedSmartWalletV3` compatibility for the public deployments listed below, alongside the native `AccountManagement` implementation.
 - V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
-- The public `v3` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount development is a separate, unactivated protocol profile.
+- The public `v3` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
 - [System capability boundaries](docs/AA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
 - The canonical mainnet AA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `morpheus-aa.miniapp.neo` plus `morpheus-aa-alias.miniapp.neo`.
 - The canonical shared testnet AA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
 ## Architecture authority
 
-`neo-os-aa` is the sole authority for account abstraction: user operations, proxy
-verification, and recovery (`protocol-aa-core`). AA decides whether an actor authorized an
+In the NeoOS workspace ownership map, `neo-os-aa` owns account abstraction: user operations, proxy
+verification, and recovery (`protocol-aa-core`). Native consensus enforcement lives in the matching
+Neo core `AccountManagement` implementation; this repository supplies its profile, modules, SDK and UI.
+AA decides whether an actor authorized an
 operation and nothing more: it does not grant DID eligibility, hold network identity, or
 select signers, and it has no dependency on the DID registry. The operation-policy layer
 composes `AAAuthorization` with an independently verified `EligibilityProof` when a product
@@ -49,7 +55,7 @@ Proposed v2 binding: in `neo-os-web/docs/workspace/neoos-target-architecture.v2.
 - **On-Chain Paymaster (Sponsored Transactions)**: The `AAPaymaster` contract enables trustless gasless execution — sponsors deposit GAS, create per-account or global sponsorship policies, and relays are reimbursed automatically after successful `UserOp` execution. Supports per-op limits, daily budgets, total budgets, target/method restrictions, and expiry timestamps.
 - **Policy-Gated Execution**: New integrations should flow through `executeUserOp(accountId, op)` where nonce handling, verification, hooks, and target execution stay centralized.
 
-## App + Market Deployment
+## Public V3 App + Market Deployment
 
 The frontend now separates:
 
@@ -195,7 +201,7 @@ If you want the clearest end-to-end explanation, read these docs in order:
 - `.NET SDK 10`
 - `Node.js 22.12+`
 - the Neo compiler, pinned: `dotnet tool install -g neo.compiler.csharp --version 3.9.1`
-- access to nuget.org. Every package the contracts and tests restore is published there and pinned
+- access to nuget.org. The ordinary contract and test projects use published packages pinned
   by `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
   `node scripts/check_neo_platform_packages.mjs` checks the pins and
   `docs/AA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. Public `v3`
@@ -203,19 +209,25 @@ If you want the clearest end-to-end explanation, read these docs in order:
   requires the private `System.Contract.CallWithGasLimit` extension; its budget guarantees must
   not be attributed to the public build (`docs/NEO-PLATFORM-PACKAGES.md`).
 
+The [native VM CI lane](.github/workflows/native-profile.yml) separately builds an immutable
+Neo core commit with .NET `10.0.400`, verifies its locked dependency archives (including the
+pinned MyGet Neo.VM package), builds native modules twice, and executes the measured composite
+matrix. This is host-VM evidence; the [native SDK integration](docs/NATIVE_SDK.md#browser-and-validation-boundaries)
+is the separate full-node gate. Neither lane activates a public network.
+
 ### Install
 
 ```bash
-cd frontend && npm ci
-cd ../sdk/js && npm ci
+(cd frontend && npm ci)
+(cd sdk/js && npm ci)
 ```
 
 ### Test
 
 ```bash
 dotnet test neo-abstract-account.sln -c Release --nologo
-cd frontend && npm test
-cd sdk/js && npm test
+(cd frontend && npm test)
+(cd sdk/js && npm test)
 ```
 
 `./scripts/verify_repo.sh` is the preferred local verification entrypoint for this repository.

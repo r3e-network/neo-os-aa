@@ -112,6 +112,22 @@ const payload = await aaClient.createSponsoredUserOpPayload({
 
 The AA core method called under the hood is `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)`. A batch variant `createSponsoredBatchPayload` works identically but targets the batch execution entrypoint.
 
+These payloads are relay DTOs: their `ByteArray` values are explicit `0x` hex,
+including the signature. They are not direct Neo RPC JSON (which uses base64).
+Both sponsored builders and `computeArgsHash` accept typed argument DTOs or Neon
+`ContractParam` instances and preserve nested arrays/maps, hashes, and public keys.
+For plain `ByteArray` input, use `0x` hex or unambiguous canonical base64; ambiguous
+bare hex such as `aabb` is rejected, so migrate it to `0xaabb`. Numeric enum types
+require a real `ContractParam` instance; do not JSON-stringify the instance first.
+Unknown types, non-null `Any`, coerced booleans and unsafe numeric integers are
+rejected. Map entry order is preserved across RPC hashing and relay execution;
+duplicate VM keys (including String/ByteArray aliases) are rejected before signing.
+Use decimal strings for large integers. Argument nesting must fit the
+relay's depth-eight limit, including the surrounding operation/batch arrays.
+Use `computeArgsHash` with the same arguments before signing; the sponsored wrapper
+does not recompute or verify a signature supplied by its caller.
+
+
 ### Validate Before Submission
 
 ```javascript
@@ -130,6 +146,14 @@ const ok = await aaClient.validatePaymasterOp({
 ### Settlement Model
 
 Settlement is atomic: the Paymaster validates the sponsor's policy (`setPolicy(accountId, targetContract, method, maxPerOp, dailyBudget, totalBudget, validUntil)`), deducts the reimbursement from the sponsor's deposit, and transfers GAS to the relay, all inside the same contract call. Use `accountId = UInt160.Zero` when creating a global policy that sponsors any account.
+
+For fee-bearing transactions, the core settles
+`min(reimbursementAmount, transaction.SystemFee + transaction.NetworkFee)`.
+The policy's `maxPerOp` and daily/total budgets bound that settlement. Fees above
+`maxPerOp` can still be accepted if the requested reimbursement is within the policy;
+the relay pays the remainder. Zero-fee estimation uses the requested amount as its
+conservative cap, and relays should keep a system-fee margin. Global policies share
+one spending scope across accounts.
 
 The Paymaster never authorizes execution. Verifier and hook plugins must approve the operation independently; the Paymaster only funds the relay after those checks pass.
 
