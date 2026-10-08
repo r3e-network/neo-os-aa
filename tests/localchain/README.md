@@ -24,11 +24,59 @@ setup failure or interruption. It does not accept an existing chain or RPC URL.
 The relay subprocess receives only basic process variables and its freshly
 created relay key; no configured remote relay, paymaster or Redis is used.
 
-Expect approximately three minutes, 54 successful checks, 66 RPC-driver executed
-transactions, 21 simulated faults and 6 node refusals. The one additional relay
-broadcast is checked through its returned transaction id and the on-chain nonce;
-it is not included in the assessor's 66 RPC-driver transaction count. Faults are
-simulations, not executed transactions. No private hardfork is required.
+Expect approximately six minutes, 100 successful checks, 78 RPC-driver executed
+transactions, 29 simulated faults and 6 node refusals. Of the faults, one is a
+broadcast transaction that faults on chain (the paymaster's per-operation bound,
+asserted by its text and by the untouched deposit and nonce); the rest are
+simulations and nothing is broadcast for them. The additional relay broadcast
+(case 7) is checked through its returned transaction id and the chain state; it
+is not included in the RPC-driver transaction count. No private hardfork is
+required.
+
+`AA-10` walks the two timelocks across their boundaries with scripted chain-time
+jumps (`neoxp fastfwd`, one node stop and restart per jump) on three accounts of
+its own: a verifier call and a hook call under the 24 h configuration timelock
+(`getPendingVerifierCallTime`, `getPendingHookCallTime`) and an escape under the
+7 d minimum (`getEscapeTriggeredAt` + `getEscapeTimelock`). Each boundary is
+attempted twice on the deny side (at the start of the timelock and again just
+before the on-chain deadline) and once on the allow side, and every observation
+records the chain time next to the deadline the chain itself reported: the
+receipt gate rejects a walk whose denied time is not strictly before the
+deadline or whose allowed time is not at or after it, so a jump that silently
+landed on the wrong side cannot pass as evidence. The changes themselves are
+also read back: the pending call is still pending and the session key is not
+stored before the boundary, and the stored key, the whitelist entry and the
+finalized escape are asserted after it.
+
+`AA-09` also drives the relay route's paymaster branch against a loopback
+paymaster stub (127.0.0.1, ephemeral port asserted above 20000, a throwaway
+bearer token, no live host): a positive approval that echoes the operation hash
+it was sent, an approval bound to another operation, an explicit denial, an
+answer without a positive approval, an approval whose own ceiling is below the
+real cost, and an endpoint that is not listening. Cases 11 to 15 must all refuse
+to broadcast and leave the nonce untouched; they use the operation the case-7
+broadcast has just consumed plus one, and the probe waits for the case-7
+application log before simulating, because a broadcast returns its transaction
+id before the nonce moves. Case 16 records a limit of the deployed stack: the
+route prices every invocation with a simulation, and the deployed core caps the
+sponsored settlement at the transaction's real system plus network fee, which
+are zero in a pricing container, so a sponsored invocation faults there
+(`Reimbursement exceeds actual gas cost`) and the route refuses it before
+signing, leaving the nonce and the sponsor deposit untouched. A sponsored
+operation on the deployed core is therefore only expressible by direct
+submission, which `AA-08` covers. The frontend has no sponsored-invocation
+builder either, so the probe composes that wire shape itself and the SDK's
+`createSponsoredUserOpPayload` wraps the inner argument array in an `Any`
+parameter a relay-ready JSON payload cannot carry; both are inputs for CU-162.
+
+`AA-08` funds the sponsor deposit, executes a sponsored operation at a fixed
+2.5 GAS system fee plus 0.5 GAS network fee while requesting 5 GAS back, and
+asserts the settlement: the `Reimbursed` event names the sponsor and the relay
+and carries exactly the 3 GAS the relay paid, the sponsor's deposit is debited
+by the same amount, and the relay's own balance is unchanged. It then re-binds
+the paymaster's per-operation bound to 1 GAS, where the same operation must be
+refused on chain with `Exceeds per-operation limit` and move nothing, and to
+4 GAS, where it executes.
 
 The receipt at `tests/localchain/out/rpc-deployed.json` includes all scenarios,
 named checks, transaction outcomes, artifact digests and engine version. Override
@@ -46,7 +94,9 @@ The negative control starts another real chain, substitutes WebAuthnVerifier for
 the native account's zero verifier, and requires `no verifier: native fallback`
 to fail with CLI exit 1. It never skips for missing prerequisites. The fast gate
 tests plant missing/duplicate scenarios, missing/renamed/false checks, count drift,
-unexpected outcomes and a changed artifact digest.
+unexpected outcomes and a changed artifact digest, and mutate the timelock walk
+(missing, empty, reordered, renamed, missing reading, one side unobserved, and
+both sides moved off the deadline) to show the boundary evidence is load-bearing.
 
 ## Current-source variant
 

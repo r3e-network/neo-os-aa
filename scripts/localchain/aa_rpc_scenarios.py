@@ -346,8 +346,31 @@ def sc_value_flow(c, x):
     return {"relayCost": before_r - c.gas("relay")}
 
 
+def _notification(c, txid, name):
+    """The first notification with this event name in a transaction's application log, or None."""
+    deadline = time.time() + 30
+    while True:
+        try:
+            log = c.rpc("getapplicationlog", [txid])
+            break
+        except Fail:
+            if time.time() > deadline:
+                raise Fail(f"no application log for {txid}")
+            time.sleep(1)
+    for entry in log["executions"][0].get("notifications", []):
+        if entry["eventname"] == name:
+            return entry
+    return None
+
+
+def _event_hash(item):
+    """A Hash160/UInt160 field of an event: the node returns it as base64 of the internal order."""
+    return "0x" + base64.b64decode(item["value"])[::-1].hex()
+
+
 def sc_paymaster(c, x):
-    """AA-08 gasless through the on-chain paymaster: relay fronts the fee, the sponsor deposit reimburses it."""
+    """AA-08 on-chain paymaster: the relay fronts the fee, the sponsor deposit reimburses it to the datoshi,
+    and the paymaster's own per-operation bound refuses the operation on one side and executes it on the other."""
     c.records.append({"scenario": "AA-08 on-chain paymaster sponsored operation"})
     acct, proxy = x.accounts["session-pm"]["id"], x.accounts["session-pm"]["proxy"]
     target, pm, sess_v = c.contracts["MockTransferTarget"], c.contracts["AAPaymaster"], c.contracts["SessionKeyVerifier"]
@@ -356,21 +379,159 @@ def sc_paymaster(c, x):
     c.check(c.read(pm, "getSponsorDeposit", H(sponsor)) == 100 * GAS, "deposit credited")
     c.send("sponsor sets a per-account policy", [{"w": "sponsor"}], pm, "setPolicy", [H(acct), H(target), S("transfer"), I(5 * GAS), I(0), I(0), I(0)])
     ar = [H(proxy), H(c.hashes["buyer"]), I(1000), B(b"")]
-    payload = c.read(sess_v, "getPayload", H(acct), H(target), S("transfer"), A(*ar), I(0), I(FAR_DEADLINE))
-    op = x.op(target, "transfer", ar, 0, sig=x.sesskey.sign(payload))
+    requested = 5 * GAS
+
+    def sponsored(nonce):
+        payload = c.read(sess_v, "getPayload", H(acct), H(target), S("transfer"), A(*ar), I(nonce), I(FAR_DEADLINE))
+        return x.op(target, "transfer", ar, nonce, sig=x.sesskey.sign(payload))
+
     relay_before, dep_before = c.gas("relay"), c.read(pm, "getSponsorDeposit", H(sponsor))
-    probe = c.rpc("invokefunction", [x.core, "executeSponsoredUserOp", [H(acct), op, H(pm), H(sponsor), I(5 * GAS)], [c._signer_json({"w": "relay"})]])
+    probe = c.rpc("invokefunction", [x.core, "executeSponsoredUserOp", [H(acct), sponsored(0), H(pm), H(sponsor), I(requested)], [c._signer_json({"w": "relay"})]])
     c.records.append({"step": "invokefunction pre-pricing of executeSponsoredUserOp (what a relay does)", "state": probe.get("state"), "exception": (probe.get("exception") or "")[:200]})
     x.sponsored_probe_state = probe.get("state")
+    # The relay pays a fixed 2.5 GAS system fee and 0.5 GAS network fee while it requests 5 GAS back: the
+    # on-chain cap (min(requested, systemFee + networkFee)) must settle exactly the 3 GAS it really paid.
     rec = c.send("relay executes the sponsored op with a fixed 2.5 GAS system fee (user holds no GAS)", [{"w": "relay"}], x.core, "executeSponsoredUserOp",
-                 [H(acct), op, H(pm), H(sponsor), I(5 * GAS)], probe_fault_ok=True, fixed_sysfee=GAS * 5 // 2, netfee=GAS // 2)
+                 [H(acct), sponsored(0), H(pm), H(sponsor), I(requested)], probe_fault_ok=True, fixed_sysfee=GAS * 5 // 2, netfee=GAS // 2)
     c.check("SponsoredUserOpExecuted" in rec["events"], "SponsoredUserOpExecuted emitted")
     relay_after, dep_after = c.gas("relay"), c.read(pm, "getSponsorDeposit", H(sponsor))
     c.check(dep_before - dep_after > 0, "sponsor deposit was debited")
     rec["relayNetGasDatoshi"] = relay_after - relay_before
     rec["depositDebitDatoshi"] = dep_before - dep_after
     c.check(c.read(x.core, "getNonce", H(acct), I(0)) == 1, "sponsored op consumed nonce 0")
-    return {"relayNet": relay_after - relay_before, "depositDebit": dep_before - dep_after, "prePricingSimulation": x.sponsored_probe_state}
+    paid = GAS * 5 // 2 + GAS // 2
+    reimb = _notification(c, rec["txid"], "Reimbursed")
+    c.check(reimb is not None, "Reimbursed event emitted")
+    fields = reimb["state"]["value"] if reimb else []
+    settled = int(fields[3]["value"]) if len(fields) > 3 else None
+    c.records.append({"step": "on-chain settlement of the first sponsored op", "requestedDatoshi": requested,
+                      "settledDatoshi": settled, "relayFeePaidDatoshi": paid, "relayNetDatoshi": relay_after - relay_before,
+                      "depositDebitDatoshi": dep_before - dep_after,
+                      "event": {"sponsor": _event_hash(fields[0]) if fields else None,
+                                "account": _event_hash(fields[1]) if len(fields) > 1 else None,
+                                "relay": _event_hash(fields[2]) if len(fields) > 2 else None}})
+    c.check(settled == paid, "the relay is reimbursed exactly the fee it paid (requested 5 GAS, settled 3 GAS)")
+    c.check(settled < requested, "the settled amount is capped below the requested amount")
+    c.check(dep_before - dep_after == settled, "the sponsor paid exactly the relay's fee")
+    c.check(relay_after == relay_before, "the relay's own GAS balance is unchanged: it is made whole, not more")
+    c.check(_event_hash(fields[0]) == sponsor and _event_hash(fields[2]) == c.hashes["relay"], "Reimbursed names the sponsor and the relay")
+    # The paymaster's per-operation bound, both sides, on chain: 1 GAS is below the 3 GAS the relay really
+    # pays and 4 GAS is above it. A settlement fault is only observable on a broadcast transaction here:
+    # the pricing container carries no fees, so the deployed core caps the settlement at zero in simulation.
+    c.send("sponsor re-binds the policy to a 1 GAS per-operation bound", [{"w": "sponsor"}], pm, "setPolicy",
+           [H(acct), H(target), S("transfer"), I(1 * GAS), I(0), I(0), I(0)])
+    dep_probe, relay_probe = c.read(pm, "getSponsorDeposit", H(sponsor)), c.gas("relay")
+    refused = c.send("broadcast the sponsored op whose settlement exceeds the on-chain per-operation bound", [{"w": "relay"}], x.core, "executeSponsoredUserOp",
+                     [H(acct), sponsored(1), H(pm), H(sponsor), I(requested)], probe_fault_ok=True, fixed_sysfee=GAS * 5 // 2, netfee=GAS // 2,
+                     onchain_fault="Exceeds per-operation limit")
+    c.check(refused.get("onChain") is True and refused["outcome"] == "FAULT", "the on-chain per-operation bound refused the sponsored op")
+    c.check(c.read(pm, "getSponsorDeposit", H(sponsor)) == dep_probe, "the refused op left the sponsor deposit untouched")
+    c.check(c.read(x.core, "getNonce", H(acct), I(0)) == 1, "the refused op left the account nonce unconsumed")
+    c.check(_notification(c, refused["txid"], "Reimbursed") is None, "the refused op emitted no Reimbursed event")
+    c.check(c.gas("relay") == relay_probe - paid, "the refused op cost the relay its own fee and reimbursed nothing")
+    c.send("sponsor re-binds the policy to a 4 GAS per-operation bound", [{"w": "sponsor"}], pm, "setPolicy",
+           [H(acct), H(target), S("transfer"), I(4 * GAS), I(0), I(0), I(0)])
+    relay_before2, dep_before2 = c.gas("relay"), c.read(pm, "getSponsorDeposit", H(sponsor))
+    rec2 = c.send("the same sponsored op now settles at 3 GAS, inside the 4 GAS bound", [{"w": "relay"}], x.core, "executeSponsoredUserOp",
+                  [H(acct), sponsored(1), H(pm), H(sponsor), I(requested)], probe_fault_ok=True, fixed_sysfee=GAS * 5 // 2, netfee=GAS // 2)
+    c.check(c.read(x.core, "getNonce", H(acct), I(0)) == 2, "the allowed sponsored op consumed nonce 1")
+    c.check(c.gas("relay") == relay_before2, "the relay is made whole on the allowed side too")
+    c.check(dep_before2 - c.read(pm, "getSponsorDeposit", H(sponsor)) == paid, "the sponsor paid the relay's fee again")
+    c.check(rec2["outcome"] == "HALT", "the allowed side HALTed on chain")
+    return {"relayNet": relay_after - relay_before, "depositDebit": dep_before - dep_after,
+            "settled": settled, "requested": requested, "allowedRelayNet": c.gas("relay") - relay_before2,
+            "prePricingSimulation": x.sponsored_probe_state}
+
+
+def sc_timelock_boundaries(c, x):
+    """AA-10 the 24 h configuration timelock and the 7 d escape timelock, observed on both sides of the
+    boundary: the change is refused strictly before the on-chain deadline and executes at or after it, with
+    both observations read from the chain rather than assumed from the jump that was requested."""
+    c.records.append({"scenario": "AA-10 timelock boundaries: 24 h configuration and 7 d escape"})
+    sess_v, hook = c.contracts["SessionKeyVerifier"], c.contracts["WhitelistHook"]
+    target = c.contracts["MockTransferTarget"]
+    key = v.P256Key(x.workdir, "boundary-session")
+    account, proxy = x.register("boundary-session", verifier=sess_v)
+    sess_args = [H(account), B(key.compressed), H(target), S("transfer"), I(c.now_ms() + 20 * DAY * 1000), I(0), S("boundary-session")]
+    rec = c.send("arm setSessionKey for the boundary account (24 h timelock)", [{"w": "owner"}], x.core, "callVerifier",
+                 [H(account), S("setSessionKey"), A(*sess_args)])
+    c.check(rec["result"] is False, "first call arms the 24 h timelock and returns false")
+    deadline = c.read(x.core, "getPendingVerifierCallTime", H(account))
+    c.check(deadline > c.now_ms(), "the chain records a 24 h deadline in the future for the verifier call")
+    hooked, hproxy = x.register("boundary-hook", hook=hook)
+    whitelist_args = [H(hooked), H(target), BOOL(True)]
+    rec = c.send("arm setWhitelist for the boundary account (24 h timelock)", [{"w": "owner"}], x.core, "callHook",
+                 [H(hooked), S("setWhitelist"), A(*whitelist_args)])
+    c.check(rec["result"] is False, "first call arms the hook timelock and returns false")
+    hook_deadline = c.read(x.core, "getPendingHookCallTime", H(hooked))
+    c.check(hook_deadline > c.now_ms(), "the chain records a 24 h deadline in the future for the hook call")
+    esc, eproxy = x.register("boundary-escape", timelock=TL, owner="merchant")
+    c.send("initiateEscape for the boundary account", [{"w": "merchant"}], x.core, "initiateEscape", [H(esc)])
+    initiated = c.read(x.core, "getEscapeTriggeredAt", H(esc))
+    escape_timelock = c.read(x.core, "getEscapeTimelock", H(esc))
+    escape_deadline = initiated + escape_timelock * 1000
+    c.check(escape_timelock == TL and escape_deadline - initiated == 7 * DAY * 1000,
+            "the escape deadline is exactly 7 days after initiation")
+
+    def session_denied(step):
+        c.send(step, [{"w": "owner"}], x.core, "callVerifier", [H(account), S("setSessionKey"), A(*sess_args)],
+               expect="FAULT", expect_text="Timelock not elapsed")
+
+    def hook_denied(step):
+        c.send(step, [{"w": "owner"}], x.core, "callHook", [H(hooked), S("setWhitelist"), A(*whitelist_args)],
+               expect="FAULT", expect_text="Timelock not elapsed")
+
+    def escape_denied(step):
+        c.send(step, [{"w": "merchant"}], x.core, "finalizeEscape", [H(esc), H(ZERO)], expect="FAULT", expect_text="Timelock active")
+
+    # Both sides are read from the chain: the deny side strictly before the earliest 24 h deadline, the
+    # allow side at or after the later one, and the 7 d escape has its own pair further out.
+    first_deny = c.now_ms()
+    session_denied("second setSessionKey call at the start of the timelock")
+    hook_denied("second setWhitelist call at the start of the timelock")
+    escape_denied("finalizeEscape at the start of the 7 d timelock")
+    c.check(first_deny < min(deadline, hook_deadline), "the first deny side is strictly before the 24 h deadlines")
+    before24, denied24 = c.jump_to(min(deadline, hook_deadline) - 60_000)
+    c.records.append({"step": "24 h boundary deny side", "chainTimeBeforeMs": before24, "chainTimeMs": denied24,
+                      "verifierDeadlineMs": deadline, "hookDeadlineMs": hook_deadline})
+    c.check(denied24 < min(deadline, hook_deadline), "the deny side is observed strictly before the 24 h deadlines")
+    session_denied("second setSessionKey call just before the 24 h deadline")
+    hook_denied("second setWhitelist call just before the 24 h deadline")
+    c.check(c.read(x.core, "hasPendingVerifierCall", H(account)) is True, "the armed verifier call is still pending, not applied")
+    stored = c.read(sess_v, "getSessionKey", H(account))
+    c.check((stored[0] if isinstance(stored, (list, tuple)) else stored) != key.compressed,
+            "the session key was not stored before the 24 h deadline")
+    c.check(c.read(hook, "isWhitelisted", H(hooked), H(target)) is False, "the hook target was not whitelisted before the 24 h deadline")
+    _, allowed24 = c.jump_to(max(deadline, hook_deadline) + 60_000)
+    c.records.append({"step": "24 h boundary allow side", "chainTimeMs": allowed24,
+                      "verifierDeadlineMs": deadline, "hookDeadlineMs": hook_deadline})
+    c.check(allowed24 >= max(deadline, hook_deadline), "the allow side is observed at or after both 24 h deadlines")
+    c.send("second setSessionKey call after the 24 h deadline", [{"w": "owner"}], x.core, "callVerifier",
+           [H(account), S("setSessionKey"), A(*sess_args)])
+    c.check(c.read(sess_v, "getSessionKey", H(account))[0] == key.compressed, "the session key is stored after the 24 h deadline")
+    c.send("second setWhitelist call after the 24 h deadline", [{"w": "owner"}], x.core, "callHook",
+           [H(hooked), S("setWhitelist"), A(*whitelist_args)])
+    c.check(c.read(hook, "isWhitelisted", H(hooked), H(target)) is True, "the hook target is whitelisted after the 24 h deadline")
+    escape_denied("finalizeEscape after the 24 h deadlines but before the 7 d one")
+    before7, denied7 = c.jump_to(escape_deadline - 60_000)
+    c.records.append({"step": "7 d boundary deny side", "chainTimeBeforeMs": before7, "chainTimeMs": denied7,
+                      "escapeDeadlineMs": escape_deadline})
+    c.check(denied7 < escape_deadline, "the deny side is observed strictly before the 7 d escape deadline")
+    escape_denied("finalizeEscape just before the 7 d deadline")
+    c.check(c.read(x.core, "isEscapeActive", H(esc)) is True, "the escape is still active before the 7 d deadline")
+    _, allowed7 = c.jump_to(escape_deadline + 60_000)
+    c.records.append({"step": "7 d boundary allow side", "chainTimeMs": allowed7, "escapeDeadlineMs": escape_deadline})
+    c.check(allowed7 >= escape_deadline, "the allow side is observed at or after the 7 d escape deadline")
+    c.send("finalizeEscape after the 7 d deadline", [{"w": "merchant"}], x.core, "finalizeEscape", [H(esc), H(ZERO)])
+    c.check(c.read(x.core, "isEscapeActive", H(esc)) is False, "the escape is finalized after the 7 d deadline")
+    x.timelock_boundaries = [
+        {"timelock": "24h-config-update", "deadlineMs": max(deadline, hook_deadline),
+         "earliestDeadlineMs": min(deadline, hook_deadline), "deniedAtMs": denied24, "allowedAtMs": allowed24,
+         "observedDenied": True, "observedAllowed": True},
+        {"timelock": "7d-escape", "deadlineMs": escape_deadline, "earliestDeadlineMs": escape_deadline,
+         "deniedAtMs": denied7, "allowedAtMs": allowed7, "observedDenied": True, "observedAllowed": True},
+    ]
+    return {"chainTimeMs": allowed7, "boundaries": x.timelock_boundaries}
 
 
 def sc_relay_route(c, x):
@@ -382,16 +543,33 @@ def sc_relay_route(c, x):
     ar = [H(proxy), H(c.hashes["buyer"]), I(1000), B(b"")]
     payload = c.read(sess_v, "getPayload", H(acct), H(target), S("transfer"), A(*ar), I(nonce), I(FAR_DEADLINE))
     sig = x.sesskey.sign(payload)
+    # The paymaster cases below never broadcast on the relay account (they must all be refused), but a
+    # preflight reads the nonce, so they use the account's next unused operation.
+    payload_next = c.read(sess_v, "getPayload", H(acct), H(target), S("transfer"), A(*ar), I(nonce + 1), I(FAR_DEADLINE))
+    sig_next = x.sesskey.sign(payload_next)
+    # The sponsored shape the route carries in case 16, signed for the policy account of AA-08 whose sponsor
+    # deposit is still funded: a 2 GAS request inside the 4 GAS policy bound the paymaster holds at this point.
+    pm_acct, pm_proxy = x.accounts["session-pm"]["id"], x.accounts["session-pm"]["proxy"]
+    pm_nonce = x.nonce(pm_acct)
+    sar = [H(pm_proxy), H(c.hashes["buyer"]), I(1000), B(b"")]
+    spayload = c.read(sess_v, "getPayload", H(pm_acct), H(target), S("transfer"), A(*sar), I(pm_nonce), I(FAR_DEADLINE))
+    sponsored_fixture = {"accountId": pm_acct, "target": target, "method": "transfer",
+                         "methodArgs": [{"type": "Hash160", "value": pm_proxy}, {"type": "Hash160", "value": c.hashes["buyer"]},
+                                        {"type": "Integer", "value": "1000"}, {"type": "ByteArray", "value": "0x"}],
+                         "nonce": str(pm_nonce), "deadline": str(FAR_DEADLINE), "signatureHex": x.sesskey.sign(spayload).hex(),
+                         "paymaster": c.contracts["AAPaymaster"], "sponsor": c.hashes["sponsor"],
+                         "reimbursementAmount": str(2 * GAS)}
     fixture = {"rpcUrl": f"http://127.0.0.1:{c.port}", "core": x.core, "accountId": acct, "target": target, "method": "transfer",
                "methodArgs": [{"type": "Hash160", "value": proxy}, {"type": "Hash160", "value": c.hashes["buyer"]}, {"type": "Integer", "value": "1000"}, {"type": "ByteArray", "value": "0x"}],
                "nonce": str(nonce), "deadline": str(FAR_DEADLINE), "signatureHex": sig.hex(), "otherHash": c.contracts["MockTransferTarget"],
-               "gasFixture": getattr(x, "gas_fixture", None)}
+               "nonceNext": str(nonce + 1), "signatureHexNext": sig_next.hex(),
+               "gasFixture": getattr(x, "gas_fixture", None), "sponsored": sponsored_fixture}
     fx = x.workdir / "relay-fixture.json"
     fx.write_text(json.dumps(fixture))
     env = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG") if k in os.environ}
     env["RELAY_PRIVATE_KEY_HEX"] = c.keys["relay"].der.read_bytes()[7:39].hex()  # raw scalar of the throwaway dev key
     env["NODE_ENV"] = "development"
-    done = subprocess.run([shutil.which("node") or "node", str(Path(__file__).with_name("relay_probe.mjs")), str(fx)], capture_output=True, text=True, env=env, timeout=90)
+    done = subprocess.run([shutil.which("node") or "node", str(Path(__file__).with_name("relay_probe.mjs")), str(fx)], capture_output=True, text=True, env=env, timeout=180)
     c.records.append({"relayProbeExit": done.returncode, "stderrTail": done.stderr[-500:]})
     if done.returncode != 0:
         raise Fail(f"relay probe failed: {done.stderr[-300:]}")
@@ -419,6 +597,45 @@ def sc_relay_route(c, x):
         c.check(x.nonce(g["accountId"]) == int(g["nonce"]), "9. refused transfer leaves the nonce unchanged")
         c.check(c.gas(g["proxy"]) == 10 * GAS, "9. refused transfer leaves the proxy GAS balance unchanged")
     c.check(after == nonce + 1, "the user-operation nonce advanced on chain")
+    # 10-15 the paymaster branch of the route: an approval is consulted on a loopback endpoint and must be
+    # positive, operation-bound and inside its own fee ceiling before the relay signs anything.
+    c.check(by["10"].get("status") == 200 and by["10"].get("ok") is True and by["10"].get("paymaster", {}).get("approved") is True,
+            "10. preflight reports the paymaster approval it received")
+    c.check(by["10"].get("waitedForCase7") is True and by["10"].get("case7VmState") == "HALT",
+            "10. the case-7 broadcast was observed on chain before the paymaster cases")
+    c.check(by["10"].get("paymaster", {}).get("operation_hash") == "0x" + by["10"].get("expectedOperationHash", "")
+            == by["10"].get("sentOperationHash"),
+            "10. the approval echoes the operation hash the route sent")
+    c.records.append({"step": "paymaster authorization requests received by the loopback stub", "requests": by["10"].get("paymasterRequests")})
+    first = (by["10"].get("paymasterRequests") or [{}])[0]
+    c.check(first.get("authorization") == "Bearer loopback-paymaster-token", "10. the paymaster request carries the operator bearer token")
+    c.check(first.get("body", {}).get("account_id") == acct.lower() and first.get("body", {}).get("userop_target_contract") == target.lower()
+            and first.get("body", {}).get("userop_method") == "transfer" and len(first.get("body", {}).get("operation_hash", "")) == 66,
+            "10. the paymaster request is bound to the account, the downstream call and the operation hash")
+    c.check(by["11"].get("status") == 502 and by["11"].get("error") == "paymaster_authorization_failed" and not by["11"].get("txid"),
+            "11. an approval echoing another operation hash stops the broadcast")
+    c.check(by["12"].get("status") == 402 and by["12"].get("error") == "paymaster_denied" and by["12"].get("paymaster", {}).get("approved") is False,
+            "12. an explicit paymaster denial stops the broadcast with paymaster_denied")
+    c.check(by["13"].get("status") == 502 and by["13"].get("error") == "paymaster_authorization_failed" and not by["13"].get("txid"),
+            "13. an answer without a positive approval is not treated as an approval")
+    c.check(by["14"].get("status") == 502 and not by["14"].get("txid"), "14. an approval ceiling below the real cost stops the broadcast")
+    c.check(by["15"].get("status") == 502 and by["15"].get("error") == "paymaster_authorization_failed" and not by["15"].get("txid"),
+            "15. an unreachable paymaster endpoint fails closed")
+    c.check(x.nonce(acct) == nonce + 1, "11-15. none of the refused broadcasts touched the account nonce")
+    # 16 the route's own pricing simulation of an on-chain sponsored invocation: the deployed core caps
+    # the settlement at the transaction's real fees, which are zero in a pricing container, so the route
+    # refuses the operation before signing. Recorded as a limit of the deployed stack (CU-162).
+    sponsored = fixture["sponsored"]
+    sponsored_nonce = x.nonce(sponsored["accountId"])
+    sponsor_deposit = c.read(c.contracts["AAPaymaster"], "getSponsorDeposit", H(c.hashes["sponsor"]))
+    c.check(by["16"].get("status") == 200 and by["16"].get("ok") is False
+            and by["16"].get("code") == "relay_simulation_fault" and not by["16"].get("txid"),
+            "16. the deployed route refuses an on-chain sponsored invocation before signing")
+    c.check("Reimbursement exceeds actual gas cost" in (by["16"].get("exception") or ""),
+            "16. the refusal names the deployed core's settlement cap in the pricing container")
+    c.check(x.nonce(sponsored["accountId"]) == sponsored_nonce
+            and c.read(c.contracts["AAPaymaster"], "getSponsorDeposit", H(c.hashes["sponsor"])) == sponsor_deposit,
+            "16. the refused sponsored invocation touched neither the nonce nor the sponsor deposit")
     return {"relay": results}
 
 
@@ -578,6 +795,8 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
         attempt("AA-01/02 create + native execute", sc_create_and_execute, c, x)
         attempt("AA-03 send GAS (proxy witness)", sc_native_gas, c, x)
         attempt("AA-04 key verifier (P-256)", sc_key_verifier, c, x)
+        attempt("AA-10 timelock boundaries (24 h and 7 d)", sc_timelock_boundaries, c, x)
+        receipt["timelockBoundaries"] = getattr(x, "timelock_boundaries", [])
         attempt("arm timelocked configuration", arm_session_and_whitelist, c, x)
         attempt("AA-07b social recovery phase 1", sc_recovery_phase1, c, x)
         c.fastforward(8 * DAY + 3600)
@@ -677,15 +896,42 @@ def _inventory_failures(receipt, scenarios, totals, counts_label):
     return failures
 
 
+def _boundary_failures(receipt):
+    """The timelock walks must record both sides of each on-chain deadline, with the observed chain time
+    strictly before it on the deny side and at or after it on the allow side. A receipt that reports a
+    boundary without those four readings is not evidence that the boundary was crossed."""
+    boundaries = receipt.get("timelockBoundaries")
+    if not isinstance(boundaries, list) or [b.get("timelock") for b in boundaries] != ["24h-config-update", "7d-escape"]:
+        return ["timelock boundaries: the 24 h and the 7 d walk are recorded, in order"]
+    failures = []
+    for boundary in boundaries:
+        name = boundary["timelock"]
+        if boundary.get("observedDenied") is not True or boundary.get("observedAllowed") is not True:
+            failures.append(f"timelock boundaries: {name} observed on both sides")
+            continue
+        try:
+            earliest, deadline = int(boundary["earliestDeadlineMs"]), int(boundary["deadlineMs"])
+            denied, allowed = int(boundary["deniedAtMs"]), int(boundary["allowedAtMs"])
+        except (KeyError, TypeError, ValueError):
+            failures.append(f"timelock boundaries: {name} records the chain time on both sides")
+            continue
+        if not (denied < earliest <= deadline <= allowed):
+            failures.append(f"timelock boundaries: {name} observed times straddle the on-chain deadline")
+    return failures
+
+
 def validate_receipt(receipt, expected):
     failures = []
     if receipt["status"] != "DONE":
         failures.append("suite completed")
     if receipt["variant"] != expected["variant"]:
         failures.append("deployed variant")
+    failures += _boundary_failures(receipt)
+    totals = expected["totals"]
     failures += _inventory_failures(
-        receipt, expected["scenarios"], expected["totals"],
-        "transaction outcomes: 66 executed, 21 simulated faults, 6 refusals")
+        receipt, expected["scenarios"], totals,
+        "transaction outcomes: %d executed, %d simulated faults, %d refusals"
+        % (totals["executedTransactions"], totals["simulatedFaults"], totals["nodeRefusals"]))
     return failures
 
 

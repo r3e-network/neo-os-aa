@@ -1,9 +1,9 @@
 {
   "variant": "deployed",
   "totals": {
-    "checks": 54,
-    "executedTransactions": 66,
-    "simulatedFaults": 21,
+    "checks": 100,
+    "executedTransactions": 78,
+    "simulatedFaults": 29,
     "nodeRefusals": 6
   },
   "artifacts": [
@@ -105,6 +105,28 @@
       ]
     },
     {
+      "name": "AA-10 timelock boundaries (24 h and 7 d)",
+      "checks": [
+        "first call arms the 24 h timelock and returns false",
+        "the chain records a 24 h deadline in the future for the verifier call",
+        "first call arms the hook timelock and returns false",
+        "the chain records a 24 h deadline in the future for the hook call",
+        "the escape deadline is exactly 7 days after initiation",
+        "the first deny side is strictly before the 24 h deadlines",
+        "the deny side is observed strictly before the 24 h deadlines",
+        "the armed verifier call is still pending, not applied",
+        "the session key was not stored before the 24 h deadline",
+        "the hook target was not whitelisted before the 24 h deadline",
+        "the allow side is observed at or after both 24 h deadlines",
+        "the session key is stored after the 24 h deadline",
+        "the hook target is whitelisted after the 24 h deadline",
+        "the deny side is observed strictly before the 7 d escape deadline",
+        "the escape is still active before the 7 d deadline",
+        "the allow side is observed at or after the 7 d escape deadline",
+        "the escape is finalized after the 7 d deadline"
+      ]
+    },
+    {
       "name": "arm timelocked configuration",
       "checks": [
         "first call arms the timelock and returns false",
@@ -156,7 +178,22 @@
         "deposit credited",
         "SponsoredUserOpExecuted emitted",
         "sponsor deposit was debited",
-        "sponsored op consumed nonce 0"
+        "sponsored op consumed nonce 0",
+        "Reimbursed event emitted",
+        "the relay is reimbursed exactly the fee it paid (requested 5 GAS, settled 3 GAS)",
+        "the settled amount is capped below the requested amount",
+        "the sponsor paid exactly the relay's fee",
+        "the relay's own GAS balance is unchanged: it is made whole, not more",
+        "Reimbursed names the sponsor and the relay",
+        "the on-chain per-operation bound refused the sponsored op",
+        "the refused op left the sponsor deposit untouched",
+        "the refused op left the account nonce unconsumed",
+        "the refused op emitted no Reimbursed event",
+        "the refused op cost the relay its own fee and reimbursed nothing",
+        "the allowed sponsored op consumed nonce 1",
+        "the relay is made whole on the allowed side too",
+        "the sponsor paid the relay's fee again",
+        "the allowed side HALTed on chain"
       ]
     },
     {
@@ -174,7 +211,21 @@
         "9. broadcast refuses the false transfer without a txid",
         "9. refused transfer leaves the nonce unchanged",
         "9. refused transfer leaves the proxy GAS balance unchanged",
-        "the user-operation nonce advanced on chain"
+        "the user-operation nonce advanced on chain",
+        "10. preflight reports the paymaster approval it received",
+        "10. the case-7 broadcast was observed on chain before the paymaster cases",
+        "10. the approval echoes the operation hash the route sent",
+        "10. the paymaster request carries the operator bearer token",
+        "10. the paymaster request is bound to the account, the downstream call and the operation hash",
+        "11. an approval echoing another operation hash stops the broadcast",
+        "12. an explicit paymaster denial stops the broadcast with paymaster_denied",
+        "13. an answer without a positive approval is not treated as an approval",
+        "14. an approval ceiling below the real cost stops the broadcast",
+        "15. an unreachable paymaster endpoint fails closed",
+        "11-15. none of the refused broadcasts touched the account nonce",
+        "16. the deployed route refuses an on-chain sponsored invocation before signing",
+        "16. the refusal names the deployed core's settlement cap in the pricing container",
+        "16. the refused sponsored invocation touched neither the nonce nor the sponsor deposit"
       ]
     }
   ]

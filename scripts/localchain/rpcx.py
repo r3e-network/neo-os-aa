@@ -5,7 +5,7 @@ One long-lived `neoxp run` node (published neoxp, no private hardfork), every tr
 here and sent over JSON-RPC, so a step costs a block (1 s) instead of two .NET process starts. Reuses the
 serialisation helpers of neo-os-aa/scripts/neoexpress_validate.py. Throwaway dev-chain keys only.
 """
-import base64, hashlib, json, os, shutil, subprocess, sys, time, urllib.request
+import base64, hashlib, json, math, os, shutil, subprocess, sys, time, urllib.request
 from pathlib import Path
 
 AA = Path(__file__).resolve().parents[2]
@@ -151,6 +151,20 @@ class Rx:
         blk = self.rpc("getblock", [self.rpc("getblockcount", []) - 1, 1])
         return int(blk["time"])
 
+    def jump_to(self, target_ms):
+        """Advance chain time to (or just past) an absolute millisecond timestamp.
+
+        The node is stopped, `neoxp fastfwd` advances the clock by a whole number of seconds and the
+        node restarts, so the observed time is read back from a block instead of assumed. Returns
+        (beforeMs, afterMs), both read from the chain, so a caller can assert which side of a
+        deadline it observed rather than trusting the requested delta.
+        """
+        before = self.now_ms()
+        seconds = max(0, int(math.ceil((int(target_ms) - before) / 1000.0)))
+        if seconds:
+            self.fastforward(seconds)
+        return before, self.now_ms()
+
     # ---- transactions
     def _signer_json(self, s):
         if "w" in s:
@@ -160,9 +174,12 @@ class Rx:
         return {"account": s["proxy"], "scopes": "WitnessRules", "rules": v.aa_proxy_rules(s["core"], s["target"])}
 
     def send(self, step, signers, contract, method, args, expect="HALT", expect_text=None, script_override=None,
-             sysfee_margin=3 * GAS, netfee=3 * GAS, reject_ok=False, probe_fault_ok=False, fixed_sysfee=None):
+             sysfee_margin=3 * GAS, netfee=3 * GAS, reject_ok=False, probe_fault_ok=False, fixed_sysfee=None,
+             onchain_fault=None):
         """Build, sign and broadcast one transaction. `expect`: HALT | FAULT (judged by simulation, nothing
-        broadcast) | REJECT (the node must refuse the transaction at mempool verification)."""
+        broadcast) | REJECT (the node must refuse the transaction at mempool verification). `onchain_fault`
+        names the assertion text a broadcast transaction is expected to fault with: the transaction is sent
+        and its on-chain fault is asserted instead of being treated as a failure."""
         sj = [self._signer_json(s) for s in signers]
         probe = self.rpc("invokefunction", [contract, method, list(args), sj])
         rec = {"step": step, "call": f"{self.name_of(contract)}.{method}", "signers": [s.get("w") or ("genesis" if "genesis" in s else "proxy") for s in signers],
@@ -182,11 +199,11 @@ class Rx:
             raise Fail(f"{step}: simulation faulted: {probe.get('exception')}")
         script = script_override if script_override is not None else base64.b64decode(probe["script"])
         gas = int(probe.get("gasconsumed", 0))
-        out = self._broadcast(rec, signers, sj, script, fixed_sysfee if fixed_sysfee is not None else gas + sysfee_margin, netfee, expect)
+        out = self._broadcast(rec, signers, sj, script, fixed_sysfee if fixed_sysfee is not None else gas + sysfee_margin, netfee, expect, onchain_fault)
         out.pop("notifications", None)
         return out
 
-    def _broadcast(self, rec, signers, sj, script, sysfee, netfee, expect="HALT"):
+    def _broadcast(self, rec, signers, sj, script, sysfee, netfee, expect="HALT", onchain_fault=None):
         height = self.rpc("getblockcount", [])
         nonce = int.from_bytes(os.urandom(4), "little")
         unsigned = serialize_unsigned(nonce, sysfee, netfee, height + 100, sj, script)
@@ -235,6 +252,11 @@ class Rx:
         if execution.get("exception"):
             rec["exception"] = execution["exception"][:240]
         if execution["vmstate"] != "HALT":
+            text = execution.get("exception") or ""
+            if onchain_fault and onchain_fault in text:
+                rec["outcome"] = "FAULT"
+                rec["onChain"] = True
+                return rec
             raise Fail(f"{rec['step']}: on-chain fault: {execution.get('exception')}")
         return rec
 
