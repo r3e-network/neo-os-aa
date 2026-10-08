@@ -85,6 +85,41 @@ for (const [name, build] of [['single', single], ['batch', batch]]) {
   });
 }
 
+// Every parameter kind the relay cannot carry has to be refused at build time with the path of the
+// offending argument, not coerced into an untyped carrier the relay refuses later. Each row names
+// the one path the refusal must report.
+const rejectedKind = [
+  ['a kind the SDK does not carry (Signature)', [{ type: 'Signature', value: SIGNATURE }], '[0]'],
+  ['a kind the SDK does not carry (Address)', [{ type: 'Address', value: `0x${TARGET}` }], '[0]'],
+  ['an unknown type name', [{ type: 'Wibble', value: 'aa' }], '[0]'],
+  ['a non-null Any', [{ type: 'Any', value: 'text' }], '[0]'],
+  ['an untyped argument', ['raw-value'], '[0]'],
+  ['an object without a type', [{ not: 'a parameter' }], '[0]'],
+  ['a date argument that is not a contract parameter', [new Date(0)], '[0]'],
+  ['a nested array value', [{ type: 'Array', value: [[{ type: 'Integer', value: '7' }]] }], '[0][0]'],
+  ['an untyped nested value', [{ type: 'Array', value: [{ type: 'Integer', value: '7' }, 'raw-value'] }], '[0][1]'],
+  ['an unsupported kind at nesting level two', [{ type: 'Array', value: [{ type: 'Array', value: [{ type: 'Signature', value: SIGNATURE }] }] }], '[0][0][0]'],
+  ['an unsupported kind as a Map value', [{ type: 'Map', value: [{ key: { type: 'String', value: 'k' }, value: { type: 'Wibble', value: 'x' } }] }], '[0].value[0].value'],
+  ['an unsupported kind as a Map key', [{ type: 'Map', value: [{ key: { type: 'Signature', value: SIGNATURE }, value: { type: 'Integer', value: '1' } }] }], '[0].value[0].key'],
+  ['an untyped Struct item', [{ type: 'Struct', value: [{ type: 'Integer', value: '1' }, 'raw-value'] }], '[0][1]'],
+];
+
+for (const [name, build] of [['single', single], ['batch', batch]]) {
+  test(`${name} sponsored SDK names the offending path of every unsupported argument kind`, () => {
+    for (const [label, args, path] of rejectedKind) {
+      assert.throws(() => build(args), (error) => error.code === 'SDK_011'
+        && (error.details?.hint || '').includes(`userOp.Args${path}`),
+      `${name} did not name ${path} for ${label}: expected a refusal naming userOp.Args${path}`);
+    }
+  });
+
+  test(`${name} sponsored SDK refuses every unsupported argument kind without coercion`, () => {
+    for (const [label, args] of rejectedKind) {
+      assert.throws(() => build(args), (error) => error.code === 'SDK_011', `${name} accepted ${label}`);
+    }
+  });
+}
+
 test('batch contains the exact same operation DTO as a single payload and keeps each operation separate', () => {
   const singleJson = json(single(typed));
   const batchJson = json(client.createSponsoredBatchPayload({ ...options, userOps: [op(typed), { ...op([]), Nonce: '9007199254740994' }] }));
