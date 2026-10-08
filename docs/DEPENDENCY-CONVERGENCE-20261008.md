@@ -27,7 +27,7 @@ These tests prove API compatibility and verification boundaries. They do not pro
 
 A fresh all-dependency audit of the original main lock reported frontend 27 low / 2 moderate / 0 high / 0 critical, and SDK zero. The two moderate entries were the typography package and its fixed transitive `postcss-selector-parser@6.0.10` dependency, from [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf). A scoped override to 7.1.6 removes both. All six generated CSS assets remain byte-identical after this parser change.
 
-Final frontend all-dependency audit: **27 low, zero moderate/high/critical**. Production audit remains the existing reviewed upstream baseline: **19 low, zero moderate/high/critical**. SDK all-dependency and production audits report zero. The normal frontend gate now checks both production and all-dependency audits, with moderate or higher blocking the latter.
+October 8 checkpoint frontend all-dependency audit: **27 low, zero moderate/high/critical**. Production audit remains the existing reviewed upstream baseline: **19 low, zero moderate/high/critical**. SDK all-dependency and production audits report zero. The normal frontend gate now checks both production and all-dependency audits, with moderate or higher blocking the latter.
 
 GitHub still returned 41 open alerts (13 high / 21 medium / 7 low). Every alert's manifest, package and vulnerable semver range was compared against all corresponding nested lock entries: **zero matched**. Current affected-package versions included baseline-browser-mapping 2.11.21, browserslist 4.28.9, nanoid 3.3.18, stream-json 3.6.0, postcss 8.5.28, DOMPurify 3.4.15, Mermaid 11.17.2, socket.io-parser 4.2.7, Vite 6.4.3, ws 7.5.12/8.21.0/8.21.1, esbuild 0.25.12, uuid 11.1.1 and js-cookie 3.0.8. This establishes that those returned alert ranges did not match this snapshot; it does not claim GitHub has closed them or that low-severity upstream issues have disappeared.
 
@@ -38,3 +38,11 @@ GitHub still returned 41 open alerts (13 high / 21 medium / 7 low). Every alert'
 - Frontend: 571 passed, three existing tests skipped; production build passed.
 - Desktop/mobile routes, navigation, network-mismatch guard, encrypted operator recovery and published Web3Auth package contract passed in Chromium. The identity page correctly displays the unconfigured state without claiming a logged-in identity.
 - The published-package browser regression is part of the normal frontend verification gate. Native-chain admission, signatures and execution remain separate proof obligations.
+
+## October 9 client and security completion
+
+DOMPurify is now pinned to 3.4.16 and Mermaid's KaTeX dependency to 0.18.2. Actual Chromium regressions cover the fixed inherited-trust URL issue and safe Mermaid/math rendering. Production retains 19 low affected packages; the complete tree retains 24. Every remaining finding propagates from the single unpatched Elliptic advisory `GHSA-848j-6mx2-7j84`. The audit gate accepts only that advisory at at most low severity; registry errors, malformed reports, unknown advisories and severity increases fail. See [the security assessment](FRONTEND_DEPENDENCY_SECURITY.md) for actual exposure and why a forced Web3Auth upgrade is not a fix.
+
+The identity provider is deferred at the production bundle boundary. Browser tests verify initial routes do not request the Elliptic-containing chunk, then load and construct the actual bundled Web3Auth provider to catch initialization cycles. Public configuration presets now match shipped ABI types and argument order, use fresh millisecond SessionKey expiry and explicit verifier/hook destinations, and clearly describe public multisignature thresholds as module counts.
+
+The combined public client gate passes without skipped tests, including the required sibling-services checks, SDK declarations and four installed-tarball consumer tests. These local and CI gates do not establish a live OAuth session or public-chain deployment. PR #14 contains these client changes and the four absorbed dependency upgrades; native core and native module acceptance remain separate.
