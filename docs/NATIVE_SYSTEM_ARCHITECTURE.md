@@ -72,10 +72,28 @@ does not authorize arbitrary transaction fees.
 | DailyLimitHook | Bounded spending with measured token-balance changes |
 | TokenRestrictedHook | Restricted token movement and policy checks |
 
-A MultiSig threshold counts modules; it does not prove that their keys belong to
-independent people. Token policies depend on the selected tokens' behavior and
-balance queries. An ABI marker is an admission compatibility check, not a proof
-that arbitrary third-party bytecode follows the supported module implementations.
+Native MultiSig selects the first threshold of approving children in configured
+roster order. Only those children receive post-execution authority and consume
+their policy allowances. Supplying an additional valid signature does not select
+that child once the quorum has been reached. The native service retains an
+independent approval receipt for this operation, checks the active code pins,
+and discards the receipt on completion or failure. Verification receipts never
+carry into Application, and batch operations never share receipts.
+
+The composite compares its threshold, ordered roster and signer domains before
+and after the selected children's post checks. Those children recheck applicable
+current policy and account for the target result without repeating SessionKey
+cryptographic verification. Receipt construction, copying and all descendant
+calls remain inside the fixed verifier budget.
+
+Supported native P-256 keys use their standard Neo signature-account identity as
+the canonical signer domain. Reusing one key as both a SessionKey and a
+NeoNative signer therefore does not create two independent votes. This does not
+prove that distinct keys belong to independent people or reveal who controls an
+arbitrary verification script. Token policies likewise depend on the selected
+tokens' behavior and balance queries. Exact profile metadata is an admission
+compatibility check, not a proof that arbitrary third-party bytecode follows the
+supported module implementations.
 
 Module configuration is delayed by 24 hours; custody recovery is delayed by
 seven days. Session expiry must leave time after activation. Delayed key removal
