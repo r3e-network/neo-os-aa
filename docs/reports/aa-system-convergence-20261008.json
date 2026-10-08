@@ -1,0 +1,94 @@
+{
+  "observedOn": "2026-10-08",
+  "scope": "public V3 source integration; local validation only",
+  "baseCommit": "a850f3fcb65f4e5cc78a673602be19bddeb07feb",
+  "contracts": {
+    "publicCoreSha256": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+    "platformCoreSha256": "badf94b2384227434792a97e52aebf68e756da745f5a5322099352462a898af3",
+    "multiSigSha256": "d34dac1e54a09b37797db1d5ed3a9f9e08062fa866121e9926605c36994ddc3f",
+    "sourceLockSha256": "5aceb5db7b205984b6d0ca9208227b8727e1b544397883a468870a0e34179ff3"
+  },
+  "tests": {
+    "contractVm": {
+      "passed": 339,
+      "failed": 0,
+      "skipped": 0,
+      "crossRepositoryNeoDidArtifactUsed": true
+    },
+    "frontend": {
+      "passed": 571,
+      "failed": 0,
+      "skipped": 0,
+      "canonicalServicesCheckoutUsed": true
+    },
+    "browserSmoke": 1,
+    "browserOperatorRecovery": 1,
+    "sdkUnit": 116,
+    "sdkInstalledPackage": 4,
+    "sdkTypes": "PASS",
+    "deploymentAndBuildToolTests": 59,
+    "dotnetFormat": "PASS"
+  },
+  "formal": {
+    "closedDeclarations": 77,
+    "semanticMutationsRejected": 32,
+    "tlcDistinctStates": 61460,
+    "smtObligations": 6,
+    "smtControls": 6,
+    "runnerTests": 23,
+    "implementationVerified": false,
+    "receipt": "aa-formal-gate-20261008.json"
+  },
+  "reproducibility": {
+    "matchedArtifacts": 80,
+    "public": 78,
+    "platform": 2,
+    "receipt": "aa-profile-reproducibility-20261008.json"
+  },
+  "privateChain": {
+    "tool": "3.10.1.18+3373db93dd",
+    "networkMagic": 1165044036,
+    "status": "DONE",
+    "checksPassed": 19,
+    "haltedExecutions": 34,
+    "nodeRefusals": 4,
+    "rawReceiptSha256": "3edbd3feee93c55951005eaefc993edefad97b41c901ce6e1996828026da49d4",
+    "input": "independently built artifact snapshot matched to the source and reproducibility receipts; runner did not compile it again",
+    "directProxyTransfer": "1 GAS moved; nonce increments once; owner and sponsor deposit unchanged; full transaction fee readback",
+    "refusals": [
+      "invalid signature",
+      "missing fee reserve",
+      "insufficient fee reserve",
+      "fee ceiling exceeded",
+      "sponsored proxy witness with correct account",
+      "sponsored proxy witness with wrong account or scope"
+    ],
+    "sourceGateTests": 16,
+    "receiptMutations": 24
+  },
+  "dependencyAudit": {
+    "frontendProduction": {
+      "low": 19,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "frontendIncludingDevelopment": {
+      "low": 27,
+      "moderate": 2,
+      "high": 0,
+      "critical": 0
+    },
+    "sdkProductionAndDevelopment": "0 vulnerabilities",
+    "remainingModerate": "typography -> postcss-selector-parser; GHSA-rj75-hqrm-r3gf; no untested parser major override"
+  },
+  "limits": [
+    "No public chain deployment, wallet signing, npm publication or production database migration performed.",
+    "Public V3 has no child callback gas budget.",
+    "Sponsored proxy witnesses are rejected.",
+    "Escape completion depends on old plugin cleanup.",
+    "MultiSig threshold counts modules, not independently attested people or keys.",
+    "Child configuration and argument/result isolation are VM-tested, not newly proven by abstract formal models.",
+    "Private native profile is preserved separately and is not part of this integration."
+  ]
+}

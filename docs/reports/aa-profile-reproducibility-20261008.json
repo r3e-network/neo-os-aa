@@ -1,0 +1,569 @@
+{
+  "generated_at": "2026-10-08T11:20:19.410Z",
+  "release_dir": "contracts/bin/v3",
+  "profiles": {
+    "v3": {
+      "artifact_dir": "contracts/bin/v3",
+      "artifacts_compared": 78,
+      "required_core_present": true,
+      "matches_fresh_build": true,
+      "drifted": [],
+      "missing": [],
+      "artifacts": [
+        {
+          "artifact": "AAAddressMarket.manifest.json",
+          "expected_sha256": "5a566e145e98a21a4d4fdcfb518772647f410b788fa23bc792836b3ae351861a",
+          "actual_sha256": "5a566e145e98a21a4d4fdcfb518772647f410b788fa23bc792836b3ae351861a",
+          "match": true
+        },
+        {
+          "artifact": "AAAddressMarket.nef",
+          "expected_sha256": "6cc8dd93ad96d79c81f02ebfada9bab28b8fe4f6eeb0c0ddff7a2a6516543328",
+          "actual_sha256": "6cc8dd93ad96d79c81f02ebfada9bab28b8fe4f6eeb0c0ddff7a2a6516543328",
+          "match": true
+        },
+        {
+          "artifact": "AAPaymaster.manifest.json",
+          "expected_sha256": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54",
+          "actual_sha256": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54",
+          "match": true
+        },
+        {
+          "artifact": "AAPaymaster.nef",
+          "expected_sha256": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
+          "actual_sha256": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
+          "match": true
+        },
+        {
+          "artifact": "DailyLimitHook.manifest.json",
+          "expected_sha256": "25b6c0b4ce2e01cc0eb509bd101072a75b5f1539fe5d3b602ab2dae1605d5681",
+          "actual_sha256": "25b6c0b4ce2e01cc0eb509bd101072a75b5f1539fe5d3b602ab2dae1605d5681",
+          "match": true
+        },
+        {
+          "artifact": "DailyLimitHook.nef",
+          "expected_sha256": "76b62891b6e6cdc3ab2c119867719e7ef94068cabc118f8dcb3da5cd5effebe3",
+          "actual_sha256": "76b62891b6e6cdc3ab2c119867719e7ef94068cabc118f8dcb3da5cd5effebe3",
+          "match": true
+        },
+        {
+          "artifact": "MarkerOnlyModule.manifest.json",
+          "expected_sha256": "aa3f002d01d69f6fe199fe42648a635d4b52fd3232674a0b6b55c255f0feee5d",
+          "actual_sha256": "aa3f002d01d69f6fe199fe42648a635d4b52fd3232674a0b6b55c255f0feee5d",
+          "match": true
+        },
+        {
+          "artifact": "MarkerOnlyModule.nef",
+          "expected_sha256": "b0a891bd9761e1bbd47b07b2f92b73112ef74d0e7b606f483d87cd54eefe0663",
+          "actual_sha256": "b0a891bd9761e1bbd47b07b2f92b73112ef74d0e7b606f483d87cd54eefe0663",
+          "match": true
+        },
+        {
+          "artifact": "MockTransferTarget.manifest.json",
+          "expected_sha256": "9705024603908788836cedd52c0895f95b3fdc5b84eb7b67eb50e654b2ab121a",
+          "actual_sha256": "9705024603908788836cedd52c0895f95b3fdc5b84eb7b67eb50e654b2ab121a",
+          "match": true
+        },
+        {
+          "artifact": "MockTransferTarget.nef",
+          "expected_sha256": "989c2116a73580468aba4333ad56e18c4266df96ad6416dcc8b7a2e34a105a29",
+          "actual_sha256": "989c2116a73580468aba4333ad56e18c4266df96ad6416dcc8b7a2e34a105a29",
+          "match": true
+        },
+        {
+          "artifact": "MockVerifierCore.manifest.json",
+          "expected_sha256": "0459404916ee3b288a2cd532583d9ed151310d17ac7719b5198bc968cac50438",
+          "actual_sha256": "0459404916ee3b288a2cd532583d9ed151310d17ac7719b5198bc968cac50438",
+          "match": true
+        },
+        {
+          "artifact": "MockVerifierCore.nef",
+          "expected_sha256": "ffedeff59be441e3edc5cfcff74472caa364050c8099f6f4b4b50e78b9178100",
+          "actual_sha256": "ffedeff59be441e3edc5cfcff74472caa364050c8099f6f4b4b50e78b9178100",
+          "match": true
+        },
+        {
+          "artifact": "MultiHook.manifest.json",
+          "expected_sha256": "53dfaf8e5c266d4896afb28411df708f1e24f5e2f01adfdf85f56bfd1a13b6e2",
+          "actual_sha256": "53dfaf8e5c266d4896afb28411df708f1e24f5e2f01adfdf85f56bfd1a13b6e2",
+          "match": true
+        },
+        {
+          "artifact": "MultiHook.nef",
+          "expected_sha256": "f042741bd96e304df1f6c70312d8013f586a0f4cc82d3b59bb56171c18a42363",
+          "actual_sha256": "f042741bd96e304df1f6c70312d8013f586a0f4cc82d3b59bb56171c18a42363",
+          "match": true
+        },
+        {
+          "artifact": "MultiSigVerifier.manifest.json",
+          "expected_sha256": "1f10a18eb4c8b3310b8c68b6851e3c3a39b5f00f077c3ad59a32e2a54ca0a491",
+          "actual_sha256": "1f10a18eb4c8b3310b8c68b6851e3c3a39b5f00f077c3ad59a32e2a54ca0a491",
+          "match": true
+        },
+        {
+          "artifact": "MultiSigVerifier.nef",
+          "expected_sha256": "d34dac1e54a09b37797db1d5ed3a9f9e08062fa866121e9926605c36994ddc3f",
+          "actual_sha256": "d34dac1e54a09b37797db1d5ed3a9f9e08062fa866121e9926605c36994ddc3f",
+          "match": true
+        },
+        {
+          "artifact": "NeoDIDCredentialHook.manifest.json",
+          "expected_sha256": "eff9af511ee957882eb0d071e2af71ba009f0cce4b4520ef5e3c6aa7383fcbbe",
+          "actual_sha256": "eff9af511ee957882eb0d071e2af71ba009f0cce4b4520ef5e3c6aa7383fcbbe",
+          "match": true
+        },
+        {
+          "artifact": "NeoDIDCredentialHook.nef",
+          "expected_sha256": "c2abf2c217e49d8efb7d92bbfb0a5be81e0f25e5f6973f2a7ad3e5d90d4d23da",
+          "actual_sha256": "c2abf2c217e49d8efb7d92bbfb0a5be81e0f25e5f6973f2a7ad3e5d90d4d23da",
+          "match": true
+        },
+        {
+          "artifact": "NeoNativeVerifier.manifest.json",
+          "expected_sha256": "76ba90a9f56b94d4c763aa17ebe5212927435d52bda7d60c25d452ec920ac719",
+          "actual_sha256": "76ba90a9f56b94d4c763aa17ebe5212927435d52bda7d60c25d452ec920ac719",
+          "match": true
+        },
+        {
+          "artifact": "NeoNativeVerifier.nef",
+          "expected_sha256": "a4e528f8bc340adaee976454d24786dda3f4bb2d0ecd03ca536789364ec1a0aa",
+          "actual_sha256": "a4e528f8bc340adaee976454d24786dda3f4bb2d0ecd03ca536789364ec1a0aa",
+          "match": true
+        },
+        {
+          "artifact": "PlatformRegistrarMock.manifest.json",
+          "expected_sha256": "6f32bd40460b9e14b848f84f7a54f68e45b502096e3714746b7725019c69a8e2",
+          "actual_sha256": "6f32bd40460b9e14b848f84f7a54f68e45b502096e3714746b7725019c69a8e2",
+          "match": true
+        },
+        {
+          "artifact": "PlatformRegistrarMock.nef",
+          "expected_sha256": "514eddaf4701d2d2679c28a75de589096df105cc3fc9ecae393b3297181b85fe",
+          "actual_sha256": "514eddaf4701d2d2679c28a75de589096df105cc3fc9ecae393b3297181b85fe",
+          "match": true
+        },
+        {
+          "artifact": "PolicyExecutionProbe.manifest.json",
+          "expected_sha256": "084bafbb151859b2dab51b9fc9fe7e83188c7c947e094fae773c13e219caff6f",
+          "actual_sha256": "084bafbb151859b2dab51b9fc9fe7e83188c7c947e094fae773c13e219caff6f",
+          "match": true
+        },
+        {
+          "artifact": "PolicyExecutionProbe.nef",
+          "expected_sha256": "08ad2d87a45d7a374e83bdb926b8f3d03be115d42c04afe57b64d1d1468482c9",
+          "actual_sha256": "08ad2d87a45d7a374e83bdb926b8f3d03be115d42c04afe57b64d1d1468482c9",
+          "match": true
+        },
+        {
+          "artifact": "SessionKeyVerifier.manifest.json",
+          "expected_sha256": "19068a0ea3b751543ef996cc55eee0073ed2dcc1c057279310aa570520427315",
+          "actual_sha256": "19068a0ea3b751543ef996cc55eee0073ed2dcc1c057279310aa570520427315",
+          "match": true
+        },
+        {
+          "artifact": "SessionKeyVerifier.nef",
+          "expected_sha256": "ab1930fa27793e7b36e0e3d0d56328934600438b0423500e033b70d2a088f4f5",
+          "actual_sha256": "ab1930fa27793e7b36e0e3d0d56328934600438b0423500e033b70d2a088f4f5",
+          "match": true
+        },
+        {
+          "artifact": "SocialRecoveryVerifier.manifest.json",
+          "expected_sha256": "3ca518e7b82a363617b23f9a97081c2a0a710f565f7fddaf90305a60409434a8",
+          "actual_sha256": "3ca518e7b82a363617b23f9a97081c2a0a710f565f7fddaf90305a60409434a8",
+          "match": true
+        },
+        {
+          "artifact": "SocialRecoveryVerifier.nef",
+          "expected_sha256": "59f9f4a10906217ce1f8ef6c9bfa296fcca47cdfda31bde3628f653451750994",
+          "actual_sha256": "59f9f4a10906217ce1f8ef6c9bfa296fcca47cdfda31bde3628f653451750994",
+          "match": true
+        },
+        {
+          "artifact": "SubscriptionVerifier.manifest.json",
+          "expected_sha256": "46aeeaf111a3b621caac5b2a4e8655dfd08b839474d174b3e53fc665f0f26eb6",
+          "actual_sha256": "46aeeaf111a3b621caac5b2a4e8655dfd08b839474d174b3e53fc665f0f26eb6",
+          "match": true
+        },
+        {
+          "artifact": "SubscriptionVerifier.nef",
+          "expected_sha256": "c73a858e418e3202d92337d3cf1ab833ca9a5b3b861b0383b4ad0e9ba6fc3875",
+          "actual_sha256": "c73a858e418e3202d92337d3cf1ab833ca9a5b3b861b0383b4ad0e9ba6fc3875",
+          "match": true
+        },
+        {
+          "artifact": "TEEVerifier.manifest.json",
+          "expected_sha256": "466de771a2f1af2a6fcf6b0e156418cb1fbda02e22000348f736f2a1a02f999c",
+          "actual_sha256": "466de771a2f1af2a6fcf6b0e156418cb1fbda02e22000348f736f2a1a02f999c",
+          "match": true
+        },
+        {
+          "artifact": "TEEVerifier.nef",
+          "expected_sha256": "74241d7dd076986b41b455959776d9c580c569a2abd85e9aef9241a05d5dcb58",
+          "actual_sha256": "74241d7dd076986b41b455959776d9c580c569a2abd85e9aef9241a05d5dcb58",
+          "match": true
+        },
+        {
+          "artifact": "TokenRestrictedHook.manifest.json",
+          "expected_sha256": "02e63678372bc987dc698f264d464ec98fceb2902b45af7b085fabb76046115d",
+          "actual_sha256": "02e63678372bc987dc698f264d464ec98fceb2902b45af7b085fabb76046115d",
+          "match": true
+        },
+        {
+          "artifact": "TokenRestrictedHook.nef",
+          "expected_sha256": "a5e08228135c09324b2e8a2f9a2658c2e7918a30ba969e694fdfe5458b8565b7",
+          "actual_sha256": "a5e08228135c09324b2e8a2f9a2658c2e7918a30ba969e694fdfe5458b8565b7",
+          "match": true
+        },
+        {
+          "artifact": "UnifiedSmartWalletV3.manifest.json",
+          "expected_sha256": "48fda3ed98a26961c647b220144604df494c65f6026e963b3c916bf0f51e658c",
+          "actual_sha256": "48fda3ed98a26961c647b220144604df494c65f6026e963b3c916bf0f51e658c",
+          "match": true
+        },
+        {
+          "artifact": "UnifiedSmartWalletV3.nef",
+          "expected_sha256": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+          "actual_sha256": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+          "match": true
+        },
+        {
+          "artifact": "Web3AuthVerifier.manifest.json",
+          "expected_sha256": "85b61610090065f499ff486a2ea28c298399d234b4d5306ae37ee011bcb39087",
+          "actual_sha256": "85b61610090065f499ff486a2ea28c298399d234b4d5306ae37ee011bcb39087",
+          "match": true
+        },
+        {
+          "artifact": "Web3AuthVerifier.nef",
+          "expected_sha256": "b31cd6ad8e847718623f36201541d92b81a348e6720b84d99653d18996660110",
+          "actual_sha256": "b31cd6ad8e847718623f36201541d92b81a348e6720b84d99653d18996660110",
+          "match": true
+        },
+        {
+          "artifact": "WebAuthnVerifier.manifest.json",
+          "expected_sha256": "df5b4b4b17ffcac20dcf51d998ed8215ca881c3e40571da64291afffe7e76a82",
+          "actual_sha256": "df5b4b4b17ffcac20dcf51d998ed8215ca881c3e40571da64291afffe7e76a82",
+          "match": true
+        },
+        {
+          "artifact": "WebAuthnVerifier.nef",
+          "expected_sha256": "4c11371fc70f3213ccc6e87ae3e9687682a6bc12a64fa58abd895deef93318a0",
+          "actual_sha256": "4c11371fc70f3213ccc6e87ae3e9687682a6bc12a64fa58abd895deef93318a0",
+          "match": true
+        },
+        {
+          "artifact": "WhitelistHook.manifest.json",
+          "expected_sha256": "3a8da17497d1414d76f8d13385b7f026f7be3848da0e2548818ba69d03b1b36f",
+          "actual_sha256": "3a8da17497d1414d76f8d13385b7f026f7be3848da0e2548818ba69d03b1b36f",
+          "match": true
+        },
+        {
+          "artifact": "WhitelistHook.nef",
+          "expected_sha256": "ea25961b76021215e3efa9d9fcc61406a92eca6f146bd85619564f38f6ce0bd0",
+          "actual_sha256": "ea25961b76021215e3efa9d9fcc61406a92eca6f146bd85619564f38f6ce0bd0",
+          "match": true
+        },
+        {
+          "artifact": "WrongHookLifecycleAbiModule.manifest.json",
+          "expected_sha256": "cac147583b22b3b7a4b84aebb8136ee214eb6426164d72d32c5272657ba6a2b5",
+          "actual_sha256": "cac147583b22b3b7a4b84aebb8136ee214eb6426164d72d32c5272657ba6a2b5",
+          "match": true
+        },
+        {
+          "artifact": "WrongHookLifecycleAbiModule.nef",
+          "expected_sha256": "324354c7df068cc158dd8f69d8d5b05ff22743c9aacf5f5538c4e8084075d557",
+          "actual_sha256": "324354c7df068cc158dd8f69d8d5b05ff22743c9aacf5f5538c4e8084075d557",
+          "match": true
+        },
+        {
+          "artifact": "WrongLifecycleAbiModule.manifest.json",
+          "expected_sha256": "98b9591d9834fbbb8a120d8a2ecc437136e69543c11565bcc659501e17a138ea",
+          "actual_sha256": "98b9591d9834fbbb8a120d8a2ecc437136e69543c11565bcc659501e17a138ea",
+          "match": true
+        },
+        {
+          "artifact": "WrongLifecycleAbiModule.nef",
+          "expected_sha256": "9916ebd6e3d32c60d7cf1b66a8d77fc63a976f020a16363e4e4ef52dbe7f9dc5",
+          "actual_sha256": "9916ebd6e3d32c60d7cf1b66a8d77fc63a976f020a16363e4e4ef52dbe7f9dc5",
+          "match": true
+        },
+        {
+          "artifact": "ZKEmailVerifier.manifest.json",
+          "expected_sha256": "f6dea610960e3fe8dc6e5a44800aeb3bd0c0def198523deb8b7a036f3e9cd104",
+          "actual_sha256": "f6dea610960e3fe8dc6e5a44800aeb3bd0c0def198523deb8b7a036f3e9cd104",
+          "match": true
+        },
+        {
+          "artifact": "ZKEmailVerifier.nef",
+          "expected_sha256": "f103a85a377871d8b77a866a973198de39424af1ed383b9dc75c48957d01f4b5",
+          "actual_sha256": "f103a85a377871d8b77a866a973198de39424af1ed383b9dc75c48957d01f4b5",
+          "match": true
+        },
+        {
+          "artifact": "ZkLoginVerifier.manifest.json",
+          "expected_sha256": "c1f3a510181d6b7b30bc4fa0d4c4c6f09c700304d8a8c68bb35ac6b9315b5bbe",
+          "actual_sha256": "c1f3a510181d6b7b30bc4fa0d4c4c6f09c700304d8a8c68bb35ac6b9315b5bbe",
+          "match": true
+        },
+        {
+          "artifact": "ZkLoginVerifier.nef",
+          "expected_sha256": "59d253887460581e10282ddec16384a312323e632eb208a1c0b1dda543e9fc78",
+          "actual_sha256": "59d253887460581e10282ddec16384a312323e632eb208a1c0b1dda543e9fc78",
+          "match": true
+        },
+        {
+          "artifact": "hooks/DailyLimitHook.manifest.json",
+          "expected_sha256": "25b6c0b4ce2e01cc0eb509bd101072a75b5f1539fe5d3b602ab2dae1605d5681",
+          "actual_sha256": "25b6c0b4ce2e01cc0eb509bd101072a75b5f1539fe5d3b602ab2dae1605d5681",
+          "match": true
+        },
+        {
+          "artifact": "hooks/DailyLimitHook.nef",
+          "expected_sha256": "76b62891b6e6cdc3ab2c119867719e7ef94068cabc118f8dcb3da5cd5effebe3",
+          "actual_sha256": "76b62891b6e6cdc3ab2c119867719e7ef94068cabc118f8dcb3da5cd5effebe3",
+          "match": true
+        },
+        {
+          "artifact": "hooks/MultiHook.manifest.json",
+          "expected_sha256": "53dfaf8e5c266d4896afb28411df708f1e24f5e2f01adfdf85f56bfd1a13b6e2",
+          "actual_sha256": "53dfaf8e5c266d4896afb28411df708f1e24f5e2f01adfdf85f56bfd1a13b6e2",
+          "match": true
+        },
+        {
+          "artifact": "hooks/MultiHook.nef",
+          "expected_sha256": "f042741bd96e304df1f6c70312d8013f586a0f4cc82d3b59bb56171c18a42363",
+          "actual_sha256": "f042741bd96e304df1f6c70312d8013f586a0f4cc82d3b59bb56171c18a42363",
+          "match": true
+        },
+        {
+          "artifact": "hooks/NeoDIDCredentialHook.manifest.json",
+          "expected_sha256": "eff9af511ee957882eb0d071e2af71ba009f0cce4b4520ef5e3c6aa7383fcbbe",
+          "actual_sha256": "eff9af511ee957882eb0d071e2af71ba009f0cce4b4520ef5e3c6aa7383fcbbe",
+          "match": true
+        },
+        {
+          "artifact": "hooks/NeoDIDCredentialHook.nef",
+          "expected_sha256": "c2abf2c217e49d8efb7d92bbfb0a5be81e0f25e5f6973f2a7ad3e5d90d4d23da",
+          "actual_sha256": "c2abf2c217e49d8efb7d92bbfb0a5be81e0f25e5f6973f2a7ad3e5d90d4d23da",
+          "match": true
+        },
+        {
+          "artifact": "hooks/TokenRestrictedHook.manifest.json",
+          "expected_sha256": "02e63678372bc987dc698f264d464ec98fceb2902b45af7b085fabb76046115d",
+          "actual_sha256": "02e63678372bc987dc698f264d464ec98fceb2902b45af7b085fabb76046115d",
+          "match": true
+        },
+        {
+          "artifact": "hooks/TokenRestrictedHook.nef",
+          "expected_sha256": "a5e08228135c09324b2e8a2f9a2658c2e7918a30ba969e694fdfe5458b8565b7",
+          "actual_sha256": "a5e08228135c09324b2e8a2f9a2658c2e7918a30ba969e694fdfe5458b8565b7",
+          "match": true
+        },
+        {
+          "artifact": "hooks/WhitelistHook.manifest.json",
+          "expected_sha256": "3a8da17497d1414d76f8d13385b7f026f7be3848da0e2548818ba69d03b1b36f",
+          "actual_sha256": "3a8da17497d1414d76f8d13385b7f026f7be3848da0e2548818ba69d03b1b36f",
+          "match": true
+        },
+        {
+          "artifact": "hooks/WhitelistHook.nef",
+          "expected_sha256": "ea25961b76021215e3efa9d9fcc61406a92eca6f146bd85619564f38f6ce0bd0",
+          "actual_sha256": "ea25961b76021215e3efa9d9fcc61406a92eca6f146bd85619564f38f6ce0bd0",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/MultiSigVerifier.manifest.json",
+          "expected_sha256": "1f10a18eb4c8b3310b8c68b6851e3c3a39b5f00f077c3ad59a32e2a54ca0a491",
+          "actual_sha256": "1f10a18eb4c8b3310b8c68b6851e3c3a39b5f00f077c3ad59a32e2a54ca0a491",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/MultiSigVerifier.nef",
+          "expected_sha256": "d34dac1e54a09b37797db1d5ed3a9f9e08062fa866121e9926605c36994ddc3f",
+          "actual_sha256": "d34dac1e54a09b37797db1d5ed3a9f9e08062fa866121e9926605c36994ddc3f",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/NeoNativeVerifier.manifest.json",
+          "expected_sha256": "76ba90a9f56b94d4c763aa17ebe5212927435d52bda7d60c25d452ec920ac719",
+          "actual_sha256": "76ba90a9f56b94d4c763aa17ebe5212927435d52bda7d60c25d452ec920ac719",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/NeoNativeVerifier.nef",
+          "expected_sha256": "a4e528f8bc340adaee976454d24786dda3f4bb2d0ecd03ca536789364ec1a0aa",
+          "actual_sha256": "a4e528f8bc340adaee976454d24786dda3f4bb2d0ecd03ca536789364ec1a0aa",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/SessionKeyVerifier.manifest.json",
+          "expected_sha256": "19068a0ea3b751543ef996cc55eee0073ed2dcc1c057279310aa570520427315",
+          "actual_sha256": "19068a0ea3b751543ef996cc55eee0073ed2dcc1c057279310aa570520427315",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/SessionKeyVerifier.nef",
+          "expected_sha256": "ab1930fa27793e7b36e0e3d0d56328934600438b0423500e033b70d2a088f4f5",
+          "actual_sha256": "ab1930fa27793e7b36e0e3d0d56328934600438b0423500e033b70d2a088f4f5",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/SubscriptionVerifier.manifest.json",
+          "expected_sha256": "46aeeaf111a3b621caac5b2a4e8655dfd08b839474d174b3e53fc665f0f26eb6",
+          "actual_sha256": "46aeeaf111a3b621caac5b2a4e8655dfd08b839474d174b3e53fc665f0f26eb6",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/SubscriptionVerifier.nef",
+          "expected_sha256": "c73a858e418e3202d92337d3cf1ab833ca9a5b3b861b0383b4ad0e9ba6fc3875",
+          "actual_sha256": "c73a858e418e3202d92337d3cf1ab833ca9a5b3b861b0383b4ad0e9ba6fc3875",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/TEEVerifier.manifest.json",
+          "expected_sha256": "466de771a2f1af2a6fcf6b0e156418cb1fbda02e22000348f736f2a1a02f999c",
+          "actual_sha256": "466de771a2f1af2a6fcf6b0e156418cb1fbda02e22000348f736f2a1a02f999c",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/TEEVerifier.nef",
+          "expected_sha256": "74241d7dd076986b41b455959776d9c580c569a2abd85e9aef9241a05d5dcb58",
+          "actual_sha256": "74241d7dd076986b41b455959776d9c580c569a2abd85e9aef9241a05d5dcb58",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/Web3AuthVerifier.manifest.json",
+          "expected_sha256": "85b61610090065f499ff486a2ea28c298399d234b4d5306ae37ee011bcb39087",
+          "actual_sha256": "85b61610090065f499ff486a2ea28c298399d234b4d5306ae37ee011bcb39087",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/Web3AuthVerifier.nef",
+          "expected_sha256": "b31cd6ad8e847718623f36201541d92b81a348e6720b84d99653d18996660110",
+          "actual_sha256": "b31cd6ad8e847718623f36201541d92b81a348e6720b84d99653d18996660110",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/WebAuthnVerifier.manifest.json",
+          "expected_sha256": "df5b4b4b17ffcac20dcf51d998ed8215ca881c3e40571da64291afffe7e76a82",
+          "actual_sha256": "df5b4b4b17ffcac20dcf51d998ed8215ca881c3e40571da64291afffe7e76a82",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/WebAuthnVerifier.nef",
+          "expected_sha256": "4c11371fc70f3213ccc6e87ae3e9687682a6bc12a64fa58abd895deef93318a0",
+          "actual_sha256": "4c11371fc70f3213ccc6e87ae3e9687682a6bc12a64fa58abd895deef93318a0",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/ZKEmailVerifier.manifest.json",
+          "expected_sha256": "f6dea610960e3fe8dc6e5a44800aeb3bd0c0def198523deb8b7a036f3e9cd104",
+          "actual_sha256": "f6dea610960e3fe8dc6e5a44800aeb3bd0c0def198523deb8b7a036f3e9cd104",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/ZKEmailVerifier.nef",
+          "expected_sha256": "f103a85a377871d8b77a866a973198de39424af1ed383b9dc75c48957d01f4b5",
+          "actual_sha256": "f103a85a377871d8b77a866a973198de39424af1ed383b9dc75c48957d01f4b5",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/ZkLoginVerifier.manifest.json",
+          "expected_sha256": "c1f3a510181d6b7b30bc4fa0d4c4c6f09c700304d8a8c68bb35ac6b9315b5bbe",
+          "actual_sha256": "c1f3a510181d6b7b30bc4fa0d4c4c6f09c700304d8a8c68bb35ac6b9315b5bbe",
+          "match": true
+        },
+        {
+          "artifact": "verifiers/ZkLoginVerifier.nef",
+          "expected_sha256": "59d253887460581e10282ddec16384a312323e632eb208a1c0b1dda543e9fc78",
+          "actual_sha256": "59d253887460581e10282ddec16384a312323e632eb208a1c0b1dda543e9fc78",
+          "match": true
+        }
+      ]
+    },
+    "platform": {
+      "artifact_dir": "contracts/bin/platform",
+      "artifacts_compared": 2,
+      "required_core_present": true,
+      "matches_fresh_build": true,
+      "drifted": [],
+      "missing": [],
+      "artifacts": [
+        {
+          "artifact": "UnifiedSmartWalletV3.manifest.json",
+          "expected_sha256": "c0760a43c0c635c66681eab3c1296ddbff8438cf186f095c0a0b32944e57e4e2",
+          "actual_sha256": "c0760a43c0c635c66681eab3c1296ddbff8438cf186f095c0a0b32944e57e4e2",
+          "match": true
+        },
+        {
+          "artifact": "UnifiedSmartWalletV3.nef",
+          "expected_sha256": "badf94b2384227434792a97e52aebf68e756da745f5a5322099352462a898af3",
+          "actual_sha256": "badf94b2384227434792a97e52aebf68e756da745f5a5322099352462a898af3",
+          "match": true
+        }
+      ]
+    }
+  },
+  "artifacts_compared": 80,
+  "release_matches_fresh_build": true,
+  "drifted": [],
+  "missing": [],
+  "tracked_anchor": [
+    {
+      "artifact": "UnifiedSmartWalletV3.nef",
+      "expected_sha256": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+      "actual_sha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+      "match": false,
+      "provenance": "tracked contracts/build; deployed-mainnet bytecode anchor"
+    }
+  ],
+  "tracked_tree_drift": [
+    "AAAddressMarket.manifest.json",
+    "AAAddressMarket.nef",
+    "AAPaymaster.manifest.json",
+    "AAPaymaster.nef",
+    "DailyLimitHook.manifest.json",
+    "DailyLimitHook.nef",
+    "MockTransferTarget.manifest.json",
+    "MockTransferTarget.nef",
+    "MockVerifierCore.manifest.json",
+    "MockVerifierCore.nef",
+    "MultiHook.manifest.json",
+    "MultiHook.nef",
+    "MultiSigVerifier.manifest.json",
+    "MultiSigVerifier.nef",
+    "NeoDIDCredentialHook.manifest.json",
+    "NeoDIDCredentialHook.nef",
+    "NeoNativeVerifier.manifest.json",
+    "NeoNativeVerifier.nef",
+    "SessionKeyVerifier.manifest.json",
+    "SessionKeyVerifier.nef",
+    "SocialRecoveryVerifier.manifest.json",
+    "SocialRecoveryVerifier.nef",
+    "SubscriptionVerifier.manifest.json",
+    "SubscriptionVerifier.nef",
+    "TEEVerifier.manifest.json",
+    "TEEVerifier.nef",
+    "TokenRestrictedHook.manifest.json",
+    "TokenRestrictedHook.nef",
+    "UnifiedSmartWalletV3.manifest.json",
+    "UnifiedSmartWalletV3.nef",
+    "Web3AuthVerifier.manifest.json",
+    "Web3AuthVerifier.nef",
+    "WebAuthnVerifier.manifest.json",
+    "WebAuthnVerifier.nef",
+    "WhitelistHook.manifest.json",
+    "WhitelistHook.nef",
+    "ZKEmailVerifier.manifest.json",
+    "ZKEmailVerifier.nef",
+    "ZkLoginVerifier.manifest.json",
+    "ZkLoginVerifier.nef"
+  ],
+  "tracked_tree_note": "Files under contracts/build whose bytes differ from a fresh build. Reported, not failing: UnifiedSmartWalletV3 is intentionally pinned to the deployed mainnet bytecode and that exception must be decided before this becomes a gate.",
+  "chain_writes_performed": false,
+  "schema": "neoos-aa-profile-reproducibility/v1",
+  "observedOn": "2026-10-08",
+  "runtime_scope": "Byte-for-byte source replay only; public v3 has no verifier child gas budget and private PLATFORM needs the matching runtime. No deployment or public parity attestation.",
+  "source_lock_sha256": "5aceb5db7b205984b6d0ca9208227b8727e1b544397883a468870a0e34179ff3",
+  "reproduction_script_sha256": "d8fcf25942347961efb92bcfa02efa9882a58c9acccfd48b5fa863cff0be4a51",
+  "build_recipe_sha256": "103974fbd139c55d87d6d3af0698f4dc7f6b63fab1fafe416ef3fa82cb285225"
+}

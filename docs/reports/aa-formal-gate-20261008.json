@@ -1,0 +1,186 @@
+{
+  "schema": "neoos-aa-formal-gate/v3",
+  "observedOn": "2026-10-08",
+  "status": "PASS",
+  "networkWritesPerformed": false,
+  "scope": "Host Coq/Rocq, TLC and Z3 model gate with exact public/private model applicability, final source snapshot checks and direct-only proxy method/arity coverage including sponsored-envelope rejection. The child configuration API and deep snapshots are source-pinned but remain outside the abstract models; their implementation evidence is NeoVM testing. No deployed-runtime or refinement claim.",
+  "hostGate": {
+    "coqModules": 5,
+    "coqDeclarations": 77,
+    "coqSemanticMutationsRejected": 28,
+    "tlaSemanticMutationsRejected": 4,
+    "runnerTests": "23/23 OK",
+    "resultRelativePath": "formal/.runs/convergence-final-20261008/result.json",
+    "resultSha256": "dc140977f8d94c8613eab4ada3899cb52cf64b1d074deea53a025eb3224808ee"
+  },
+  "containerGate": {
+    "status": "NOT_RUN",
+    "note": "The historical Docker toolchain pin is unchanged; this receipt describes the host run only."
+  },
+  "result": {
+    "modelChecksPassed": true,
+    "implementationVerified": false,
+    "boundary": "Hand-written abstractions; no VM/source/NEF refinement or liveness proof",
+    "runtimeProfiles": {
+      "v3": {
+        "artifactDirectory": "contracts/bin/v3",
+        "define": null,
+        "verifierCall": "System.Contract.Call",
+        "verifierChildBudgetEnforced": false
+      },
+      "platform": {
+        "artifactDirectory": "contracts/bin/platform",
+        "define": "PLATFORM",
+        "verifierCall": "System.Contract.CallWithGasLimit",
+        "verifierChildBudgetEnforced": true
+      }
+    },
+    "modelProfiles": {
+      "coq/CallbackPluginTopology.v": [
+        "v3",
+        "platform"
+      ],
+      "coq/MultiSigPolicy.v": [
+        "v3",
+        "platform"
+      ],
+      "coq/ProxyWitnessScript.v": [
+        "v3",
+        "platform"
+      ],
+      "coq/UnifiedSmartWalletAA.v": [
+        "v3",
+        "platform"
+      ],
+      "coq/VerifierGasBudget.v": [
+        "platform"
+      ],
+      "smt/aa_core.smt2": [
+        "v3",
+        "platform"
+      ],
+      "tla/UnifiedSmartWalletAA.cfg": [
+        "v3",
+        "platform"
+      ],
+      "tla/UnifiedSmartWalletAA.tla": [
+        "v3",
+        "platform"
+      ]
+    },
+    "multisigBoundedModel": {
+      "configCases": 104,
+      "acceptanceCases": 206846,
+      "sourceGuards": 6,
+      "sourceMutationsRejected": [
+        "non_empty",
+        "maximum_size",
+        "threshold_range",
+        "address_validity",
+        "no_duplicates",
+        "post_execute_threshold"
+      ]
+    },
+    "artifactSha256": {
+      "coq/CallbackPluginTopology.v": "8bf3695273f1dd7012741a7e6a438e2a2c226b7b8782ffd491f7529ae2346b41",
+      "coq/MultiSigPolicy.v": "62d6a62ebdf0ebfccbf27b593726d2fd279aacbc36d78387da0e191501a8919a",
+      "coq/ProxyWitnessScript.v": "030d190b9ae73a63ee9c201a9a45b6d6b3d49384f57104951399580f0fd6c340",
+      "coq/UnifiedSmartWalletAA.v": "6f6c67b2f780b3a3d0c8413085be6225a6c10ef4599e130fd5630b5e10b0ee68",
+      "coq/VerifierGasBudget.v": "25c5d91e57d4171e4892cdd0bb4e82f74a11ee08c2bedae3767decc747e031ec",
+      "smt/aa_core.smt2": "49a2f207a175e07138f9ffd1d2b49200a3db1dd37394e188053cbc8d164b05e8",
+      "tla/UnifiedSmartWalletAA.cfg": "268386d69c8b18f3cbe464a300e16ca9ecba0abe635d609ee6e0e85ec91ef333",
+      "tla/UnifiedSmartWalletAA.tla": "226957a7a494545eed044a647a292f133be53376e7b717537169e6696e730766"
+    },
+    "sourceSha256": {
+      "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
+      "contracts/UnifiedSmartWallet.Escape.cs": "433b064b7bb06f1344e5ac8977fa0e2323c588a82963c55f82a53d162059aee6",
+      "contracts/UnifiedSmartWallet.Execution.cs": "441c7213440125196d505c5b843af5a6b2f975e524d6e44aa3b1b88b1027f7c3",
+      "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
+      "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
+      "contracts/UnifiedSmartWallet.State.cs": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f",
+      "contracts/UnifiedSmartWallet.VerifierChildren.cs": "38d414912d0fafc678d4e7c49000c6c7dc5e817ba6e21db7074c0d66f060ab5a",
+      "contracts/UnifiedSmartWallet.VerifyContext.cs": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7",
+      "contracts/UnifiedSmartWallet.csproj": "701a59fc3ea905c7ee37f246759a7f3e558e30a57f6b515eb107f4c5e248f20e",
+      "contracts/compile.sh": "103974fbd139c55d87d6d3af0698f4dc7f6b63fab1fafe416ef3fa82cb285225",
+      "contracts/hooks/MultiHook.cs": "b6f3de93710f9439df37a09df93f2f46ed62c0867552ce4aac745c421e07eeb7",
+      "contracts/paymaster/Paymaster.cs": "c04511d90eff0e97fabb94d17c38c80de4287186138dcdf01073ee2a16cada87",
+      "contracts/verifiers/MultiSigVerifier.cs": "92890c6e571ce5e6130b8f5bb77d47f82fc3b43f98af5dc467ad4158562fab13",
+      "contracts/verifiers/VerifierPayload.cs": "9366d6d24a0ad9be79b24756558bea6b89e165b91a6b4e24cca2e54147204f12"
+    },
+    "tlcJarSha256": "7beec0f04818732a62fa193731711a99aa4f11279499b2360a7d156c519ea78d",
+    "toolVersions": {
+      "java": "openjdk version \"26.0.2.1\" 2026-08-18",
+      "coq": "The Rocq Prover, version 9.2",
+      "z3": "Z3 version 5.1.0 - 64 bit",
+      "tlc": "TLC2 Version 2026.10.06.014338 (rev: 94d0c50)"
+    },
+    "coqDeclarations": {
+      "UnifiedSmartWalletAA.v": 23,
+      "MultiSigPolicy.v": 11,
+      "ProxyWitnessScript.v": 25,
+      "CallbackPluginTopology.v": 12,
+      "VerifierGasBudget.v": 6
+    },
+    "coqMutationsRejected": {
+      "UnifiedSmartWalletAA.v": [
+        "authorization",
+        "nonce-check",
+        "nonce-increment",
+        "reentrancy",
+        "escape-owner",
+        "rollback",
+        "operation-shape",
+        "reject-all"
+      ],
+      "MultiSigPolicy.v": [
+        "multisig-threshold",
+        "multisig-signature-count",
+        "multisig-uniqueness"
+      ],
+      "ProxyWitnessScript.v": [
+        "witness-prefix-check",
+        "witness-account-binding",
+        "witness-core-binding",
+        "witness-flags-range",
+        "witness-method-arity",
+        "witness-entrypoint-allowlist",
+        "witness-syscall-tail",
+        "witness-unknown-opcode"
+      ],
+      "CallbackPluginTopology.v": [
+        "callback-target-binding",
+        "callback-signature-binding",
+        "callback-post-order",
+        "scope-entry-binding",
+        "cleanup-fail-closed"
+      ],
+      "VerifierGasBudget.v": [
+        "budget-limit-check",
+        "ancestor-conjunction",
+        "atomic-failure-state",
+        "nested-ancestor-requirement"
+      ]
+    },
+    "tlc": {
+      "generated": 11859476,
+      "distinct": 61460,
+      "actions": {
+        "Init": 4,
+        "Tick": 24592,
+        "Begin": 11804160,
+        "CompleteSuccess": 120,
+        "CompleteFailure": 30600
+      }
+    },
+    "tlcMutationsRejected": [
+      "authorization",
+      "operation-shape",
+      "nonce-increment",
+      "rollback"
+    ],
+    "smt": {
+      "obligations": 6,
+      "controls": 6
+    }
+  }
+}

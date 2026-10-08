@@ -13,7 +13,7 @@
         "postExecute": 1
       },
       "totals": {
-        "checks": 18,
+        "checks": 19,
         "executedTransactions": 26,
         "simulatedFaults": 2,
         "nodeRefusals": 1
@@ -56,6 +56,12 @@
             "the fault names the unregistered interop 1371299780",
             "no GAS moved and the nonce is unchanged"
           ]
+        },
+        {
+          "name": "SRC-09 current source relay: proxy GAS and sponsored refusal",
+          "checks": [
+            "public-node relay proof is unavailable for the private-syscall profile"
+          ]
         }
       ]
     },
@@ -67,10 +73,10 @@
         "postExecute": 0
       },
       "totals": {
-        "checks": 16,
-        "executedTransactions": 28,
+        "checks": 19,
+        "executedTransactions": 34,
         "simulatedFaults": 0,
-        "nodeRefusals": 1
+        "nodeRefusals": 4
       },
       "scenarios": [
         {
@@ -107,6 +113,14 @@
           "checks": [
             "buyer +1 GAS, proxy -1 GAS exactly",
             "the verifier-backed proxy witness advanced the nonce"
+          ]
+        },
+        {
+          "name": "SRC-09 current source relay: proxy GAS and sponsored refusal",
+          "checks": [
+            "source relay proof binds invalid-signature and fee refusals, direct transfer, nonce, owner and fee payer",
+            "direct proxy transfer HALTed and sponsored relay transfer was refused",
+            "all sponsored proxy envelopes are rejected by the node and leave assets, nonce and deposit unchanged"
           ]
         }
       ]

@@ -179,41 +179,19 @@ namespace AbstractAccount.Hooks
         {
             HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
 
-            // A failed op moves no funds, so nothing is accrued. The transient PreExecute
-            // snapshots left behind are harmless: every PreExecute re-snapshots ALL configured
-            // tokens (overwriting any stale value) before the next meter reads them.
-            if (!DidExecutionSucceed(result)) return;
-
-            // Account the directly-targeted "transfer" of a configured token by its declared
-            // amount (unchanged original behaviour), then exclude that token from the balance-delta
-            // pass below to avoid double counting.
-            UInt160 directlyRecorded = UInt160.Zero;
-            if (TryReadTrackedTransfer(opParams, out UInt160 targetContract, out UInt160 fromAccount, out BigInteger amount)
-                && IsProtectedTransferSource(accountId, fromAccount))
+            // A HALTed call may return false/zero after changing balances. Always meter
+            // realized outflows. For a successful direct transfer, preserve declared-value
+            // accounting as a floor, but never exclude its token from balance-delta checks.
+            UInt160 directToken = UInt160.Zero;
+            BigInteger declaredAmount = 0;
+            if (result is bool accepted && accepted
+                && TryReadTrackedTransfer(opParams, out UInt160 token, out UInt160 from, out BigInteger amount)
+                && IsProtectedTransferSource(accountId, from))
             {
-                LimitConfig? config = GetLimitConfig(accountId, targetContract);
-                if (config != null)
-                {
-                    BigInteger currentTime = Runtime.Time;
-                    if (config.UseRollingWindow)
-                    {
-                        RecordTransaction(accountId, targetContract, currentTime, amount);
-                    }
-                    else
-                    {
-                        BigInteger spentToday = GetFixedWindowSpent(accountId, targetContract, currentTime);
-                        StoreFixedWindowSpent(accountId, targetContract, currentTime, spentToday + amount);
-                    }
-                    directlyRecorded = targetContract;
-                }
+                directToken = token;
+                declaredAmount = amount;
             }
-
-            // Audit fix HIGH: meter the realized balance delta of EVERY OTHER configured-limit
-            // token against its limit. This covers transferFrom/withdraw/swap, router/intermediary-
-            // routed moves, and the native NEO/GAS path, so value moved without the limited token
-            // being the direct "transfer" target is still counted. Reverts the whole tx if any
-            // token's limit would be exceeded. Fails closed.
-            MeterAllLimitedOutflows(accountId, directlyRecorded);
+            MeterAllLimitedOutflows(accountId, directToken, declaredAmount);
         }
 
         public static void ClearAccount(UInt160 accountId)
@@ -225,6 +203,7 @@ namespace AbstractAccount.Hooks
             ClearPrefixForAccount(Prefix_LastReset, accountId);
             ClearPrefixForAccount(Prefix_TransactionHistory, accountId);
             ClearPrefixForAccount(Prefix_TransactionCounter, accountId);
+            ClearPrefixForAccount(Prefix_BalanceSnapshot, accountId);
         }
 
         private static void ClearPrefixForAccount(byte[] prefix, UInt160 accountId)
@@ -321,16 +300,10 @@ namespace AbstractAccount.Hooks
         }
 
         /// <summary>
-        /// For every configured-limit token other than <paramref name="directlyRecorded"/> (which
-        /// the direct "transfer" path already accounted by its declared amount), computes the
-        /// realized outflow (pre-balance minus post-balance) and meters it against that token's
-        /// daily limit. Asserts (reverting the whole transaction) if any token's limit is exceeded,
-        /// then records the spend. Every token's transient snapshot is cleared so stale snapshots
-        /// cannot leak into a later op. Driven by the configured-limit set, so an indirect/native
-        /// move is still counted no matter which contract was the direct call target. Only called
-        /// after PostExecute has confirmed the op succeeded.
+        /// Meters every limited token once using max(realized net debit, successful declared
+        /// direct transfer). Always clears snapshots, independent of the business return value.
         /// </summary>
-        private static void MeterAllLimitedOutflows(UInt160 accountId, UInt160 directlyRecorded)
+        private static void MeterAllLimitedOutflows(UInt160 accountId, UInt160 directToken, BigInteger declaredAmount)
         {
             BigInteger currentTime = Runtime.Time;
 
@@ -344,8 +317,6 @@ namespace AbstractAccount.Hooks
                 // Always clear the transient snapshot so it cannot bleed into a future op.
                 Storage.Delete(Storage.CurrentContext, snapKey);
 
-                // The directly-transferred token was already accounted by declared amount above.
-                if (token == directlyRecorded) continue;
                 if (snap == null) continue;            // limit added mid-op; nothing to compare against
 
                 LimitConfig? config = GetLimitConfig(accountId, token);
@@ -354,6 +325,7 @@ namespace AbstractAccount.Hooks
                 BigInteger before = (BigInteger)snap;
                 BigInteger after = TokenBalanceOf(token, AssetAddressOf(accountId));
                 BigInteger outflow = before - after;
+                if (token == directToken && declaredAmount > outflow) outflow = declaredAmount;
                 if (outflow <= 0) continue;            // inflow or no movement
 
                 BigInteger spentToday = config.UseRollingWindow
@@ -399,7 +371,9 @@ namespace AbstractAccount.Hooks
         {
             byte[] spentKey = BuildTrackedKey(Prefix_SpentToday, accountId, token);
             byte[] resetKey = BuildTrackedKey(Prefix_LastReset, accountId, token);
-            Storage.Put(Storage.CurrentContext, resetKey, currentTime);
+            ByteString? lastResetData = Storage.Get(Storage.CurrentContext, resetKey);
+            if (lastResetData == null || currentTime >= (BigInteger)lastResetData + OneDayMs)
+                Storage.Put(Storage.CurrentContext, resetKey, currentTime);
             Storage.Put(Storage.CurrentContext, spentKey, amount);
         }
 
@@ -492,13 +466,6 @@ namespace AbstractAccount.Hooks
                     }
                 }
             }
-        }
-
-        private static bool DidExecutionSucceed(object result)
-        {
-            if (result is bool asBool) return asBool;
-            if (result is BigInteger asInteger) return asInteger != 0;
-            return true;
         }
 
         private static bool IsProtectedTransferSource(UInt160 accountId, UInt160 from)

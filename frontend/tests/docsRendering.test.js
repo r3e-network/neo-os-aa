@@ -446,11 +446,26 @@ test("studio governance and permissions panels expect accountId hashes instead o
   );
 });
 
-test("frontend package does not depend on Neon SDK bundles directly", () => {
+test("Neon is a declared server dependency and stays out of browser module imports", () => {
   const packageJson = readFrontendPackage();
 
   assert.equal(packageJson.dependencies["@cityofzion/neon-core"], undefined);
-  assert.equal(packageJson.dependencies["@cityofzion/neon-js"], undefined);
+  assert.equal(packageJson.dependencies["@cityofzion/neon-js"], "5.9.0");
+  const lock = JSON.parse(read("package-lock.json"));
+  for (const name of ["neon-js", "neon-api", "neon-core"]) {
+    const entries = Object.entries(lock.packages).filter(([key]) => key.endsWith(`/@cityofzion/${name}`));
+    assert.ok(entries.length > 0, `${name} is locked`);
+    for (const [, entry] of entries) {
+      assert.equal(entry.version, "5.9.0", `${name} stays on the validated release`);
+      assert.equal(Boolean(entry.dev), false, `${name} is a production dependency`);
+    }
+  }
+  for (const relativePath of fs.readdirSync(path.join(frontendRoot, "src"), { recursive: true })) {
+    if (!/\.(?:js|mjs|ts|vue)$/.test(relativePath)) continue;
+    assert.doesNotMatch(read(path.join("src", relativePath)),
+      /(?:from\s*|(?:import|require)\s*\(\s*)["']@cityofzion\/neon-(?:js|core)["']/,
+      `server-only dependency imported by ${relativePath}`);
+  }
 });
 
 test("HomeView keeps the first screen focused on AA operation entry", () => {

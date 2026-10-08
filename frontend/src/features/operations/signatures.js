@@ -22,15 +22,24 @@ export function appendSignatureEntries(entries = [], signature) {
 }
 
 export function summarizeSignerProgress(requirements = [], signatures = []) {
-  const signatureKeys = new Set(signatures.map((item) => `${item.kind}:${item.signerId}`));
-  const satisfied = requirements.filter((item) => signatureKeys.has(`${item.kind}:${item.id}`));
-  const pending = requirements.filter((item) => !signatureKeys.has(`${item.kind}:${item.id}`));
+  // This roster is collaboration metadata, not the verifier's on-chain policy.
+  const key = (kind, id) => {
+    const value = String(id || '').trim();
+    return `${String(kind || '').trim()}:${kind === 'evm' && /^(0x)?[0-9a-f]{40}$/i.test(value) ? sanitizeHex(value) : value}`;
+  };
+  const uniqueRequirements = [...new Map(requirements.map((item) => [key(item.kind, item.id), item])).values()];
+  const signatureKeys = new Set(signatures.filter((item) => item.signatureHex || item.metadata?.metaInvocation)
+    .map((item) => key(item.kind, item.signerId)));
+  const satisfied = uniqueRequirements.filter((item) => signatureKeys.has(key(item.kind, item.id)));
+  const pending = uniqueRequirements.filter((item) => !signatureKeys.has(key(item.kind, item.id)));
   return {
-    requiredCount: requirements.length,
-    signatureCount: signatures.length,
+    requiredCount: uniqueRequirements.length,
+    signatureCount: satisfied.length,
+    recordCount: signatures.length,
     satisfied,
     pending,
-    isComplete: pending.length === 0 && requirements.length > 0,
+    isComplete: pending.length === 0 && uniqueRequirements.length > 0,
+    chainQuorumVerified: false,
   };
 }
 

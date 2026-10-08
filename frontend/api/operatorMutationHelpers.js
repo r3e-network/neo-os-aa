@@ -58,6 +58,9 @@ export async function importOperatorPrivateKey(jwk) {
 }
 
 export async function importOperatorPublicKey(jwk) {
+  if (!jwk || Object.prototype.hasOwnProperty.call(jwk, 'd')) {
+    throw new Error('invalid_operator_public_key');
+  }
   return crypto.subtle.importKey(
     'jwk',
     jwk,
@@ -65,6 +68,15 @@ export async function importOperatorPublicKey(jwk) {
     true,
     ['verify'],
   );
+}
+
+// PostgreSQL JSONB may reorder object properties. Compare the actual P-256 key,
+// never the serialization order or optional JWK metadata.
+export function operatorPublicKeysMatch(left, right) {
+  return [left, right].every((key) => key && key.kty === 'EC' && key.crv === 'P-256'
+    && !Object.prototype.hasOwnProperty.call(key, 'd')
+    && typeof key.x === 'string' && typeof key.y === 'string')
+    && left.x === right.x && left.y === right.y;
 }
 
 export async function signOperatorMutationPayload(payload, privateKey) {

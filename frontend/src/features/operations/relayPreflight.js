@@ -2,9 +2,9 @@ import { EC } from '../../config/errorCodes.js';
 import { TRANSFER_RETURNED_FALSE_MESSAGE, findFailedTransferInInvocation } from '../../shared/transferOutcome.mjs';
 import { buildRelayBroadcastRequest } from './execution.js';
 
-export function buildRelayPreflightRequest({ relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, morpheusNetwork, transactionBody = {}, signatures = [] } = {}) {
+export function buildRelayPreflightRequest({ relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, morpheusNetwork, networkMagic, transactionBody = {}, signatures = [] } = {}) {
   return {
-    ...buildRelayBroadcastRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, transactionBody, signatures, morpheusNetwork }),
+    ...buildRelayBroadcastRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, transactionBody, signatures, morpheusNetwork, networkMagic }),
     simulate: true,
   };
 }
@@ -78,12 +78,12 @@ export function normalizeRelayPreflightResult(relayPayload = {}, payloadMode = '
   };
 }
 
-export async function runRelayPreflight({ walletService, relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, morpheusNetwork, transactionBody = {}, signatures = [], t } = {}) {
+export async function runRelayPreflight({ walletService, relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, morpheusNetwork, networkMagic, transactionBody = {}, signatures = [], t } = {}) {
   if (!walletService) {
     throw new Error(EC.walletServiceMissing);
   }
 
-  const request = buildRelayPreflightRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, morpheusNetwork, transactionBody, signatures });
+  const request = buildRelayPreflightRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, morpheusNetwork, networkMagic, transactionBody, signatures });
   const response = await walletService.relayTransaction(request);
   return normalizeRelayPreflightResult(response, relayPayloadMode, t, { metaInvocation: request.metaInvocation });
 }

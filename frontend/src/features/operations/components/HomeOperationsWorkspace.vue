@@ -787,6 +787,11 @@
             </svg>
           </button>
           <div :class="sidebarExpanded ? 'block' : 'hidden xl:block'">
+            <OperatorKeyBackupPanel
+              v-if="runtime.collaborationEnabled && workspace.share.value.canOperate && workspace.share.value.shareSlug"
+              :share-slug="workspace.share.value.shareSlug"
+              :access-slug="workspace.share.value.operatorSlug"
+            />
             <ActivitySidebar
               class="xl:sticky xl:top-8 xl:max-h-[calc(100vh-4rem)] overflow-y-auto rounded-[20px] border border-aa-border bg-aa-panel/50 shadow-2xl backdrop-blur-xl"
               :draft-id="workspace.share.value.draftId"
@@ -857,6 +862,7 @@ import {
   createDraftStore,
 } from "@/features/operations/drafts.js";
 import { createOperatorMutationTransport } from "@/features/operations/operatorMutationTransport.js";
+import OperatorKeyBackupPanel from "@/features/operations/components/OperatorKeyBackupPanel.vue";
 import {
   buildDraftExportBundle,
   buildRelayPayloadOptions,
@@ -1154,6 +1160,7 @@ const invokeTargetContract = computed(() => {
 // the composer and blocks staging.
 const presetBuild = computed(() =>
   tryBuildOperationFromPreset({
+    broadcastMode: workspace.broadcast.value.mode,
     preset: preset.value,
     account: workspace.account.value,
     invoke: {
@@ -1304,6 +1311,7 @@ const currentRelayPreflightRequest = computed(() => {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: workspace.transactionBody.value,
       signatures: workspace.signatures.value,
     });
@@ -1377,8 +1385,7 @@ const steps = computed(() => [
     id: "step3",
     label: t("operations.stepSign", "Sign"),
     state:
-      signerProgress.value.requiredCount > 0 &&
-      signerProgress.value.signatureCount >= signerProgress.value.requiredCount
+      signerProgress.value.isComplete
         ? "completed"
         : step3Expanded.value
           ? "active"
@@ -1443,8 +1450,7 @@ watch(
 );
 watch(
   () =>
-    signerProgress.value.requiredCount > 0 &&
-    signerProgress.value.signatureCount >= signerProgress.value.requiredCount,
+    signerProgress.value.isComplete,
   (val, oldVal) => {
     if (val && !oldVal) {
       step3Expanded.value = false;
@@ -1929,6 +1935,7 @@ function stageOperation() {
       rawTransaction: rawTransaction.value,
       notes: notes.value,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       createdAt: nextOperationBody.createdAt,
     }),
   );
@@ -2238,6 +2245,7 @@ async function checkRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: workspace.transactionBody.value,
       signatures: workspace.signatures.value,
     });
@@ -2247,6 +2255,7 @@ async function checkRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: workspace.transactionBody.value,
       signatures: workspace.signatures.value,
       t,
@@ -2316,6 +2325,8 @@ async function broadcastWithNeoWallet() {
   try {
     const result = await executeBroadcast({
       mode: "client",
+      morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       signerAddress: walletService.address,
       transactionBody: workspace.transactionBody.value,
       relayPayloadMode: relayPayloadMode.value,
@@ -2391,6 +2402,7 @@ async function submitViaRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: workspace.transactionBody.value,
       signatures: workspace.signatures.value,
       walletService,

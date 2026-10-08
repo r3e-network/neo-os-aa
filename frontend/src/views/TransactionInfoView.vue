@@ -126,6 +126,11 @@
             :access-scope="accessScope"
             :has-draft="Boolean(draft)"
           />
+          <OperatorKeyBackupPanel
+            v-if="runtime.collaborationEnabled && hasOperatorAccess && draft?.share_slug"
+            :share-slug="draft.share_slug"
+            :access-slug="draft.operator_slug"
+          />
           <div v-if="loading" class="space-y-3">
             <div class="skeleton h-6 w-48 rounded"></div>
             <div class="skeleton h-20 rounded-xl"></div>
@@ -583,6 +588,7 @@ import { useClipboard } from "@/composables/useClipboard";
 import { OPERATIONS_RUNTIME } from "@/config/operationsRuntime.js";
 import { createDraftStore } from "@/features/operations/drafts.js";
 import { createOperatorMutationTransport } from "@/features/operations/operatorMutationTransport.js";
+import OperatorKeyBackupPanel from "@/features/operations/components/OperatorKeyBackupPanel.vue";
 import {
   buildRelayPayloadOptions,
   executeBroadcast,
@@ -695,7 +701,7 @@ const signerProgressText = computed(() => {
     return `${base} · ${t("sharedDraft.signerProgressPending", "{count} still pending").replace("{count}", String(sp.pending.length))}`;
   }
   if (sp.requiredCount) {
-    return `${base} · ${t("sharedDraft.signerProgressComplete", "all required signers satisfied")}`;
+    return `${base} · ${t("sharedDraft.approvalRecordsComplete", "required records collected; on-chain authorization unverified")}`;
   }
   return `${base} · ${t("sharedDraft.signerProgressNoRoster", "no required signer roster recorded")}`;
 });
@@ -744,6 +750,7 @@ const currentRelayPreflightRequest = computed(() => {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: draft.value?.transaction_body || {},
       signatures: draft.value?.signatures || [],
     });
@@ -1097,6 +1104,7 @@ async function checkRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: draft.value?.transaction_body || {},
       signatures: draft.value?.signatures || [],
     });
@@ -1106,6 +1114,7 @@ async function checkRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: draft.value?.transaction_body || {},
       signatures: draft.value?.signatures || [],
       t,
@@ -1157,6 +1166,8 @@ async function broadcastWithNeoWallet() {
   try {
     const result = await executeBroadcast({
       mode: "client",
+      morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       signerAddress: walletService.address,
       transactionBody: draft.value.transaction_body,
       relayPayloadMode: relayPayloadMode.value,
@@ -1227,6 +1238,7 @@ async function submitViaRelay() {
       relayPayloadMode: relayPayloadMode.value,
       relayRawEnabled: runtime.relayRawEnabled,
       morpheusNetwork: runtime.morpheusNetwork,
+      networkMagic: runtime.networkMagic,
       transactionBody: draft.value.transaction_body,
       signatures: draft.value.signatures || [],
       walletService,

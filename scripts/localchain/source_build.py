@@ -2,9 +2,9 @@
 """Build the AA contracts from the current checkout and read their verifier-callback build profile.
 
 The local-chain suite runs on published Neo.Express, which registers the syscalls of the published
-Neo core. The current AA source declares `System.Contract.CallWithGasLimit` itself (DEC-AA-1) and
-emits it for both verifier callbacks, so a source build that still carries it faults on every
-verifier-signed `executeUserOp`; only a Neo core with the private hardfork registers the interop.
+Neo core. The public AA profile uses standard Contract.Call; its explicit PLATFORM profile declares
+`System.Contract.CallWithGasLimit` for both verifier callbacks. A build that carries that interop
+faults on every verifier-signed `executeUserOp` on published Neo; only a private compatible runtime registers it.
 The profile is therefore read from the compiled bytes, never claimed on the command line, so the
 source variant's expectations flip with the build profile alone.
 

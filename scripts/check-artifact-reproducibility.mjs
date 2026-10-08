@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 // Reproducibility gate for the artifacts every deploy/upgrade script reads
-// (contracts/bin/v3). It copies the working-tree sources into a scratch
-// directory, replays the exact compile.sh command sequence there, and compares
-// the result byte-for-byte with the checked-in release directory.
+// (contracts/bin/v3) and the isolated private core (contracts/bin/platform).
+// Replays compile.sh itself in a scratch directory and compares each profile
+// byte-for-byte with the generated local artifact directory.
 //
 // contracts/build is tracked in git and is deliberately not treated as build
 // output: its UnifiedSmartWalletV3.nef is byte-identical to the deployed mainnet
@@ -24,6 +24,7 @@ const SKIP_DIRS = /(^|\/)(bin|obj|build)$/;
 // The restore policy every contract project is built under. Without them the scratch copy would
 // compile against whatever package source and framework version the machine happens to resolve.
 export const RESTORE_POLICY_FILES = ["Directory.Build.props", "nuget.config"];
+export const ARTIFACT_PROFILES = ["v3", "platform"];
 
 /** Recursively lists nef/manifest files relative to a directory. */
 export function listArtifacts(dir) {
@@ -55,6 +56,25 @@ export function compareTrees(expectedDir, actualDir) {
   });
 }
 
+/** A profile must contain the core pair; two absent trees cannot constitute proof. */
+export function compareProfiles(expectedBin, actualBin) {
+  return Object.fromEntries(ARTIFACT_PROFILES.map((profile) => {
+    const rows = compareTrees(path.join(expectedBin, profile), path.join(actualBin, profile));
+    const required = ["UnifiedSmartWalletV3.nef", "UnifiedSmartWalletV3.manifest.json"];
+    const requiredCorePresent = required.every((name) => rows.some((row) =>
+      row.artifact === name && row.expected_sha256 && row.actual_sha256));
+    return [profile, {
+      artifact_dir: `contracts/bin/${profile}`,
+      artifacts_compared: rows.length,
+      required_core_present: requiredCorePresent,
+      matches_fresh_build: requiredCorePresent && rows.every((row) => row.match),
+      drifted: rows.filter((row) => !row.match && row.expected_sha256 && row.actual_sha256).map((row) => row.artifact),
+      missing: rows.filter((row) => !row.expected_sha256 || !row.actual_sha256).map((row) => row.artifact),
+      artifacts: rows,
+    }];
+  }));
+}
+
 /** Copies the sources, lock files and restore policy that determine the artifacts into a new scratch directory. */
 export function prepareScratch() {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "aa-repro-"));
@@ -64,53 +84,35 @@ export function prepareScratch() {
   });
   for (const file of RESTORE_POLICY_FILES) fs.copyFileSync(path.join(repoRoot, file), path.join(scratch, file));
   fs.mkdirSync(path.join(scratch, "scripts"), { recursive: true });
-  fs.copyFileSync(
-    path.join(repoRoot, "scripts", "dotnet_env.sh"),
-    path.join(scratch, "scripts", "dotnet_env.sh"),
-  );
+  for (const file of ["dotnet_env.sh", "check_neo_platform_packages.mjs"]) {
+    fs.copyFileSync(path.join(repoRoot, "scripts", file), path.join(scratch, "scripts", file));
+  }
   return scratch;
 }
 
 /** Replays contracts/compile.sh against the scratch copy. */
 export function compileScratch(scratch) {
-  const verifiers = ["Web3AuthVerifier", "TEEVerifier", "SessionKeyVerifier", "WebAuthnVerifier",
-    "ZKEmailVerifier", "ZkLoginVerifier", "MultiSigVerifier", "SubscriptionVerifier", "NeoNativeVerifier"];
-  const hooks = ["DailyLimitHook", "NeoDIDCredentialHook", "WhitelistHook", "MultiHook", "TokenRestrictedHook"];
-  const steps = [
-    '"$NCCS_BIN" UnifiedSmartWallet.csproj -o bin/v3',
-    "cd verifiers",
-    `for project in ${verifiers.join(" ")}; do "$NCCS_BIN" ./$project.csproj -o ../bin/v3/verifiers; done`,
-    "cd ../hooks",
-    `for project in ${hooks.join(" ")}; do "$NCCS_BIN" ./$project.csproj -o ../bin/v3/hooks; done`,
-    "cd ../mocks",
-    '"$NCCS_BIN" ./MockVerifierCore.csproj -o ../bin/v3',
-    '"$NCCS_BIN" ./MockTransferTarget.csproj -o ../bin/v3',
-    '"$NCCS_BIN" ./PlatformRegistrarMock.csproj -o ../bin/v3',
-    '"$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../bin/v3',
-    '"$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../bin/v3',
-    '"$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../bin/v3',
-    "cd ../market",
-    '"$NCCS_BIN" ./AAAddressMarket.csproj -o ../bin/v3',
-    "cd ../recovery",
-    '"$NCCS_BIN" ./MorpheusSocialRecoveryVerifier.csproj -o ../bin/v3',
-  ];
-  const script = ["set -euo pipefail", `cd ${JSON.stringify(scratch)}`, "source scripts/dotnet_env.sh",
-    "cd contracts", ...steps].join("\n");
   try {
-    execFileSync("bash", ["-c", script], { stdio: ["ignore", "pipe", "pipe"] });
+    execFileSync("bash", [path.join(scratch, "contracts", "compile.sh")], {
+      cwd: scratch, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 16 * 1024 * 1024,
+    });
   } catch (error) {
     const stderr = error?.stderr ? Buffer.from(error.stderr).toString("utf8").trim() : "";
     throw new Error(`scratch compile failed: ${stderr || error.message}`);
   }
-  return path.join(scratch, "contracts", "bin", "v3");
+  return path.join(scratch, "contracts", "bin");
 }
 
 async function main() {
   const json = process.argv.includes("--json");
   const scratch = prepareScratch();
   try {
-    const freshDir = compileScratch(scratch);
-    const rows = compareTrees(freshDir, releaseDir);
+    const freshBin = compileScratch(scratch);
+    const freshDir = path.join(freshBin, "v3");
+    const profiles = compareProfiles(freshBin, path.dirname(releaseDir));
+    const rows = Object.entries(profiles).flatMap(([profile, result]) => result.artifacts.map((row) => ({
+      ...row, artifact: `${profile}/${row.artifact}`,
+    })));
     const drifted = rows.filter((row) => !row.match && row.expected_sha256 && row.actual_sha256);
     const missing = rows.filter((row) => !row.expected_sha256 || !row.actual_sha256);
     const anchor = compareTrees(freshDir, path.join(trackedDir, "..", "build"))
@@ -129,8 +131,9 @@ async function main() {
     const report = {
       generated_at: new Date().toISOString(),
       release_dir: path.relative(repoRoot, releaseDir),
+      profiles,
       artifacts_compared: rows.length,
-      release_matches_fresh_build: drifted.length === 0 && missing.length === 0,
+      release_matches_fresh_build: Object.values(profiles).every((profile) => profile.matches_fresh_build),
       drifted: drifted.map((row) => row.artifact),
       missing: missing.map((row) => row.artifact),
       tracked_anchor: anchor,
@@ -145,6 +148,9 @@ async function main() {
     else {
       console.log(`artifacts compared: ${report.artifacts_compared}`);
       console.log(`release matches fresh build: ${report.release_matches_fresh_build ? "YES" : "NO"}`);
+      for (const [name, profile] of Object.entries(profiles)) {
+        console.log(`${name}: ${profile.matches_fresh_build ? "MATCH" : "FAIL"} (${profile.artifacts_compared} artifacts)`);
+      }
       if (report.drifted.length) console.log(`drifted: ${report.drifted.join(", ")}`);
       if (report.missing.length) console.log(`missing: ${report.missing.join(", ")}`);
       for (const row of report.tracked_anchor) {

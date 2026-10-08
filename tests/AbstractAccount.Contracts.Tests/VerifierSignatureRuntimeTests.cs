@@ -48,7 +48,7 @@ public class VerifierSignatureRuntimeTests
         public void Configure(UInt160 verifier, string method, params object?[] args) =>
             Fx.CallVoid(Core, "forward", verifier, method, args);
 
-        public object?[] TransferArgs(BigInteger amount) => new object?[] { AccountId, Recipient, amount, null };
+        public object?[] TransferArgs(BigInteger amount) => new object?[] { Fx.CallUInt160(Core, "getProxyScriptHash", AccountId), Recipient, amount, null };
 
         public object[] TransferOp(BigInteger amount, BigInteger nonce, BigInteger deadline, object? signature) =>
             RuntimeFixture.UserOp(Target, "transfer", TransferArgs(amount), nonce, deadline, signature);
@@ -412,7 +412,7 @@ public class VerifierSignatureRuntimeTests
     private static object[] SubscriptionOp(VerifierHarness h, byte[] subId, BigInteger nonce) =>
         RuntimeFixture.UserOp(
             h.Target, "transfer",
-            new object?[] { h.Fx.CallUInt160(h.Core, "getProxyScriptHash", AccountId), Merchant, (BigInteger)SubscriptionAmount },
+            new object?[] { h.Fx.CallUInt160(h.Core, "getProxyScriptHash", AccountId), Merchant, (BigInteger)SubscriptionAmount, null },
             nonce, BigInteger.Zero, subId);
 
     /// <summary>

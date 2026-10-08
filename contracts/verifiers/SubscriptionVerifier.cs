@@ -107,8 +107,11 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert(op.TargetContract == config.Token, "Target must be the subscription token");
             ExecutionEngine.Assert(op.Method == "transfer", "Method must be transfer");
 
-            // Expected args: [from, to, amount, ...]
-            ExecutionEngine.Assert(op.Args.Length >= 3, "Invalid transfer args");
+            // NEP-17: exactly [from, to, integer amount, data]. Never coerce a Boolean
+            // or byte string amount into an integer accepted by an arbitrary token ABI.
+            ExecutionEngine.Assert(op.Args != null && op.Args.Length == 4, "Invalid NEP-17 transfer args");
+            ExecutionEngine.Assert(op.Args[2] is BigInteger, "Transfer amount must be an integer");
+            ExecutionEngine.Assert((BigInteger)op.Args[2] > 0, "Subscription amount must be positive");
             // A virtual AA account never holds a balance at its accountId: its assets sit at the
             // core's proxy script hash, which is also the only "from" the token's CheckWitness can
             // accept during executeUserOp (UnifiedSmartWallet.Proxy.cs). Pinning the source to the
@@ -197,6 +200,9 @@ namespace AbstractAccount.Verifiers
         public static void PostExecute(UInt160 accountId, UserOperation op, object result)
         {
             VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+            // Failed or malformed NEP-17 results must not consume a billing period/nonce.
+            // Faulting here rolls back every write in the enclosing user operation.
+            ExecutionEngine.Assert(result is bool accepted && accepted, "NEP-17 transfer failed");
             ByteString subId = op.Signature;
             byte[] key = Helper.Concat(Helper.Concat(Prefix_Subscription, (byte[])accountId), (byte[])subId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);

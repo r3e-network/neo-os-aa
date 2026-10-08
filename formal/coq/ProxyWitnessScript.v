@@ -1,7 +1,7 @@
 (*
   NeoOS formal verification -- proxy witness transaction-script shape.
 
-  Source correspondence (read 2026-09-20):
+  Source correspondence (read 2026-10-08):
     ../neo-os-aa/contracts/UnifiedSmartWallet.VerifyContext.cs
       ScriptIsSingleExecuteCall, ScriptPrefixIsDataPushes, DataPushInstructionSize
 
@@ -110,11 +110,17 @@ Definition bytes_eq (a b : script) : bool :=
 
 Definition PUSHDATA1_20 : script := [12; 20].
 Definition PUSH2_PACK : script := [18; 192].
+Definition PUSH5_PACK : script := [21; 192].
 Definition SYSCALL_CONTRACT_CALL : script := [65; 98; 125; 91; 82].
 Definition METHOD_EXECUTE_USER_OP : script :=
   [12; 13; 101; 120; 101; 99; 117; 116; 101; 85; 115; 101; 114; 79; 112].
 Definition METHOD_EXECUTE_USER_OPS : script :=
   [12; 14; 101; 120; 101; 99; 117; 116; 101; 85; 115; 101; 114; 79; 112; 115].
+(* Test vectors only: sponsored entrypoints are outside the proxy witness allowlist. *)
+Definition METHOD_EXECUTE_SPONSORED_USER_OP : script :=
+  [12; 22; 101; 120; 101; 99; 117; 116; 101; 83; 112; 111; 110; 115; 111; 114; 101; 100; 85; 115; 101; 114; 79; 112].
+Definition METHOD_EXECUTE_SPONSORED_USER_OPS : script :=
+  [12; 23; 101; 120; 101; 99; 117; 116; 101; 83; 112; 111; 110; 115; 111; 114; 101; 100; 85; 115; 101; 114; 79; 112; 115].
 
 (* CallFlags is pushed as PUSH0..PUSH15 (0x10..0x1F). *)
 Definition flags_in_range (f : byte) : bool := (16 <=? f) && (f <=? 31).
@@ -420,6 +426,42 @@ Example PW_013_trailing_instruction_is_rejected :
     SAMPLE_ACCOUNT SAMPLE_CORE = false.
 Proof. vm_compute. reflexivity. Qed.
 
+
+(* A structurally valid five-argument sponsored envelope is still not an
+   authorized proxy transaction. Settlement callbacks are outside this boundary. *)
+Example PW_014_sponsored_single_call_is_rejected :
+  transaction_script_is_bound
+    ([16; 16; 16; 16] ++ PUSHDATA1_20 ++ SAMPLE_ACCOUNT ++ PUSH5_PACK ++ [31]
+      ++ METHOD_EXECUTE_SPONSORED_USER_OP ++ PUSHDATA1_20 ++ SAMPLE_CORE ++ SYSCALL_CONTRACT_CALL)
+    SAMPLE_ACCOUNT SAMPLE_CORE = false.
+Proof. vm_compute. reflexivity. Qed.
+
+Example PW_015_sponsored_batch_call_is_rejected :
+  transaction_script_is_bound
+    ([16; 16; 16; 16] ++ PUSHDATA1_20 ++ SAMPLE_ACCOUNT ++ PUSH5_PACK ++ [31]
+      ++ METHOD_EXECUTE_SPONSORED_USER_OPS ++ PUSHDATA1_20 ++ SAMPLE_CORE ++ SYSCALL_CONTRACT_CALL)
+    SAMPLE_ACCOUNT SAMPLE_CORE = false.
+Proof. vm_compute. reflexivity. Qed.
+
+Example PW_016_sponsored_two_argument_disguise_is_rejected :
+  transaction_script_is_bound
+    (expected_tail SAMPLE_ACCOUNT SAMPLE_CORE 31 METHOD_EXECUTE_SPONSORED_USER_OP)
+    SAMPLE_ACCOUNT SAMPLE_CORE = false.
+Proof. vm_compute. reflexivity. Qed.
+
+Example PW_017_sponsored_batch_two_argument_disguise_is_rejected :
+  transaction_script_is_bound
+    (expected_tail SAMPLE_ACCOUNT SAMPLE_CORE 31 METHOD_EXECUTE_SPONSORED_USER_OPS)
+    SAMPLE_ACCOUNT SAMPLE_CORE = false.
+Proof. vm_compute. reflexivity. Qed.
+
+Example PW_018_plain_five_argument_pack_is_rejected :
+  transaction_script_is_bound
+    (PUSHDATA1_20 ++ SAMPLE_ACCOUNT ++ PUSH5_PACK ++ [31] ++ METHOD_EXECUTE_USER_OP
+      ++ PUSHDATA1_20 ++ SAMPLE_CORE ++ SYSCALL_CONTRACT_CALL)
+    SAMPLE_ACCOUNT SAMPLE_CORE = false.
+Proof. vm_compute. reflexivity. Qed.
+
 Print Assumptions bytes_eq_true.
 Print Assumptions skipn_split.
 Print Assumptions firstn1_skipn_nth.
@@ -440,3 +482,9 @@ Print Assumptions PW_010_leading_syscall_is_rejected.
 Print Assumptions PW_011_foreign_account_is_rejected.
 Print Assumptions PW_012_out_of_range_flags_push_is_rejected.
 Print Assumptions PW_013_trailing_instruction_is_rejected.
+
+Print Assumptions PW_014_sponsored_single_call_is_rejected.
+Print Assumptions PW_015_sponsored_batch_call_is_rejected.
+Print Assumptions PW_016_sponsored_two_argument_disguise_is_rejected.
+Print Assumptions PW_017_sponsored_batch_two_argument_disguise_is_rejected.
+Print Assumptions PW_018_plain_five_argument_pack_is_rejected.

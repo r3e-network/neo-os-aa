@@ -67,8 +67,8 @@
         </svg>
         {{
           t(
-            "operations.allSignaturesCollected",
-            "All required signatures collected",
+            "operations.requiredApprovalRecordsCollected",
+            "Required approval records collected. On-chain authorization still needs verification.",
           )
         }}
       </p>

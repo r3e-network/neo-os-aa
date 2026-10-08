@@ -111,7 +111,7 @@ test("a manifest without the compiler is reported", () => {
 });
 
 test("every project that restores Neo packages has a committed lock file that agrees with the audit", () => {
-  assert.equal(projects.length, 25, "24 contract projects and the tests project");
+  assert.equal(projects.length, 26, "25 contract projects and the tests project");
   const locks = locksFromRepository();
   assert.deepEqual(lockFileProblems(locks, manifest), []);
   assert.ok(locks.every(({ lock }) => lock !== null));

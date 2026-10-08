@@ -4,6 +4,11 @@ This index keeps the root documentation set visible and easy to browse.
 
 ## Core Explainers
 
+- `docs/AA-SYSTEM-STATUS.md` — capability boundaries and operational prerequisites
+- `docs/ACCOUNT_RECOVERY_AND_IDENTITY.md` — recovery limitations and canonical account identity reads
+- `docs/OPERATOR_KEY_RECOVERY.md` — encrypted operator backups and browser recovery
+- `docs/AA-PROXY-TRANSFERS.md` — direct proxy witness construction, fee policy and sponsorship refusal
+- `sdk/js/PACKAGING.md` — independently installable SDK package and consumer validation
 - `docs/HOW_IT_WORKS.md` — end-to-end mental model and usage guide
 - `docs/USER_GUIDE.md` — practical operator / signer usage steps
 - `docs/WORKFLOWS.md` — transaction lifecycle and submission flows
@@ -65,7 +70,7 @@ This index keeps the root documentation set visible and easy to browse.
 ## Build Toolchain
 
 - `docs/AA-REPRODUCIBLE-BUILD.md` — the pinned, published toolchain, how to restore, build and reproduce the AA contracts byte for byte, and how to bump a pin (R-11 / N-DEP-1)
-- `docs/NEO-PLATFORM-PACKAGES.md` — the remaining platform gap: `System.Contract.CallWithGasLimit` is registered by no published Neo core, the four tests that need it, and the private packages that still provide it
+- `docs/NEO-PLATFORM-PACKAGES.md` — published dependency pins and the separate private `PLATFORM` runtime requirement
 - `contracts/neo-platform-packages.json` — audited hashes of the nine published Neo packages and the nccs compiler; `scripts/check_neo_platform_packages.mjs` enforces them together with the `packages.lock.json` files
 - `docs/reports/aa-published-build-reproducibility-20261004.json` — receipt: 76 artifacts built from published packages in two clean exports at different paths, byte-identical
 

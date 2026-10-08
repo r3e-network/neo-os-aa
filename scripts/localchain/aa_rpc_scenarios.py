@@ -749,11 +749,153 @@ def sc_source_verifier_proxy_witness(c, x):
     return {}
 
 
+def sc_source_proxy_relay(c, x):
+    """Fresh-source direct GAS transfer and explicit rejection of unsafe sponsored proxy envelopes."""
+    if x.source_profile["profile"] == srcbuild.PROFILE_SYSCALL_PRESENT:
+        c.check(True, "public-node relay proof is unavailable for the private-syscall profile")
+        return {"supported": False}
+    core, verifier, pm = x.core, c.contracts["WebAuthnVerifier"], c.contracts["AAPaymaster"]
+    key = v.P256Key(x.workdir, "source-relay-proxy")
+    account, proxy = x.register("source-relay-proxy", verifier=verifier, params=key.compressed)
+    buyer, sponsor = c.hashes["buyer"], c.hashes["sponsor"]
+    c.send("fund source relay proxy with 10 GAS", [{"w": "owner"}], GAS_HASH, "transfer", [H(c.hashes["owner"]), H(proxy), I(10 * GAS), B(b"")])
+    c.send("configure source relay proxy GAS scope", [{"w": "deployer"}], core, "setVerifyScopeTarget", [H(account), H(GAS_HASH)])
+    c.send("fund source relay sponsor deposit", [{"w": "sponsor"}], GAS_HASH, "transfer", [H(sponsor), H(pm), I(100 * GAS), B(b"")])
+    c.send("configure source relay sponsorship policy", [{"w": "sponsor"}], pm, "setPolicy", [H(account), H(GAS_HASH), S("transfer"), I(30 * GAS), I(0), I(0), I(0)])
+    ar = [H(proxy), H(buyer), I(GAS), B(b"")]
+    def operation(nonce):
+        payload = c.read(verifier, "getPayload", H(account), H(GAS_HASH), S("transfer"), A(*ar), I(nonce), I(FAR_DEADLINE))
+        return x.op(GAS_HASH, "transfer", ar, nonce, sig=key.sign(payload))
+    def invocation(nonce, sponsored=False):
+        op = json.loads(json.dumps(operation(nonce)))
+        op["type"] = "Struct"
+        # rpcx ByteArray values are base64; the route wire protocol carries hex.
+        op["value"][-1]["value"] = "0x" + base64.b64decode(op["value"][-1]["value"]).hex()
+        op["value"][2]["value"][-1]["value"] = "0x"
+        return {"scriptHash": core, "operation": "executeSponsoredUserOp" if sponsored else "executeUserOp",
+                "args": [H(account), op] + ([H(pm), H(sponsor), I(30 * GAS)] if sponsored else [])}
+    bad = invocation(0)
+    bad["args"][1]["value"][-1]["value"] = "0x" + "00" * 64
+    fx = {"rpcUrl": f"http://127.0.0.1:{c.port}", "core": core, "accountId": account, "proxy": proxy,
+          "buyer": buyer, "owner": c.hashes["owner"], "relay": c.hashes["relay"], "gas": GAS_HASH,
+          "paymaster": pm, "sponsor": sponsor, "amount": GAS,
+          "invocations": {"invalidSignature": bad, "direct": invocation(0), "sponsored": invocation(1, True)}}
+    fixture = x.workdir / "source-proxy-relay.json"
+    fixture.write_text(json.dumps(fx))
+    env = {k: os.environ[k] for k in ("PATH", "LANG", "TMPDIR") if k in os.environ}
+    env["RELAY_PRIVATE_KEY_HEX"] = c.keys["relay"].der.read_bytes()[7:39].hex()
+    done = subprocess.run(["node", str(AA / "scripts/localchain/source_proxy_relay_probe.mjs"), str(fixture)],
+                          capture_output=True, text=True, env=env, timeout=180)
+    if done.returncode:
+        raise Fail("source relay probe failed: " + done.stderr[-500:])
+    proof = json.loads(done.stdout)
+    x.source_proxy_relay = proof
+    for case in proof["cases"]:
+        if case.get("execution"):
+            c.records.append({"step": "source proxy relay " + case["name"], "outcome": case["execution"]["vmstate"], "txid": case["response"].get("txid")})
+    c.check(not _source_proxy_relay_failures(proof), "source relay proof binds invalid-signature and fee refusals, direct transfer, nonce, owner and fee payer")
+    c.check(proof["cases"][1]["execution"]["vmstate"] == "HALT" and proof["cases"][2]["response"].get("txid") is None, "direct proxy transfer HALTed and sponsored relay transfer was refused")
+    psig = {"proxy": proxy, "core": core, "target": GAS_HASH, "script": proxy_script_for(account, core)}
+    before = (c.gas(proxy), c.gas(buyer), x.nonce(account), c.read(pm, "getSponsorDeposit", H(sponsor)))
+    c.send("correct sponsored proxy envelope remains refused", [{"w": "relay"}, psig], core, "executeSponsoredUserOp",
+           [H(account), operation(1), H(pm), H(sponsor), I(GAS)], expect="REJECT")
+    c.send("wrong account in sponsored proxy envelope", [{"w": "relay"}, psig], core, "executeSponsoredUserOp",
+           [H(c.hashes["stranger"]), operation(1), H(pm), H(sponsor), I(GAS)], expect="REJECT")
+    c.send("wrong scope in sponsored proxy envelope", [{"w": "relay"}, dict(psig, target=NEO_HASH)], core, "executeSponsoredUserOp",
+           [H(account), operation(1), H(pm), H(sponsor), I(GAS)], expect="REJECT")
+    c.check(before == (c.gas(proxy), c.gas(buyer), x.nonce(account), c.read(pm, "getSponsorDeposit", H(sponsor))),
+            "all sponsored proxy envelopes are rejected by the node and leave assets, nonce and deposit unchanged")
+    return {"supported": True}
+
+
+def _proxy_data_prefix_only(script):
+    cursor = 0
+    while cursor < len(script):
+        op = script[cursor]
+        if op in srcbuild._PUSHDATA_PREFIX:
+            width = srcbuild._PUSHDATA_PREFIX[op]
+            if cursor + 1 + width > len(script):
+                return False
+            size = 1 + width + int.from_bytes(script[cursor + 1:cursor + 1 + width], "little")
+        elif 0 <= op <= 5:
+            size = 1 + srcbuild._OPERAND_SIZE[op]
+        elif op in (8, 9, 11, 190, 191, 192, 194, 197, 200) or 15 <= op <= 32:
+            size = 1
+        elif op == 219:
+            size = 2
+        else:
+            return False
+        cursor += size
+        if cursor > len(script):
+            return False
+    return True
+
+
+def _source_proxy_relay_failures(proof):
+    """Load-bearing chain readback; accepting a txid or a green named check alone is insufficient."""
+    errors = []
+    try:
+        proxy_bytes = proxy_script_for(proof["accountId"], proof["core"])
+        if proof["proxy"] != "0x" + v.hash160(proxy_bytes)[::-1].hex():
+            errors.append("proxy identity derived from this core and account")
+        cases = proof["cases"]
+        if [r["name"] for r in cases] != ["invalidSignature", "direct", "sponsored"]:
+            return ["proxy relay case inventory"]
+        bad = cases[0]
+        if bad["response"].get("txid") or bad["execution"] is not None or bad["before"] != bad["after"] or bad["response"].get("vmState") != "FAULT":
+            errors.append("invalid signature must refuse without state change")
+        refusals = proof["refusals"]
+        if [row["name"] for row in refusals] != ["missingReserve", "insufficientReserve", "networkFeeCeiling"]:
+            errors.append("proxy reserve refusal inventory")
+        for row, marker in zip(refusals, ("AA_RELAY_PROXY_NETWORK_FEE_RESERVE", "InsufficientFunds", "AA_RELAY_MAX_NETWORK_FEE")):
+            if row["status"] != 502 or row["response"].get("txid") or row["execution"] is not None or row["before"] != row["after"] or marker not in row["response"].get("rawMessage", ""):
+                errors.append(row["name"] + " refuses without fee or nonce consumption")
+        amount = int(proof["amount"])
+        if amount <= 0:
+            errors.append("positive transfer amount")
+        denied = cases[2]
+        if denied["status"] != 502 or denied["response"].get("txid") or denied["execution"] is not None or denied["before"] != denied["after"] or "Sponsored proxy transfers are not supported" not in denied["response"].get("rawMessage", ""):
+            errors.append("sponsored proxy relay is explicitly refused without state change")
+        for row in cases[1:2]:
+            before, after, response, transaction = row["before"], row["after"], row["response"], row["transaction"]
+            if row["status"] != 200 or row["execution"]["vmstate"] != "HALT" or transaction["hash"] != response["txid"]:
+                errors.append(row["name"] + " persisted HALT")
+            if int(after["buyer"]) - int(before["buyer"]) != amount or int(before["proxy"]) - int(after["proxy"]) != amount:
+                errors.append(row["name"] + " exact asset movement")
+            if int(after["nonce"]) != int(before["nonce"]) + 1 or after["owner"] != before["owner"]:
+                errors.append(row["name"] + " nonce and owner unchanged")
+            method = "executeSponsoredUserOp" if row["name"] == "sponsored" else "executeUserOp"
+            tail = b"\x0c\x14" + v.hash_le(proof["accountId"]) + bytes([0x15 if row["name"] == "sponsored" else 0x12, 0xC0, 0x1F, 0x0C, len(method)]) + method.encode() + b"\x0c\x14" + v.hash_le(proof["core"]) + bytes.fromhex("41627d5b52")
+            application_script = base64.b64decode(transaction["script"])
+            if not application_script.endswith(tail) or not _proxy_data_prefix_only(application_script[:-len(tail)]):
+                errors.append(row["name"] + " exact core/account execution envelope")
+            signers = transaction["signers"]
+            if len(signers) != 2 or signers[0]["account"] != proof["relay"] or signers[1]["account"] != proof["proxy"]:
+                errors.append(row["name"] + " exact fee payer and proxy signers")
+            if signers[0]["scopes"] != "CalledByEntry" or signers[1]["scopes"] != "WitnessRules" or signers[1]["rules"] != v.aa_proxy_rules(proof["core"], GAS_HASH):
+                errors.append(row["name"] + " exact witness scopes")
+            witnesses = transaction["witnesses"]
+            if len(witnesses) != 2 or witnesses[1]["invocation"] != "" or base64.b64decode(witnesses[1]["verification"]) != proxy_script_for(proof["accountId"], proof["core"]):
+                errors.append(row["name"] + " proxy script identity")
+            paid = int(response["systemFee"]) + int(response["networkFee"])
+            if paid <= 0 or int(transaction["sysfee"]) + int(transaction["netfee"]) != paid:
+                errors.append(row["name"] + " persisted fee accounting")
+            debit = int(before["deposit"]) - int(after["deposit"])
+            if debit != 0 or int(before["relay"]) - int(after["relay"]) != paid:
+                errors.append("direct fee payer balance")
+        if cases[0]["after"] != cases[1]["before"] or cases[1]["after"] != cases[2]["before"]:
+            errors.append("proxy relay causal state continuity")
+    except (KeyError, TypeError, ValueError, IndexError, AttributeError):
+        errors.append("complete typed proxy relay evidence")
+    return errors
+
+
 SOURCE_SCENARIOS = [
     ("SRC-01/02 current source core: build profile and native-owner execution", sc_source_build_and_native),
     ("SRC-03 current source core: proxy witness without a verifier", sc_source_proxy_witness),
     ("SRC-04 current source core: verifier callback (validateSignature)", sc_source_verifier_callback),
     ("SRC-03b current source core: verifier-backed proxy witness (P-256)", sc_source_verifier_proxy_witness),
+    ("SRC-09 current source relay: proxy GAS and sponsored refusal", sc_source_proxy_relay),
 ]
 
 
@@ -782,6 +924,8 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
     c, x = Rx(workdir, port), None
     def save():
         receipt["records"] = c.records if c else []
+        if x is not None and hasattr(x, "source_proxy_relay"):
+            receipt["sourceProxyRelay"] = x.source_proxy_relay
         receipt_path.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
     def attempt(name, fn, *a):
         _attempt(receipt, c, save, name, fn, *a)
@@ -826,6 +970,8 @@ def run_source(workdir, port, receipt_path, source_dir=None):
     c, x = Rx(workdir, port), None
     def save():
         receipt["records"] = c.records if c else []
+        if x is not None and hasattr(x, "source_proxy_relay"):
+            receipt["sourceProxyRelay"] = x.source_proxy_relay
         receipt_path.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
     def attempt(name, fn, *a):
         _attempt(receipt, c, save, name, fn, *a)
@@ -852,6 +998,7 @@ def run_source(workdir, port, receipt_path, source_dir=None):
         print("up in", round(time.time() - t0, 1), "s; contracts:", len(c.contracts), flush=True)
         for name, fn in SOURCE_SCENARIOS:
             attempt(name, fn, c, x)
+        receipt["sourceProxyRelay"] = getattr(x, "source_proxy_relay", None)
         receipt["status"] = "DONE"
     except Exception as e:
         receipt["status"] = "ABORTED"; receipt["abort"] = f"{type(e).__name__}: {str(e)[:700]}"
@@ -958,6 +1105,13 @@ def validate_source_receipt(receipt, expected):
         failures.append("the source core digest is recorded")
     elif source["coreSha256"] == expected["deployedCore"]["sha256"]:
         failures.append("the source build is not the deployed artifact")
+    if profile == srcbuild.PROFILE_SYSCALL_ABSENT:
+        proof = receipt.get("sourceProxyRelay") or {}
+        failures += _source_proxy_relay_failures(proof)
+        if proof.get("core") != (receipt.get("contracts") or {}).get("UnifiedSmartWalletV3"):
+            failures.append("proxy relay proof uses the deployed source core")
+        if proof.get("amount") != GAS:
+            failures.append("proxy relay proof transfers exactly one GAS")
     totals = wanted["totals"]
     failures += _inventory_failures(
         receipt, wanted["scenarios"], totals,

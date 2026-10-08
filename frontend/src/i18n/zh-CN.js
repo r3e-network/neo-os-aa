@@ -1,6 +1,25 @@
 // zh-CN translations — dynamically loaded by i18n/index.js
 // Extracted to reduce initial bundle size (was ~100KB inline).
 export default {
+    operatorBackup: {
+      title: '操作员密钥备份与恢复',
+      description: '此浏览器会保存草稿操作员密钥。清除浏览器数据或更换设备前，请导出加密备份。请另行保存最新操作员链接；恢复时两者都需要。',
+      password: '备份密码（至少 12 个字符）',
+      confirmPassword: '导出前再次输入密码',
+      file: '加密的操作员备份文件',
+      export: '下载加密备份',
+      import: '恢复操作员密钥',
+      exported: '加密备份已下载。请将密码另行保存，并保留最新操作员链接。',
+      imported: '操作员密钥已恢复，并已通过此草稿的绑定校验，可以继续管理。',
+      mismatch: '两次输入的导出密码不一致。',
+      weakPassword: '请使用至少 12 个字符且不重复使用的备份密码。',
+      invalidBackup: '无法打开此备份。请检查密码，并选择完整的操作员备份文件。',
+      wrongDraft: '此备份属于其他草稿，请打开对应的操作员链接。',
+      storageUnavailable: '此浏览器无法安全保存操作员密钥，请启用本站存储后重试。',
+      storageCorrupt: '无法读取已保存的操作员密钥。请恢复有效备份，原有数据已保留。',
+      recoveryRequired: '此草稿已绑定另一把操作员密钥。请导入其备份或使用原浏览器；若两者均已丢失，请创建新草稿。',
+      failed: '操作员密钥操作失败，请检查操作员链接及网络后重试。',
+    },
     networkGate: {
       title: '网络不匹配',
       description: '请求的网络与此部署不一致，账户操作界面未打开。',

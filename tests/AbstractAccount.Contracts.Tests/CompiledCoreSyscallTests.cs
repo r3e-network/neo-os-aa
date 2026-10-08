@@ -1,7 +1,9 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo.SmartContract;
@@ -10,10 +12,7 @@ using Neo.VM;
 namespace AbstractAccount.Contracts.Tests;
 
 /// <summary>
-/// Reads the compiled AA core under <c>contracts/bin/v3</c> and checks which syscall each verifier
-/// callback is compiled to. The contract declares <c>System.Contract.CallWithGasLimit</c> itself,
-/// so which framework package is restored cannot change what is emitted; this pins the result at
-/// the bytecode level, independent of which Neo core the TestEngine runs.
+/// Checks the public and private PLATFORM artifacts, independently of the TestEngine interop table.
 /// </summary>
 [TestClass]
 public class CompiledCoreSyscallTests
@@ -23,22 +22,26 @@ public class CompiledCoreSyscallTests
 
     private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "v3");
 
-    private static readonly uint GasBounded =
-        PlatformSyscallRequirement.InteropHash(PlatformSyscallRequirement.CallWithGasLimit);
+    private static uint InteropHash(string name) =>
+        BinaryPrimitives.ReadUInt32LittleEndian(SHA256.HashData(Encoding.ASCII.GetBytes(name)));
 
-    private static readonly uint Unbounded = PlatformSyscallRequirement.InteropHash("System.Contract.Call");
+    private static readonly uint GasBounded = InteropHash("System.Contract.CallWithGasLimit");
+
+    private static readonly uint Unbounded = InteropHash("System.Contract.Call");
 
     /// <summary>
     /// Every SYSCALL in the artifact's script with the last printable string pushed before it. At a
     /// dynamic call that string is the target method name, because the compiler pushes the method
     /// name immediately before the contract hash and the syscall.
     /// </summary>
-    private static List<(uint Hash, string Method)> Syscalls(string artifact)
+    private static List<(uint Hash, string Method, OpCode Flags)> Syscalls(string artifact)
     {
         NefFile nef = NefFile.Parse(File.ReadAllBytes(Path.Combine(CompiledContractsDir, artifact + ".nef")), verify: true);
         Script script = new(nef.Script);
-        List<(uint, string)> sites = new();
+        List<(uint, string, OpCode)> sites = new();
         string lastString = string.Empty;
+        OpCode previous = OpCode.NOP;
+        OpCode flags = OpCode.NOP;
         for (int ip = 0; ip < script.Length;)
         {
             Instruction instruction = script.GetInstruction(ip);
@@ -46,11 +49,15 @@ public class CompiledCoreSyscallTests
             {
                 ReadOnlySpan<byte> data = instruction.Operand.Span;
                 if (data.Length > 0 && data.Length < 64 && data.ToArray().All(b => b >= 0x20 && b < 0x7f))
+                {
                     lastString = Encoding.ASCII.GetString(data);
+                    flags = previous;
+                }
             }
 
             if (instruction.OpCode == OpCode.SYSCALL)
-                sites.Add((instruction.TokenU32, lastString));
+                sites.Add((instruction.TokenU32, lastString, flags));
+            previous = instruction.OpCode;
             ip += instruction.Size;
         }
 
@@ -58,15 +65,28 @@ public class CompiledCoreSyscallTests
     }
 
     [TestMethod]
-    public void CompiledCoreCallsEachVerifierCallbackThroughTheGasBoundedSyscall()
+    public void PublicCoreUsesOnlyPublishedSyscallsForVerifierCallbacks()
     {
-        List<(uint Hash, string Method)> syscalls = Syscalls("UnifiedSmartWalletV3");
+        var syscalls = Syscalls("UnifiedSmartWalletV3");
 
-        // validateSignature and postExecute are the two verifier callbacks; each is one bounded call.
-        Assert.AreEqual(1, syscalls.Count(s => s.Hash == GasBounded && s.Method == "validateSignature"));
-        Assert.AreEqual(1, syscalls.Count(s => s.Hash == GasBounded && s.Method == "postExecute"));
+        Assert.AreEqual(0, syscalls.Count(s => s.Hash == GasBounded),
+            "Public builds must never emit CallWithGasLimit");
+        Assert.AreEqual(1, syscalls.Count(s => s.Hash == Unbounded && s.Method == "validateSignature"));
+        Assert.AreEqual(OpCode.PUSH5, syscalls.Single(s => s.Hash == Unbounded && s.Method == "validateSignature").Flags,
+            "Signature validation must be read-only (CallFlags.ReadOnly = 5)");
+        Assert.AreEqual(2, syscalls.Count(s => s.Hash == Unbounded && s.Method == "postExecute"),
+            "Both the hook and verifier retain their post-execution callback");
+        Assert.IsTrue(syscalls.Where(s => s.Hash == Unbounded && s.Method == "postExecute").All(s => s.Flags == OpCode.PUSH15),
+            "Post-execution accounting retains CallFlags.All = 15");
+    }
 
-        // The unbounded call must never reach the verifier's signature check.
+    [TestMethod]
+    public void PlatformCoreKeepsBothGasBoundedVerifierCallbacks()
+    {
+        var syscalls = Syscalls("../platform/UnifiedSmartWalletV3");
+        // nccs also emits the extern declaration's stub, besides the two inlined callback sites.
+        Assert.AreEqual(OpCode.PUSH5, syscalls.Single(s => s.Hash == GasBounded && s.Method == "validateSignature").Flags);
+        Assert.AreEqual(OpCode.PUSH15, syscalls.Single(s => s.Hash == GasBounded && s.Method == "postExecute").Flags);
         Assert.AreEqual(0, syscalls.Count(s => s.Hash == Unbounded && s.Method == "validateSignature"));
     }
 
