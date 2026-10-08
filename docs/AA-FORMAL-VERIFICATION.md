@@ -6,13 +6,28 @@ The repository-local formal artifacts under `formal/` are the inputs to the
 fail-closed gate below; the sibling local `neo-os-formal-verification`
 workspace carries the parallel verification set.
 
-The current fail-closed AA-local gate passed on 2026-09-21: **5 Coq modules,
+The historical fail-closed AA-local gate passed on 2026-09-21: **5 Coq modules,
 72 closed declarations, 30 semantic mutations rejected, 61,460 TLC distinct
 states, and 6 SMT obligations with 6 controls**. The host run and the same
 source snapshot in the cached-base Docker BuildKit stage both passed; the
 runner regression suite is **20/20 OK**. This verifies the stated abstract
 models and arithmetic obligations, not a claim that a deployed NEF is fully
 formally verified.
+
+The 2026-10-08 host gate passed **5 Coq modules, 77 closed declarations, 32 semantic
+mutations rejected, 61,460 TLC distinct states, 6 SMT obligations and 6 controls**,
+with **23/23** runner tests. Exact source/model/tool hashes and versions are recorded in
+[`aa-formal-gate-20261008.json`](reports/aa-formal-gate-20261008.json). The Docker gate was
+not rerun; its pin is unchanged.
+
+The 2026-10-08 source separates public `v3` and private `PLATFORM` execution. The
+source lock and every new gate result include `runtimeProfiles` and `modelProfiles`;
+the runner rejects missing or changed scope metadata. `VerifierGasBudget.v` applies
+only to `PLATFORM`. Public `v3` uses standard `System.Contract.Call` and has **no
+per-verifier child gas budget**. Other models cover stated abstractions for both
+profiles, without establishing source/VM refinement or deployment parity. Historical
+private receipts below do not validate a changed public artifact or current source;
+re-run the gate and bytecode/runtime tests for the exact candidate being reviewed.
 
 Run from the formal-verification workspace:
 
@@ -89,9 +104,9 @@ models under `verified/` for its own `verify.sh`.
 |---|---|
 | `formal/coq/UnifiedSmartWalletAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating and success-only state transitions |
 | `formal/coq/MultiSigPolicy.v` | Closed bounded threshold-policy proofs for configuration validity, exact signature cardinality and threshold support; child identity is abstract |
-| `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected `executeUserOp`/`executeUserOps` call, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
+| `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected direct `executeUserOp`/`executeUserOps` call with its two-argument pack, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
 | `formal/coq/CallbackPluginTopology.v` | Closed abstract correspondence model for the six-field hook callback tuple, success/callback ordering, CalledByEntry/Custom target binding, and fail-closed plugin cleanup/rotation; it is not a proof of NeoVM dispatch or arbitrary plugin storage |
-| `formal/coq/VerifierGasBudget.v` | Closed abstract model of bounded callback charging: every charge checks the callback and all ancestor budgets before mutation, exhaustion is atomic, and nested callbacks cannot escape an ancestor cap |
+| `formal/coq/VerifierGasBudget.v` | **PLATFORM only:** closed abstract model of bounded callback charging: every charge checks the callback and all ancestor budgets before mutation, exhaustion is atomic, and nested callbacks cannot escape an ancestor cap; inapplicable to public `v3` |
 | `formal/tla/UnifiedSmartWalletAA.tla` (sibling: `verified/tla/`) | Finite state-machine exploration of Begin/success/failure/Tick transitions |
 | `formal/tla/UnifiedSmartWalletAA.cfg` | TLC bounds and safety invariants |
 | `formal/smt/aa_core.smt2` (sibling: `verified/smt/`) | Nonce arithmetic, cursor advancement, rollback equalities, reimbursement cap and budget arithmetic |
@@ -105,9 +120,14 @@ models under `verified/` for its own `verify.sh`.
 
 ### Verifier resource-boundary status
 
-The current AA source and NEF call verifiers through
-`System.Contract.CallWithGasLimit`, with a 1,000,000,000-datoshi (10 GAS)
-callback budget. The matching Neo core/DevPack runtime activates the syscall
+The private `PLATFORM` source branch and `contracts/bin/platform` core call verifiers
+through `System.Contract.CallWithGasLimit`, with a 1,000,000,000-datoshi (10 GAS)
+callback budget. Public `contracts/bin/v3` uses standard `System.Contract.Call`:
+validation is read-only, post-execution accounting retains write access, and neither
+callback has an isolated child budget. Input bounds, total transaction gas ceilings
+and module admission do not supply the missing public runtime capability.
+
+The historical matching Neo core/DevPack runtime activates the private syscall
 at `HF_Iara`; ordinary nested calls and bounded descendants consume the
 ancestor chain, and whitelist charging cannot bypass it. The isolated core
 passes 9/9 targeted vectors and 1,435/1,435 full unit tests. A fresh private
@@ -122,6 +142,16 @@ receipts are `docs/reports/aa-platform-gas-cap-20260921.json` and
 The models do not prove cryptography, witness-rule or script parsing
 correctness, full Neo VM semantics, or C#-to-NEF callback refinement, session lifecycle,
 paymaster policy resolution, or C#-to-NEF/deployed-bytecode equivalence.
+The cleanup model proves fail-closed state transitions, not recovery availability:
+`finalizeEscape` still depends on successful cleanup by the old verifier and hook.
+The 2026-10-08 source validates the replacement verifier before these callbacks, but
+does not introduce emergency detach or guarantee progress past a malicious old module.
+`CallVerifierChild` and its explicit `getChildVerifierConfig` capability are recorded in
+the source snapshot and tested in NeoVM, but are outside the current abstract models.
+Those models do not prove the child configuration ABI, core/topology binding,
+pending-call serialization or timelock enforcement for this new route. The project file
+and profile build recipe are also pinned so changing source selection invalidates the
+snapshot. Hash pinning is not a proof of these implementation properties.
 The MultiSig model separately proves only the finite policy layer: non-empty,
 at-most-ten, nonzero/distinct child identifiers, threshold bounds, exact
 signature-array cardinality, and threshold support. It does not prove that
@@ -132,6 +162,10 @@ vectors and 2-of-2/1-of-2/native-witness vectors; these remain bounded VM
 evidence rather than a complete NeoVM or cryptographic proof. The policy model
 also proves that its abstract post-callback roster is unique, configured, and
 threshold-supported; this remains separate from concrete callback refinement.
+Its lists and callback fields are abstract values. The concrete protection against a
+child mutating another child's arguments or result depends on the implementation's
+deep snapshots and the NeoVM regression vectors; the model does not prove serialization
+or reference-isolation behavior.
 The local runtime suite does check the concrete session-key ordering rule:
 after `clearSessionKey` executes, a later `validateSignature` faults with no
 active key, and the clear emits `SessionKeyRevoked`. This does not cancel a
@@ -173,13 +207,20 @@ non-bypassable per-verifier gas budget.
 
 The proxy-witness transaction-script shape is now covered by a closed Coq
 model rather than by runtime vectors alone. `formal/coq/ProxyWitnessScript.v`
-transcribes the parser byte for byte (opcode table, PUSHDATA length decoding,
-overrun checks, tail layout, CallFlags push range) and proves that any accepted
+models the parser's opcode table, PUSHDATA length decoding,
+overrun checks, tail layout and CallFlags push range, and proves that any accepted
 script is a walk of data-push instructions landing exactly on the expected core
 call for the given account id and core hash, that no instruction start in that
 walk is a SYSCALL or any other non-push opcode, and that acceptance binds the
-account id and core hash uniquely; six semantic mutations (dropping the prefix
-walk, the account or core binding, the flags range, the syscall tail, or
+account id and core hash uniquely. The model allows only the two direct entrypoints:
+`executeUserOp`/`executeUserOps` require `PUSH2 PACK`. Both sponsored method names
+are explicitly rejected, including a correctly packed five-argument envelope and a
+two-argument disguise. These negative examples are compiled and assumption-audited;
+they preserve the boundary that sponsored settlement callbacks have not been authorized
+to reuse the proxy witness.
+Eight semantic mutations (dropping the prefix
+walk, the account or core binding, the flags range, the method/arity binding, widening
+the entrypoint allowlist, removing the syscall tail, or
 treating unknown opcodes as pushes) are each rejected. It does not prove NeoVM's
 own instruction decoding, witness-rule evaluation, signer-scope semantics, or
 C#-to-NEF refinement, and the byte range 0..255 is assumed from the C# type.
@@ -213,7 +254,7 @@ source/artifact hashes and explicit public-deployed-parity status are recorded i
 canonical TestNet/MainNet hashes found different NEF scripts; the current artifact has not
 been publicly deployed.
 
-The current gated contract run is **292 passed, 0 failed, 0 skipped** after
+The historical 2026-09-21 gated contract run was **292 passed, 0 failed, 0 skipped** after
 adding the MultiSig configuration,
 fail-closed cleanup, witness-shape, hook-callback ABI, input-shape boundary,
 market-escape pre-flight, recovery-verifier cleanup, subscription transfer-source
@@ -264,12 +305,12 @@ merchant pull needs a signer scope that reaches the verifier (see `SECURITY_MODE
 latest receipt records the corrected implementation, including the bounded verifier callback,
 and remains local-chain evidence; it does not establish public deployment parity.
 
-The current standalone checkout without the sibling `NeoDIDRegistry` artifact passed
+The historical 2026-09-21 standalone checkout without the sibling `NeoDIDRegistry` artifact passed
 **290/292** and records exactly the two cross-repository DID cases as explicit
 skips; it does not count those cases as passes. The earlier 289/291 result is
 historical, from before the zero-fee estimation regression test was added.
 
-The current source-to-artifact replay independently compiled the scratch tree
+The historical 2026-09-21 source-to-artifact replay independently compiled the scratch tree
 with the matching private compiler and compared **76/76** NEF/manifest files
 byte-for-byte with `contracts/bin/v3`; no artifact was missing or drifted. The
 historical `contracts/build` tree remains an explicitly reported provenance

@@ -90,6 +90,11 @@ jobs:
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.x
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+      - name: Install standalone relay runtime dependencies
+        run: npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
       - name: Install published neoxp
         run: |
           dotnet tool install Neo.Express --version 3.10.1 --tool-path "$RUNNER_TEMP/aa-neoxp"
@@ -106,8 +111,8 @@ jobs:
       # committed deployed core, and both expectation branches are mutated.
       - name: Test source variant gate
         run: python3 tests/localchain/test_source_gate.py
-      # Compiles the current checkout with the pinned compiler and prints the build profile
-      # (platform-syscall-present while DEC-AA-1 is in the source, absent after CU-29 lands).
+      # Compile the public profile with pinned packages; the source suite exercises
+      # verifier-signed execution and the actual relay's direct proxy witness path.
       - name: Build contracts from source and read the build profile
         run: python3 scripts/localchain/source_build.py --out "$RUNNER_TEMP/aa-source"
       - name: Run current-source suite

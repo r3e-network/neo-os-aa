@@ -17,7 +17,19 @@ ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
              "coq/CallbackPluginTopology.v", "coq/VerifierGasBudget.v",
              "tla/UnifiedSmartWalletAA.tla",
              "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
-SOURCE_FILES = {"contracts/UnifiedSmartWallet.Execution.cs",
+# Scope is part of the fail-closed source correspondence record. Successful
+# abstract budget proofs must never be attributed to standard public Call.
+RUNTIME_PROFILES = {
+    "v3": {"artifactDirectory": "contracts/bin/v3", "define": None,
+           "verifierCall": "System.Contract.Call", "verifierChildBudgetEnforced": False},
+    "platform": {"artifactDirectory": "contracts/bin/platform", "define": "PLATFORM",
+                 "verifierCall": "System.Contract.CallWithGasLimit", "verifierChildBudgetEnforced": True},
+}
+MODEL_PROFILES = {name: (["platform"] if name == "coq/VerifierGasBudget.v" else ["v3", "platform"])
+                  for name in sorted(ARTIFACTS)}
+SOURCE_FILES = {"contracts/compile.sh", "contracts/UnifiedSmartWallet.csproj",
+                "contracts/UnifiedSmartWallet.VerifierChildren.cs",
+                "contracts/UnifiedSmartWallet.Execution.cs",
                 "contracts/UnifiedSmartWallet.Accounts.cs",
                 "contracts/UnifiedSmartWallet.Models.cs",
                 "contracts/UnifiedSmartWallet.State.cs",
@@ -74,6 +86,11 @@ PROXY_WITNESS_COQ_MUTATIONS = {
     "witness-core-binding": ("  bytes_eq (firstn 20 (skipn (27 + length method_push) t)) core &&",
                              "  true &&"),
     "witness-flags-range": ("  flags_in_range (at_ t 24) &&", "  true &&"),
+    "witness-method-arity": ("  bytes_eq (firstn 2 (skipn 22 t)) PUSH2_PACK &&", "  true &&"),
+    "witness-entrypoint-allowlist": (
+        "  || script_is_single_execute_call s account core METHOD_EXECUTE_USER_OPS.",
+        "  || script_is_single_execute_call s account core METHOD_EXECUTE_USER_OPS\n"
+        "  || script_is_single_execute_call s account core METHOD_EXECUTE_SPONSORED_USER_OP."),
     "witness-syscall-tail": ("  bytes_eq (firstn 5 (skipn (47 + length method_push) t)) SYSCALL_CONTRACT_CALL.",
                              "  true."),
     "witness-unknown-opcode": ("  else if op =? 219 then 2                            (* CONVERT <type> *)\n  else 0.",
@@ -135,12 +152,20 @@ def replace_once(source, old, new):
     return source.replace(old, new, 1)
 
 
+def check_profile_scope(lock):
+    require(lock.get("runtimeProfiles") == RUNTIME_PROFILES,
+            "Runtime profile scope changed; explicit review required")
+    require(lock.get("modelProfiles") == MODEL_PROFILES,
+            "Model profile scope changed; budget proof applies to PLATFORM only")
+
+
 def check_inventory(root=ROOT):
     found = {str(p.relative_to(root)) for d in ("coq", "tla", "smt")
              for p in (root / d).rglob("*") if p.suffix in {".v", ".tla", ".cfg", ".smt2"}}
     require(found == ARTIFACTS, f"Artifact inventory mismatch: {found ^ ARTIFACTS}")
     lock = json.loads((root / "source-lock.json").read_text())
     require(lock["schema"] == "aa-formal-source-lock/v1", "Unknown source-lock schema")
+    check_profile_scope(lock)
     require(set(lock["sources"]) == SOURCE_FILES, "Source roster changed; explicit review required")
     for name, expected in lock["sources"].items():
         actual = hashlib.sha256((root.parent / name).read_bytes()).hexdigest()
@@ -333,7 +358,8 @@ def main():
     logs.mkdir(parents=True, exist_ok=True)
     # Invalidate a previous success before any current gate runs.
     report = {"modelChecksPassed": False, "implementationVerified": False,
-              "boundary": "Hand-written abstractions; no VM/source/NEF refinement or liveness proof"}
+              "boundary": "Hand-written abstractions; no VM/source/NEF refinement or liveness proof",
+              "runtimeProfiles": RUNTIME_PROFILES, "modelProfiles": MODEL_PROFILES}
     report_path = logs / "result.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     try:

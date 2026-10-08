@@ -5,6 +5,7 @@ are dictionaries. The committed deployed core is parsed from disk as the negativ
 bytecode detector, so the parser is exercised against real compiler output as well.
 """
 import copy
+import base64
 import hashlib
 import importlib.util
 import json
@@ -65,6 +66,47 @@ def nef_with_declared_script_length(declared, body):
     out += b"\x00" + b"\x00" + b"\x00\x00" + varint(declared) + body
     out += hashlib.sha256(hashlib.sha256(bytes(out)).digest()).digest()[:4]
     return bytes(out)
+
+
+def proxy_relay_proof():
+    """Independent minimal successful chain observations for mutation gates."""
+    proof = {name: "0x" + char * 40 for name, char in (("core", "1"), ("accountId", "2"), ("proxy", "3"),
+             ("buyer", "4"), ("owner", "5"), ("relay", "6"), ("paymaster", "7"), ("sponsor", "8"))}
+    proof["amount"] = suite.GAS
+    proof["proxy"] = "0x" + suite.v.hash160(suite.proxy_script_for(proof["accountId"], proof["core"]))[::-1].hex()
+    initial = {"proxy": "1000000000", "buyer": "0", "owner": "999", "relay": "999", "nonce": "0", "deposit": "1000"}
+    proof["cases"] = [{"name": "invalidSignature", "before": initial, "after": dict(initial), "status": 200,
+                       "response": {"vmState": "FAULT"}, "execution": None, "transaction": None}]
+    proof["refusals"] = [{"name": name, "before": dict(initial), "after": dict(initial), "status": 502,
+                           "response": {"rawMessage": marker}, "execution": None} for name, marker in (
+                             ("missingReserve", "AA_RELAY_PROXY_NETWORK_FEE_RESERVE"),
+                             ("insufficientReserve", "InsufficientFunds"),
+                             ("networkFeeCeiling", "AA_RELAY_MAX_NETWORK_FEE"))]
+    previous = initial
+    for name in ("direct",):
+        after = dict(previous, proxy=str(int(previous["proxy"]) - proof["amount"]), buyer=str(int(previous["buyer"]) + proof["amount"]),
+                     nonce=str(int(previous["nonce"]) + 1))
+        if name == "direct":
+            after["relay"] = str(int(previous["relay"]) - 120)
+        else:
+            after["deposit"] = str(int(previous["deposit"]) - 120)
+        txid = "0x" + ("ab" if name == "direct" else "cd") * 32
+        method = "executeUserOp" if name == "direct" else "executeSponsoredUserOp"
+        tail = b"\x0c\x14" + suite.v.hash_le(proof["accountId"]) + bytes([0x12 if name == "direct" else 0x15, 0xC0, 0x1F, 0x0C, len(method)]) + method.encode() + b"\x0c\x14" + suite.v.hash_le(proof["core"]) + bytes.fromhex("41627d5b52")
+        tx = {"hash": txid, "sysfee": "100", "netfee": "20", "script": base64.b64encode(tail).decode(),
+              "signers": [{"account": proof["relay"], "scopes": "CalledByEntry"}, {"account": proof["proxy"], "scopes": "WitnessRules", "rules": suite.v.aa_proxy_rules(proof["core"], suite.GAS_HASH)}],
+              "witnesses": [{}, {"invocation": "", "verification": base64.b64encode(suite.proxy_script_for(proof["accountId"], proof["core"])).decode()}]}
+        events = []
+        if name == "sponsored":
+            fields = [{"type": "ByteString", "value": base64.b64encode(suite.v.hash_le(proof[who])).decode()} for who in ("sponsor", "accountId", "relay")]
+            events = [{"contract": proof["paymaster"], "eventname": "Reimbursed", "state": {"type": "Array", "value": fields + [{"type": "Integer", "value": "120"}]}}]
+        proof["cases"].append({"name": name, "before": dict(previous), "after": after, "status": 200,
+                               "response": {"txid": txid, "systemFee": "100", "networkFee": "20"},
+                               "transaction": tx, "execution": {"vmstate": "HALT", "notifications": events}})
+        previous = after
+    proof["cases"].append({"name": "sponsored", "before": dict(previous), "after": dict(previous), "status": 502,
+                           "response": {"rawMessage": "Sponsored proxy transfers are not supported"}, "execution": None, "transaction": None})
+    return proof
 
 
 class DetectorTest(unittest.TestCase):
@@ -144,6 +186,9 @@ class SourceReceiptGateTest(unittest.TestCase):
         for outcome, key in (("HALT", "executedTransactions"), ("FAULT", "simulatedFaults"),
                              ("REJECTED", "nodeRefusals")):
             receipt["records"].extend({"outcome": outcome} for _ in range(wanted["totals"][key]))
+        if profile == source_build.PROFILE_SYSCALL_ABSENT:
+            receipt["sourceProxyRelay"] = proxy_relay_proof()
+            receipt["contracts"] = {"UnifiedSmartWalletV3": receipt["sourceProxyRelay"]["core"]}
         return receipt
 
     def test_both_profiles_are_declared(self):
@@ -201,6 +246,41 @@ class SourceReceiptGateTest(unittest.TestCase):
             with self.subTest(outcome=outcome):
                 receipt = self.receipt(present)
                 receipt["records"].append({"outcome": outcome})
+                self.assertTrue(suite.validate_source_receipt(receipt, self.expected))
+
+
+    def test_proxy_relay_causal_readback_mutations_fail_closed(self):
+        mutations = [
+            lambda p: p.pop("cases"),
+            lambda p: p.update(proxy="0x" + "9" * 40),
+            lambda p: p.pop("refusals"),
+            lambda p: p["refusals"][1]["after"].update(nonce="1"),
+            lambda p: p["refusals"][2]["response"].update(txid="unexpected"),
+            lambda p: p["refusals"][0]["response"].update(rawMessage="unrelated error"),
+            lambda p: p["cases"].reverse(),
+            lambda p: p["cases"][0]["response"].update(txid="unexpected"),
+            lambda p: p["cases"][0]["after"].update(nonce="1"),
+            lambda p: p["cases"][1]["after"].update(buyer="0"),
+            lambda p: p["cases"][1]["after"].update(proxy="1000"),
+            lambda p: p["cases"][1]["after"].update(owner="0"),
+            lambda p: p["cases"][1]["after"].update(nonce="0"),
+            lambda p: p["cases"][1]["transaction"]["signers"][0].update(account=p["proxy"]),
+            lambda p: p["cases"][1]["transaction"]["signers"][1].update(scopes="Global"),
+            lambda p: p["cases"][1]["transaction"].update(script="AA=="),
+            lambda p: p["cases"][1]["transaction"].update(script=base64.b64encode(b"\x40" + base64.b64decode(p["cases"][1]["transaction"]["script"])).decode()),
+            lambda p: p["cases"][1]["transaction"]["witnesses"][1].update(verification="AA=="),
+            lambda p: p["cases"][1]["transaction"].update(netfee="21"),
+            lambda p: p["cases"][2]["after"].update(deposit="0"),
+            lambda p: p["cases"][2]["response"].update(txid="unexpected"),
+            lambda p: p["cases"][2]["response"].update(rawMessage="unrelated error"),
+            lambda p: p["cases"][2].update(status=200),
+            lambda p: p["cases"][2]["after"].update(proxy="0"),
+        ]
+        self.assertEqual([], suite._source_proxy_relay_failures(proxy_relay_proof()))
+        for index, mutate in enumerate(mutations):
+            with self.subTest(mutation=index):
+                receipt = self.receipt(source_build.PROFILE_SYSCALL_ABSENT)
+                mutate(receipt["sourceProxyRelay"])
                 self.assertTrue(suite.validate_source_receipt(receipt, self.expected))
 
 

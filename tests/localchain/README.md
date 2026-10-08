@@ -132,8 +132,9 @@ receipt whose profile, call sites or outcome counts disagree with the artifact.
 `SRC-03` covers the proxy-witness path with no verifier: it never reaches the
 gas-bounded syscall and must keep working in both profiles, which is what makes
 the DEC-AA-1 fault specific to the verifier callbacks. Expect approximately one
-minute, 18 successful checks, 26 executed transactions, 2 simulated faults and
-1 node refusal while the fault is present.
+minute, 19 successful checks, 26 executed transactions, 2 simulated faults and
+1 node refusal while the fault is present. The public profile additionally runs
+SRC-09: 19 checks, 34 executed transactions and 4 node refusals in total.
 
 The compiled core can carry a third `SYSCALL` with the same interop token in
 unreachable tail position; the repository's own `CompiledCoreSyscallTests` pins
@@ -175,3 +176,22 @@ replay is the acceptance evidence. Hosted Linux execution and the
 checkout/setup/upload actions are not verified by local replay. The jobs use no
 sibling repositories. This is test-only; rollback removes the localchain scripts,
 tests and workflow without changing any contract, SDK or frontend.
+
+## Current-source relay proxy acceptance
+
+`SRC-09` runs the real frontend relay route against the disposable source chain.
+It enables proxy support only in that subprocess, using the chain's throwaway
+relay key. The test explicitly sets the account's GAS scope and a bounded custom
+witness fee reserve; published Neo RPC does not price non-standard nonempty
+verification scripts completely. Missing or insufficient reserves and exceeded
+network ceilings must leave every observed balance, deposit and nonce unchanged.
+
+The direct relay transaction must move exactly 1 GAS from proxy to buyer, advance
+the account nonce once, charge only the relay, and carry the canonical proxy
+script and exact restricted signer rules. Sponsored proxy transfers are disabled:
+the route refuses single/batch envelopes, and the node refuses even the correctly
+shaped sponsored witness envelope, as well as wrong-account and wrong-scope
+variants. A source receipt stores raw transaction, witness, balance and nonce
+readback under `sourceProxyRelay`; `test_source_gate.py` mutates that evidence to
+ensure a txid or green assertion by itself cannot pass acceptance. See
+`docs/AA-PROXY-TRANSFERS.md` for the settlement authority boundary.

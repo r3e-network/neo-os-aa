@@ -33,7 +33,12 @@ test("mainnet candidate removes the instant admin transfer surface", () => {
   const artifact = script.candidateArtifact();
   assert.equal(script.REMOVED_METHODS.includes("transferAdmin"), true);
   assert.equal(artifact.methodCount > 0, true);
-  assert.equal(artifact.methodCount, 89);
+  assert.equal(artifact.methodCount, 90);
+  const manifest = JSON.parse(artifact.manifestText);
+  const childConfiguration = manifest.abi.methods.find((method) => method.name === 'callVerifierChild');
+  assert.equal(childConfiguration.safe, false);
+  assert.deepEqual(childConfiguration.parameters.map((parameter) => parameter.type),
+    ['Hash160', 'Hash160', 'String', 'Array']);
 });
 
 test("mainnet candidate contains the governed upgrade surface", () => {

@@ -13,6 +13,26 @@ import verify
 
 
 class VerificationGateTests(unittest.TestCase):
+    def test_budget_model_is_platform_only(self):
+        profiles = verify.MODEL_PROFILES
+        self.assertEqual(["platform"], profiles["coq/VerifierGasBudget.v"])
+        self.assertEqual(verify.ARTIFACTS, set(profiles))
+        self.assertFalse(verify.RUNTIME_PROFILES["v3"]["verifierChildBudgetEnforced"])
+        self.assertTrue(verify.RUNTIME_PROFILES["platform"]["verifierChildBudgetEnforced"])
+
+    def test_source_lock_may_not_claim_public_child_budget(self):
+        lock = json.loads((verify.ROOT / "source-lock.json").read_text())
+        verify.check_profile_scope(lock)
+        lock["modelProfiles"]["coq/VerifierGasBudget.v"].append("v3")
+        with self.assertRaisesRegex(ValueError, "Model profile scope"):
+            verify.check_profile_scope(lock)
+
+    def test_source_lock_may_not_change_runtime_capability(self):
+        lock = json.loads((verify.ROOT / "source-lock.json").read_text())
+        lock["runtimeProfiles"]["v3"]["verifierChildBudgetEnforced"] = True
+        with self.assertRaisesRegex(ValueError, "Runtime profile scope"):
+            verify.check_profile_scope(lock)
+
     def tlc_output(self):
         return "\n".join([
             "Progress(2): 10 states generated, 3 distinct states found, 1 states left on queue.",

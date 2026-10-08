@@ -10,7 +10,7 @@ builder gets the same NEF and manifest bytes.
 | --- | --- | --- |
 | `Neo.SmartContract.Framework`, `Neo.SmartContract.Testing` | 3.10.1 | `Directory.Build.props` (`NeoSmartContractFrameworkVersion`) |
 | the Neo packages they pull in | `Neo`, `Neo.Extensions`, `Neo.IO`, `Neo.Json`, `Neo.VM`, `Neo.Disassembler.CSharp` 3.10.1; `Neo.Cryptography.BLS12_381` 3.9.0 | `contracts/neo-platform-packages.json` (SHA-512 of each package) |
-| every other package (MSTest, Akka, ...) | resolved version and content hash | `packages.lock.json` beside each of the 25 projects (`packages.<Project>.lock.json` where a directory holds several projects) |
+| every other package (MSTest, Akka, ...) | resolved version and content hash | `packages.lock.json` beside each of the 26 projects (`packages.<Project>.lock.json` where a directory holds several projects) |
 | package source | nuget.org only, every package id mapped to it | `nuget.config` |
 | compiler | `Neo.Compiler.CSharp` 3.9.1 (`nccs`) | `.github/workflows/ci.yml`; the installed package is checked against `contracts/neo-platform-packages.json` |
 | SDK | .NET 10 (`net10.0`) | `actions/setup-dotnet` in `ci.yml` |
@@ -47,9 +47,12 @@ MSBuild `DefineConstants`, so the script prepends `#define PLATFORM` to a tempor
 source and removes the copy afterwards. The private core retains both 10 GAS bounded callbacks and
 requires the private core syscall at runtime; do not deploy that artifact on public networks.
 
-The public profile does not bound verifier gas. The registry allowlist and relayer controls in
-DEC-AA-2 are separate work (CU-65); this build change does not establish those controls or authorize
-a deployment. `contracts/build` remains the historical deployed-artifact fixture.
+The public profile does not bound verifier gas. Lifecycle ABI admission is not a verifier trust or
+resource policy. Public relays must apply their own reviewed module policy, simulation and finite
+transaction-fee limits before sponsorship; these controls do not establish a protocol-level child
+budget. Unrestricted sponsored admission remains unsafe. `contracts/build` remains the historical
+deployed-artifact fixture. Public deploy/upgrade helpers select `contracts/bin/v3` and reject paths
+escaping that directory; `contracts/bin/platform` is never a public release source.
 
 ### Two-build comparison
 
@@ -61,11 +64,19 @@ done
 diff "$A.sha256" "$B/deeper.sha256" && echo reproduced
 ```
 
-`node scripts/check-artifact-reproducibility.mjs` does the same against a scratch copy. The NEF carries no
+`node scripts/check-artifact-reproducibility.mjs` replays the canonical `contracts/compile.sh` in a
+scratch copy and compares **both** `contracts/bin/v3` and `contracts/bin/platform`, with separate
+profile verdicts. A missing core, empty directory, extra artifact or byte drift in either profile
+fails the gate. It does not infer runtime compatibility from reproducibility alone.
+The 2026-10-08 replay matched **80/80** files: **78** under `bin/v3` and **2** under
+`bin/platform`, with no drift or missing artifacts. Exact digests and the profile verdicts
+are in [`aa-profile-reproducibility-20261008.json`](reports/aa-profile-reproducibility-20261008.json).
+The NEF carries no
 source path or URL, and the compiler string in its header is `Neo.Compiler.CSharp 3.9.1+5fa9566e...`, so the
 bytes depend only on the sources, the pinned packages and the pinned compiler.
 
-Reference digests of the AA core (SHA-256; they change whenever a contract source or a pin changes):
+Historical reference digests before the 2026-10-08 consolidation (SHA-256; these are not pins for the
+current source, and a fresh reproduction report is required after every contract or pin change):
 
 | Profile / artifact | SHA-256 |
 | --- | --- |
@@ -88,7 +99,7 @@ characters, each with an empty NuGet cache, produced identical bytes and no warn
   Deployed-versus-source evidence for the AA core is a separate task.
 - The historical 2026-10-04 core emitted `SYSCALL System.Contract.CallWithGasLimit`. Only the private
   PLATFORM profile now emits it; the public profile's four callback tests run without a skip guard.
-- 3.10.1 is the newest published framework. 3.10.0 gives the same bytes. 3.9.1 and older bind
+- 3.10.1 is the pinned published framework. The historical comparison found that 3.10.0 gives the same bytes. 3.9.1 and older bind
   `ContractManagement.Update` to the two-argument native overload instead of the three-argument one (a
   different method token and one byte less code), so every later method offset shifts and the build differs.
 

@@ -35,7 +35,7 @@ Runs the full local validation gate:
 - contracts: build + nccs compile + solution tests + deployment-tool tests + format verify
   (+ formal model checks with --formal, + private-chain validation with --neoexpress)
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
-- sdk: unit tests + declaration types check + production dependency audit
+- sdk: unit tests + declaration types check + installed-package smoke test + production dependency audit
 EOF
 }
 
@@ -138,6 +138,7 @@ if [[ $run_frontend -eq 1 ]]; then
   npm run build
   if [[ $skip_e2e -eq 0 ]]; then
     npm run test:e2e:browser:built
+    npm run test:operator-recovery:browser
   fi
   cd ..
 fi
@@ -148,6 +149,7 @@ if [[ $run_sdk -eq 1 ]]; then
   cd sdk/js
   npm test
   npm run types:check
+  npm run test:package
   npm run audit:prod
   cd ../..
 fi

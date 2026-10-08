@@ -189,7 +189,7 @@ rejects an unlisted target before dispatch, and rolls back the nonce on rejectio
 
 ### 5.2 Should-Hold Invariants
 
-1. **Gas Limits on Verifiers:** *(PRIVATE INTEGRATION VERIFIED; PUBLIC ACTIVATION PENDING)* The matching Neo core/DevPack runtime enforces a 10 GAS child budget for each verifier callback, including ordinary nested descendants and fee-whitelisted execution.
+1. **Gas Limits on Verifiers:** *(PROFILE DEPENDENT)* The private `PLATFORM` core uses a 10 GAS child budget for each verifier callback on the matching runtime. Public `v3` uses standard `System.Contract.Call` and has no child budget; lifecycle admission, simulation and transaction fee ceilings do not establish one. Historical private runtime evidence requires revalidation after source/runtime changes.
 2. **Plugin State Cleanup:** *(PARTIAL)* Current settlement clears known plugin markers and rejects modules whose manifest omits the V3 lifecycle ABI; semantic cleanup/refinement coverage for arbitrary future plugins is pending.
    Every verifier and hook must implement `clearAccount`: the core calls it without a fallback from
    `confirmVerifierUpdate`, `confirmHookUpdate`, `finalizeEscape` and `settleMarketEscrow`, and a
@@ -219,7 +219,7 @@ rejects an unlisted target before dispatch, and rolls back the nonce on rejectio
 
 | ID | Severity | Component | Description | Status |
 | --- | --- | --- | --- |
-| **VULN-001** | Critical | **Verifier Gas DoS** | Untrusted verifier callbacks are bounded by `System.Contract.CallWithGasLimit` in the current AA artifact | Mitigated for the matching private-chain artifact; public activation/deployment pending |
+| **VULN-001** | Critical | **Verifier Gas DoS** | Public `v3` permits lifecycle-compatible verifier callbacks through standard `Contract.Call` without a child budget | Open for public arbitrary-verifier sponsorship; historical private `PLATFORM` evidence only |
 | **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Mitigated in source; refinement/deployment unverified |
 | **VULN-003** | Medium | **Session Key Ordering** | A signed operation can execute before a later revocation transaction is ordered | Defined execution-order semantics; residual pre-inclusion operational risk |
 | **VULN-004** | Medium | **MultiSig Empty Array** | Empty, oversized, invalid-threshold, duplicate, self-referential and incomplete-child configurations | Bounded Coq policy + 11 real Neo VM vectors + child manifest preflight; key independence, cycles, crypto/VM/refinement boundary remains open |
@@ -239,7 +239,19 @@ burning verifier to `Contract call gas limit exceeded` with nonce rollback and
 `docs/reports/aa-platform-gas-cap-20260921.json` and
 `docs/reports/aa-neoexpress-gas-cap-20260921.json`. VULN-001 is mitigated for
 this private integrated artifact; public activation and deployment remain
-pending.
+pending. These dated receipts describe the private artifact tested then, not the
+current public `contracts/bin/v3` build. The source lock explicitly scopes
+`VerifierGasBudget.v` to `PLATFORM`; a passing formal run does not close public VULN-001.
+
+**Public admission policy:** the on-chain lifecycle ABI preflight is a compatibility
+check and does not certify a module's trustworthiness, resource use, upgrade policy or
+nested dependencies. Permissionless account configuration does not oblige a relay to
+sponsor that configuration. A public sponsor must bound its transaction exposure and
+admit only reviewed verifier/hook configurations, including mutable child modules and
+upgrade authority; it must re-check the configuration and simulation before signing.
+An absent reviewed admission policy means arbitrary-module sponsorship is not ready for
+production. These operational controls reduce sponsor exposure without claiming the
+non-bypassable callback budget that only the private runtime supplies.
 
 **Witness/callback evidence boundary:** the runtime suite now covers bounded proxy-script shape
 vectors (wrong account, arbitrary/non-data instructions, decoy/global signer, and fee-payer
@@ -413,6 +425,13 @@ stateDiagram-v2
 | **Audit Trail** | All escape events emitted |
 | **No Bypass** | *(PARTIAL)* Market escrow can clear escape |
 
+Finalization validates a nonzero replacement verifier against the same V3 lifecycle ABI
+as normal verifier rotation before cleanup or state writes. It still calls the old
+verifier and hook's `clearAccount` and fails atomically if either module faults or aborts.
+The timelock therefore authorizes recovery but does not guarantee recovery liveness
+against an unavailable or malicious old plugin. Emergency detach would need an explicit
+authority-revocation and plugin-state design; it is not implemented by these changes.
+
 ---
 
 ## 10. Compliance & Privacy
@@ -435,7 +454,7 @@ stateDiagram-v2
 | **Sanctions Screening** | Via `WhitelistHook` |
 | **Transaction Monitoring** | Via relay server logs |
 | **Recovery Standard** | L1 timelock escape hatch |
-| **User Sovereignty** | Backup owner control guaranteed |
+| **User Sovereignty** | Backup owner authorizes delayed recovery; successful plugin cleanup remains required |
 
 ---
 

@@ -1,4 +1,4 @@
-# NeoOS AA — Neo N3 Abstract Account (ERC-4337 equivalent)
+# NeoOS AA — Neo N3 Smart Accounts
 
 `neo-os-aa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Abstract Accounts on Neo N3.
 
@@ -6,6 +6,8 @@ Current status note:
 
 - The current `main` branch runs `UnifiedSmartWalletV3`.
 - V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
+- The public `v3` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount development is a separate, unactivated protocol profile.
+- [System capability boundaries](docs/AA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
 - The canonical mainnet AA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `morpheus-aa.miniapp.neo` plus `morpheus-aa-alias.miniapp.neo`.
 - The canonical shared testnet AA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
@@ -28,7 +30,7 @@ Proposed v2 binding: in `neo-os-web/docs/workspace/neoos-target-architecture.v2.
 - **Deterministic V3 Accounts**: Each account is keyed by a 20-byte `accountId` and derives a stable Neo virtual address without deploying per-user wallet logic.
 - **Verifier Plugin Authorization**: Bind Web3Auth, TEE, WebAuthn, session keys, multisig, or other verifier plugins per account.
 - **Hook Plugin Policy Enforcement**: Attach optional hook plugins for daily limits, token restrictions, credential gates, and post-execution controls.
-- **Backup-Owner Escape Hatch**: Every account can define a native Neo backup owner plus timelocked verifier rotation.
+- **Backup-Owner Recovery**: Every account can define a native Neo backup owner plus timelocked verifier rotation. Finalization currently requires successful cleanup by the old plugins; see [recovery boundaries](docs/ACCOUNT_RECOVERY_AND_IDENTITY.md).
 - **Trustless AA Address Escrow Market**: Deterministic AA addresses can be listed, escrow-locked, purchased with GAS, and transferred atomically on-chain.
 - **Cross-Chain EVM Compatibility**: V3 supports secp256k1 / Keccak256 EIP-712 `UserOperation` signatures through the Web3Auth verifier path.
 - **On-Chain Paymaster (Sponsored Transactions)**: The `AAPaymaster` contract enables trustless gasless execution — sponsors deposit GAS, create per-account or global sponsorship policies, and relays are reimbursed automatically after successful `UserOp` execution. Supports per-op limits, daily budgets, total budgets, target/method restrictions, and expiry timestamps.
@@ -50,6 +52,8 @@ If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `A
 For local setup, start from `frontend/.env.example` and copy the values you need into `frontend/.env.local` or your hosting provider's environment-variable dashboard.
 
 For on-chain sponsored transactions via the `AAPaymaster` contract, set `VITE_AA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the AA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `createSponsoredUserOpPayload` and `validatePaymasterOp` methods.
+
+Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/AA-PROXY-TRANSFERS.md).
 
 If you want relay submission to request Morpheus off-chain sponsorship before broadcasting, also configure the server-side paymaster bridge:
 
@@ -176,14 +180,15 @@ If you want the clearest end-to-end explanation, read these docs in order:
 
 ### Prerequisites
 - `.NET SDK 10`
-- `Node.js 22+`
+- `Node.js 22.12+`
 - the Neo compiler, pinned: `dotnet tool install -g neo.compiler.csharp --version 3.9.1`
 - access to nuget.org. Every package the contracts and tests restore is published there and pinned
   by `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
   `node scripts/check_neo_platform_packages.mjs` checks the pins and
-  `docs/AA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. The AA core calls a
-  syscall that no published Neo core registers, so four runtime tests are skipped on the published
-  packages (`docs/NEO-PLATFORM-PACKAGES.md`).
+  `docs/AA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. Public `v3`
+  verifier callbacks execute on the published TestEngine. Only the separate `PLATFORM` artifact
+  requires the private `System.Contract.CallWithGasLimit` extension; its budget guarantees must
+  not be attributed to the public build (`docs/NEO-PLATFORM-PACKAGES.md`).
 
 ### Install
 

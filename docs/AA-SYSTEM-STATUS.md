@@ -1,0 +1,58 @@
+# Smart account capability boundaries
+
+This is a source-level integration guide. A configured address, a successful build,
+or a historical deployment receipt does not show that a public contract contains
+the current implementation. Validate the exact NEF, manifest, network and core
+binding before enabling a capability for users.
+
+## Runtime profiles
+
+| Profile | Implementation boundary | Deployment requirement |
+| --- | --- | --- |
+| Public `v3` | Standard `System.Contract.Call`; account nonce, verifier, hooks and execution in one transaction | Published Neo runtime; current core and matching plugin artifacts |
+| Private `PLATFORM` | Adds bounded verifier child calls | Runtime with the matching private syscall; not deployable by choosing a public RPC URL |
+| Native SmartAccount | Separate protocol development and account identity | Corresponding Neo core implementation and hardfork activation; not part of public V3 activation |
+
+The public profile has no per-child verifier gas budget. Relays and sponsors must
+bound transaction fees and review the selected modules and their mutable child
+configuration. Private-profile proofs do not close this public-runtime limitation.
+
+## Account and operator workflows
+
+| Capability | Supported contract | Remaining boundary |
+| --- | --- | --- |
+| Account identity | Read account ID, derived proxy and verifier from the selected core; reject mismatches | Legacy reverse indexes may require an explicit account ID |
+| Shared drafts | Execute a staged, consistent signed invocation | Collaborator records and UI signature counts do not establish chain authorization |
+| MultiSig | Chain-ordered child proofs over the same operation, with child-specific signing domains | Threshold counts verifier modules; it does not prove independent humans or custody |
+| Session transfers | Exact NEP-17 arguments, proxy sender, nonnegative amount, Boolean success | A token's declared amount does not measure arbitrary additional balance loss |
+| Daily limits | Fixed-window accounting and actual net debit, including targets returning false or zero | Token `balanceOf` is a trust dependency; this is not a per-asset universal balance oracle |
+| Subscription transfers | Positive amount and successful NEP-17 outcome before consuming a period | Generic non-transfer targets retain their documented return semantics |
+| Direct proxy transfer | Derived witness, core scope readback and explicit bounded fee reserve | Relay mode and administrator-configured scope; ordinary wallet invoke APIs cannot add this witness |
+| Sponsored execution | Existing policy-checked paymaster execution for supported operations | Sponsored proxy witnesses are refused; arbitrary settlement must not inherit proxy asset authority |
+| Operator key recovery | Durable browser key storage and passphrase-encrypted backup | Import requires the draft's already-pinned public key; a link alone cannot replace it |
+| Backup-owner escape | Timelock, owner witness, replacement ABI validation and atomic cleanup | A faulting old plugin can block finalization; authority-epoch recovery remains a proposal |
+
+## Plugin names are not full product guarantees
+
+- `WebAuthnVerifier` verifies its documented P-256 proof format. It is not by
+  itself a complete WebAuthn ceremony with origin, RP ID and authenticator-data
+  validation.
+- `TEEVerifier` trusts its registered signing key. A valid signature alone does
+  not establish a particular enclave's attestation.
+- `ZKEmailVerifier` is disabled; do not offer it as a working account option.
+- `ZkLoginVerifier` uses its documented delegated signing path; do not describe
+  it as a locally verified general-purpose zero-knowledge login proof.
+- Social recovery's plugin owner and the core backup owner are separate state.
+  Updating one is not evidence that the other changed.
+
+## Validation and release
+
+Run `scripts/verify_repo.sh` for contracts, frontend, browser, SDK consumers and
+dependency audits. Run the formal and private-chain gates with their required
+tools, and inspect their recorded scope and skipped checks. The build comparison
+must cover both `contracts/bin/v3` and `contracts/bin/platform`.
+
+Before a public rollout, compare every deployed artifact and authorization binding
+with the reviewed source; exercise account creation, configuration, transfer,
+failure rollback, recovery and fee settlement on the intended runtime. User wallet
+signing and public-chain deployment are separate operational steps.
