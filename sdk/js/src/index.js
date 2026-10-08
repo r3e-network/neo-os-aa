@@ -36,7 +36,6 @@ const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({
  * @throws {Error} If address is invalid
  * @private
  */
-
 function normalizeAddress(addressHex) {
   if (!addressHex) {
     throw createError(EC.VALIDATION_ADDRESS_INVALID);
@@ -1433,16 +1432,7 @@ class AbstractAccountClient {
       operation: 'executeSponsoredUserOps',
       args: [
         sc.ContractParam.hash160(resolvedAccountHash),
-        sc.ContractParam.array(...userOps.map(op => sc.ContractParam.array(
-          sc.ContractParam.hash160(normalizeAddress(op.TargetContract)),
-          sc.ContractParam.string(op.Method),
-          userOpArgsParameter(op.Args),
-          sc.ContractParam.integer(op.Nonce),
-          sc.ContractParam.integer(op.Deadline),
-          sc.ContractParam.byteArray(
-            u.HexString.fromHex(sanitizeHex(op.Signature || ''), true)
-          ),
-        ))),
+        { type: 'Array', value: opsArray },
         sc.ContractParam.hash160(normalizeAddress(paymasterHash)),
         sc.ContractParam.hash160(normalizeAddress(sponsorAddress)),
         sc.ContractParam.integer(reimbursementAmount),
