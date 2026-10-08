@@ -39,7 +39,7 @@
   * N3 上目前最杀手级的插件。
   * 直接接收以太坊标准的 EIP-712 Typed Data Hash 和 `v, r, s` 签名。
   * 内部使用 N3 底层的 `CryptoLib.VerifyWithECDsa`（针对 secp256k1 曲线）和自定义的 Keccak256，完美还原以太坊验签。使得 MetaMask 用户能无缝操控 N3 资产。
-* **TEE / AI Agent Verifier (隐私与自动化中心)**：
+* **TEE / 自动策略验证器 (隐私与自动化中心)**：
   * 绑定特定的硬件公钥。只要 `UserOperation` 带有 TEE 节点的签名，即认为通过（因为复杂的商业逻辑已经在 TEE 内完成了预审）。
 * **Session Key Verifier (高频交互利器)**：
   * 为短暂、高频的交互（如全链游戏、高频交易）提供临时授权密钥，支持细粒度的权限范围与过期时间设定。
@@ -76,9 +76,9 @@
 * **方案 B：“熊市囤币”定投金库（组合风控）**
   * **组合**：内置冷钱包降级方案 + DailyLimitHook + WhitelistHook (通过 MultiHook 组合)
   * **场景**：使用极致安全的硬件冷钱包作为控制权，同时限制每天只能转出少量资金，且只能与特定的定投或 DeFi 质押合约交互。
-* **方案 C：AI 托管量化基金（意图驱动）**
-  * **组合**：TEE / AI Agent Verifier + Max Drawdown Hook (或 NeoDIDCredentialHook / Custom Hook)
-  * **场景**：将资金委托给运行在 TEE 内的 AI 代理，AI 根据市场信号自动交易，但通过 Hook 严格限制最大回撤（Max Drawdown）或只能参与通过 KYC 的合规池。
+* **方案 C：自动策略量化基金（意图驱动）**
+  * **组合**：TEE / 自动策略验证器 + Max Drawdown Hook (或 NeoDIDCredentialHook / Custom Hook)
+  * **场景**：将资金委托给运行在 TEE 内的 自动策略，按市场信号自动交易，但通过 Hook 严格限制最大回撤（Max Drawdown）或只能参与通过 KYC 的合规池。
 * **方案 D：全链游戏/电竞战队打金号**
   * **组合**：Session Key Verifier + TokenRestrictedHook
   * **场景**：游戏公会为代练玩家颁发 Session Key，限制其只能在游戏内高频操作并只能转移游戏内产生的打金代币，无法触碰金库的主力资产。

@@ -39,7 +39,7 @@
   * N3 上目前最杀手级的插件。
   * 直接接收以太坊标准的 EIP-712 Typed Data Hash 和 `v, r, s` 签名。
   * 内部使用 N3 底层的 `CryptoLib.VerifyWithECDsa`（针对 secp256k1 曲线）和自定义的 Keccak256，完美还原以太坊验签。使得 MetaMask 用户能无缝操控 N3 资产。
-* **TEE / AI Agent Verifier (隐私与自动化中心)**：
+* **TEE / 自动策略验证器 (隐私与自动化中心)**：
   * 绑定特定的硬件公钥。只要 `UserOperation` 带有 TEE 节点的签名，即认为通过（因为复杂的商业逻辑已经在 TEE 内完成了预审）。
 * **Session Key Verifier (高频交互利器)**：
   * 为短暂、高频的交互（如全链游戏、高频交易）提供临时授权密钥，支持细粒度的权限范围与过期时间设定。
@@ -76,9 +76,9 @@
 * **方案 B：“熊市囤币”定投金库（组合风控）**
   * **组合**：内置冷钱包降级方案 + DailyLimitHook + WhitelistHook (通过 MultiHook 组合)
   * **场景**：使用极致安全的硬件冷钱包作为控制权，同时限制每天只能转出少量资金，且只能与特定的定投或 DeFi 质押合约交互。
-* **方案 C：AI 托管量化基金（意图驱动）**
-  * **组合**：TEE / AI Agent Verifier + Max Drawdown Hook (或 NeoDIDCredentialHook / Custom Hook)
-  * **场景**：将资金委托给运行在 TEE 内的 AI 代理，AI 根据市场信号自动交易，但通过 Hook 严格限制最大回撤（Max Drawdown）或只能参与通过 KYC 的合规池。
+* **方案 C：自动策略量化基金（意图驱动）**
+  * **组合**：TEE / 自动策略验证器 + Max Drawdown Hook (或 NeoDIDCredentialHook / Custom Hook)
+  * **场景**：将资金委托给运行在 TEE 内的 自动策略，按市场信号自动交易，但通过 Hook 严格限制最大回撤（Max Drawdown）或只能参与通过 KYC 的合规池。
 * **方案 D：全链游戏/电竞战队打金号**
   * **组合**：Session Key Verifier + TokenRestrictedHook
   * **场景**：游戏公会为代练玩家颁发 Session Key，限制其只能在游戏内高频操作并只能转移游戏内产生的打金代币，无法触碰金库的主力资产。
@@ -93,7 +93,7 @@
 1. **绑定备份 (Setup)**：用户在 TEE/Web3Auth 中设定一个物理冷钱包地址（N3 原生地址）作为 `BackupOwner`，并设定 30 天的 `Timelock`。
 2. **触发挂失 (Initiate)**：若 TEE/Web2 挂了，用户用冷钱包向网关发起 `InitiateEscape`，链上开始 30 天倒计时。
 3. **防盗拦截 (Cancel)**：进行中的逃生倒计时**不会**被日常活动静默自动取消——那种设计会让触发恶意挂失的攻击者无限期冻结倒计时。链上逻辑（`UnifiedSmartWallet.Execution.cs`）中，只有由 `BackupOwner` 本人授权的操作才能取消挂起的逃生（`Only backup owner can cancel escape`），确保用户始终握有控制权，攻击者的企图随倒计时终结而破灭。若冷钱包被盗、黑客触发挂失，用户会在手机 App 收到警报，并可用自己仍掌控的密钥，以一笔备份所有者授权的操作取消该挂起逃生。
-4. **主权接管 (Finalize)**：若逃生窗口期满且未发生备份所有者授权的取消，冷钱包直接获得最高权限，重置整个 AA 账户的 Verifier 插件，实现绝对的 L1 资产主权。
+4. **完成恢复 (Finalize)**：逃生窗口期满后，备份所有者可以更换符合 V3 接口的验证器，或将验证器设为零以启用备份所有者授权。恢复同时清理旧验证器与 hook 的账户配置，只有旧插件的 `clearAccount` 成功执行才能完成；不可用或故障插件仍可能阻止恢复。失败时原子回滚保留旧状态，不能据此宣称无条件的资产恢复保证。详见[恢复约束与活性限制](ACCOUNT_RECOVERY_AND_IDENTITY.md)。
 
 ---
 
