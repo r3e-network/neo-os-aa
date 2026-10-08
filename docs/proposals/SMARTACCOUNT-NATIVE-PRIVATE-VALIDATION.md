@@ -7,18 +7,40 @@ native-v2 module build receipt. Execution uses four arguments:
 `(accountId, operationOrBatch, expectedAuthorityEpoch, expectedConfigurationNonce)`.
 Both counters must match the 14-field account record; the former two-argument
 entrypoints reject. This commitment is part of the unsigned transaction, including
-custody fallback and native transaction-witness authorization. Fee preparation
-uses the RPC `minimumrequiredfee` and verifies the final signed transaction.
+custody fallback and native transaction-witness authorization. Automatic fee preparation
+requires the RPC `minimumrequiredfee`; an explicit SystemFee budget can be supplied
+when preparing against an older node. Final signed-transaction preflight still
+requires the complete native fee/admission result and verifies the identical bytes.
 
 Recovery tests must preserve actual signed bytes across transitions, reject
 stale counters in both Verification and Application, and verify that reinstalled
 modules cannot read previous `0xA2` account/authorityEpoch namespaces. New
 signatures/configuration supply positive controls. Receipts must distinguish
 mempool rejection, admitted FAULT and persisted HALT, and compare actual account,
-nonce, module storage and asset deltas. Prior counts and receipts below describe
-ABI 1 snapshots only; they do not establish current ABI 2 validation.
+nonce, module storage and asset deltas. Historical ABI 1 and intermediate ABI 2
+receipts below do not establish acceptance for changed final sources.
 
-The ABI 2 source runner was rebuilt twice from the final reviewed production
+The final 2026-10-09 composite-profile runtime pins core `ff422d940a4722c361c32398c6f28c00fb7f0693`,
+node `fa35e69af130661e2ac60bffd43eb6c6c78aa7d5` and profile digest
+`4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4`.
+Use [`aa-native-composite-final-runner-build-20261009.json`](../reports/aa-native-composite-final-runner-build-20261009.json)
+for its two complete source builds (314 core, 123 node and 182 Express inputs;
+104 identical runtime files and 50 dependency archives), and
+[`aa-native-composite-final-build-proof-20261009.json`](../reports/aa-native-composite-final-build-proof-20261009.json)
+for the module, public-artifact and model evidence. The current core head changes
+only two test files after that pin; its production source tree is identical.
+
+Final execution evidence is separate:
+[`aa-native-final-private-runtime-20261009.json`](../reports/aa-native-final-private-runtime-20261009.json)
+records the ten-suite private matrix, selected producer bytes and retention limits;
+[`aa-native-final-sdk-runtime-20261009.json`](../reports/aa-native-final-sdk-runtime-20261009.json)
+records the actual SDK-signed transaction matrix. The
+[convergence report](../reports/aa-native-convergence-20261009.md) indexes the final
+validation and remaining upstream activation boundaries.
+
+## Historical intermediate ABI 2 builds
+
+The earlier ABI 2 source runner was rebuilt twice from its then-reviewed production
 sources on 2026-10-08. All 104 runtime files, 50 dependency archives and generated
 lock maps matched. The source graph contains 313 core, 122 node and 182 Express
 inputs. Exact hashes are in
@@ -33,9 +55,11 @@ The 2026-10-09 RPC compatibility rebuild adds the capability reader to the sourc
 graph: 313 core, **123 node** and 182 Express inputs. Two independent builds again
 matched all 104 runtime files and 50 dependency archives. Native RPC output retains
 the exact `minimumrequiredfee`; a published core without that capability omits
-the field. The native SDK still requires it when preparing native transactions.
-Use [`aa-native-abi2-runner-build-20261009.json`](../reports/aa-native-abi2-runner-build-20261009.json)
-for this runtime and
+the field. Automatic SDK fee preparation requires that field; explicit SystemFee preparation
+is separate from the mandatory final signed-transaction preflight. This intermediate
+receipt predates the final composite/key-normalization implementation and is historical.
+See [`aa-native-abi2-runner-build-20261009.json`](../reports/aa-native-abi2-runner-build-20261009.json)
+for that intermediate runtime and
 [`aa-native-abi2-rpc-runtime-20261009.json`](../reports/aa-native-abi2-rpc-runtime-20261009.json)
 for its source/build and two-lane RPC test evidence. The earlier runner receipt
 remains the dated snapshot and must not be substituted for these changed sources.

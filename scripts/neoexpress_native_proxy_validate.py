@@ -217,7 +217,7 @@ class ProxyTransactions:
 def validate(runtime, dotnet, output):
     report = {"schema": "smartaccount-native-proxy-private/v1", "status": "RUNNING", "publicNetworksTouched": False,
               "scope": "Actual signed native proxy, GAS balances, persisted atomic rollback and witness admission controls; not full native conformance or a cryptographic proof.",
-              "runtimeMode": "Isolated local assembly overlay, not a reproducible NeoExpress distribution build.",
+              "runtimeMode": "Caller-supplied NeoExpress runtime; this runner does not establish build provenance. Verify the separate source-build receipt.",
               "transactions": [], "executions": [], "admissionRejections": [], "ownedNodesStopped": False,
               "sourceSha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest() for name in
                   ("neoexpress_native_proxy_validate.py", "neoexpress_native_service_validate.py", "neoexpress_activation_validate.py", "neoexpress_validate.py")}}

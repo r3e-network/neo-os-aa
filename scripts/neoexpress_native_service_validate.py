@@ -178,7 +178,7 @@ def rejected(chain, report, label, method, args, expected):
 def validate(runtime, dotnet, output):
     report = {"schema": "smartaccount-native-service-private/v1", "status": "RUNNING", "publicNetworksTouched": False,
               "scope": "Actual native activation, registration, fallback operations and recovery-address lifecycle; not full native conformance.",
-              "runtimeMode": "Isolated local assembly overlay; not a reproducible NeoExpress distribution build.",
+              "runtimeMode": "Caller-supplied NeoExpress runtime; this runner does not establish build provenance. Verify the separate source-build receipt.",
               "transactions": [], "preflightRejections": [], "ownedNodesStopped": False,
               "sourceSha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest() for name in
                                ("neoexpress_native_service_validate.py", "neoexpress_activation_validate.py", "neoexpress_validate.py")}}

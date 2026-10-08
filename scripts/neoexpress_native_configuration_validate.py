@@ -106,7 +106,7 @@ def send(chain, owner, report, label, method, args, *, fault=False, cancellation
 def validate(runtime, dotnet, output):
     report = {"schema": "smartaccount-native-configuration-private/v1", "status": "RUNNING", "publicNetworksTouched": False,
         "scope": "Persisted root destruction rollback and benign child configuration for verifier/hook roles; diagnostic plugins, not full conformance.",
-        "runtimeMode": "Isolated local assembly overlay, not a reproducible NeoExpress distribution build.",
+        "runtimeMode": "Caller-supplied NeoExpress runtime; this runner does not establish build provenance. Verify the separate source-build receipt.",
         "transactions": [], "executions": [], "scenarios": [], "ownedNodesStopped": False,
         "sourceSha256": {n: hashlib.sha256(Path(__file__).with_name(n).read_bytes()).hexdigest() for n in
             ("neoexpress_native_configuration_validate.py", "neoexpress_native_proxy_validate.py", "neoexpress_native_service_validate.py", "neoexpress_activation_validate.py", "neoexpress_validate.py")}}
