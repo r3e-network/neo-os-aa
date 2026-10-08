@@ -47,11 +47,18 @@ because the application currently exposes an identity login flow.
 The native workspace has no direct import of the Web3Auth modal runtime.
 `didService` imports it only when initializing the identity client; identity
 reconnection is another possible trigger in views using `useDidConnection`.
-However, a fresh Chromium visit to the production `/native` route still loads
-the shared `identity-runtime` chunk containing Elliptic. Dynamic import at the
-service boundary does not establish that all of its cryptographic dependencies
-are absent from other routes. Loading that code does not by itself demonstrate
-a vulnerable signing call. Native wallet operations are handed to the external wallet. The native Node SDK
+Before the chunk-boundary fix, a fresh production `/native` visit still loaded
+a 3.17 MB shared identity chunk containing Elliptic: manual grouping had pulled
+Ethers and Vite's preload helper into that deferred chunk. The build now keeps
+manual groups explicit and lets the identity dependency tree retain automatic
+chunk boundaries. Chromium verifies that ordinary routes, including `/native`
+when registered, do not request any chunk containing Elliptic until identity
+initialization. It also imports and constructs the actual bundled Web3Auth
+provider, so keeping it deferred cannot silently remove the feature. Measured
+native-route JavaScript decreased from 3,817,540 to 663,165 uncompressed bytes
+(about 83%). This is a loading boundary, not a fix for the remaining advisory.
+The deferred provider still produces a build size warning above the unchanged
+3.5 MB budget; the warning is not suppressed. Native wallet operations are handed to the external wallet. The native Node SDK
 accepts caller-provided transaction signers and verifies their P-256 signatures
 with Node crypto. This separation does not remove the frontend dependency risk.
 
@@ -86,6 +93,7 @@ node --test tests/frontendAuditPolicy.test.js tests/frontendAuditBaseline.test.j
 npm run audit:prod
 npm run audit:all
 npm run test:docs-security:browser
+npm run test:bundle:browser
 ```
 
 The repository frontend verification command also includes this browser security

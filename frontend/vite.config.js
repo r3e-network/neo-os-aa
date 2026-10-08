@@ -4,12 +4,6 @@ import { nodePolyfills } from "vite-plugin-node-polyfills";
 import { fileURLToPath, URL } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const deferredIdentityChunks = [
-  "identity-runtime",
-  "identity-analytics-runtime",
-  "walletconnect-runtime",
-  "react-runtime",
-];
 
 export default defineConfig({
   plugins: [
@@ -41,19 +35,9 @@ export default defineConfig({
     },
   },
   build: {
-    // The Web3Auth identity runtime is intentionally deferred and excluded from
-    // module preloads, so its chunk budget should not use the default eager-app threshold.
+    // The identity provider loads on demand; retain a visible warning if that
+    // deferred bundle grows beyond its existing size budget.
     chunkSizeWarningLimit: 3500,
-    modulePreload: {
-      resolveDependencies(_filename, deps) {
-        return deps.filter(
-          (dep) =>
-            !deferredIdentityChunks.some((chunkName) =>
-              dep.includes(chunkName),
-            ),
-        );
-      },
-    },
     rollupOptions: {
       onwarn(warning, defaultHandler) {
         if (
@@ -67,42 +51,27 @@ export default defineConfig({
         defaultHandler(warning);
       },
       output: {
+        // Keep shared dependencies and Vite's preload helper out of deferred
+        // identity chunks; otherwise ordinary routes eagerly import that tree.
+        onlyExplicitManualChunks: true,
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
           // vue core
-          if (id.includes("vue-router") || id.includes("/vue/"))
+          if (
+            id.includes("vue-router") ||
+            id.includes("/vue/") ||
+            id.includes("/@vue/")
+          )
             return "vue-vendor";
-          // supabase
-          if (id.includes("@supabase")) return "supabase";
           if (id.includes("highlight.js") || id.includes("@highlightjs"))
             return "highlight";
           if (id.includes("katex")) return "katex";
           if (id.includes("vue-toastification")) return "toast";
           if (id.includes("jose")) return "jose";
-          // Web3Auth pulls a large React/WalletConnect/Torus support tree that is
-          // only needed when the DID workspace opens the identity runtime.
-          if (
-            id.includes("react-i18next") ||
-            id.includes("i18next") ||
-            id.includes("/react/") ||
-            id.includes("/react-dom/") ||
-            id.includes("scheduler") ||
-            id.includes("@hcaptcha/react-hcaptcha")
-          )
-            return "react-runtime";
-          if (
-            id.includes("@walletconnect") ||
-            id.includes("xrpl") ||
-            id.includes("ripple-keypairs")
-          )
-            return "walletconnect-runtime";
-          if (id.includes("@segment")) return "identity-analytics-runtime";
-          if (id.includes("@metamask") || id.includes("@toruslabs"))
-            return "identity-runtime";
-          // NOTE: ethers, @web3auth, buffer, @noble, @scure are NOT split
-          // into manual chunks. ethers v6 has circular internal deps that
-          // cause TDZ errors ("Cannot access before initialization") when
-          // Rollup isolates them. Let Rollup handle the split naturally.
+          // Keep the identity provider and its shared dependencies automatic.
+          // Forcing Torus, React or analytics into separate chunks creates
+          // initialization cycles or pulls the provider into ordinary routes.
+          // Ethers also has internal cycles and must remain automatic.
         },
       },
     },
