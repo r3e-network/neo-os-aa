@@ -35,7 +35,7 @@ const STALE_LOCK_RESTORE = `
 const FORGED_LOCK_RESTORE = `
   Determining projects to restore...
 /w/contracts/UnifiedSmartWallet.csproj : error NU1403: Package content hash validation failed for Neo.SmartContract.Framework.3.10.1. The package is different than the last restore.
-/w/contracts/UnifiedSmartWallet.csproj : error NU1403: 
+/w/contracts/UnifiedSmartWallet.csproj : error NU1403:
   Failed to restore /w/contracts/UnifiedSmartWallet.csproj (in 487 ms).
 `;
 
