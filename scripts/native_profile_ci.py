@@ -42,6 +42,30 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
+def pin_sdk(directory):
+    """Select the exact SDK; installing it alone does not defeat newer SDKs."""
+    target = directory / "global.json"
+    value = {"sdk": {"version": SDK, "rollForward": "disable", "allowPrerelease": False}}
+    require(not target.is_symlink(), "SDK selector must not be a symbolic link")
+    if target.exists():
+        require(json.loads(target.read_text()) == value, "Existing global.json differs; it will not be overwritten")
+    else:
+        with target.open("x") as stream:
+            stream.write(json.dumps(value, indent=2) + "\n")
+    return target
+
+
+def build_environment(work, cache):
+    pin_sdk(work)
+    scratch = work / "temporary"
+    scratch.mkdir()
+    # build_native_modules.py creates its two scratch trees with tempfile. Keep
+    # both below global.json so compiler/MSBuild children select this SDK too.
+    return {**os.environ, "NUGET_PACKAGES": str(cache), "TMPDIR": str(scratch),
+            "TMP": str(scratch), "TEMP": str(scratch),
+            "DOTNET_NOLOGO": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
+
+
 def command(args, cwd, log, env=None, timeout=600):
     result = subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout)
     log.write_text(result.stdout + result.stderr)
@@ -167,8 +191,12 @@ def execute(args):
     write_json(output / "native-profile-ci.json", report)
     try:
         check_core_identity(core, args.core_commit)
-        version = subprocess.check_output(["dotnet", "--version"], text=True).strip()
+        env = build_environment(work, cache)
+        # AA/probe commands use the checkout selector created by the workflow;
+        # core and module compilation use the independent work-tree selector.
+        version = subprocess.check_output(["dotnet", "--version"], cwd=repo, text=True).strip()
         require(version == SDK, f"Expected .NET SDK {SDK}; found {version}")
+        require(subprocess.check_output(["dotnet", "--version"], cwd=work, env=env, text=True).strip() == SDK, "Isolated build selected a different SDK")
         source = work / "core"
         source.mkdir()
         sources = snapshot_core(core, source)
@@ -181,7 +209,6 @@ def execute(args):
         with urllib.request.urlopen(VM_URL, timeout=60) as response:
             vm_archive.write_bytes(response.read())
         require(sha256(vm_archive) == VM_SHA256, "Downloaded native VM package differs from the reviewed bytes")
-        env = {**os.environ, "NUGET_PACKAGES": str(cache), "DOTNET_NOLOGO": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
         common = ["-p:RestorePackagesWithLockFile=true", "-p:UseSharedCompilation=false"]
         command(["dotnet", "restore", "src/Neo/Neo.csproj", "--configfile", "nuget.config", "--locked-mode", *common], source, work / "core-restore.log", env)
         archives = verify_package_archives(locks, cache, archive_pins)

@@ -1,5 +1,6 @@
 /** Private integration bridge. Ephemeral fixture keys enter only on stdin; never print them. */
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const {
@@ -19,6 +20,22 @@ const client = new NativeSmartAccountClient({
   rpcUrl: options.rpcUrl,
   networkMagic: options.networkMagic,
 });
+if (options.diagnosticOutput) {
+  const send = client.rpc.send.bind(client.rpc);
+  client.rpc.send = async (method, params) => {
+    const result = await send(
+      method,
+      method === "invokescript" ? [...params.slice(0, 2), true] : params,
+    );
+    if (method === "invokescript" && result?.state === "FAULT")
+      fs.writeFileSync(
+        options.diagnosticOutput,
+        JSON.stringify({ method, params, result }),
+        { mode: 0o600 },
+      );
+    return result;
+  };
+}
 function wallet(hex) {
   const raw = Buffer.from(c.hex(hex, 32), "hex");
   const der = Buffer.concat([
@@ -101,9 +118,28 @@ if (options.mode === "preflight-raw") {
       accountId: options.accountId,
       ...options.operation,
     });
-    if (options.sessionPrivateKey) {
-      const session = wallet(options.sessionPrivateKey);
-      const op = operation.operation;
+    const sessionInputs =
+      options.sessionSigners ??
+      (options.sessionPrivateKey
+        ? [
+            {
+              verifier: options.sessionVerifier,
+              privateKey: options.sessionPrivateKey,
+            },
+          ]
+        : []);
+    const proofs = new Map(),
+      sessionEvidence = [];
+    for (const input of sessionInputs) {
+      const verifier = c.hex(input.verifier, 20),
+        session = wallet(input.privateKey),
+        op = operation.operation;
+      if (proofs.has(verifier)) throw new Error("Duplicate session verifier");
+      const deployed = await client.rpc.send("getcontractstate", [
+        "0x" + verifier,
+      ]);
+      if (deployed.manifest.name !== "SessionKeyVerifier")
+        throw new Error("Unexpected session module");
       const chainPayload = await client._read(
         "getPayload",
         [
@@ -114,7 +150,7 @@ if (options.mode === "preflight-raw") {
           { type: "Integer", value: op.nonce },
           { type: "Integer", value: op.deadline },
         ],
-        options.sessionVerifier,
+        verifier,
       );
       if (
         !(chainPayload instanceof Uint8Array) ||
@@ -123,60 +159,98 @@ if (options.mode === "preflight-raw") {
         throw new Error(
           "Session module payload differs from SDK native authorization preimage",
         );
-      let signature = await session.sign(operation.preimage);
-      if (options.multiSig) {
-        const config = await client._read(
-          "getConfig",
-          [c.hashValue(options.accountId)],
-          operation.account.verifier.contract,
-        );
-        if (
-          !["Array", "Struct"].includes(config?.type) ||
-          config.value.length !== 2 ||
-          config.value[0]?.type !== "Array"
+      proofs.set(verifier, await session.sign(operation.preimage));
+      sessionEvidence.push({
+        publicKey: session.publicKey,
+        sessionVerifier: verifier,
+        chainPayloadMatched: true,
+      });
+    }
+    if (options.multiSig) {
+      const config = await client._read(
+        "getConfig",
+        [c.hashValue(options.accountId)],
+        operation.account.verifier.contract,
+      );
+      if (
+        !["Array", "Struct"].includes(config?.type) ||
+        config.value.length !== 2 ||
+        config.value[0]?.type !== "Array" ||
+        config.value[0].value.some(
+          (child) => !(child instanceof Uint8Array) || child.length !== 20,
         )
-          throw new Error("Invalid real MultiSig configuration");
-        const children = config.value[0].value.map((v) =>
-          Buffer.from(v).reverse().toString("hex"),
-        );
-        const sessionIndex = children.indexOf(
-          c.hex(options.sessionVerifier, 20),
-        );
-        if (
-          children.length !== 2 ||
-          new Set(children).size !== 2 ||
-          sessionIndex < 0 ||
-          config.value[1] !== 2n
-        )
-          throw new Error(
-            "Runtime fixture expects exact 2-of-2 Session/NeoNative child order",
-          );
-        const other = children[1 - sessionIndex];
+      )
+        throw new Error("Invalid real MultiSig configuration");
+      const children = config.value[0].value.map((v) =>
+        Buffer.from(v).reverse().toString("hex"),
+      );
+      if (
+        children.length < 1 ||
+        children.length > 3 ||
+        new Set(children).size !== children.length ||
+        typeof config.value[1] !== "bigint" ||
+        config.value[1] < 1n ||
+        config.value[1] > 2n ||
+        config.value[1] > BigInt(children.length)
+      )
+        throw new Error("Invalid bounded MultiSig topology");
+      // Explicitly selected witness leaves use a present empty ByteString; absent
+      // proofs stay Null, preserving the exact on-chain child slot order.
+      const nativeLeaves =
+        options.nativeVerifierLeaves ??
+        children.filter((child) => !proofs.has(child));
+      for (const raw of nativeLeaves) {
+        const leaf = c.hex(raw, 20);
+        if (!children.includes(leaf) || proofs.has(leaf))
+          throw new Error("Invalid or duplicate witness leaf");
         const deployed = await client.rpc.send("getcontractstate", [
-          "0x" + other,
+          "0x" + leaf,
         ]);
         if (deployed.manifest.name !== "NeoNativeVerifier")
           throw new Error("Unexpected witness child");
-        signature = c.serializeValue({
-          type: "Array",
-          value: children.map((_, i) => ({
-            type: "ByteString",
-            value: i === sessionIndex ? signature : "",
-          })),
-        });
-        payloadEvidence = { children, threshold: "2", sessionIndex };
+        proofs.set(leaf, "");
       }
+      if ([...proofs.keys()].some((child) => !children.includes(child)))
+        throw new Error("Proof is not an active child");
+      const signature = c.serializeValue({
+        type: "Array",
+        value: children.map((child) =>
+          proofs.has(child)
+            ? { type: "ByteString", value: proofs.get(child) }
+            : { type: "Null" },
+        ),
+      });
       operation = client.attachSignature(operation, signature);
+      const sessionIndices = sessionEvidence.map((item) =>
+        children.indexOf(item.sessionVerifier),
+      );
+      payloadEvidence = {
+        children,
+        threshold: config.value[1].toString(),
+        sessionIndices,
+        sessionIndex: sessionIndices[0],
+        presentSlots: children.map((child) => proofs.has(child)),
+      };
+    } else if (sessionInputs.length) {
+      if (
+        sessionInputs.length !== 1 ||
+        !proofs.has(operation.account.verifier.contract)
+      )
+        throw new Error("Session proof must match the account's root verifier");
+      operation = client.attachSignature(
+        operation,
+        proofs.get(operation.account.verifier.contract),
+      );
+    }
+    if (sessionEvidence.length)
       payloadEvidence = {
         ...payloadEvidence,
-        publicKey: session.publicKey,
-        sessionVerifier: c.hex(options.sessionVerifier, 20),
+        sessions: sessionEvidence,
         preimage: operation.preimage,
         digest: operation.digest,
         context: operation.context,
         chainPayloadMatched: true,
       };
-    }
     plan = client.buildExecution([operation]);
   }
   const required = plan.requiredAuthorities ?? [];

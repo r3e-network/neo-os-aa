@@ -83,6 +83,8 @@ A Session signer signs `prepared.preimage` with P-256/SHA-256 once. `prepared.di
 
 For native MultiSig, the configured child order is significant: validation selects the first `threshold` children whose submitted proofs pass. Only that selected quorum receives execution-after callbacks and consumes Session policy counters. Three submitted valid proofs in a 2-of-3 account do not mean three child policies were consumed. A caller can deliberately omit a child with a Null slot to choose another allowed quorum; an empty ByteString is a present proof for a NeoNative witness child. Use simulation and the confirmed policy-state readback when reviewing the selected quorum.
 
+Removing an active child clears its account-specific policy and removes it from the enrolled roster. Adding that module back later requires re-enrolling and configuring it through the full delayed child-configuration flow before confirming the new MultiSig roster. A previously successful child configuration is not preserved across removal.
+
 The application supplies the signer adapter; a generic signature record does not prove module approval. Native MultiSig adapters must use core dependency order, current config and disjoint signer domains. Do not reuse public V3 EIP-712 aggregation for native signatures.
 
 `getModuleDependencies` reads authoritative active/cleanup rosters. Dependency setters are internal module continuations; the SDK exposes no custody-authorized helper for them.

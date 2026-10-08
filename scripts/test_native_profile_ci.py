@@ -4,14 +4,43 @@ import base64
 import copy
 import hashlib
 import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
 
 import native_profile_ci as ci
 
 
 class NativeProfileCiTests(unittest.TestCase):
+    def test_sdk_pin_is_exact_and_never_overwrites_an_existing_selector(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            selector = ci.pin_sdk(root)
+            before = selector.read_bytes()
+            self.assertEqual(json.loads(before)["sdk"], {"version": ci.SDK, "rollForward": "disable", "allowPrerelease": False})
+            ci.pin_sdk(root)
+            self.assertEqual(selector.read_bytes(), before)
+            selector.write_text('{"sdk":{"version":"10.0.401"}}')
+            other = selector.read_bytes()
+            with self.assertRaisesRegex(ValueError, "will not be overwritten"):
+                ci.pin_sdk(root)
+            self.assertEqual(selector.read_bytes(), other)
+
+    def test_real_sdk_resolver_inherits_the_pin_in_compiler_scratch_directories(self):
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp)
+            env = ci.build_environment(work, work / "packages")
+            # A separate Python process honors TMPDIR exactly as the native
+            # module build does; it must not escape into the system /tmp tree.
+            scratch = Path(subprocess.check_output([sys.executable, "-c", "import tempfile; print(tempfile.mkdtemp())"], env=env, text=True).strip())
+            self.assertTrue(scratch.resolve().is_relative_to(work.resolve()))
+            actual = subprocess.check_output(["dotnet", "--version"], cwd=scratch, env=env, text=True).strip()
+            self.assertEqual(actual, ci.SDK)
+            installed = subprocess.check_output(["dotnet", "--list-sdks"], env=env, text=True).strip()
+            print("SDK selection regression: " + installed.replace("\n", "; ") + " -> " + actual)
+
     def test_mismatched_module_bytes_are_rejected_even_with_equal_build_counts(self):
         with tempfile.TemporaryDirectory() as temp:
             modules = Path(temp)
