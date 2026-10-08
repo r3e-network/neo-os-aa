@@ -1352,18 +1352,18 @@ const MESSAGES = {
       hookContractOptionalPlaceholder: '0x... (optional)',
       manageVerifierParamsPlaceholder: 'Pubkey or verifier-specific config hex.',
       // Preset descriptions
-      presetSessionKeyDesc: 'Temporary delegated signer for one target + method.',
+      presetSessionKeyDesc: 'Temporary delegated signer with a transfer spending limit.',
       presetSubscriptionDesc: 'Recurring approvals for scheduled pull-style flows.',
-      presetMultiSigDesc: 'Threshold-based approvals for treasury-style accounts.',
+      presetMultiSigDesc: 'A threshold of verifier modules. Modules may share keys or controllers; this does not prove independent signers.',
       presetWhitelistDesc: 'Allow one target contract.',
       presetDailyLimitDesc: 'Cap daily token outflow.',
       presetDIDDesc: 'Require an active NeoDID registry binding before target access.',
       presetMultiHookDesc: 'Compose multiple policy hooks behind one slot.',
       // Session key value-exposure warning
       sessionKeyUncappedWarning:
-        'This session key is VALUE-UNCAPPED: a wildcard ("*") method or a zero spending limit lets the delegated signer move the whole balance on the target contract — it is not limited to one method. Set method to "transfer" and add a positive spending limit (7th arg) to enforce a cap.',
+        'This session key is VALUE-UNCAPPED: a wildcard ("*") method or a zero spending limit lets the delegated signer move the whole balance on the target contract — it is not limited to one method. Set method to "transfer" and add a positive spending limit (6th arg) to enforce a cap.',
       sessionKeyUncappedNativeWarning:
-        'This session key is VALUE-UNCAPPED on a native asset ({asset}): a wildcard ("*") method or a zero spending limit lets the delegated signer drain your entire {asset} balance — it is not limited to one method. Set method to "transfer" and add a positive spending limit (7th arg) to enforce a cap.',
+        'This session key is VALUE-UNCAPPED on a native asset ({asset}): a wildcard ("*") method or a zero spending limit lets the delegated signer drain your entire {asset} balance — it is not limited to one method. Set method to "transfer" and add a positive spending limit (6th arg) to enforce a cap.',
       // Preset labels
       presetSessionKeyLabel: 'SessionKeyVerifier',
       presetSubscriptionLabel: 'SubscriptionVerifier',

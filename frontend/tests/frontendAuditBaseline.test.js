@@ -16,8 +16,9 @@ test('repo README describes the current frontend audit baseline honestly', () =>
 
   assert.match(readme, /0 high\/critical production vulnerabilities/i);
   assert.match(readme, /frontend and JavaScript SDK/i);
-  assert.match(readme, /reviewed low\/moderate package families/i);
-  assert.match(readme, /Web3Auth\/Torus\/MetaMask\/Solana dependency chain/i);
+  assert.match(readme, /GHSA-848j-6mx2-7j84/i);
+  assert.match(readme, /at most low severity/i);
+  assert.match(readme, /Web3Auth\/Torus dependency chain/i);
   assert.match(readme, /SDK runs a separate production-only audit/i);
   assert.doesNotMatch(readme, /0 known production vulnerabilities/i);
 });
@@ -28,16 +29,17 @@ test('repo verifier enforces the frontend audit allowlist guard', () => {
   const frontendPackage = JSON.parse(readRepo('frontend/package.json'));
 
   assert.match(verifyScript, /npm run audit:prod/);
+  assert.match(verifyScript, /npm run test:docs-security:browser/);
   assert.equal(
     frontendPackage.scripts['audit:prod'],
     'node ../scripts/check_frontend_audit_allowlist.mjs',
   );
-  assert.match(auditGuard, /ALLOWED_BASELINE/);
-  assert.match(auditGuard, /@web3auth\/modal/);
-  assert.match(auditGuard, /@metamask\/sdk/);
-  assert.match(auditGuard, /@solana\/web3\.js/);
-  assert.match(auditGuard, /uuid/);
-  assert.match(auditGuard, /elliptic/);
+  assert.equal(
+    frontendPackage.scripts['audit:all'],
+    'node ../scripts/check_frontend_audit_allowlist.mjs --all',
+  );
+  assert.match(auditGuard, /validateAuditReport/);
+  assert.doesNotMatch(auditGuard, /ALLOWED_BASELINE/);
 });
 
 test('repo README documents the local verification entrypoint explicitly', () => {

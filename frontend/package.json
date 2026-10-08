@@ -21,7 +21,11 @@
     "test:e2e:install": "playwright install --with-deps chromium",
     "test:e2e:browser": "npm run build && npm run test:e2e:browser:built",
     "test:e2e:browser:built": "node tests/browserSmoke.e2e.mjs",
-    "test:operator-recovery:browser": "node --test tests/operatorKeyRecovery.browser.mjs"
+    "test:operator-recovery:browser": "node --test tests/operatorKeyRecovery.browser.mjs",
+    "audit:all": "node ../scripts/check_frontend_audit_allowlist.mjs --all",
+    "test:web3auth:browser": "node --test tests/web3AuthPackage.browser.mjs",
+    "test:docs-security:browser": "node --test tests/docsDependencySecurity.browser.mjs",
+    "test:bundle:browser": "node --test tests/deferredIdentityBundle.browser.mjs"
   },
   "dependencies": {
     "@cityofzion/neon-js": "5.9.0",
@@ -39,7 +43,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/forms": "^0.5.11",
-    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/typography": "^0.5.20",
     "@vitejs/plugin-vue": "^5.2.1",
     "autoprefixer": "^10.4.27",
     "marked-highlight": "2.2.4",
@@ -48,7 +52,7 @@
     "postcss": "8.5.28",
     "tailwindcss": "^4.3.3",
     "vite": "^6.4.3",
-    "vite-plugin-node-polyfills": "^0.25.0"
+    "vite-plugin-node-polyfills": "^0.28.0"
   },
   "overrides": {
     "@cityofzion/neon-api": "5.9.0",
@@ -56,7 +60,7 @@
       ".": "5.9.0",
       "lodash": "4.18.1"
     },
-    "dompurify": "3.4.15",
+    "dompurify": "3.4.16",
     "js-cookie": "3.0.8",
     "postcss": "8.5.28",
     "h3": {
@@ -84,6 +88,12 @@
     },
     "stream-json": "3.6.0",
     "uuid": "11.1.1",
-    "source-map-js": "1.2.2"
+    "source-map-js": "1.2.2",
+    "@tailwindcss/typography": {
+      "postcss-selector-parser": "7.1.6"
+    },
+    "mermaid": {
+      "katex": "0.18.2"
+    }
   }
 }

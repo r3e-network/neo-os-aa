@@ -135,10 +135,14 @@ if [[ $run_frontend -eq 1 ]]; then
   cd frontend
   npm test
   npm run audit:prod
+  npm run audit:all
   npm run build
   if [[ $skip_e2e -eq 0 ]]; then
     npm run test:e2e:browser:built
     npm run test:operator-recovery:browser
+    npm run test:web3auth:browser
+    npm run test:docs-security:browser
+    npm run test:bundle:browser
   fi
   cd ..
 fi

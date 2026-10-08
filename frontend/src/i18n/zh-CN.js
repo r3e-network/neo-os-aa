@@ -1349,18 +1349,18 @@ export default {
       hookContractOptionalPlaceholder: '0x...（可选）',
       manageVerifierParamsPlaceholder: '公钥或验证器特定的配置 hex。',
       // 预设描述
-      presetSessionKeyDesc: '针对单个目标和方法的临时委托签名者。',
+      presetSessionKeyDesc: '有转账额度限制的临时委托签名者。',
       presetSubscriptionDesc: '用于计划拉取式流程的周期性审批。',
-      presetMultiSigDesc: '用于金库风格账户的基于阈值的审批。',
+      presetMultiSigDesc: '按验证器模块数量设定阈值。模块可能共用密钥或控制方，并不代表独立签名者。',
       presetWhitelistDesc: '允许一个目标合约。',
       presetDailyLimitDesc: '限制每日代币流出。',
       presetDIDDesc: '在目标访问前要求活跃的 NeoDID 注册表绑定。',
       presetMultiHookDesc: '在一个插槽后组合多个策略 hook。',
       // 会话密钥金额暴露警告
       sessionKeyUncappedWarning:
-        '此会话密钥不限额：通配符（"*"）方法或为零的支出上限会让被委托的签名者动用目标合约上的全部余额——它并未被限制为单一方法。请将方法设为 "transfer" 并填写正的支出上限（第 7 个参数）以强制限额。',
+        '此会话密钥不限额：通配符（"*"）方法或为零的支出上限会让被委托的签名者动用目标合约上的全部余额——它并未被限制为单一方法。请将方法设为 "transfer" 并填写正的支出上限（第 6 个参数）以强制限额。',
       sessionKeyUncappedNativeWarning:
-        '此会话密钥在原生资产（{asset}）上不限额：通配符（"*"）方法或为零的支出上限会让被委托的签名者抽干你的全部 {asset} 余额——它并未被限制为单一方法。请将方法设为 "transfer" 并填写正的支出上限（第 7 个参数）以强制限额。',
+        '此会话密钥在原生资产（{asset}）上不限额：通配符（"*"）方法或为零的支出上限会让被委托的签名者抽干你的全部 {asset} 余额——它并未被限制为单一方法。请将方法设为 "transfer" 并填写正的支出上限（第 6 个参数）以强制限额。',
       // 预设标签
       presetSessionKeyLabel: 'SessionKeyVerifier',
       presetSubscriptionLabel: 'SubscriptionVerifier',

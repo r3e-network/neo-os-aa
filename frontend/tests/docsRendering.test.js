@@ -321,26 +321,13 @@ test("DocsView supports deep-linking to a specific doc entry through the query s
   assert.match(docsViewSource, /resolveDocKey/);
 });
 
-test("vite config defines manual chunk groups for heavy frontend dependencies", () => {
-  const viteConfigSource = read("vite.config.js");
-
-  assert.match(viteConfigSource, /manualChunks/);
-  assert.match(viteConfigSource, /supabase/);
-  assert.match(viteConfigSource, /jose/);
-  assert.match(viteConfigSource, /react-runtime/);
-  assert.match(viteConfigSource, /identity-runtime/);
-  assert.match(viteConfigSource, /walletconnect-runtime/);
-  assert.match(viteConfigSource, /@walletconnect/);
-  assert.match(viteConfigSource, /@toruslabs/);
-  assert.match(viteConfigSource, /deferredIdentityChunks/);
-  assert.match(viteConfigSource, /chunkSizeWarningLimit:\s*3500/);
-  assert.match(viteConfigSource, /INVALID_ANNOTATION/);
-  assert.match(viteConfigSource, /ox\/_esm\/core\/Base64\.js/);
-  // ethers, @web3auth, buffer are NOT in manualChunks (circular dep TDZ fix)
-  assert.doesNotMatch(viteConfigSource, /return 'ethers'/);
-  assert.doesNotMatch(viteConfigSource, /neon-core/);
-  assert.doesNotMatch(viteConfigSource, /return 'mermaid'/);
-  assert.doesNotMatch(viteConfigSource, /return 'cytoscape'/);
+test("frontend verifier checks the actual built identity dependency boundary", () => {
+  const frontendPackage = readFrontendPackage();
+  assert.equal(
+    frontendPackage.scripts["test:bundle:browser"],
+    "node --test tests/deferredIdentityBundle.browser.mjs",
+  );
+  assert.match(read("../scripts/verify_repo.sh"), /npm run test:bundle:browser/);
 });
 
 test("vite config polyfills browser crypto dependencies pulled by web3auth wallet connectors", () => {
