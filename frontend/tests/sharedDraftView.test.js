@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
 import {
   buildCollectedSignatureCards,
   buildOperationSnapshotItems,
@@ -17,7 +18,9 @@ test('buildOperationSnapshotItems summarizes operation fields and available payl
       },
       transaction_body: {
         rawTransaction: 'aa',
-        metaInvocation: { scriptHash: '11'.repeat(20), operation: 'executeUnifiedByAddress', args: [] },
+        // A deployed V3 invocation, signed: this is what the client stages now, and what the
+        // payload summary has to report as a relay-ready invocation.
+        clientInvocation: executeUserOpInvocation({ nonce: 1 }),
       },
     },
     relayReadiness: {
@@ -38,7 +41,7 @@ test('buildOperationSnapshotItems summarizes operation fields and available payl
   assert.equal(items[1].value, 'transfer');
   assert.equal(items[2].value, '2 argument(s)');
   assert.equal(items[3].value, 'Relay Payload Ready');
-  assert.equal(items[4].value, 'Raw Tx + Relay Invocation');
+  assert.equal(items[4].value, 'Raw Tx + UserOperation Invocation');
 });
 
 test('buildSignerChecklistItems marks required signers and surfaces extras', () => {

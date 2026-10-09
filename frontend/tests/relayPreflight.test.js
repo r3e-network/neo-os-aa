@@ -23,13 +23,7 @@ test('buildRelayPreflightRequest reuses the selected relay payload and adds simu
     transactionBody: {},
     signatures: [{
       kind: 'evm',
-      metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUnifiedByAddress',
-          args: [{ type: 'String', value: 'ok' }],
-        },
-      },
+      metadata: { metaInvocation: executeUserOpInvocation() },
     }],
   });
 
@@ -38,11 +32,7 @@ test('buildRelayPreflightRequest reuses the selected relay payload and adds simu
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
     simulate: true,
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUnifiedByAddress',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
   });
 });
 
@@ -52,17 +42,17 @@ test('normalizeRelayPreflightResult marks successful simulations as ready', () =
     ok: true,
     vmState: 'HALT',
     gasConsumed: '12345',
-    operation: 'executeUnifiedByAddress',
+    operation: 'executeUserOp',
   });
 
   assert.deepEqual(result, {
     ok: true,
     level: 'ready',
     label: 'Relay Check Passed',
-    detail: 'executeUnifiedByAddress simulated successfully (gas 12345).',
+    detail: 'executeUserOp simulated successfully (gas 12345).',
     vmState: 'HALT',
     gasConsumed: '12345',
-    operation: 'executeUnifiedByAddress',
+    operation: 'executeUserOp',
     payloadMode: 'best',
     exception: '',
     supported: true,
@@ -99,7 +89,7 @@ test('normalizeRelayPreflightResult preserves fault details for a failed simulat
     simulate: true,
     ok: false,
     vmState: 'FAULT',
-    operation: 'executeUnifiedByAddress',
+    operation: 'executeUserOp',
     gasConsumed: '88',
     exception: 'Invalid Nonce',
   });
@@ -111,7 +101,7 @@ test('normalizeRelayPreflightResult preserves fault details for a failed simulat
     detail: 'Invalid Nonce',
     vmState: 'FAULT',
     gasConsumed: '88',
-    operation: 'executeUnifiedByAddress',
+    operation: 'executeUserOp',
     payloadMode: 'best',
     exception: 'Invalid Nonce',
     supported: true,
@@ -125,7 +115,7 @@ test('normalizeRelayPreflightResult preserves returned stack items for inspectio
     ok: true,
     vmState: 'HALT',
     gasConsumed: '99',
-    operation: 'executeUnifiedByAddress',
+    operation: 'executeUserOp',
     stack: [{ type: 'Integer', value: '1' }, { type: 'ByteString', value: 'YWJjZA==' }],
   });
 
@@ -163,7 +153,7 @@ test('relay preflight payloads are exportable for draft metadata persistence', (
     ok: true,
     vmState: 'HALT',
     gasConsumed: '77',
-    operation: 'executeUnifiedByAddress',
+    operation: 'executeUserOp',
     stack: [{ type: 'Integer', value: '1' }],
   }, 'meta');
 
@@ -181,7 +171,7 @@ test('runRelayPreflight submits simulate requests through the relay transport', 
         ok: true,
         vmState: 'HALT',
         gasConsumed: '77',
-        operation: 'executeUnifiedByAddress',
+        operation: 'executeUserOp',
         stack: [{ type: 'Integer', value: '1' }],
         validationPreview: {
           deadlineValid: true,
@@ -201,20 +191,14 @@ test('runRelayPreflight submits simulate requests through the relay transport', 
     transactionBody: {},
     signatures: [{
       kind: 'evm',
-      metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUnifiedByAddress',
-          args: [{ type: 'String', value: 'ok' }],
-        },
-      },
+      metadata: { metaInvocation: executeUserOpInvocation() },
     }],
   });
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].simulate, true);
   assert.equal(result.label, 'Relay Check Passed');
-  assert.equal(result.operation, 'executeUnifiedByAddress');
+  assert.equal(result.operation, 'executeUserOp');
   assert.equal(result.gasConsumed, '77');
   assert.deepEqual(result.stack, [{ type: 'Integer', value: '1' }]);
   assert.equal(result.validationPreview?.hasVerifier, true);

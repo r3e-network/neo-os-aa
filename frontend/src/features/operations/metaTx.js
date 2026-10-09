@@ -273,35 +273,6 @@ export function buildExecuteUserOpInvocation({
   };
 }
 
-export function buildExecuteUnifiedByAddressInvocation({
-  aaContractHash,
-  accountAddressScriptHash,
-  evmPublicKeyHex = '',
-  targetContract,
-  method,
-  methodArgs = [],
-  argsHashHex = '',
-  nonce = 0n,
-  deadline = 0n,
-  signatureHex = '',
-} = {}) {
-  return {
-    scriptHash: sanitizeHex(aaContractHash),
-    operation: 'executeUnifiedByAddress',
-    args: [
-      { type: 'Hash160', value: `0x${sanitizeHex(accountAddressScriptHash)}` },
-      { type: 'Hash160', value: `0x${sanitizeHex(targetContract)}` },
-      { type: 'String', value: String(method || '') },
-      { type: 'Array', value: methodArgs },
-      { type: 'Array', value: sanitizeHex(evmPublicKeyHex) ? [{ type: 'ByteArray', value: `0x${sanitizeHex(evmPublicKeyHex)}` }] : [] },
-      { type: 'ByteArray', value: `0x${sanitizeHex(argsHashHex)}` },
-      { type: 'Integer', value: String(nonce) },
-      { type: 'Integer', value: String(deadline) },
-      { type: 'Array', value: sanitizeHex(signatureHex) ? [{ type: 'ByteArray', value: `0x${sanitizeHex(signatureHex)}` }] : [] },
-    ],
-  };
-}
-
 export function toCompactEcdsaSignature(signature) {
   const parsed = Signature.from(signature);
   return `${sanitizeHex(parsed.r)}${sanitizeHex(parsed.s)}`;

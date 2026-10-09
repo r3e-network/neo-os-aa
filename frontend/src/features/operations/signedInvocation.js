@@ -7,6 +7,21 @@ const NETWORK_MAGIC = { mainnet: '860833102', testnet: '894710606' };
 const fail = (detail) => { throw new Error(`Draft signed invocation mismatch: ${detail}`); };
 const networkName = (value) => String(value || '').trim().toLowerCase().replace(/^neo-n3-/, '');
 
+// The deployed V3 execution surface (contracts/build/UnifiedSmartWalletV3.manifest.json), shared by
+// this selector and by the client broadcast builder so the two cannot disagree about what the
+// account core exports. A V1/V2 wrapper is not in it: the client no longer builds one and no
+// deployed contract exports the name.
+export const DEPLOYED_ENTRYPOINTS = [
+  'executeUserOp',
+  'executeUserOps',
+  'executeSponsoredUserOp',
+  'executeSponsoredUserOps',
+];
+
+export function isDeployedEntrypoint(operation) {
+  return DEPLOYED_ENTRYPOINTS.includes(operation);
+}
+
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (!value || typeof value !== 'object') return value;
@@ -42,10 +57,8 @@ function v3Fields(invocation) {
 function intent(invocation) {
   const fields = v3Fields(invocation);
   if (fields) return { core: fields.core, account: fields.account, target: fields.target, method: fields.method, args: fields.args };
-  if (invocation?.operation === 'executeUnifiedByAddress' && invocation.args?.length === 9) {
-    return { core: sanitizeHex(invocation.scriptHash), account: sanitizeHex(invocation.args[0].value),
-      target: sanitizeHex(invocation.args[1].value), method: invocation.args[2].value, args: invocation.args[3].value };
-  }
+  // No V1/V2 decoder: a legacy envelope is refused by selectSignedInvocation's wrapper list, and
+  // reading its call layout here would keep the dead entrypoint names in the client for no caller.
   return { scriptHash: sanitizeHex(invocation?.scriptHash), operation: invocation?.operation, args: invocation?.args };
 }
 
@@ -112,7 +125,9 @@ export function selectSignedInvocation({ transactionBody = {}, signatures = [], 
   let selected = null;
   for (const { invocation, record } of candidates) {
     if (!invocation?.scriptHash || !invocation?.operation || !Array.isArray(invocation.args)) fail('invalid invocation');
-    if (!['executeUserOp', 'executeUserOps', 'executeSponsoredUserOp', 'executeSponsoredUserOps', 'executeUnified', 'executeUnifiedByAddress'].includes(invocation.operation)) fail('unsupported AA wrapper');
+    // An envelope the deployed core does not export is refused here; the client broadcast builder
+    // applies the same predicate to whatever the selector returns.
+    if (!isDeployedEntrypoint(invocation.operation)) fail('unsupported AA wrapper');
     const fields = v3Fields(invocation);
     if (fields && !fields.signature) fail('signed UserOperation has no signature');
     const anchor = anchors.find((item) => item.operation === invocation.operation);

@@ -4,11 +4,10 @@ import { cloneImmutable } from './helpers.js';
 import { buildDraftCollaborationUrl, buildDraftShareUrl } from './shareLinks.js';
 import { EC } from '../../config/errorCodes.js';
 import { RUNTIME_CONFIG } from '../../config/runtimeConfig.js';
-import { selectSignedInvocation } from './signedInvocation.js';
+import { selectSignedInvocation, isDeployedEntrypoint } from './signedInvocation.js';
 import { isProxySourcedTransfer } from '../../shared/transferOutcome.mjs';
 import {
   computeArgsHash,
-  buildExecuteUnifiedByAddressInvocation,
   buildExecuteUserOpInvocation as buildV3ExecuteUserOpInvocation,
 } from './metaTx.js';
 
@@ -135,30 +134,16 @@ export function buildStagedTransactionBody({
   morpheusNetwork = RUNTIME_CONFIG.morpheusNetwork,
   createdAt = new Date().toISOString(),
 } = {}) {
-  const legacyInvocationBase = buildExecuteUnifiedByAddressInvocation({
-    aaContractHash,
-    accountAddressScriptHash: account.accountAddressScriptHash || '',
-    targetContract: operationBody?.targetContract,
-    method: operationBody?.method,
-    methodArgs: Array.isArray(operationBody?.args) ? operationBody.args : [],
-    argsHashHex: '',
-    nonce: '0',
-    deadline: '0',
-    signatureHex: '',
-  });
-  const legacyInvocation = legacyInvocationBase
-    ? {
-        ...legacyInvocationBase,
-        signers: signerAddress ? [{ account: signerAddress, scopes: 1 }] : [],
-      }
-    : null;
+  // A staged body carries the V3 envelope or nothing. The previous V1/V2 fallback built an
+  // invocation naming an entrypoint no deployed contract exports, which the relay now refuses at
+  // validation; refusing here keeps the caller from staging a draft that can never be submitted.
   const v3Invocation = buildExecuteUserOpInvocation({
     aaContractHash,
     account,
     operationBody,
     signerAddress,
   });
-  const clientInvocation = v3Invocation || legacyInvocation;
+  const clientInvocation = v3Invocation;
   if (!clientInvocation) {
     throw new Error(EC.v3AccountRequired);
   }
@@ -172,7 +157,6 @@ export function buildStagedTransactionBody({
     requiresProxyWitness: Boolean(operationBody?.metadata?.requiresProxyWitness),
     clientInvocation,
     v3Invocation,
-    legacyInvocation,
     rawTransaction: sanitizeHex(rawTransaction || ''),
     notes: String(notes || '').trim(),
     createdAt,
@@ -211,13 +195,14 @@ export function buildDraftApprovalTypedData({ draftRecord, chainId = RUNTIME_CON
 function assertClientWitnessSupported(transactionBody, invocation) {
   const proxy = transactionBody?.accountAddressScriptHash;
   const args = invocation?.args || [];
+  // Only the deployed V3 envelopes are decoded here. A V1/V2 envelope is refused earlier, by
+  // selectSignedInvocation; decoding it here as well would keep the dead names in the client for no
+  // reachable caller.
   let calls = [{ method: invocation?.operation, args }];
   if (['executeUserOp', 'executeSponsoredUserOp'].includes(invocation?.operation)) {
     calls = [{ method: args[1]?.value?.[1]?.value, args: args[1]?.value?.[2]?.value }];
   } else if (['executeUserOps', 'executeSponsoredUserOps'].includes(invocation?.operation)) {
     calls = (args[1]?.value || []).map((op) => ({ method: op?.value?.[1]?.value, args: op?.value?.[2]?.value }));
-  } else if (invocation?.operation === 'executeUnifiedByAddress') {
-    calls = [{ method: args[2]?.value, args: args[3]?.value }];
   }
   if (transactionBody?.requiresProxyWitness || calls.some((call) => isProxySourcedTransfer({
     method: call.method,
@@ -240,6 +225,12 @@ export function buildClientBroadcastRequest({ signerAddress = '', transactionBod
   }
   assertClientWitnessSupported(transactionBody, invocation);
   if (!invocation.scriptHash || !invocation.operation) {
+    throw new Error(EC.clientInvocationMissing);
+  }
+  // The selector refuses a wrapper the deployed ABI does not export but returns null for an
+  // envelope it cannot read; without this guard the fallback above would still hand that envelope
+  // to the wallet.
+  if (!isDeployedEntrypoint(invocation.operation)) {
     throw new Error(EC.clientInvocationMissing);
   }
 
