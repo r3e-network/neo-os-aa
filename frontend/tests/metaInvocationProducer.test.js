@@ -119,6 +119,10 @@ test('every exported binding on the client execution surface is the inventoried 
 test('the client execution-surface list is exactly the deployed ABI execution surface', () => {
   const { entrypoints } = readDeployedAbi();
 
+  assert.ok(
+    Array.isArray(signedInvocation.DEPLOYED_ENTRYPOINTS),
+    'the client must export the entrypoint list its selector and submission path decide on, so it can be held to the deployed ABI',
+  );
   assert.deepEqual(
     signedInvocation.DEPLOYED_ENTRYPOINTS.slice().sort(),
     entrypoints.slice().sort(),
@@ -157,6 +161,37 @@ test('the invocation builders emit only entrypoints the deployed ABI exports', (
     transactionBody: { ...body, v3Invocation: null, clientInvocation: body.clientInvocation },
   });
   built.push(['execution.buildClientBroadcastRequest', unsigned]);
+
+  // The staging path with an account the V3 core cannot identify: it must refuse, and if a future
+  // producer makes it return an invocation instead, that invocation is checked here too.
+  try {
+    built.push(['execution.buildStagedTransactionBody (no V3 account)', execution.buildStagedTransactionBody({
+      aaContractHash: AA_HASH,
+      account: { accountAddressScriptHash: ACCOUNT_ADDRESS_SCRIPT_HASH },
+      operationBody: {
+        kind: 'invoke',
+        targetContract: 'd2a4cff31913016155e38e474a2c06d08be276cf',
+        method: 'transfer',
+        args: [],
+      },
+      signerAddress: 'NdzSignerAddress',
+    }).clientInvocation]);
+  } catch (error) {
+    assert.equal(error?.message, EC.v3AccountRequired, `unexpected refusal: ${error.message}`);
+  }
+
+  // The wallet path fed a legacy-shaped envelope: it must refuse or submit a deployed entrypoint,
+  // never forward the envelope as-is.
+  for (const operation of ['executeUnified', 'executeUnifiedByAddress']) {
+    try {
+      built.push([`execution.buildClientBroadcastRequest (${operation})`, execution.buildClientBroadcastRequest({
+        signerAddress: 'NdzSignerAddress',
+        transactionBody: { clientInvocation: legacyShapedInvocation(operation) },
+      })]);
+    } catch (error) {
+      assert.equal(error?.message, EC.clientInvocationMissing, `unexpected refusal: ${error.message}`);
+    }
+  }
 
   for (const [label, invocation] of built) {
     assert.ok(invocation && typeof invocation.operation === 'string', `${label} produced no invocation`);
