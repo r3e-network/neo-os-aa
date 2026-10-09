@@ -11,12 +11,43 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+// The relay turns a payload into an invocation with this module (the relay route imports the same
+// one). It is deliberately not neon-js's ContractParam.fromJson: a relay DTO spells ByteArray as
+// explicit 0x hex, while ContractParam.fromJson reads an RPC JSON ByteArray as base64, so decoding a
+// payload with it turns a 64-byte signature into 65 bytes and the account's verifier refuses the
+// operation on chain.
+import { normalizeRelayContractParameter } from '../../shared/relayContractParameter.mjs';
 
 const AA = fileURLToPath(new URL('../../', import.meta.url));
 const request = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const sdkRequire = createRequire(`${AA}/sdk/js/package.json`);
 const { AbstractAccountClient } = sdkRequire(`${AA}/sdk/js/src/index.js`);
-const { sc } = sdkRequire('@cityofzion/neon-js');
+const { sc, u } = sdkRequire('@cityofzion/neon-js');
+
+// The relay's typed byte boundary, as an object array the script builder can emit.
+function relayArguments(payload) {
+  return JSON.parse(JSON.stringify(payload.args)).map((parameter) => {
+    const normalized = normalizeRelayContractParameter(parameter, { depth: 0, byteEncoding: 'hex', allowClasses: true });
+    return toRpcParameter(normalized);
+  });
+}
+
+// Matches the frontend relay route's own conversion of a normalized relay DTO.
+function toRpcParameter(parameter) {
+  switch (parameter.type) {
+    case 'Hash160': return sc.ContractParam.hash160(parameter.value);
+    case 'Hash256': return sc.ContractParam.hash256(parameter.value);
+    case 'PublicKey': return sc.ContractParam.publicKey(parameter.value);
+    case 'Integer': return sc.ContractParam.integer(parameter.value);
+    case 'Boolean': return sc.ContractParam.boolean(parameter.value);
+    case 'String': return sc.ContractParam.string(parameter.value);
+    case 'ByteArray': return sc.ContractParam.byteArray(u.HexString.fromHex(parameter.value.slice(2), true));
+    case 'Array': return sc.ContractParam.array(...parameter.value.map(toRpcParameter));
+    case 'Map': return sc.ContractParam.map(...parameter.value.map((entry) => ({ key: toRpcParameter(entry.key), value: toRpcParameter(entry.value) })));
+    case 'Any': return sc.ContractParam.any(null);
+    default: throw new Error(`the relay cannot carry a ${parameter.type} parameter`);
+  }
+}
 
 function emit(body) {
   process.stdout.write(`${JSON.stringify(body)}\n`);
@@ -100,12 +131,34 @@ const byteHex = (value) => {
 // them may differ.
 const hashTypes = new Set(['Hash160', 'Hash256', 'PublicKey']);
 const sameValue = (actual, expected, type) => (hashTypes.has(type) ? hex(actual) === hex(expected) : same(actual, expected));
+
+// A ByteArray is compared by the bytes it names in either canonical spelling, including one level of
+// nesting: a decoder that reads an explicit 0x hex value as base64 changes the byte string, so the
+// comparison has to be on the normalised bytes rather than on the spelling the payload happens to use.
+function byteDifference(actual, expected, label) {
+  if (expected.type === 'Array') {
+    if (!Array.isArray(expected.value) || !Array.isArray(actual?.value) || actual.value.length !== expected.value.length) {
+      return `${label} does not carry the requested nested parameters`;
+    }
+    return expected.value.map((item, index) => byteDifference(actual.value[index], item, `${label}[${index}]`)).find(Boolean) || null;
+  }
+  if (expected.type !== 'ByteArray') return null;
+  if (!actual || actual.type !== 'ByteArray') return `${label} is not the requested parameter`;
+  try {
+    return byteHex(actual.value) === hex(expected.value) ? null : `${label} bytes differ`;
+  } catch (error) {
+    return `${label} is not a byte string: ${error.message}`;
+  }
+}
+
 const reproduced = expectedArgs.map((arg, index) => {
   const actual = argsParam.value[index];
-  if (!actual || actual.type !== arg.type) return `argument ${index} is ${actual?.type}, not ${arg.type}`;
-  if (arg.type === 'ByteArray') {
-    return byteHex(actual.value) === hex(arg.value) ? null : `argument ${index} bytes differ`;
-  }
+  if (!actual) return `argument ${index} is missing`;
+  if (actual.type !== arg.type) return `argument ${index} is ${actual.type}, not ${arg.type}`;
+  const byteIssue = byteDifference(actual, arg, `argument ${index}`);
+  if (byteIssue) return byteIssue;
+  if (arg.type === 'Array') return null;
+  if (arg.type === 'ByteArray') return null;
   return sameValue(actual.value, arg.value, arg.type) ? null : `argument ${index} value differs`;
 }).filter(Boolean);
 if (reproduced.length) fail(`the payload does not reproduce the operation: ${reproduced[0]}`);
@@ -119,7 +172,7 @@ if (!sameValue(payload.args[2].value, request.paymaster, 'Hash160')) fail('the p
 if (!sameValue(payload.args[3].value, request.sponsor, 'Hash160')) fail('the payload does not name the requested sponsor');
 if (String(payload.args[4].value) !== String(request.reimbursementAmount)) fail('the payload does not carry the requested reimbursement amount');
 
-const args = payload.args.map((param) => sc.ContractParam.fromJson(param));
+const args = relayArguments(payload);
 const script = sc.createScript({ scriptHash: payload.scriptHash, operation: payload.operation, args });
 
 // The batch builder carries its per-operation arguments through the same path, so a payload built

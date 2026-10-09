@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
+const { sc, u } = require('@cityofzion/neon-js');
 
 const ROOT = path.resolve(__dirname, '../../..');
 const FIXTURE = path.join(ROOT, 'scripts/localchain/sdk_paymaster_fixture.mjs');
@@ -61,6 +62,26 @@ const byteArgs = (byte4) => [
   byte4,
 ];
 
+// The invocation a relay builds from the requested operation, from raw bytes: the reference the
+// fixture's own script has to equal.
+function expectedScript(signatureHex) {
+  const op = sc.ContractParam.array(
+    sc.ContractParam.hash160(TARGET),
+    sc.ContractParam.string('transfer'),
+    sc.ContractParam.array(sc.ContractParam.hash160(RECIPIENT), sc.ContractParam.hash160(BUYER),
+      sc.ContractParam.integer('1000'), sc.ContractParam.byteArray(u.HexString.fromHex('00aabb', true))),
+    sc.ContractParam.integer('1'),
+    sc.ContractParam.integer('1900000000000'),
+    sc.ContractParam.byteArray(u.HexString.fromHex(signatureHex, true)),
+  );
+  return sc.createScript({
+    scriptHash: CORE,
+    operation: 'executeSponsoredUserOp',
+    args: [sc.ContractParam.hash160(ACCOUNT), op, sc.ContractParam.hash160(PAYMASTER),
+      sc.ContractParam.hash160(SPONSOR), sc.ContractParam.integer('500000000')],
+  });
+}
+
 test('the sponsored fixture accepts a payload whose bytes equal the requested bytes', () => {
   for (const value of ['0x', '0x00aabb', '0x' + 'ab'.repeat(40)]) {
     const result = runFixture(byteArgs({ type: 'ByteArray', value }));
@@ -89,6 +110,22 @@ test('the fixture comparison is byte-exact, not a comparison of two spellings', 
   const base64Signature = runFixture(byteArgs({ type: 'ByteArray', value: '0x' }));
   assert.equal(base64Signature.body.ok, true);
   assert.equal(base64Signature.body.payload.args[1].value[5].value, `0x${'ab'.repeat(64)}`);
+});
+
+test('the invocation the fixture prints is the invocation the relay builds from the payload', () => {
+  // The fixture prints the script a relay would broadcast. A relay decodes a payload with the shared
+  // relay normalizer, whose ByteArray is explicit 0x hex; neon-js's ContractParam.fromJson would read
+  // that hex as base64 instead, so the signature reaches the verifier as 65 bytes and the account
+  // refuses the operation on chain with "Invalid signature length". The script must equal the
+  // raw-byte construction exactly.
+  const result = runFixture(byteArgs({ type: 'ByteArray', value: '0x00aabb' }));
+  assert.equal(result.body.ok, true, `${result.body.error || result.body.hint}`);
+  const printed = Buffer.from(result.body.script, 'base64').toString('hex');
+  assert.equal(printed, expectedScript('ab'.repeat(64)), 'the printed invocation is not the requested operation');
+  // A 65-byte signature is exactly what a spelling-confused decode produces, and the account's
+  // verifier refuses it on chain, so pin the length the printed invocation carries.
+  const signature = result.body.payload.args[1].value[5].value;
+  assert.equal((signature.length - 2) / 2, 64, 'the printed invocation does not carry a 64-byte signature');
 });
 
 test('the sponsored fixture refuses a byte argument it cannot spell', () => {
