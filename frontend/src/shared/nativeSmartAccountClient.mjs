@@ -1141,17 +1141,28 @@ export function createNativeClientClass(codec) {
       ]);
       if (!allowed.has(action)) error("unsupported native lifecycle action");
       let authorities = [state.custodyAddress];
+      let pendingCall;
       const params = [H(accountId)];
       if (action.startsWith("propose")) params.push(H(address));
       if (action === "cancelModuleCall") {
         this._role(role);
+        pendingCall = await this.getPendingModuleCall(accountId, role);
+        if (!pendingCall) error("no pending module call to cancel");
         params.push(S(role));
       }
       if (action === "proposeRecovery" || action === "freeze") {
         if (state.recoveryAddress === ZERO) error("no recovery authority");
         authorities = [state.recoveryAddress];
       }
-      if (action === "executeRecovery") authorities = [];
+      if (
+        [
+          "activateVerifier",
+          "activateHook",
+          "activateRecoveryAddress",
+          "executeRecovery",
+        ].includes(action)
+      )
+        authorities = [];
       if (action === "unfreeze" && state.recoveryAddress !== ZERO)
         authorities = [state.custodyAddress, state.recoveryAddress];
       if (action === "cancelRecovery") authorities = []; // Either recovery, or custody strictly before maturity; caller supplies actor for simulation.
@@ -1166,6 +1177,7 @@ export function createNativeClientClass(codec) {
             ? "recovery-or-custody-before-maturity"
             : undefined,
         configurationNonce: state.configurationNonce,
+        ...(action === "cancelModuleCall" ? { role, pending: pendingCall } : {}),
         script: codec.dynamicCall(SERVICE, action, params),
       });
     }
@@ -1184,7 +1196,8 @@ export function createNativeClientClass(codec) {
       } else if (JSON.stringify(state) !== JSON.stringify(plan.accountState))
         error("account changed before transaction signing");
       if (
-        plan.kind === "configuration" &&
+        (plan.kind === "configuration" ||
+          (plan.kind === "lifecycle" && plan.method === "cancelModuleCall")) &&
         JSON.stringify(
           await this.getPendingModuleCall(plan.accountId, plan.role),
         ) !== JSON.stringify(plan.pending)

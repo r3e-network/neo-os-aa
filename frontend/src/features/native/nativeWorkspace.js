@@ -289,7 +289,7 @@ export const NATIVE_ACTIONS = freeze([
     value: "freeze",
     label: "Freeze spending",
     detail:
-      "Recovery authority freezes immediately. Pending changes are cleared.",
+      "Recovery authority freezes immediately and clears pending changes. Unfreezing needs custody and recovery cooperation.",
   },
   {
     value: "proposeRecovery",
@@ -332,7 +332,9 @@ export const NATIVE_ACTIONS = freeze([
         "Activate " +
         name.replace("RecoveryAddress", "recovery authority").toLowerCase(),
       detail:
-        "Activates a mature proposal. Old module cleanup may still fail; custody recovery is the callback-independent exit.",
+        name === "RecoveryAddress"
+          ? "After 24 hours, anyone can activate the mature recovery-authority proposal and pay its fees. No custody signature is required."
+          : "After 24 hours, anyone can activate the mature proposal and pay its fees. No custody signature is required. Old module cleanup may still fail; custody recovery is the callback-independent exit.",
     },
     {
       value: "cancel" + name,
@@ -602,6 +604,7 @@ export function createNativeWorkspace({
       recipe,
       submission,
       feePayer: actor,
+      requiredAuthorities: [...required],
       signers,
       simulation,
       simulationError: displayError(simulation),
@@ -742,6 +745,12 @@ export function createNativeWorkspace({
           : undefined,
       });
       const now = await clock(c);
+      if (
+        input.action === "cancelModuleCall" &&
+        input.expectedPending !== undefined &&
+        comparable(plan.pending) !== comparable(input.expectedPending)
+      )
+        fail("The pending policy changed. Refresh it before reviewing cancellation.");
       const block = actionBlockReason(plan.accountState, input.action, now);
       if (block) fail(block);
       let actor =
@@ -758,6 +767,9 @@ export function createNativeWorkspace({
         fail("Only recovery, or custody before maturity, can cancel recovery.");
       const args = [
         H(accountId),
+        ...(input.action === "cancelModuleCall"
+          ? [{ type: "String", value: plan.role }]
+          : []),
         ...(input.action.startsWith("propose")
           ? [H(nativeAddress(input.address, { zero: true }))]
           : []),
@@ -782,9 +794,26 @@ export function createNativeWorkspace({
         actor,
         submission: input.submission,
         description:
-          NATIVE_ACTIONS.find((a) => a.value === input.action)?.detail ||
-          input.action,
+          input.action === "cancelModuleCall"
+            ? `Cancel the pending ${plan.role} policy call. Custody authority is required; active permissions remain unchanged.`
+            : NATIVE_ACTIONS.find((a) => a.value === input.action)?.detail ||
+              input.action,
       });
+    },
+    async inspectPolicy({ accountId, role = "verifier" }) {
+      const { version, c, intent } = begin();
+      const id = nativeAddress(accountId);
+      if (!["verifier", "hook"].includes(role))
+        fail("Select the verifier or hook policy role.");
+      await c.discover();
+      const [pending, chainTime] = await Promise.all([
+        c.getPendingModuleCall(id, role),
+        clock(c),
+      ]);
+      guard(version);
+      if (intent !== intentVersion)
+        fail("Policy inputs changed. Refresh the pending policy again.");
+      return freeze({ accountId: id, role, pending, chainTime });
     },
     async policy(input) {
       const { version, c, intent } = begin();

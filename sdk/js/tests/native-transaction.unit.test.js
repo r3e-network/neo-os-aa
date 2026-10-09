@@ -2,9 +2,15 @@ const test = require("node:test"),
   assert = require("node:assert/strict"),
   crypto = require("node:crypto");
 const {
+  NativeSmartAccountClient,
   nativeCodec: c,
   NATIVE_PROFILE_PARAMETER_DIGEST: PROFILE,
+  NATIVE_ACCOUNT_SERVICE: CORE,
 } = require("../src/native");
+const {
+  NATIVE_REQUIRED_ABI,
+  NATIVE_REQUIRED_EVENTS,
+} = require("../src/native/client");
 const { createNativeTransactionTools } = require("../src/native/transaction");
 function signer() {
   const { privateKey, publicKey } = crypto.generateKeyPairSync("ec", {
@@ -160,6 +166,120 @@ function fixture() {
     },
   };
 }
+function lifecycleFixture(role = "verifier") {
+  const f = fixture(),
+    accountId = f.plan.accountId,
+    module = "55".repeat(20),
+    recovery = "66".repeat(20),
+    I = (value) => ({ type: "Integer", value: String(value) }),
+    B = (hex) => ({
+      type: "ByteString",
+      value: Buffer.from(hex, "hex").toString("base64"),
+    }),
+    H = (hex) => B(Buffer.from(hex, "hex").reverse().toString("hex")),
+    A = (value) => ({ type: "Array", value }),
+    N = { type: "Any", value: null },
+    binding = A([H(module), H("aa".repeat(32))]),
+    pendingBinding = A([...binding.value, I(1), I(86400001), I(11)]),
+    record = A([
+      I(2),
+      H(accountId),
+      H(c.accountAddress(accountId)),
+      H(f.custody.account),
+      H(recovery),
+      binding,
+      binding,
+      I(0),
+      I(11),
+      pendingBinding,
+      pendingBinding,
+      A([H("77".repeat(20)), I(1), I(86400001), I(11)]),
+      N,
+      I(7),
+    ]),
+    pending = A([
+      I(1),
+      H(accountId),
+      I(role === "verifier" ? 0 : 1),
+      binding,
+      binding,
+      B(Buffer.from("setConfig").toString("hex")),
+      A([H(accountId), I(1)]),
+      I(1),
+      I(86400001),
+      I(11),
+    ]),
+    manifest = {
+      name: "AccountManagement",
+      extra: { smartAccount: { abiVersion: 2, profileParameterDigest: PROFILE } },
+      abi: {
+        methods: Object.entries(NATIVE_REQUIRED_ABI).map(
+          ([name, [types, returntype, safe, names]]) => ({
+            name,
+            returntype,
+            safe,
+            parameters: types.map((type, index) => ({
+              name: names[index],
+              type,
+            })),
+          }),
+        ),
+        events: Object.entries(NATIVE_REQUIRED_EVENTS).map(
+          ([name, parameters]) => ({ name, parameters }),
+        ),
+      },
+    },
+    reads = new Map([
+      [c.dynamicCall(CORE, "getVersion", [], 5), I(2)],
+      [c.dynamicCall(CORE, "getAccount", [c.hashValue(accountId)], 5), record],
+      [
+        c.dynamicCall(CORE, "getPendingModuleCall", [
+          c.hashValue(accountId),
+          c.stringValue(role),
+        ], 5),
+        pending,
+      ],
+    ]),
+    actions = new Set([
+      ...["activateVerifier", "activateHook", "activateRecoveryAddress"].map(
+        (action) => c.dynamicCall(CORE, action, [c.hashValue(accountId)]),
+      ),
+      c.dynamicCall(CORE, "cancelModuleCall", [
+        c.hashValue(accountId),
+        c.stringValue(role),
+      ]),
+    ]),
+    send = f.client.rpc.send;
+  f.client = new NativeSmartAccountClient({
+    networkMagic: 123,
+    rpcClient: {
+      send: async (method, params) => {
+        if (!["getversion", "getcontractstate", "invokescript"].includes(method))
+          return send(method, params);
+        f.calls.push({ method, params });
+        if (method === "getversion") return { protocol: { network: 123 } };
+        if (method === "getcontractstate")
+          return { id: -13, hash: "0x" + CORE, manifest };
+        const script = Buffer.from(params[0], "base64").toString("hex");
+        if (!reads.has(script) && !actions.has(script))
+          throw new Error("unexpected lifecycle RPC script");
+        return {
+          state: "HALT",
+          stack: [reads.get(script) ?? N],
+          gasconsumed: "10",
+          minimumrequiredfee: "100",
+        };
+      },
+    },
+  });
+  return {
+    ...f,
+    accountId,
+    replacePending: () => {
+      pending.value[6] = A([H(accountId), I(2)]);
+    },
+  };
+}
 test("native transaction uses external payer first, exact proxy script, none payer scope and real P256 signed bytes", async () => {
   const f = fixture(),
     p = await f.tool.prepareNativeTransaction(f.client, f.plan, f.options);
@@ -173,6 +293,100 @@ test("native transaction uses external payer first, exact proxy script, none pay
   f.setPreflight(signed.txid);
   const r = await f.tool.broadcastNativeTransaction(f.client, signed);
   assert.deepEqual(r, { txid: signed.txid, submitted: true, confirmed: false });
+});
+for (const action of [
+  "activateVerifier",
+  "activateHook",
+  "activateRecoveryAddress",
+]) {
+  test(`${action} prepares and signs a lifecycle transaction with only an independent fee payer`, async () => {
+    const f = lifecycleFixture(),
+      plan = await f.client.buildAction({ accountId: f.accountId, action }),
+      expectedScript = c.dynamicCall(CORE, action, [c.hashValue(f.accountId)]),
+      expectedSigners = [{ account: "0x" + f.payer.account, scopes: "None" }];
+    assert.notEqual(f.payer.account, f.custody.account);
+    assert.deepEqual(plan.requiredAuthorities, []);
+    assert.equal(plan.script, expectedScript);
+    const prepared = await f.tool.prepareNativeTransaction(
+        f.client,
+        plan,
+        f.options,
+      ),
+      signed = await f.tool.signNativeTransaction(f.client, prepared),
+      { tx } = require("@cityofzion/neon-js"),
+      decoded = tx.Transaction.deserialize(signed.rawTransaction).toJson();
+    assert.deepEqual(prepared.transaction.signers, expectedSigners);
+    assert.deepEqual(decoded.signers, expectedSigners);
+    assert.equal(
+      Buffer.from(decoded.script, "base64").toString("hex"),
+      expectedScript,
+    );
+    assert.equal(decoded.witnesses.length, 1);
+    assert.equal(
+      Buffer.from(decoded.witnesses[0].verification, "base64").toString("hex"),
+      f.payer.verificationScript,
+    );
+    const simulation = f.calls.find(
+      (call) =>
+        call.method === "invokescript" &&
+        Buffer.from(call.params[0], "base64").toString("hex") === expectedScript,
+    );
+    assert.deepEqual(simulation.params[1], expectedSigners);
+  });
+}
+test("replacing a pending module cancellation intent rejects signing before any wallet callback", async () => {
+  for (const role of ["verifier", "hook"]) {
+    const f = lifecycleFixture(role),
+      plan = await f.client.buildAction({
+        accountId: f.accountId,
+        action: "cancelModuleCall",
+        role,
+      }),
+      expectedPending = await f.client.getPendingModuleCall(f.accountId, role),
+      signedBy = [],
+      observe = (wallet) => ({
+        ...wallet,
+        sign: async (hex) => {
+          signedBy.push(wallet.account);
+          return wallet.sign(hex);
+        },
+      }),
+      prepared = await f.tool.prepareNativeTransaction(f.client, plan, {
+        ...f.options,
+        feePayer: observe(f.payer),
+        authoritySigners: [observe(f.custody)],
+      });
+    assert.deepEqual(plan.requiredAuthorities, [f.custody.account]);
+    assert.deepEqual(prepared.transaction.signers, [
+      { account: "0x" + f.payer.account, scopes: "None" },
+      {
+        account: "0x" + f.custody.account,
+        scopes: "CustomContracts",
+        allowedcontracts: ["0x" + CORE],
+      },
+    ]);
+    assert.equal(
+      plan.script,
+      c.dynamicCall(CORE, "cancelModuleCall", [
+        c.hashValue(f.accountId),
+        c.stringValue(role),
+      ]),
+    );
+    assert.deepEqual(signedBy, []);
+    f.replacePending();
+    assert.deepEqual(await f.client.getAccount(f.accountId), plan.accountState);
+    assert.notDeepEqual(
+      await f.client.getPendingModuleCall(f.accountId, role),
+      expectedPending,
+    );
+    await assert.rejects(
+      () => f.tool.signNativeTransaction(f.client, prepared),
+      /module proposal phase changed/,
+    );
+    assert.deepEqual(signedBy, []);
+    assert.equal(plan.role, role);
+    assert.deepEqual(plan.pending, expectedPending);
+  }
 });
 test("native witness fallback adds independent custody authority scoped only to native service", async () => {
   const f = fixture();
