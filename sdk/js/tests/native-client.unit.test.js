@@ -6,7 +6,10 @@ const {
   NATIVE_PROFILE_PARAMETER_DIGEST: D,
   NATIVE_ACCOUNT_SERVICE: CORE,
 } = require("../src/native");
-const { NATIVE_REQUIRED_ABI } = require("../src/native/client");
+const {
+  NATIVE_REQUIRED_ABI,
+  NATIVE_REQUIRED_EVENTS,
+} = require("../src/native/client");
 const h = "11".repeat(20),
   custody = "22".repeat(20),
   recovery = "33".repeat(20),
@@ -49,11 +52,20 @@ function fixture() {
     extra: { smartAccount: { abiVersion: 2, profileParameterDigest: D } },
     abi: {
       methods: Object.entries(NATIVE_REQUIRED_ABI).map(
-        ([name, [params, returntype, safe]]) => ({
+        ([name, [params, returntype, safe, names]]) => ({
           name,
-          parameters: params.map((type) => ({ type })),
+          parameters: params.map((type, index) => ({
+            name: names[index],
+            type,
+          })),
           returntype,
           safe,
+        }),
+      ),
+      events: Object.entries(NATIVE_REQUIRED_EVENTS).map(
+        ([name, parameters]) => ({
+          name,
+          parameters: structuredClone(parameters),
         }),
       ),
     },
@@ -156,7 +168,7 @@ test("native discovery requires the canonical P256 helper ABI without invoking i
   const name = "canonicalP256PublicKey";
   const valid = {
     name,
-    parameters: [{ type: "ByteArray" }],
+    parameters: [{ name: "publicKey", type: "ByteArray" }],
     returntype: "ByteArray",
     safe: true,
   };
@@ -164,7 +176,7 @@ test("native discovery requires the canonical P256 helper ABI without invoking i
     null,
     { ...valid, safe: false },
     { ...valid, returntype: "Any" },
-    { ...valid, parameters: [{ type: "String" }] },
+    { ...valid, parameters: [{ name: "publicKey", type: "String" }] },
   ]) {
     const f = fixture();
     f.manifest.abi.methods = f.manifest.abi.methods.filter(
@@ -187,6 +199,121 @@ test("native discovery requires the canonical P256 helper ABI without invoking i
     ),
     false,
   );
+});
+test("native discovery rejects missing, ambiguous and malformed required methods before activation queries", async () => {
+  for (const name of Object.keys(NATIVE_REQUIRED_ABI)) {
+    const changes = [
+      [
+        "missing",
+        (methods, entry) => methods.splice(methods.indexOf(entry), 1),
+      ],
+      ["duplicate", (methods, entry) => methods.push(structuredClone(entry))],
+      [
+        "overload",
+        (methods, entry) =>
+          methods.push({
+            ...entry,
+            parameters: [
+              ...entry.parameters,
+              { name: "unexpected", type: "Any" },
+            ],
+          }),
+      ],
+      ["parameter collection", (_, entry) => (entry.parameters = null)],
+      [
+        "return",
+        (_, entry) =>
+          (entry.returntype = entry.returntype === "Any" ? "Void" : "Any"),
+      ],
+      ["safe", (_, entry) => (entry.safe = String(entry.safe))],
+    ];
+    if (NATIVE_REQUIRED_ABI[name][0].length)
+      changes.push(
+        ["parameter name", (_, entry) => delete entry.parameters[0].name],
+        ["parameter type", (_, entry) => (entry.parameters[0].type = "Any")],
+        ["null parameter", (_, entry) => (entry.parameters[0] = null)],
+      );
+    if (NATIVE_REQUIRED_ABI[name][0].length > 1)
+      changes.push([
+        "parameter order",
+        (_, entry) =>
+          ([entry.parameters[0], entry.parameters[1]] = [
+            entry.parameters[1],
+            entry.parameters[0],
+          ]),
+      ]);
+    for (const [label, change] of changes) {
+      const f = fixture();
+      change(
+        f.manifest.abi.methods,
+        f.manifest.abi.methods.find((method) => method.name === name),
+      );
+      await assert.rejects(
+        () => f.client.discover(),
+        /native ABI/,
+        `${name}: ${label}`,
+      );
+      assert.equal(f.client.profile, null);
+      assert.equal(
+        f.calls.some((call) => call.method === "invokescript"),
+        false,
+      );
+    }
+  }
+});
+test("native discovery requires every event with unique names and ordered named parameter types", async () => {
+  for (const name of Object.keys(NATIVE_REQUIRED_EVENTS)) {
+    const changes = [
+      ["missing", (events, entry) => events.splice(events.indexOf(entry), 1)],
+      ["duplicate", (events, entry) => events.push(structuredClone(entry))],
+      ["parameter collection", (_, entry) => (entry.parameters = {})],
+      ["parameter name", (_, entry) => delete entry.parameters[0].name],
+      [
+        "parameter type",
+        (_, entry) => (entry.parameters[0].type = "ByteArray"),
+      ],
+      ["null parameter", (_, entry) => (entry.parameters[0] = null)],
+    ];
+    if (NATIVE_REQUIRED_EVENTS[name].length > 1)
+      changes.push([
+        "parameter order",
+        (_, entry) =>
+          ([entry.parameters[0], entry.parameters[1]] = [
+            entry.parameters[1],
+            entry.parameters[0],
+          ]),
+      ]);
+    for (const [label, change] of changes) {
+      const f = fixture();
+      change(
+        f.manifest.abi.events,
+        f.manifest.abi.events.find((event) => event.name === name),
+      );
+      await assert.rejects(
+        () => f.client.discover(),
+        /native ABI event/,
+        `${name}: ${label}`,
+      );
+      assert.equal(f.client.profile, null);
+      assert.equal(
+        f.calls.some((call) => call.method === "invokescript"),
+        false,
+      );
+    }
+  }
+});
+test("native discovery rejects malformed descriptor collections and accepts manifest ordering changes", async () => {
+  for (const collection of ["methods", "events"]) {
+    for (const value of [undefined, null, {}, [null], [[]], [{ name: 1 }]]) {
+      const f = fixture();
+      f.manifest.abi[collection] = value;
+      await assert.rejects(() => f.client.discover(), /native ABI/);
+    }
+  }
+  const f = fixture();
+  f.manifest.abi.methods.reverse();
+  f.manifest.abi.events.reverse();
+  assert.equal((await f.client.discover()).abiVersion, 2);
 });
 test("native state is exact14 fields with epoch and independently checked address", async () => {
   const f = fixture();

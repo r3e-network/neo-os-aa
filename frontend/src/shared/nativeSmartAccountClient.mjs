@@ -16,49 +16,295 @@ const freeze = (value) => {
 };
 const I = (value) => ({ type: "Integer", value: String(value) });
 const A = (value) => ({ type: "Array", value });
+const parameters = (entries) => entries.map(([name, type]) => ({ name, type }));
+const requiredMethod = (entries, returntype, safe) => [
+  entries.map(([, type]) => type),
+  returntype,
+  safe,
+  entries.map(([name]) => name),
+];
 export const NATIVE_REQUIRED_ABI = {
-  verify: [["Hash160"], "Boolean", true],
-  getVersion: [[], "Integer", true],
-  canonicalP256PublicKey: [["ByteArray"], "ByteArray", true],
-  getAccount: [["Hash160"], "Any", true],
-  getAccountAddress: [["Hash160"], "Hash160", true],
-  getAuthorityEpoch: [["Hash160"], "Integer", true],
-  getNonce: [["Hash160", "Integer"], "Integer", true],
-  getAuthorizationDomain: [["Hash160"], "ByteArray", true],
-  getOperationDigest: [["Hash160", "Array"], "ByteArray", true],
-  getPendingModuleCall: [["Hash160", "String"], "Any", true],
-  getModuleDependencies: [["Hash160", "String"], "Array", true],
-  registerAccount: [
-    ["Hash160", "ByteArray", "Hash160", "Hash160", "Hash160"],
+  verify: requiredMethod([["accountId", "Hash160"]], "Boolean", true),
+  getVersion: requiredMethod([], "Integer", true),
+  canonicalP256PublicKey: requiredMethod(
+    [["publicKey", "ByteArray"]],
+    "ByteArray",
+    true,
+  ),
+  getAccount: requiredMethod([["accountId", "Hash160"]], "Any", true),
+  getAccountAddress: requiredMethod(
+    [["accountId", "Hash160"]],
+    "Hash160",
+    true,
+  ),
+  getAuthorityEpoch: requiredMethod(
+    [["accountId", "Hash160"]],
+    "Integer",
+    true,
+  ),
+  getNonce: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["channel", "Integer"],
+    ],
+    "Integer",
+    true,
+  ),
+  getAuthorizationDomain: requiredMethod(
+    [["accountId", "Hash160"]],
+    "ByteArray",
+    true,
+  ),
+  getOperationDigest: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["op", "Array"],
+    ],
+    "ByteArray",
+    true,
+  ),
+  getPendingModuleCall: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["moduleType", "String"],
+    ],
+    "Any",
+    true,
+  ),
+  getModuleDependencies: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["moduleType", "String"],
+    ],
+    "Array",
+    true,
+  ),
+  hasModuleContext: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["moduleType", "String"],
+      ["module", "Hash160"],
+      ["phase", "String"],
+    ],
+    "Boolean",
+    true,
+  ),
+  isAccountAuthorized: requiredMethod(
+    [["accountId", "Hash160"]],
+    "Boolean",
+    true,
+  ),
+  registerAccount: requiredMethod(
+    [
+      ["custodyAddress", "Hash160"],
+      ["salt", "ByteArray"],
+      ["verifier", "Hash160"],
+      ["hook", "Hash160"],
+      ["recoveryAddress", "Hash160"],
+    ],
     "Hash160",
     false,
-  ],
-  executeUserOp: [["Hash160", "Array", "Integer", "Integer"], "Any", false],
-  executeUserOps: [["Hash160", "Array", "Integer", "Integer"], "Array", false],
-  callVerifier: [["Hash160", "String", "Array"], "Any", false],
-  callHook: [["Hash160", "String", "Array"], "Any", false],
-  callVerifierChild: [["Hash160", "Hash160", "String", "Array"], "Any", false],
-  callHookChild: [["Hash160", "Hash160", "String", "Array"], "Any", false],
-  cancelModuleCall: [["Hash160", "String"], "Void", false],
-};
-for (const prefix of ["Verifier", "Hook", "RecoveryAddress"]) {
-  NATIVE_REQUIRED_ABI["propose" + prefix] = [
-    ["Hash160", "Hash160"],
+  ),
+  executeUserOp: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["op", "Array"],
+      ["expectedAuthorityEpoch", "Integer"],
+      ["expectedConfigurationNonce", "Integer"],
+    ],
+    "Any",
+    false,
+  ),
+  executeUserOps: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["ops", "Array"],
+      ["expectedAuthorityEpoch", "Integer"],
+      ["expectedConfigurationNonce", "Integer"],
+    ],
+    "Array",
+    false,
+  ),
+  callVerifier: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["method", "String"],
+      ["args", "Array"],
+    ],
+    "Any",
+    false,
+  ),
+  callHook: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["method", "String"],
+      ["args", "Array"],
+    ],
+    "Any",
+    false,
+  ),
+  callVerifierChild: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["childVerifier", "Hash160"],
+      ["method", "String"],
+      ["args", "Array"],
+    ],
+    "Any",
+    false,
+  ),
+  callHookChild: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["childHook", "Hash160"],
+      ["method", "String"],
+      ["args", "Array"],
+    ],
+    "Any",
+    false,
+  ),
+  cancelModuleCall: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["moduleType", "String"],
+    ],
     "Void",
     false,
-  ];
+  ),
+};
+for (const [prefix, parameter] of [
+  ["Verifier", "verifier"],
+  ["Hook", "hook"],
+  ["RecoveryAddress", "recovery"],
+]) {
+  NATIVE_REQUIRED_ABI["propose" + prefix] = requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      [parameter, "Hash160"],
+    ],
+    "Void",
+    false,
+  );
   for (const verb of ["activate", "cancel"])
-    NATIVE_REQUIRED_ABI[verb + prefix] = [["Hash160"], "Void", false];
+    NATIVE_REQUIRED_ABI[verb + prefix] = requiredMethod(
+      [["accountId", "Hash160"]],
+      "Void",
+      false,
+    );
 }
-NATIVE_REQUIRED_ABI.proposeRecovery = [["Hash160", "Hash160"], "Void", false];
+NATIVE_REQUIRED_ABI.proposeRecovery = requiredMethod(
+  [
+    ["accountId", "Hash160"],
+    ["newCustody", "Hash160"],
+  ],
+  "Void",
+  false,
+);
 for (const method of [
   "executeRecovery",
   "cancelRecovery",
   "freeze",
   "unfreeze",
+  "clearVerifierDependencies",
+  "clearHookDependencies",
 ])
-  NATIVE_REQUIRED_ABI[method] = [["Hash160"], "Void", false];
+  NATIVE_REQUIRED_ABI[method] = requiredMethod(
+    [["accountId", "Hash160"]],
+    "Void",
+    false,
+  );
+for (const method of ["setVerifierDependencies", "setHookDependencies"])
+  NATIVE_REQUIRED_ABI[method] = requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["children", "Array"],
+    ],
+    "Void",
+    false,
+  );
 freeze(NATIVE_REQUIRED_ABI);
+export const NATIVE_REQUIRED_EVENTS = {
+  AccountCreated: parameters([
+    ["accountId", "Hash160"],
+    ["accountAddress", "Hash160"],
+    ["custodyAddress", "Hash160"],
+    ["verifier", "Hash160"],
+    ["hook", "Hash160"],
+    ["recoveryAddress", "Hash160"],
+  ]),
+  RecoveryProposed: parameters([
+    ["accountId", "Hash160"],
+    ["newCustodyAddress", "Hash160"],
+    ["executeAt", "Integer"],
+    ["configurationNonce", "Integer"],
+  ]),
+  RecoveryCancelled: parameters([
+    ["accountId", "Hash160"],
+    ["configurationNonce", "Integer"],
+  ]),
+  RecoveryExecuted: parameters([
+    ["accountId", "Hash160"],
+    ["oldCustodyAddress", "Hash160"],
+    ["newCustodyAddress", "Hash160"],
+    ["configurationNonce", "Integer"],
+    ["authorityEpoch", "Integer"],
+  ]),
+  AccountFrozen: parameters([["accountId", "Hash160"]]),
+  AccountUnfrozen: parameters([["accountId", "Hash160"]]),
+  UserOpExecuted: parameters([
+    ["accountId", "Hash160"],
+    ["targetContract", "Hash160"],
+    ["method", "String"],
+    ["nonce", "Integer"],
+  ]),
+};
+for (const [prefix, parameter] of [
+  ["Verifier", "verifier"],
+  ["Hook", "hook"],
+  ["RecoveryAddress", "recoveryAddress"],
+]) {
+  NATIVE_REQUIRED_EVENTS[prefix + "ChangeProposed"] = parameters([
+    ["accountId", "Hash160"],
+    [parameter, "Hash160"],
+    ["activateAt", "Integer"],
+    ["configurationNonce", "Integer"],
+  ]);
+  NATIVE_REQUIRED_EVENTS[prefix + "Changed"] = parameters([
+    ["accountId", "Hash160"],
+    [parameter, "Hash160"],
+    ["configurationNonce", "Integer"],
+  ]);
+  NATIVE_REQUIRED_EVENTS[prefix + "ChangeCancelled"] = parameters([
+    ["accountId", "Hash160"],
+    ["configurationNonce", "Integer"],
+  ]);
+}
+freeze(NATIVE_REQUIRED_EVENTS);
+function matchesParameters(actual, expected) {
+  return (
+    Array.isArray(actual) &&
+    actual.length === expected.length &&
+    expected.every(
+      (parameter, index) =>
+        actual[index]?.name === parameter.name &&
+        actual[index]?.type === parameter.type,
+    )
+  );
+}
+function descriptors(value, label) {
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (entry) =>
+        !entry ||
+        typeof entry !== "object" ||
+        Array.isArray(entry) ||
+        typeof entry.name !== "string",
+    )
+  )
+    error(`native ABI ${label} missing or malformed`);
+  return value;
+}
 // Core returns one snapshotted Any for executeUserOp, or one exact Array of
 // those results for executeUserOps. RPC truncation is not execution evidence.
 export function validateNativeInvocationResult(plan, stack) {
@@ -348,22 +594,30 @@ export function createNativeClientClass(codec) {
         marker?.profileParameterDigest !== this.profileParameterDigest
       )
         error("native ABI/profile parameter digest mismatch");
-      const methods = state.manifest.abi?.methods;
-      if (!Array.isArray(methods)) error("native ABI missing");
-      for (const [name, [params, returntype, safe]] of Object.entries(
+      const methods = descriptors(state.manifest.abi?.methods, "methods");
+      const events = descriptors(state.manifest.abi?.events, "events");
+      for (const [name, [types, returntype, safe, names]] of Object.entries(
         NATIVE_REQUIRED_ABI,
       )) {
-        const matches = methods.filter(
-          (m) => m.name === name && m.parameters?.length === params.length,
-        );
+        const matches = methods.filter((method) => method.name === name);
         if (
           matches.length !== 1 ||
           matches[0].returntype !== returntype ||
           matches[0].safe !== safe ||
-          JSON.stringify(matches[0].parameters.map((p) => p.type)) !==
-            JSON.stringify(params)
+          !matchesParameters(
+            matches[0].parameters,
+            parameters(types.map((type, index) => [names[index], type])),
+          )
         )
           error(`native ABI mismatch: ${name}`);
+      }
+      for (const [name, params] of Object.entries(NATIVE_REQUIRED_EVENTS)) {
+        const matches = events.filter((event) => event.name === name);
+        if (
+          matches.length !== 1 ||
+          !matchesParameters(matches[0].parameters, params)
+        )
+          error(`native ABI event mismatch: ${name}`);
       }
       if ((await this._read("getVersion")) !== 2n)
         error("native service is inactive or has wrong version");

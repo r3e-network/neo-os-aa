@@ -3,7 +3,10 @@ import {
   NATIVE_ACCOUNT_SERVICE as CORE,
   NATIVE_PROFILE_PARAMETER_DIGEST,
 } from "../../src/features/native/nativeWorkspace.js";
-import { NATIVE_REQUIRED_ABI } from "../../src/shared/nativeSmartAccountClient.mjs";
+import {
+  NATIVE_REQUIRED_ABI,
+  NATIVE_REQUIRED_EVENTS,
+} from "../../src/shared/nativeSmartAccountClient.mjs";
 export const nativeTestCustody = "11".repeat(20),
   nativeTestRecovery = "22".repeat(20),
   nativeTestSalt = "33".repeat(32),
@@ -50,11 +53,20 @@ export function createNativeRpcFixture() {
     },
     abi: {
       methods: Object.entries(NATIVE_REQUIRED_ABI).map(
-        ([name, [types, returntype, safe]]) => ({
+        ([name, [types, returntype, safe, names]]) => ({
           name,
-          parameters: types.map((type) => ({ type })),
+          parameters: types.map((type, index) => ({
+            name: names[index],
+            type,
+          })),
           returntype,
           safe,
+        }),
+      ),
+      events: Object.entries(NATIVE_REQUIRED_EVENTS).map(
+        ([name, parameters]) => ({
+          name,
+          parameters: structuredClone(parameters),
         }),
       ),
     },

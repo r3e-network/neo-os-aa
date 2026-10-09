@@ -97,3 +97,5 @@ semantics. Receipts absent from this checkout are not current release evidence.
 
 - same-transaction AA creation plus `.matrix` registration is supported for compatible Neo wallets
 - `.matrix` resolution is used to discover linked AA addresses through admin/manager indexes
+
+- [Native issue 242 conformance map](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md): required protocol sections, implementation evidence and remaining public-activation gates.
