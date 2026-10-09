@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { DEFAULT_ABSTRACT_ACCOUNT_HASH, DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET, resolveAbstractAccountHash, resolveOptionalBoolean } from '../src/config/runtimeConfig.js';
 import { sanitizeHex } from '../src/utils/hex.js';
 import { TRANSFER_RETURNED_FALSE_MESSAGE, findFailedTransferInInvocation } from '../src/shared/transferOutcome.mjs';
-import { convertContractParamFromJson, normalizeRelayPayload, sanitizeMetaInvocationForRelay } from './relayHelpers.js';
+import { convertContractParamFromJson, normalizeRelayPayload, resolveRelayMetaInvocationRefusal, sanitizeMetaInvocationForRelay } from './relayHelpers.js';
 import { attachRequestId, beginDurableRequest, completeDurableRequest, failDurableRequest } from './requestDurability.js';
 import { checkRateLimit, resolveClientIp, resolveRateLimitFailure, sanitizeError } from './rateLimiter.js';
 import { resolveMorpheusOracleCvmId, resolveMorpheusPaymasterEndpoint, resolveMorpheusRuntimeToken, resolveNetwork } from './morpheus-base.js';
@@ -765,8 +765,13 @@ export default async function handler(req, res) {
     aaContractHash: allowedAaContractHash,
   });
   if (!sanitizedMetaInvocation) {
+    // Name the cause: an operation the deployed core does not export has to be refused here,
+    // where the caller can still see why, not later inside simulation.
+    const reason = resolveRelayMetaInvocationRefusal(metaInvocation, {
+      aaContractHash: allowedAaContractHash,
+    });
     await failDurableRequest(durable.context, { statusCode: 400, error: 'relay_meta_invocation_not_allowed', phase: 'validation' });
-    return sendJson(res, 400, { error: 'relay_meta_invocation_not_allowed' }, requestId);
+    return sendJson(res, 400, { error: 'relay_meta_invocation_not_allowed', reason }, requestId);
   }
 
   if (!relayWif) {
