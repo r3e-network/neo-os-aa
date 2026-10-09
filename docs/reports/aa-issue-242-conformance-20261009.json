@@ -1,0 +1,88 @@
+{
+  "schema": "native-issue-242-conformance-review/v1",
+  "reviewDate": "2026-10-09",
+  "issue": "https://github.com/neo-project/proposals/issues/242",
+  "issueUpdatedAt": "2026-10-01T18:27:32Z",
+  "aaBaseCommit": "455d3b189a8334f14c95b2f06a2dfbbb184cf6fc",
+  "coreTestCommit": "95e2c06e5e99aee3b44f8f3d7ef4cf9640fd56bb",
+  "coreProductionSource": "ff422d940a4722c361c32398c6f28c00fb7f0693",
+  "foundationCommit": "84b6179999bb0f169d53f803e818a97235de4d17",
+  "profile": {
+    "abiVersion": 2,
+    "identityVersion": 1,
+    "requiredMethods": 39,
+    "requiredEvents": 16,
+    "parametersChanged": false
+  },
+  "corrections": [
+    "Complete SDK ABI discovery, with required ordered named parameters and events",
+    "Preserve typed nested REST manifest metadata",
+    "Specify deterministic Verification/Application chain time and inclusive deadlines",
+    "Clarify mandatory scalar compatibility descriptors for composite native verifiers",
+    "State absence of implicit import or ABI 1 native-state conversion",
+    "Separate protocol-review completeness from public-activation authorization"
+  ],
+  "validation": {
+    "core": {
+      "passed": 1792,
+      "failed": 0,
+      "skipped": 0,
+      "newClockCases": 6
+    },
+    "sdk": {
+      "passed": 183,
+      "packageConsumerPassed": 4,
+      "typeCheck": "passed"
+    },
+    "frontend": {
+      "initialPassed": 626,
+      "initialSkipped": 3,
+      "canonicalSourceRecheckPassed": 10,
+      "canonicalSourceRecheckSkipped": 0,
+      "distinctPassedAfterRecheck": 629,
+      "nativeBrowserPassed": 1,
+      "build": "passed"
+    },
+    "formal": {
+      "modelChecksPassed": true,
+      "implementationVerified": false,
+      "coqModules": 26,
+      "closedDeclarations": 443,
+      "tlcDistinctStates": 61460,
+      "smt": {
+        "obligations": 6,
+        "controls": 6
+      },
+      "runnerTestsPassed": 60,
+      "coqMutationsRejected": 243,
+      "tlcMutationsRejected": 4,
+      "semanticMutationsRejected": 247
+    },
+    "documentValidators": [
+      "foundation: passed",
+      "native profile and vectors: passed"
+    ],
+    "rest": {
+      "nativeCorePassed": 14,
+      "publishedCorePassed": 14,
+      "newRegressionCases": 3,
+      "beforeFixFailed": 2,
+      "beforeFixPassed": 1,
+      "focusedJsonRpcPassed": 5,
+      "format": "passed"
+    }
+  },
+  "sourceSha256": {
+    "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md": "7f0a0d031a133e3448817956eabaca0079813523d3d1a96f7fde6e3b1d8dca9f",
+    "docs/proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md": "0dcf3070d43f1ca3e0520c4584060ad440ac0e9b85185fc20465f37216d12c64",
+    "shared/nativeSmartAccountClient.mjs": "72bc2ea5f578b81f29ed777b56dcd7c4e67f9803074f18feb27a92bef6babd38",
+    "formal/source-lock.json": "57d5eae1cbfb31a5346d2731b6689d903b26cffebc89d114a44710c4859d46dc"
+  },
+  "boundaries": [
+    "Upstream reviews remain required; no public-network activation",
+    "Private runtime receipts retain their original artifact and source pins",
+    "Two independent consensus-client conformance and applicable prior-state migration remain activation gates",
+    "Handwritten formal models do not prove implementation refinement or arbitrary module liveness"
+  ],
+  "rpcCommit": "835a222751131717c03507b8cade2db4e69a1c4b"
+}

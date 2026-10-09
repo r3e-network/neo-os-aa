@@ -347,6 +347,42 @@ test("actual browser client rejects absent native service, ABI1, wrong digest, n
   await w.connect({});
   await assert.rejects(() => w.load(nativeTestIdentity.accountId), /identity/);
 });
+test("browser workspace discovery rejects incomplete methods and malformed event descriptors", async () => {
+  const Client = createNativeClientClass(nativeCodec);
+  for (const change of [
+    (abi) =>
+      (abi.methods = abi.methods.filter(
+        (method) => method.name !== "setVerifierDependencies",
+      )),
+    (abi) => delete abi.events,
+    (abi) => {
+      const event = abi.events.find(
+        (event) => event.name === "RecoveryExecuted",
+      );
+      [event.parameters[3], event.parameters[4]] = [
+        event.parameters[4],
+        event.parameters[3],
+      ];
+    },
+  ]) {
+    const f = createNativeRpcFixture();
+    const send = f.send;
+    f.send = async (method, params) => {
+      const response = await send(method, params);
+      if (method === "getcontractstate") change(response.manifest.abi);
+      return response;
+    };
+    const workspace = createNativeWorkspace({
+      makeClient: () => new Client({ rpcClient: f, networkMagic: 123 }),
+    });
+    await assert.rejects(() => workspace.connect({}), /native ABI/);
+    assert.equal(workspace.profile, null);
+    assert.equal(
+      f.state.calls.some((call) => call.method === "invokescript"),
+      false,
+    );
+  }
+});
 test("canonical native codecs are shipped byte-identically in the standalone frontend", async () => {
   const { readFile } = await import("node:fs/promises");
   const { createHash } = await import("node:crypto");

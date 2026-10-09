@@ -579,7 +579,12 @@ infer compatibility from a compiler label or silently supply an old fingerprint.
 
 ## 8. Module binding and code identity
 
-An installed verifier MUST expose exactly:
+Every ABI 2 verifier, including a composite root, MUST retain these scalar
+compatibility descriptors with the exact types below. Ordinary leaf verifiers
+use these callbacks for execution; admitted composite roots use the additional
+composite callbacks specified next. This native profile is stricter about
+baseline descriptors than the foundation's general permission to define a
+separate composite ABI; it does not make either execution-after callback optional.
 
 ```text
 validateSignature(accountId: Hash160, op: Array) -> Boolean
@@ -1174,6 +1179,37 @@ A signature produced for either older counter value MUST NOT authorize the
 current state. Identity derivation remains version 1; changing the authorization
 domain MUST NOT change accountId, verification-script bytes or asset address.
 
+### 9.3 Chain time and deadline boundaries
+
+Time values are integer milliseconds from a deterministic chain context, never
+from a wallet, relayer or node's wall clock. When an execution has a persisting
+block, the account service uses that block's timestamp. Otherwise it uses the
+timestamp of the header identified by `Ledger.CurrentHash` in the execution's
+snapshot. A missing persisted header MUST fault; zero or local time is not a
+fallback.
+
+The standard Neo witness-verification path supplies no persisting block, so
+Verification uses the snapshot's persisted header time. A verifier needing time
+in that trigger MUST read the same persisted block/header; it MUST NOT assume
+that the Application-only `Runtime.Time` service is available. Application
+execution in a block uses that block's timestamp, including the explicitly
+hypothetical block used by transaction preflight. An earlier Verification result
+MUST NOT replace Application's deadline or module-policy checks.
+
+An operation expires exactly when `now > deadline`; equality is accepted.
+A module may impose a stricter, separately documented policy. Configuration
+and recovery maturity use the same Application time: execution is allowed at
+`now >= matureAt`, while custody cancellation of recovery requires
+`now < executeAt`. The fixed delays are milliseconds, not block counts.
+
+For example, an operation with deadline `1000` can pass Verification against a
+persisted timestamp of `1000` and fail Application in a block timestamped `1001`.
+The failed Application does not consume its nonce or commit target/module state;
+ordinary transaction fees still apply if the transaction is included. A client
+MUST NOT interpret successful Verification, or a hypothetical next-block replay,
+as a reservation of nonce, timestamp or inclusion. It must inspect the actual
+persisted Application result.
+
 ## 10. Resource and fee accounting
 
 The native service MUST use the platform bounded-call capability for every
@@ -1292,27 +1328,37 @@ address without the authority and delay rules above.
 Existing ordinary SmartAccounts remain ordinary deployed contracts. No native
 account is implicitly created for them and no existing address changes meaning.
 
-An optional migration adapter may create a native account only when:
+ABI 2 defines no legacy import entrypoint, import registry, migration event,
+or native address alias. Registering an account does not record a legacy
+identity or authorize movement of legacy assets. The native address differs
+from the legacy address; assets remain at the legacy address until an explicitly
+authorized transfer occurs.
 
-- the legacy account address witnesses the migration transaction;
-- the new custody address witnesses the same transaction;
-- the legacy core identity, legacy account identifier, and legacy address are
-  recorded in the migration event;
-- the new account identifier is computed by the version-1 formula;
-- the legacy identity has not already been imported.
+An optional migration adapter is a separately specified extension outside this
+profile. It may compose the existing registration call with explicitly authorized
+transfers, but MUST NOT claim native import status. If such an extension publishes
+an import mapping, its own specification MUST define the registry and event,
+require both the legacy account and new custody witnesses, bind the legacy core,
+account identifier and asset address, reject duplicate imports, and preserve the
+one-way immutable mapping to the newly derived native account identifier. Those
+requirements do not add an ABI 2 service method or establish implemented adapter
+behavior. The existing legacy witness rules may constrain which composition is
+possible; an adapter requires separate implementation and conformance evidence.
 
-The native address is different from the legacy address. Assets remain at the
-legacy address until an explicitly authorized transfer occurs. The native core
-MUST NOT claim custody of legacy assets merely because an import record exists.
+ABI 1 to ABI 2 is a breaking revision of an unactivated draft, not an automatic
+upgrade of deployed state. Initial activation under this document starts with
+ABI 2. Identity derivation version 1 preserves the formula; it does not make old
+account records, module ABIs or execution envelopes compatible. The native core
+MUST reject an ABI 1 thirteen-field record, an ABI 1 module and a former
+two-argument execution call. It MUST NOT silently append an epoch, infer an
+initial counter, or import an older state namespace.
 
-The migration mapping is one-way and immutable:
-
-```text
-(legacyCoreHash, legacyAccountId, legacyAddress) -> nativeAccountId
-```
-
-No reverse mapping, address alias, or transparent script replacement is
-provided by version 2.
+This profile supplies no legacy native-state conversion routine. A network
+already containing a prior experimental native state cannot use this draft as
+its migration program: it needs the separately specified activation, deterministic
+state conversion and cross-client vectors required by section 11. No reverse
+mapping, transparent script replacement or implicit transfer of assets is
+provided by ABI 2.
 
 ## 13. Required ABI surface
 
@@ -1463,22 +1509,39 @@ The corresponding test suite MUST additionally cover:
 - rollback of nonce, target state, callback state, and notifications;
 - recovery delay, stale configuration nonce, cancellation, and frozen state;
 - pre-activation rejection and activation-block initialization;
-- legacy import witness requirements and asset non-custody.
+- rejection of ABI 1 records, modules and execution envelopes; no implicit legacy import or asset custody.
 
-## 15. Implementation gate
+A separately specified migration adapter MUST additionally publish and pass its
+own witness, duplicate-import, mapping/event and asset-transfer vectors. Those
+extension-specific cases are not claims about the current native ABI.
 
-The native core implementation is ready for a protocol PR only when all of the
-following are true:
+## 15. Review and activation gates
 
-1. the activation identifier and network configuration are accepted;
+A protocol-review candidate MUST include the complete normative state model,
+canonical identity/authorization/nonce/witness vectors, resource and failure
+semantics, authority/governance/recovery rules, and explicit compatibility with
+#218 and the foundation in #243. The implementation and tests offered for review
+MUST identify their exact source and artifact inputs and disclose every pending
+conformance or rollout requirement. Draft PRs and private-chain evidence may be
+reviewed before network activation is approved; they do not imply that approval.
+
+Public activation additionally requires all of the following:
+
+1. the activation identifier and explicit network configuration are accepted
+   through the network's protocol-governance process;
 2. the bounded-call engine capability is implemented and independently tested;
 3. the native ABI and storage encoding match this document byte-for-byte;
 4. the vectors are checked by at least two independent clients;
-5. NeoExpress verifies activation, execution, rollback, migration, and
-   readback parity;
-6. the source, NEF-equivalent native manifest, and deployed readback hashes
+5. NeoExpress verifies activation, execution, rollback and readback parity,
+   plus every migration path applicable to that network's actual prior state;
+6. the source, native manifest/artifact identity and deployed readback hashes
    match;
 7. a security audit has no unmitigated critical or high findings.
 
-Until these gates pass, this document remains a design profile and MUST NOT be
-presented as an activated Neo native SmartAccount service.
+A fresh activation with no legacy native state MUST prove rejection of obsolete
+records and entrypoints and absence of implicit import. It MUST NOT substitute
+that proof for migration testing on a network that does have prior state. Any
+optional adapter needs its own reviewed specification and evidence before use.
+
+Until these public-activation gates pass, this document remains a design profile
+and MUST NOT be presented as an activated Neo native SmartAccount service.
