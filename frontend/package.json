@@ -27,7 +27,8 @@
     "audit:all": "node ../scripts/check_frontend_audit_allowlist.mjs --all",
     "test:web3auth:browser": "node --test tests/web3AuthPackage.browser.mjs",
     "test:docs-security:browser": "node --test tests/docsDependencySecurity.browser.mjs",
-    "test:bundle:browser": "node --test tests/deferredIdentityBundle.browser.mjs"
+    "test:bundle:browser": "node --test tests/deferredIdentityBundle.browser.mjs",
+    "test:ordinary:browser": "node --test tests/ordinaryLifecycle.browser.mjs"
   },
   "dependencies": {
     "@cityofzion/neon-js": "5.9.0",

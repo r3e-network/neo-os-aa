@@ -30,7 +30,10 @@ export function createManageFormState() {
     escapeTimelock: '',
     escapeTriggeredAt: '',
     escapeActive: false,
+    escapeMode: 'backup-owner',
     escapeNewVerifier: '',
+    escapeVerifierParams: '',
+    escapeAllowEmptyParams: false,
   };
 }
 
@@ -51,6 +54,7 @@ export function createManageBusyState() {
     verifier: false,
     initiateEscape: false,
     finalizeEscape: false,
+    governance: false,
   };
 }
 

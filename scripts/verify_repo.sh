@@ -3,10 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
-source "$ROOT_DIR/scripts/dotnet_env.sh"
 
 # Consolidated local+CI validation entrypoint (absorbs the former
-# run_local_validation_gates.sh — this script is a strict superset).
+# run_local_validation_gates.sh; --profile all selects both implementation gates).
 run_contracts=1
 run_frontend=1
 run_sdk=1
@@ -14,10 +13,17 @@ run_formal=0
 run_neoexpress=0
 skip_contract_build=0
 skip_e2e=0
+verification_profile=ordinary
 
 usage() {
   cat <<'EOF'
-Usage: scripts/verify_repo.sh [--contracts-only|--frontend-only|--sdk-only] [--skip-contract-build] [--skip-e2e] [--formal] [--neoexpress]
+Usage: scripts/verify_repo.sh [--profile ordinary|native|all] [--contracts-only|--frontend-only|--sdk-only] [--skip-contract-build] [--skip-e2e] [--formal] [--neoexpress]
+
+Profile ordinary (default): published contract, frontend and SDK gates.
+Profile native: native package/profile guards, module epoch VM fixture and browser checks.
+Profile all: both. Shared frontend/SDK unit checks run for either profile.
+The separate native-profile.yml workflow additionally verifies the pinned native core VM.
+Every selected command is required; this script does not establish network activation.
 
 Set NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 for the release-grade cross-repository gate: a missing
 neo-os-services NeoDIDRegistry artifact, or a missing neo-os-services checkout for the Morpheus
@@ -28,7 +34,7 @@ core checkout matching formal/source-lock.json. It needs Coq 8.16+ (including Ro
 and tla2tools.jar (TLA_JAR); a missing tool is a failure, never a simulated pass.
 
 Set NEOOS_NATIVE_EPOCH_RECEIPT to retain the native-module VM regression JSON at an explicit
-path; otherwise the contract gate writes and prints a temporary receipt path. This test-only
+path; otherwise the native contract gate writes and prints a temporary receipt path. This test-only
 public-VM harness does not establish native-chain admission or recovery.
 
 Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) to also deploy every artifact to a
@@ -37,9 +43,10 @@ contract back over JSON-RPC and write a dated receipt under docs/reports/. It ne
 neoxp tool (~/.dotnet/tools/neoxp, or NEOOS_NEOXP for a core-matched runner) and openssl;
 it never touches a public network.
 
-Runs the full local validation gate:
-- contracts: build + nccs compile + solution tests + native-module VM regression + deployment-tool tests + format verify
-  (+ formal model checks with --formal, + private-chain validation with --neoexpress)
+Runs the selected profile gates:
+- ordinary contracts: public build + solution tests + deployment-tool tests + format verify
+- native contracts: profile/runner guards + native-module epoch VM regression
+- optional: aggregate formal checks with --formal; compatibility private chain with --neoexpress
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
 - sdk: unit tests + declaration types check + installed-package smoke test + production dependency audit
 EOF
@@ -47,6 +54,11 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --profile)
+      [[ $# -ge 2 ]] || { echo "--profile requires ordinary, native or all" >&2; exit 1; }
+      verification_profile="$2"; shift 2 ;;
+    --profile=*)
+      verification_profile="${1#*=}"; shift ;;
     --contracts-only)
       run_contracts=1; run_frontend=0; run_sdk=0; shift ;;
     --frontend-only)
@@ -70,64 +82,93 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+run_ordinary=0
+run_native=0
+case "$verification_profile" in
+  ordinary) run_ordinary=1 ;;
+  native) run_native=1 ;;
+  all) run_ordinary=1; run_native=1 ;;
+  *) echo "Unknown verification profile: $verification_profile" >&2; exit 1 ;;
+esac
+if [[ $run_ordinary -eq 0 && ( $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ) ]]; then
+  echo "--neoexpress selects the compatibility probe; choose ordinary/all or use the dedicated native-chain runner." >&2
+  exit 1
+fi
+
 if [[ $run_contracts -eq 1 ]]; then
   echo ""
   echo "=== Contract Gates ==="
   # Restores the pinned Neo packages in locked mode first (every package is published on
   # nuget.org), so a changed resolution, different package bytes or a different nccs stop here
   # with the pinned versions named (docs/AA-REPRODUCIBLE-BUILD.md) instead of deep inside the build.
-  node scripts/check_neo_platform_packages.mjs --include-native
-  node scripts/check_neo_platform_packages.mjs --compiler-only
-  if [[ $skip_contract_build -eq 0 ]]; then
-    dotnet build contracts/UnifiedSmartWallet.csproj -c Release -p:WarningsAsErrors=nullable -nologo
-    bash contracts/compile.sh
-  fi
-  # The NeoDIDRegistry cross-contract proof deploys a compiled artifact built by
-  # the private sibling repository neo-os-services, whose contracts/build output is
-  # gitignored there. CI checks out this repository on its own, so state the gate's
-  # reachability before the run instead of letting a bare "skipped" read as a pass.
-  services_build="${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/contracts/build}"
-  if [[ -f "$services_build/NeoDIDRegistry.nef" && -f "$services_build/NeoDIDRegistry.manifest.json" ]]; then
-    export NEOOS_REQUIRE_SERVICES_ARTIFACTS=1
-    echo "cross-repo gate: NeoDIDRegistry integration proof ENABLED (artifact dir: $services_build)"
-  elif [[ "${NEOOS_REQUIRE_SERVICES_ARTIFACTS:-0}" == "1" ]]; then
-    echo "cross-repo gate: REQUIRED NeoDIDRegistry artifact is missing: $services_build" >&2
-    echo "cross-repo gate: build neo-os-services contracts and set NEOOS_SERVICES_CONTRACT_BUILD, then retry." >&2
-    exit 1
+  source "$ROOT_DIR/scripts/dotnet_env.sh"
+  if [[ $run_native -eq 1 ]]; then
+    node scripts/check_neo_platform_packages.mjs --include-native
   else
-    echo "cross-repo gate: NeoDIDRegistry integration proof NOT RUN - 0 cross-contract assertions executed."
-    echo "cross-repo gate:   missing $services_build/NeoDIDRegistry.nef"
-    echo "cross-repo gate:   that artifact is built by the private sibling repository neo-os-services and is"
-    echo "cross-repo gate:   gitignored there, so a single-repository checkout cannot supply it."
-    echo "cross-repo gate:   set NEOOS_SERVICES_CONTRACT_BUILD to a neo-os-services contract build directory to"
-    echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
+    node scripts/check_neo_platform_packages.mjs
   fi
-  echo "public-profile gate: verifier-callback tests run on the published TestEngine; private PLATFORM bytecode is checked separately."
-  dotnet test neo-abstract-account.sln -c Release --nologo
-  python3 -m unittest discover -s scripts -p 'test_neoexpress_*.py'
-  python3 docs/proposals/validate-native-smartaccount-profile.py
-  python3 -m unittest discover -s docs/proposals -p 'test_native_profile*.py'
-  python3 -m unittest discover -s scripts -p 'test_native_module_*.py'
-  python3 -m unittest discover -s scripts -p 'test_build_native_*.py'
-  # Real production module bytecode runs in the public NeoVM with a test-only ABI
-  # fixture. This proves module storage/object isolation, not native-chain admission.
-  native_epoch_probe_receipt="${NEOOS_NATIVE_EPOCH_RECEIPT:-}"
-  if [[ -z "$native_epoch_probe_receipt" ]]; then
-    native_epoch_probe_receipt="$(mktemp "${TMPDIR:-/tmp}/aa-native-epoch.XXXXXX")"
+  node scripts/check_neo_platform_packages.mjs --compiler-only
+  if [[ $run_ordinary -eq 1 ]]; then
+    if [[ $skip_contract_build -eq 0 ]]; then
+      dotnet build contracts/UnifiedSmartWallet.csproj -c Release -p:WarningsAsErrors=nullable -nologo
+      bash contracts/compile.sh
+    fi
+    # The NeoDIDRegistry cross-contract proof deploys a compiled artifact built by
+    # the private sibling repository neo-os-services, whose contracts/build output is
+    # gitignored there. CI checks out this repository on its own, so state the gate's
+    # reachability before the run instead of letting a bare "skipped" read as a pass.
+    services_build="${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/contracts/build}"
+    if [[ -f "$services_build/NeoDIDRegistry.nef" && -f "$services_build/NeoDIDRegistry.manifest.json" ]]; then
+      export NEOOS_REQUIRE_SERVICES_ARTIFACTS=1
+      echo "cross-repo gate: NeoDIDRegistry integration proof ENABLED (artifact dir: $services_build)"
+    elif [[ "${NEOOS_REQUIRE_SERVICES_ARTIFACTS:-0}" == "1" ]]; then
+      echo "cross-repo gate: REQUIRED NeoDIDRegistry artifact is missing: $services_build" >&2
+      echo "cross-repo gate: build neo-os-services contracts and set NEOOS_SERVICES_CONTRACT_BUILD, then retry." >&2
+      exit 1
+    else
+      echo "cross-repo gate: NeoDIDRegistry integration proof NOT RUN - 0 cross-contract assertions executed."
+      echo "cross-repo gate:   missing $services_build/NeoDIDRegistry.nef"
+      echo "cross-repo gate:   that artifact is built by the private sibling repository neo-os-services and is"
+      echo "cross-repo gate:   gitignored there, so a single-repository checkout cannot supply it."
+      echo "cross-repo gate:   set NEOOS_SERVICES_CONTRACT_BUILD to a neo-os-services contract build directory to"
+      echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
+    fi
+    echo "public-profile gate: verifier-callback tests run on the published TestEngine; private PLATFORM bytecode is checked separately."
+    dotnet test neo-abstract-account.sln -c Release --nologo
+    python3 -m unittest discover -s scripts -p 'test_neoexpress_validate.py'
+    python3 -m unittest discover -s scripts -p 'test_neoexpress_source_validate.py'
+    python3 -m unittest discover -s scripts -p 'test_neoexpress_reproducible_build.py'
+    node --test scripts/lib/deploy-helpers.test.mjs \
+      scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
+      scripts/upgrade_testnet_unified_smart_wallet.test.mjs \
+      scripts/deploy_latest_aa_verifiers.test.mjs \
+      scripts/check_neo_platform_packages.test.mjs \
+      scripts/check-artifact-reproducibility.test.mjs \
+      scripts/fuzz_continuous.test.mjs \
+      scripts/repo_hygiene.test.mjs \
+      scripts/verify-private-artifact-provenance.test.mjs \
+      scripts/verify_repo.test.mjs
+    dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal
   fi
-  echo "native module VM regression: locked production build + test-only public-VM fixture (not native-chain proof)"
-  echo "native module VM receipt: $native_epoch_probe_receipt"
-  python3 scripts/native_epoch_probe.py --compiler "$NCCS_BIN" --output "$native_epoch_probe_receipt"
-  node --test scripts/lib/deploy-helpers.test.mjs \
-    scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
-    scripts/upgrade_testnet_unified_smart_wallet.test.mjs \
-    scripts/deploy_latest_aa_verifiers.test.mjs \
-    scripts/check_neo_platform_packages.test.mjs \
-    scripts/check-artifact-reproducibility.test.mjs \
-    scripts/fuzz_continuous.test.mjs \
-    scripts/repo_hygiene.test.mjs \
-    scripts/verify-private-artifact-provenance.test.mjs
-  dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal
+  if [[ $run_native -eq 1 ]]; then
+    python3 docs/proposals/validate-native-smartaccount-profile.py
+    python3 -m unittest discover -s docs/proposals -p 'test_native_profile*.py'
+    python3 -m unittest discover -s scripts -p 'test_native_module_*.py'
+    python3 -m unittest discover -s scripts -p 'test_native_profile_ci.py'
+    python3 -m unittest discover -s scripts -p 'test_neoexpress_native_*.py'
+    python3 -m unittest discover -s scripts -p 'test_neoexpress_activation_validate.py'
+    python3 -m unittest discover -s scripts -p 'test_native_budget_benchmark.py'
+    python3 -m unittest discover -s scripts -p 'test_build_native_*.py'
+    # Real production module bytecode runs in the public NeoVM with a test-only ABI
+    # fixture. This proves module storage/object isolation, not native-chain admission.
+    native_epoch_probe_receipt="${NEOOS_NATIVE_EPOCH_RECEIPT:-}"
+    if [[ -z "$native_epoch_probe_receipt" ]]; then
+      native_epoch_probe_receipt="$(mktemp "${TMPDIR:-/tmp}/aa-native-epoch.XXXXXX")"
+    fi
+    echo "native module VM regression: locked production build + test-only public-VM fixture (not native-chain proof)"
+    echo "native module VM receipt: $native_epoch_probe_receipt"
+    python3 scripts/native_epoch_probe.py --compiler "$NCCS_BIN" --output "$native_epoch_probe_receipt"
+  fi
   # The formal gate is opt-in because CI's ubuntu image ships neither Rocq/Coq 9 nor the TLA
   # tools; formal/verify.py refuses to substitute a simulated result for a missing tool, so an
   # unconditional run would only ever fail there. State the gap instead of hiding it.
@@ -171,12 +212,17 @@ if [[ $run_frontend -eq 1 ]]; then
   npm run audit:all
   npm run build
   if [[ $skip_e2e -eq 0 ]]; then
-    npm run test:e2e:browser:built
-    npm run test:operator-recovery:browser
-    npm run test:native:browser
-    npm run test:web3auth:browser
-    npm run test:docs-security:browser
-    npm run test:bundle:browser
+    if [[ $run_ordinary -eq 1 ]]; then
+      npm run test:e2e:browser:built
+      npm run test:ordinary:browser
+      npm run test:operator-recovery:browser
+      npm run test:web3auth:browser
+      npm run test:docs-security:browser
+      npm run test:bundle:browser
+    fi
+    if [[ $run_native -eq 1 ]]; then
+      npm run test:native:browser
+    fi
   fi
   cd ..
 fi
@@ -193,4 +239,4 @@ if [[ $run_sdk -eq 1 ]]; then
 fi
 
 echo ""
-echo "verify_repo gates completed successfully."
+echo "verify_repo $verification_profile gates completed successfully."

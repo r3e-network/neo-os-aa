@@ -9,7 +9,7 @@
     "contracts/UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
     "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
     "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
-    "contracts/UnifiedSmartWallet.State.cs": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f",
+    "contracts/UnifiedSmartWallet.State.cs": "83d70a55943b3904587258e9fbed02953391c06e81b3477dbd5953d5928cd437",
     "contracts/UnifiedSmartWallet.VerifierChildren.cs": "38d414912d0fafc678d4e7c49000c6c7dc5e817ba6e21db7074c0d66f060ab5a",
     "contracts/UnifiedSmartWallet.VerifyContext.cs": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7",
     "contracts/UnifiedSmartWallet.csproj": "701a59fc3ea905c7ee37f246759a7f3e558e30a57f6b515eb107f4c5e248f20e",
@@ -56,7 +56,7 @@
     "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
     "scripts/check_neo_platform_packages.mjs": "3e59f2002a67fdf8ffb995834f707e984ce3260628521348b09754362bb9ba30",
     "scripts/native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
-    "scripts/verify_repo.sh": "caa4c66d7481b20d227e0c339866faa9e5419c873079eb6bc2a2ccbdd5615bbf"
+    "scripts/verify_repo.sh": "4ae5603534db3de441449a686bd183b8b470ec1683196d051fd47672f1dfde84"
   },
   "nativeCoreSources": {
     "src/Directory.Build.props": "b6cb09e9b9112c2ff2007cad2e387edaa5cb85fc4094dfb70fbf37bd96a02c50",

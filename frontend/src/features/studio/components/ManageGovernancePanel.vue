@@ -44,7 +44,7 @@
             :aria-label="t('studioPanels.ariaLoadAccount', 'Load account')"
             class="btn-primary sm:w-auto"
             :class="{ 'btn-loading': manageBusy.load }"
-            :disabled="manageBusy.load || !canManageTarget"
+            :disabled="governanceBusy || !canManageTarget"
             @click="loadAccountConfiguration"
           >
             {{
@@ -64,6 +64,8 @@
         </p>
       </div>
 
+      <p v-if="governanceOutcome" role="status" class="text-sm text-aa-warning" data-testid="ordinary-governance-outcome">{{ governanceOutcome }}</p>
+      <p v-if="governanceBusy" role="status" class="text-sm text-aa-muted">{{ t('ordinary.waitForWallet', 'Waiting for the wallet or chain confirmation. Keep this page open.') }}</p>
       <!-- Empty state when no account is loaded -->
       <GovernanceEmptyState v-if="!manageSnapshot.loadedAt" />
 
@@ -74,6 +76,18 @@
         />
       </transition>
 
+      <div v-if="manageSnapshot.loadedAt" class="space-y-3 text-sm">
+        <p data-testid="ordinary-chain-time">{{ t('ordinary.chainTime', 'Node block time at refresh') }}: {{ formatTime(manageSnapshot.chain.time) }} · #{{ manageSnapshot.chain.height }} · {{ String(manageSnapshot.chain.hash || '').slice(0, 10) }}…{{ String(manageSnapshot.chain.hash || '').slice(-8) }}</p>
+        <p class="text-xs text-aa-muted">{{ t('ordinary.refreshHint', 'Use Load V3 State to refresh maturity. Your device clock does not advance the verified node state.') }}</p>
+        <p v-if="!isGovernanceOwner" role="status" class="text-aa-warning">{{ t('ordinary.connectOwner', 'Connect the configured Neo backup owner.') }}</p>
+        <p v-if="manageSnapshot.marketEscrow" class="text-aa-warning">{{ t('ordinary.escrow', 'This account is in market escrow. Plugin changes and recovery are unavailable.') }}</p>
+        <p class="text-xs text-aa-muted">{{ t('ordinary.pendingRace', 'State is checked again before wallet signing. Another device can change the pending proposal before your transaction is included; these actions affect the pending update for that role at execution.') }}</p>
+        <p class="text-xs text-aa-muted">{{ t('ordinary.rotationDelay', 'Installing into an empty slot is immediate. Replacing an installed plugin requires a separate confirmation after 24 hours. The backup owner authorizes and pays; review the wallet fee.') }}</p>
+      </div>
+      <div v-if="manageSnapshot.loadedAt" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <PendingModuleUpdateCard role="verifier" :pending="manageSnapshot.pendingVerifier" :chain-time="manageSnapshot.chain.time" :can-confirm="canGovernanceAction('confirmVerifierUpdate')" :can-cancel="canGovernanceAction('cancelVerifierUpdate')" @confirm="confirmGovernanceChange('confirmVerifierUpdate')" @cancel="confirmGovernanceChange('cancelVerifierUpdate')" />
+        <PendingModuleUpdateCard role="hook" :pending="manageSnapshot.pendingHook" :chain-time="manageSnapshot.chain.time" :can-confirm="canGovernanceAction('confirmHookUpdate')" :can-cancel="canGovernanceAction('cancelHookUpdate')" @confirm="confirmGovernanceChange('confirmHookUpdate')" @cancel="confirmGovernanceChange('cancelHookUpdate')" />
+      </div>
       <div
         v-if="manageSnapshot.loadedAt"
         class="grid grid-cols-1 lg:grid-cols-2 gap-8"
@@ -82,15 +96,15 @@
           v-model:verifier-contract="manageForm.verifierContract"
           v-model:verifier-params="manageForm.verifierParams"
           :busy="manageBusy.verifier"
-          :disabled="manageBusy.verifier || !canManageTarget"
-          @update="updateVerifier"
+          :disabled="!canGovernanceAction('updateVerifier')"
+          @update="confirmGovernanceChange('updateVerifier')"
         />
 
         <RotateHookCard
           v-model:hook-contract="manageForm.hookContract"
           :busy="manageBusy.hook"
-          :disabled="manageBusy.hook || !canManageTarget"
-          @update="updateHook"
+          :disabled="!canGovernanceAction('updateHook')"
+          @update="confirmGovernanceChange('updateHook')"
         />
       </div>
 
@@ -100,7 +114,16 @@
             {{ t("studioPanels.escapeHatch", "Escape Hatch") }}
           </h3>
           <div class="space-y-4">
-            <div>
+            <p class="text-xs text-aa-muted">{{ t('ordinary.escapeCleanup', 'Recovery removes the old hook, its configuration, old verifier configuration, pending plugin changes and calls, and the on-chain metadata URI. It does not transfer assets. Old plugins must successfully clear their configuration; a cleanup fault rolls back the recovery, and a mined failure may still cost fees.') }}</p>
+            <p class="text-xs text-aa-warning">{{ t('ordinary.escapeOwnerLoss', 'Keep a separate backup of the Neo backup owner. If its only key is lost, this recovery path cannot replace that witness.') }}</p>
+            <p v-if="manageSnapshot.escapeActive" class="text-sm">{{ t('ordinary.escapeMatures', 'Recovery matures at') }}: {{ formatTime(manageSnapshot.escapeTriggeredAt + manageSnapshot.escapeTimelock * 1000) }}</p>
+            <label class="block text-sm" for="governance-escape-mode">{{ t('ordinary.escapeMode', 'Authorization after recovery') }}
+              <select id="governance-escape-mode" v-model="manageForm.escapeMode" class="input-field mt-1">
+                <option value="backup-owner">{{ t('ordinary.backupMode', 'Backup owner Neo witness') }}</option>
+                <option value="verifier">{{ t('ordinary.verifierMode', 'New verifier with initialization parameters') }}</option>
+              </select>
+            </label>
+            <div v-if="manageForm.escapeMode === 'verifier'">
               <label
                 for="governance-escape-verifier"
                 class="block text-xs font-semibold text-aa-muted mb-1"
@@ -119,6 +142,11 @@
                 :placeholder="t('studioPanels.hashPlaceholder', '0x...')"
               />
             </div>
+            <div v-if="manageForm.escapeMode === 'verifier'" class="space-y-2">
+              <label for="governance-escape-params" class="block text-xs font-semibold text-aa-muted">{{ t('ordinary.pendingParams', 'Initialization parameters (hex)') }}</label>
+              <textarea id="governance-escape-params" v-model="manageForm.escapeVerifierParams" class="input-field font-mono text-xs" rows="3" />
+              <label class="flex gap-2 text-xs text-aa-muted"><input type="checkbox" v-model="manageForm.escapeAllowEmptyParams" />{{ t('ordinary.allowEmptyParams', 'This verifier needs no initialization parameters. I have checked its configuration requirements.') }}</label>
+            </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
@@ -127,7 +155,7 @@
                 "
                 class="btn-warning w-full"
                 :class="{ 'btn-loading': manageBusy.initiateEscape }"
-                :disabled="manageBusy.initiateEscape || !canManageTarget"
+                :disabled="!canGovernanceAction('initiateEscape')"
                 @click="confirmInitiateEscape"
               >
                 {{
@@ -143,7 +171,7 @@
                 "
                 class="btn-primary w-full"
                 :class="{ 'btn-loading': manageBusy.finalizeEscape }"
-                :disabled="manageBusy.finalizeEscape || !canManageTarget"
+                :disabled="!canGovernanceAction('finalizeEscape')"
                 @click="confirmFinalizeEscape"
               >
                 {{
@@ -190,16 +218,20 @@
 </template>
 
 <script setup>
-import { inject, ref } from "vue";
+import { inject, ref, watch } from "vue";
+import { useToast } from "vue-toastification";
 import { useI18n } from "@/i18n";
 import GovernanceEmptyState from "./ManageGovernancePanel/GovernanceEmptyState.vue";
 import GovernanceSnapshotCard from "./ManageGovernancePanel/GovernanceSnapshotCard.vue";
 import RotateVerifierCard from "./ManageGovernancePanel/RotateVerifierCard.vue";
 import RotateHookCard from "./ManageGovernancePanel/RotateHookCard.vue";
 import AccountMetadataCard from "./ManageGovernancePanel/AccountMetadataCard.vue";
+import PendingModuleUpdateCard from "./ManageGovernancePanel/PendingModuleUpdateCard.vue";
 import ConfirmDialog from "./ManageGovernancePanel/ConfirmDialog.vue";
 
 const { t } = useI18n();
+const toast = useToast();
+const formatTime = (value) => Number.isSafeInteger(value) && value > 0 ? new Date(value).toISOString() : "—";
 
 const confirmModal = ref(null);
 
@@ -211,6 +243,12 @@ const {
   metadataForm,
   metadataBusy,
   canManageTarget,
+  governanceBusy,
+  governanceOutcome,
+  isGovernanceOwner,
+  canGovernanceAction,
+  prepareGovernanceAction,
+  submitGovernanceAction,
   autoLoadedAccounts,
   loadAccountConfiguration,
   updateVerifier,
@@ -220,29 +258,37 @@ const {
   saveMetadata,
 } = studio;
 
-function confirmInitiateEscape() {
-  confirmModal.value = {
-    title: t("studioPanels.initiateEscapeTitle", "Initiate Escape Hatch"),
-    message: t(
-      "studioPanels.confirmInitiateEscape",
-      "This will start the escape hatch countdown. The current verifier will be replaced after the timelock expires. Continue?",
-    ),
-    confirmLabel: t("studioPanels.initiateEscape", "Initiate Escape"),
-    danger: false,
-    onConfirm: initiateEscape,
-  };
+watch([manageForm, manageSnapshot], () => { confirmModal.value = null; }, { deep: true });
+function confirmGovernanceChange(operation) {
+  try {
+    const review = prepareGovernanceAction(operation);
+    const labels = {
+      confirmVerifierUpdate: t('ordinary.confirmVerifier', 'Confirm verifier update'),
+      cancelVerifierUpdate: t('ordinary.cancelVerifier', 'Cancel verifier update'),
+      confirmHookUpdate: t('ordinary.confirmHook', 'Confirm hook update'),
+      cancelHookUpdate: t('ordinary.cancelHook', 'Cancel hook update'),
+      updateVerifier: t('studioPanels.updateVerifier', 'Update Verifier'),
+      updateHook: t('studioPanels.updateHook', 'Update Hook'),
+      initiateEscape: t('studioPanels.initiateEscape', 'Initiate Escape'),
+      finalizeEscape: t('studioPanels.finalizeEscape', 'Finalize Escape'),
+    };
+    let detail = t('ordinary.pendingRace', 'State is checked again before wallet signing. Another device can change the pending proposal before your transaction is included; these actions affect the pending update for that role at execution.');
+    if (operation === 'initiateEscape') detail = t('studioPanels.confirmInitiateEscape', 'This starts the recovery countdown. The backup owner must explicitly finalize after the timelock; nothing changes automatically. Continue?');
+    if (operation === 'finalizeEscape') detail = t('studioPanels.confirmFinalizeEscape', 'Replace the verifier, remove the hook, and clear pending plugin state and the metadata URI. Old plugin cleanup must succeed. Assets stay at the same address. Continue?');
+    const pending = operation.includes('Verifier') ? review.snapshot.pendingVerifier : operation.includes('Hook') ? review.snapshot.pendingHook : null;
+    let target = pending?.exists && pending.full
+      ? `\n${t('ordinary.pendingTarget', 'Pending module')}: 0x${pending.module}\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: 0x${pending.params}`
+      : '';
+    if (operation === 'updateVerifier' || operation === 'updateHook') {
+      target = `\n${t('ordinary.pendingTarget', 'Requested module')}: 0x${review.options.module || ''}`
+        + (operation === 'updateVerifier' ? `\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: 0x${review.options.params || ''}` : '');
+    }
+    if (operation === 'finalizeEscape' && review.options.mode === 'verifier') {
+      target = `\n${t('ordinary.pendingTarget', 'New verifier')}: 0x${review.options.verifier || ''}\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: 0x${review.options.params || ''}`;
+    }
+    confirmModal.value = { title: labels[operation], confirmLabel: labels[operation], danger: operation === 'finalizeEscape' || operation.startsWith('cancel'), message: `${detail}\nAccountId: ${review.snapshot.accountId}${target}`, onConfirm: () => submitGovernanceAction(review) };
+  } catch (error) { toast.error(error.message); }
 }
-
-function confirmFinalizeEscape() {
-  confirmModal.value = {
-    title: t("studioPanels.finalizeEscapeTitle", "Finalize Escape Hatch"),
-    message: t(
-      "studioPanels.confirmFinalizeEscape",
-      "This will finalize the escape hatch and permanently replace the current verifier. This action cannot be undone. Continue?",
-    ),
-    confirmLabel: t("studioPanels.finalizeEscape", "Finalize Escape"),
-    danger: true,
-    onConfirm: finalizeEscape,
-  };
-}
+const confirmInitiateEscape = () => confirmGovernanceChange('initiateEscape');
+const confirmFinalizeEscape = () => confirmGovernanceChange('finalizeEscape');
 </script>
