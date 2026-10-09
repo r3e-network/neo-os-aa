@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 // payload with it turns a 64-byte signature into 65 bytes and the account's verifier refuses the
 // operation on chain.
 import { normalizeRelayContractParameter } from '../../shared/relayContractParameter.mjs';
+import { canonicalByteHex, compareSponsArgs, sameValue } from './sponsoredArgumentComparison.mjs';
 
 const AA = fileURLToPath(new URL('../../', import.meta.url));
 const request = JSON.parse(readFileSync(process.argv[2], 'utf8'));
@@ -68,7 +69,11 @@ function same(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-const expectedArgs = request.args || [];
+// The requested arguments, and the copy this fixture holds them to. They are the same object today;
+// keeping the expectation separate from what the builders receive is what lets the argument walk be
+// exercised against a planted expectation without changing the request.
+const requestArgs = request.args || [];
+const expectedArgs = requestArgs;
 
 const client = new AbstractAccountClient(request.rpcUrl, request.core);
 // The payload has to survive the transport the relay uses: JSON in, JSON out, unchanged. Everything
@@ -79,7 +84,7 @@ const payload = JSON.parse(JSON.stringify(client.createSponsoredUserOpPayload({
   userOp: {
     TargetContract: request.target,
     Method: request.method,
-    Args: expectedArgs,
+    Args: requestArgs,
     Nonce: request.nonce,
     Deadline: request.deadline,
     Signature: request.signatureHex || '',
@@ -103,65 +108,23 @@ if (argsParam.value.length !== expectedArgs.length) {
   fail(`the inner argument list carries ${argsParam.value.length} arguments, not ${expectedArgs.length}`);
 }
 
-// The payload must reproduce the requested operation, argument by argument: a swapped, dropped,
-// re-typed or re-ordered argument changes the signed arguments hash and would no longer execute.
+// A byte string has one identity on the wire and two spellings at this boundary, and the fixture makes
+// two field-level checks outside the argument walk: the signature and the hash-valued fields. They use
+// the comparison module's own normalisation so one rule covers the whole payload.
+const byteHex = canonicalByteHex;
 const hex = (value) => String(value ?? '').replace(/^0x/i, '').toLowerCase();
-// A byte string has one identity on the wire and two spellings at this boundary: the relay DTO the
-// payload builder emits is explicit 0x hex, while a value read back over RPC (the signature below)
-// is canonical base64. Normalise the spelling instead of assuming one, and refuse anything that is
-// neither, because Buffer.from(value, 'base64') silently decodes non-base64 text ('0x' becomes d3)
-// and would let a mismatched byte string through as a match.
-const byteHex = (value) => {
-  const text = String(value ?? '');
-  if (/^0x/i.test(text)) {
-    const hexText = String(text).slice(2).toLowerCase();
-    if (!/^(?:[0-9a-f]{2})*$/.test(hexText)) throw new Error(`not a 0x hex byte string: ${text.slice(0, 40)}`);
-    return hexText;
-  }
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) {
-    throw new Error(`not a canonical base64 byte string: ${text.slice(0, 40)}`);
-  }
-  const binary = Buffer.from(text, 'base64').toString('binary');
-  if (Buffer.from(binary, 'binary').toString('base64') !== text) {
-    throw new Error(`not canonical base64: ${text.slice(0, 40)}`);
-  }
-  return Buffer.from(binary, 'binary').toString('hex');
-};
-// Hash-valued parameters are printed without the 0x prefix the request carries; nothing else about
-// them may differ.
-const hashTypes = new Set(['Hash160', 'Hash256', 'PublicKey']);
-const sameValue = (actual, expected, type) => (hashTypes.has(type) ? hex(actual) === hex(expected) : same(actual, expected));
 
-// A ByteArray is compared by the bytes it names in either canonical spelling, including one level of
-// nesting: a decoder that reads an explicit 0x hex value as base64 changes the byte string, so the
-// comparison has to be on the normalised bytes rather than on the spelling the payload happens to use.
-function byteDifference(actual, expected, label) {
-  if (expected.type === 'Array') {
-    if (!Array.isArray(expected.value) || !Array.isArray(actual?.value) || actual.value.length !== expected.value.length) {
-      return `${label} does not carry the requested nested parameters`;
-    }
-    return expected.value.map((item, index) => byteDifference(actual.value[index], item, `${label}[${index}]`)).find(Boolean) || null;
-  }
-  if (expected.type !== 'ByteArray') return null;
-  if (!actual || actual.type !== 'ByteArray') return `${label} is not the requested parameter`;
-  try {
-    return byteHex(actual.value) === hex(expected.value) ? null : `${label} bytes differ`;
-  } catch (error) {
-    return `${label} is not a byte string: ${error.message}`;
-  }
+// The payload must reproduce the requested operation, argument by argument: a swapped, dropped,
+// re-typed or re-ordered argument changes the signed arguments hash and would no longer execute. The
+// comparison itself lives in sponsoredArgumentComparison.mjs so that its recursion over every nested
+// parameter kind is exercised directly, not only through this script.
+const comparison = compareSponsArgs(argsParam.value, expectedArgs);
+if (comparison.difference) {
+  // The walk's own verdict is reported before any other check, so a refusal always names the nested
+  // parameter it caught rather than whatever unrelated assertion runs next.
+  fail(`the payload does not reproduce the operation: ${comparison.difference}`);
 }
 
-const reproduced = expectedArgs.map((arg, index) => {
-  const actual = argsParam.value[index];
-  if (!actual) return `argument ${index} is missing`;
-  if (actual.type !== arg.type) return `argument ${index} is ${actual.type}, not ${arg.type}`;
-  const byteIssue = byteDifference(actual, arg, `argument ${index}`);
-  if (byteIssue) return byteIssue;
-  if (arg.type === 'Array') return null;
-  if (arg.type === 'ByteArray') return null;
-  return sameValue(actual.value, arg.value, arg.type) ? null : `argument ${index} value differs`;
-}).filter(Boolean);
-if (reproduced.length) fail(`the payload does not reproduce the operation: ${reproduced[0]}`);
 if (!sameValue(opParam.value[0].value, request.target, 'Hash160')) fail('the payload does not name the requested target');
 if (opParam.value[1].value !== request.method) fail('the payload does not name the requested method');
 if (String(opParam.value[3].value) !== String(request.nonce)) fail('the payload does not carry the requested nonce');
@@ -180,7 +143,7 @@ const script = sc.createScript({ scriptHash: payload.scriptHash, operation: payl
 const batch = JSON.parse(JSON.stringify(client.createSponsoredBatchPayload({
   accountScriptHash: request.accountId,
   userOps: [{
-    TargetContract: request.target, Method: request.method, Args: expectedArgs,
+    TargetContract: request.target, Method: request.method, Args: requestArgs,
     Nonce: request.nonce, Deadline: request.deadline, Signature: request.signatureHex || '',
   }],
   paymasterHash: request.paymaster,
@@ -202,4 +165,5 @@ process.stdout.write(`${JSON.stringify({
   script: Buffer.from(script, 'hex').toString('base64'),
   batchArgsTypes: (batchArgsParam?.value || []).map((item) => item.type),
   argsParameter: { type: argsParam.type, value: argsParam.value.length, types: argsParam.value.map((item) => item.type) },
+  inspection: comparison.inspection,
 })}\n`);
