@@ -113,19 +113,36 @@ function walkRelayArgument(value, segments, depth) {
     throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: Contract parameter: typed contract parameter required` });
   }
   const recurse = (item, segment) => walkRelayArgument(item, extendPath(segments, segment), depth + 1);
+  // A container the relay refuses is refused with the path this walk reached, not with the path of the
+  // argument list: "Contract parameter: Array requires an array" alone tells a caller that something
+  // nested is malformed but not which node, while the sibling refusals above and below name it.
+  const atPath = (normalize) => {
+    try {
+      return normalize();
+    } catch (error) {
+      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: ${error.message}` });
+    }
+  };
   if (value.type === 'Array' || value.type === 'Struct') {
-    if (!Array.isArray(value.value)) return normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true });
+    if (!Array.isArray(value.value)) {
+      return atPath(() => normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
+    }
     return { type: 'Array', value: value.value.map((item, index) => recurse(item, index)) };
   }
   if (value.type === 'Map') {
-    if (!Array.isArray(value.value)) return normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true });
-    return { type: 'Map', value: value.value.map((entry, index) => {
-      if (!entry || typeof entry !== 'object') return entry;
-      return {
-        key: recurse(entry.key, ['value', index, 'key']),
-        value: recurse(entry.value, ['value', index, 'value']),
-      };
-    }) };
+    if (!Array.isArray(value.value)) {
+      return atPath(() => normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
+    }
+    // An entry that is not an entry is malformed at its own index; the key and value below keep the
+    // paths their own recursion gives them.
+    const entries = value.value.map((entry, index) => {
+      if (entry && typeof entry === 'object') return entry;
+      return atPath(() => normalizeRelayContractParameter({ type: 'Map', value: [entry] }, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
+    });
+    return { type: 'Map', value: entries.map((entry, index) => ({
+      key: recurse(entry.key, ['value', index, 'key']),
+      value: recurse(entry.value, ['value', index, 'value']),
+    })) };
   }
   try {
     return normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true });
