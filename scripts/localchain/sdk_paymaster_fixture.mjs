@@ -75,7 +75,27 @@ if (argsParam.value.length !== expectedArgs.length) {
 // The payload must reproduce the requested operation, argument by argument: a swapped, dropped,
 // re-typed or re-ordered argument changes the signed arguments hash and would no longer execute.
 const hex = (value) => String(value ?? '').replace(/^0x/i, '').toLowerCase();
-const base64ToHex = (value) => Buffer.from(String(value ?? ''), 'base64').toString('hex');
+// A byte string has one identity on the wire and two spellings at this boundary: the relay DTO the
+// payload builder emits is explicit 0x hex, while a value read back over RPC (the signature below)
+// is canonical base64. Normalise the spelling instead of assuming one, and refuse anything that is
+// neither, because Buffer.from(value, 'base64') silently decodes non-base64 text ('0x' becomes d3)
+// and would let a mismatched byte string through as a match.
+const byteHex = (value) => {
+  const text = String(value ?? '');
+  if (/^0x/i.test(text)) {
+    const hexText = String(text).slice(2).toLowerCase();
+    if (!/^(?:[0-9a-f]{2})*$/.test(hexText)) throw new Error(`not a 0x hex byte string: ${text.slice(0, 40)}`);
+    return hexText;
+  }
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) {
+    throw new Error(`not a canonical base64 byte string: ${text.slice(0, 40)}`);
+  }
+  const binary = Buffer.from(text, 'base64').toString('binary');
+  if (Buffer.from(binary, 'binary').toString('base64') !== text) {
+    throw new Error(`not canonical base64: ${text.slice(0, 40)}`);
+  }
+  return Buffer.from(binary, 'binary').toString('hex');
+};
 // Hash-valued parameters are printed without the 0x prefix the request carries; nothing else about
 // them may differ.
 const hashTypes = new Set(['Hash160', 'Hash256', 'PublicKey']);
@@ -84,7 +104,7 @@ const reproduced = expectedArgs.map((arg, index) => {
   const actual = argsParam.value[index];
   if (!actual || actual.type !== arg.type) return `argument ${index} is ${actual?.type}, not ${arg.type}`;
   if (arg.type === 'ByteArray') {
-    return base64ToHex(actual.value) === hex(arg.value) ? null : `argument ${index} bytes differ`;
+    return byteHex(actual.value) === hex(arg.value) ? null : `argument ${index} bytes differ`;
   }
   return sameValue(actual.value, arg.value, arg.type) ? null : `argument ${index} value differs`;
 }).filter(Boolean);
@@ -93,7 +113,7 @@ if (!sameValue(opParam.value[0].value, request.target, 'Hash160')) fail('the pay
 if (opParam.value[1].value !== request.method) fail('the payload does not name the requested method');
 if (String(opParam.value[3].value) !== String(request.nonce)) fail('the payload does not carry the requested nonce');
 if (String(opParam.value[4].value) !== String(request.deadline)) fail('the payload does not carry the requested deadline');
-if (base64ToHex(opParam.value[5].value) !== hex(request.signatureHex)) fail('the payload does not carry the requested signature');
+if (byteHex(opParam.value[5].value) !== hex(request.signatureHex)) fail('the payload does not carry the requested signature');
 if (!sameValue(payload.args[0].value, request.accountId, 'Hash160')) fail('the payload does not name the requested account');
 if (!sameValue(payload.args[2].value, request.paymaster, 'Hash160')) fail('the payload does not name the requested paymaster');
 if (!sameValue(payload.args[3].value, request.sponsor, 'Hash160')) fail('the payload does not name the requested sponsor');
