@@ -439,6 +439,93 @@ test("lifecycle plans distinguish custody, guardian, joint and permissionless re
     /unsupported/,
   );
 });
+for (const action of [
+  "activateVerifier",
+  "activateHook",
+  "activateRecoveryAddress",
+]) {
+  test(`matured ${action} plans require no custody signature`, async () => {
+    const f = fixture();
+    const plan = await f.client.buildAction({ accountId: h, action });
+    assert.deepEqual(plan.requiredAuthorities, []);
+  });
+}
+
+function setCancellationIntent(f, amount = 7, proposedAt = 1) {
+  const binding = A([H(verifier), B("aa".repeat(32))]);
+  f.add(
+    "getPendingModuleCall",
+    [c.hashValue(h), c.stringValue("verifier")],
+    A([
+      I(1),
+      H(h),
+      I(0),
+      binding,
+      binding,
+      B(Buffer.from("setLimit").toString("hex")),
+      A([H(h), I(amount)]),
+      I(proposedAt),
+      I(proposedAt + 86400000),
+      I(11),
+    ]),
+  );
+}
+
+test("module cancellation plans require a role and an existing intent", async () => {
+  const f = fixture();
+  await assert.rejects(
+    () => f.client.buildAction({ accountId: h, action: "cancelModuleCall" }),
+    /module role/,
+  );
+  f.add("getPendingModuleCall", [c.hashValue(h), c.stringValue("verifier")], N);
+  await assert.rejects(
+    () => f.client.buildAction({
+      accountId: h,
+      action: "cancelModuleCall",
+      role: "verifier",
+    }),
+    /no pending module call/,
+  );
+});
+
+test("module cancellation plans retain the role and complete pending intent", async () => {
+  const f = fixture();
+  setCancellationIntent(f);
+  const pending = await f.client.getPendingModuleCall(h, "verifier");
+  const plan = await f.client.buildAction({
+    accountId: h,
+    action: "cancelModuleCall",
+    role: "verifier",
+  });
+  assert.deepEqual(
+    { role: plan.role, pending: plan.pending },
+    { role: "verifier", pending },
+  );
+  assert.equal(Object.isFrozen(plan.pending), true);
+  assert.equal(Object.isFrozen(plan.pending.invokedArguments.value), true);
+  assert.equal(
+    plan.script,
+    c.dynamicCall(CORE, "cancelModuleCall", [
+      c.hashValue(h),
+      c.stringValue("verifier"),
+    ]),
+  );
+});
+
+test("module cancellation rejects a replacement intent with an unchanged account record", async () => {
+  const f = fixture();
+  setCancellationIntent(f);
+  const before = await f.client.getAccount(h);
+  const plan = await f.client.buildAction({
+    accountId: h,
+    action: "cancelModuleCall",
+    role: "verifier",
+  });
+  assert.equal(await f.client.revalidatePlan(plan), true);
+  setCancellationIntent(f, 99, 2);
+  assert.deepEqual(await f.client.getAccount(h), before);
+  await assert.rejects(() => f.client.revalidatePlan(plan), /phase changed/);
+});
 test("gasconsumed alone never declares automatic system fee available", async () => {
   const f = fixture();
   const plan = { script: c.dynamicCall(CORE, "getVersion", [], 5) };

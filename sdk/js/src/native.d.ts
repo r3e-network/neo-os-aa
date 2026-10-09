@@ -99,6 +99,17 @@ export interface NativePendingIntent {
   readonly matureAt: string;
   readonly configurationNonce: string;
 }
+export interface NativePendingModuleCall {
+  readonly accountId: string;
+  readonly role: "verifier" | "hook";
+  readonly root: NativeModuleBinding | null;
+  readonly selected: NativeModuleBinding | null;
+  readonly method: string;
+  readonly invokedArguments: NativeValue;
+  readonly proposedAt: string;
+  readonly matureAt: string;
+  readonly configurationNonce: string;
+}
 export interface NativeAccount {
   readonly version: 2;
   readonly accountId: string;
@@ -146,6 +157,8 @@ export interface NativePlan {
   readonly accountState?: NativeAccount;
   readonly configurationNonce?: string;
   readonly authorityPolicy?: string;
+  readonly role?: "verifier" | "hook";
+  readonly pending?: NativePendingModuleCall | null;
 }
 export interface NativeExecutionPlan extends NativePlan {
   readonly kind: "execution";
@@ -276,17 +289,7 @@ export declare class NativeSmartAccountClient {
   getPendingModuleCall(
     accountId: string,
     role: "verifier" | "hook",
-  ): Promise<{
-    accountId: string;
-    role: "verifier" | "hook";
-    root: NativeModuleBinding | null;
-    selected: NativeModuleBinding | null;
-    method: string;
-    invokedArguments: NativeValue;
-    proposedAt: string;
-    matureAt: string;
-    configurationNonce: string;
-  } | null>;
+  ): Promise<NativePendingModuleCall | null>;
   getModuleDependencies(
     accountId: string,
     role: "verifier" | "hook",

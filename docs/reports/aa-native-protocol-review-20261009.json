@@ -1,0 +1,131 @@
+{
+  "schema": "aa-native-protocol-review/v1",
+  "date": "2026-10-09",
+  "status": "CLIENT_CORRECTIONS_VERIFIED_PROTOCOL_BOUNDARY_OPEN",
+  "issue": "https://github.com/neo-project/proposals/issues/242",
+  "baseline": {
+    "account": "8367049ebe9adf389a88fee6a16ca54fae1bf65a",
+    "core": "95e2c06e5e99aee3b44f8f3d7ef4cf9640fd56bb",
+    "rpc": "835a222751131717c03507b8cade2db4e69a1c4b"
+  },
+  "scope": {
+    "fullyReviewedPrimaryFiles": 40,
+    "method": "Independent architecture and baseline reviews, focused authority and user-flow reviews, source reconciliation, and disposable-copy client regression tests.",
+    "coverage": "partial",
+    "exclusions": [
+      "Unrelated legacy applications and marketplace flows",
+      "Public activation, real-wallet signing and production deployment",
+      "Arbitrary third-party module correctness and complete compiler/VM refinement",
+      "Repository-wide test, build-tool and generated-artifact audit"
+    ]
+  },
+  "confirmedCorrections": [
+    {
+      "id": "LIFECYCLE-PERMISSIONLESS-ACTIVATION",
+      "problem": "The client required custody for mature verifier, hook and recovery-address activation, although the native protocol makes these transitions permissionless.",
+      "correction": "Require only a fee payer for these three activations, retaining fresh account, maturity and simulation checks. Module-policy activation still requires custody."
+    },
+    {
+      "id": "LIFECYCLE-CANCELLATION-INTENT",
+      "problem": "A module cancellation plan did not retain its role or pending intent; replacement of that intent without changing the account record was not detected.",
+      "correction": "Capture the existing role and complete pending intent in the immutable plan, and compare it on every revalidation and exported-review rebuild.",
+      "boundary": "This detects changes already visible at revalidation. It does not reserve the pending state between final preflight and inclusion; the current on-chain cancellation method has no expected-intent argument."
+    },
+    {
+      "id": "WORKSPACE-PENDING-POLICY-CANCELLATION",
+      "problem": "The workspace lacked a pending-policy cancellation flow and its generic wallet invocation omitted the module role.",
+      "correction": "Expose verifier and hook pending policies, cancellation review and exact accountId/moduleType wallet arguments."
+    },
+    {
+      "id": "WORKSPACE-AUTHORITY-TIME-FEE-GUIDANCE",
+      "problem": "Recovery cancellation appeared permissionless, stale maturity lacked refresh guidance, and Application consumption could be mistaken for the required fee budget.",
+      "correction": "Display effective authorities, verified chain snapshot time and refresh controls, and separate consumption from admission and network-fee information. Document guardian cooperation and key-loss limits."
+    }
+  ],
+  "validation": {
+    "baselineClientRegression": {
+      "tests": 29,
+      "passed": 24,
+      "failedAsExpected": 5,
+      "cases": [
+        "Three permissionless activations retain an incorrect custody requirement",
+        "Cancellation plan lacks role and pending intent",
+        "Replacing pending intent with unchanged account state is not rejected"
+      ]
+    },
+    "correctedClientAndWorkspace": {
+      "sdkUnit": {
+        "passed": 193,
+        "failed": 0,
+        "skipped": 0
+      },
+      "sdkTypes": "passed",
+      "installedPackage": {
+        "passed": 4,
+        "failed": 0
+      },
+      "frontendUnit": {
+        "passed": 633,
+        "failed": 0,
+        "skipped": 0,
+        "canonicalServicesCheckout": "explicitly supplied"
+      },
+      "nativeBrowser": {
+        "passed": 2,
+        "failed": 0,
+        "transport": "RPC and wallet fixtures; no network transaction",
+        "viewports": [
+          "1440x1100",
+          "390x844"
+        ]
+      },
+      "frontendBuild": "passed",
+      "repositoryHygiene": {
+        "passed": 5,
+        "failed": 0
+      },
+      "nativeProfileVectors": "passed",
+      "unchangedLocalSourceLocks": 55,
+      "independentPatchReview": "GO for SDK, workspace and documentation; excludes core, deployment and unresolved protocol boundary"
+    }
+  },
+  "openBoundaries": [
+    {
+      "id": "NATIVE-CROSS-PROXY-AUTHORITY",
+      "status": "RUNTIME_VALIDATION_UNAVAILABLE",
+      "evidence": "Source review indicates that another native proxy may be accepted as custody or recovery but lose its witness grant when the governed account acquires its own account lock.",
+      "limit": "The isolated validation task was refused by the validation service. No executable confirmation is claimed and no consensus behavior was changed on that basis.",
+      "requiredFollowUp": "Validate supported authority forms in the native execution context and specify admission/temporal semantics without weakening target-frame witness isolation."
+    },
+    {
+      "id": "EXTERNAL-PROTOCOL-ACCEPTANCE",
+      "status": "OPEN",
+      "evidence": "Issue 242 remains a draft design discussion. Upstream review, independently maintained consensus-client conformance and public activation are separate gates."
+    }
+  ],
+  "protocol": {
+    "abiVersion": 2,
+    "identityVersion": 1,
+    "parameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4",
+    "consensusChanged": false,
+    "publicActivationVerified": false,
+    "implementationVerified": false
+  },
+  "historicalEvidence": "Earlier full native/runtime/formal receipts retain their original source and artifact pins. They were not regenerated by this client and workspace correction.",
+  "correctedSourceSha256": {
+    "docs/NATIVE_ACCOUNT_USER_GUIDE.md": "bf0f7d27e56edd5d0444a9e1fd30114e9678f1da05b68746a6bcd361f4597a63",
+    "docs/NATIVE_ACCOUNT_WORKSPACE.md": "f5a0dcb9e7c18b726b447363a941ef5bc7fd5ffa69c00d0e12fd31dca2a3c1fb",
+    "docs/NATIVE_SDK.md": "edc284597dd70b5572ac3adcf1ab25e68e27588f90d3952de948ed0578033765",
+    "docs/NATIVE_SYSTEM_ARCHITECTURE.md": "b3726fc408844fe5811330062e5f851dd6d0cf2b76499e2faf27b806b57b0c4e",
+    "docs/proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md": "dbfdc13771057e43d18630a6849d83fc9a5aadea7dfc01599d527c4ee1cd78eb",
+    "frontend/src/features/native/NativeAccountWorkspace.vue": "ad21ad293738a412d7ec9efb52b289be466fd3fe013ceb35efe51f45e417c497",
+    "frontend/src/features/native/nativeWorkspace.js": "73303ecc8d3cc11a7df0743f178f04518c8cd0fd72fd30577aa37b56c7eb7c00",
+    "frontend/src/shared/nativeSmartAccountClient.mjs": "10b72ab9b4ad864df789352af75507b29cab36008bff9988e7742b37bb94f0ae",
+    "frontend/tests/nativeWorkspace.browser.mjs": "63ac270bf0a3a62339c3349558845bd35e36380fab4b40342a1998029c86223c",
+    "frontend/tests/nativeWorkspace.test.js": "99f636526cdec16aed993bdb1e27770420e7a71ac9137abb093e95bccb02cfbb",
+    "sdk/js/src/native.d.ts": "f4de6003b90eb7dfaa9f943eb6bdb54e6e4feed1b291d0e4b55fb2beb196a339",
+    "sdk/js/tests/native-client.unit.test.js": "27759231fb05d89976704c1f07d59543dfb0d33e51308c1d15d85064e606a3c6",
+    "sdk/js/tests/native-transaction.unit.test.js": "86df0df888a0adb52a523a7f2a85fc40148998db37ef7b4199cbc3fd6a50629e",
+    "shared/nativeSmartAccountClient.mjs": "10b72ab9b4ad864df789352af75507b29cab36008bff9988e7742b37bb94f0ae"
+  }
+}

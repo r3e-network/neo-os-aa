@@ -164,6 +164,12 @@
                 <dd>{{ time(snapshot.chainTime) }}</dd>
               </dl>
             </div>
+            <p class="small">
+              {{ L("State and maturity use the chain time shown above. Refresh after waiting or submitting a transaction; this page does not advance maturity using your device clock.", "状态和到期判断使用上方链上时间。等待或提交交易后请刷新；本页不会按设备时钟推算到期。") }}
+            </p>
+            <button class="secondary" :disabled="busy || !profile" @click="loadAccount">
+              {{ L("Refresh account and chain time", "刷新账户与链上时间") }}
+            </button>
             <div v-if="pendingIntents.length" class="callout">
               <strong>{{ L("Pending changes", "待生效变更") }}</strong>
               <p v-for="intent in pendingIntents" :key="intent.key">
@@ -223,8 +229,8 @@
             <p class="small">
               {{
                 L(
-                  "ABI 2 recovery detaches old plugins without cleanup callbacks. Address and frozen state remain unchanged. Unfreeze needs both authorities.",
-                  "ABI 2 恢复无需旧插件清理回调即可撤销其权限。地址和冻结状态保留；解冻需要双方权限。",
+                  "Recovery detaches old plugins without their callbacks; the funding address and frozen state stay unchanged. Recovery can freeze spending immediately. Unfreezing requires current custody and recovery cooperation. A lost custody key can be replaced through recovery; a lost recovery key leaves no custody-only unfreeze.",
+                  "恢复无需旧插件回调即可撤销其权限，收款地址和冻结状态保留。恢复方可立即冻结支出；解冻需要当前托管方与恢复方合作。托管密钥丢失可通过恢复更换；恢复密钥丢失时，托管方无法单独解冻。",
                 )
               }}
             </p>
@@ -266,8 +272,8 @@
           <p class="small">
             {{
               L(
-                "Use a separately controlled Neo wallet you can access. An Ethereum-shaped hash does not prove Neo wallet control.",
-                "请选择可实际使用、独立保管的 Neo 钱包。Ethereum 地址外形并不证明具备 Neo 钱包控制权。",
+                "Use a separately controlled Neo wallet you can access. Recovery can freeze spending and replace custody after 7 days. Unfreezing needs both authorities, so back up both keys and agree how to cooperate. An Ethereum-shaped hash does not prove Neo wallet control.",
+                "请选择可实际使用、独立保管的 Neo 钱包。恢复方可以冻结支出，并在 7 天后更换托管方。解冻需要双方权限，请备份双方密钥并约定协作方式。Ethereum 地址外形并不证明具备 Neo 钱包控制权。",
               )
             }}
           </p>
@@ -336,11 +342,49 @@
           <p>
             {{
               L(
-                "Load an account first. Configure an installed verifier with custody authority.",
-                "请先加载账户，以托管权限配置已安装的验证模块。",
+                "Load an account first. Inspect a pending verifier or hook policy, activate its exact call after maturity, or cancel it with custody authority.",
+                "请先加载账户。查看待生效验证或策略模块配置，到期后提交相同调用激活，也可由托管方取消。",
               )
             }}
           </p>
+          <label>
+            {{ L("Module role", "模块角色") }}
+            <select v-model="policy.role" :aria-label="L('Module role', '模块角色')">
+              <option value="verifier">{{ L("Verifier", "验证模块") }}</option>
+              <option value="hook">{{ L("Hook", "策略模块") }}</option>
+            </select>
+          </label>
+          <button class="secondary" :disabled="!profile || !snapshot || busy" @click="refreshPolicy">
+            {{ L("Refresh pending policy", "刷新待生效配置") }}
+          </button>
+          <div v-if="pendingPolicy" class="callout" data-testid="native-pending-policy">
+            <p class="small">{{ L("Checked at chain time", "核对时的链上时间") }}: {{ time(pendingPolicy.chainTime) }}</p>
+            <template v-if="pendingPolicy.pending">
+              <dl>
+                <dt>{{ L("Role / method", "角色 / 方法") }}</dt>
+                <dd>{{ pendingPolicy.role }} / {{ pendingPolicy.pending.method }}</dd>
+                <dt>{{ L("Root module", "根模块") }}</dt>
+                <dd class="mono">0x{{ pendingPolicy.pending.root.contract }}</dd>
+                <dt>{{ L("Selected module", "目标模块") }}</dt>
+                <dd class="mono">0x{{ pendingPolicy.pending.selected.contract }}</dd>
+                <dt>{{ L("Activation time", "可激活时间") }}</dt>
+                <dd>{{ time(pendingPolicy.pending.matureAt) }}</dd>
+              </dl>
+              <p>{{ BigInt(pendingPolicy.pending.matureAt) <= BigInt(pendingPolicy.chainTime)
+                ? L("Mature at the checked chain time. A separate custody-authorized activation transaction is required.", "核对时已到期，仍需由托管方另发激活交易。")
+                : L("Waiting for chain time. Refresh before activating.", "等待链上时间到期，请在激活前刷新。") }}</p>
+              <details>
+                <summary>{{ L("Exact typed arguments, including account ID", "完整类型化参数（含账户 ID）") }}</summary>
+                <pre>{{ jsonText(pendingPolicy.pending.invokedArguments) }}</pre>
+              </details>
+              <button class="secondary" :disabled="busy || !profile" @click="cancelPolicy">
+                {{ L("Review policy cancellation", "审核取消配置") }}
+              </button>
+              <p class="small">{{ L("Cancellation removes this role’s pending call when executed; active permissions stay unchanged. The review is checked again before signing. If another custody device changes the pending call before confirmation, cancellation can affect the new call.", "取消在执行时移除此角色的待生效调用，当前权限不变。签名前会再次核对；若其他托管设备在确认前更改了待生效调用，取消可能影响新调用。") }}</p>
+            </template>
+            <p v-else>{{ L("No policy call is pending for this role.", "此角色没有待生效配置。") }}</p>
+          </div>
+          <template v-if="policy.role === 'verifier'">
           <label
             >{{ L("Policy", "权限类型")
             }}<select
@@ -450,15 +494,18 @@
               )
             }}
           </p>
+          </template>
+          <p v-else class="small">{{ L("Use the native SDK to stage hook configuration. Existing pending calls can be inspected, activated or cancelled here.", "请使用原生 SDK 提交策略模块配置。已有待生效调用可在此查看、激活或取消。") }}</p>
           <div class="actions">
             <button
+              v-if="policy.role === 'verifier'"
               :disabled="!profile || !snapshot || busy"
               @click="reviewPolicy"
             >
               {{ L("Review delayed policy", "审核延迟权限配置") }}</button
             ><button
               class="secondary"
-              :disabled="!profile || !snapshot || busy"
+              :disabled="!profile || !snapshot || busy || !pendingPolicy?.pending"
               @click="activatePolicy"
             >
               {{ L("Review pending activation", "审核待生效配置") }}
@@ -570,7 +617,7 @@
             spellcheck="false"
             placeholder="N… or 0x…"
         /></label>
-        <label v-if="tab === 'account' || tab === 'create'"
+        <label v-if="tab !== 'operation'"
           >{{ L("Signing path", "签名路径") }}
           <select
             v-model="signingPath"
@@ -618,9 +665,9 @@
             <dt>{{ L("Fee payer", "付费者") }}</dt>
             <dd class="mono">0x{{ review.feePayer }}</dd>
             <dt>{{ L("Required authorities", "所需权限") }}</dt>
-            <dd class="mono">
+            <dd class="mono" data-testid="native-required-authorities">
               {{
-                review.plan.requiredAuthorities
+                review.requiredAuthorities
                   .map((h) => "0x" + h)
                   .join(", ") ||
                 L(
@@ -643,13 +690,18 @@
                   .join(" / ")
               }}
             </dd>
-            <dt>{{ L("Simulation fee estimate", "模拟费用估算") }}</dt>
-            <dd>
+            <dt>{{ L("Application consumption", "应用执行消耗") }}</dt>
+            <dd data-testid="native-application-consumption">
               {{ formatGas(review.simulation.gasConsumed) }}
             </dd>
+            <dt>{{ L("Minimum system fee budget", "最低系统费预算") }}</dt>
+            <dd data-testid="native-minimum-system-fee">{{ formatGas(review.simulation.minimumRequiredFee) }}</dd>
+            <dt>{{ L("Network fee", "网络费") }}</dt>
+            <dd>{{ L("Not quoted; confirm in wallet or SDK", "尚未报价；请在钱包或 SDK 核对") }}</dd>
             <dt>{{ L("Script bytes", "脚本字节数") }}</dt>
             <dd>{{ review.plan.script.length / 2 }}</dd>
           </dl>
+          <p class="small">{{ L("Consumption is not the admission budget or total transaction fee. Bounded module callbacks can require a larger system fee budget. Confirm final system and network fees before signing.", "执行消耗并非准入预算或交易总费用。有限额的模块回调可能要求更高系统费预算；签名前请核对最终系统费与网络费。") }}</p>
           <div v-if="review.plan.preparedOperations" class="small mono">
             <p v-for="p in review.plan.preparedOperations" :key="p.digest">
               {{ p.operation.method }} · 0x{{ p.operation.targetContract
@@ -787,6 +839,7 @@ const endpoint = ref(RUNTIME_CONFIG.rpcUrl),
   network = ref(String(RUNTIME_CONFIG.networkMagic)),
   profile = shallowRef(null),
   snapshot = shallowRef(null),
+  pendingPolicy = shallowRef(null),
   review = shallowRef(null);
 const tab = ref("account"),
   busy = ref(false),
@@ -805,6 +858,7 @@ const registration = reactive({
   allowNoRecovery: false,
 });
 const policy = reactive({
+  role: "verifier",
   kind: "session",
   child: "",
   publicKey: "",
@@ -905,6 +959,7 @@ function invalidate() {
   workspace.invalidate();
   profile.value = null;
   snapshot.value = null;
+  pendingPolicy.value = null;
   clearReview();
   notice.value = "";
 }
@@ -934,10 +989,12 @@ watch(
   accountId,
   () => {
     snapshot.value = null;
+    pendingPolicy.value = null;
     clearReview();
   },
   { flush: "sync" },
 );
+watch(() => policy.role, () => { pendingPolicy.value = null; }, { flush: "sync" });
 function walletChanged() {
   invalidate();
   notice.value = L(
@@ -968,6 +1025,7 @@ async function run(fn) {
     if (!workspace.profile) {
       profile.value = null;
       snapshot.value = null;
+      pendingPolicy.value = null;
       clearReview();
     }
     error.value = String(e.message || "Request failed.").slice(0, 400);
@@ -979,6 +1037,7 @@ async function connectNode() {
   await run(async () => {
     clearReview();
     snapshot.value = null;
+    pendingPolicy.value = null;
     profile.value = null;
     profile.value = await workspace.connect({
       rpcUrl: endpoint.value,
@@ -993,6 +1052,7 @@ async function connectNode() {
 async function loadAccount() {
   await run(async () => {
     clearReview();
+    pendingPolicy.value = null;
     snapshot.value = await workspace.load(accountId.value);
     if (!feePayer.value) feePayer.value = snapshot.value.account.custodyAddress;
     policy.expiresAt = String(snapshot.value.chainTime + 2 * 86400000);
@@ -1082,7 +1142,7 @@ async function reviewPolicy() {
     setReview(
       await workspace.policy({
         accountId: accountId.value,
-        role: "verifier",
+        role: policy.role,
         child: policy.child || undefined,
         method,
         args,
@@ -1091,11 +1151,33 @@ async function reviewPolicy() {
     );
   });
 }
+async function refreshPolicy() {
+  await run(async () => {
+    clearReview();
+    pendingPolicy.value = null;
+    pendingPolicy.value = await workspace.inspectPolicy({ accountId: accountId.value, role: policy.role });
+  });
+}
+async function cancelPolicy() {
+  await run(async () => {
+    const inspected = pendingPolicy.value;
+    if (!inspected?.pending) throw Error(L("Refresh the pending policy first.", "请先刷新待生效配置。"));
+    setReview(await workspace.lifecycle({
+      accountId: accountId.value,
+      action: "cancelModuleCall",
+      role: inspected.role,
+      expectedPending: inspected.pending,
+      feePayer: feePayer.value,
+      submission: signingPath.value,
+    }));
+  });
+}
 async function activatePolicy() {
   await run(async () =>
     setReview(
       await workspace.activatePolicy({
         accountId: accountId.value,
+        role: policy.role,
         feePayer: feePayer.value,
       }),
     ),

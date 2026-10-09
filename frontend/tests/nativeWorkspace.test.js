@@ -686,6 +686,7 @@ test("SDK recovery cancellation grants the actor core scope; permissionless reco
     submission: "native-sdk",
   });
   assert.equal(cancel.signers[0].scopes, "CustomContracts");
+  assert.deepEqual(cancel.requiredAuthorities, [recovery]);
   assert.deepEqual(cancel.signers[0].allowedcontracts, [
     "0x" + NATIVE_ACCOUNT_SERVICE,
   ]);
@@ -697,6 +698,128 @@ test("SDK recovery cancellation grants the actor core scope; permissionless reco
     submission: "native-sdk",
   });
   assert.equal(execute.signers[0].scopes, "None");
+  assert.deepEqual(execute.requiredAuthorities, []);
+});
+
+function policyFixture(role = "verifier") {
+  const rpc = createNativeRpcFixture();
+  rpc.state.registered = true;
+  const binding = { contract: "44".repeat(20), codeHash: "55".repeat(32) };
+  const makePending = (method = "setPolicy") => ({
+    accountId: nativeTestIdentity.accountId,
+    role,
+    root: binding,
+    selected: binding,
+    method,
+    invokedArguments: { type: "Array", value: [nativeCodec.hashValue(nativeTestIdentity.accountId)] },
+    proposedAt: String(rpc.state.time - 86400001),
+    matureAt: String(rpc.state.time - 1),
+    configurationNonce: "0",
+  });
+  let pending = makePending();
+  const Client = createNativeClientClass(nativeCodec);
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  client.getPendingModuleCall = async (id, selectedRole) => {
+    assert.equal(id, nativeTestIdentity.accountId);
+    assert.equal(selectedRole, role);
+    return pending;
+  };
+  const wallet = {
+    account: async () => custody,
+    network: async () => 123,
+    invoke: async (request) => ({ request }),
+  };
+  return {
+    rpc, client,
+    workspace: createNativeWorkspace({ makeClient: () => client, wallet }),
+    replace() { pending = makePending("replacePolicy"); },
+    clear() { pending = null; },
+  };
+}
+
+test("pending policy inspection and cancellation retain the selected role in exact script and wallet arguments", async () => {
+  for (const role of ["verifier", "hook"]) {
+    const f = policyFixture(role);
+    await f.workspace.connect({});
+    const inspected = await f.workspace.inspectPolicy({ accountId: nativeTestIdentity.accountId, role });
+    assert.equal(inspected.role, role);
+    assert.equal(inspected.chainTime, f.rpc.state.time);
+    assert.equal(inspected.pending.method, "setPolicy");
+    const review = await f.workspace.lifecycle({
+      accountId: nativeTestIdentity.accountId, action: "cancelModuleCall", role,
+      feePayer: custody, expectedPending: inspected.pending,
+    });
+    assert.deepEqual(review.request.args, [
+      { type: "Hash160", value: "0x" + nativeTestIdentity.accountId },
+      { type: "String", value: role },
+    ]);
+    assert.equal(review.plan.script, nativeCodec.dynamicCall(NATIVE_ACCOUNT_SERVICE, "cancelModuleCall", [
+      nativeCodec.hashValue(nativeTestIdentity.accountId), nativeCodec.stringValue(role),
+    ]));
+    assert.equal(review.plan.role, role);
+    assert.deepEqual(review.plan.pending, inspected.pending);
+    assert.deepEqual(review.requiredAuthorities, [custody]);
+    assert.equal((await f.workspace.submit(review)).request.operation, "cancelModuleCall");
+  }
+});
+
+test("pending cancellation refuses a changed inspected intent and stale SDK export even with unchanged account state", async () => {
+  const f = policyFixture();
+  await f.workspace.connect({});
+  const inspected = await f.workspace.inspectPolicy({ accountId: nativeTestIdentity.accountId, role: "verifier" });
+  const input = {
+    accountId: nativeTestIdentity.accountId, action: "cancelModuleCall", role: "verifier",
+    expectedPending: inspected.pending, feePayer: custody, submission: "native-sdk",
+  };
+  const review = await f.workspace.lifecycle(input);
+  const exported = await f.workspace.exportReview(review);
+  assert.equal(exported.recipe.input.role, "verifier");
+  f.replace();
+  await assert.rejects(() => f.workspace.exportReview(review), /pending|intent|changed/i);
+  const { rebuildNativeReview } = await import("../src/features/native/nativeWorkspace.js");
+  await assert.rejects(() => rebuildNativeReview(f.client, exported), /pending|intent|changed/i);
+  await assert.rejects(() => f.workspace.lifecycle(input), /pending.*changed|changed.*pending/i);
+  f.clear();
+  const empty = await f.workspace.inspectPolicy({ accountId: nativeTestIdentity.accountId, role: "verifier" });
+  assert.equal(empty.pending, null);
+});
+
+test("changing policy inputs during inspection prevents a stale pending card", async () => {
+  const f = policyFixture();
+  await f.workspace.connect({});
+  let finish;
+  const result = new Promise((resolve) => { finish = resolve; });
+  f.client.getPendingModuleCall = async () => result;
+  const inspection = f.workspace.inspectPolicy({
+    accountId: nativeTestIdentity.accountId, role: "verifier",
+  });
+  f.workspace.clearReview();
+  finish(null);
+  await assert.rejects(() => inspection, /inputs changed/i);
+});
+
+test("all three mature activations use only the unrelated payer in wallet and SDK reviews", async () => {
+  const rpc = createNativeRpcFixture();
+  rpc.state.registered = true;
+  const Client = createNativeClientClass(nativeCodec);
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  const state = await client.getAccount(nativeTestIdentity.accountId);
+  client.getAccount = async () => ({ ...state,
+    pendingVerifier: { matureAt: "1" }, pendingHook: { matureAt: "1" },
+    pendingRecoveryAddress: { matureAt: "1" },
+  });
+  const workspace = createNativeWorkspace({ makeClient: () => client });
+  await workspace.connect({});
+  for (const action of ["activateVerifier", "activateHook", "activateRecoveryAddress"]) {
+    for (const submission of ["wallet-invoke", "native-sdk"]) {
+      const review = await workspace.lifecycle({ accountId: state.accountId, action, feePayer: "66".repeat(20), submission });
+      assert.deepEqual(review.requiredAuthorities, []);
+      assert.equal(review.signers.length, 1);
+      assert.equal(review.signers[0].scopes, submission === "native-sdk" ? "None" : "CalledByEntry");
+      assert.equal(review.walletSupported, submission === "wallet-invoke");
+      assert.match(review.description, /anyone/i);
+    }
+  }
 });
 test("SDK execution signer order is fee payer, proxy, remaining custody authority", async () => {
   const f = fixture();

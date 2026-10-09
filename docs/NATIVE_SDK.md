@@ -4,6 +4,8 @@
 
 Discovery requires the exact ABI 2 manifest/profile digest, native id/hash/name, explicit expected network magic, and callable `getVersion() == 2`. The node must activate `HF_SmartAccountV1`. Private tests do not establish public activation.
 
+For setup, backups and key-loss decisions, start with the [account user guide](NATIVE_ACCOUNT_USER_GUIDE.md).
+
 ## Typed bytes and authority
 
 Account identity, asset address, custody, recovery authority, and fee payer are distinct. Identity derivation remains version 1. ABI 2 adds authorityEpoch at index 13 of its exact fourteen-field account record. The signing domain binds authorization version 2, network, service, account, authorityEpoch and configurationNonce. Canonical execution also requires all four arguments `(accountId, opOrBatch, expectedAuthorityEpoch, expectedConfigurationNonce)`. This transaction-level commitment protects native witness-only authorization after custody or configuration changes. The old two-argument envelope is rejected, with no zero-counter default. Recovery advances both counters and revokes installed modules while preserving identity/assets/nonce channels/Frozen status.
@@ -85,6 +87,31 @@ const config = await client.buildModuleCall({
 
 Submit with custody, inspect `getPendingModuleCall`, wait the chain's full 24-hour maturity, then rebuild and submit the identical call. Issued plans are immutable and tied to the current account snapshot. Staging false differs from a completed callback whose result is false: distinguish them by pending state and configurationNonce.
 
+Cancel an unwanted pending policy call with an explicit role:
+
+```js
+const cancellation = await client.buildAction({
+  accountId, action:'cancelModuleCall', role:'verifier',
+});
+// Present cancellation.pending in your application: selected module, method,
+// typed arguments and maturity. Obtain approval before preparing or signing.
+const cancellationTx = await client.prepareTransaction(cancellation, {
+  feePayer:payerWallet, authoritySigners:[custodyWallet], ...limits,
+});
+await client.broadcastTransaction(await client.signTransaction(cancellationTx));
+```
+
+Use `role:'hook'` for a hook policy call. The cancellation plan retains the role
+and pending-call snapshot; revalidation rejects a changed or missing intent
+when that change is observed. The native cancellation encodes only
+`cancelModuleCall(accountId, role)`, with no pending-call digest or counter in
+its arguments. The snapshot is a client review check, not an on-chain commitment:
+pending state can still change after the last revalidation and before inclusion,
+and the transaction acts on the pending call present for that role when it
+executes. Coordinate custody devices to avoid concurrent policy changes and
+inspect confirmed pending state. Cancellation removes a proposal, not the active
+policy. Build and review a fresh plan after an observed change.
+
 A Session signer signs `prepared.preimage` with P-256/SHA-256 once. `prepared.digest` is its independently computed, chain-matched SHA-256. Attach the signature with `attachSignature(prepared, signatureHex)` and buildExecution. A verifier-authorized operation can use an independent payer without a custody transaction signature. For NeoNativeVerifier, pass `verifierSigners:[walletAdapter]` explicitly to `prepareTransaction`. The SDK reads the core-owned verifier root and active leaf roster, reconstructs complete deployed NEF bytes and JCS manifest code hashes, checks stored pins, and reads each native witness leaf's configured signer list. CustomContracts includes only matching leaves. A MultiSigVerifier root with direct native witness children is supported; recursive or unregistered children are refused. Merely paying fees does not grant verifier authority. Payer/custody and verifier roles can deliberately share a key, but only explicit selection adds that module scope. Config/roster/code pins are rechecked before and after signing and before broadcast.
 
 For native MultiSig, the configured child order is significant: validation selects the first `threshold` children whose submitted proofs pass. Only that selected quorum receives execution-after callbacks and consumes Session policy counters. Three submitted valid proofs in a 2-of-3 account do not mean three child policies were consumed. A caller can deliberately omit a child with a Null slot to choose another allowed quorum; an empty ByteString is a present proof for a NeoNative witness child. Use simulation and the confirmed policy-state readback when reviewing the selected quorum.
@@ -99,7 +126,38 @@ The application supplies the signer adapter; a generic signature record does not
 
 `prepareOperations({accountId,operations})` allocates sequences in input order per channel; buildExecution emits the canonical batch. Channels are below 2^191, sequences below 2^64, and nonce/deadline below 2^255. Cursor 2^64 means exhausted. Thirty-two operations is a syntax limit, not a guarantee they fit the global Verification gas cap.
 
-`buildAction` supports verifier/hook/recovery-address propose/activate/cancel, custody-recovery propose/execute/cancel, freeze/unfreeze, and module-call cancellation. Custody controls configuration; guardian controls recovery proposals/freeze; unfreeze needs both when recovery is configured. Mature recovery execution is permissionless but requires a fee payer. The configured guardian can cancel a pending recovery; custody can cancel only strictly before maturity. Final simulation rechecks the selected actor and current pending state.
+`buildAction` supports the lifecycle below. Every transaction needs a fee payer;
+the table lists account authority required in addition to payment. The fee payer
+may also be the listed authority if it has the corresponding key.
+
+| Action | Required account authority | Timing and state | Cancellation |
+| --- | --- | --- | --- |
+| `proposeVerifier`, `proposeHook`, `proposeRecoveryAddress` | Custody | Active; no pending custody recovery; starts a 24-hour delay | Custody uses the matching cancel action while the intent remains pending |
+| `activateVerifier`, `activateHook`, `activateRecoveryAddress` | None; payer only | Current pending intent at or after maturity; Active; no pending custody recovery | Custody can cancel a still-pending intent, including after maturity, before activation executes |
+| `buildModuleCall` proposal and application | Custody for both calls | Active; no pending custody recovery; repeat the exact method/arguments after 24 hours | Custody uses `cancelModuleCall` with the explicit role and reviewed pending call |
+| `proposeRecovery` | Configured guardian | Active or Frozen; starts a seven-day delay | Guardian while pending; custody only strictly before maturity |
+| `executeRecovery` | None; payer only | Current pending recovery at or after maturity | No pending recovery remains after execution |
+| `freeze` | Configured guardian | Active; no protocol waiting period | Clears every pending intent; use `unfreeze` to resume |
+| `unfreeze` | Custody and configured guardian | Frozen; no protocol waiting period | No pending proposal |
+
+For example, a mature activation needs only `feePayer:payerWallet` and the fee
+caps in `prepareTransaction`; `authoritySigners` may be omitted. Payer-only
+activation does not waive pending-state, maturity, module-pin or cleanup checks.
+Module-policy application is a distinct flow and still requires custody.
+Final simulation rechecks the selected actor and current pending state.
+Account-only lifecycle calls, such as `executeRecovery(accountId)`, do not encode
+the reviewed pending payload. Client revalidation detects observed changes but
+cannot lock pending state through inclusion; read confirmed state after execution.
+
+Freeze advances the configuration counter and clears pending recovery,
+verifier/hook/address changes and module-policy calls. If both containment and
+recovery are needed, freeze and confirm first, then propose recovery. Recovery
+preserves Frozen status and the configured guardian; unfreezing still needs the
+new custody and that guardian. Losing the guardian key while Frozen has no
+custody-only override in this profile. While Active without pending custody
+recovery, custody can propose a 24-hour guardian replacement. Use accepted Neo
+wallet authorities and an independently controlled guardian; the current SDK
+transport support remains the standard P-256 wallet interface described above.
 
 Recovery/configuration invalidate old signatures through authorityEpoch/configurationNonce. The SDK rechecks state/domain/digest/nonce before signing and broadcast. Prepared operations and plans are issued by one client instance. Imported JSON must be rebuilt from chain state, not promoted to a trusted signing request.
 

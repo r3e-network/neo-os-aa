@@ -5,14 +5,19 @@ contract for the fixed native AccountManagement service. A new endpoint starts
 read-only; discovery requires the expected network magic, native contract id,
 service hash/name, exact ABI, profile digest and successful getVersion=2.
 
+Read the [account user guide](NATIVE_ACCOUNT_USER_GUIDE.md) for the authority and
+timing matrix, backup requirements and key-loss scenarios. External protocol
+review and public-network activation remain separate draft-release gates.
+
 ## User flows and trust boundaries
 
 1. **Connect a node**: enter its RPC URL and expected network magic, then verify.
    Changing either value or a wallet network/account event discards prepared work.
    Public networks without activation show an explicit read-only error.
 2. **Create**: generate a cryptographic 32-byte salt; enter Neo custody/recovery
-   script hashes. Default verifier/hook are absent so custody witness works
-   immediately. Independent recovery is recommended; no recovery requires an
+   script hashes from accepted Neo wallet authorities. Default verifier/hook are
+   absent so custody witness works immediately. Choose a guardian controlled
+   independently from custody; no recovery requires an
    explicit acknowledgment. Preview stable identity and separate funding address.
 3. **Backup / restore**: export a public recovery descriptor (network, profile,
    identity, funding address, custody and salt). It contains no private key and
@@ -25,11 +30,19 @@ service hash/name, exact ABI, profile digest and successful getVersion=2.
    authority epoch and preserves funding address, nonces and frozen state.
    The configured recovery authority may cancel any still-pending recovery;
    custody may cancel only strictly before maturity.
+   Mature verifier, hook and guardian-address activations, and mature custody
+   recovery execution, require only a fee payer. They operate on the pending
+   intent present at execution and must pass current state and maturity checks.
+   The review snapshot does not lock that state until inclusion.
 5. **Restricted sessions / multiple approvals**: build declared module calls
    with typed values, finite session expiry and an explicit positive spending
    cap. Session configuration excludes the automatically prepended account id.
    MultiSig thresholds count verifier modules, not independently controlled
-   humans. Delayed policy calls are exported as exact scripts; configuration
+   humans. Inspect pending policy calls separately for verifier and hook roles;
+   review their selected module, method, typed arguments and maturity. Custody
+   can cancel the selected pending call. Cancellation removes that proposal,
+   not an active key or policy. Applying the policy after 24 hours still requires
+   custody and its exact stored arguments. Delayed policy calls are exported as exact scripts; configuration
    never masquerades as an immediate key revocation.
 6. **Business operation**: build an exact typed operation with RPC nonce, finite
    deadline, current authority domain and digest cross-check. Show fee payer,
@@ -37,9 +50,24 @@ service hash/name, exact ABI, profile digest and successful getVersion=2.
    is no gasless checkbox. Execution exports proxy witness and CustomContracts
    target scope for an exact-script SDK/wallet integration, not legacy invoke.
 
+Account state and displayed chain time are snapshots. Use **Refresh account and
+chain time** before acting on a pending change. In the policy tab, select
+**Module role**, then **Refresh pending policy**. The pending card shows the
+root and selected module, method, typed arguments, maturity and checked chain
+time. **Review policy cancellation** compares the freshly read pending call to
+that inspected snapshot; an observed change requires a new review.
+**Review pending activation**
+uses the selected role and repeats the exact stored call after maturity. New
+hook-policy proposals are built through the SDK.
+
+The review separates **Application consumption** from **Minimum system fee
+budget**. Its **Network fee** remains unquoted until an exact transaction and
+witness roster are available. These preview values are not a final total-fee
+approval; review the wallet's final fees or use SDK fee caps before signing.
+
 ## Manual wallet hand-off
 
-Single-authority registration and lifecycle calls use the existing wallet invoke
+Supported registration and lifecycle calls use the existing wallet invoke
 service only after fresh discovery, account-state revalidation, successful
 simulation, matching live wallet account and matching live wallet network. The
 selected provider must expose `getNetwork()` or `getNetworks()` with a recognizable
@@ -109,12 +137,36 @@ After recovery, the descriptor still finds the same account; fresh on-chain
 state supplies current authority. A descriptor does not reset authority or
 recover a lost wallet private key.
 
+An exported policy cancellation includes both its explicit verifier/hook role
+and the pending-call snapshot reviewed for that role. Reloading before submission
+rejects replacement or removal observed by the last revalidation. The native
+call encodes only `cancelModuleCall(accountId, role)`, not the snapshot or its
+digest. Pending state can still change before inclusion, and cancellation acts
+on the role's pending call at execution. Coordinate custody devices to avoid
+concurrent changes and inspect confirmed pending state. The same cancel script
+does not prove that the original reviewed intent is still current.
+
 Session defaults use a 48-hour expiry so the initial 24-hour configuration delay
 leaves a useful session. New grants ending before activation are rejected. The
 pending-activation action reloads and repeats the exact stored arguments; it
 never silently extends a session. Revocation is also delayed. Freeze remains the
-immediate containment action, and recovery provides the old-plugin-independent
-exit. If the wallet request was already opened when the network changed, the
+immediate containment action once its transaction executes, and recovery provides
+the old-plugin-independent exit. Freeze clears every pending intent, including
+custody recovery and policy calls. Freeze first and confirm, then start recovery;
+a recovery proposal on its own leaves an Active account active. Recovery retains
+the guardian and Frozen status. Unfreeze requires custody and the configured
+guardian, so a lost guardian key while Frozen has no custody-only override.
+While Active without pending custody recovery, custody can propose a guardian
+replacement with the normal 24-hour delay.
+
+Times shown for deadlines and maturity are chain milliseconds. Equality is valid
+for a deadline and sufficient for maturity; custody cancellation of recovery
+ends strictly before maturity. An included FAULT can charge fees despite rolling
+back application changes. Boolean `false` is not itself a VM fault; review the
+operation's result and applicable policy. After a timeout, inspect the same
+transaction ID before preparing another transaction.
+
+If the wallet request was already opened when the network changed, the
 page cannot recall it; a late result asks the user to inspect the wallet before
 retrying and is never shown as confirmation of the new context.
 

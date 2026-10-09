@@ -8,6 +8,9 @@ The profile remains a draft until the Neo proposal and activation process is
 complete. Public `UnifiedSmartWalletV3` and private `PLATFORM` are separate
 compatibility profiles with separate account identities and artifacts.
 
+The [account user guide](NATIVE_ACCOUNT_USER_GUIDE.md) covers setup, backups,
+the authority and timing matrix, and recovery decisions.
+
 ## Account identity and authority
 
 An account has a stable account ID and a derived verification-script address.
@@ -29,6 +32,36 @@ custody, detaches the verifier and hook, and clears enrolled dependencies and
 pending configuration. It does not invoke the old modules. Account identity,
 operation nonces and frozen status remain intact. Unfreezing retains its required
 authorities; recovery does not silently enable a frozen account.
+
+The recovery authority is also the guardian for emergency freeze. Choose an
+accepted Neo wallet authority controlled independently from custody, and keep
+both wallet backups. A guardian can freeze an Active account without custody;
+unfreezing requires custody and the configured guardian. Recovery retains that
+guardian. If its key is lost while the account is Frozen, this profile provides
+no custody-only override or guardian replacement while Frozen. While Active and
+without pending custody recovery, custody can propose a guardian replacement;
+it takes 24 hours to mature.
+
+Freeze takes effect when its transaction executes and clears **all pending
+intents**, including custody recovery and module-policy calls. For emergency
+containment followed by recovery, freeze first, confirm the resulting state,
+then start a new recovery proposal. Proposing recovery alone does not freeze
+the account. A successful counter-advancing transition also invalidates pending
+configuration, so every subsequent action must reload current state.
+
+Custody authorizes proposals to replace the verifier, hook or recovery address.
+After 24 hours, anyone may pay to activate the current mature intent through
+`activateVerifier`, `activateHook` or `activateRecoveryAddress`; no custody or
+guardian signature is required at activation. The account must still be Active
+with no pending custody recovery. Module replacement still checks code pins and
+old-module cleanup. In contrast, applying a delayed module-policy call requires
+custody again and the identical stored method and arguments. Custody may cancel
+that call for its selected verifier or hook role while it remains pending.
+Lifecycle review snapshots are client checks. Account-only activation/recovery
+calls act on pending state at execution; policy cancellation encodes account ID
+and role, without a pending-call digest. Revalidation rejects observed changes
+but does not lock state between the last check and inclusion. Coordinate custody
+devices and inspect confirmed state after execution.
 
 Supported native modules address storage by account ID and authority epoch.
 Reinstalling the same module after recovery starts with empty policy state.
@@ -118,6 +151,12 @@ The native profile has no reimbursement paymaster or automatic sponsorship
 settlement. The payer signs the complete transaction after separate system,
 network and total fee ceilings have been checked.
 
+An included transaction whose Application ends in FAULT can still charge its
+fee payer; reverted state changes do not refund transaction fees. A target
+returning Boolean `false` is a business result, not itself a VM fault. Modules
+and clients apply their own result checks, including the SDK's strict
+Boolean-true requirement for `transfer`.
+
 Bounded calls need enough remaining gas to admit a child budget even when actual
 consumption is lower. Node simulation therefore reports `minimumrequiredfee` in
 addition to `gasconsumed`; wallet and SDK builders preserve that requirement.
@@ -133,9 +172,11 @@ boundary vector establishes support only for its recorded runtime and fee policy
 
 The workspace starts read-only and shows identity separately from the funding
 address. Recovery descriptors contain public discovery information, not private
-keys. Network, wallet, account or pending-intent changes invalidate prepared
-reviews. Returned transaction IDs are submissions; exact transaction and receipt
+keys. Observed network, wallet, account or pending-intent changes invalidate
+prepared reviews. Returned transaction IDs are submissions; exact transaction and receipt
 readback are required before confirmation.
+After a submission timeout, query the same transaction ID before preparing a
+replacement. Successful simulation does not reserve a nonce or guarantee inclusion.
 
 Ordinary wallet `invoke` APIs can handle supported single-authority management
 calls. Proxy execution and multiple authorities require exact witness support;

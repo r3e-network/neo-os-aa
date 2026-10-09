@@ -35,3 +35,19 @@ The normative documents are the [native ABI 2 profile](SMARTACCOUNT-NATIVE-PROFI
 Current implementation review is coordinated through [core #4768](https://github.com/neo-project/neo/pull/4768), [RPC #1115](https://github.com/neo-project/neo-node/pull/1115) and [foundation #243](https://github.com/neo-project/proposals/pull/243). Upstream review and public-activation gates remain open. Historical issue comments and pinned runtime receipts describe their original checkpoints and must not be read as current deployment claims.
 
 The [2026-10-09 validation receipt](../reports/aa-issue-242-conformance-20261009.json) records the source pins, new regression cases and verification counts for this review.
+
+## Lifecycle and usability follow-up
+
+The [protocol audit receipt](../reports/aa-native-protocol-review-20261009.json)
+tracks the subsequent client and workspace review. It separates permissionless
+account-level activation from custody-authorized module-policy activation, binds
+module cancellation reviews to their exact pending intent, and documents the
+user's authority and timing choices in the [account guide](../NATIVE_ACCOUNT_USER_GUIDE.md).
+
+One protocol boundary remains unresolved: using a native account's proxy as
+another account's custody or recovery authority. Source review indicates that
+the nested account lock may make that authority unusable; executable
+confirmation is still unavailable. Do not treat nested-account authority as a
+supported recovery arrangement or this audit as complete protocol clearance.
+Resolving that boundary must preserve the specified target-frame witness
+isolation and receive the corresponding native-protocol review.
