@@ -1160,3 +1160,59 @@ test('sanitizeMetaInvocationForRelay rejects operations outside the relay allowl
     );
   }
 });
+
+test('relay refuses an entrypoint the deployed ABI does not export before any RPC and names it', async () => {
+  // CU-203: executeUnified appears in no deployed manifest and in no contract source. Before the
+  // fix it passed the helper and the route asked a node to invoke it, so the caller saw a
+  // simulation or paymaster error instead of "that operation does not exist". The refusal must now
+  // happen at validation, name the operation, and touch no RPC.
+  const { CORE_HASH } = await import('./fixtures/aaChainFixtures.js');
+  const { withRelay, post, startNode } = await import('./fixtures/relayHarness.js');
+
+  // Count outbound calls without breaking the ones the accepted control needs: the SDK's RPC
+  // client is a real HTTP client, so the wrapper forwards. A refused operation must produce none.
+  let fetchAttempts = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (...args) => {
+    fetchAttempts += 1;
+    return originalFetch(...args);
+  };
+
+  // The node records every RPC it receives; a refused operation must never reach it. The stub
+  // answers a plain HALT so the accepted control below can complete.
+  const node = await startNode({ invokeScript: () => ({ script: 'AAAA', state: 'HALT', gasconsumed: '1000', exception: null, stack: [] }) });
+  try {
+    const refused = await withRelay(node, {}, () => post({
+      metaInvocation: {
+        scriptHash: CORE_HASH,
+        operation: 'executeUnified',
+        args: [],
+      },
+    }));
+
+    assert.equal(refused.status, 400);
+    assert.equal(refused.body.error, 'relay_meta_invocation_not_allowed');
+    assert.equal(
+      refused.body.reason,
+      'unsupported relay operation: executeUnified is not in the deployed Abstract Account ABI',
+    );
+    assert.equal(node.count('invokescript'), 0, 'the node was never asked to invoke a dead entrypoint');
+    assert.equal(fetchAttempts, 0, 'no outbound call was attempted for a refused operation');
+
+    const accepted = await withRelay(node, {}, () => post({
+      metaInvocation: {
+        scriptHash: CORE_HASH,
+        operation: 'executeUserOp',
+        args: [
+          { type: 'Hash160', value: `0x${'aa'.repeat(20)}` },
+          { type: 'Struct', value: [] },
+        ],
+      },
+    }));
+    assert.notEqual(accepted.status, 400, 'a deployed entrypoint still reaches the relay');
+    assert.ok(node.count('invokescript') >= 1, 'the deployed entrypoint was simulated');
+  } finally {
+    globalThis.fetch = originalFetch;
+    await node.close();
+  }
+});

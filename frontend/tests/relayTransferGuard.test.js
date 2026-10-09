@@ -152,7 +152,7 @@ test('CU-06: a batch is refused when one of its transfers returned false, and on
   assert.equal(fine.sent, 1);
 });
 
-test('CU-06: the method name cannot be disguised as bytes, and the sponsored and legacy entry points are judged too', async () => {
+test('CU-06: the method name cannot be disguised as bytes, and the sponsored entry point is judged too', async () => {
   const transferAsBytes = executeUserOpInvocation({ target: GAS_HASH, method: 'transfer', args: gasTransferArgs() });
   transferAsBytes.args[1].value[1] = { type: 'ByteArray', value: `0x${Buffer.from('transfer').toString('hex')}` };
 
@@ -167,6 +167,23 @@ test('CU-06: the method name cannot be disguised as bytes, and the sponsored and
     ],
   };
 
+  for (const [name, invocation] of Object.entries({ transferAsBytes, sponsored })) {
+    const node = await startNode({ invokeScript: () => haltResult('2000', boolItem(false)) });
+    try {
+      const { body } = await withRelay(node, {}, () => post({ metaInvocation: invocation }));
+      assert.equal(body.code, CODE, name);
+      assert.equal(node.count('sendrawtransaction'), 0, name);
+    } finally {
+      await node.close();
+    }
+  }
+});
+
+test('CU-06/CU-203: the legacy executeUnifiedByAddress envelope is refused at validation, before any simulation', async () => {
+  // CU-06 used to feed this envelope through the transfer guard. CU-203 established that no
+  // deployed manifest and no contract source defines executeUnifiedByAddress, so it is no longer
+  // one of the entrypoints the relay accepts: the route refuses it during validation, names the
+  // operation, and never simulates. What keeps this case safe is the allowlist, not the guard.
   const legacy = {
     scriptHash: CORE_HASH,
     operation: 'executeUnifiedByAddress',
@@ -178,15 +195,16 @@ test('CU-06: the method name cannot be disguised as bytes, and the sponsored and
     ],
   };
 
-  for (const [name, invocation] of Object.entries({ transferAsBytes, sponsored, legacy })) {
-    const node = await startNode({ invokeScript: () => haltResult('2000', boolItem(false)) });
-    try {
-      const { body } = await withRelay(node, {}, () => post({ metaInvocation: invocation }));
-      assert.equal(body.code, CODE, name);
-      assert.equal(node.count('sendrawtransaction'), 0, name);
-    } finally {
-      await node.close();
-    }
+  const node = await startNode({ invokeScript: () => haltResult('2000', boolItem(false)) });
+  try {
+    const { status, body } = await withRelay(node, {}, () => post({ metaInvocation: legacy }));
+    assert.equal(status, 400);
+    assert.equal(body.error, 'relay_meta_invocation_not_allowed');
+    assert.match(body.reason, /unsupported relay operation: executeUnifiedByAddress/);
+    assert.equal(node.count('invokescript'), 0, 'refused before any simulation');
+    assert.equal(node.count('sendrawtransaction'), 0);
+  } finally {
+    await node.close();
   }
 });
 
