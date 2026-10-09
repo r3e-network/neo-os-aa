@@ -20,7 +20,7 @@ const { createRegistrationAccountIdDeriver } = require('../../../shared/registra
 
 // Result rules for token transfers, shared with the relay route and the wallet (shared/transferOutcome.mjs).
 const transferOutcome = require('../../../shared/transferOutcome.mjs');
-const { normalizeRelayContractParameter } = require('../../../shared/relayContractParameter.mjs');
+const { normalizeRelayContractParameter, MAX_RELAY_PARAMETER_DEPTH } = require('../../../shared/relayContractParameter.mjs');
 const { toMultiSigRpcParameter } = require('../../../shared/multiSigCore.mjs');
 
 const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({
@@ -81,10 +81,68 @@ function decodeByteStringStackText(item) {
 const { decodeStackBoolean, decodeHash160Stack, decodeValidationPreviewStack } = metaTxExports;
 
 // Both sponsored builders and the signing hash use the same typed byte boundary.
-function userOpArgsParameter(args, depth = 2) {
+//
+// The relay carries a contract parameter as a DTO and refuses anything it cannot name, so an
+// argument list has to be checked recursively before it is embedded: an unknown type, a kind the
+// relay does not carry, a non-null Any, an untyped nested value or an over-deep nesting would
+// otherwise be coerced into the untyped carrier the relay later refuses, or executed as different
+// arguments than the account signed. The walk below validates every node with the relay's own
+// normalizer (one source of truth for the kind and value rules) and, on the first refusal, names
+// the argument path that caused it.
+function argumentPath(segments) {
+  return segments.reduce((path, segment) => (/^[0-9]+$/.test(String(segment))
+    ? `${path}[${segment}]`
+    : `${path}.${segment}`), '');
+}
+
+// One path segment or several; the walk builds both an index and a Map-entry path.
+function extendPath(segments, segment) {
+  return segments.concat(Array.isArray(segment) ? segment : [segment]);
+}
+
+function walkRelayArgument(value, segments, depth) {
+  const path = `userOp.Args${argumentPath(segments)}`;
+  if (depth > MAX_RELAY_PARAMETER_DEPTH) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
+      hint: `${path}: Contract parameter: nesting exceeds maximum depth of ${MAX_RELAY_PARAMETER_DEPTH}`,
+    });
+  }
+  // A raw value is not a contract parameter at all: name it here rather than letting the array
+  // wrap it in the untyped carrier the relay refuses.
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: Contract parameter: typed contract parameter required` });
+  }
+  const recurse = (item, segment) => walkRelayArgument(item, extendPath(segments, segment), depth + 1);
+  if (value.type === 'Array' || value.type === 'Struct') {
+    if (!Array.isArray(value.value)) return normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true });
+    return { type: 'Array', value: value.value.map((item, index) => recurse(item, index)) };
+  }
+  if (value.type === 'Map') {
+    if (!Array.isArray(value.value)) return normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true });
+    return { type: 'Map', value: value.value.map((entry, index) => {
+      if (!entry || typeof entry !== 'object') return entry;
+      return {
+        key: recurse(entry.key, ['value', index, 'key']),
+        value: recurse(entry.value, ['value', index, 'value']),
+      };
+    }) };
+  }
   try {
-    return normalizeRelayContractParameter({ type: 'Array', value: args ?? [] }, {
-      depth: depth - 1, byteEncoding: 'mixed', allowClasses: true,
+    return normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true });
+  } catch (error) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: ${error.message}` });
+  }
+}
+
+function userOpArgsParameter(args, baseDepth = 0) {
+  if (args === undefined || args === null) args = [];
+  if (!Array.isArray(args)) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'userOp.Args must be an array' });
+  }
+  const items = args.map((item, index) => walkRelayArgument(item, [index], baseDepth + 1));
+  try {
+    return normalizeRelayContractParameter({ type: 'Array', value: items }, {
+      depth: baseDepth, byteEncoding: 'mixed', allowClasses: true,
     });
   } catch (error) {
     throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `userOp.Args: ${error.message}` });
@@ -96,7 +154,7 @@ function sponsoredUserOpParameter(op, depth) {
     return normalizeRelayContractParameter({ type: 'Array', value: [
       { type: 'Hash160', value: normalizeAddress(op.TargetContract) },
       { type: 'String', value: op.Method },
-      userOpArgsParameter(op.Args, depth),
+      userOpArgsParameter(op.Args, depth - 1),
       { type: 'Integer', value: op.Nonce },
       { type: 'Integer', value: op.Deadline },
       { type: 'ByteArray', value: `0x${sanitizeHex(op.Signature || '')}` },
