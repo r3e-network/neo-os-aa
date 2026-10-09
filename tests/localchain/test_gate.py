@@ -15,6 +15,14 @@ class GateTest(unittest.TestCase):
         self.expected = json.loads((ROOT / "tests/localchain/expected-deployed.json").read_text())
         totals = self.expected["totals"]
         self.receipt = {"variant": "deployed", "status": "DONE", "results": [], "records": [],
+                        "sdkSponsored": {
+                            "sdkScriptSimulation": "FAULT",
+                            "sdkScriptException": "ABORTMSG is executed. Reason: Reimbursement exceeds actual gas cost",
+                            "innerGasConsumed": 90283200, "sponsoredGasConsumed": 140195490,
+                            "requested": 500000000, "settled": 300000000, "allowedSettled": 300000000,
+                            "argumentTypes": ["Hash160", "Hash160", "Integer", "ByteArray"],
+                            "payloadHasUntypedCarrier": False, "sdkEqualsHarnessParams": True,
+                        },
                         "timelockBoundaries": [
                             {"timelock": "24h-config-update", "deadlineMs": 86400000, "earliestDeadlineMs": 86390000,
                              "deniedAtMs": 86340000, "allowedAtMs": 86460000, "observedDenied": True, "observedAllowed": True},
@@ -69,6 +77,35 @@ class GateTest(unittest.TestCase):
             lambda r: r["timelockBoundaries"].reverse(),
             lambda r: r["timelockBoundaries"][1].update(timelock="24h-config-update"),
             lambda r: r.update(timelockBoundaries={"24h-config-update": True, "7d-escape": True}),
+        ]
+        for index, mutate in enumerate(mutations):
+            with self.subTest(mutation=index):
+                r = copy.deepcopy(self.receipt)
+                mutate(r)
+                self.assertTrue(suite.validate_receipt(r, self.expected))
+
+    def test_sdk_sponsored_mutants_fail_closed(self):
+        """The SDK sponsored walk only counts with its readings: equivalence to the parameter path, a
+        settlement strictly under the request, the bound shown on both sides and typed arguments."""
+        mutations = [
+            lambda r: r.pop("sdkSponsored"),
+            lambda r: r.update(sdkSponsored={}),
+            lambda r: r["sdkSponsored"].update(sdkScriptSimulation="HALT"),
+            lambda r: r["sdkSponsored"].update(sdkScriptException="ABORTMSG is executed. Reason: another refusal"),
+            lambda r: r["sdkSponsored"].update(sdkScriptException="a fault with no reason"),
+            lambda r: r["sdkSponsored"].update(sdkEqualsHarnessParams=False),
+            lambda r: r["sdkSponsored"].update(payloadHasUntypedCarrier=True),
+            lambda r: r["sdkSponsored"].update(argumentTypes=["Hash160", "Hash160", "Integer"]),
+            lambda r: r["sdkSponsored"].update(argumentTypes=["Hash160", "Hash160", "Any", "ByteArray"]),
+            lambda r: r["sdkSponsored"].update(settled=500000000),
+            lambda r: r["sdkSponsored"].update(settled=0),
+            lambda r: r["sdkSponsored"].update(settled=-1),
+            lambda r: r["sdkSponsored"].update(allowedSettled=500000000),
+            lambda r: r["sdkSponsored"].update(allowedSettled=0),
+            lambda r: r["sdkSponsored"].update(innerGasConsumed=0),
+            lambda r: r["sdkSponsored"].update(sponsoredGasConsumed=1),
+            lambda r: r["sdkSponsored"].pop("settled"),
+            lambda r: r["sdkSponsored"].pop("sponsoredGasConsumed"),
         ]
         for index, mutate in enumerate(mutations):
             with self.subTest(mutation=index):

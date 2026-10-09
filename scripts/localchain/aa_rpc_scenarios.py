@@ -628,9 +628,18 @@ def sc_sdk_sponsored(c, x):
         body, exit_code = sdk_payload(nonce_probe, amount=amount)
         c.check(exit_code != 0 and body.get("ok") is not True, f"the SDK refuses a {label} reimbursement request")
 
-    return {"sdkScriptSimulation": sponsored_probe.get("state"), "settled": settled, "requested": requested,
-            "innerGasConsumed": inner_probe.get("gasconsumed"), "sponsoredGasConsumed": rec.get("gas"),
-            "argumentTypes": shape.get("types")}
+    x.sdkSponsored = {
+        "sdkScriptSimulation": sponsored_probe.get("state"),
+        "sdkScriptException": (sponsored_probe.get("exception") or "")[:120],
+        "innerGasConsumed": int(inner_probe.get("gasconsumed") or 0),
+        "sponsoredGasConsumed": int(rec.get("gas") or 0),
+        "requested": requested, "settled": settled, "allowedSettled": allowed_settled,
+        "argumentTypes": shape.get("types"),
+        "payloadHasUntypedCarrier": '"Any"' in encoded,
+        "sdkEqualsHarnessParams": harness_probe.get("gasconsumed") == sponsored_probe.get("gasconsumed")
+                                  and (harness_probe.get("exception") or "") == (sponsored_probe.get("exception") or ""),
+    }
+    return x.sdkSponsored
 
 
 def sc_timelock_boundaries(c, x):
@@ -1116,6 +1125,8 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
         receipt["records"] = c.records if c else []
         if x is not None and hasattr(x, "source_proxy_relay"):
             receipt["sourceProxyRelay"] = x.source_proxy_relay
+        if x is not None and hasattr(x, "sdkSponsored"):
+            receipt["sdkSponsored"] = x.sdkSponsored
         receipt_path.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
     def attempt(name, fn, *a):
         _attempt(receipt, c, save, name, fn, *a)
@@ -1141,6 +1152,7 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
         attempt("AA-08 on-chain paymaster", sc_paymaster, c, x)
         attempt("AA-11 SDK sponsored operation end to end", sc_sdk_sponsored, c, x)
         attempt("AA-09 relay route", sc_relay_route, c, x)
+        receipt["sdkSponsored"] = getattr(x, "sdkSponsored", None)
         receipt["status"] = "DONE"
     except Exception as e:
         receipt["status"] = "ABORTED"; receipt["abort"] = f"{type(e).__name__}: {str(e)[:700]}"
@@ -1258,6 +1270,39 @@ def _boundary_failures(receipt):
     return failures
 
 
+def _sdk_sponsored_failures(receipt):
+    """The SDK sponsored walk is evidence only with the readings that make it load-bearing: the SDK
+    invocation must price the same as the parameter path, the settlement must sit strictly under the
+    amount requested, and no parameter of the payload may be an untyped carrier. A receipt that
+    reports the walk without those readings is not evidence."""
+    evidence = receipt.get("sdkSponsored")
+    if not isinstance(evidence, dict):
+        return ["SDK sponsored payload: the end-to-end walk is recorded"]
+    failures = []
+    for key in ("sdkScriptSimulation", "sdkScriptException", "innerGasConsumed", "sponsoredGasConsumed",
+                "requested", "settled", "allowedSettled", "argumentTypes",
+                "payloadHasUntypedCarrier", "sdkEqualsHarnessParams"):
+        if key not in evidence:
+            failures.append(f"SDK sponsored payload: the walk records {key}")
+    if failures:
+        return failures
+    if evidence["sdkScriptSimulation"] != "FAULT" or "Reimbursement exceeds actual gas cost" not in evidence["sdkScriptException"]:
+        failures.append("SDK sponsored payload: the pricing container refuses the sponsored envelope on its settlement cap")
+    if evidence["sdkEqualsHarnessParams"] is not True:
+        failures.append("SDK sponsored payload: the SDK invocation prices the same as the parameter path")
+    if evidence["payloadHasUntypedCarrier"] is not False:
+        failures.append("SDK sponsored payload: no parameter of the payload is an untyped carrier")
+    if evidence["argumentTypes"] != ["Hash160", "Hash160", "Integer", "ByteArray"]:
+        failures.append("SDK sponsored payload: the inner argument list keeps its parameter types")
+    if not (0 < evidence["settled"] < evidence["requested"]):
+        failures.append("SDK sponsored payload: the settlement is positive and below the amount requested")
+    if not (0 < evidence["allowedSettled"] < evidence["requested"]):
+        failures.append("SDK sponsored payload: the allowed side settles below the amount requested")
+    if not (evidence["innerGasConsumed"] > 0 and evidence["sponsoredGasConsumed"] >= evidence["innerGasConsumed"]):
+        failures.append("SDK sponsored payload: the sponsored call is priced at least as high as its inner operation")
+    return failures
+
+
 def validate_receipt(receipt, expected):
     failures = []
     if receipt["status"] != "DONE":
@@ -1265,6 +1310,7 @@ def validate_receipt(receipt, expected):
     if receipt["variant"] != expected["variant"]:
         failures.append("deployed variant")
     failures += _boundary_failures(receipt)
+    failures += _sdk_sponsored_failures(receipt)
     totals = expected["totals"]
     failures += _inventory_failures(
         receipt, expected["scenarios"], totals,
