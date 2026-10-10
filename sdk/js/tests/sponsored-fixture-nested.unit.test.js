@@ -8,9 +8,12 @@
 // The mutations are planted in the payload because that is the direction the property runs: the
 // payload must reproduce the request. The pre-fix walk is run against the same mutations in "the
 // pre-fix walk is shown accepting every planted mutation below", which is the red this fix is
-// measured against; it is the branch's own reviewed fixture code, not a re-description of it.
+// measured against; it is a checked-in copy of the branch's own reviewed fixture code, sliced and
+// executed here rather than re-described. The copy is what lets the red run in a clean `git archive`
+// export: an archive has no `.git`, so a history lookup cannot supply the pre-fix walk there.
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -19,6 +22,10 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '../../..');
 const FIXTURE = path.join(ROOT, 'scripts/localchain/sdk_paymaster_fixture.mjs');
 const COMPARISON = require(path.join(ROOT, 'scripts/localchain/sponsoredArgumentComparison.mjs'));
+// The committed pre-fix walk and the SHA-256 of the exact text this test executes out of it. The
+// fixture's own header records where the copy came from and why it is a copy.
+const PRE_FIX_WALK = path.join(__dirname, 'fixtures', 'sponsored-walk-prefix-c09972a.mjs');
+const PRE_FIX_WALK_SHA256 = 'fe602adc7eaeca55121c4d5b561273555d9b95e5ce7e65c220d27793c60cc8db';
 
 const TARGET = '0x' + '22'.repeat(20);
 const ACCOUNT = '0x' + '44'.repeat(20);
@@ -107,8 +114,8 @@ function refusal(payload, expected = requestArgs()) {
   return COMPARISON.compareSponsArgs(payload, expected);
 }
 
-// The complete text of one function or arrow binding, so the pre-fix walk above is the reviewed
-// code itself and not a re-description of it.
+// The complete text of one function or arrow binding, so the walk the red runs is sliced out of the
+// reviewed text rather than re-described in the test.
 function definitionOf(source, start) {
   const from = source.indexOf(start);
   assert.notEqual(from, -1, `the reviewed fixture no longer carries ${start}`);
@@ -156,17 +163,24 @@ test('the comparison refuses every planted map mutation, including entry order',
 });
 
 test('the pre-fix walk is shown accepting every planted non-byte mutation below', () => {
-  // The red this fix is measured against, recovered from the branch's own reviewed fixture at
-  // c09972a. Its walk recursed into nested Array lengths and compared nested ByteArray bytes, so it
-  // refused those two and returned success for every other kind; the accepted set below is that
-  // remainder, which is the defect. If the set ever changes, the planted mutations have stopped
-  // reproducing the reported defect and the green above would prove nothing.
-  const source = execFileSync('git', ['-C', ROOT, 'show', 'c09972a:scripts/localchain/sdk_paymaster_fixture.mjs'],
-    { encoding: 'utf8' });
+  // The red this fix is measured against, sliced out of the checked-in copy of the branch's own
+  // reviewed fixture at c09972a. Its walk recursed into nested Array lengths and compared nested
+  // ByteArray bytes, so it refused those two and returned success for every other kind; the accepted
+  // set below is that remainder, which is the defect. If the set ever changes, the planted mutations
+  // have stopped reproducing the reported defect and the green above would prove nothing.
+  const source = fs.readFileSync(PRE_FIX_WALK, 'utf8');
+  const executed = [
+    definitionOf(source, 'const byteHex ='),
+    definitionOf(source, 'const hex ='),
+    definitionOf(source, 'function byteDifference'),
+  ].join('\n');
+  // A committed copy can drift where a history lookup could not, so the text that is about to run is
+  // pinned: this is the digest of the pre-fix text the git-backed red executed, and a changed fixture
+  // fails here instead of quietly re-basing the red on a different walk.
+  assert.equal(createHash('sha256').update(executed).digest('hex'), PRE_FIX_WALK_SHA256,
+    'the fixture no longer carries the reviewed pre-fix walk');
   const preFix = new Function(`
-${definitionOf(source, 'const byteHex =')}
-${definitionOf(source, 'const hex =')}
-${definitionOf(source, 'function byteDifference')}
+${executed}
     return { byteDifference };`)();
   const expected = requestArgs();
   const mapExpected = requestArgs(entriesOf([['Map', mapEntries[0]]]));
