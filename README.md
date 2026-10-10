@@ -2,18 +2,27 @@
 
 `neo-os-aa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Abstract Accounts on Neo N3.
 
-The target architecture is **Neo N3 native SmartAccount**, implemented by the
-protocol's `AccountManagement` service. Start with the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
-[native SDK](docs/NATIVE_SDK.md), and [native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md)
-at `/native`. The service uses stable account identity, explicitly scoped
-authorization, bounded module callbacks, independent fee payment, and recovery
-that revokes old modules without calling them.
+The project has **two parallel implementations** of the smart-account protocol:
 
-This branch implements the unactivated ABI 2 draft associated with
+- **Deployed contracts first:** `UnifiedSmartWalletV3`, its modules, SDK and app
+  supply the implementation path for NeoOS on the current public Neo N3 runtime.
+  This is the near-term delivery priority and a source of protocol validation.
+- **Native service:** `AccountManagement`, its native modules and clients develop
+  the protocol-standard implementation alongside the deployed-contract path.
+  Native availability depends on Neo review and consensus activation.
+
+Start with the [implementation strategy](docs/AA-IMPLEMENTATION-STRATEGY.md) and
+[capability boundaries](docs/AA-SYSTEM-STATUS.md). Use the deployed-contract app
+for current-runtime integration. The separate [native workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md)
+at `/native` targets the unactivated ABI 2 draft associated with
 [proposal #243](https://github.com/neo-project/proposals/pull/243) and
 [discussion #242](https://github.com/neo-project/proposals/issues/242).
-Selecting a public RPC endpoint cannot enable it. The workspace verifies native
-activation and the exact protocol profile before enabling account actions.
+Selecting a public RPC endpoint cannot enable the native service.
+
+The two implementations must share explicitly specified account semantics and
+conformance cases. Their identities, wire formats, deployment controls and
+runtime guarantees remain profile-specific; existing V3 artifacts are not
+silently reclassified as native-compatible accounts.
 
 The latest [consistency follow-up](docs/reports/aa-consistency-iteration-20261009.md)
 records the signed-preflight, SDK/relay, workspace and validation-gate fixes,
@@ -21,7 +30,7 @@ with exact-source private-chain evidence and remaining activation boundaries.
 
 Runtime and deployment boundaries:
 
-- This repository retains `UnifiedSmartWalletV3` compatibility for the public deployments listed below, alongside the native `AccountManagement` implementation.
+- This repository develops the deployed `UnifiedSmartWalletV3` implementation for current NeoOS use alongside the native `AccountManagement` implementation.
 - V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
 - The public `v3` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
 - [System capability boundaries](docs/AA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.

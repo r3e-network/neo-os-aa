@@ -32,6 +32,7 @@
           {{ t("studioPanels.identitySection", "Identity") }}
         </div>
         <div class="bg-aa-panel rounded-lg border border-aa-border/60 p-5">
+          <p class="mb-4 text-xs text-aa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-2">
               <label
@@ -261,6 +262,7 @@
           {{ t("studioPanels.pluginsSection", "Plugins") }}
         </div>
         <div class="bg-aa-panel rounded-lg border border-aa-border/60 p-5">
+          <p class="mb-4 text-xs text-aa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-4">
               <div>
@@ -352,6 +354,7 @@
           {{ t("studioPanels.backupSection", "Backup & Recovery") }}
         </div>
         <div class="bg-aa-panel rounded-lg border border-aa-border/60 p-5">
+          <p class="mb-4 text-xs text-aa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-2">
               <label
@@ -376,11 +379,11 @@
               >
                 {{ backupOwnerError }}
               </p>
-              <p v-else class="mt-1 text-xs text-aa-muted">
+              <p class="mt-1 text-xs text-aa-muted">
                 {{
                   t(
                     "studioPanels.backupOwnerHint",
-                    "Neo address (N...) or EVM address (0x...)",
+                    "Neo N3 address (N...) or Neo script hash (0x...). The connected wallet must be this backup owner.",
                   )
                 }}
               </p>
@@ -555,6 +558,7 @@ const {
   createAccount,
   checkMatrixDomain,
   matrixCheckResult,
+  registrationOwnerError,
 } = studio;
 
 async function copyScript() {
@@ -562,21 +566,10 @@ async function copyScript() {
   if (await copyText(computedScriptHex)) markCopied("script");
 }
 
-const backupOwnerError = computed(() => {
-  const val = createForm.backupOwner?.trim() || "";
-  if (!val) return "";
-  const isNeo = val.startsWith("N") && val.length === 34;
-  const isEvm = /^0x[0-9a-fA-F]{40}$/.test(val);
-  if (!isNeo && !isEvm)
-    return t(
-      "studioPanels.invalidAddressFormat",
-      "Invalid address format (expect N... or 0x...)",
-    );
-  return "";
-});
+const backupOwnerError = registrationOwnerError;
 
 const backupOwnerInputClass = computed(() => {
-  const val = createForm.backupOwner?.trim() || "";
+  const val = createForm.value.backupOwner?.trim() || "";
   if (!val) return "";
   return backupOwnerError.value
     ? "border-aa-error focus:border-aa-error-light"

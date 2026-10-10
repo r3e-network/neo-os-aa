@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isDeepStrictEqual } = require('node:util');
 
 const {
   neon,
@@ -16,11 +17,11 @@ const {
   assertVmState,
   invokePersisted,
   extractDeployedContractHash,
+  artifactPaths,
 } = require('./lib/deploy-helpers');
 
 const { rpc, sc, wallet, experimental } = neon;
 const ROOT = path.resolve(__dirname, '..');
-const ARTIFACT_ROOT = path.join(ROOT, 'contracts', 'build');
 const REPORT_ROOT = path.join(ROOT, 'docs', 'reports');
 
 const NETWORKS = {
@@ -43,6 +44,7 @@ const NETWORKS = {
 const MODULES = {
   session: {
     artifact: 'SessionKeyVerifier',
+    publicArtifact: 'verifiers/SessionKeyVerifier',
     version: '2.0.0',
     requiredMethods: [
       'version',
@@ -61,6 +63,7 @@ const MODULES = {
   },
   recovery: {
     artifact: 'SocialRecoveryVerifier',
+    publicArtifact: 'SocialRecoveryVerifier',
     version: '2.0.0',
     requiredMethods: [
       'supportsV3',
@@ -112,8 +115,7 @@ function resolveWif(config) {
 }
 
 function loadArtifact(moduleConfig) {
-  const nefPath = path.join(ARTIFACT_ROOT, `${moduleConfig.artifact}.nef`);
-  const manifestPath = path.join(ARTIFACT_ROOT, `${moduleConfig.artifact}.manifest.json`);
+  const { nef: nefPath, manifest: manifestPath } = artifactPaths(moduleConfig.publicArtifact);
   const nef = sc.NEF.fromBuffer(fs.readFileSync(nefPath));
   const manifestJson = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   if (manifestJson.name !== moduleConfig.artifact) {
@@ -138,6 +140,19 @@ function loadArtifact(moduleConfig) {
     manifestJson,
     methods,
   };
+}
+
+function assertArtifactParity(state, artifact) {
+  if (Number(state.nef?.checksum) !== Number(artifact.nef.checksum)) {
+    throw new Error(`${artifact.manifestJson.name} on-chain checksum does not match the selected public artifact`);
+  }
+  const script = Buffer.from(state.nef?.script || '', 'base64');
+  if (!script.equals(Buffer.from(artifact.nef.script, 'hex'))) {
+    throw new Error(`${artifact.manifestJson.name} on-chain script does not match the selected public artifact`);
+  }
+  if (!isDeepStrictEqual(state.manifest, artifact.manifestJson)) {
+    throw new Error(`${artifact.manifestJson.name} on-chain manifest does not match the selected public artifact`);
+  }
 }
 
 async function contractState(client, contractHash) {
@@ -198,9 +213,7 @@ async function deployModule({ client, account, config, moduleName, moduleConfig,
     return { module: moduleName, hash: predictedHash, status, deploymentTx, bindingTx: null };
   }
   if (!state) throw new Error(`${moduleConfig.artifact} was not found after deployment`);
-  if (Number(state.nef?.checksum) !== Number(artifact.nef.checksum)) {
-    throw new Error(`${moduleConfig.artifact} on-chain checksum does not match the latest artifact`);
-  }
+  assertArtifactParity(state, artifact);
   const liveMethods = state.manifest?.abi?.methods?.map((method) => method.name) || [];
   const missing = moduleConfig.requiredMethods.filter((method) => !liveMethods.includes(method));
   if (missing.length) throw new Error(`${moduleConfig.artifact} live ABI is missing: ${missing.join(', ')}`);
@@ -315,6 +328,7 @@ module.exports = {
   NETWORKS,
   MODULES,
   loadArtifact,
+  assertArtifactParity,
   parseArgs,
   stackBoolean,
   stackString,

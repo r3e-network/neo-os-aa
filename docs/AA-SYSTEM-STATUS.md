@@ -5,6 +5,14 @@ or a historical deployment receipt does not show that a public contract contains
 the current implementation. Validate the exact NEF, manifest, network and core
 binding before enabling a capability for users.
 
+## Delivery priority
+
+The deployed-contract implementation serves NeoOS on the current public runtime.
+Native implementation and protocol review proceed in parallel, with independent
+release gates. Neither path waits for the other to become usable, and evidence
+from one path does not establish runtime guarantees for the other. See the
+[implementation strategy](AA-IMPLEMENTATION-STRATEGY.md).
+
 ## Runtime profiles
 
 | Profile | Implementation boundary | Deployment requirement |
@@ -65,8 +73,10 @@ the network's global Verification budget.
 
 ## Validation and release
 
-Run `scripts/verify_repo.sh` for contracts, frontend, browser, SDK consumers and
-dependency audits. Run the formal and private-chain gates with their required
+Run `scripts/verify_repo.sh --profile ordinary` for public contracts, frontend,
+browser, SDK consumers and dependency audits. Use `--profile native` for native
+profile/module checks or `--profile all` for both lanes. Run the formal and
+private-chain gates with their required
 tools, and inspect their recorded scope and skipped checks. The build comparison
 must cover both `contracts/bin/v3` and `contracts/bin/platform`.
 
@@ -75,7 +85,7 @@ reviewed immutable core commit and two identical native module copies, then chec
 the complete measured composite scenario matrix with the actual native VM. It
 rejects missing, duplicate, unknown, failed or over-budget cases; synthetic
 transaction signers make this a host test, not mempool or block confirmation.
-NativeEpochProbe in the ordinary gate uses a test-only epoch service and is a
+NativeEpochProbe in the native gate uses a test-only epoch service and is a
 different test boundary. Full-node SDK/private-chain receipts remain separate.
 Historical reports retain the commits and bytes they tested; a later test-only
 core commit does not change the production runtime identity recorded there.

@@ -54,5 +54,10 @@ jobs:
       - name: Install Playwright browser for frontend e2e
         working-directory: frontend
         run: npm run test:e2e:install
-      - name: Verify repository
-        run: ./scripts/verify_repo.sh
+      # Uses local RPC/wallet fixtures and the dependencies installed above.
+      # This workflow has no path filter: UI, shared, SDK and test changes all run it.
+      - name: Verify native account browser fixtures
+        working-directory: frontend
+        run: npm run test:native:browser
+      - name: Verify ordinary contracts and clients
+        run: ./scripts/verify_repo.sh --profile ordinary
