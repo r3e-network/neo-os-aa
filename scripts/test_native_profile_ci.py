@@ -134,9 +134,7 @@ class NativeProfileCiTests(unittest.TestCase):
             for changed in (".editorconfig", "global.json", "Directory.Build.props", "Directory.Build.targets", "nuget.config",
                     "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md", "docs/proposals/smartaccount-native-profile-v2-parameters.json",
                     "docs/proposals/test_native_profile_v2.py", "docs/reports/aa-native-ci-probe-consistency-20261009.json",
-                    "scripts/native_profile_ci.py", "scripts/native-profile-core-locks.json", "tests/NativeMultiSigProbe/Program.cs",
-                    "scripts/verify_repo.sh", "scripts/verify_repo.test.mjs", "tests/NativeEpochProbe/Program.cs",
-                    "tests/NativeEpochProbe/contracts/NativeEpochCore.cs", "tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs"):
+                    "scripts/native_profile_ci.py", "scripts/native-profile-core-locks.json", "tests/NativeMultiSigProbe/Program.cs"):
                 with self.subTest(changed=changed):
                     self.assertTrue(any(fnmatch.fnmatchcase(changed, pattern) for pattern in patterns), changed)
         self.assertIn("python3 -m unittest discover -s docs/proposals -p test_native_profile_v2.py -v", workflow)

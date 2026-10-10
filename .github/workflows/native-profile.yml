@@ -15,12 +15,9 @@ on:
       - 'docs/proposals/SMARTACCOUNT-NATIVE*'
       - 'docs/reports/aa-native-ci-probe-consistency-20261009.json'
       - 'scripts/*native*'
-      - 'scripts/verify_repo*'
       - 'scripts/check_neo_platform_packages*'
       - 'scripts/dotnet_env.sh'
       - 'tests/NativeMultiSigProbe/**'
-      - 'tests/NativeEpochProbe/**'
-      - 'tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs'
   pull_request:
     paths:
       - '.github/workflows/native-profile.yml'
@@ -34,12 +31,9 @@ on:
       - 'docs/proposals/SMARTACCOUNT-NATIVE*'
       - 'docs/reports/aa-native-ci-probe-consistency-20261009.json'
       - 'scripts/*native*'
-      - 'scripts/verify_repo*'
       - 'scripts/check_neo_platform_packages*'
       - 'scripts/dotnet_env.sh'
       - 'tests/NativeMultiSigProbe/**'
-      - 'tests/NativeEpochProbe/**'
-      - 'tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs'
   workflow_dispatch:
 
 # PR code only receives read access. This job never publishes, uses deployment
@@ -108,10 +102,6 @@ jobs:
           node scripts/check_neo_platform_packages.mjs --include-native
           dotnet tool install neo.compiler.csharp --version 3.9.1 --tool-path "$RUNNER_TEMP/native-profile-tools" --configfile nuget.config
           node scripts/check_neo_platform_packages.mjs --compiler-only
-      - name: Verify native module isolation
-        env:
-          NEOOS_NATIVE_EPOCH_RECEIPT: ${{ runner.temp }}/native-profile-receipts/native-epoch.json
-        run: ./scripts/verify_repo.sh --profile native --contracts-only
       - name: Build pinned core and two module copies, then execute native VM matrix
         run: |
           python3 scripts/native_profile_ci.py \
@@ -121,8 +111,8 @@ jobs:
             --cache "$NUGET_PACKAGES" \
             --work "$RUNNER_TEMP/native-profile-work" \
             --output "$RUNNER_TEMP/native-profile-receipts"
-      # The epoch fixture and pinned native core VM are distinct checks; neither
-      # substitutes for the separate full-chain acceptance runner.
+      # Existing CI separately exercises NativeEpochProbe in the public testing
+      # VM. This lane tests the native core and does not imply full-chain coverage.
       - name: Retain minimal build and VM receipts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -130,7 +120,6 @@ jobs:
           name: native-profile-receipts
           path: |
             ${{ runner.temp }}/native-profile-receipts/native-profile-ci.json
-            ${{ runner.temp }}/native-profile-receipts/native-epoch.json
             ${{ runner.temp }}/native-profile-receipts/core-build-manifest.json
             ${{ runner.temp }}/native-profile-receipts/module-build.json
             ${{ runner.temp }}/native-profile-receipts/multisig-probe.json
