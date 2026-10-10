@@ -2,6 +2,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import { createNativeTransactionArtifactTools } from "../../../shared/nativeTransactionArtifact.mjs";
+import { createNativeWalletWitnessTools } from "../../../shared/nativeWalletWitness.mjs";
 const require = createRequire(import.meta.url);
 const {
   NativeSmartAccountClient,
@@ -112,6 +114,12 @@ if (options.mode === "preflight-raw") {
     plan = await client.buildModuleCall({
       accountId: options.accountId,
       ...options.configuration,
+    });
+  } else if (options.mode === "cancel-policy") {
+    plan = await client.buildAction({
+      accountId: options.accountId,
+      action: "cancelModuleCall",
+      role: options.role,
     });
   } else {
     let operation = await client.prepareOperation({
@@ -267,13 +275,37 @@ if (options.mode === "preflight-raw") {
   });
   const signed = await client.signTransaction(prepared),
     preflight = await client.preflightTransaction(signed);
+  let imported, artifactTransport, artifactPreflight;
+  if (options.signedArtifactTransport) {
+    artifactTransport = createNativeTransactionArtifactTools({
+      codec: c,
+      sha256: (hex) => crypto.createHash("sha256").update(Buffer.from(hex, "hex")).digest("hex"),
+      walletWitness: createNativeWalletWitnessTools({
+        hash160: (hex) => Buffer.from(crypto.createHash("ripemd160").update(
+          crypto.createHash("sha256").update(Buffer.from(hex, "hex")).digest(),
+        ).digest()).reverse().toString("hex"),
+      }),
+    });
+    const artifact = client.exportSignedTransaction(signed);
+    imported = await artifactTransport.importArtifact(client, {
+      submission: "native-sdk", profile, plan,
+      signers: prepared.transaction.signers,
+      feePayer: payer.account, simulation: prepared.simulation,
+    }, JSON.stringify(artifact), {
+      maxSystemFee: "1000000000", maxNetworkFee: "300000000", maxTotalFee: "1300000000",
+    });
+    artifactPreflight = await artifactTransport.preflight(client, imported);
+  }
   let receipt;
   if (options.mode !== "sign-only") {
-    await client.broadcastTransaction(signed);
+    if (imported) await artifactTransport.broadcast(client, imported);
+    else await client.broadcastTransaction(signed);
     const end = Date.now() + 45000;
     while (Date.now() < end) {
       try {
-        receipt = await client.getTransactionReceipt(signed);
+        receipt = imported
+          ? await artifactTransport.receipt(client, imported)
+          : await client.getTransactionReceipt(signed);
         if (receipt.confirmed) break;
       } catch {}
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -292,6 +324,12 @@ if (options.mode === "preflight-raw") {
     systemFeeSource: prepared.systemFeeSource,
     signers: prepared.transaction.signers,
     verifierContext: prepared.verifierContext ?? null,
+    artifactTransport: imported ? {
+      format: imported.format, version: imported.version,
+      exactBytesMatched: imported.rawTransaction === signed.rawTransaction,
+      walletSignaturesVerified: true, preflight: artifactPreflight,
+      guardedCancellation: plan.requiresExactScript === true,
+    } : undefined,
     payloadEvidence,
     preflight,
     receipt,

@@ -30,6 +30,9 @@ class NativeSmartAccountClient extends createNativeClientClass(nativeCodec) {
   signTransaction(prepared) {
     return transactionTools.signNativeTransaction(this, prepared);
   }
+  exportSignedTransaction(signed) {
+    return transactionTools.exportSignedTransaction(this, signed);
+  }
   preflightTransaction(signed) {
     return transactionTools.preflightNativeTransaction(this, signed);
   }

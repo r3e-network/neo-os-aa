@@ -182,9 +182,7 @@ namespace AbstractAccount.Verifiers
                         ExecutionEngine.Assert(!EqualBytes(domains[k], domain), "Duplicate signer domain");
                     // The commitment and duplicate check own their domain bytes.
                     // A later child cannot mutate an earlier child's returned graph.
-                    byte[] owned = new byte[32];
-                    for (int offset = 0; offset < 32; offset++) owned[offset] = domain[offset];
-                    child[j] = (ByteString)owned;
+                    child[j] = (ByteString)Helper.Range((byte[])domain, 0, 32);
                     domains[count++] = child[j];
                 }
                 sets[i] = child;

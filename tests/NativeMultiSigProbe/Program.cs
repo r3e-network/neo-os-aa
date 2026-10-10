@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Neo;
 using Neo.Cryptography;
@@ -17,11 +19,32 @@ using Neo.Wallets;
 using A = Neo.VM.Types.Array;
 using Ctx = Neo.VM.ExecutionContext;
 
-if (args.Length < 1 || args.Length > 2) throw new ArgumentException("Pass the exact native module artifact directory.");
+if (args.Length < 1) throw new ArgumentException("Pass the exact native module artifact directory.");
 var artifacts = Path.GetFullPath(args[0]);
-bool diagnose = args.Length == 2 && args[1] == "--diagnose";
+bool diagnose = false, benchmark = false, benchmarkCountsSpecified = false;
+int warmupCount = 5, samplesPerCase = 30;
+for (int i = 1; i < args.Length; i++)
+{
+    switch (args[i])
+    {
+        case "--diagnose": diagnose = true; break;
+        case "--benchmark": benchmark = true; break;
+        case "--warmup":
+        case "--samples":
+            bool warmup = args[i] == "--warmup";
+            if (++i >= args.Length || !int.TryParse(args[i], out int count) || count < (warmup ? 0 : 1) || count > 10_000)
+                throw new ArgumentException("Warmup count must be 0..10000 and sample count must be 1..10000.");
+            if (warmup) warmupCount = count; else samplesPerCase = count;
+            benchmarkCountsSpecified = true;
+            break;
+        default: throw new ArgumentException("Unknown probe option: " + args[i]);
+    }
+}
+if (diagnose && benchmark) throw new ArgumentException("Benchmark receipts require the strict acceptance checks; --diagnose cannot be combined with --benchmark.");
+if (benchmarkCountsSpecified && !benchmark) throw new ArgumentException("--warmup and --samples require --benchmark.");
 bool allPassed = true;
 var rows = new List<object>();
+var benchmarkRows = new List<object>();
 object? pricing = null;
 // Execute wrong result shapes in the actual VM before trusting HALT as approval.
 using (var control = new Harness())
@@ -124,6 +147,10 @@ foreach (var scenario in scenarios)
             h.SetModuleValue(children[0], account, 6, initializedLastUse);
         }
     }
+    bool expected = !scenario.Malformed && scenario.Slots.Count(c => c == '1') >= 2;
+    var measured = benchmark ? h.Benchmark(Harness.Core, "executeUserOp",
+        [account, operation, state[13].GetInteger(), state[8].GetInteger()],
+        [Harness.Owner, Harness.Other, proxy], expected ? VMState.HALT : VMState.FAULT, warmupCount, samplesPerCase) : null;
     var verification = h.Verify(account, operation, state, [Harness.Owner, Harness.Other, proxy]);
     bool expectedVerification = !scenario.Malformed && scenario.Slots.Count(c => c == '1') >= 2;
     Require(h.LastState == (expectedVerification ? VMState.HALT : VMState.FAULT), "Verification result differs from the operation approval predicate.");
@@ -131,7 +158,6 @@ foreach (var scenario in scenarios)
     var trace = new GasTrace(root); h.Trace = trace;
     h.Call(Harness.Core, "executeUserOp", [account, operation, state[13].GetInteger(), state[8].GetInteger()], expectSuccess: false, signers: [Harness.Owner, Harness.Other, proxy]);
     Console.Error.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { scenario.Roster, scenario.Slots, scenario.Maximum, scenario.BadSignature, scenario.Malformed, result = h.LastResult, verification, phases = trace.Rows }));
-    bool expected = !scenario.Malformed && scenario.Slots.Count(c => c == '1') >= 2;
     if (diagnose && h.LastState != (expected ? VMState.HALT : VMState.FAULT)) { allPassed = false; rows.Add(new { scenario.Roster, scenario.Slots, scenario.Maximum, scenario.BadSignature, scenario.Malformed, result = h.LastResult, verification, phases = trace.Rows }); continue; }
     Require(h.LastState == (expected ? VMState.HALT : VMState.FAULT), $"Unexpected {scenario}: {System.Text.Json.JsonSerializer.Serialize(h.LastResult)}");
     if (!expected) Require(beforeExecution.OrderBy(x => x.Key).SequenceEqual(Harness.Storage(h.Snapshot).OrderBy(x => x.Key)), "Failed operation changed persisted storage.");
@@ -140,6 +166,7 @@ foreach (var scenario in scenarios)
     BigInteger afterNonce = h.Call(Harness.Core, "getNonce", [account, nonce >> 64]).GetInteger();
     Require(afterNonce == (expected ? BigInteger.One : BigInteger.Zero), "Wrong target nonce after execution.");
     int selected = 0;
+    var postSessions = new List<object>();
     for (int i = 0; i < children.Length; i++)
     {
         bool approved = expected && scenario.Slots[i] == '1' && !(scenario.BadSignature && i == 0) && selected < 2;
@@ -151,9 +178,18 @@ foreach (var scenario in scenarios)
         Require(metadata.Count == 3 && metadata[1].GetInteger() == (approved ? new BigInteger(h.Time) : BigInteger.Zero), "Metadata projection lost its three-field last-use semantics.");
         var storedMetadata = (A)BinarySerializer.Deserialize(h.ModuleValue(children[i], account, 2)!, ExecutionEngineLimits.Default);
         Require(storedMetadata[1].GetInteger() == 0, "Post execution rewrote immutable metadata.");
+        postSessions.Add(new { childIndex = i, spentAmount = spent.ToString(), lastUsedAt = metadata[1].GetInteger().ToString(), immutableMetadataLastUsedAt = storedMetadata[1].GetInteger().ToString() });
     }
     if (expected) Require(trace.Budgets.Count == 2 && trace.Budgets.All(x => x.Limit == 100_000_000 && x.Consumed < x.Limit), "Both native callbacks must remain strictly within the unchanged 1 GAS budget.");
     rows.Add(new { scenario.Roster, scenario.Slots, scenario.Maximum, scenario.BadSignature, scenario.Malformed, descriptionBytes = scenario.Maximum ? 128 : 16, amount = amount.ToString(), dataLength, methodBytes = method.Length, timestamp = h.Time.ToString(), priorSpent = growSpent ? "1" : "0", signatureBytes = signatures.Length, lastUsePostRollbackNegativeControls = scenario.Roster == "SN" && !scenario.Maximum ? 4 : 0, argumentDepth = deep ? 8 : 1, canonicalDomain = domainHex, result = execution, verification, phases = trace.Rows });
+    if (measured is not null) benchmarkRows.Add(new
+    {
+        scenario = new { scenario.Roster, scenario.Slots, scenario.Maximum, scenario.BadSignature, scenario.Malformed, descriptionBytes = scenario.Maximum ? 128 : 16, amount = amount.ToString(), dataLength, methodBytes = method.Length, timestamp = h.Time.ToString(), priorSpent = growSpent ? "1" : "0", signatureBytes = signatures.Length, argumentDepth = deep ? 8 : 1, canonicalDomain = domainHex },
+        expectedState = expected ? "HALT" : "FAULT",
+        measured.startingStorage, measured.samples, measured.p50Ticks, measured.p95Ticks,
+        executionResult = execution, verification, phaseGas = trace.Rows,
+        postExecutionState = new { nonceChannel = (nonce >> 64).ToString(), nonce = afterNonce.ToString(), sessions = postSessions }
+    });
 }
 // Same public key through different verifier schemes must never count twice.
 foreach (bool uncompressed in new[] { false, true })
@@ -202,7 +238,33 @@ foreach (bool uncompressed in new[] { false, true })
     Require(h.ModuleValue(session, account, 5) is null && h.ModuleValue(session, account, 6) is null && h.ModuleValue(session, account, 4) is not null, "Revocation must delete domain/last-use and retain cooldown.");
     rows.Add(new { label = "session-native-same-key-rejected", uncompressed, standardAccount = standard.ToString(), domain = Convert.ToHexString(sessionDomain[0].GetSpan()).ToLowerInvariant(), initialLastUseHex = Convert.ToHexString(initialLastUse).ToLowerInvariant(), configurationRollback = true, invalidPointRollback = true, revocationClearsDomainAndLastUse = true });
 }
-Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { schema = "smartaccount-native-multisig-probe/v1", status = allPassed ? "PASS" : "FAIL", publicNetworksTouched = false, execution = "ApplicationEngine host probe; synthetic transaction signers, real module NEFs and P256 operation signatures", pricing, artifactHashes = new[] { "SessionKeyVerifier", "NeoNativeVerifier", "MultiSigVerifier" }.SelectMany(n => new[] { n + ".nef", n + ".manifest.json" }).ToDictionary(n => n, n => Hash(Path.Combine(artifacts, n))), runtimeAssemblyHashes = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic && a.GetName().Name!.StartsWith("Neo", StringComparison.Ordinal) && a.Location.Length > 0).ToDictionary(a => Path.GetFileName(a.Location), a => Hash(a.Location)), probeSourceHashes = new[] { "Program.cs", "NativeMultiSigProbe.csproj", "packages.lock.json" }.ToDictionary(n => n, n => Hash(Path.Combine(Directory.GetCurrentDirectory(), "tests", "NativeMultiSigProbe", n))), cases = rows }, new JsonSerializerOptions { WriteIndented = true }));
+var artifactHashes = new[] { "SessionKeyVerifier", "NeoNativeVerifier", "MultiSigVerifier" }.SelectMany(n => new[] { n + ".nef", n + ".manifest.json" }).ToDictionary(n => n, n => Hash(Path.Combine(artifacts, n)));
+var runtimeAssemblyHashes = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic && a.GetName().Name!.StartsWith("Neo", StringComparison.Ordinal) && a.Location.Length > 0).ToDictionary(a => Path.GetFileName(a.Location), a => Hash(a.Location));
+var probeSourceHashes = new[] { "Program.cs", "NativeMultiSigProbe.csproj", "packages.lock.json" }.ToDictionary(n => n, n => Hash(Path.Combine(Directory.GetCurrentDirectory(), "tests", "NativeMultiSigProbe", n)));
+object receipt = benchmark ? new
+{
+    schema = "smartaccount-native-multisig-benchmark/v1", status = allPassed ? "PASS" : "FAIL", publicNetworksTouched = false,
+    mode = "fixed-snapshot-discard", immutableOperationPerCase = true, diagnosticsDuringTiming = false,
+    timingBoundary = "ApplicationEngine.Execute", quantileMethod = "nearest-rank", warmupCount, samplesPerCase,
+    environment = new
+    {
+        frameworkDescription = RuntimeInformation.FrameworkDescription, osDescription = RuntimeInformation.OSDescription,
+        osArchitecture = RuntimeInformation.OSArchitecture.ToString(), processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
+        machineName = Environment.MachineName, runtimeVersion = Environment.Version.ToString(), processorCount = Environment.ProcessorCount,
+        stopwatchFrequency = Stopwatch.Frequency, stopwatchIsHighResolution = Stopwatch.IsHighResolution,
+        serverGC = System.Runtime.GCSettings.IsServerGC, gcLatencyMode = System.Runtime.GCSettings.LatencyMode.ToString()
+    },
+    pricing, artifactHashes, runtimeAssemblyHashes, probeSourceHashes, cases = benchmarkRows,
+    // These controls ran outside all timed intervals, including duplicate-domain
+    // and post-callback rollback checks. Preserve their results for comparison.
+    semanticControls = rows
+} : new
+{
+    schema = "smartaccount-native-multisig-probe/v1", status = allPassed ? "PASS" : "FAIL", publicNetworksTouched = false,
+    execution = "ApplicationEngine host probe; synthetic transaction signers, real module NEFs and P256 operation signatures",
+    pricing, artifactHashes, runtimeAssemblyHashes, probeSourceHashes, cases = rows
+};
+Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }));
 
 Environment.ExitCode = allPassed ? 0 : 1;
 
@@ -218,6 +280,22 @@ static StackItem Stack(object? value) => value switch
     BigInteger integer => new Integer(integer),
     _ => throw new ArgumentException("Unsupported probe value.")
 };
+
+sealed record StorageMetrics(long keyCount, long keyBytes, long valueBytes, long totalBytes)
+{
+    internal static StorageMetrics Of(Dictionary<string, string> storage)
+    {
+        long keys = storage.Sum(pair => (long)pair.Key.Length / 2);
+        long values = storage.Sum(pair => (long)pair.Value.Length / 2);
+        return new(storage.Count, keys, values, checked(keys + values));
+    }
+    internal StorageMetrics Subtract(StorageMetrics before) => new(keyCount - before.keyCount,
+        keyBytes - before.keyBytes, valueBytes - before.valueBytes, totalBytes - before.totalBytes);
+}
+
+sealed record BenchmarkSample(long elapsedTicks, string state, long feeConsumedDatoshi, long minimumRequiredFeeDatoshi,
+    StorageMetrics logicalStorage, StorageMetrics storageDelta, bool committedStorageUnchanged);
+sealed record BenchmarkRun(StorageMetrics startingStorage, BenchmarkSample[] samples, long p50Ticks, long p95Ticks);
 
 sealed class GasTrace(UInt160 root) : IDiagnostic
 {
@@ -309,23 +387,25 @@ sealed class Harness : IDisposable
         };
     }
 
+    private Block ApplicationBlock() => new()
+    {
+        Header = new Header
+        {
+            Index = 1,
+            Timestamp = Time,
+            PrevHash = UInt256.Zero,
+            MerkleRoot = UInt256.Zero,
+            NextConsensus = UInt160.Zero,
+            Witness = new Witness { InvocationScript = ReadOnlyMemory<byte>.Empty, VerificationScript = ReadOnlyMemory<byte>.Empty }
+        },
+        Transactions = []
+    };
+
     internal StackItem Call(UInt160 target, string method, object?[] arguments, bool expectSuccess = true, UInt160[]? signers = null)
     {
         var transaction = Transaction(target, method, arguments, signers ?? [Owner]);
         var working = Snapshot.CloneCache();
-        var block = new Block
-        {
-            Header = new Header
-            {
-                Index = 1,
-                Timestamp = Time,
-                PrevHash = UInt256.Zero,
-                MerkleRoot = UInt256.Zero,
-                NextConsensus = UInt160.Zero,
-                Witness = new Witness { InvocationScript = ReadOnlyMemory<byte>.Empty, VerificationScript = ReadOnlyMemory<byte>.Empty }
-            },
-            Transactions = []
-        };
+        var block = ApplicationBlock();
         using var engine = ApplicationEngine.Create(TriggerType.Application, transaction, working, block, settings,
             gas: 10_000_000_000, diagnostic: Trace);
         engine.LoadScript(transaction.Script);
@@ -342,6 +422,43 @@ sealed class Harness : IDisposable
         // Match persistence: a FAULT discards the entire transaction's clone.
         if (LastState == VMState.HALT) working.Commit();
         return LastState == VMState.HALT && engine.ResultStack.Count > 0 ? engine.ResultStack.Peek() : StackItem.Null;
+    }
+
+    internal BenchmarkRun Benchmark(UInt160 target, string method, object?[] arguments, UInt160[] signers,
+        VMState expectedState, int warmupCount, int samplesPerCase)
+    {
+        if (Trace is not null) throw new InvalidOperationException("Timing requires diagnostics to be disabled.");
+        // Construct the signed operation's enclosing script once. Every repeat
+        // sees the same operation, signers, time, nonce and initial storage.
+        var transaction = Transaction(target, method, arguments, signers);
+        var block = ApplicationBlock();
+        var before = Storage(Snapshot);
+        var startingStorage = StorageMetrics.Of(before);
+        var samples = new List<BenchmarkSample>(samplesPerCase);
+        for (int i = 0; i < warmupCount + samplesPerCase; i++)
+        {
+            var working = Snapshot.CloneCache();
+            using var engine = ApplicationEngine.Create(TriggerType.Application, transaction, working, block, settings,
+                gas: 10_000_000_000, diagnostic: null);
+            engine.LoadScript(transaction.Script);
+            long start = Stopwatch.GetTimestamp();
+            var state = engine.Execute();
+            long elapsed = Stopwatch.GetTimestamp() - start;
+            // Snapshot enumeration, assertions, engine creation/disposal and
+            // result conversion are deliberately outside the timed interval.
+            if (state != expectedState) throw new InvalidOperationException("Benchmark state differs from the approval predicate: " + engine.FaultException);
+            if (!before.OrderBy(pair => pair.Key).SequenceEqual(Storage(Snapshot).OrderBy(pair => pair.Key)))
+                throw new InvalidOperationException("A discarded benchmark invocation changed committed storage.");
+            // A FAULT discards all writes. Report its effective storage after
+            // rollback, not the transient dirty clone that is never committed.
+            var logicalStorage = state == VMState.HALT ? StorageMetrics.Of(Storage(working)) : startingStorage;
+            if (i >= warmupCount) samples.Add(new(elapsed, state.ToString(), checked((long)engine.FeeConsumed),
+                checked((long)engine.MinimumRequiredFee), logicalStorage, logicalStorage.Subtract(startingStorage), true));
+            // Never Commit(), including successful warmups and samples.
+        }
+        long[] ordered = samples.Select(sample => sample.elapsedTicks).Order().ToArray();
+        long Quantile(int percentile) => ordered[(int)(((long)ordered.Length * percentile + 99) / 100) - 1];
+        return new(startingStorage, samples.ToArray(), Quantile(50), Quantile(95));
     }
 
     internal object Pricing => new

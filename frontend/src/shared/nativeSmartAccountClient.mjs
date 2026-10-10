@@ -1,4 +1,5 @@
 const SERVICE = "d9421d07adf206e9dc4be746a02e8e087fa61741";
+const STDLIB = "acce6fd80d44e1796aa0c2c625e9e4e0ce39efc0";
 export const NATIVE_PROFILE_PARAMETER_DIGEST =
   "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4";
 export const NATIVE_COMPOSITE_MAX_CHILDREN = 3;
@@ -402,6 +403,7 @@ export function validateNativeModuleProfile(deployed, profileDigest) {
 export function createNativeClientClass(codec) {
   const H = codec.hashValue,
     S = codec.stringValue;
+  const pendingEncodings = new WeakMap();
   const base64ToBytes = (text) =>
     Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
   const bytesToBase64 = (value) => {
@@ -937,7 +939,7 @@ export function createNativeClientClass(codec) {
       const invokedArguments = stackValue(p[6]);
       if (codec.serializeValue(invokedArguments).length > 8192)
         error("pending arguments exceed profile bound");
-      return freeze({
+      const pending = freeze({
         accountId: hash(p[1]),
         role,
         root: binding(p[3]),
@@ -950,6 +952,13 @@ export function createNativeClientClass(codec) {
         matureAt: uint(p[8], 64, "maturity"),
         configurationNonce: uint(p[9], 64, "configuration nonce"),
       });
+      // Serialize the ten-field Array without adding its wrapper to argument depth.
+      const serialized =
+        "400a" + p.map((item) => codec.serializeValue(stackValue(item))).join("");
+      if (serialized.length > 16384)
+        error("pending module record exceeds 8192 bytes");
+      pendingEncodings.set(pending, serialized);
+      return pending;
     }
     async getModuleDependencies(accountId, role) {
       await this._ready();
@@ -1166,6 +1175,23 @@ export function createNativeClientClass(codec) {
       if (action === "unfreeze" && state.recoveryAddress !== ZERO)
         authorities = [state.custodyAddress, state.recoveryAddress];
       if (action === "cancelRecovery") authorities = []; // Either recovery, or custody strictly before maturity; caller supplies actor for simulation.
+      let script = codec.dynamicCall(SERVICE, action, params);
+      let pendingCallBytes;
+      if (action === "cancelModuleCall") {
+        pendingCallBytes = pendingEncodings.get(pendingCall);
+        if (!pendingCallBytes)
+          error("pending module call must come from this client");
+        script =
+          codec.dynamicCall(SERVICE, "getPendingModuleCall", params, 5) +
+          // PUSH1 PACK passes the read result to StdLib.serialize with None flags.
+          "11c010" +
+          codec.encodeValue(S("serialize")) +
+          codec.encodeValue(H(STDLIB)) +
+          "41627d5b52" +
+          codec.encodeValue({ type: "ByteString", value: pendingCallBytes }) +
+          "9739" + // EQUAL ASSERT must succeed before invoking cancellation.
+          script;
+      }
       return this._plan({
         kind: "lifecycle",
         accountState: state,
@@ -1177,8 +1203,15 @@ export function createNativeClientClass(codec) {
             ? "recovery-or-custody-before-maturity"
             : undefined,
         configurationNonce: state.configurationNonce,
-        ...(action === "cancelModuleCall" ? { role, pending: pendingCall } : {}),
-        script: codec.dynamicCall(SERVICE, action, params),
+        ...(action === "cancelModuleCall"
+          ? {
+              role,
+              pending: pendingCall,
+              pendingCallBytes,
+              requiresExactScript: true,
+            }
+          : {}),
+        script,
       });
     }
     _plan(value) {

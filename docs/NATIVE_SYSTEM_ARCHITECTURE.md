@@ -1,16 +1,12 @@
 # Neo N3 native smart accounts
 
-This document describes the native implementation of the parallel
-[smart-account strategy](AA-IMPLEMENTATION-STRATEGY.md). The deployed-contract
-implementation is the near-term NeoOS delivery priority. The native path is
-`AccountManagement`, a protocol service with a
+The target is a protocol-native account service, `AccountManagement`, with a
 small, explicit authorization boundary. The [ABI 2 profile](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)
 defines the wire contract. The [SDK](NATIVE_SDK.md) and [workspace](NATIVE_ACCOUNT_WORKSPACE.md)
 consume that contract; neither can grant authority the native service rejects.
 The profile remains a draft until the Neo proposal and activation process is
 complete. Public `UnifiedSmartWalletV3` and private `PLATFORM` are separate
-runtime profiles with separate account identities and artifacts. Native
-implementation progress does not retire or suspend deployed-contract development.
+compatibility profiles with separate account identities and artifacts.
 
 The [account user guide](NATIVE_ACCOUNT_USER_GUIDE.md) covers setup, backups,
 the authority and timing matrix, and recovery decisions.
@@ -61,11 +57,15 @@ with no pending custody recovery. Module replacement still checks code pins and
 old-module cleanup. In contrast, applying a delayed module-policy call requires
 custody again and the identical stored method and arguments. Custody may cancel
 that call for its selected verifier or hook role while it remains pending.
-Lifecycle review snapshots are client checks. Account-only activation/recovery
-calls act on pending state at execution; policy cancellation encodes account ID
-and role, without a pending-call digest. Revalidation rejects observed changes
-but does not lock state between the last check and inclusion. Coordinate custody
-devices and inspect confirmed state after execution.
+Account-only activation/recovery calls act on pending state at execution. The
+SDK's policy cancellation uses a complete transaction script that reads and
+serializes the selected pending call, asserts equality with reviewed bytes, and
+only then invokes the unchanged native cancellation entrypoint. It faults on
+changed or missing content without cancelling a replacement. Exact-script
+signing is required; ordinary wallet invoke cannot express this guard. An
+identical-byte re-proposal can still match, because the protocol has no unique
+proposal-instance counter. See [transaction guards](NATIVE_ACCOUNT_TRANSACTION_GUARDS.md).
+Coordinate custody devices and inspect confirmed state after execution.
 
 Supported native modules address storage by account ID and authority epoch.
 Reinstalling the same module after recovery starts with empty policy state.

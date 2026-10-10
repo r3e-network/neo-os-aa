@@ -6,6 +6,7 @@ import {
   actionBlockReason,
   nativeCodec,
   nativeAddress,
+  nativeGasLimit,
   buildRecoveryDescriptor,
   readRecoveryDescriptor,
   buildSessionArguments,
@@ -32,7 +33,7 @@ const identity = () =>
     custodyAddress: custody,
     salt,
   });
-function fixture() {
+function fixture(options = {}) {
   let changed = false,
     called = 0;
   const state = {
@@ -85,7 +86,7 @@ function fixture() {
       return { txid: "aa".repeat(32), request };
     },
   };
-  const workspace = createNativeWorkspace({ makeClient: () => client, wallet });
+  const workspace = createNativeWorkspace({ makeClient: () => client, wallet, ...options });
   return {
     workspace,
     client,
@@ -387,7 +388,7 @@ test("canonical native codecs are shipped byte-identically in the standalone fro
   const { readFile } = await import("node:fs/promises");
   const { createHash } = await import("node:crypto");
   const hash = (value) => createHash("sha256").update(value).digest("hex");
-  for (const name of ["nativeSmartAccount.mjs", "nativeSmartAccountClient.mjs"])
+  for (const name of ["nativeSmartAccount.mjs", "nativeSmartAccountClient.mjs", "nativeTransactionArtifact.mjs", "nativeWalletWitness.mjs"])
     assert.equal(
       hash(await readFile(new URL("../src/shared/" + name, import.meta.url))),
       hash(await readFile(new URL("../../shared/" + name, import.meta.url))),
@@ -716,28 +717,37 @@ function policyFixture(role = "verifier") {
     matureAt: String(rpc.state.time - 1),
     configurationNonce: "0",
   });
-  let pending = makePending();
+  const B = (value) => ({ type: "ByteString", value: Buffer.from(value, "hex").toString("base64") });
+  const H = (value) => B(Buffer.from(value, "hex").reverse().toString("hex"));
+  const I = (value) => ({ type: "Integer", value: String(value) });
+  const A = (value) => ({ type: "Array", value });
+  function setPending(value) {
+    rpc.add("getPendingModuleCall", [nativeCodec.hashValue(nativeTestIdentity.accountId), nativeCodec.stringValue(role)], value ? A([
+      I(1), H(value.accountId), I(role === "verifier" ? 0 : 1),
+      A([H(binding.contract), H(binding.codeHash)]), A([H(binding.contract), H(binding.codeHash)]),
+      B(Buffer.from(value.method).toString("hex")), A([H(value.accountId)]),
+      I(value.proposedAt), I(value.matureAt), I(value.configurationNonce),
+    ]) : { type: "Any", value: null });
+  }
+  setPending(makePending());
   const Client = createNativeClientClass(nativeCodec);
   const client = new Client({ rpcClient: rpc, networkMagic: 123 });
-  client.getPendingModuleCall = async (id, selectedRole) => {
-    assert.equal(id, nativeTestIdentity.accountId);
-    assert.equal(selectedRole, role);
-    return pending;
-  };
+  let walletCalls = 0;
   const wallet = {
     account: async () => custody,
     network: async () => 123,
-    invoke: async (request) => ({ request }),
+    invoke: async (request) => { walletCalls++; return { request }; },
   };
   return {
     rpc, client,
     workspace: createNativeWorkspace({ makeClient: () => client, wallet }),
-    replace() { pending = makePending("replacePolicy"); },
-    clear() { pending = null; },
+    called: () => walletCalls,
+    replace() { setPending(makePending("replacePolicy")); },
+    clear() { setPending(null); },
   };
 }
 
-test("pending policy inspection and cancellation retain the selected role in exact script and wallet arguments", async () => {
+test("guarded policy cancellation preserves the selected intent and cannot fall back to wallet invoke", async () => {
   for (const role of ["verifier", "hook"]) {
     const f = policyFixture(role);
     await f.workspace.connect({});
@@ -749,17 +759,19 @@ test("pending policy inspection and cancellation retain the selected role in exa
       accountId: nativeTestIdentity.accountId, action: "cancelModuleCall", role,
       feePayer: custody, expectedPending: inspected.pending,
     });
-    assert.deepEqual(review.request.args, [
-      { type: "Hash160", value: "0x" + nativeTestIdentity.accountId },
-      { type: "String", value: role },
-    ]);
-    assert.equal(review.plan.script, nativeCodec.dynamicCall(NATIVE_ACCOUNT_SERVICE, "cancelModuleCall", [
+    assert.equal(review.submission, "native-sdk");
+    assert.equal(review.walletSupported, false);
+    assert.equal(review.request, null);
+    assert.equal(review.plan.requiresExactScript, true);
+    assert.match(review.plan.pendingCallBytes, /^400a[0-9a-f]+$/);
+    assert.notEqual(review.plan.script, nativeCodec.dynamicCall(NATIVE_ACCOUNT_SERVICE, "cancelModuleCall", [
       nativeCodec.hashValue(nativeTestIdentity.accountId), nativeCodec.stringValue(role),
     ]));
     assert.equal(review.plan.role, role);
     assert.deepEqual(review.plan.pending, inspected.pending);
     assert.deepEqual(review.requiredAuthorities, [custody]);
-    assert.equal((await f.workspace.submit(review)).request.operation, "cancelModuleCall");
+    await assert.rejects(() => f.workspace.submit(review), /exact-script/);
+    assert.equal(f.called(), 0);
   }
 });
 
@@ -917,4 +929,121 @@ test("custody may cancel configuration proposals during recovery without enablin
       /Configuration is blocked/,
     );
   }
+});
+
+test("GAS limits remain exact decimal integers and reject implicit or rounded fees", () => {
+  assert.equal(nativeGasLimit("0.00000001"), "1");
+  assert.equal(nativeGasLimit("1.23456789"), "123456789");
+  assert.equal(nativeGasLimit("0"), "0");
+  for (const invalid of ["", "1e2", "-1", "0.000000001", "01", "Infinity", "92233720369"])
+    assert.throws(() => nativeGasLimit(invalid), /fee|GAS/);
+});
+
+function exactImportFixture(overrides = {}) {
+  let sends = 0;
+  const tools = {
+    importArtifact: async (_client, review, _text, caps) => Object.freeze({
+      review, txid: "0x" + "ab".repeat(32), rawTransaction: "aa",
+      fees: { system: "10", network: "1", total: "11" }, caps,
+      transaction: { validUntilBlock: 20 },
+    }),
+    preflight: async () => ({ snapshot: { height: 10 }, state: "HALT" }),
+    broadcast: async (_client, _transaction, { assertCurrent }) => {
+      assertCurrent(); sends++;
+      return { txid: "0x" + "ab".repeat(32), submitted: true };
+    },
+    receipt: async () => ({ confirmed: true, succeeded: true, vmState: "HALT" }),
+    ...overrides,
+  };
+  return { ...fixture({ transactionTools: tools }), tools, sends: () => sends };
+}
+const exactReview = async (f) => {
+  await f.workspace.connect({});
+  return f.workspace.registration({ custodyAddress: custody, recoveryAddress: recovery, salt, submission: "native-sdk" });
+};
+const importCaps = { maxSystemFee: "100", maxNetworkFee: "100", maxTotalFee: "200" };
+
+test("imported transaction remains bound to the current review and fee limits across async work", async () => {
+  const f = exactImportFixture();
+  const review = await exactReview(f);
+  const imported = await f.workspace.importSigned(review, "{}", importCaps);
+  assert.equal((await f.workspace.preflightSigned(imported)).state, "HALT");
+  f.workspace.clearImported();
+  await assert.rejects(() => f.workspace.broadcastSigned(imported), /stale/);
+  assert.equal(f.sends(), 0);
+  let finish;
+  f.tools.importArtifact = () => new Promise((resolve) => { finish = resolve; });
+  const importing = f.workspace.importSigned(review, "{}", importCaps);
+  await Promise.resolve();
+  f.workspace.clearReview();
+  finish(Object.freeze({ txid: imported.txid }));
+  await assert.rejects(() => importing, /changed/);
+});
+
+test("a changed review during the broadcast preflight never reaches submission", async () => {
+  let resume;
+  const pending = new Promise((resolve) => { resume = resolve; });
+  let sent = 0;
+  const f = exactImportFixture({ broadcast: async (_c, _tx, { assertCurrent }) => {
+    await pending;
+    assertCurrent();
+    sent++;
+  } });
+  const review = await exactReview(f);
+  const imported = await f.workspace.importSigned(review, "{}", importCaps);
+  const broadcasting = f.workspace.broadcastSigned(imported);
+  f.workspace.clearReview();
+  resume();
+  await assert.rejects(() => broadcasting, /stale/);
+  assert.equal(sent, 0);
+});
+
+test("uncertain submission retains same transaction for receipt and cannot be retried", async () => {
+  let attempts = 0;
+  const f = exactImportFixture({ broadcast: async (_c, tx, { assertCurrent }) => {
+    assertCurrent(); attempts++;
+    throw Object.assign(Error("timed out"), { submissionAttempted: true, txid: tx.txid });
+  } });
+  const review = await exactReview(f);
+  const imported = await f.workspace.importSigned(review, "{}", importCaps);
+  await assert.rejects(() => f.workspace.broadcastSigned(imported), { message: "timed out", submissionAttempted: true });
+  await assert.rejects(() => f.workspace.broadcastSigned(imported), /already attempted/);
+  await assert.rejects(() => f.workspace.importSigned(review, "{}", importCaps), /current exact-script review/);
+  f.change(); // Receipt must remain available after a successful transaction changes account state.
+  assert.equal((await f.workspace.confirmSigned(imported)).succeeded, true);
+  assert.equal(attempts, 1);
+});
+
+test("archived receipts survive executed state and expiry without gaining submission authority", async () => {
+  let restoredChecks = 0;
+  const f = exactImportFixture({
+    restoreForReceipt: async (_client, review) => {
+      assert.equal(review.format, "neo-native-reviewed-request");
+      return Object.freeze({ txid: "0x" + "ab".repeat(32), receiptOnly: true });
+    },
+    receipt: async () => { restoredChecks++; return { confirmed: true, succeeded: true }; },
+  });
+  await f.workspace.connect({});
+  f.change();
+  const restored = await f.workspace.restoreReceipt('{"format":"neo-native-reviewed-request","version":1}', "{}");
+  assert.equal((await f.workspace.confirmRestoredReceipt(restored)).succeeded, true);
+  await assert.rejects(() => f.workspace.preflightSigned(restored), /stale/);
+  await assert.rejects(() => f.workspace.broadcastSigned(restored), /stale/);
+  assert.equal(f.sends(), 0);
+  f.workspace.clearReview();
+  assert.equal((await f.workspace.confirmRestoredReceipt(restored)).confirmed, true, "changing new form inputs does not invalidate a read-only archived receipt");
+  f.workspace.clearArchived();
+  await assert.rejects(() => f.workspace.confirmRestoredReceipt(restored), /files changed/);
+  assert.equal(restoredChecks, 2);
+});
+
+test("archived receipt restoration is revoked by a network change during verification", async () => {
+  let finish;
+  const f = exactImportFixture({ restoreForReceipt: () => new Promise((resolve) => { finish = resolve; }) });
+  await f.workspace.connect({});
+  const restoring = f.workspace.restoreReceipt("{}", "{}");
+  await Promise.resolve();
+  f.workspace.invalidate();
+  finish(Object.freeze({ receiptOnly: true }));
+  await assert.rejects(() => restoring, /Stale/);
 });

@@ -53,11 +53,15 @@ In the workspace, refresh the account and chain time before acting. For a policy
 call, select its verifier/hook role, refresh the pending policy, inspect the
 stored arguments and choose the cancellation or activation review. A snapshot
 does not update itself when another transaction changes the account.
-Revalidation rejects changes it observes, but pending state can still change
-after the last check and before inclusion. Policy cancellation names only the
-account and verifier/hook role, so it cancels that role's pending call at execution;
-it does not carry the reviewed payload. Coordinate custody devices to avoid
-concurrent changes, and inspect confirmed account and pending-policy state.
+Revalidation rejects changes it observes. The SDK's policy-cancellation transaction
+also compares the complete reviewed pending content on chain immediately before
+cancelling. If the content changed or disappeared, the transaction fails instead
+of cancelling another proposal. Use the complete exported script: an ordinary
+wallet method invocation cannot preserve this check. An exactly identical record
+recreated in the same block still matches; there is no unique proposal-instance
+number. Other activation and recovery calls act on their current pending state
+at execution. Coordinate custody devices and inspect confirmed account and
+pending-policy state.
 
 Deadlines and delays use **chain time in milliseconds**, not your device clock.
 An operation is valid at its exact deadline; an intent is mature at its exact
@@ -91,6 +95,14 @@ The profile has no custody-only override if the guardian key is lost while
 Frozen. Recovery does not remove or replace the guardian. While Active and
 without pending custody recovery, custody can propose a guardian replacement
 with a 24-hour delay; that pending change is also cleared by freeze.
+
+A standard Neo threshold multisignature wallet can serve as the guardian. For
+example, independently backed-up 2-of-3 keys tolerate one unavailable key while
+the remaining two still authorize the guardian. This is one guardian address
+with a threshold witness, separate from the account's verifier module. Custody
+must still participate in unfreezing. If fewer than the threshold remain while
+Frozen, there is no override; threshold recovery reduces individual-key failure
+risk without creating authority after all usable backups are lost.
 
 ## If a key or backup is lost
 
