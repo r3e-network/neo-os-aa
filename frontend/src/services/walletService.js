@@ -225,6 +225,10 @@ class WalletService {
     this.account = null;
     this.rpcUrl = RUNTIME_CONFIG.rpcUrl;
     this.sessionState = SESSION_STATES.DISCONNECTED;
+    // Monotonic session context barrier. Any account or network event makes
+    // in-flight signing work stale, even when the provider keeps the same
+    // account string and RPC endpoint.
+    this.contextVersion = 0;
     this._reconcilePromise = null;
     this._sessionListenersInstalled = false;
     this.bootstrap();
@@ -256,6 +260,7 @@ class WalletService {
   }
 
   setConnected(address, metadata = {}) {
+    this.contextVersion += 1;
     setConnectedAccount(address);
     this.account = address ? { address, ...metadata } : null;
     this.sessionState = address ? SESSION_STATES.VERIFIED : SESSION_STATES.DISCONNECTED;
@@ -293,7 +298,10 @@ class WalletService {
   handleAccountChanged(detail) {
     if (!this.isConnected) return;
     const next = normalizeNep21Account(detail) || normalizeNep21Account(detail?.account);
-    if (!next?.address || next.address === this.account?.address) return;
+    if (!next?.address) return;
+    // Treat every provider account notification as a context boundary. Some
+    // wallets reuse the same display address while changing the script hash
+    // or provider/network, so an address-only equality check is insufficient.
     this.setConnected(next.address, {
       hash: next.hash || '',
       provider: this.account?.provider || '',
@@ -302,6 +310,7 @@ class WalletService {
 
   handleNetworkChanged() {
     if (!this.isConnected) return;
+    this.contextVersion += 1;
     // The cached account and its hash metadata may not be valid on the new
     // network; force a re-verification pass.
     this.sessionState = SESSION_STATES.PENDING;

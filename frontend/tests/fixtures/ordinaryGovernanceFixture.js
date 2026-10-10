@@ -35,6 +35,10 @@ export function createOrdinaryGovernanceFixture() {
     marketEscrow: false,
     pendingVerifier: pending('verifier'),
     pendingHook: pending('hook'),
+    metadataLogState: 'HALT',
+    walletDelayMs: 0,
+    metadataPosts: [],
+    events: [],
     calls: [],
     walletRequests: [],
     failures: [],
@@ -60,7 +64,10 @@ export function createOrdinaryGovernanceFixture() {
       assert.equal(params[0], state.height);
       return { index: state.height, hash: '0x' + state.height.toString(16).padStart(64, '0'), time: state.time };
     }
-    if (method === 'getapplicationlog') return { txid: params[0], executions: [{ trigger: 'Application', vmstate: 'HALT', stack: [], notifications: [] }] };
+    if (method === 'getapplicationlog') {
+      state.events.push({ type: 'application-log', txid: params[0], vmstate: state.metadataLogState });
+      return { txid: params[0], executions: [{ trigger: 'Application', vmstate: state.metadataLogState, stack: [], notifications: [] }] };
+    }
     assert.equal(method, 'invokefunction', `Unstubbed fixture RPC: ${method}`);
     const operation = params[1];
     assert.equal(String(params[0]).replace(/^0x/, '').toLowerCase(), ordinaryCore);
@@ -78,8 +85,10 @@ export function createOrdinaryGovernanceFixture() {
     assert.equal(typeof values[operation], 'function', `Unstubbed account method: ${operation}`);
     return { state: 'HALT', gasconsumed: '100000', stack: [values[operation]()] };
   }
-  function invoke(request) {
+  async function invoke(request) {
     state.walletRequests.push(structuredClone(request));
+    const txid = '0x' + state.walletRequests.length.toString(16).padStart(64, '0');
+    state.events.push({ type: 'wallet-invoke', operation: request.operation, txid });
     const match = /^(confirm|cancel)(Verifier|Hook)Update$/.exec(request.operation);
     if (match) {
       const key = `pending${match[2]}`;
@@ -93,7 +102,8 @@ export function createOrdinaryGovernanceFixture() {
       state.escapeTriggeredAt = 0;
       state.verifier = request.args[1].value.replace(/^0x/, '');
     }
-    return { txid: '0x' + state.walletRequests.length.toString(16).padStart(64, '0') };
+    if (state.walletDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, state.walletDelayMs));
+    return { txid };
   }
   async function route(requestRoute, localOrigin) {
     const request = requestRoute.request();
@@ -111,6 +121,11 @@ export function createOrdinaryGovernanceFixture() {
     }
     if (url.origin === localOrigin && url.pathname === '/api/account-metadata' && request.method() === 'POST' && ['get', 'getBatch'].includes(body?.action)) {
       return requestRoute.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, metadata: null, map: {} }) });
+    }
+    if (url.origin === localOrigin && url.pathname === '/api/account-metadata' && request.method() === 'POST' && body?.action === 'upsert') {
+      state.events.push({ type: 'metadata-post', body: structuredClone(body) });
+      state.metadataPosts.push(structuredClone(body));
+      return requestRoute.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, metadata: body }) });
     }
     if (url.origin === localOrigin && request.method() === 'GET') return requestRoute.continue();
     // Local application POSTs are deliberately blocked unless they are the

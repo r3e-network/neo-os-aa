@@ -28,6 +28,7 @@
           :value="metadataUri"
           @input="$emit('update:metadataUri', $event.target.value)"
           type="text"
+          maxlength="240"
           class="input-field font-mono text-sm py-2 px-3 bg-aa-dark"
           :placeholder="
             t(
@@ -61,6 +62,7 @@
           id="governance-description"
           :value="description"
           @input="$emit('update:description', $event.target.value)"
+          maxlength="500"
           class="input-field font-mono text-sm py-2 px-3 bg-aa-dark min-h-20 resize-y"
           :placeholder="
             t(
@@ -116,7 +118,7 @@
             :aria-label="t('studioPanels.ariaUploadLogo', 'Upload logo')"
             class="btn-secondary text-xs"
             :class="{ 'btn-loading': logoUploading }"
-            :disabled="logoUploading"
+            :disabled="disabled || logoUploading"
             @click="$refs.logoFileInput.click()"
           >
             {{

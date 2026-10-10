@@ -98,6 +98,12 @@ async function waitForFixtureWallet(fixture, count, timeout = 5000) {
   }
   assert.equal(fixture.state.walletRequests.length, count, `wallet invoke ${count} should be captured`);
 }
+async function waitForGovernanceIdle(page) {
+  await page.waitForFunction(() => {
+    const load = document.querySelector('button[aria-label="Load account"]');
+    return load && !load.disabled;
+  });
+}
 function assertRequest(request, operation, args = [{ type: 'Hash160', value: ordinaryAccountId }]) {
   assert.equal(request.operation, operation);
   assert.equal(request.scriptHash.replace(/^0x/, ''), ordinaryCore);
@@ -170,9 +176,11 @@ test('ordinary pending updates bind full state, chain maturity and actual wallet
     await loadGovernance(page);
     for (const [role, action] of [['verifier', 'Confirm'], ['hook', 'Cancel']]) {
       const label = `${action} ${role} update`;
+      const walletCount = fixture.state.walletRequests.length;
       await page.getByTestId(`ordinary-pending-${role}`).getByRole('button', { name: label, exact: true }).click();
       await confirmDialog(page, label);
-      await page.getByText(/submitted\. Waiting for on-chain confirmation/).last().waitFor();
+      await waitForFixtureWallet(fixture, walletCount + 1);
+      await waitForGovernanceIdle(page);
       assertRequest(fixture.state.walletRequests.at(-1), `${action.toLowerCase()}${role === 'verifier' ? 'Verifier' : 'Hook'}Update`);
       await loadGovernance(page);
     }
@@ -182,9 +190,11 @@ test('ordinary pending updates bind full state, chain maturity and actual wallet
     await loadGovernance(page);
     for (const [role, action] of [['hook', 'Confirm'], ['verifier', 'Cancel']]) {
       const label = `${action} ${role} update`;
+      const walletCount = fixture.state.walletRequests.length;
       await page.getByTestId(`ordinary-pending-${role}`).getByRole('button', { name: label, exact: true }).click();
       await confirmDialog(page, label);
-      await page.getByText(/submitted\. Waiting for on-chain confirmation/).last().waitFor();
+      await waitForFixtureWallet(fixture, walletCount + 1);
+      await waitForGovernanceIdle(page);
       assertRequest(fixture.state.walletRequests.at(-1), `${action.toLowerCase()}${role === 'verifier' ? 'Verifier' : 'Hook'}Update`);
       await loadGovernance(page);
     }

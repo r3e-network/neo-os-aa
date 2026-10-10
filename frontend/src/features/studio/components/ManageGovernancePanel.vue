@@ -199,7 +199,7 @@
           v-model:description="metadataForm.description"
           v-model:logo-url="metadataForm.logoUrl"
           :busy="metadataBusy.save"
-          :disabled="metadataBusy.save || !canManageTarget"
+          :disabled="governanceBusy || !canManageTarget || !isGovernanceOwner"
           @save="saveMetadata"
         />
       </div>
@@ -275,16 +275,28 @@ function confirmGovernanceChange(operation) {
     let detail = t('ordinary.pendingRace', 'State is checked again before wallet signing. Another device can change the pending proposal before your transaction is included; these actions affect the pending update for that role at execution.');
     if (operation === 'initiateEscape') detail = t('studioPanels.confirmInitiateEscape', 'This starts the recovery countdown. The backup owner must explicitly finalize after the timelock; nothing changes automatically. Continue?');
     if (operation === 'finalizeEscape') detail = t('studioPanels.confirmFinalizeEscape', 'Replace the verifier, remove the hook, and clear pending plugin state and the metadata URI. Old plugin cleanup must succeed. Assets stay at the same address. Continue?');
+    const displayHash160 = (value) => {
+      const raw = String(value ?? '').trim();
+      if (!raw) return '—';
+      return `0x${raw.replace(/^0x/i, '')}`;
+    };
+    const displayBytes = (value) => {
+      const raw = String(value ?? '').trim();
+      if (!raw) return '0x';
+      return raw.toLowerCase().startsWith('0x') ? raw : `0x${raw}`;
+    };
     const pending = operation.includes('Verifier') ? review.snapshot.pendingVerifier : operation.includes('Hook') ? review.snapshot.pendingHook : null;
     let target = pending?.exists && pending.full
-      ? `\n${t('ordinary.pendingTarget', 'Pending module')}: 0x${pending.module}\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: 0x${pending.params}`
+      ? `\n${t('ordinary.pendingTarget', 'Pending module')}: ${displayHash160(pending.module)}\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: ${displayBytes(pending.params)}`
       : '';
     if (operation === 'updateVerifier' || operation === 'updateHook') {
-      target = `\n${t('ordinary.pendingTarget', 'Requested module')}: 0x${review.options.module || ''}`
-        + (operation === 'updateVerifier' ? `\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: 0x${review.options.params || ''}` : '');
+      target = `\n${t('ordinary.requestedTarget', 'Requested module')}: ${displayHash160(review.args[1]?.value)}`
+        + (operation === 'updateVerifier' ? `\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: ${displayBytes(review.args[2]?.value)}` : '');
     }
     if (operation === 'finalizeEscape' && review.options.mode === 'verifier') {
-      target = `\n${t('ordinary.pendingTarget', 'New verifier')}: 0x${review.options.verifier || ''}\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: 0x${review.options.params || ''}`;
+      target = `\n${t('ordinary.newVerifier', 'New verifier')}: ${displayHash160(review.args[1]?.value)}\n${t('ordinary.pendingParams', 'Initialization parameters (hex)')}: ${displayBytes(review.args[2]?.value)}`;
+    } else if (operation === 'finalizeEscape' && review.options.mode === 'backup-owner') {
+      target = `\n${t('ordinary.recoveryMode', 'Recovery mode')}: ${t('ordinary.backupMode', 'Backup owner Neo witness')}`;
     }
     confirmModal.value = { title: labels[operation], confirmLabel: labels[operation], danger: operation === 'finalizeEscape' || operation.startsWith('cancel'), message: `${detail}\nAccountId: ${review.snapshot.accountId}${target}`, onConfirm: () => submitGovernanceAction(review) };
   } catch (error) { toast.error(error.message); }
