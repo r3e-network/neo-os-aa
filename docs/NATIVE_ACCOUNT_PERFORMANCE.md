@@ -147,6 +147,60 @@ improvement check rejects the baseline compared with itself and accepts the
 candidate. The comparator's 15 unit tests cover malformed or mismatched receipts,
 state effects, quantiles and the improvement gate.
 
+## Native Boolean result comparison — 2026-10-09
+
+This bounded native-only candidate concerns the composite post callback's
+result snapshot. An exact VM Boolean is immutable, so each approved child can
+receive the original Boolean value, including `false`. Every other result type
+continues through the existing serialization and independent deserialization
+path: null, Integer, ByteString, Buffer, Array, Struct and Map receive no shortcut.
+Unsupported or cyclic result graphs must still fail before any child post call.
+Each child's operation arguments remain an independent deep copy.
+
+This candidate is inside `SMARTACCOUNT_NATIVE`; the ordinary contract path is
+unchanged. It preserves both fresh policy commitments, current domain and
+authority reads, phase and code checks, and atomic rollback. No budget, fee
+schedule, module version or storage format change is part of it.
+
+The new comparison repeats all 18 scenarios with five warmups and 30 measured
+samples per version under the same pinned runtime. For maximum-argument
+`SSN/110`:
+
+| Measurement | Range-copy baseline | Boolean result candidate |
+| --- | ---: | ---: |
+| Post-execution callback, GAS | 0.95454583 | 0.91399672 |
+| Callback headroom | 4.545417% | 8.600328% |
+| Validation callback, GAS | 0.67744195 | 0.67744195 |
+| Application consumption, GAS | 1.89580941 | 1.85526030 |
+| Minimum admission fee, GAS | 1.89702613 | 1.89702613 |
+| Local execution p50, ms | 8.723583 | 8.767458 |
+| Local execution p95, ms | 10.680916 | 10.651084 |
+| Logical operation growth | 3 keys / 200 bytes | 3 keys / 200 bytes |
+
+The post callback saves 4,054,911 datoshi, or 4.248%. The minimum admission fee
+remains unchanged because it includes the bounded callback reservation; lower
+consumption does not imply an equal reduction in the fee budget required for
+admission. The candidate NEF is 19 bytes larger, which increases the fixture's
+starting logical storage by 19 bytes. The timing measurements show no consistent
+latency improvement and retain the sequential-run and signature-byte limits
+described above.
+
+The native build reproduces twice. The default 20 controls remain present, and
+an instruction diagnostic reconciles every callback's charges with its recorded
+budget. Its Boolean result path changes from one result serialization and two
+result deserializations to zero; argument copying remains intact. Separate
+module tests cover Boolean true/false propagation, every listed non-Boolean type,
+mutable results isolated between children and from the original, and unsupported
+or cyclic results rejected before any child post call with storage rolled back.
+Those ownership tests use a permissive test service in a public VM; they do not
+establish native service authorization.
+
+The new raw samples, build and semantic receipts are retained as separate review
+artifacts. Earlier committed receipts remain historical evidence. Candidate NEFs
+remain outside the public build directory pending separate native delivery;
+the ordinary contract's source with `SMARTACCOUNT_NATIVE` disabled is identical
+before and after this change.
+
 ## Further measurement boundaries
 
 The separate SDK runtime runner can measure loopback transaction submission and

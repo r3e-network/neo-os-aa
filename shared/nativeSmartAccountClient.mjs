@@ -8,6 +8,20 @@ const ZERO = "00".repeat(20);
 const error = (message) => {
   throw new Error(`Native SmartAccount: ${message}`);
 };
+// RPC monetary values use exact datoshi strings, never JSON numbers or GAS decimals.
+export function parseNativeRpcFee(value, label) {
+  if (typeof value !== "string" || !/^(?:0|[1-9][0-9]{0,18})$/.test(value) || BigInt(value) >= (1n << 63n))
+    error(`${label} fee must be a canonical nonnegative Int64 decimal string`);
+  return BigInt(value);
+}
+export function parseNativeRpcFees(result, requireMinimum = false) {
+  const gas = parseNativeRpcFee(result?.gasconsumed, "gasconsumed");
+  const minimum = result?.minimumrequiredfee === undefined
+    ? null : parseNativeRpcFee(result.minimumrequiredfee, "minimumrequiredfee");
+  if (requireMinimum && minimum === null) error("minimumrequiredfee fee is required");
+  if (minimum !== null && minimum < gas) error("minimumrequiredfee fee is below gasconsumed");
+  return { gasConsumed: gas.toString(), minimumRequiredFee: minimum?.toString() ?? null };
+}
 const freeze = (value) => {
   if (value && typeof value === "object") {
     Object.values(value).forEach(freeze);
@@ -1054,7 +1068,7 @@ export function createNativeClientClass(codec) {
       }
       const capabilities = metadata.configurationMethods;
       const matches = deployed?.manifest?.abi?.methods?.filter(
-        (m) => m.name === method,
+        (m) => m.name === method && m.parameters?.length === args.length + 1,
       );
       if (
         !Array.isArray(capabilities) ||
@@ -1248,17 +1262,20 @@ export function createNativeClientClass(codec) {
         result?.state === "HALT"
           ? validateNativeInvocationResult(plan, result.stack)
           : [];
+      const fees = result?.state === "HALT" ? parseNativeRpcFees(result) : {
+        gasConsumed: result?.gasconsumed ?? null,
+        minimumRequiredFee: null,
+      };
       return freeze({
         failedTransfers,
         state: result?.state,
         exception: result?.exception ?? null,
         stack: result?.stack ?? [],
-        gasConsumed: result?.gasconsumed ?? null,
-        minimumRequiredFee: result?.minimumrequiredfee ?? null,
+        ...fees,
         automaticSystemFeeAvailable:
           result?.state === "HALT" &&
           failedTransfers.length === 0 &&
-          typeof result?.minimumrequiredfee === "string",
+          fees.minimumRequiredFee !== null,
         raw: result,
       });
     }

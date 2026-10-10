@@ -4,6 +4,12 @@ Review date: 2026-10-09. This map follows [issue #242](https://github.com/neo-pr
 
 The normative documents are the [native ABI 2 profile](SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) and the [deployment-independent foundation](nep-aa-entry-verifier.mediawiki). Identity derivation remains version 1. The profile parameter digest is unchanged by these clarifications.
 
+The foundation supports parallel ordinary-contract and native implementations.
+An ordinary implementation can validate shared protocol behavior and serve
+applications under its own deployment profile. This map evaluates the native
+profile specifically; its consensus activation, VM-enforced callback budgets
+and witness restrictions are not inferred from ordinary-contract execution.
+
 ## Required sections
 
 | Issue requirement | Normative coverage | Implementation and evidence | Boundary |
@@ -31,6 +37,7 @@ The normative documents are the [native ABI 2 profile](SMARTACCOUNT-NATIVE-PROFI
 - Remove the implication that native legacy import or automatic ABI 1 state conversion exists.
 - Separate protocol-review completeness from public-activation approval.
 - Validate the complete required ABI during SDK discovery, including events, and preserve nested native metadata through REST serialization.
+- Document the existing native target-result serializer separately from argument encoding: supported VM types, runtime size/item bounds, repeated-reference rejection and atomic failure. Profile §9.4 explains current behavior without changing the ABI or parameter digest; it does not assign those implementation limits to an ordinary-contract profile.
 
 Current implementation review is coordinated through [core #4768](https://github.com/neo-project/neo/pull/4768), [RPC #1115](https://github.com/neo-project/neo-node/pull/1115) and [foundation #243](https://github.com/neo-project/proposals/pull/243). Upstream review and public-activation gates remain open. Historical issue comments and pinned runtime receipts describe their original checkpoints and must not be read as current deployment claims.
 

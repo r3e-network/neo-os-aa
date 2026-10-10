@@ -776,7 +776,7 @@ async function simulationFixture(batch = false) {
     ...f,
     plan: simulatedPlan,
     setResult: (stack) => {
-      result = { state: "HALT", stack, minimumrequiredfee: "100" };
+      result = { state: "HALT", stack, gasconsumed: "10", minimumrequiredfee: "100" };
     },
   };
 }
@@ -1072,4 +1072,53 @@ test("MultiSig convenience is bound to the declared official native profile, not
   const f = multiSigConfigurationFixture();
   f.moduleManifest.extra.smartAccount.profileDigest = "00".repeat(32);
   await assert.rejects(() => f.build([I(123), I(456)]), /module profile/);
+});
+
+for (const invalid of [
+  {gasconsumed:"10", minimumrequiredfee:"9"},
+  ...[10, null, "", "01", "-1", "1.5", "0x10", "9223372036854775808"].flatMap(value => [
+    {gasconsumed:value, minimumrequiredfee:"100"}, {gasconsumed:"10", minimumrequiredfee:value},
+  ]),
+]) {
+  test(`simulation refuses invalid RPC fee fields ${JSON.stringify(invalid)}`, async () => {
+    const f = fixture();
+    await f.client.discover();
+    const send = f.client.rpc.send;
+    f.client.rpc.send = (method, params) => method === "invokescript" && params[0] === "q80="
+      ? {state:"HALT", stack:[I(1)], ...invalid} : send(method, params);
+    await assert.rejects(f.client.simulate({kind:"lifecycle", script:"abcd"}), /fee|gasconsumed/);
+  });
+}
+
+test("module configuration resolves same-name overloads by full argument count", async () => {
+  const f = fixture(), send = f.client.rpc.send;
+  const one = {name:"setLimit",safe:false,parameters:[{type:"Hash160"},{type:"Integer"}]};
+  const two = {...one,parameters:[...one.parameters,{type:"Integer"}]};
+  let methods = [one, two];
+  f.client.rpc.send = (method, params) => method === "getcontractstate" && params[0] === "0x" + verifier
+    ? {manifest:{extra:{smartAccount:{abiVersion:2,profileDigest:D,compositeVerifier:false,configurationMethods:["setLimit"]}},abi:{methods}}}
+    : send(method, params);
+  f.add("supportsComposition",[],{type:"Boolean",value:false},verifier);
+  f.add("getPendingModuleCall",[c.hashValue(h),c.stringValue("verifier")],N);
+  const input = {accountId:h,role:"verifier",method:"setLimit"};
+  for (const args of [[I(7)],[I(7),I(8)]]) {
+    const plan = await f.client.buildModuleCall({...input,args});
+    assert.equal(plan.script,c.dynamicCall(CORE,"callVerifier",[c.hashValue(h),c.stringValue("setLimit"),A(args)]));
+  }
+  for (const args of [[],[I(7),I(8),I(9)]])
+    await assert.rejects(f.client.buildModuleCall({...input,args}),/capability/);
+  for (const invalid of [[one,one,two],[{...one,safe:true},two],[{...one,parameters:[{type:"Integer"},{type:"Integer"}]},two]]) {
+    methods = invalid;
+    await assert.rejects(f.client.buildModuleCall({...input,args:[I(7)]}),/capability/);
+  }
+});
+
+test("RPC fees accept zero, exact Int64 maximum and absent minimum without inventing admission", () => {
+  const {parseNativeRpcFees} = require("../src/native/client");
+  for (const value of ["0","10","9223372036854775807"]) {
+    assert.deepEqual(parseNativeRpcFees({gasconsumed:value,minimumrequiredfee:value}),{gasConsumed:value,minimumRequiredFee:value});
+  }
+  assert.deepEqual(parseNativeRpcFees({gasconsumed:"10"}),{gasConsumed:"10",minimumRequiredFee:null});
+  assert.throws(()=>parseNativeRpcFees({gasconsumed:"10"},true),/minimumrequiredfee/);
+  assert.throws(()=>parseNativeRpcFees({minimumrequiredfee:"10"}),/gasconsumed/);
 });

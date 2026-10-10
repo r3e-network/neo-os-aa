@@ -502,6 +502,9 @@ test("rebuilding exported recovery and module calls binds full reviewed authorit
     version: 1,
     submission: "native-sdk",
     profile,
+    feePayer: custody,
+    requiredAuthorities: [],
+    signers: [{ account: "0x" + custody, scopes: "None" }],
     recipe: {
       method: "buildAction",
       input: { accountId: identity().accountId, action: "executeRecovery" },
@@ -963,6 +966,213 @@ const exactReview = async (f) => {
 };
 const importCaps = { maxSystemFee: "100", maxNetworkFee: "100", maxTotalFee: "200" };
 
+function recoveryCancellationFixture(options = {}) {
+  const f = fixture(options);
+  let chainTime = 1000;
+  f.state.pendingRecovery = { address: "33".repeat(20), proposedAt: "0", matureAt: "2000", configurationNonce: "0" };
+  f.client.rpc.send = async (method) => method === "getblockcount" ? 1 : { time: chainTime };
+  f.client.buildAction = async ({ accountId, action }) => ({
+    kind: "lifecycle", accountId, accountState: structuredClone(f.state), method: action,
+    requiredAuthorities: [], authorityPolicy: "recovery-or-custody-before-maturity",
+    script: nativeCodec.dynamicCall(NATIVE_ACCOUNT_SERVICE, action, [nativeCodec.hashValue(accountId)]),
+  });
+  return { ...f, time(value) { chainTime = value; } };
+}
+
+test("cancellation authority is separate from payer and forces exact signing only when needed", async () => {
+  const f = recoveryCancellationFixture();
+  await f.workspace.connect({});
+  const payer = "66".repeat(20);
+  for (const authority of [custody, recovery]) {
+    const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: payer, cancellationAuthority: authority });
+    assert.equal(review.cancellationAuthority, authority);
+    assert.equal(review.feePayer, payer);
+    assert.equal(review.submission, "native-sdk");
+    assert.equal(review.request, null);
+    assert.deepEqual(review.requiredAuthorities, [authority]);
+    assert.deepEqual(review.plan.requiredAuthorities, [], "the client-issued plan is not rewritten");
+    assert.deepEqual(review.signers, [{ account: "0x" + payer, scopes: "None" },
+      { account: "0x" + authority, scopes: "CustomContracts", allowedcontracts: ["0x" + NATIVE_ACCOUNT_SERVICE] }]);
+  }
+  for (const authority of [custody, recovery]) {
+    const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: authority });
+    assert.equal(review.cancellationAuthority, authority);
+    assert.equal(review.submission, "wallet-invoke");
+    assert.deepEqual(review.signers, [{ account: "0x" + authority, scopes: "CalledByEntry" }]);
+    f.wallet.account = async () => authority;
+    const sent = await f.workspace.submit(review);
+    assert.equal(sent.request.operation, "cancelRecovery");
+    assert.deepEqual(sent.request.args, [{ type: "Hash160", value: "0x" + f.state.accountId }]);
+  }
+  const crossing = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: recovery, cancellationAuthority: custody });
+  assert.equal(crossing.signers[0].scopes, "None", "an unselected recovery payer gains no authority scope");
+  assert.deepEqual(crossing.requiredAuthorities, [custody]);
+});
+
+test("recovery cancellation uses chain maturity with strict custody boundary and rejects unrelated authority", async () => {
+  const f = recoveryCancellationFixture();
+  await f.workspace.connect({});
+  const input = { accountId: f.state.accountId, action: "cancelRecovery", feePayer: "66".repeat(20) };
+  for (const now of [1999, 2000, 2001]) {
+    f.time(now);
+    await f.workspace.lifecycle({ ...input, cancellationAuthority: recovery });
+    if (now < 2000) await f.workspace.lifecycle({ ...input, cancellationAuthority: custody });
+    else await assert.rejects(() => f.workspace.lifecycle({ ...input, cancellationAuthority: custody }), /before maturity/);
+  }
+  for (const authority of ["77".repeat(20), "00".repeat(20), "bad"])
+    await assert.rejects(() => f.workspace.lifecycle({ ...input, cancellationAuthority: authority }));
+  f.state.pendingRecovery = null;
+  await assert.rejects(() => f.workspace.lifecycle({ ...input, cancellationAuthority: recovery }), /No custody recovery/);
+});
+
+test("cancellation export and rebuild bind actual authority, scopes and current chain time", async () => {
+  const { rebuildNativeReview } = await import("../src/features/native/nativeWorkspace.js");
+  const f = recoveryCancellationFixture();
+  await f.workspace.connect({});
+  const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: "66".repeat(20), cancellationAuthority: custody });
+  const exported = await f.workspace.exportReview(review);
+  assert.equal(exported.cancellationAuthority, custody);
+  assert.equal(Object.hasOwn(exported.recipe.input, "cancellationAuthority"), false);
+  assert.deepEqual(await rebuildNativeReview(f.client, exported), review.plan);
+  for (const change of [
+    (copy) => { copy.cancellationAuthority = recovery; },
+    (copy) => { copy.requiredAuthorities = [recovery]; },
+    (copy) => { copy.signers[0].scopes = "CustomContracts"; },
+    (copy) => { copy.signers.reverse(); },
+    (copy) => { copy.feePayer = recovery; },
+  ]) {
+    const copy = structuredClone(exported); change(copy);
+    await assert.rejects(() => rebuildNativeReview(f.client, copy), /authority|signer|payer|scope/i);
+  }
+  f.time(2000);
+  await assert.rejects(() => f.workspace.exportReview(review), /before maturity/);
+  await assert.rejects(() => rebuildNativeReview(f.client, exported), /before maturity/);
+});
+
+test("legacy version-one cancellation exports rebuild only with the exact same-payer authority roster", async () => {
+  const { rebuildNativeReview } = await import("../src/features/native/nativeWorkspace.js");
+  const f = recoveryCancellationFixture();
+  await f.workspace.connect({});
+  const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: custody, submission: "native-sdk" });
+  const legacy = structuredClone(await f.workspace.exportReview(review));
+  delete legacy.cancellationAuthority;
+  assert.deepEqual(await rebuildNativeReview(f.client, legacy), review.plan);
+  assert.equal(Object.hasOwn(legacy, "cancellationAuthority"), false, "legacy input is not rewritten");
+  for (const change of [
+    (copy) => { copy.feePayer = "66".repeat(20); },
+    (copy) => { copy.requiredAuthorities = [recovery]; },
+    (copy) => { copy.signers[0].scopes = "None"; delete copy.signers[0].allowedcontracts; },
+    (copy) => { copy.cancellationAuthority = null; },
+    (copy) => { copy.cancellationAuthority = undefined; },
+    (copy) => { copy.recipe.input.cancellationAuthority = recovery; },
+  ]) {
+    const copy = structuredClone(legacy); change(copy);
+    await assert.rejects(() => rebuildNativeReview(f.client, copy));
+  }
+  f.time(2000);
+  await assert.rejects(() => rebuildNativeReview(f.client, legacy), /before maturity/);
+});
+
+test("cancellation authority changes invalidate pending imported transactions and delayed reviews", async () => {
+  let importedReview;
+  const f = recoveryCancellationFixture({ transactionTools: { importArtifact: async (_client, review) => { importedReview = review; return {}; } } });
+  await f.workspace.connect({});
+  const input = { accountId: f.state.accountId, action: "cancelRecovery", feePayer: "66".repeat(20), cancellationAuthority: custody };
+  const first = await f.workspace.lifecycle(input);
+  const imported = await f.workspace.importSigned(first, "{}", importCaps);
+  assert.equal(importedReview, first);
+  await f.workspace.lifecycle({ ...input, cancellationAuthority: recovery });
+  await assert.rejects(() => f.workspace.exportReview(first), /stale/);
+  await assert.rejects(() => f.workspace.preflightSigned(imported), /stale/);
+  const beforeMaturity = await f.workspace.lifecycle(input);
+  f.time(2000);
+  await assert.rejects(() => f.workspace.importSigned(beforeMaturity, "{}", importCaps), /before maturity/);
+});
+
+test("custody cancellation cannot cross maturity during simulation or before wallet approval", async () => {
+  const f = recoveryCancellationFixture();
+  await f.workspace.connect({});
+  const input = { accountId: f.state.accountId, action: "cancelRecovery", feePayer: custody };
+  const review = await f.workspace.lifecycle(input);
+  f.time(2000);
+  await assert.rejects(() => f.workspace.submit(review), /before maturity/);
+  assert.equal(f.called(), 0);
+  f.time(1999);
+  f.client.simulate = async () => {
+    f.time(2000);
+    return { state: "HALT", gasConsumed: "10", failedTransfers: [] };
+  };
+  await assert.rejects(() => f.workspace.lifecycle(input), /before maturity/);
+  assert.equal(f.workspace.review, null);
+});
+
+test("cancellation review rebuilds through SDK signing and real browser witness import with independent payer", async () => {
+  const crypto = await import("node:crypto");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(new URL("../../sdk/js/package.json", import.meta.url));
+  const { NativeSmartAccountClient } = require("./src/native");
+  const { rebuildNativeReview } = await import("../src/features/native/nativeWorkspace.js");
+  // Existing public offline fixture scalars from the SDK multisig tests.
+  function fixtureWallet(scalar) {
+    const bytes = Buffer.alloc(32); bytes[31] = scalar;
+    const ec = crypto.createECDH("prime256v1"); ec.setPrivateKey(bytes);
+    const publicPoint = ec.getPublicKey(undefined, "uncompressed");
+    const key = crypto.createPrivateKey({ format: "jwk", key: { kty: "EC", crv: "P-256",
+      x: publicPoint.subarray(1, 33).toString("base64url"), y: publicPoint.subarray(33).toString("base64url"), d: bytes.toString("base64url") } });
+    const verificationScript = "0c21" + ec.getPublicKey(undefined, "compressed").toString("hex") + "4156e7b327";
+    const account = crypto.createHash("ripemd160").update(crypto.createHash("sha256").update(Buffer.from(verificationScript, "hex")).digest()).digest().reverse().toString("hex");
+    return { account, verificationScript, sign(data) { return crypto.sign("sha256", Buffer.from(data, "hex"), { key, dsaEncoding: "ieee-p1363" }).toString("hex"); } };
+  }
+  const owner = fixtureWallet(2), guardian = fixtureWallet(3), independent = fixtureWallet(41);
+  const rpc = createNativeRpcFixture();
+  rpc.state.registered = true;
+  rpc.state.time = 1900000000000;
+  const identity = nativeCodec.deriveIdentity({ networkMagic: 123, custodyAddress: owner.account, salt });
+  const accountRead = nativeCodec.dynamicCall(NATIVE_ACCOUNT_SERVICE, "getAccount", [nativeCodec.hashValue(identity.accountId)], 5);
+  const H = (value) => ({ type: "ByteString", value: Buffer.from(value, "hex").reverse().toString("base64") });
+  const I = (value) => ({ type: "Integer", value: String(value) });
+  let replacement = "55".repeat(20);
+  const rpcClient = { async send(method, params) {
+    if (method === "calculatenetworkfee") return { networkfee: "50" };
+    if (method === "invokescript" && Buffer.from(params[0], "base64").toString("hex") === accountRead) {
+      const record = rpc.record();
+      record.value[1] = H(identity.accountId); record.value[2] = H(identity.accountAddress);
+      record.value[3] = H(owner.account); record.value[4] = H(guardian.account);
+      record.value[12] = { type: "Array", value: [H(replacement), I(1899999999000), I(1900000001000), I(0)] };
+      return { state: "HALT", stack: [record], gasconsumed: "100000", minimumrequiredfee: "100000" };
+    }
+    return rpc.send(method, params);
+  } };
+  const makeClient = () => new NativeSmartAccountClient({ networkMagic: 123, rpcClient });
+  const workspace = createNativeWorkspace({ makeClient });
+  await workspace.connect({});
+  const caps = { maxSystemFee: "200000", maxNetworkFee: "100", maxTotalFee: "200100" };
+  for (const [payer, authority] of [[independent, owner], [independent, guardian], [guardian, owner], [owner, owner], [guardian, guardian]]) {
+    const review = await workspace.lifecycle({ accountId: identity.accountId, action: "cancelRecovery", feePayer: payer.account,
+      cancellationAuthority: authority.account, submission: "native-sdk" });
+    const exported = await workspace.exportReview(review);
+    const sdk = makeClient();
+    const plan = await rebuildNativeReview(sdk, exported);
+    const prepared = await sdk.prepareTransaction(plan, { feePayer: payer, authoritySigners: payer === authority ? [] : [authority],
+      cancellationAuthority: exported.cancellationAuthority, nonce: 42, validUntilBlock: 50, ...caps });
+    const signed = await sdk.signTransaction(prepared);
+    const artifact = sdk.exportSignedTransaction(signed);
+    const imported = await workspace.importSigned(review, JSON.stringify(artifact), caps);
+    assert.equal(imported.txid, signed.txid);
+    assert.equal(imported.witnesses.length, payer === authority ? 1 : 2);
+    assert.equal(imported.transaction.signers[0].scopes, payer === authority ? "CustomContracts" : "None");
+    assert.equal(imported.transaction.signers.at(-1).account, "0x" + authority.account);
+    assert.deepEqual(imported.transaction.signers.at(-1).allowedcontracts, ["0x" + NATIVE_ACCOUNT_SERVICE]);
+    const changedRoster = structuredClone(artifact);
+    changedRoster.transaction.signers[0].scopes = "Global";
+    await assert.rejects(() => workspace.importSigned(review, JSON.stringify(changedRoster), caps), /scope|canonical|signer/);
+    replacement = "56".repeat(20);
+    await assert.rejects(() => workspace.importSigned(review, JSON.stringify(artifact), caps), /account changed/);
+    replacement = "55".repeat(20);
+  }
+  assert.equal(rpc.state.calls.some(({ method }) => method === "sendrawtransaction"), false);
+});
+
 test("imported transaction remains bound to the current review and fee limits across async work", async () => {
   const f = exactImportFixture();
   const review = await exactReview(f);
@@ -971,10 +1181,11 @@ test("imported transaction remains bound to the current review and fee limits ac
   f.workspace.clearImported();
   await assert.rejects(() => f.workspace.broadcastSigned(imported), /stale/);
   assert.equal(f.sends(), 0);
-  let finish;
-  f.tools.importArtifact = () => new Promise((resolve) => { finish = resolve; });
+  let finish, started;
+  const importingStarted = new Promise((resolve) => { started = resolve; });
+  f.tools.importArtifact = () => new Promise((resolve) => { finish = resolve; started(); });
   const importing = f.workspace.importSigned(review, "{}", importCaps);
-  await Promise.resolve();
+  await importingStarted;
   f.workspace.clearReview();
   finish(Object.freeze({ txid: imported.txid }));
   await assert.rejects(() => importing, /changed/);

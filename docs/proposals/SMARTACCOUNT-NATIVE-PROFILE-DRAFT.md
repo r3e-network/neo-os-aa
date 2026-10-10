@@ -1210,6 +1210,43 @@ MUST NOT interpret successful Verification, or a hypothetical next-block replay,
 as a reservation of nonce, timestamp or inclusion. It must inspect the actual
 persisted Application result.
 
+### 9.4 Target results in the current implementation
+
+The `Any` return type of `executeUserOp` and the `result: Any` callback
+parameter do not mean that every runtime object can be returned through this
+profile. The current native implementation serializes the target result before
+post-execution callbacks and deserializes an independent copy for each root
+callback and for the caller. This also happens with no verifier or hook
+installed. A target with a `Void` ABI produces Null; Boolean `false` remains an
+ordinary result.
+
+The existing result serializer accepts Null, Boolean, Integer, ByteString,
+Buffer, Array, Struct and Map, preserving their VM types. It rejects
+InteropInterface values, including iterators and storage contexts, and Pointer
+values. It also rejects a repeated reference to the same Array, Struct or Map,
+even when the graph has no cycle. Separate containers with equal contents are
+permitted. Buffer is supported here although it is not a supported
+UserOperation argument type.
+
+Result snapshots use the executing engine's `MaxItemSize` as the maximum total
+serialized byte length, including type tags and length prefixes, and
+`MaxStackSize` as the maximum number of serialized values. A container counts
+as one value; each Map key and value is counted separately. In the current
+reference runtime, Neo.VM `3.10.2-CI00384`, these defaults are **131,070 bytes**
+and **2,048 values**. These are existing VM limits used by the implementation,
+not additional fixed profile parameters or a promise that a value at either
+limit fits the surrounding execution and callback budgets. The argument
+limits of 4096 bytes and depth 8 are not substituted for the result limits.
+
+An unsupported result, repeated container reference or serialization-limit
+failure faults the operation before its post-execution callbacks. The normal
+application rollback applies to target writes, nonce changes and notifications;
+transaction fees remain chargeable. The existing result-isolation tests cover
+independent nested Array/Buffer copies and rejection of a cyclic Array or
+InteropInterface result. These implementation details explain the current
+return-value boundary; this clarification changes no ABI, parameter digest,
+consensus rule or ordinary-contract implementation.
+
 ## 10. Resource and fee accounting
 
 The native service MUST use the platform bounded-call capability for every

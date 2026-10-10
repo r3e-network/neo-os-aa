@@ -53,4 +53,15 @@ public class NativeEpochCore : SmartContract
         object[] receipt = (object[])Contract.Call(root, "validateCompositeSignature", CallFlags.ReadOnly, new object[] { account, operation });
         Contract.Call(root, "postExecuteComposite", CallFlags.All, new object[] { account, operation, result, receipt });
     }
+
+    public static object CallPostProbe(UInt160 root, UInt160 account, object[] operation, object result, bool iterator)
+    {
+        // A write before the callback lets the public VM host independently
+        // check transaction rollback when result serialization rejects a graph.
+        Storage.Put(Storage.CurrentContext, new byte[] { 0xfe }, 1);
+        if (iterator) result = Storage.Find(Storage.CurrentContext, new byte[] { 0xff }, FindOptions.KeysOnly);
+        object[] receipt = (object[])Contract.Call(root, "validateCompositeSignature", CallFlags.ReadOnly, new object[] { account, operation });
+        Contract.Call(root, "postExecuteComposite", CallFlags.All, new object[] { account, operation, result, receipt });
+        return result;
+    }
 }

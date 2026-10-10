@@ -3,22 +3,31 @@ using System.Text.Json;
 using AbstractAccount.Contracts.Tests;
 using Neo;
 using Neo.Extensions;
+using Neo.IO;
+using Neo.Network.P2P.Payloads;
+using Neo.Persistence;
 using Neo.SmartContract;
 using Neo.SmartContract.Manifest;
 using Neo.SmartContract.Native;
 using Neo.SmartContract.Testing.Exceptions;
 using Neo.VM;
 using Neo.VM.Types;
+using Ctx = Neo.VM.ExecutionContext;
 
 // These tests execute compiler-produced production modules in a real public
 // NeoVM with a deliberately permissive test service ABI. They prove the module
 // key transition, not native recovery authorization or private-chain admission.
-string artifacts = Path.GetFullPath(args.Single());
+if (args.Length == 0 || args.Skip(1).Any(arg => arg is not "--result-isolation-only" and not "--require-boolean-fast-path"))
+    throw new ArgumentException("Pass the artifact directory and optional result-isolation flags.");
+string artifacts = Path.GetFullPath(args[0]);
+bool resultIsolationOnly = args.Contains("--result-isolation-only");
+bool requireBooleanFastPath = args.Contains("--require-boolean-fast-path");
 UInt160 service = UInt160.Parse("0xd9421d07adf206e9dc4be746a02e8e087fa61741");
 UInt160 account = UInt160.Parse("0x1111111111111111111111111111111111111111");
 UInt160 other = UInt160.Parse("0x2222222222222222222222222222222222222222");
 UInt160 signer = UInt160.Parse("0x3333333333333333333333333333333333333333");
 List<object> cases = [];
+List<object> resultPaths = [];
 int failures = 0;
 
 void Require(bool value, string message)
@@ -51,6 +60,7 @@ RuntimeFixture Create()
 
 void Run(string label, Action action)
 {
+    if (resultIsolationOnly && !label.StartsWith("multisig-result-", StringComparison.Ordinal)) return;
     try { action(); cases.Add(new { label, status = "PASS" }); }
     catch (Exception error)
     {
@@ -323,6 +333,221 @@ foreach (bool buffer in new[] { false, true })
     });
 }
 
+void PushValue(ScriptBuilder script, object? value)
+{
+    if (value is object?[] values)
+    {
+        for (int i = values.Length - 1; i >= 0; i--) PushValue(script, values[i]);
+        script.EmitPush(values.Length).Emit(OpCode.PACK);
+    }
+    else script.EmitPush(value);
+}
+
+string InnerKind(string kind) => kind.StartsWith("nested-", StringComparison.Ordinal) ? kind[7..] : kind;
+StackItemType ResultType(string kind) => kind.StartsWith("nested-", StringComparison.Ordinal) ? StackItemType.Array : kind switch
+{
+    "true" or "false" => StackItemType.Boolean,
+    "null" => StackItemType.Any,
+    "integer" or "integer-zero" or "integer-one" => StackItemType.Integer,
+    "bytes" => StackItemType.ByteString,
+    "buffer" => StackItemType.Buffer,
+    "array" => StackItemType.Array,
+    "struct" => StackItemType.Struct,
+    "map" => StackItemType.Map,
+    _ => throw new ArgumentException(kind)
+};
+void EmitResult(ScriptBuilder script, string kind)
+{
+    if (kind.StartsWith("nested-", StringComparison.Ordinal))
+    {
+        EmitResult(script, InnerKind(kind)); script.EmitPush(1).Emit(OpCode.PACK); return;
+    }
+    switch (kind)
+    {
+        case "true": script.EmitPush(true); break;
+        case "false": script.EmitPush(false); break;
+        case "null": script.Emit(OpCode.PUSHNULL); break;
+        case "integer": script.EmitPush(7); break;
+        case "integer-zero": script.EmitPush(0); break;
+        case "integer-one": script.EmitPush(1); break;
+        case "bytes": script.EmitPush(new byte[] { 7 }); break;
+        case "buffer": script.EmitPush(1).Emit(OpCode.NEWBUFFER).Emit(OpCode.DUP).EmitPush(0).EmitPush(7).Emit(OpCode.SETITEM); break;
+        case "array": script.EmitPush(7).EmitPush(1).Emit(OpCode.PACK); break;
+        case "struct": script.EmitPush(1).Emit(OpCode.NEWSTRUCT).Emit(OpCode.DUP).EmitPush(0).EmitPush(7).Emit(OpCode.SETITEM); break;
+        case "map": script.Emit(OpCode.NEWMAP).Emit(OpCode.DUP).EmitPush("k").EmitPush(7).Emit(OpCode.SETITEM); break;
+        case "cycle": script.Emit(OpCode.NEWARRAY0).Emit(OpCode.DUP).Emit(OpCode.DUP).Emit(OpCode.APPEND); break;
+        default: throw new ArgumentException(kind);
+    }
+}
+void ResultInner(ScriptBuilder script, string kind)
+{
+    script.Emit(OpCode.LDARG2);
+    if (kind.StartsWith("nested-", StringComparison.Ordinal)) script.EmitPush(0).Emit(OpCode.PICKITEM);
+}
+void AssertResult(ScriptBuilder script, string kind, int number = 7)
+{
+    script.Emit(OpCode.LDARG2);
+    if (kind == "null") { script.Emit(OpCode.ISNULL).Emit(OpCode.ASSERT); return; }
+    script.Emit(OpCode.ISTYPE, new byte[] { (byte)ResultType(kind) }).Emit(OpCode.ASSERT);
+    ResultInner(script, kind);
+    string inner = InnerKind(kind);
+    if (kind.StartsWith("nested-", StringComparison.Ordinal))
+        script.Emit(OpCode.DUP).Emit(OpCode.ISTYPE, new byte[] { (byte)ResultType(inner) }).Emit(OpCode.ASSERT);
+    if (inner is "true" or "false") { script.EmitPush(inner == "true").Emit(OpCode.EQUAL).Emit(OpCode.ASSERT); return; }
+    if (inner is "array" or "struct" or "bytes" or "buffer") script.EmitPush(0).Emit(OpCode.PICKITEM);
+    else if (inner == "map") script.EmitPush("k").Emit(OpCode.PICKITEM);
+    script.EmitPush(inner == "integer-zero" ? 0 : inner == "integer-one" ? 1 : number).Emit(OpCode.NUMEQUAL).Emit(OpCode.ASSERT);
+}
+void PostMarker(ScriptBuilder script) => script.EmitPush(1).EmitPush(new byte[] { 0xd0 })
+    .EmitSysCall(ApplicationEngine.System_Storage_GetContext.Hash).EmitSysCall(ApplicationEngine.System_Storage_Put.Hash);
+void MutateTypedResult(ScriptBuilder script, string kind)
+{
+    string inner = InnerKind(kind);
+    if (inner is not ("array" or "struct" or "map" or "buffer")) return;
+    ResultInner(script, kind);
+    if (inner == "map") script.EmitPush("k"); else script.EmitPush(0);
+    script.EmitPush(9).Emit(OpCode.SETITEM);
+    AssertResult(script, kind, 9);
+}
+Dictionary<string, string> SnapshotBytes(DataCache snapshot) => snapshot.Find((byte[]?)null)
+    .ToDictionary(pair => Convert.ToHexString(pair.Key.ToArray()), pair => Convert.ToHexString(pair.Value.Value.Span));
+byte[] ExpectedResultBytes(string kind)
+{
+    using ScriptBuilder script = new(); EmitResult(script, kind);
+    using var engine = new ExecutionEngine(); engine.LoadScript(script.ToArray());
+    Require(engine.Execute() == VMState.HALT, "Result construction failed");
+    return BinarySerializer.Serialize(engine.ResultStack.Peek(), 8192, 8192).ToArray();
+}
+
+foreach (string kind in new[] { "true", "false", "null", "integer", "integer-zero", "integer-one", "bytes", "buffer", "array", "struct", "map", "nested-array", "nested-buffer", "nested-struct", "nested-map", "interop", "cycle" })
+{
+    Run("multisig-result-" + kind + "-type-ownership-and-path", () =>
+    {
+        RuntimeFixture fx = Create(); UInt160 root = Deploy(fx, "MultiSigVerifier");
+        bool rejection = kind is "interop" or "cycle";
+        UInt160 first = Leaf(fx, 1, Approve, script =>
+        {
+            PostMarker(script);
+            if (!rejection) { AssertResult(script, kind); MutateTypedResult(script, kind); }
+        });
+        UInt160 second = Leaf(fx, 2, Approve, script =>
+        {
+            PostMarker(script);
+            if (!rejection) AssertResult(script, kind);
+        });
+        fx.CallVoid(root, "setConfig", account, new[] { first, second }, 2);
+        object[] operation = CompositeOperation(fx, 2);
+        var block = new Block
+        {
+            Header = new Header
+            {
+                Index = 1, Timestamp = checked((ulong)fx.Now()), PrevHash = UInt256.Zero,
+                MerkleRoot = UInt256.Zero, NextConsensus = UInt160.Zero,
+                Witness = new Witness { InvocationScript = ReadOnlyMemory<byte>.Empty, VerificationScript = ReadOnlyMemory<byte>.Empty }
+            },
+            Transactions = []
+        };
+        var before = SnapshotBytes(fx.Engine.Storage.Snapshot);
+        using ScriptBuilder entry = new();
+        entry.EmitPush(kind == "interop");
+        EmitResult(entry, kind == "interop" ? "null" : kind);
+        PushValue(entry, operation); entry.EmitPush(account).EmitPush(root).EmitPush(5).Emit(OpCode.PACK);
+        entry.EmitPush(CallFlags.All).EmitPush("callPostProbe").EmitPush(service).EmitSysCall(ApplicationEngine.System_Contract_Call.Hash);
+        var working = fx.Engine.Storage.Snapshot.CloneCache();
+        var trace = new ResultPathTrace(root, first, second, service);
+        using var engine = ApplicationEngine.Create(TriggerType.Application, fx.Engine.Transaction, working,
+            block, fx.Engine.ProtocolSettings, gas: 10_000_000_000, diagnostic: trace);
+        engine.LoadScript(entry.ToArray());
+        VMState state = engine.Execute();
+        int fixtureId = NativeContract.ContractManagement.GetContract(working, service)!.Id;
+        var marker = new StorageKey { Id = fixtureId, Key = new byte[] { 0xfe } };
+        Require(trace.FixtureWriteObserved, "The fixture write did not execute before the result callback");
+        Require(before.OrderBy(pair => pair.Key).SequenceEqual(SnapshotBytes(fx.Engine.Storage.Snapshot).OrderBy(pair => pair.Key)),
+            "An uncommitted result invocation changed persisted storage");
+        resultPaths.Add(new { kind, state = state.ToString(), trace.SerializeCalls, trace.DeserializeCalls,
+            trace.FirstPostEntries, trace.SecondPostEntries, trace.FixtureWriteObserved, rollback = rejection,
+            error = engine.FaultException?.ToString() });
+        if (rejection)
+        {
+            Require(state == VMState.FAULT, "Unserializable result was accepted");
+            Require(trace.FirstPostEntries == 0 && trace.SecondPostEntries == 0, "A post child ran before unsupported result rejection");
+            Require(trace.SerializeCalls == 4 && trace.DeserializeCalls == 2, "Rejection did not reach the original result serialization boundary");
+            string error = engine.FaultException?.ToString() ?? "";
+            Require(error.Contains("serializ", StringComparison.OrdinalIgnoreCase) || error.Contains("Interop", StringComparison.OrdinalIgnoreCase)
+                || error.Contains("circular", StringComparison.OrdinalIgnoreCase), "Unexpected rejection: " + error);
+            // The diagnostic observed the write before the callback. After
+            // FAULT, the VM has reverted it in both working and base snapshots,
+            // before this host discards the transaction clone.
+            Require(fx.Engine.Storage.Snapshot.TryGet(marker) is null, "Rejected result retained its pre-callback write");
+            Require(before.OrderBy(pair => pair.Key).SequenceEqual(SnapshotBytes(working).OrderBy(pair => pair.Key)),
+                "FAULT did not revert the fixture invocation's storage writes");
+            return;
+        }
+        Require(state == VMState.HALT, "Result propagation failed: " + engine.FaultException);
+        Require(trace.FirstPostEntries == 1 && trace.SecondPostEntries == 1, "Both approved children must observe the result exactly once");
+        Require(engine.ResultStack.Count == 1, "Result fixture must return one original result");
+        StackItem original = engine.ResultStack.Peek();
+        Require(original.Type == ResultType(kind) && BinarySerializer.Serialize(original, 8192, 8192).AsSpan().SequenceEqual(ExpectedResultBytes(kind)),
+            "Child mutation changed the original result type or contents");
+        bool boolean = kind is "true" or "false";
+        bool originalPath = trace.SerializeCalls == 5 && trace.DeserializeCalls == 7;
+        bool booleanPath = trace.SerializeCalls == 4 && trace.DeserializeCalls == 5;
+        Require(boolean ? (requireBooleanFastPath ? booleanPath : originalPath || booleanPath) : originalPath,
+            $"Wrong result path for {kind}: serialize={trace.SerializeCalls}, deserialize={trace.DeserializeCalls}");
+        working.Commit();
+        foreach (UInt160 child in new[] { first, second })
+        {
+            int childId = NativeContract.ContractManagement.GetContract(fx.Engine.Storage.Snapshot, child)!.Id;
+            Require(fx.Engine.Storage.Snapshot.TryGet(new StorageKey { Id = childId, Key = new byte[] { 0xd0 } }) is not null,
+                "Successful child result assertion did not persist its marker");
+        }
+    });
+}
+
 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = failures == 0 ? "PASS" : "FAIL", publicNetworksTouched = false,
-    evidence = "Real public NeoVM executes production module NEFs against a test-only epoch service ABI; no native recovery/admission claim.", cases }, new JsonSerializerOptions { WriteIndented = true }));
+    evidence = "Real public NeoVM executes production module NEFs against a test-only epoch service ABI; no native recovery/admission claim.",
+    resultIsolationOnly, requireBooleanFastPath, resultPaths, cases }, new JsonSerializerOptions { WriteIndented = true }));
 return failures == 0 ? 0 : 1;
+
+sealed class ResultPathTrace(UInt160 root, UInt160 first, UInt160 second, UInt160 fixture) : IDiagnostic
+{
+    private ApplicationEngine engine = null!;
+    private Ctx? rootPost;
+    private bool pendingFixtureWrite;
+    internal bool FixtureWriteObserved;
+    internal int SerializeCalls, DeserializeCalls, FirstPostEntries, SecondPostEntries;
+    public void Initialized(ApplicationEngine value) => engine = value;
+    public void Disposed() { }
+    public void CallFromNative(UInt160 target, string method, StackItem[] arguments) { }
+    public void ContextLoaded(Ctx context)
+    {
+        UInt160 hash = context.GetScriptHash();
+        var contract = NativeContract.ContractManagement.GetContract(engine.SnapshotCache, hash);
+        string? method = contract?.Manifest.Abi.Methods.FirstOrDefault(value => value.Offset == context.InstructionPointer)?.Name;
+        if (hash == root && method == "postExecuteComposite") rootPost = context;
+        if (method == "postExecute")
+        {
+            if (hash == first) FirstPostEntries++;
+            if (hash == second) SecondPostEntries++;
+        }
+    }
+    public void ContextUnloaded(Ctx context) { if (ReferenceEquals(context, rootPost)) rootPost = null; }
+    public void PreExecuteInstruction(Instruction instruction)
+    {
+        pendingFixtureWrite = engine.CurrentScriptHash == fixture && instruction.OpCode == OpCode.SYSCALL
+            && instruction.TokenU32 == ApplicationEngine.System_Storage_Put.Hash;
+        if (rootPost is null || engine.CurrentScriptHash != root || instruction.OpCode != OpCode.CALLT) return;
+        var contract = NativeContract.ContractManagement.GetContract(engine.SnapshotCache, root)!;
+        var token = contract.Nef.Tokens[instruction.TokenU16];
+        if (token.Hash != NativeContract.StdLib.Hash) return;
+        if (token.Method == "serialize") SerializeCalls++;
+        if (token.Method == "deserialize") DeserializeCalls++;
+    }
+    public void PostExecuteInstruction(Instruction instruction)
+    {
+        if (!pendingFixtureWrite) return;
+        var contract = NativeContract.ContractManagement.GetContract(engine.SnapshotCache, fixture)!;
+        FixtureWriteObserved |= engine.SnapshotCache.TryGet(new StorageKey { Id = contract.Id, Key = new byte[] { 0xfe } }) is not null;
+        pendingFixtureWrite = false;
+    }
+}

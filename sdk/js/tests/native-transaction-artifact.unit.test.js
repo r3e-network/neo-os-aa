@@ -17,7 +17,7 @@ function setup(source = fixture) {
     preflight: {
       hash: data.artifact.txid, network: 123, snapshot: { height: 9, hash: "0x" + "aa".repeat(32) },
       simulation: { mode: "single-transaction-next-block", height: 10, timestamp: "1700000000000", primaryIndex: 0, view: 0, transactionCount: 1, onPersist: "HALT", nextConsensus: "0x" + "bb".repeat(20) },
-      verification: "Succeed", state: "HALT", relayed: false, mempoolChecked: false, minimumrequiredfee: "100000", stack: [{ type: "Boolean", value: true }],
+      verification: "Succeed", state: "HALT", relayed: false, mempoolChecked: false, gasconsumed: "10", minimumrequiredfee: "100000", stack: [{ type: "Boolean", value: true }],
     },
     transaction: { hash: data.artifact.txid, blockhash: "0x" + "cc".repeat(32) },
     wire: Buffer.from(data.artifact.rawTransaction, "hex").toString("base64"),
@@ -399,4 +399,26 @@ test("SDK exports only signed objects, with public artifact fields and no callba
   assert.equal((await client.preflightTransaction(signed)).hash, signed.txid);
   sdkPreflight.simulation.onPersist = "FAULT";
   await assert.rejects(client.preflightTransaction(signed), /single-transaction next-block/);
+});
+
+test("signed preflight rejects malformed or inconsistent RPC fees before broadcast", async () => {
+  const invalid = [
+    {gasconsumed:"100001",minimumrequiredfee:"100000"},
+    ...[undefined,null,10,"", "01", "-1", "1.5", "0x10", "9223372036854775808"].flatMap(value => [
+      {gasconsumed:value}, {minimumrequiredfee:value},
+    ]),
+  ];
+  for (const override of invalid) {
+    const f = setup(), imported = await f.load();
+    Object.assign(f.state.preflight,override);
+    await assert.rejects(f.tools.broadcast(f.client,imported),/fee|gasconsumed/);
+    assert.equal(f.calls.some(call => call.method === "sendrawtransaction"),false);
+  }
+});
+test("artifact import rejects malformed review fees and an explicit budget below consumption", async () => {
+  for (const override of [{gasConsumed:10},{minimumRequiredFee:100000},{minimumRequiredFee:"9"},{minimumRequiredFee:null,gasConsumed:"200001"}]) {
+    const f = setup(); Object.assign(f.data.review.simulation,override);
+    await assert.rejects(f.load(),/fee|gasconsumed|admission/);
+    assert.equal(f.calls.some(call => call.method === "sendrawtransaction"),false);
+  }
 });
