@@ -680,7 +680,7 @@ test("signed artifact import verifies public signatures, fresh preflight, exact 
           state: "HALT", relayed: false, mempoolChecked: false,
           snapshot: { height: 9, hash: "0x" + "bb".repeat(32) },
           simulation: { mode: "single-transaction-next-block", height: 10, timestamp: String(fixture.state.time), primaryIndex: 0, view: 0, transactionCount: 1, onPersist: "HALT", nextConsensus: "0x" + "cc".repeat(20) },
-          minimumrequiredfee: "100000", stack: [{ type: "Boolean", value: true }],
+          gasconsumed: "100000", minimumrequiredfee: "100000", stack: [{ type: "Boolean", value: true }],
         };
       } else if (method === "sendrawtransaction") {
         submittedRaw.push(Buffer.from(params[0], "base64").toString("hex"));

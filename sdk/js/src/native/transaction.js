@@ -1,6 +1,6 @@
 const crypto = require("node:crypto");
 const { createVerifierWitnessTools } = require("./verifierWitness");
-const { validateNativeInvocationResult } = require("./client");
+const { validateNativeInvocationResult, parseNativeRpcFee, parseNativeRpcFees } = require("./client");
 const { createNativeWalletWitnessTools } = require("../../../../shared/nativeWalletWitness.mjs");
 const { createNativeTransactionArtifactTools, validateNativeSignedPreflight } = require("../../../../shared/nativeTransactionArtifact.mjs");
 const deepFreeze = (value) => {
@@ -136,12 +136,27 @@ function createNativeTransactionTools(c) {
   }
   const issued = new WeakSet(),
     signedIssued = new WeakSet();
+  async function validateCancellationAuthority(client, plan, authority) {
+    if (authority === undefined) return;
+    const state = plan.accountState;
+    if (plan.method !== "cancelRecovery" || !state?.pendingRecovery)
+      fail("cancellation authority requires a pending cancelRecovery action");
+    if (authority === state.recoveryAddress && !/^0+$/.test(authority)) return;
+    if (authority !== state.custodyAddress) fail("invalid recovery cancellation authority");
+    const height = await client.rpc.send("getblockcount", []);
+    if (!Number.isSafeInteger(height) || height < 1 || height > 0xffffffff) fail("invalid block height");
+    const block = await client.rpc.send("getblockheader", [height - 1, true]);
+    if (!Number.isSafeInteger(block?.time) || block.time < 0) fail("invalid chain timestamp");
+    if (BigInt(block.time) >= c.unsigned(state.pendingRecovery.matureAt, 64, "recovery maturity"))
+      fail("custody cannot cancel recovery at or after maturity");
+  }
   async function prepareNativeTransaction(
     client,
     plan,
     {
       feePayer,
       authoritySigners = [],
+      cancellationAuthority,
       verifierSigners = [],
       systemFee,
       maxSystemFee,
@@ -158,19 +173,18 @@ function createNativeTransactionTools(c) {
       total: fee(maxTotalFee, "total fee cap"),
     };
     const required = new Set(plan.requiredAuthorities);
+    if (cancellationAuthority !== undefined && plan.authorityPolicy !== "recovery-or-custody-before-maturity")
+      fail("cancellationAuthority is only supported for cancelRecovery");
+    let selectedCancellation;
     if (plan.authorityPolicy === "recovery-or-custody-before-maturity") {
-      const candidates = [feePayer, ...authoritySigners].map((s) =>
-          c.hex(s?.account, 20),
-        ),
-        state = plan.accountState;
-      if (
-        candidates.includes(state.recoveryAddress) &&
-        !/^0+$/.test(state.recoveryAddress)
-      )
-        required.add(state.recoveryAddress);
-      else if (candidates.includes(state.custodyAddress))
-        required.add(state.custodyAddress);
-      else fail("recovery cancellation needs a recovery or custody signer");
+      const candidates = [feePayer, ...authoritySigners].map((s) => c.hex(s?.account, 20));
+      const state = plan.accountState;
+      selectedCancellation = cancellationAuthority !== undefined ? c.hex(cancellationAuthority, 20)
+        : candidates.includes(state.recoveryAddress) && !/^0+$/.test(state.recoveryAddress)
+          ? state.recoveryAddress : state.custodyAddress;
+      await validateCancellationAuthority(client, plan, selectedCancellation);
+      if (!candidates.includes(selectedCancellation)) fail("recovery cancellation needs the selected authority signer");
+      required.add(selectedCancellation);
     }
     const verifierAccounts = verifierSigners.map((s) => c.hex(s.account, 20));
     if (new Set(verifierAccounts).size !== verifierAccounts.length)
@@ -217,16 +231,20 @@ function createNativeTransactionTools(c) {
       );
     if (validateNativeInvocationResult(plan, simulation.stack).length)
       fail("a simulated token transfer did not return Boolean true");
-    const minimum =
-      simulation.minimumRequiredFee === null
-        ? null
-        : fee(simulation.minimumRequiredFee, "minimum required system fee");
+    const validatedFees = parseNativeRpcFees({
+      gasconsumed: simulation.gasConsumed,
+      minimumrequiredfee: simulation.minimumRequiredFee === null ? undefined : simulation.minimumRequiredFee,
+    });
+    const minimum = validatedFees.minimumRequiredFee === null
+      ? null : BigInt(validatedFees.minimumRequiredFee);
     if (systemFee === undefined && minimum === null)
       fail(
         "node does not report minimumrequiredfee; supply an explicit system fee budget",
       );
     const system =
       systemFee === undefined ? minimum : fee(systemFee, "system fee");
+    if (system < BigInt(validatedFees.gasConsumed))
+      fail("system fee is below actual simulated consumption");
     if (minimum !== null && system < minimum)
       fail("system fee is below bounded-call admission requirement");
     if (system > caps.system) fail("system fee exceeds approved cap");
@@ -259,7 +277,7 @@ function createNativeTransactionTools(c) {
     const quote = await client.rpc.send("calculatenetworkfee", [
       raw(tx, placeholders).toString("base64"),
     ]);
-    const network = fee(quote?.networkfee, "network fee");
+    const network = parseNativeRpcFee(quote?.networkfee, "network");
     if (network > caps.network || network + system > caps.total)
       fail("transaction fees exceed approved caps");
     tx.networkFee = network.toString();
@@ -281,6 +299,7 @@ function createNativeTransactionTools(c) {
         systemFee === undefined ? "minimumrequiredfee" : "explicit-budget",
       verifierAccounts,
       verifierContext,
+      ...(selectedCancellation === undefined ? {} : { cancellationAuthority: selectedCancellation }),
       simulation,
       wallets: Object.freeze(wallets),
       placeholderWitnesses: Object.freeze(placeholders),
@@ -292,6 +311,7 @@ function createNativeTransactionTools(c) {
     if (!issued.has(prepared))
       fail("transaction must be prepared by this SDK instance");
     await client.revalidatePlan(prepared.plan);
+    await validateCancellationAuthority(client, prepared.plan, prepared.cancellationAuthority);
     await verifierWitness.revalidate(client, prepared);
     if (unsigned(prepared.transaction).toString("hex") !== prepared.unsignedHex)
       fail("transaction changed after fee approval");
@@ -311,6 +331,7 @@ function createNativeTransactionTools(c) {
       ...signatures.slice(1),
     ];
     await client.revalidatePlan(prepared.plan);
+    await validateCancellationAuthority(client, prepared.plan, prepared.cancellationAuthority);
     await verifierWitness.revalidate(client, prepared);
     if (unsigned(prepared.transaction).toString("hex") !== prepared.unsignedHex)
       fail("transaction changed during signing");
@@ -319,7 +340,7 @@ function createNativeTransactionTools(c) {
       finalBytes.toString("base64"),
     ]);
     if (
-      fee(quote?.networkfee, "final network fee") > BigInt(prepared.networkFee)
+      parseNativeRpcFee(quote?.networkfee, "final network") > BigInt(prepared.networkFee)
     )
       fail("final witness network fee exceeds approved transaction");
     const result = Object.freeze({

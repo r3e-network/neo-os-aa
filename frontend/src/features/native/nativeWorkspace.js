@@ -430,6 +430,54 @@ function comparable(value) {
     return item;
   });
 }
+async function chainTime(client) {
+  const count = await client.rpc.send("getblockcount", []);
+  if (!Number.isSafeInteger(count) || count < 1) fail("Invalid block height.");
+  const block = await client.rpc.send("getblockheader", [count - 1, true]);
+  if (!Number.isSafeInteger(block?.time) || block.time < 0)
+    fail("Invalid chain timestamp.");
+  return block.time;
+}
+function cancellationAuthorityFor(plan, value, now) {
+  const authority = nativeAddress(value);
+  const state = plan.accountState;
+  if (!state?.pendingRecovery) fail("No custody recovery is pending.");
+  if (
+    authority !== state.recoveryAddress &&
+    (authority !== state.custodyAddress ||
+      BigInt(now) >= BigInt(state.pendingRecovery.matureAt))
+  )
+    fail("Only recovery, or custody before maturity, can cancel recovery.");
+  return authority;
+}
+function reviewAuthorities(plan, cancellationAuthority) {
+  return [...new Set([
+    ...plan.requiredAuthorities,
+    ...(plan.authorityPolicy === "recovery-or-custody-before-maturity"
+      ? [nativeAddress(cancellationAuthority)] : []),
+  ])];
+}
+function sdkReviewSigners(plan, actor, authorities) {
+  if (actor === (plan.accountAddress || plan.accountState?.accountAddress))
+    fail("The fee payer must be a separate Neo wallet, not the account proxy.");
+  const required = new Set(authorities);
+  const signer = (account) => ({
+    account: "0x" + account,
+    scopes: required.has(account) ? "CustomContracts" : "None",
+    ...(required.has(account)
+      ? { allowedcontracts: ["0x" + NATIVE_ACCOUNT_SERVICE] } : {}),
+  });
+  return [signer(actor), ...(plan.proxySigner ? [plan.proxySigner] : []),
+    ...authorities.filter((account) => account !== actor).map(signer)];
+}
+async function checkCancellationTime(client, review) {
+  if (review.plan.authorityPolicy === "recovery-or-custody-before-maturity")
+    cancellationAuthorityFor(review.plan, review.cancellationAuthority, await chainTime(client));
+}
+async function revalidateReview(client, review) {
+  await client.revalidatePlan(review.plan);
+  await checkCancellationTime(client, review);
+}
 export async function rebuildNativeReview(client, exported) {
   if (
     exported?.format !== "neo-native-reviewed-request" ||
@@ -464,7 +512,20 @@ export async function rebuildNativeReview(client, exported) {
     fail(
       "Reviewed authority, pending intent or operation changed. Review again.",
     );
-  await client.revalidatePlan(plan);
+  const payer = nativeAddress(exported.feePayer);
+  // Version-one exports originally represented cancellation by the payer's
+  // authority alone. Accept only that shape, then recheck its complete roster.
+  const legacyCancellation = !Object.hasOwn(exported, "cancellationAuthority") &&
+    plan.kind === "lifecycle" && plan.method === "cancelRecovery" &&
+    plan.authorityPolicy === "recovery-or-custody-before-maturity" &&
+    recipe.method === "buildAction" && recipe.input?.action === "cancelRecovery" &&
+    !Object.hasOwn(recipe.input, "cancellationAuthority");
+  const cancellationAuthority = legacyCancellation ? payer : exported.cancellationAuthority;
+  const authorities = reviewAuthorities(plan, cancellationAuthority);
+  if (comparable(authorities) !== comparable(exported.requiredAuthorities) ||
+      comparable(sdkReviewSigners(plan, payer, authorities)) !== comparable(exported.signers))
+    fail("Reviewed cancellation authority, fee payer or signer scopes changed. Review again.");
+  await revalidateReview(client, { ...exported, cancellationAuthority, plan });
   return plan;
 }
 export function validateNativeReceipt(review, transaction, log, txid) {
@@ -584,13 +645,7 @@ export function createNativeWorkspace({
     return { version: generation, c: client, intent: ++intentVersion };
   }
   async function clock(c) {
-    const count = await c.rpc.send("getblockcount", []);
-    if (!Number.isSafeInteger(count) || count < 1)
-      fail("Invalid block height.");
-    const block = await c.rpc.send("getblockheader", [count - 1, true]);
-    if (!Number.isSafeInteger(block?.time) || block.time < 0)
-      fail("Invalid chain timestamp.");
-    return block.time;
+    return chainTime(c);
   }
   async function reviewPlan({
     version,
@@ -599,6 +654,7 @@ export function createNativeWorkspace({
     plan,
     args,
     actor,
+    cancellationAuthority,
     description,
     recipe,
     submission: requestedSubmission,
@@ -610,7 +666,7 @@ export function createNativeWorkspace({
       fail(
         "The fee payer must be a separate Neo wallet, not the account proxy.",
       );
-    const authorities = [...plan.requiredAuthorities];
+    const authorities = reviewAuthorities(plan, cancellationAuthority);
     const walletSupported =
       requestedSubmission !== "native-sdk" &&
       !plan.requiresExactScript &&
@@ -618,24 +674,11 @@ export function createNativeWorkspace({
       authorities.length <= 1 &&
       (!authorities.length || authorities[0] === actor);
     const submission = walletSupported ? "wallet-invoke" : "native-sdk";
-    const required = new Set(authorities);
-    if (plan.authorityPolicy === "recovery-or-custody-before-maturity")
-      required.add(actor);
-    const sdkSigner = (account) => ({
-      account: "0x" + account,
-      scopes: required.has(account) ? "CustomContracts" : "None",
-      ...(required.has(account)
-        ? { allowedcontracts: ["0x" + NATIVE_ACCOUNT_SERVICE] }
-        : {}),
-    });
     const signers = walletSupported
       ? [{ account: "0x" + actor, scopes: "CalledByEntry" }]
-      : [
-          sdkSigner(actor),
-          ...(plan.proxySigner ? [plan.proxySigner] : []),
-          ...authorities.filter((h) => h !== actor).map(sdkSigner),
-        ];
+      : sdkReviewSigners(plan, actor, authorities);
     const simulation = await c.simulate(plan, signers);
+    await checkCancellationTime(c, { plan, cancellationAuthority });
     guard(version);
     if (intent !== intentVersion) fail("Review inputs changed. Preview again.");
     const review = freeze({
@@ -645,7 +688,8 @@ export function createNativeWorkspace({
       recipe,
       submission,
       feePayer: actor,
-      requiredAuthorities: [...required],
+      ...(cancellationAuthority ? { cancellationAuthority } : {}),
+      requiredAuthorities: authorities,
       signers,
       simulation,
       simulationError: displayError(simulation),
@@ -806,13 +850,9 @@ export function createNativeWorkspace({
         plan.requiredAuthorities[0] ||
         plan.accountState.custodyAddress;
       actor = nativeAddress(actor);
-      if (
-        input.action === "cancelRecovery" &&
-        actor !== plan.accountState.recoveryAddress &&
-        (actor !== plan.accountState.custodyAddress ||
-          BigInt(now) >= BigInt(plan.accountState.pendingRecovery.matureAt))
-      )
-        fail("Only recovery, or custody before maturity, can cancel recovery.");
+      const cancellationAuthority = input.action === "cancelRecovery"
+        ? cancellationAuthorityFor(plan, input.cancellationAuthority || actor, now)
+        : undefined;
       const args = [
         H(accountId),
         ...(input.action === "cancelModuleCall"
@@ -840,6 +880,7 @@ export function createNativeWorkspace({
           },
         },
         actor,
+        cancellationAuthority,
         submission: input.submission,
         description:
           input.action === "cancelModuleCall"
@@ -996,7 +1037,7 @@ export function createNativeWorkspace({
       if (!wallet) fail("Connect a supported Neo wallet.");
       submitting = true;
       try {
-        await meta.c.revalidatePlan(review.plan);
+        await revalidateReview(meta.c, review);
         checkReview();
         const actor = await wallet.account();
         if (actor !== review.feePayer)
@@ -1011,7 +1052,7 @@ export function createNativeWorkspace({
         checkReview();
         const reason = displayError(simulation);
         if (reason) fail(reason);
-        await meta.c.revalidatePlan(review.plan);
+        await revalidateReview(meta.c, review);
         checkReview();
         if (
           (await wallet.account()) !== actor ||
@@ -1034,7 +1075,7 @@ export function createNativeWorkspace({
       const meta = reviews.get(review);
       if (!meta || active !== review) fail("Unknown or stale review.");
       guard(meta.version);
-      await meta.c.revalidatePlan(review.plan);
+      await revalidateReview(meta.c, review);
       guard(meta.version);
       if (active !== review) fail("Review inputs changed. Preview again.");
       return { format: "neo-native-reviewed-request", version: 1, ...review };
@@ -1046,8 +1087,13 @@ export function createNativeWorkspace({
       guard(meta.version);
       clearImported();
       const revision = importVersion;
+      await revalidateReview(meta.c, review);
+      guard(meta.version);
+      if (active !== review || revision !== importVersion)
+        fail("Review or fee limits changed during import. Import again.");
       const tools = await exactTools();
       const result = await tools.importArtifact(meta.c, review, text, caps);
+      await checkCancellationTime(meta.c, review);
       guard(meta.version);
       if (active !== review || revision !== importVersion)
         fail("Review or fee limits changed during import. Import again.");
@@ -1064,6 +1110,8 @@ export function createNativeWorkspace({
       };
       check();
       if (meta.attempted) fail("Submission was already attempted. Check this transaction's confirmation.");
+      await revalidateReview(meta.c, meta.review);
+      check();
       const result = await meta.tools.preflight(meta.c, transaction);
       check();
       return result;
@@ -1080,6 +1128,8 @@ export function createNativeWorkspace({
       if (submitting) fail("A transaction submission is already pending.");
       submitting = true;
       try {
+        await revalidateReview(meta.c, meta.review);
+        check();
         const result = await meta.tools.broadcast(meta.c, transaction, { assertCurrent: check });
         meta.attempted = true;
         reviews.get(meta.review).used = true;

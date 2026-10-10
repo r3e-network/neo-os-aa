@@ -344,7 +344,10 @@ namespace AbstractAccount.Verifiers
             object[] signatures = NativeSignatures(op.Signature);
             ExecutionEngine.Assert(signatures.Length == config.Verifiers.Length, "Signature array length mismatch");
             ByteString arguments = StdLib.Serialize(op.Args);
-            ByteString resultSnapshot = StdLib.Serialize(result);
+            // Boolean values are immutable. All other result types retain the
+            // serialization boundary and an independent graph for each child.
+            bool immutableResult = result is bool;
+            ByteString? resultSnapshot = immutableResult ? null : StdLib.Serialize(result);
             int next = 0;
             for (int i = 0; i < approved.Length; i++)
             {
@@ -357,7 +360,7 @@ namespace AbstractAccount.Verifiers
                 object[] childOp = CreateNativeSubOperation(op, signatures[next], arguments);
                 next++;
                 Contract.Call(child, "postExecute", CallFlags.All,
-                    new object[] { accountId, childOp, StdLib.Deserialize(resultSnapshot) });
+                    new object[] { accountId, childOp, immutableResult ? result : StdLib.Deserialize(resultSnapshot!) });
             }
             // A child cannot leave a changed signer policy for another child or the
             // next operation, even when its configuration is outside the native service.

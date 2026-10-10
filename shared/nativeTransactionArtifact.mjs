@@ -1,4 +1,4 @@
-import { validateNativeInvocationResult } from "./nativeSmartAccountClient.mjs";
+import { validateNativeInvocationResult, parseNativeRpcFees } from "./nativeSmartAccountClient.mjs";
 
 export const NATIVE_SIGNED_ARTIFACT_MAX_CHARS = 1048576;
 const MAX_TRANSACTION_BYTES = 102400;
@@ -107,7 +107,8 @@ export function validateNativeSignedPreflight(c, expected, result) {
   c.unsigned(simulation.timestamp, 64, "preflight simulation timestamp");
   if (expected.validUntilBlock !== undefined && expected.validUntilBlock <= simulation.height)
     fail("signed transaction expires before the simulated block");
-  if (c.unsigned(result.minimumrequiredfee, 63, "final minimum required fee") > BigInt(expected.systemFee))
+  const fees = parseNativeRpcFees(result, true);
+  if (BigInt(fees.minimumRequiredFee) > BigInt(expected.systemFee))
     fail("final Application admission exceeds signed system fee");
   if (validateNativeInvocationResult(expected.plan, result.stack).length)
     fail("signed transaction preflight token transfer did not return Boolean true");
@@ -165,7 +166,11 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
     };
     const system = fee(artifact.transaction.systemFee, "system fee"), network = fee(artifact.transaction.networkFee, "network fee");
     if (system > approved.system || network > approved.network || system + network > approved.total) fail("artifact fees exceed approved caps");
-    if (review.simulation?.minimumRequiredFee != null && system < c.unsigned(review.simulation.minimumRequiredFee, 63, "reviewed minimum required fee")) fail("artifact system fee is below the reviewed admission requirement");
+    const reviewedFees = parseNativeRpcFees({
+      gasconsumed: review.simulation?.gasConsumed,
+      minimumrequiredfee: review.simulation?.minimumRequiredFee === null ? undefined : review.simulation?.minimumRequiredFee,
+    });
+    if (system < BigInt(reviewedFees.minimumRequiredFee ?? reviewedFees.gasConsumed)) fail("artifact system fee is below the reviewed admission requirement");
     await client.revalidatePlan(review.plan);
     if (!same(artifact.profile, profile(client.profile))) fail("current native profile changed");
     const height = uint32(await client.rpc.send("getblockcount", []), "block count");

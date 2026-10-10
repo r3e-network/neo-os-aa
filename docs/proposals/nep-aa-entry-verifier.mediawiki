@@ -21,6 +21,8 @@ A SmartAccount protocol must also separate authorization from policy. A verifier
 
 This foundation is intentionally independent of deployment topology. It can be implemented by an ordinary deployed contract or by a separately specified native service. A native implementation requires additional consensus, identity, fee, governance, and migration rules; those rules are not implied by this foundation.
 
+Ordinary-contract and native implementations can be developed in parallel and compared against the shared operation, authorization and state-transition semantics. Such comparison does not make their deployment, witness enforcement, resource accounting or upgrade guarantees interchangeable. In particular, an ordinary contract on a network without the required platform-enforced child-budget capability can validate shared logical behavior, but cannot claim that a transaction-wide gas limit or contract convention satisfies the resource requirements below. Implementing the same operation interface does not activate a native service or preserve another profile's addresses and signing domain.
+
 ===Relationship to other proposals===
 
 The [https://github.com/neo-project/proposals/pull/218 contract-based verification-script draft (#218)] defines a generic witness-script layer. This proposal does not narrow that layer to a fixed method name, argument count, or invocation-script format.
@@ -119,6 +121,8 @@ For each operation, the core MUST perform the following steps in order:
 Invalid authorization, module failure, or target VM failure MUST fail the invocation rather than produce an apparently successful operation. Implementations MUST preserve Neo application-state atomicity: a failed invocation or batch commits neither target state nor consumed nonce. This does not refund transaction fees or imply that a failed transaction was never included in a block.
 
 A target returning Boolean <code>false</code> is not intrinsically a VM fault. The result is forwarded to the post-execution callbacks and the caller. A policy that requires business-level success MUST explicitly reject a result that fails its criterion.
+
+The ABI type <code>Any</code> does not by itself establish an unrestricted portable result domain. The selected implementation profile describes which target-result values can cross its callback and return boundaries, the applicable encoding and runtime limits, and failure behavior for unsupported values. For example, the current native implementation snapshots serializable VM values and rejects runtime handles and repeated container references; its result limits are distinct from its UserOperation argument limits. This example does not impose that native serializer or its runtime constants on an ordinary-contract profile. Callback isolation and application-state atomicity still apply as specified here.
 
 A batch executes operations in order and is all-or-nothing. A profile MAY impose a lower batch bound, but MUST publish the bound and all applicable resource limits.
 

@@ -56,9 +56,19 @@ The external payer is signer zero. Its scope is None unless it is also an explic
 
 `client.exportSignedTransaction(signed)` produces a versioned public artifact with the exact signed bytes, transaction fields, profile and witnesses. The browser can import it for the same reviewed plan, validate wallet signatures and fee ceilings, perform complete signed preflight, and explicitly send those bytes. See [signed transaction import](NATIVE_SIGNED_TRANSACTION_IMPORT.md). Import does not grant the workspace access to signing keys.
 
+For `cancelRecovery`, keep the cancellation authority separate from the payer.
+Pass `cancellationAuthority: custodyWallet.account` or the recovery wallet account
+alongside its wallet in `authoritySigners` (or as `feePayer` if it also pays).
+An explicit choice determines the native-service witness scope even when the
+other authority pays. Custody can cancel only before maturity; recovery can
+cancel any pending recovery. The SDK rechecks custody's chain-time window before
+requesting signatures. Without an explicit choice, the existing recovery-first
+selection remains. The final native execution always enforces the actual block
+state and time.
+
 ## Fees and final preflight
 
-Fees are integer datoshi. `gasconsumed` is actual consumption; bounded callbacks can need a larger admission budget. Automatic SystemFee requires `minimumrequiredfee`; an older node needs an explicit SystemFee budget for preparation. This does not bypass final validation. Fee caps are mandatory. `calculatenetworkfee` accounts for complete witness shape and is repeated using final signed witnesses.
+Fees from RPC must be canonical nonnegative Int64 decimal strings; malformed values and a `minimumrequiredfee` below `gasconsumed` are rejected before signing. Missing minimum admission data permits only explicit preparation budgets, which must still cover actual consumption. Final signed preflight requires both fields and applies the same checks. `gasconsumed` is actual consumption; bounded callbacks can need a larger admission budget. Automatic SystemFee requires `minimumrequiredfee`; an older node needs an explicit SystemFee budget for preparation. This does not bypass final validation. Fee caps are mandatory. `calculatenetworkfee` accounts for complete witness shape and is repeated using final signed witnesses.
 
 `preflightTransaction` calls `invoketransaction(base64RawTx)` and requires matching hash/network, snapshot identity, Verification Succeed, Application HALT, `relayed:false`, `mempoolChecked:false`, and minimum admission fee within the signed SystemFee. It also requires the RPC's `simulation` declaration: `mode:'single-transaction-next-block'`, `height:snapshot.height+1`, a canonical UInt64 decimal-string `timestamp`, UInt8 `primaryIndex`, `view:0`, `transactionCount:1`, `onPersist:'HALT'`, and canonical UInt160 `nextConsensus`. This confirms native fee processing ran before Application in a disposable single-transaction next-block context. It does not predict other transactions, the actual next primary or timestamp, or mempool acceptance. Broadcast repeats preflight on identical signed bytes. Unsupported RPC, a missing preparation declaration, or any mismatch refuses broadcast; the signed raw artifact remains exportable.
 
@@ -72,7 +82,7 @@ ABI 2 has no legacy import endpoint, import registry or migration event. Registe
 
 ## Module configuration and signing
 
-`buildModuleCall({accountId,role,child?,method,args})` accepts only method-specific args; the core prepends accountId. It checks the deployed configuration capability and ABI. Module admission for both configuration and witness signing requires metadata with numeric `abiVersion: 2`, the exact service profile digest and a Boolean composition marker. Missing, old or mistyped versions are refused. The core revalidates identity/code hash/authority/delay/epoch independently.
+`buildModuleCall({accountId,role,child?,method,args})` accepts only method-specific args; the core prepends accountId. It checks the deployed configuration capability and resolves the ABI by method name plus argument count, including the account ID prepended by the core. Different-arity overloads are valid; duplicate matching signatures, safe methods and methods without a leading Hash160 are refused. Module admission for both configuration and witness signing requires metadata with numeric `abiVersion: 2`, the exact service profile digest and a Boolean composition marker. Missing, old or mistyped versions are refused. The core revalidates identity/code hash/authority/delay/epoch independently.
 
 For the declared native-v2 `MultiSigVerifier` profile and its exact `setConfig(Hash160, Array, Integer)` capability, the SDK also checks the known configuration shape before staging: 1–3 ordered, unique child hashes and an integer threshold of 1–2 that does not exceed the roster size. Zero, self and service hashes are refused. This is a convenience for the built-in schema, not an inference about arbitrary third-party `setConfig` methods. The three-domain total, disjoint child signer domains, code pins and current child policies remain core-authoritative checks. Initial staging can succeed before child configuration is ready; its simulation does not prove the future configuration can be applied. After maturity, rebuild the complete confirmation and simulate it again before signing.
 

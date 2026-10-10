@@ -157,6 +157,7 @@ function fixture() {
         relayed: false,
         mempoolChecked: false,
         minimumrequiredfee: "100",
+        gasconsumed: "10",
         stack: [{ type: "Any" }],
         ...override,
       };
@@ -1081,4 +1082,82 @@ test("verifier admission refuses even code-pinned modules with mismatched profil
       /profile|composition/i,
     );
   }
+});
+
+test("invalid simulation fee responses cannot reach a signing callback", async () => {
+  for (const minimum of ["9", 100, "01", "-1", "1.5", "9223372036854775808"]) {
+    const f = fixture(); f.setMin(minimum); let signatures = 0;
+    f.payer.sign = () => { signatures++; throw Error("must not sign"); };
+    await assert.rejects(async () => {
+      const tx = await f.tool.prepareNativeTransaction(f.client,f.plan,f.options);
+      await f.tool.signNativeTransaction(f.client,tx);
+    }, /fee/);
+    assert.equal(signatures,0);
+  }
+  const f = fixture(); f.setMin(null);
+  await assert.rejects(f.tool.prepareNativeTransaction(f.client,f.plan,{...f.options,systemFee:"9"}),/consum|fee/);
+});
+
+function cancellationFixture(now = 1000) {
+  const f = fixture(), send = f.client.rpc.send;
+  f.plan = {kind:"lifecycle",method:"cancelRecovery",accountId:"11".repeat(20),
+    script:c.dynamicCall(CORE,"cancelRecovery",[c.hashValue("11".repeat(20))]),requiredAuthorities:[],
+    authorityPolicy:"recovery-or-custody-before-maturity",accountState:{custodyAddress:f.custody.account,recoveryAddress:f.payer.account,pendingRecovery:{matureAt:"2000"}}};
+  let time = now;
+  f.client.rpc.send = (method, params) => method === "getblockheader" ? {time} : send(method,params);
+  f.setTime = value => {time=value;};
+  return f;
+}
+test("explicit recovery cancellation keeps payer and authority roles separate", async () => {
+  for (const selected of ["custody", "recovery"]) {
+    const f = cancellationFixture(), authority = selected === "custody" ? f.custody : f.payer;
+    const payer = selected === "custody" ? f.payer : f.custody;
+    const tx = await f.tool.prepareNativeTransaction(f.client,f.plan,{...f.options,feePayer:payer,authoritySigners:[authority],cancellationAuthority:authority.account});
+    assert.deepEqual(tx.transaction.signers,[{account:"0x"+payer.account,scopes:"None"},{account:"0x"+authority.account,scopes:"CustomContracts",allowedcontracts:["0x"+CORE]}]);
+    assert.equal((await f.tool.signNativeTransaction(f.client,tx)).witnesses.length,2);
+  }
+  const f = cancellationFixture(2000);
+  const tx = await f.tool.prepareNativeTransaction(f.client,f.plan,{...f.options,cancellationAuthority:f.payer.account});
+  assert.equal(tx.transaction.signers.length,1);
+  assert.equal(tx.transaction.signers[0].scopes,"CustomContracts");
+});
+test("custody cancellation refuses at maturity and rechecks the chain before signatures", async () => {
+  for (const time of [2000,2001]) {
+    const f = cancellationFixture(time);
+    await assert.rejects(f.tool.prepareNativeTransaction(f.client,f.plan,{...f.options,authoritySigners:[f.custody],cancellationAuthority:f.custody.account}),/matur/);
+  }
+  const f = cancellationFixture(); let signed = 0;
+  f.payer.sign = () => {signed++; throw Error("must not sign");};
+  const tx = await f.tool.prepareNativeTransaction(f.client,f.plan,{...f.options,authoritySigners:[f.custody],cancellationAuthority:f.custody.account});
+  f.setTime(2000);
+  await assert.rejects(f.tool.signNativeTransaction(f.client,tx),/matur/);
+  assert.equal(signed,0);
+});
+test("explicit cancellation requires the selected real authority and correct action", async () => {
+  const f = cancellationFixture();
+  for (const cancellationAuthority of ["77".repeat(20),"00".repeat(20)])
+    await assert.rejects(f.tool.prepareNativeTransaction(f.client,f.plan,{...f.options,cancellationAuthority}),/authority/);
+  await assert.rejects(f.tool.prepareNativeTransaction(f.client,f.plan,{...f.options,cancellationAuthority:f.custody.account}),/signer/);
+  const unrelated = fixture();
+  await assert.rejects(unrelated.tool.prepareNativeTransaction(unrelated.client,unrelated.plan,{...unrelated.options,cancellationAuthority:unrelated.payer.account}),/cancelRecovery/);
+});
+
+test("network fee RPC fields use exact strings during preparation and after signatures", async () => {
+  for (const invalid of [50,null,"01","-1","0.5","9223372036854775808"]) {
+    const f = fixture(); f.setNetwork(invalid);
+    await assert.rejects(f.tool.prepareNativeTransaction(f.client,f.plan,f.options),/network.*fee/);
+    f.setNetwork("50");
+    const tx = await f.tool.prepareNativeTransaction(f.client,f.plan,f.options);
+    f.setNetwork(invalid);
+    await assert.rejects(f.tool.signNativeTransaction(f.client,tx),/network.*fee/);
+  }
+});
+
+test("custody cancellation rejects maturity reached during signing before final fees or submission", async () => {
+  const f = cancellationFixture(1999), sign = f.custody.sign;
+  f.custody.sign = async (bytes) => { const signature = await sign(bytes); f.setTime(2000); return signature; };
+  const prepared = await f.tool.prepareNativeTransaction(f.client,f.plan,{...f.options,authoritySigners:[f.custody],cancellationAuthority:f.custody.account});
+  await assert.rejects(f.tool.signNativeTransaction(f.client,prepared),/matur/);
+  assert.equal(f.calls.filter(call=>call.method === "calculatenetworkfee").length,1);
+  assert.equal(f.calls.some(call=>call.method === "sendrawtransaction"),false);
 });

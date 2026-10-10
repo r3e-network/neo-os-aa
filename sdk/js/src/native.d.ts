@@ -201,6 +201,8 @@ export interface NativeWalletSigner {
 export interface NativeTransactionOptions {
   feePayer: NativeWalletSigner;
   authoritySigners?: NativeWalletSigner[];
+  /** Explicit custody or recovery authority for cancelRecovery, independently of feePayer. */
+  cancellationAuthority?: string;
   /** Explicit NeoNativeVerifier witnesses; scopes are derived from current root/active children and code pins. */
   verifierSigners?: NativeWalletSigner[];
   systemFee?: NativeInteger;
@@ -212,6 +214,7 @@ export interface NativeTransactionOptions {
 }
 export interface NativePreparedTransaction {
   readonly kind: "native-transaction";
+  readonly cancellationAuthority?: string;
   readonly plan: NativePlan;
   readonly transaction: {
     readonly nonce: number;

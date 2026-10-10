@@ -212,6 +212,16 @@
               </select></label
             >
             <p class="callout">{{ selectedAction.detail }}</p>
+            <template v-if="action === 'cancelRecovery'">
+              <label>{{ L("Cancellation authority", "取消授权方") }}
+                <select v-model="cancellationAuthority" data-testid="native-cancellation-authority" :aria-label="L('Cancellation authority', '取消授权方')">
+                  <option value="">{{ L("Same as fee payer", "与付费者相同") }}</option>
+                  <option :value="snapshot.account.custodyAddress" :disabled="!custodyCanCancelRecovery">{{ L("Current custody · before maturity only", "当前托管方 · 仅限成熟前") }} · 0x{{ snapshot.account.custodyAddress }}</option>
+                  <option v-if="snapshot.account.recoveryAddress !== ZERO_HASH" :value="snapshot.account.recoveryAddress">{{ L("Current recovery · while pending", "当前恢复方 · 提议仍待处理时") }} · 0x{{ snapshot.account.recoveryAddress }}</option>
+                </select>
+              </label>
+              <p class="small">{{ L("Choose who authorizes cancellation separately from who pays fees. Different wallets use the exact-script SDK path. Custody loses cancellation authority at maturity; recovery may cancel any still-pending recovery. Chain time is checked again before handoff.", "取消授权与费用支付可由不同钱包承担，此时自动使用 SDK 精确脚本签名。到达成熟时间后托管方不可取消；恢复方可取消任何仍待处理的恢复提议。提交前会重新检查链上时间。") }}</p>
+            </template>
             <div v-if="action === 'freeze' || action === 'unfreeze' || snapshot.account.status === 'Frozen'" class="callout" data-testid="native-freeze-risk">
               <strong>{{ snapshot.account.status === 'Frozen' ? L("What is needed to unfreeze", "解冻所需条件") : L("Before freezing: plan how to unfreeze", "冻结前：确认如何解冻") }}</strong>
               <p>{{ L("Unfreezing requires both of these authorities to sign the same transaction:", "解冻需要以下双方共同签署同一笔交易：") }}</p>
@@ -668,7 +678,7 @@
         <p class="small">
           {{
             L(
-              "The actor pays network and system fees. Confirm actual transaction fees in the wallet.",
+              "The fee payer pays network and system fees. Confirm actual transaction fees in the wallet.",
               "所选钱包承担网络费和系统费，实际费用请在钱包确认页核对。",
             )
           }}
@@ -695,6 +705,10 @@
             <dd class="mono">0x{{ review.plan.accountId }}</dd>
             <dt>{{ L("Fee payer", "付费者") }}</dt>
             <dd class="mono">0x{{ review.feePayer }}</dd>
+            <template v-if="review.cancellationAuthority">
+              <dt>{{ L("Cancellation authority", "取消授权方") }}</dt>
+              <dd class="mono" data-testid="native-reviewed-cancellation-authority">0x{{ review.cancellationAuthority }}</dd>
+            </template>
             <dt>{{ L("Required authorities", "所需权限") }}</dt>
             <dd class="mono" data-testid="native-required-authorities">
               {{
@@ -713,7 +727,7 @@
                 review.signers
                   .map(
                     (s) =>
-                      s.scopes +
+                      s.account + " · " + s.scopes +
                       (s.allowedcontracts?.length
                         ? " · " + s.allowedcontracts.join(", ")
                         : ""),
@@ -952,7 +966,8 @@ const operation = reactive({
   signature: "",
 });
 const action = ref("freeze"),
-  actionAddress = ref("");
+  actionAddress = ref(""),
+  cancellationAuthority = ref("");
 const workspace = createNativeWorkspace({
   wallet: createNativeWalletAdapter(walletService),
 });
@@ -971,6 +986,10 @@ const actionBlocked = computed(() =>
     action.value,
     snapshot.value?.chainTime ?? 0,
   ),
+);
+const custodyCanCancelRecovery = computed(() =>
+  !!snapshot.value?.account.pendingRecovery &&
+  BigInt(snapshot.value.chainTime) < BigInt(snapshot.value.account.pendingRecovery.matureAt),
 );
 const derived = computed(() => {
   try {
@@ -1066,6 +1085,7 @@ watch(
     () => ({ ...operation }),
     action,
     actionAddress,
+    cancellationAuthority,
     feePayer,
     signingPath,
     tab,
@@ -1078,6 +1098,7 @@ watch(
   () => {
     snapshot.value = null;
     pendingPolicy.value = null;
+    cancellationAuthority.value = "";
     clearReview();
   },
   { flush: "sync" },
@@ -1209,6 +1230,7 @@ async function reviewAction() {
         submission: signingPath.value,
         address: actionAddress.value,
         feePayer: feePayer.value,
+        cancellationAuthority: cancellationAuthority.value,
       }),
     ),
   );

@@ -30,6 +30,13 @@ review and public-network activation remain separate draft-release gates.
    authority epoch and preserves funding address, nonces and frozen state.
    The configured recovery authority may cancel any still-pending recovery;
    custody may cancel only strictly before maturity.
+   **Cancellation authority** selects the wallet that authorizes cancellation,
+   separately from **Fee payer**. The same-wallet default remains available.
+   An independent payer receives `None` scope; the selected authority receives
+   `CustomContracts` restricted to the native service. Choosing different wallets
+   automatically uses the exact-script SDK path. At maturity, including the exact
+   boundary, custody can no longer cancel; recovery can cancel while the proposal
+   is still pending. Fresh chain time is checked again before export and handoff.
    Mature verifier, hook and guardian-address activations, and mature custody
    recovery execution, require only a fee payer. They operate on the pending
    intent present at execution and must pass current state and maturity checks.
@@ -144,8 +151,18 @@ proxy signer scopes against the rebuilt plan. Then use the native SDK's
 its actual wallet signer interfaces and final user approval. SDK-mode scopes are
 shown before export: payer first (`None` unless also required), proxy second for
 execution, then remaining authorities with `CustomContracts` restricted to the
-native service. Recovery cancellation includes its selected custody/recovery
-actor in the required set. Receipt checks require the same signer order and exact
+native service. Recovery cancellation exports its selected `cancellationAuthority`
+separately from `feePayer`, and includes only that selected custody/recovery wallet
+in the required set. Rebuilding checks the exported authority and the complete
+actual signer roster against the fresh plan; it does not change the issued plan.
+Older version-one cancellation exports that omit this field are accepted only
+when the payer is also the required cancellation authority and their complete
+signer roster matches that same-wallet selection. Explicit invalid fields or
+an independent-payer roster do not receive this compatibility fallback.
+Pass that same `cancellationAuthority` to `prepareTransaction`, supply the payer
+wallet as `feePayer`, and supply the selected authority in `authoritySigners` when
+it differs from the payer. Editing either selection invalidates the previous
+review and any imported signed transaction. Receipt checks require the same signer order and exact
 scopes; no broader superset is accepted. Additional NeoNativeVerifier or MultiSig
 transaction witness signers are not collected by this UI. Such integrations need
 a separate SDK review that includes their discovered module scopes; this page
