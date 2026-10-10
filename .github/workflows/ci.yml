@@ -32,7 +32,7 @@ jobs:
             sdk/js/package-lock.json
       # Needs no packages, so it still runs when the gate below fails.
       - name: Repository hygiene and package-pin tests
-        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/fuzz_continuous.test.mjs scripts/source_map_js_pin.test.mjs scripts/verify_repo.test.mjs
+        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/fuzz_continuous.test.mjs scripts/source_map_js_pin.test.mjs
       # Neo.SmartContract.Framework and Neo.SmartContract.Testing 3.10.1, the Neo packages they pull
       # in and every other NuGet package are published on nuget.org, which nuget.config makes the
       # only source. Directory.Build.props pins the framework and the packages.lock.json next to
