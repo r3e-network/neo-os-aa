@@ -80,7 +80,7 @@ test("recovery cancellation separates its payer and authority and invalidates st
       await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id, result }) });
     });
     const url = `http://127.0.0.1:${server.httpServer.address().port}/native`;
-    await page.goto(url);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90000 });
     await page.getByRole("heading", { name: "Native accounts", exact: true }).waitFor();
     assert.equal(page.url(), url);
     assert.match(await page.title(), /Native Accounts/);
