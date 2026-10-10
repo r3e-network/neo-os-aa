@@ -19,6 +19,19 @@ export const nativeCodec = createNativeCodec({
   hash160: (hex) => ripemd160(sha256("0x" + hex)).slice(2),
 });
 const Client = createNativeClientClass(nativeCodec);
+async function browserTransactionTools() {
+  const [{ createNativeTransactionArtifactTools }, { createNativeWalletWitnessTools }] = await Promise.all([
+    import("../../shared/nativeTransactionArtifact.mjs"),
+    import("../../shared/nativeWalletWitness.mjs"),
+  ]);
+  return createNativeTransactionArtifactTools({
+    codec: nativeCodec,
+    sha256: (hex) => sha256("0x" + hex).slice(2),
+    walletWitness: createNativeWalletWitnessTools({
+      hash160: (hex) => ripemd160(sha256("0x" + hex)).slice(2).match(/../g).reverse().join(""),
+    }),
+  });
+}
 const fail = (message) => {
   throw new Error(message);
 };
@@ -35,6 +48,15 @@ export const jsonText = (value) =>
     (_, item) => (typeof item === "bigint" ? item.toString() : item),
     2,
   );
+export function nativeGasLimit(value) {
+  const text = String(value).trim();
+  if (text.length > 32 || !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,8})?$/.test(text))
+    fail("Enter an explicit GAS fee limit with at most 8 decimal places.");
+  const [whole, fraction = ""] = text.split(".");
+  const amount = BigInt(whole) * 100000000n + BigInt(fraction.padEnd(8, "0"));
+  if (amount > 9223372036854775807n) fail("The fee limit is too large.");
+  return amount.toString();
+}
 export function nativeAddress(value, { zero = false } = {}) {
   const raw = String(value ?? "").trim();
   const address = nativeCodec.hex(
@@ -523,14 +545,31 @@ export function createNativeWorkspace({
   makeClient = ({ rpcUrl, networkMagic }) =>
     new Client({ rpcClient: createNativeRpc(rpcUrl), networkMagic }),
   wallet,
+  transactionTools,
 } = {}) {
   let generation = 0,
     intentVersion = 0,
     client = null,
     profile = null,
     active = null,
-    submitting = false;
+    submitting = false,
+    imported = null,
+    importVersion = 0,
+    archived = null,
+    archiveVersion = 0;
   const reviews = new WeakMap();
+  const imports = new WeakMap();
+  const archives = new WeakMap();
+  let toolsPromise;
+  const exactTools = () => toolsPromise ||= Promise.resolve(transactionTools || browserTransactionTools());
+  function clearImported() {
+    imported = null;
+    importVersion++;
+  }
+  function clearArchived() {
+    archived = null;
+    archiveVersion++;
+  }
   function guard(version) {
     if (version !== generation || !client || !profile)
       fail(
@@ -541,6 +580,7 @@ export function createNativeWorkspace({
     if (!client || !profile)
       fail("Complete native discovery before creating a review.");
     active = null;
+    clearImported();
     return { version: generation, c: client, intent: ++intentVersion };
   }
   async function clock(c) {
@@ -573,6 +613,7 @@ export function createNativeWorkspace({
     const authorities = [...plan.requiredAuthorities];
     const walletSupported =
       requestedSubmission !== "native-sdk" &&
+      !plan.requiresExactScript &&
       !!args &&
       authorities.length <= 1 &&
       (!authorities.length || authorities[0] === actor);
@@ -636,18 +677,25 @@ export function createNativeWorkspace({
     clearReview() {
       intentVersion++;
       active = null;
+      clearImported();
     },
+    clearImported,
+    clearArchived,
     invalidate() {
       generation++;
       client = null;
       profile = null;
       active = null;
+      clearImported();
+      clearArchived();
     },
     async connect(options) {
       const version = ++generation;
       client = null;
       profile = null;
       active = null;
+      clearImported();
+      clearArchived();
       const candidate = makeClient(options);
       const discover = candidate.discover.bind(candidate);
       candidate.discover = async () => {
@@ -795,7 +843,7 @@ export function createNativeWorkspace({
         submission: input.submission,
         description:
           input.action === "cancelModuleCall"
-            ? `Cancel the pending ${plan.role} policy call. Custody authority is required; active permissions remain unchanged.`
+            ? `Cancel the reviewed ${plan.role} policy call. The exact script checks that this pending intent is unchanged before cancelling it; active permissions remain unchanged.`
             : NATIVE_ACTIONS.find((a) => a.value === input.action)?.detail ||
               input.action,
       });
@@ -990,6 +1038,102 @@ export function createNativeWorkspace({
       guard(meta.version);
       if (active !== review) fail("Review inputs changed. Preview again.");
       return { format: "neo-native-reviewed-request", version: 1, ...review };
+    },
+    async importSigned(review, text, caps) {
+      const meta = reviews.get(review);
+      if (!meta || meta.used || active !== review || review.submission !== "native-sdk")
+        fail("Create a current exact-script review before importing a signed transaction.");
+      guard(meta.version);
+      clearImported();
+      const revision = importVersion;
+      const tools = await exactTools();
+      const result = await tools.importArtifact(meta.c, review, text, caps);
+      guard(meta.version);
+      if (active !== review || revision !== importVersion)
+        fail("Review or fee limits changed during import. Import again.");
+      imports.set(result, { ...meta, review, tools, revision, attempted: false });
+      imported = result;
+      return result;
+    },
+    async preflightSigned(transaction) {
+      const meta = imports.get(transaction);
+      const check = () => {
+        if (!meta || imported !== transaction || active !== meta.review || meta.revision !== importVersion)
+          fail("The imported transaction is stale. Review and import again.");
+        guard(meta.version);
+      };
+      check();
+      if (meta.attempted) fail("Submission was already attempted. Check this transaction's confirmation.");
+      const result = await meta.tools.preflight(meta.c, transaction);
+      check();
+      return result;
+    },
+    async broadcastSigned(transaction) {
+      const meta = imports.get(transaction);
+      const check = () => {
+        if (!meta || imported !== transaction || active !== meta.review || meta.revision !== importVersion)
+          fail("The imported transaction is stale. Review and import again.");
+        guard(meta.version);
+      };
+      check();
+      if (meta.attempted) fail("Submission was already attempted. Check this transaction's confirmation.");
+      if (submitting) fail("A transaction submission is already pending.");
+      submitting = true;
+      try {
+        const result = await meta.tools.broadcast(meta.c, transaction, { assertCurrent: check });
+        meta.attempted = true;
+        reviews.get(meta.review).used = true;
+        return result;
+      } catch (error) {
+        if (error.submissionAttempted) {
+          meta.attempted = true;
+          reviews.get(meta.review).used = true;
+        }
+        throw error;
+      } finally {
+        submitting = false;
+      }
+    },
+    async confirmSigned(transaction) {
+      const meta = imports.get(transaction);
+      const check = () => {
+        if (!meta || imported !== transaction || active !== meta.review || meta.revision !== importVersion)
+          fail("The imported transaction is stale. Use the matching review to check its receipt.");
+        guard(meta.version);
+      };
+      check();
+      const receipt = await meta.tools.receipt(meta.c, transaction);
+      check();
+      return receipt;
+    },
+    async restoreReceipt(reviewText, artifactText) {
+      const version = generation, c = client;
+      guard(version);
+      clearArchived();
+      const revision = archiveVersion;
+      if (typeof reviewText !== "string" || reviewText.length > 1048576)
+        fail("Archived review exceeds the input limit.");
+      let review;
+      try { review = JSON.parse(reviewText); } catch { fail("Archived review must be valid JSON."); }
+      const tools = await exactTools();
+      const result = await tools.restoreForReceipt(c, review, artifactText);
+      guard(version);
+      if (revision !== archiveVersion) fail("Receipt files changed during verification. Restore again.");
+      archives.set(result, { version, c, tools, revision });
+      archived = result;
+      return result;
+    },
+    async confirmRestoredReceipt(transaction) {
+      const meta = archives.get(transaction);
+      const check = () => {
+        if (!meta || archived !== transaction || meta.revision !== archiveVersion)
+          fail("Receipt files changed. Restore them again.");
+        guard(meta.version);
+      };
+      check();
+      const receipt = await meta.tools.receipt(meta.c, transaction);
+      check();
+      return receipt;
     },
     async confirm(review, txid) {
       const meta = reviews.get(review);

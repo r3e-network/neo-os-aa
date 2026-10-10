@@ -1,0 +1,72 @@
+{
+  "schema": "smartaccount-native-domain-copy-validation/v1",
+  "status": "PASS",
+  "completedAtUtc": "2026-10-09T03:25:39.062244+00:00",
+  "publicNetworksTouched": false,
+  "sourceChange": "contracts/verifiers/MultiSigVerifier.cs: replace only the owned 32-byte loop with Helper.Range",
+  "sourceMirror": "frontend/src/assets/contracts/verifiers/MultiSigVerifier.cs",
+  "sourceMirrorIdentical": true,
+  "sourceInputChanges": [
+    "contracts/verifiers/MultiSigVerifier.cs"
+  ],
+  "baselineMatchesHistoricalArtifacts": true,
+  "runtimeBuildFilesVerified": 104,
+  "runtimeSourceCommits": {
+    "core": "ff422d940a4722c361c32398c6f28c00fb7f0693",
+    "node": "2f4b607699d7c34e24b770ede56effde7c5ef60b",
+    "express": "da143f8643ebca7841cc7f56e4e3e00293819fbc"
+  },
+  "buildConfiguration": "Release",
+  "sdk": "10.0.400",
+  "warmupPerCase": 5,
+  "samplesPerCase": 30,
+  "casesPerVersion": 18,
+  "measuredSamplesPerVersion": 540,
+  "defaultAcceptanceCases": 20,
+  "defaultAcceptanceValidator": "scripts/native_profile_ci.py:validate_probe",
+  "defaultAcceptanceValidation": "PASS",
+  "comparisonValidation": "PASS",
+  "pythonComparatorTests": 15,
+  "expectedRedControl": {
+    "status": "FAIL",
+    "error": "Required strict postExecuteComposite GAS improvement for SSN/110 Maximum=true was not measured",
+    "receiptSha256": "bb2d753ec460da54cace63c2308fa06bbcc1cbc2e643434a5ba0e53898a17c6e",
+    "baselineComparedWithItself": true
+  },
+  "artifactFiles": {
+    "comparison.json": "191917ca34fd1d5ba12872ba739a33d3f2ed71ca9d72a96b4c1606643125150b",
+    "candidate-acceptance.json": "646342edcc462ef3d5d17275ae038d0fba36466738761b5c466172632e4973bd",
+    "runner-build.json": "b172f9846e98d3a4649b2e1b24d10ac8e21acd1710d50ec1c30a890d8b0242fe"
+  },
+  "recipeSha256": {
+    "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
+    "scripts/native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
+    "scripts/native_budget_benchmark.py": "3954472a927e7fdff3da0b2b70977f8445db06c5b6a1db5446983711d90d4d71",
+    "scripts/test_native_budget_benchmark.py": "b7c4ef3d43bff751a8dce8e8d56b03b604b1219abc2a2f94852763abe7ef083c"
+  },
+  "limits": [
+    "ApplicationEngine.Execute timing with synthetic transaction signers and in-memory snapshots; no wallet, mempool, consensus or public network measurement.",
+    "Fixed local host; run order and concurrent machine load can affect wall-clock distributions.",
+    "Logical serialized storage bytes, not physical database growth.",
+    "Existing deployed module artifacts are unchanged; this candidate requires ordinary module admission and lifecycle.",
+    "No compiler refinement proof, cross-account proxy authority validation or release approval is claimed.",
+    "Operation and signature bytes are fixed within each scenario run; independent signatures and no transaction-script hash prevent a byte-identical-input claim across versions."
+  ],
+  "rangeCopyEvidence": {
+    "frameworkSource": "Neo.SmartContract.Framework 3.10.1 src/Helper.cs:207-208",
+    "frameworkArchiveSha256": "e59c42fef8b983ad5dd7644f06ebd431664d6dca92eacebfe1c1c6f7a6837cac",
+    "opcode": "SUBSTR",
+    "runtimeAssemblySha256": "ccd160139cb55fec9d9656dc5a36e222b79e99a7b81888da598a1bd04cbaac97",
+    "verifiedImplementation": "Allocate a new Buffer(count), copy span.Slice(index, count) into its InnerBuffer, and push the new buffer."
+  },
+  "publicEvidenceOmissions": [
+    {
+      "path": "baseline-build.json",
+      "reason": "Raw build receipt is regenerated locally; comparison and validation receipts retain the measured result."
+    },
+    {
+      "path": "candidate-build.json",
+      "reason": "Raw build receipt is regenerated locally; comparison and validation receipts retain the measured result."
+    }
+  ]
+}

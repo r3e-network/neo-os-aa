@@ -451,7 +451,7 @@ for (const action of [
   });
 }
 
-function setCancellationIntent(f, amount = 7, proposedAt = 1) {
+function setCancellationIntent(f, amount = 7, proposedAt = 1, extraArguments = []) {
   const binding = A([H(verifier), B("aa".repeat(32))]);
   f.add(
     "getPendingModuleCall",
@@ -463,7 +463,7 @@ function setCancellationIntent(f, amount = 7, proposedAt = 1) {
       binding,
       binding,
       B(Buffer.from("setLimit").toString("hex")),
-      A([H(h), I(amount)]),
+      A([H(h), I(amount), ...extraArguments]),
       I(proposedAt),
       I(proposedAt + 86400000),
       I(11),
@@ -503,13 +503,82 @@ test("module cancellation plans retain the role and complete pending intent", as
   );
   assert.equal(Object.isFrozen(plan.pending), true);
   assert.equal(Object.isFrozen(plan.pending.invokedArguments.value), true);
+  assert.equal(plan.requiresExactScript, true);
+  const binding = {
+    type: "Array",
+    value: [c.hashValue(verifier), { type: "ByteString", value: "aa".repeat(32) }],
+  };
+  const expected = c.serializeValue({
+    type: "Array",
+    value: [
+      I(1), c.hashValue(h), I(0), binding, structuredClone(binding),
+      c.stringValue("setLimit"),
+      { type: "Array", value: [c.hashValue(h), I(7)] },
+      I(1), I(86400001), I(11),
+    ],
+  });
+  assert.equal(plan.pendingCallBytes, expected);
+  const args = [c.hashValue(h), c.stringValue("verifier")];
+  const read = c.dynamicCall(CORE, "getPendingModuleCall", args, 5);
+  const serialize =
+    "11c010" + c.encodeValue(c.stringValue("serialize")) +
+    c.encodeValue(c.hashValue("acce6fd80d44e1796aa0c2c625e9e4e0ce39efc0")) +
+    "41627d5b52";
+  const cancel = c.dynamicCall(CORE, "cancelModuleCall", args);
   assert.equal(
     plan.script,
-    c.dynamicCall(CORE, "cancelModuleCall", [
-      c.hashValue(h),
-      c.stringValue("verifier"),
-    ]),
+    read + serialize + c.encodeValue({ type: "ByteString", value: expected }) +
+      "9739" + cancel,
   );
+  assert.notEqual(plan.script, cancel);
+});
+
+test("module cancellation guard preserves canonical VM argument types and depth", async () => {
+  const values = [
+    I(1), B("01"), { type: "Boolean", value: true }, N,
+    A([I(1)]), { type: "Struct", value: [I(1)] },
+  ];
+  const encodings = new Set();
+  for (const value of values) {
+    const f = fixture();
+    setCancellationIntent(f, 7, 1, [value]);
+    const plan = await f.client.buildAction({
+      accountId: h, action: "cancelModuleCall", role: "verifier",
+    });
+    assert.equal(plan.requiresExactScript, true);
+    encodings.add(plan.pendingCallBytes);
+  }
+  assert.equal(encodings.size, values.length);
+  let nested = I(1);
+  for (let depth = 0; depth < 8; depth++) nested = A([nested]);
+  const f = fixture();
+  setCancellationIntent(f, 7, 1, [nested]);
+  const plan = await f.client.buildAction({
+    accountId: h, action: "cancelModuleCall", role: "verifier",
+  });
+  assert.ok(plan.pendingCallBytes);
+  setCancellationIntent(f, 7, 1, [A([nested])]);
+  await assert.rejects(
+    () => f.client.buildAction({
+      accountId: h, action: "cancelModuleCall", role: "verifier",
+    }),
+    /depth/,
+  );
+});
+
+test("module cancellation guard treats an identical pending record as the same content", async () => {
+  const f = fixture();
+  setCancellationIntent(f);
+  const before = await f.client.buildAction({
+    accountId: h, action: "cancelModuleCall", role: "verifier",
+  });
+  setCancellationIntent(f);
+  const after = await f.client.buildAction({
+    accountId: h, action: "cancelModuleCall", role: "verifier",
+  });
+  assert.equal(before.pendingCallBytes, after.pendingCallBytes);
+  assert.equal(before.script, after.script);
+  assert.equal(await f.client.revalidatePlan(before), true);
 });
 
 test("module cancellation rejects a replacement intent with an unchanged account record", async () => {

@@ -14,7 +14,7 @@ Hash160 inputs are display-order hex; `nativeCodec.hashValue(hash)` converts the
 
 ## Registration and custody execution
 
-Provide wallet adapters `{account, verificationScript, sign(signDataHex)}` for standard Neo P-256 single-signature accounts. `sign` signs the exact supplied bytes using P-256/SHA-256 once and returns 64-byte IEEE P1363 r||s hex. Do not apply a message prefix or hash an already hashed digest again. The SDK stores no private keys.
+Provide wallet adapters `{account, verificationScript, sign(signDataHex)}` for standard Neo P-256 CHECKSIG or canonical CHECKMULTISIG accounts. `sign` signs the exact supplied bytes using P-256/SHA-256 once. A single-signature adapter returns 64-byte IEEE P1363 r||s hex; a multisignature adapter returns `{publicKey, signature}` records. The SDK verifies every submitted signature and assembles the required quorum in script order. Do not apply a message prefix or hash an already hashed digest again. The SDK stores no private keys. See [threshold recovery](NATIVE_ACCOUNT_THRESHOLD_RECOVERY.md) for script limits and backup requirements.
 
 ```js
 const { NativeSmartAccountClient, nativeCodec: c } = require('neo-abstract-account');
@@ -52,7 +52,9 @@ const transferTx = await client.prepareTransaction(plan, {
 await client.broadcastTransaction(await client.signTransaction(transferTx));
 ```
 
-The external payer is signer zero. Its scope is None unless it is also an explicitly required custody/recovery authority. Proxy scope is CustomContracts restricted to operation targets; its witness is empty invocation plus canonical verification script. Custody/recovery scopes target AccountManagement. Proxy-as-payer, conflicting wallet identities and unsupported wallet scripts are rejected. A wallet explicitly selected in several authority roles is encoded once with only those derived scopes. The current transport supports ordinary P-256 single-signature wallets, not arbitrary wallet multisignature scripts.
+The external payer is signer zero. Its scope is None unless it is also an explicitly required custody/recovery authority. Proxy scope is CustomContracts restricted to operation targets; its witness is empty invocation plus canonical verification script. Custody/recovery scopes target AccountManagement. Proxy-as-payer, conflicting wallet identities and unsupported wallet scripts are rejected. A wallet explicitly selected in several authority roles is encoded once with only those derived scopes. Standard wallet multisignatures are supported for custody, recovery and the payer. They count public-key signatures within one wallet witness and are distinct from the native MultiSigVerifier's module quorum.
+
+`client.exportSignedTransaction(signed)` produces a versioned public artifact with the exact signed bytes, transaction fields, profile and witnesses. The browser can import it for the same reviewed plan, validate wallet signatures and fee ceilings, perform complete signed preflight, and explicitly send those bytes. See [signed transaction import](NATIVE_SIGNED_TRANSACTION_IMPORT.md). Import does not grant the workspace access to signing keys.
 
 ## Fees and final preflight
 
@@ -101,16 +103,19 @@ const cancellationTx = await client.prepareTransaction(cancellation, {
 await client.broadcastTransaction(await client.signTransaction(cancellationTx));
 ```
 
-Use `role:'hook'` for a hook policy call. The cancellation plan retains the role
-and pending-call snapshot; revalidation rejects a changed or missing intent
-when that change is observed. The native cancellation encodes only
-`cancelModuleCall(accountId, role)`, with no pending-call digest or counter in
-its arguments. The snapshot is a client review check, not an on-chain commitment:
-pending state can still change after the last revalidation and before inclusion,
-and the transaction acts on the pending call present for that role when it
-executes. Coordinate custody devices to avoid concurrent policy changes and
-inspect confirmed pending state. Cancellation removes a proposal, not the active
-policy. Build and review a fresh plan after an observed change.
+Use `role:'hook'` for a hook policy call. The cancellation plan retains the role,
+pending-call snapshot and its canonical `pendingCallBytes`. Its complete signed
+script reads and serializes the current pending record, asserts byte equality,
+then calls `cancelModuleCall(accountId, role)` in the same transaction. Changed
+or missing content therefore faults before cancellation, including changes after
+the last client revalidation. Preserve `requiresExactScript: true`; a wallet
+method-and-arguments invocation would omit this protection and is refused by the
+workspace. The native entrypoint itself remains unchanged for deliberate slot
+cancellation. This binds content, not a unique proposal instance: an exactly
+identical record recreated in the same block can still match. See the
+[transaction guard specification](NATIVE_ACCOUNT_TRANSACTION_GUARDS.md).
+Cancellation removes a proposal, not the active policy. Build and review a fresh
+plan after a change, and inspect the confirmed pending state.
 
 A Session signer signs `prepared.preimage` with P-256/SHA-256 once. `prepared.digest` is its independently computed, chain-matched SHA-256. Attach the signature with `attachSignature(prepared, signatureHex)` and buildExecution. A verifier-authorized operation can use an independent payer without a custody transaction signature. For NeoNativeVerifier, pass `verifierSigners:[walletAdapter]` explicitly to `prepareTransaction`. The SDK reads the core-owned verifier root and active leaf roster, reconstructs complete deployed NEF bytes and JCS manifest code hashes, checks stored pins, and reads each native witness leaf's configured signer list. CustomContracts includes only matching leaves. A MultiSigVerifier root with direct native witness children is supported; recursive or unregistered children are refused. Merely paying fees does not grant verifier authority. Payer/custody and verifier roles can deliberately share a key, but only explicit selection adds that module scope. Config/roster/code pins are rechecked before and after signing and before broadcast.
 
@@ -173,5 +178,7 @@ RPC execution evidence is checked before transaction signing and again on the ex
 The default RPC transport preserves a JSON-RPC error's numeric `code` and structured `data`. Signed preflight errors also retain the original `cause`; broadcast adds the immutable `txid` and `submissionAttempted`. A preflight failure can be retried with the same signed bytes after the node recovers. Once submission has been attempted, inspect that transaction's receipt to resolve uncertainty instead of silently signing or sending another transaction.
 
 The reproducible private integration entry point is `sdk/js/tests/native-runtime-verifiers.py`. Supply `--runtime`, `--build-receipt`, `--artifacts`, `--module-receipt`, `--dotnet` and `--output`. It verifies both build receipts, creates an isolated loopback chain, and uses the actual SDK for NeoNativeVerifier, SessionKeyVerifier, two-Session 2-of-2 and ordered Session/Native 2-of-3 combinations. The matrix includes every two-child quorum, three submitted proofs with only the first two selected, maximum serialized operation args and a maximum nonce channel. Its receipt includes signed preflight, exact persisted raw bytes, scoped signer/code-pin evidence, independent balance/nonce/spending readback, and rejection of a retained signed transaction after configuration changes. Keys enter the Node bridge only on stdin; temporary wallet files use mode 0600. A PASS applies only to the pinned source/runtime/artifacts in that receipt.
+
+Add `--signed-artifact-transport` to run that matrix through SDK export and the same portable artifact validator used by the browser. Every submitted transaction then also passes public wallet-signature verification, fresh exact signed preflight and exact raw receipt checks. The mode adds a guarded pending-policy cancellation and independently verifies that the pending record is removed while the account record and active policy remain unchanged.
 
 Protocol requirements and remaining activation gates are mapped in the [issue 242 conformance review](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md).

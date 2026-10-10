@@ -37,9 +37,6 @@ import {
 } from './helpers';
 import { EC, translateError } from '../../config/errorCodes.js';
 import { TX_STATUS, waitForTransactionConfirmation } from './txConfirmation.js';
-import { fetchWithTimeout } from '../../utils/fetchWithTimeout.js';
-import { validateRegistrationOwner, supportedPendingRoles, readChainClock, readGovernanceSnapshot, buildGovernanceAction, assertGovernanceReviewCurrent } from './governance.js';
-import { captureMetadataSaveIntent, metadataIntentMatchesCurrent, metadataMirrorPayload } from './metadataSave.js';
 
 export function useStudioController() {
   const toast = useToast();
@@ -78,33 +75,16 @@ export function useStudioController() {
 
   const walletConnected = computed(() => !!connectedAccount.value);
 
-  const registrationOwnerError = computed(() => {
-    const issue = validateRegistrationOwner(createForm.value.backupOwner, connectedAccount.value);
-    if (!createForm.value.backupOwner) return '';
-    if (issue === 'owner-mismatch') return t('ordinary.ownerMismatch', 'Connect the Neo backup owner wallet. This registration requests only the connected wallet witness.');
-    if (issue === 'owner-invalid') return t('ordinary.ownerInvalid', 'Enter a valid Neo N3 address or Neo script hash, not an Ethereum address.');
-    if (issue) return t('ordinary.walletRequired', 'Connect the Neo backup owner wallet first.');
-    return '';
-  });
   const canCreate = computed(() => {
     if (!walletConnected.value) return false;
     if (!computedAddress.value) return false;
-    if (validateRegistrationOwner(createForm.value.backupOwner, connectedAccount.value)) return false;
+    if (!createForm.value.backupOwner) return false;
     const escapeTimelockDays = Number(createForm.value.escapeTimelockDays) || 0;
     if (escapeTimelockDays < MIN_REGISTRATION_ESCAPE_TIMELOCK_DAYS || escapeTimelockDays > MAX_REGISTRATION_ESCAPE_TIMELOCK_DAYS) return false;
     return true;
   });
 
   const canManageTarget = computed(() => !!manageForm.value.accountAddress && walletConnected.value);
-  const governanceBusy = computed(() => Object.values(manageBusy.value).some(Boolean) || metadataBusy.value.save);
-  const governanceOutcome = ref('');
-  let contextEpoch = 0;
-  const isGovernanceOwner = computed(() => manageSnapshot.value.loadedAt && !validateRegistrationOwner(manageSnapshot.value.backupOwner, connectedAccount.value));
-  watch(() => [manageForm.value.accountAddress, connectedAccount.value], () => {
-    contextEpoch += 1;
-    manageSnapshot.value = createManageSnapshotState();
-    governanceOutcome.value = '';
-  });
   const canManagePermissions = computed(() => !!permissionsForm.value.accountAddress && walletConnected.value);
 
   const validCreateAdmins = computed(() => {
@@ -225,9 +205,9 @@ export function useStudioController() {
    * timeout or unreachable node degrades to 'pending confirmation' so a relayed
    * tx that FAULTed can never be reported as a success.
    */
-  async function confirmTransaction(label, txid, { rpcUrl = resolveRpcUrl(walletService) } = {}) {
+  async function confirmTransaction(label, txid) {
     const { status, exception } = await waitForTransactionConfirmation(
-      rpcUrl,
+      resolveRpcUrl(walletService),
       txid,
     );
 
@@ -260,13 +240,13 @@ export function useStudioController() {
     return status;
   }
 
-  function trackConfirmation(label, txid, rpcUrl = resolveRpcUrl(walletService)) {
+  function trackConfirmation(label, txid) {
     if (!txid) return;
     // Fire-and-forget: confirmation runs asynchronously and updates state/toasts
     // without blocking the submit handler. waitForTransactionConfirmation never
     // throws, but guard the chain defensively so a rejected promise cannot
     // surface as an unhandled rejection.
-    void confirmTransaction(label, txid, { rpcUrl }).catch((err) => {
+    void confirmTransaction(label, txid).catch((err) => {
       if (import.meta.env.DEV) console.warn('[useStudioController] confirmTransaction failed:', err?.message);
     });
   }
@@ -339,13 +319,8 @@ export function useStudioController() {
     }
   }
 
-  async function invokeOperation(label, operation, args, { waitForConfirmation = false, context = null } = {}) {
-    const operationContext = context || {
-      rpcUrl: resolveRpcUrl(walletService),
-      coreHash: getAbstractAccountHash(),
-      wallet: connectedAccount.value,
-    };
-    const aaHash = operationContext.coreHash;
+  async function invokeOperation(label, operation, args) {
+    const aaHash = getAbstractAccountHash();
     if (!aaHash) {
       throw new Error(EC.contractNotFound);
     }
@@ -354,7 +329,7 @@ export function useStudioController() {
       scriptHash: aaHash,
       operation,
       args,
-      signers: [{ account: operationContext.wallet, scopes: 1 }]
+      signers: [{ account: connectedAccount.value, scopes: 1 }]
     });
 
     const txid = result?.txid || '';
@@ -366,47 +341,50 @@ export function useStudioController() {
     toast.info(
       t('studio.toast.txSubmitted', '{label} submitted. Waiting for on-chain confirmation…').replace('{label}', label),
     );
-    if (waitForConfirmation) return { txid, status: await confirmTransaction(label, txid, { rpcUrl: operationContext.rpcUrl }) };
-    trackConfirmation(label, txid, operationContext.rpcUrl);
-    return { txid, status: TX_STATUS.PENDING };
+    trackConfirmation(label, txid);
   }
 
   async function loadAccountConfiguration() {
-    if (!requireWallet() || governanceBusy.value || !canManageTarget.value) return;
+    if (!requireWallet() || !canManageTarget.value) return;
 
     manageBusy.value.load = true;
     try {
-      const requestedAccount = normalizeAccountId(manageForm.value.accountAddress);
-      const loadEpoch = contextEpoch;
-      const loadWallet = connectedAccount.value;
-      const loadRpcUrl = resolveRpcUrl(walletService);
-      const loadCoreHash = getAbstractAccountHash();
-      const loadWalletContext = walletService.contextVersion;
-      const accountHash = deriveAccountIdHash(requestedAccount);
-      const isCurrentLoad = () => loadEpoch === contextEpoch
-        && requestedAccount.toLowerCase() === normalizeAccountId(manageForm.value.accountAddress).toLowerCase()
-        && loadWallet === connectedAccount.value
-        && loadRpcUrl === resolveRpcUrl(walletService)
-        && loadCoreHash === getAbstractAccountHash()
-        && loadWalletContext === walletService.contextVersion
-        && walletService.sessionState === 'verified';
+      const accountHash = deriveAccountIdHash(normalizeAccountId(manageForm.value.accountAddress));
 
-      const snapshot = await fetchGovernanceSnapshot(accountHash);
-      // A different account or wallet may have been selected while RPC reads ran.
-      if (!isCurrentLoad()) return;
-      manageForm.value.verifierContract = `0x${snapshot.verifier}`;
-      manageForm.value.hookContract = `0x${snapshot.hook}`;
-      manageForm.value.backupOwner = `0x${snapshot.backupOwner}`;
-      manageForm.value.escapeTimelock = String(snapshot.escapeTimelock);
-      manageForm.value.escapeTriggeredAt = String(snapshot.escapeTriggeredAt);
-      manageForm.value.escapeActive = snapshot.escapeActive;
+      const [
+        verifierRes,
+        hookRes,
+        backupOwnerRes,
+        escapeTimelockRes,
+        escapeTriggeredAtRes,
+        escapeActiveRes
+      ] = await Promise.all([
+        invokeReadOperation('getVerifier', [{ type: 'Hash160', value: accountHash }]),
+        invokeReadOperation('getHook', [{ type: 'Hash160', value: accountHash }]),
+        invokeReadOperation('getBackupOwner', [{ type: 'Hash160', value: accountHash }]),
+        invokeReadOperation('getEscapeTimelock', [{ type: 'Hash160', value: accountHash }]),
+        invokeReadOperation('getEscapeTriggeredAt', [{ type: 'Hash160', value: accountHash }]),
+        invokeReadOperation('isEscapeActive', [{ type: 'Hash160', value: accountHash }]),
+      ]);
+
+      const verifier = decodeStackHash160(verifierRes?.stack?.[0]);
+      const hook = decodeStackHash160(hookRes?.stack?.[0]);
+      const backupOwner = decodeStackHash160(backupOwnerRes?.stack?.[0]);
+      const escapeTimelock = decodeStackInteger(escapeTimelockRes?.stack?.[0]);
+      const escapeTriggeredAt = decodeStackInteger(escapeTriggeredAtRes?.stack?.[0]);
+      const escapeActive = decodeStackBoolean(escapeActiveRes?.stack?.[0]);
+
+      manageForm.value.verifierContract = verifier ? `0x${verifier}` : '';
+      manageForm.value.hookContract = hook ? `0x${hook}` : '';
+      manageForm.value.backupOwner = backupOwner ? `0x${backupOwner}` : '';
+      manageForm.value.escapeTimelock = String(escapeTimelock || 0);
+      manageForm.value.escapeTriggeredAt = String(escapeTriggeredAt || 0);
+      manageForm.value.escapeActive = escapeActive;
       permissionsForm.value.accountAddress = manageForm.value.accountAddress;
-      manageSnapshot.value = { ...snapshot, loadedAt: new Date().toLocaleString() };
 
       // Fetch off-chain metadata
       try {
         const meta = await fetchAccountMetadata(accountHash);
-        if (!isCurrentLoad()) return;
         metadataForm.value = {
           metadataUri: meta?.metadata_uri || '',
           description: meta?.description || '',
@@ -414,12 +392,20 @@ export function useStudioController() {
         };
       } catch (e) {
         if (import.meta.env.DEV) console.warn('[useStudioController] fetchAccountMetadata failed:', e?.message);
-        if (isCurrentLoad()) {
-          metadataForm.value = createMetadataFormState();
-        }
+        metadataForm.value = createMetadataFormState();
       }
 
-      if (!isCurrentLoad()) return;
+      manageSnapshot.value = {
+        loadedAt: new Date().toLocaleString(),
+        accountId: accountHash,
+        verifier: manageForm.value.verifierContract,
+        hook: manageForm.value.hookContract,
+        backupOwner: manageForm.value.backupOwner,
+        escapeTimelock,
+        escapeTriggeredAt,
+        escapeActive,
+      };
+
       toast.success(t('studio.toast.accountLoaded', 'Current account configuration loaded.'));
     } catch (err) {
       toast.error(translateError(err?.message, t));
@@ -500,175 +486,93 @@ export function useStudioController() {
     }
   }
 
-  async function governanceRpc(method, params) {
-    const response = await fetchWithTimeout(resolveRpcUrl(walletService), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    });
-    if (!response.ok) throw new Error(EC.rpcRequestFailed);
-    const body = await response.json();
-    if (body.error || body.result == null) throw new Error(EC.rpcRequestFailed);
-    return body.result;
-  }
-
-  async function fetchGovernanceSnapshot(accountId) {
-    const state = await governanceRpc('getcontractstate', [getAbstractAccountHash()]);
-    return readGovernanceSnapshot({
-      accountId, read: invokeReadOperation,
-      readClock: () => readChainClock(governanceRpc),
-      fullPendingRoles: supportedPendingRoles(state),
-    });
-  }
-
-  function governanceOptions(operation) {
-    if (operation === 'finalizeEscape') return {
-      mode: manageForm.value.escapeMode,
-      verifier: manageForm.value.escapeNewVerifier,
-      params: manageForm.value.escapeVerifierParams,
-      allowEmptyParams: manageForm.value.escapeAllowEmptyParams,
-    };
-    if (operation === 'updateVerifier') return { module: manageForm.value.verifierContract, params: manageForm.value.verifierParams };
-    if (operation === 'updateHook') return { module: manageForm.value.hookContract };
-    return {};
-  }
-
-  function prepareGovernanceAction(operation) {
-    if (!isGovernanceOwner.value) throw new Error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
-    const review = buildGovernanceAction(manageSnapshot.value, operation, governanceOptions(operation));
-    return { ...review, rpcUrl: resolveRpcUrl(walletService), coreHash: getAbstractAccountHash(), wallet: connectedAccount.value };
-  }
-
-  function canGovernanceAction(operation) {
-    if (governanceBusy.value || !isGovernanceOwner.value) return false;
-    try { prepareGovernanceAction(operation); return true; } catch (_) { return false; }
-  }
-
-  async function submitGovernanceAction(review) {
-    if (!requireWallet() || governanceBusy.value || !review) return;
-    manageBusy.value.governance = true;
-    governanceOutcome.value = '';
+  async function updateVerifier() {
+    if (!requireWallet() || !canManageTarget.value) return;
+    manageBusy.value.verifier = true;
     try {
-      const sameContext = () => review.rpcUrl === resolveRpcUrl(walletService)
-        && review.coreHash === getAbstractAccountHash() && review.wallet === connectedAccount.value
-        && review.snapshot.accountId === normalizeAccountId(manageForm.value.accountAddress).toLowerCase();
-      if (!sameContext()) throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
-      const fresh = await fetchGovernanceSnapshot(review.snapshot.accountId);
-      if (!sameContext()) throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
-      assertGovernanceReviewCurrent(review, fresh, connectedAccount.value);
-      const current = buildGovernanceAction(fresh, review.operation, governanceOptions(review.operation));
-      if (JSON.stringify(current.args) !== JSON.stringify(review.args)) throw new Error(t('ordinary.requestChanged', 'Governance inputs changed. Review again.'));
-      const result = await invokeOperation(review.operation, review.operation, review.args, { waitForConfirmation: true });
-      if (result.status === TX_STATUS.CONFIRMED) {
-        governanceOutcome.value = t('ordinary.confirmedRefresh', 'Confirmed on-chain. Refresh account state before the next action.');
-        manageSnapshot.value = createManageSnapshotState();
-      } else if (result.status === TX_STATUS.FAILED && review.operation === 'finalizeEscape') {
-        governanceOutcome.value = t('ordinary.escapeFailed', 'Recovery failed. A plugin cleanup fault rolls back account changes; this recovery does not transfer assets. A mined failed transaction may still charge fees.');
-      } else if (result.status === TX_STATUS.PENDING) {
-        governanceOutcome.value = t('ordinary.pendingConfirmation', 'Submitted; confirmation is still unknown. Check the transaction before repeating an action.');
-        manageSnapshot.value = createManageSnapshotState();
-      }
+      const accountIdHash = deriveAccountIdHash(normalizeAccountId(manageForm.value.accountAddress));
+      const verifierHash = manageForm.value.verifierContract.trim()
+        ? hash160Param(manageForm.value.verifierContract)
+        : '0000000000000000000000000000000000000000';
+      const verifierParamsHex = sanitizeHex(manageForm.value.verifierParams || '');
+      await invokeOperation('Update verifier', 'updateVerifier', [
+        { type: 'Hash160', value: accountIdHash },
+        { type: 'Hash160', value: verifierHash },
+        { type: 'ByteArray', value: verifierParamsHex ? `0x${verifierParamsHex}` : '0x' }
+      ]);
     } catch (err) {
-      governanceOutcome.value = translateError(err?.message, t);
-      toast.error(governanceOutcome.value);
-      manageSnapshot.value = createManageSnapshotState();
+      toast.error(translateError(err?.message, t));
     } finally {
-      manageBusy.value.governance = false;
+      manageBusy.value.verifier = false;
     }
   }
 
-  async function submitCurrentGovernanceAction(operation) {
-    try { await submitGovernanceAction(prepareGovernanceAction(operation)); }
-    catch (err) { toast.error(translateError(err?.message, t)); }
+  async function updateHook() {
+    if (!requireWallet() || !canManageTarget.value) return;
+    manageBusy.value.hook = true;
+    try {
+      const accountIdHash = deriveAccountIdHash(normalizeAccountId(manageForm.value.accountAddress));
+      const hookHash = manageForm.value.hookContract.trim()
+        ? hash160Param(manageForm.value.hookContract)
+        : '0000000000000000000000000000000000000000';
+      await invokeOperation('Update hook', 'updateHook', [
+        { type: 'Hash160', value: accountIdHash },
+        { type: 'Hash160', value: hookHash }
+      ]);
+    } catch (err) {
+      toast.error(translateError(err?.message, t));
+    } finally {
+      manageBusy.value.hook = false;
+    }
   }
-  const updateVerifier = () => submitCurrentGovernanceAction('updateVerifier');
-  const updateHook = () => submitCurrentGovernanceAction('updateHook');
-  const initiateEscape = () => submitCurrentGovernanceAction('initiateEscape');
-  const finalizeEscape = () => submitCurrentGovernanceAction('finalizeEscape');
 
-  async function saveMetadata() {
-    if (!requireWallet() || governanceBusy.value || !canManageTarget.value) return;
-    if (!isGovernanceOwner.value) {
-      toast.error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
+  async function initiateEscape() {
+    if (!requireWallet() || !canManageTarget.value) return;
+    manageBusy.value.initiateEscape = true;
+    try {
+      const accountIdHash = deriveAccountIdHash(normalizeAccountId(manageForm.value.accountAddress));
+      await invokeOperation('Initiate escape', 'initiateEscape', [
+        { type: 'Hash160', value: accountIdHash },
+      ]);
+    } catch (err) {
+      toast.error(translateError(err?.message, t));
+    } finally {
+      manageBusy.value.initiateEscape = false;
+    }
+  }
+
+  async function finalizeEscape() {
+    if (!requireWallet() || !canManageTarget.value) return;
+    if (!manageForm.value.escapeNewVerifier) {
+      toast.error(t('studio.toast.provideNewVerifier', 'Provide the new verifier hash to finalize escape.'));
       return;
     }
+    manageBusy.value.finalizeEscape = true;
+    try {
+      const accountIdHash = deriveAccountIdHash(normalizeAccountId(manageForm.value.accountAddress));
+      await invokeOperation('Finalize escape', 'finalizeEscape', [
+        { type: 'Hash160', value: accountIdHash },
+        { type: 'Hash160', value: hash160Param(manageForm.value.escapeNewVerifier) },
+      ]);
+    } catch (err) {
+      toast.error(translateError(err?.message, t));
+    } finally {
+      manageBusy.value.finalizeEscape = false;
+    }
+  }
 
-    const accountAddress = normalizeAccountId(manageForm.value.accountAddress);
-    const accountIdHash = deriveAccountIdHash(accountAddress);
-    const rpcUrl = resolveRpcUrl(walletService);
-    const coreHash = getAbstractAccountHash();
-    const wallet = connectedAccount.value;
-    const snapshotOwner = manageSnapshot.value.backupOwner;
-    const idToken = (connectedDidProfile.value?.idToken || '').trim();
-    const intent = captureMetadataSaveIntent({
-      accountAddress,
-      accountIdHash,
-      backupOwner: snapshotOwner,
-      wallet,
-      rpcUrl,
-      coreHash,
-      metadataUri: metadataForm.value.metadataUri,
-      description: metadataForm.value.description,
-      logoUrl: metadataForm.value.logoUrl,
-      idToken,
-      epoch: contextEpoch,
-      walletContext: walletService.contextVersion,
-    });
-
+  async function saveMetadata() {
+    if (!requireWallet() || !canManageTarget.value) return;
     metadataBusy.value.save = true;
     try {
-      const sameContext = () => metadataIntentMatchesCurrent(intent, {
-        accountAddress: manageForm.value.accountAddress,
-        accountIdHash,
-        backupOwner: manageSnapshot.value.backupOwner,
-        wallet: connectedAccount.value,
-        rpcUrl: resolveRpcUrl(walletService),
-        coreHash: getAbstractAccountHash(),
-        metadataUri: metadataForm.value.metadataUri,
-        description: metadataForm.value.description,
-        logoUrl: metadataForm.value.logoUrl,
-        idToken: (connectedDidProfile.value?.idToken || '').trim(),
-        epoch: contextEpoch,
-        walletContext: walletService.contextVersion,
-      });
-
-      if (!sameContext() || walletService.sessionState !== 'verified') throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
-      const fresh = await fetchGovernanceSnapshot(accountIdHash);
-      if (!sameContext() || walletService.sessionState !== 'verified') throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
-      if (String(fresh.backupOwner || '').toLowerCase() !== intent.backupOwner) {
-        throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
-      }
-      if (validateRegistrationOwner(fresh.backupOwner, intent.wallet)) {
-        throw new Error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
-      }
+      const accountIdHash = deriveAccountIdHash(normalizeAccountId(manageForm.value.accountAddress));
 
       // On-chain: set MetadataUri
-      const result = await invokeOperation('Set metadata URI', 'setMetadataUri', [
-        { type: 'Hash160', value: intent.accountIdHash },
-        { type: 'String', value: intent.metadataUri },
-      ], {
-        waitForConfirmation: true,
-        context: { rpcUrl: intent.rpcUrl, coreHash: intent.coreHash, wallet: intent.wallet },
-      });
-
-      if (result.status !== TX_STATUS.CONFIRMED) {
-        if (result.status === TX_STATUS.PENDING) {
-          governanceOutcome.value = t('ordinary.metadataPending', 'Metadata transaction is awaiting confirmation. The off-chain profile was not updated. Refresh before trying again.');
-        }
-        return;
-      }
-
-      // If the user changed the target, wallet, network, or fields while the
-      // wallet was waiting, never attach the original transaction to new data.
-      // Re-read the owner after confirmation. The wallet can remain connected
-      // while the account owner changes during a delayed signing flow.
-      const confirmedSnapshot = await fetchGovernanceSnapshot(accountIdHash);
-      if (!sameContext()
-        || walletService.sessionState !== 'verified'
-        || String(confirmedSnapshot.backupOwner || '').toLowerCase() !== intent.backupOwner
-        || validateRegistrationOwner(confirmedSnapshot.backupOwner, intent.wallet)) {
-        toast.warning(t('ordinary.metadataChanged', 'On-chain metadata was confirmed, but the account or form changed while signing. Refresh the account before syncing the off-chain profile.'));
-        return;
-      }
+      const metadataUri = metadataForm.value.metadataUri.trim();
+      await invokeOperation('Set metadata URI', 'setMetadataUri', [
+        { type: 'Hash160', value: accountIdHash },
+        { type: 'String', value: metadataUri },
+      ]);
 
       // Off-chain: save description + logo. The on-chain setMetadataUri above is the
       // authoritative record; the off-chain mirror requires proof of account control
@@ -676,7 +580,13 @@ export function useStudioController() {
       // unavailable, keep the on-chain save successful and surface a soft warning rather
       // than failing the whole operation.
       try {
-        await upsertAccountMetadata(metadataMirrorPayload(intent));
+        await upsertAccountMetadata({
+          accountIdHash,
+          description: metadataForm.value.description.trim(),
+          logoUrl: metadataForm.value.logoUrl.trim(),
+          metadataUri,
+          idToken: (connectedDidProfile.value?.idToken || '').trim() || undefined,
+        });
         toast.success(t('studio.toast.metadataSaved', 'Account metadata saved.'));
       } catch (offChainErr) {
         toast.warning(
@@ -782,13 +692,6 @@ export function useStudioController() {
     walletConnected,
     autoLoadedAccounts,
     canCreate,
-    registrationOwnerError,
-    governanceBusy,
-    governanceOutcome,
-    isGovernanceOwner,
-    canGovernanceAction,
-    prepareGovernanceAction,
-    submitGovernanceAction,
     canManageTarget,
     canManagePermissions,
     validCreateAdmins,

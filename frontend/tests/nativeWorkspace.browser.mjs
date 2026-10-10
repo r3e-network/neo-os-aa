@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { fileURLToPath } from "node:url";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import {
   createNativeRpcFixture,
   nativeTestCustody,
@@ -250,12 +250,24 @@ test(
         .getByRole("button", { name: "Review management action", exact: true })
         .click();
       await page.getByText("freeze", { exact: true }).waitFor();
+      const freezeRisk = page.getByTestId("native-freeze-risk");
+      assert.ok((await freezeRisk.innerText()).includes(nativeTestCustody));
+      assert.ok((await freezeRisk.innerText()).includes(nativeTestRecovery));
+      assert.match(await freezeRisk.innerText(), /custody alone cannot unfreeze or replace recovery/);
+      assert.match(await freezeRisk.innerText(), /pending policy calls for both verifier and hook/);
       await page
         .getByLabel(
           "I reviewed the network, authority, target, scope and fee payer.",
           { exact: true },
         )
         .check();
+      assert.equal(await page.getByRole("button", { name: "Export reviewed request", exact: true }).isDisabled(), true, "freeze requires its separate risk acknowledgement");
+      await page.getByTestId("native-freeze-acknowledgement").getByRole("checkbox").check();
+      await page.screenshot({ path: "/tmp/native-freeze-risk-desktop-20261009.png", fullPage: true });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.screenshot({ path: "/tmp/native-freeze-risk-mobile-20261009.png", fullPage: true });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false);
+      await page.setViewportSize({ width: 1440, height: 1100 });
       const freezeDownload = page.waitForEvent("download");
       await page
         .getByRole("button", { name: "Export reviewed request", exact: true })
@@ -276,6 +288,7 @@ test(
         .getByRole("button", { name: "Review management action", exact: true })
         .click();
       await page.getByText("freeze", { exact: true }).waitFor();
+      assert.equal(await page.getByTestId("native-freeze-acknowledgement").getByRole("checkbox").isChecked(), false, "changing the review clears freeze acknowledgement");
       assert.equal(
         await page
           .getByRole("button", {
@@ -291,6 +304,7 @@ test(
           { exact: true },
         )
         .check();
+      await page.getByTestId("native-freeze-acknowledgement").getByRole("checkbox").check();
       const sdkDownload = page.waitForEvent("download");
       await page
         .getByRole("button", { name: "Export reviewed request", exact: true })
@@ -523,11 +537,13 @@ test(
         assert.equal(exported.recipe.input.role, role);
         assert.equal(exported.plan.pending.method, intent.method);
         assert.deepEqual(exported.plan.pending.invokedArguments, exactArguments);
-        assert.deepEqual(exported.request.args, [
-          { type: "Hash160", value: "0x" + nativeTestIdentity.accountId },
-          { type: "String", value: role },
-        ]);
-        assert.equal(exported.plan.script, c.dynamicCall(CORE, "cancelModuleCall", [c.hashValue(nativeTestIdentity.accountId), c.stringValue(role)]));
+        assert.equal(exported.submission, "native-sdk");
+        assert.equal(exported.request, null);
+        assert.equal(exported.plan.requiresExactScript, true);
+        assert.match(exported.plan.pendingCallBytes, /^400a[0-9a-f]+$/);
+        assert.notEqual(exported.plan.script, c.dynamicCall(CORE, "cancelModuleCall", [c.hashValue(nativeTestIdentity.accountId), c.stringValue(role)]));
+        await page.getByText(/invoke interface rebuilds the call and cannot preserve that check/).waitFor();
+        assert.equal(await page.getByRole("button", { name: "Send to wallet for approval", exact: true }).isDisabled(), true);
         await page.getByLabel("Signing path", { exact: true }).selectOption("native-sdk");
         await page.getByRole("button", { name: "Review policy cancellation", exact: true }).click();
         await reviewMethod("cancelModuleCall").waitFor();
@@ -557,14 +573,14 @@ test(
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false, "pending policy review fits the mobile viewport");
           await page.setViewportSize({ width: 1440, height: 1100 });
         }
-        await send();
-        assert.deepEqual(requests.at(-1).args, exported.request.args);
-        assert.equal(requests.at(-1).operation, "cancelModuleCall");
+        assert.equal(await page.getByRole("button", { name: "Send to wallet for approval", exact: true }).isDisabled(), true, "selecting invoke never removes the cancellation guard");
+        assert.equal(requests.length, 0);
+        pending.delete(role);
         await page.getByRole("button", { name: "Refresh pending policy", exact: true }).click();
         await card.getByText("No policy call is pending for this role.", { exact: true }).waitFor();
         assert.equal(await page.getByRole("button", { name: "Review policy cancellation", exact: true }).count(), 0);
       }
-      assert.equal(requests.length, 2);
+      assert.equal(requests.length, 0);
 
       pending.set("hook", { method: "setTransferLimit", amount: "84" });
       await page.getByRole("button", { name: "Refresh pending policy", exact: true }).click();
@@ -573,12 +589,13 @@ test(
       await page.getByRole("button", { name: "Review policy cancellation", exact: true }).click();
       await page.getByRole("alert").filter({ hasText: /pending.*changed|changed.*pending/i }).waitFor();
       assert.equal(await reviewMethod("cancelModuleCall").count(), 0);
-      assert.equal(requests.length, 2, "a replaced pending intent must not reach the wallet");
+      assert.equal(requests.length, 0, "a replaced pending intent must not reach the wallet");
 
       pendingRecovery = true;
       await page.getByRole("button", { name: "Account & recovery", exact: true }).click();
       await page.getByRole("button", { name: "Refresh account and chain time", exact: true }).click();
       await page.getByRole("status").filter({ hasText: "Account loaded from the selected node." }).waitFor();
+      await page.getByTestId("native-freeze-risk").getByText(/Starting it again requires a new proposal and a new 7-day delay/).waitFor();
       await page.getByLabel("Action", { exact: true }).selectOption("cancelRecovery");
       await page.getByLabel("Fee payer Neo address / script hash", { exact: true }).fill(nativeTestRecovery);
       await page.getByRole("button", { name: "Review management action", exact: true }).click();
@@ -625,7 +642,7 @@ test(
         assert.equal(requests.at(-1).operation, action);
         assert.deepEqual(requests.at(-1).signers, [{ account: "0x" + unrelatedPayer, scopes: "CalledByEntry" }]);
       }
-      assert.equal(requests.length, 5);
+      assert.equal(requests.length, 3);
       await page.screenshot({ path: "/tmp/aa-native-mature-activation-20261009.png", fullPage: true });
       assert.equal(await page.locator("vite-error-overlay").count(), 0);
       assert.deepEqual(errors, []);
@@ -635,3 +652,168 @@ test(
     }
   },
 );
+
+test("signed artifact import verifies public signatures, fresh preflight, exact broadcast and receipt", { timeout: 90000 }, async () => {
+  const vector = JSON.parse(await readFile(new URL("../../sdk/js/tests/fixtures/native-signed-registration.json", import.meta.url)));
+  const fixture = createNativeRpcFixture();
+  const server = await createServer({ root, server: { host: "127.0.0.1", port: 0, watch: { ignored: ["**/*"] } }, logLevel: "error" });
+  await server.listen();
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
+  page.setDefaultTimeout(10000);
+  const errors = [], submittedRaw = [], historicalRpc = [];
+  let historical = false;
+  let preflights = 0, preflightValid = true, confirmed = false, receiptFault = false;
+  try {
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+    await page.addInitScript(() => localStorage.setItem("aa_locale", "en"));
+    await page.route("https://native.fixture.test/rpc", async (route) => {
+      const { id, method, params } = route.request().postDataJSON();
+      if (historical) historicalRpc.push({ method, params });
+      let result;
+      if (method === "invoketransaction") {
+        preflights++;
+        assert.equal(Buffer.from(params[0], "base64").toString("hex"), vector.artifact.rawTransaction);
+        result = {
+          hash: vector.artifact.txid, network: 123, verification: preflightValid ? "Succeed" : "Invalid",
+          state: "HALT", relayed: false, mempoolChecked: false,
+          snapshot: { height: 9, hash: "0x" + "bb".repeat(32) },
+          simulation: { mode: "single-transaction-next-block", height: 10, timestamp: String(fixture.state.time), primaryIndex: 0, view: 0, transactionCount: 1, onPersist: "HALT", nextConsensus: "0x" + "cc".repeat(20) },
+          minimumrequiredfee: "100000", stack: [{ type: "Boolean", value: true }],
+        };
+      } else if (method === "sendrawtransaction") {
+        submittedRaw.push(Buffer.from(params[0], "base64").toString("hex"));
+        // The same bytes may be persisted even when the submission response is lost.
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32603, message: "Submission response unavailable" } }) });
+        return;
+      } else if (method === "getrawtransaction") {
+        assert.equal(params[0], vector.artifact.txid);
+        result = params[1] === false ? Buffer.from(vector.artifact.rawTransaction, "hex").toString("base64")
+          : confirmed ? { hash: vector.artifact.txid, blockhash: "0x" + "dd".repeat(32) } : { hash: vector.artifact.txid };
+      } else if (method === "getapplicationlog") {
+        result = { txid: vector.artifact.txid, executions: [{ trigger: "Application", vmstate: receiptFault ? "FAULT" : "HALT", stack: [{ type: "Boolean", value: true }], notifications: [], gasconsumed: "100000" }] };
+      } else result = await fixture.send(method, params);
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id, result }) });
+    });
+    const port = server.httpServer.address().port;
+    await page.goto(`http://127.0.0.1:${port}/native`);
+    assert.equal(new URL(page.url()).pathname, "/native");
+    await page.getByRole("heading", { name: "Native accounts", exact: true }).waitFor();
+    await page.getByLabel("RPC endpoint", { exact: true }).fill("https://native.fixture.test/rpc");
+    await page.getByLabel("Expected network magic", { exact: true }).fill("123");
+    await page.getByRole("button", { name: "Verify node", exact: true }).click();
+    await page.getByText("Native ABI 2 and network verified.", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Create account", exact: true }).click();
+    await page.getByTestId("native-custody").fill(vector.recipe.custodyAddress);
+    await page.getByTestId("native-recovery").fill(vector.recipe.recoveryAddress);
+    await page.getByTestId("native-salt").fill(vector.recipe.salt);
+    await page.getByLabel("Signing path", { exact: true }).selectOption("native-sdk");
+    await page.getByRole("button", { name: "Review registration", exact: true }).click();
+    await page.locator(".review-heading").getByText("registerAccount", { exact: true }).waitFor();
+    await page.getByLabel("I reviewed the network, authority, target, scope and fee payer.", { exact: true }).check();
+    const reviewedDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export reviewed request", exact: true }).click();
+    const archivedReview = await readFile(await (await reviewedDownload).path());
+    const panel = page.getByTestId("native-signed-import");
+    await panel.getByLabel("Maximum system fee (GAS)", { exact: true }).fill("0.003");
+    await panel.getByLabel("Maximum network fee (GAS)", { exact: true }).fill("0.001");
+    await panel.getByLabel("Maximum total fee (GAS)", { exact: true }).fill("0.004");
+    const upload = (artifact) => panel.getByLabel("Import signed transaction file", { exact: true }).setInputFiles({ name: "signed-transaction.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(artifact)) });
+    await upload({ ...vector.artifact, networkMagic: 456 });
+    await page.getByRole("alert").filter({ hasText: /network mismatch/ }).waitFor();
+    assert.equal(preflights, 0);
+    assert.equal(submittedRaw.length, 0);
+    await upload(vector.artifact);
+    await panel.getByText(vector.artifact.txid, { exact: true }).waitFor();
+    await panel.getByText("0.0025 GAS", { exact: true }).waitFor();
+    await panel.getByLabel("Maximum total fee (GAS)", { exact: true }).fill("0.005");
+    assert.equal(await panel.getByText(vector.artifact.txid, { exact: true }).count(), 0, "fee changes invalidate the imported transaction");
+    await upload(vector.artifact);
+    await panel.getByText(vector.artifact.txid, { exact: true }).waitFor();
+    const preflight = panel.getByRole("button", { name: "Check signed transaction", exact: true });
+    const broadcast = panel.getByRole("button", { name: "Broadcast signed transaction", exact: true });
+    assert.equal(await broadcast.isDisabled(), true);
+    preflightValid = false;
+    await preflight.click();
+    await page.getByRole("alert").filter({ hasText: /preflight rejected/ }).waitFor();
+    assert.equal(await broadcast.isDisabled(), true);
+    preflightValid = true;
+    await preflight.click();
+    await page.getByTestId("native-signed-preflight").waitFor();
+    await page.getByLabel("I reviewed the network, authority, target, scope and fee payer.", { exact: true }).check();
+    await panel.getByLabel("I approve these exact signed fees and this transaction hash for broadcast.", { exact: true }).check();
+    assert.equal(await broadcast.isDisabled(), false);
+    await page.screenshot({ path: "/tmp/native-signed-import-desktop-20261009.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: "/tmp/native-signed-import-mobile-20261009.png", fullPage: true });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    preflightValid = false;
+    const beforeBroadcast = preflights;
+    await broadcast.click();
+    await page.getByRole("alert").filter({ hasText: /preflight rejected/ }).waitFor();
+    assert.equal(preflights, beforeBroadcast + 1, "broadcast uses fresh preflight even after a successful explicit check");
+    assert.equal(submittedRaw.length, 0);
+    preflightValid = true;
+    await broadcast.click();
+    await page.getByRole("alert").filter({ hasText: /Submission result is uncertain/ }).waitFor();
+    assert.deepEqual(submittedRaw, [vector.artifact.rawTransaction]);
+    assert.equal(await broadcast.isDisabled(), true, "uncertain submission cannot be resent");
+    const confirm = panel.getByRole("button", { name: "Check imported transaction confirmation", exact: true });
+    await confirm.click();
+    await page.getByRole("status").filter({ hasText: /not confirmed/ }).waitFor();
+    confirmed = true;
+    receiptFault = true;
+    await confirm.click();
+    await page.getByRole("alert").filter({ hasText: /confirmed but execution failed/ }).waitFor();
+    receiptFault = false;
+    await confirm.click();
+    await page.getByRole("status").filter({ hasText: /exact signed bytes are confirmed and execution succeeded/ }).waitFor();
+    assert.equal(submittedRaw.length, 1);
+    historical = true;
+    await page.reload();
+    await page.getByRole("heading", { name: "Native accounts", exact: true }).waitFor();
+    await page.getByLabel("RPC endpoint", { exact: true }).fill("https://native.fixture.test/rpc");
+    await page.getByLabel("Expected network magic", { exact: true }).fill("123");
+    await page.getByRole("button", { name: "Verify node", exact: true }).click();
+    await page.getByText("Native ABI 2 and network verified.", { exact: true }).waitFor();
+    const restored = page.getByTestId("native-receipt-restore");
+    await restored.locator("summary").click();
+    await restored.getByLabel("Archived reviewed request", { exact: true }).setInputFiles({ name: "reviewed-request.json", mimeType: "application/json", buffer: archivedReview });
+    await restored.getByText("reviewed-request.json", { exact: true }).waitFor();
+    await page.waitForFunction(() => document.querySelector('[data-testid="native-receipt-restore"] input[type="file"]')?.disabled === false);
+    const receiptUpload = (artifact) => restored.getByLabel("Signed transaction for receipt", { exact: true }).setInputFiles({ name: "signed-transaction.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(artifact)) });
+    await receiptUpload({ ...vector.artifact, networkMagic: 456 });
+    await restored.getByRole("button", { name: "Verify receipt files", exact: true }).click();
+    await page.getByRole("alert").filter({ hasText: /network mismatch/ }).waitFor();
+    assert.equal(await restored.getByRole("button", { name: "Check restored receipt", exact: true }).count(), 0);
+    await receiptUpload(vector.artifact);
+    await restored.getByRole("button", { name: "Verify receipt files", exact: true }).click();
+    await restored.getByText(vector.artifact.txid, { exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Broadcast signed transaction", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "Check signed transaction", exact: true }).count(), 0);
+    await restored.getByRole("button", { name: "Check restored receipt", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: /exact signed bytes are confirmed and execution succeeded/ }).waitFor();
+    assert.equal(submittedRaw.length, 1);
+    assert.equal(preflights, 4);
+    assert.equal(historicalRpc.some(({ method }) => ["getblockcount", "invoketransaction", "sendrawtransaction"].includes(method)), false, "historical receipt does not check fresh expiry or gain a submission path");
+    assert.equal(historicalRpc.filter(({ method }) => method === "invokescript").every(({ params }) => Buffer.from(params[0], "base64").toString("hex") === c.dynamicCall(CORE, "getVersion", [], 5)), true, "history verifies the live service without reading old account state");
+    await page.screenshot({ path: "/tmp/native-restored-receipt-desktop-20261009.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: "/tmp/native-restored-receipt-mobile-20261009.png", fullPage: true });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    assert.equal(await page.locator("vite-error-overlay").count(), 0);
+    assert.deepEqual(errors, []);
+    await writeFile("/tmp/native-signed-import-evidence-20261009.json", JSON.stringify({
+      url: page.url(), title: await page.title(), heading: await page.getByRole("heading", { name: "Native accounts", exact: true }).innerText(),
+      consoleErrors: errors, submittedHash: vector.artifact.txid, broadcasts: submittedRaw.length, preflights,
+      finalStatus: await page.getByRole("status").filter({ hasText: /exact signed bytes are confirmed and execution succeeded/ }).innerText(),
+      desktopScreenshot: "/tmp/native-signed-import-desktop-20261009.png", mobileScreenshot: "/tmp/native-signed-import-mobile-20261009.png",
+    }, null, 2));
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});

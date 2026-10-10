@@ -1,6 +1,8 @@
 const crypto = require("node:crypto");
 const { createVerifierWitnessTools } = require("./verifierWitness");
 const { validateNativeInvocationResult } = require("./client");
+const { createNativeWalletWitnessTools } = require("../../../../shared/nativeWalletWitness.mjs");
+const { createNativeTransactionArtifactTools, validateNativeSignedPreflight } = require("../../../../shared/nativeTransactionArtifact.mjs");
 const deepFreeze = (value) => {
   if (value && typeof value === "object") {
     Object.values(value).forEach(deepFreeze);
@@ -23,6 +25,7 @@ const accountOf = (script) =>
     .toString("hex");
 function createNativeTransactionTools(c) {
   const verifierWitness = createVerifierWitnessTools(c);
+  const walletWitness = createNativeWalletWitnessTools({ hash160: accountOf, verify });
   const le = (value, size) => {
     let n = BigInt(value);
     const out = Buffer.alloc(size);
@@ -81,14 +84,8 @@ function createNativeTransactionTools(c) {
     if (!input || typeof input.sign !== "function")
       fail("payer/authority signer must expose sign(signDataHex)");
     const verification = c.hex(input.verificationScript);
-    // Current native transport supports ordinary P-256 single-signature Neo accounts.
-    if (!/^0c21(?:02|03)[0-9a-f]{64}4156e7b327$/.test(verification))
-      fail(
-        "unsupported wallet verification script; standard P-256 account required",
-      );
     const account = c.hex(input.account, 20);
-    if (accountOf(verification) !== account)
-      fail("wallet account does not match verification script");
+    const parsed = walletWitness.parse(verification, account);
     const contracts = [
       ...new Set([
         ...(requiredAuthorities.has(account)
@@ -102,6 +99,7 @@ function createNativeTransactionTools(c) {
     return deepFreeze({
       account,
       verification,
+      parsed,
       sign: input.sign.bind(input),
       descriptor: {
         account: "0x" + account,
@@ -110,8 +108,8 @@ function createNativeTransactionTools(c) {
       },
     });
   }
-  function verify(signature, verification, message) {
-    const compressed = Buffer.from(verification.slice(4, 70), "hex");
+  function verify(publicKey, signature, signData) {
+    const compressed = Buffer.from(publicKey, "hex");
     const point = crypto.ECDH.convertKey(
       compressed,
       "prime256v1",
@@ -128,7 +126,7 @@ function createNativeTransactionTools(c) {
     ]);
     return crypto.verify(
       "sha256",
-      message,
+      Buffer.from(signData, "hex"),
       {
         key: crypto.createPublicKey({ key: spki, format: "der", type: "spki" }),
         dsaEncoding: "ieee-p1363",
@@ -252,10 +250,7 @@ function createNativeTransactionTools(c) {
       script: c.hex(plan.script),
       signers,
     };
-    const walletPlaceholder = (w) => ({
-      invocation: "0c40" + "00".repeat(64),
-      verification: w.verification,
-    });
+    const walletPlaceholder = (w) => walletWitness.placeholder(w.parsed);
     const placeholders = [
       walletPlaceholder(wallets[0]),
       ...(plan.kind === "execution" ? [plan.proxyWitness] : []),
@@ -302,15 +297,11 @@ function createNativeTransactionTools(c) {
       fail("transaction changed after fee approval");
     const signatures = [];
     for (const wallet of prepared.wallets) {
-      const sig = c.hex(await wallet.sign(prepared.signData), 64);
-      if (
-        !verify(sig, wallet.verification, Buffer.from(prepared.signData, "hex"))
-      )
-        fail("wallet returned an invalid transaction signature");
-      signatures.push({
-        invocation: "0c40" + sig,
-        verification: wallet.verification,
-      });
+      signatures.push(await walletWitness.assemble(
+        wallet.parsed,
+        await wallet.sign(prepared.signData),
+        prepared.signData,
+      ));
     }
     const witnesses = [
       signatures[0],
@@ -336,6 +327,7 @@ function createNativeTransactionTools(c) {
       prepared,
       txid: prepared.txid,
       rawTransaction: finalBytes.toString("hex"),
+      witnesses: Object.freeze(witnesses.map((witness) => Object.freeze({ ...witness }))),
     });
     signedIssued.add(result);
     return result;
@@ -361,55 +353,33 @@ function createNativeTransactionTools(c) {
       }
       throw error;
     }
-    if (
-      result?.hash !== signed.txid ||
-      result?.network !== client.networkMagic ||
-      result?.verification !== "Succeed" ||
-      result?.state !== "HALT" ||
-      result?.relayed !== false ||
-      result?.mempoolChecked !== false
-    )
-      fail(
-        "signed transaction preflight rejected or returned mismatched identity",
-      );
-    if (!Number.isSafeInteger(result?.snapshot?.height))
-      fail("preflight snapshot height must be a UInt32 number");
-    c.unsigned(result.snapshot.height, 32, "preflight snapshot height");
-    c.hex(result?.snapshot?.hash, 32);
-    const simulation = result.simulation;
-    if (
-      simulation?.mode !== "single-transaction-next-block" ||
-      simulation?.onPersist !== "HALT" ||
-      simulation?.view !== 0 ||
-      simulation?.transactionCount !== 1 ||
-      !Number.isSafeInteger(simulation?.height) ||
-      simulation.height !== result.snapshot.height + 1 ||
-      simulation.height > 0xffffffff ||
-      !Number.isSafeInteger(simulation?.primaryIndex) ||
-      simulation.primaryIndex < 0 ||
-      simulation.primaryIndex > 0xff ||
-      typeof simulation?.timestamp !== "string" ||
-      !/^(?:0|[1-9][0-9]{0,19})$/.test(simulation.timestamp) ||
-      typeof simulation?.nextConsensus !== "string" ||
-      !/^0x[0-9a-f]{40}$/.test(simulation.nextConsensus)
-    )
-      fail(
-        "preflight simulation must declare successful single-transaction next-block preparation",
-      );
-    c.unsigned(simulation.timestamp, 64, "preflight simulation timestamp");
-    if (
-      fee(result.minimumrequiredfee, "final minimum required fee") >
-      BigInt(signed.prepared.systemFee)
-    )
-      fail("final Application admission exceeds signed system fee");
-    if (
-      validateNativeInvocationResult(signed.prepared.plan, result.stack).length
-    )
-      fail(
-        "signed transaction preflight token transfer did not return Boolean true",
-      );
-    return deepFreeze(result);
+    return validateNativeSignedPreflight(c, {
+      txid: signed.txid,
+      networkMagic: client.networkMagic,
+      plan: signed.prepared.plan,
+      systemFee: signed.prepared.systemFee,
+      validUntilBlock: signed.prepared.transaction.validUntilBlock,
+    }, result);
   }
+  function exportSignedTransaction(client, signed) {
+    if (!signedIssued.has(signed))
+      fail("signed transaction must be produced by this SDK instance");
+    const artifactTools = createNativeTransactionArtifactTools({
+      codec: c,
+      sha256: (hex) => hash(Buffer.from(hex, "hex")).toString("hex"),
+    });
+    return artifactTools.createArtifact({
+      networkMagic: client.networkMagic,
+      profile: client.profile,
+      transaction: signed.prepared.transaction,
+      witnesses: signed.witnesses,
+      unsignedHex: signed.prepared.unsignedHex,
+      txid: signed.txid,
+      signData: signed.prepared.signData,
+      rawTransaction: signed.rawTransaction,
+    });
+  }
+
   const submissions = new WeakMap();
   function broadcastNativeTransaction(client, signed) {
     if (!signedIssued.has(signed))
@@ -488,6 +458,7 @@ function createNativeTransactionTools(c) {
     broadcastNativeTransaction,
     getNativeTransactionReceipt,
     preflightNativeTransaction,
+    exportSignedTransaction,
   };
 }
 module.exports = { createNativeTransactionTools };

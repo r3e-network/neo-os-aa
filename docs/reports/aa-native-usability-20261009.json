@@ -1,0 +1,156 @@
+{
+  "schema": "smartaccount-native-usability-review/v1",
+  "completedAtUtc": "2026-10-09T03:45:57.956379+00:00",
+  "status": "PASS_SCOPED_LOCAL_VALIDATION",
+  "protocolReleaseStatus": "REVIEW_REQUIRED",
+  "baseCommit": "be06b8fe09eaaca29ac880af7f45868197a9abd0",
+  "nativeCoreTestHead": "838436649f3763b471db6cef39924d8f9bbc367a",
+  "nativeCoreProductionCommit": "ff422d940a4722c361c32398c6f28c00fb7f0693",
+  "profile": {
+    "abiVersion": 2,
+    "identityVersion": 1,
+    "parameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4",
+    "changed": false
+  },
+  "sourceSha256": {
+    ".github/workflows/native-profile.yml": "4261dc3916faaedf56dd7ce0a407883f7be50a485bb2c3c76e34148b4ff14b5f",
+    "README.md": "6813053b5f1e6de2d06d9c95f9d592a65ddf7d4ebaebc85550ab0a5da0f44ab7",
+    "contracts/verifiers/MultiSigVerifier.cs": "0637e80cdc74b211bdcff343c2084ce773a73d9806e98caf8857e744a9695362",
+    "docs/NATIVE_ACCOUNT_PERFORMANCE.md": "6bc7a6c78dc6ae452e672c253c1e2b6751d95758e6148fd5295c4df8c0996451",
+    "docs/NATIVE_ACCOUNT_THRESHOLD_RECOVERY.md": "173660a9d0e0430590fab8c7435cafcc54c1157965b198c1d6ba121c9368746d",
+    "docs/NATIVE_ACCOUNT_TRANSACTION_GUARDS.md": "bffa16c3f2f8b831a5ce1f88c0341a8ce79d53ec25b6b72966f9fe6d86b59f97",
+    "docs/NATIVE_ACCOUNT_USER_GUIDE.md": "17726c10221db591f27df64d3002357e9de0084c53cbff7f51a769248aaca094",
+    "docs/NATIVE_ACCOUNT_WORKSPACE.md": "3b3db965f4b156ae14d8a358ed1a5bd0e3d803c0b94a702178b4d7596875a07e",
+    "docs/NATIVE_SDK.md": "8bd3b02567f89d256971ed84c042c8b565f5f16935f8621e24a21d39873013b5",
+    "docs/NATIVE_SIGNED_TRANSACTION_IMPORT.md": "04f850bd7b9a01fa3046cabd13f85e09eeea9c4c7845feb540fb3fe7bfa9e457",
+    "docs/NATIVE_SYSTEM_ARCHITECTURE.md": "c1ba5c851fd88c6b7b9b85a3606898fdfb7ea08d4a50cae8f10985a748cf268e",
+    "docs/proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md": "6e3480fa458ec84fd7536dac64f676c22b99e18a0b24347896e0ee60c00f2b51",
+    "formal/source-lock.json": "8eddade99f11d99ae3bf01aec5ffd24c6c3c2d6c55dfb0e88b5bfb89f3030b14",
+    "frontend/scripts/sync-native-shared.mjs": "a88a0d562cc55dfbef3270a4f5cb7a0f1f9b5489b9ae3fd8cf88916b0a79b0dc",
+    "frontend/src/assets/contracts/verifiers/MultiSigVerifier.cs": "0637e80cdc74b211bdcff343c2084ce773a73d9806e98caf8857e744a9695362",
+    "frontend/src/features/native/NativeAccountWorkspace.vue": "d2f209fd98e8ebaa9f2882f3758c2b8462d0356bc3af2771c0bd33322d4705f8",
+    "frontend/src/features/native/nativeWorkspace.js": "de449f21ccf76ac0c2e7ed519897f87264041e43a4da9357e6797b47dee3a8ee",
+    "frontend/src/shared/nativeSmartAccountClient.mjs": "b118ecbf67131ddac4a244196788dd499582a580c9938e5e6ec99d0539c0e6f2",
+    "frontend/src/shared/nativeTransactionArtifact.mjs": "e3599c2e21f6c27757dbd4e303824c9fd4ec6ef152b655d6d30ab23fe2839717",
+    "frontend/src/shared/nativeWalletWitness.mjs": "486ccdfd7f09e387a89c720910b836095429c8988203fe16de52275650c753f7",
+    "frontend/tests/nativeWorkspace.browser.mjs": "7ec301df8ae06c5054f917934c0b66c78b88084c8ad0a5fb0021ac75c520cad8",
+    "frontend/tests/nativeWorkspace.test.js": "9c64faff7b4582c45148ad012b2e0fe8cbd49f138cb3e448595cb5a39160a90b",
+    "scripts/native_budget_benchmark.py": "3954472a927e7fdff3da0b2b70977f8445db06c5b6a1db5446983711d90d4d71",
+    "scripts/test_native_budget_benchmark.py": "b7c4ef3d43bff751a8dce8e8d56b03b604b1219abc2a2f94852763abe7ef083c",
+    "scripts/verify_repo.sh": "4c25853800a33c3661f0663063642e235a04493e9c9a67328598674abb44a2b0",
+    "sdk/js/src/native.d.ts": "d6cbb482a1003ba925e0d9fd3eea1cbd7e55835e2b773c4feae09f641ab7c228",
+    "sdk/js/src/native.js": "3d9aaafc042a2e929cc6f54048d6de1736c191c1c00a1e9cca9fd94f8ca0f0f7",
+    "sdk/js/src/native/transaction.js": "510724857086ab4f98d11ef10288fdea285ffc131749e7660d7937b69bf06ca9",
+    "sdk/js/tests/fixtures/native-signed-execution.json": "0a90de157e9d10082d409caef1e99657ac14caf76e61305db0f7d3274db7a12e",
+    "sdk/js/tests/fixtures/native-signed-registration.json": "549eda6b41556b6e88b350d497e87cf0d942613210889b9a32996a8b9aa10142",
+    "sdk/js/tests/native-client.unit.test.js": "92c530402df8c30277f2ef15964f7a53d0d322c61f0f6653243bfec8739cd0fb",
+    "sdk/js/tests/native-multisig-transaction.unit.test.js": "19aa3b3beb2619f4b9e01afa4990121c5898deadb86a224175cd493ac5e4024f",
+    "sdk/js/tests/native-runtime-driver.mjs": "2fac46e21316afe5413863957f6e4ed34a850da140b0b756e004acd8cfcfa503",
+    "sdk/js/tests/native-runtime-verifiers.py": "3f1634e60f15c8e167dc1e1c0bee7adced9be311668941413732acb5cc29379c",
+    "sdk/js/tests/native-transaction-artifact.unit.test.js": "08bcbed63e85e8083dcfe118043e6b062d3690e963b5f00cd96a467c28d4afbf",
+    "sdk/js/tests/native-transaction.unit.test.js": "9206948a9d64a04f640c10a4658aa72d642fecbb257bbc6e6a40461d3d4c3e41",
+    "shared/nativeSmartAccountClient.mjs": "b118ecbf67131ddac4a244196788dd499582a580c9938e5e6ec99d0539c0e6f2",
+    "shared/nativeTransactionArtifact.mjs": "e3599c2e21f6c27757dbd4e303824c9fd4ec6ef152b655d6d30ab23fe2839717",
+    "shared/nativeWalletWitness.mjs": "486ccdfd7f09e387a89c720910b836095429c8988203fe16de52275650c753f7",
+    "tests/NativeMultiSigProbe/Program.cs": "c50e5370091f9334fe50fa3b35ef8d8f91c5c9402a35a72cf449d2c829999b3e",
+    "tests/NativeMultiSigProbe/README.md": "bc2f60b31e14532edc8f3617030677a9fe18b53a35770efcade96aae909b6eb0"
+  },
+  "evidenceSha256": {
+    "docs/reports/native-usability-20261009/pending-guard-sdk-vector.json": "39d68a9998ad449f2a1defd5bb71e04290700e6cc17925b49de72ee4054f89a3",
+    "docs/reports/native-usability-20261009/private-runtime.json": "611a3495cf8bb7a3158fa60d06cbcb518f0b218e7a93b4b19775aa150e6facb0",
+    "docs/reports/native-usability-20261009/threshold-public-vectors.json": "ed076429f6f48894fa09e4424d717da6d4cc3671d3469be6da15ed7b9ade91dd",
+    "docs/reports/native-usability-20261009/wallet-interop.json": "743eeaec2684649fe8a7cfa85b0b41fd1fbc17dada96332abd8c0b432c234506"
+  },
+  "counts": {
+    "core": 2003,
+    "newCoreCases": 20,
+    "sdk": 229,
+    "sdkPackageConsumers": 4,
+    "frontend": 639,
+    "nativeWorkspaceUnits": 37,
+    "nativeBrowserCases": 3,
+    "generalBrowserSmokeCases": 1,
+    "publicContracts": 396,
+    "publicArtifactReproduction": 80,
+    "repositoryGuards": 40,
+    "nativeModuleAcceptance": 20,
+    "measuredSamplesPerVersion": 540,
+    "benchmarkVersions": 2,
+    "privateSignedConfirmedTransactions": 38,
+    "privateRejectionControls": 3,
+    "crossLanguageTransactions": 20,
+    "crossLanguageWalletWitnesses": 37,
+    "crossLanguageMultisigWitnesses": 17,
+    "coqModules": 26,
+    "coqDeclarations": 443,
+    "semanticMutations": 247,
+    "temporalDistinctStates": 61460,
+    "smtObligations": 6,
+    "smtControls": 6,
+    "formalRunnerTests": 60
+  },
+  "zeroSkipped": {
+    "core": true,
+    "sdk": true,
+    "frontend": true,
+    "publicContracts": true
+  },
+  "privateRuntime": {
+    "exactSignedArtifacts": true,
+    "publicWalletSignaturesVerified": true,
+    "freshSignedPreflight": true,
+    "exactRawReadback": true,
+    "guardedCancellationIndependentStateReadback": true,
+    "ownedNodeStopped": true,
+    "temporaryWalletStateRemoved": true
+  },
+  "performance": {
+    "maximumPostCallbackDatoshiBefore": 95694229,
+    "maximumPostCallbackDatoshiAfter": 95454583,
+    "savingDatoshi": 239646,
+    "savingPercent": 0.2504288947246756,
+    "limitDatoshi": 100000000,
+    "ownedCopyPreserved": true,
+    "networkThroughputMeasured": false,
+    "latencyImprovementClaimed": false
+  },
+  "independentReview": {
+    "guardAndWalletTransport": "GO_SCOPED",
+    "receiptOnlyRestoration": "GO_SCOPED",
+    "moduleOptimization": "GO_SCOPED"
+  },
+  "browser": {
+    "url": "http://127.0.0.1:5174/native",
+    "desktopWidth": 1440,
+    "mobileWidth": 390,
+    "consoleErrors": 0,
+    "source": "local controlled RPC and fixed public signature fixtures",
+    "inspectedScreenshots": [
+      "native-signed-import-desktop-20261009.png",
+      "native-signed-import-mobile-20261009.png",
+      "native-restored-receipt-desktop-20261009.png",
+      "native-restored-receipt-mobile-20261009.png"
+    ],
+    "realUserWalletExercised": false
+  },
+  "formal": {
+    "modelChecksPassed": true,
+    "implementationVerified": false,
+    "boundary": "Hand-written bounded abstractions; no VM/source/NEF refinement or liveness proof"
+  },
+  "publicNetworksTouched": false,
+  "trackedDeploymentArtifactsReplaced": false,
+  "openBoundaries": [
+    "Native proxy as another account custody/recovery authority: source concern, executable confirmation unavailable.",
+    "Upstream draft protocol/core/RPC review and independent consensus-client conformance.",
+    "Public activation, arbitrary third-party modules and live wallet/hardware-signer interoperability.",
+    "No proposal-instance identifier: exactly identical pending content, including same-block recreation, matches the cancellation guard.",
+    "Existing frontend production bundle-size warning; no page-loading performance claim."
+  ],
+  "publicEvidenceOmissions": [
+    {
+      "path": "docs/reports/native-usability-20261009/formal.json",
+      "reason": "Raw formal receipt is regenerated locally; the public checkpoint retains its bounded summary and source lock."
+    }
+  ]
+}

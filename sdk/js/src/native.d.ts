@@ -159,6 +159,8 @@ export interface NativePlan {
   readonly authorityPolicy?: string;
   readonly role?: "verifier" | "hook";
   readonly pending?: NativePendingModuleCall | null;
+  readonly pendingCallBytes?: string;
+  readonly requiresExactScript?: boolean;
 }
 export interface NativeExecutionPlan extends NativePlan {
   readonly kind: "execution";
@@ -178,11 +180,23 @@ export interface NativeSimulation {
   readonly automaticSystemFeeAvailable: boolean;
   readonly raw: unknown;
 }
-/** Standard Neo P-256 single-signature account. Sign exact networkLE32 || SHA256(unsignedTx), hashing it once with P-256/SHA256; return IEEE P1363 r||s (64-byte hex). */
+/** One member's IEEE P1363 r||s signature (64-byte hex) and compressed P-256 public key. */
+export interface NativeWalletMemberSignature {
+  publicKey: string;
+  signature: string;
+}
+/** Standard Neo P-256 CHECKSIG or canonical CHECKMULTISIG wallet. Sign exact
+ * networkLE32 || SHA256(unsignedTx), hashing it once with P-256/SHA256.
+ * CHECKSIG returns one signature string. CHECKMULTISIG returns member entries;
+ * every submitted entry is verified before selecting m in script public-key order.
+ * Both witness scripts must fit Neo's existing 1,024-byte limits. */
 export interface NativeWalletSigner {
   account: string;
   verificationScript: string;
-  sign: (signDataHex: string) => Promise<string> | string;
+  sign: (signDataHex: string) =>
+    | string
+    | readonly NativeWalletMemberSignature[]
+    | Promise<string | readonly NativeWalletMemberSignature[]>;
 }
 export interface NativeTransactionOptions {
   feePayer: NativeWalletSigner;
@@ -219,6 +233,20 @@ export interface NativeSignedTransaction {
   readonly kind: "signed-native-transaction";
   readonly prepared: NativePreparedTransaction;
   readonly txid: string;
+  readonly rawTransaction: string;
+  readonly witnesses: readonly { readonly invocation: string; readonly verification: string }[];
+}
+/** Public exact-byte artifact. Contains signatures and transaction data, never signing callbacks or private keys. */
+export interface NativeSignedTransactionArtifact {
+  readonly format: "neo-native-signed-transaction";
+  readonly version: 1;
+  readonly networkMagic: number;
+  readonly profile: NativeProfile;
+  readonly transaction: NativePreparedTransaction["transaction"];
+  readonly witnesses: NativeSignedTransaction["witnesses"];
+  readonly unsignedHex: string;
+  readonly txid: string;
+  readonly signData: string;
   readonly rawTransaction: string;
 }
 export interface NativeOperationInput {
@@ -322,6 +350,7 @@ export declare class NativeSmartAccountClient {
   signTransaction(
     prepared: NativePreparedTransaction,
   ): Promise<NativeSignedTransaction>;
+  exportSignedTransaction(signed: NativeSignedTransaction): NativeSignedTransactionArtifact;
   preflightTransaction(signed: NativeSignedTransaction): Promise<{
     hash: string;
     network: number;

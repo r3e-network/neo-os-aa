@@ -66,6 +66,20 @@
     <p v-if="busy" role="status">
       {{ L("Checking native state…", "正在检查原生状态…") }}
     </p>
+    <details class="card receipt-restore" data-testid="native-receipt-restore">
+      <summary>{{ L("Restore a transaction receipt", "恢复交易回执查询") }}</summary>
+      <p>{{ L("After a page refresh, import the original reviewed request and signed transaction to check that exact transaction, including after expiry or execution. This read-only path cannot sign, preflight or broadcast a transaction.", "刷新页面后，可导入原审核请求和已签交易，查询同一笔交易；交易过期或已执行后仍可查询。此入口仅供只读确认，不能签名、预检或广播交易。") }}</p>
+      <label>{{ L("Archived reviewed request", "原审核请求文件") }}<input type="file" accept="application/json,.json" :disabled="busy" @change="readReceiptFile('review', $event)" /></label>
+      <p v-if="receiptFiles.reviewName" class="small">{{ receiptFiles.reviewName }}</p>
+      <label>{{ L("Signed transaction for receipt", "用于查询回执的已签交易文件") }}<input type="file" accept="application/json,.json" :disabled="busy" @change="readReceiptFile('artifact', $event)" /></label>
+      <p v-if="receiptFiles.artifactName" class="small">{{ receiptFiles.artifactName }}</p>
+      <button class="secondary" :disabled="busy || !profile || !receiptFiles.review || !receiptFiles.artifact" @click="restoreReceipt">{{ L("Verify receipt files", "核对回执文件") }}</button>
+      <template v-if="restoredTransaction">
+        <p class="mono">{{ restoredTransaction.txid }}</p>
+        <p>{{ L("Original signed bytes and network verified. Confirmation checks this exact transaction only.", "已核对原已签字节和网络，确认仅针对这笔精确交易。") }}</p>
+        <button class="secondary" :disabled="busy" @click="confirmRestoredReceipt">{{ L("Check restored receipt", "检查恢复的回执") }}</button>
+      </template>
+    </details>
     <nav class="tabs" :aria-label="L('Native account tasks', '原生账户任务')">
       <button
         v-for="item in tabs"
@@ -198,6 +212,23 @@
               </select></label
             >
             <p class="callout">{{ selectedAction.detail }}</p>
+            <div v-if="action === 'freeze' || action === 'unfreeze' || snapshot.account.status === 'Frozen'" class="callout" data-testid="native-freeze-risk">
+              <strong>{{ snapshot.account.status === 'Frozen' ? L("What is needed to unfreeze", "解冻所需条件") : L("Before freezing: plan how to unfreeze", "冻结前：确认如何解冻") }}</strong>
+              <p>{{ L("Unfreezing requires both of these authorities to sign the same transaction:", "解冻需要以下双方共同签署同一笔交易：") }}</p>
+              <dl>
+                <dt>{{ L("Current custody", "当前托管方") }}</dt>
+                <dd class="mono">{{ addressOf(snapshot.account.custodyAddress) }}<br />0x{{ snapshot.account.custodyAddress }}</dd>
+                <dt>{{ L("Current recovery authority", "当前恢复方") }}</dt>
+                <dd class="mono">{{ snapshot.account.recoveryAddress === ZERO_HASH ? L("Not configured", "未配置") : addressOf(snapshot.account.recoveryAddress) }}<br v-if="snapshot.account.recoveryAddress !== ZERO_HASH" /><span v-if="snapshot.account.recoveryAddress !== ZERO_HASH">0x{{ snapshot.account.recoveryAddress }}</span></dd>
+              </dl>
+              <p>{{ L("If recovery can no longer sign while frozen, custody alone cannot unfreeze or replace recovery. Custody recovery keeps the same recovery authority and frozen status. Check that recovery can still sign and that both parties can cooperate before freezing.", "冻结期间若恢复方无法满足签名条件，托管方无法单独解冻或更换恢复方。托管恢复也会保留原恢复方和冻结状态。冻结前请确认恢复方仍能签名，并与托管方约定共同解冻。") }}</p>
+              <p>{{ L("Recovery may use a standard Neo wallet with an m-of-n signature threshold. Keep enough independent signers available to meet that threshold; fewer cannot authorize recovery or unfreeze. This is separate from the account's MultiSigVerifier plugin.", "恢复方可以使用普通 Neo m-of-n 多签钱包。应保留足够的独立签名方以满足阈值；不足阈值时无法授权恢复或解冻。这与账户的 MultiSigVerifier 验证插件是不同机制。") }}</p>
+              <p v-if="snapshot.account.status !== 'Frozen' && !snapshot.account.pendingRecovery">{{ L("If recovery access is at risk while the account is active, custody can propose a replacement recovery authority and activate it after 24 hours. Confirm that change before relying on it.", "账户正常且恢复权限可能丢失时，托管方可先提议更换恢复方，并在 24 小时后激活；请确认变更已上链后再依赖新恢复方。") }}</p>
+              <template v-if="action === 'freeze'">
+                <p>{{ L("Freezing clears pending verifier and hook replacements, recovery-authority replacement, custody recovery, and pending policy calls for both verifier and hook. Active module settings remain installed.", "冻结会清空待生效的验证插件更换、策略插件更换、恢复方更换、托管恢复，以及验证插件和策略插件两类待生效配置调用。当前模块配置仍保留。") }}</p>
+                <p v-if="snapshot.account.pendingRecovery">{{ L("Your pending custody recovery will be cancelled. Starting it again requires a new proposal and a new 7-day delay.", "当前待生效的托管恢复会被取消。重新发起需要新的提议，并重新等待 7 天。") }}</p>
+              </template>
+            </div>
             <label v-if="selectedAction.address"
               >{{
                 action === "proposeRecovery"
@@ -229,8 +260,8 @@
             <p class="small">
               {{
                 L(
-                  "Recovery detaches old plugins without their callbacks; the funding address and frozen state stay unchanged. Recovery can freeze spending immediately. Unfreezing requires current custody and recovery cooperation. A lost custody key can be replaced through recovery; a lost recovery key leaves no custody-only unfreeze.",
-                  "恢复无需旧插件回调即可撤销其权限，收款地址和冻结状态保留。恢复方可立即冻结支出；解冻需要当前托管方与恢复方合作。托管密钥丢失可通过恢复更换；恢复密钥丢失时，托管方无法单独解冻。",
+                  "Recovery detaches old plugins without their callbacks; the funding address and frozen state stay unchanged. Recovery can freeze spending immediately. Unfreezing requires current custody and recovery cooperation. Lost custody access can be replaced through recovery; lost recovery signing access leaves no custody-only unfreeze.",
+                  "恢复无需旧插件回调即可撤销其权限，收款地址和冻结状态保留。恢复方可立即冻结支出；解冻需要当前托管方与恢复方合作。托管权限丢失可通过恢复更换；恢复方无法签名时，托管方无法单独解冻。",
                 )
               }}
             </p>
@@ -272,8 +303,8 @@
           <p class="small">
             {{
               L(
-                "Use a separately controlled Neo wallet you can access. Recovery can freeze spending and replace custody after 7 days. Unfreezing needs both authorities, so back up both keys and agree how to cooperate. An Ethereum-shaped hash does not prove Neo wallet control.",
-                "请选择可实际使用、独立保管的 Neo 钱包。恢复方可以冻结支出，并在 7 天后更换托管方。解冻需要双方权限，请备份双方密钥并约定协作方式。Ethereum 地址外形并不证明具备 Neo 钱包控制权。",
+                "Use a separately controlled Neo wallet you can access. Recovery can freeze spending and replace custody after 7 days. Unfreezing needs both authorities, so preserve both signing paths and agree how to cooperate. An Ethereum-shaped hash does not prove Neo wallet control.",
+                "请选择可实际使用、独立保管的 Neo 钱包。恢复方可以冻结支出，并在 7 天后更换托管方。解冻需要双方权限，请确保双方签名方式可用并约定协作方式。Ethereum 地址外形并不证明具备 Neo 钱包控制权。",
               )
             }}
           </p>
@@ -380,7 +411,7 @@
               <button class="secondary" :disabled="busy || !profile" @click="cancelPolicy">
                 {{ L("Review policy cancellation", "审核取消配置") }}
               </button>
-              <p class="small">{{ L("Cancellation removes this role’s pending call when executed; active permissions stay unchanged. The review is checked again before signing. If another custody device changes the pending call before confirmation, cancellation can affect the new call.", "取消在执行时移除此角色的待生效调用，当前权限不变。签名前会再次核对；若其他托管设备在确认前更改了待生效调用，取消可能影响新调用。") }}</p>
+              <p class="small">{{ L("Cancellation checks this exact pending call again on chain before removing it. If another device changes it first, cancellation fails and the replacement stays pending. Active permissions stay unchanged.", "取消交易会在链上再次核对这笔待生效调用。若其他设备先更改了它，取消会失败，新调用仍待生效；当前权限不变。") }}</p>
             </template>
             <p v-else>{{ L("No policy call is pending for this role.", "此角色没有待生效配置。") }}</p>
           </div>
@@ -697,7 +728,7 @@
             <dt>{{ L("Minimum system fee budget", "最低系统费预算") }}</dt>
             <dd data-testid="native-minimum-system-fee">{{ formatGas(review.simulation.minimumRequiredFee) }}</dd>
             <dt>{{ L("Network fee", "网络费") }}</dt>
-            <dd>{{ L("Not quoted; confirm in wallet or SDK", "尚未报价；请在钱包或 SDK 核对") }}</dd>
+            <dd>{{ signedTransaction ? formatGas(signedTransaction.fees.network) : L("Not quoted; confirm in wallet or SDK", "尚未报价；请在钱包或 SDK 核对") }}</dd>
             <dt>{{ L("Script bytes", "脚本字节数") }}</dt>
             <dd>{{ review.plan.script.length / 2 }}</dd>
           </dl>
@@ -735,10 +766,15 @@
               )
             }}</label
           >
+          <label v-if="review.plan.method === 'freeze'" class="check" data-testid="native-freeze-acknowledgement">
+            <input v-model="freezeAccepted" type="checkbox" :disabled="busy" />
+            {{ L("I understand both authorities are needed to unfreeze, losing recovery access can leave funds frozen, and pending changes will be cleared.", "我已了解解冻需要双方合作，恢复权限丢失可能导致资金无法解冻，且待生效变更会被清空。") }}
+          </label>
           <div class="actions">
             <button
               :disabled="
                 !accepted ||
+                (review.plan.method === 'freeze' && !freezeAccepted) ||
                 busy ||
                 !review.walletSupported ||
                 !!review.simulationError ||
@@ -749,7 +785,7 @@
               {{ L("Send to wallet for approval", "交给钱包确认") }}</button
             ><button
               class="secondary"
-              :disabled="!accepted || busy"
+              :disabled="!accepted || (review.plan.method === 'freeze' && !freezeAccepted) || busy"
               @click="exportRequest"
             >
               {{ L("Export reviewed request", "导出审核请求") }}
@@ -757,12 +793,40 @@
           </div>
           <p v-if="!review.walletSupported" class="callout">
             {{
-              L(
+              review.plan.requiresExactScript ? L(
+                "This cancellation needs the exact script to preserve its pending-intent check. The connected wallet's invoke interface rebuilds the call and cannot preserve that check. Export the request for exact transaction signing; ordinary wallet invoke is disabled.",
+                "此取消操作必须保留精确脚本中的待生效调用核对。已连接钱包的 invoke 接口会重新组装调用，无法保留这项核对。请导出请求完成精确交易签名；普通钱包 invoke 已禁用。",
+              ) : L(
                 "This needs exact-script or multiple-authority signing. Export it for the native SDK. Ordinary wallet invoke is disabled.",
                 "此请求需要精确脚本或多权限签名，请导出后使用原生 SDK。普通钱包 invoke 已禁用。",
               )
             }}
           </p>
+          <section v-if="review.submission === 'native-sdk'" class="callout" data-testid="native-signed-import">
+            <h3>{{ L("Import and submit a signed transaction", "导入并提交已签交易") }}</h3>
+            <p>{{ L("Export this review, sign its exact transaction with your existing wallet through the native SDK, then exportSignedTransaction. Import that file here. Keys remain in your wallet; this page does not request them.", "请导出本次审核，使用现有钱包通过原生 SDK 签署精确交易，再调用 exportSignedTransaction 导出文件并在此导入。密钥保留在钱包中，本页不会索取。") }}</p>
+            <p>{{ L("Set all three maximum fees before importing. These limits validate the signed fees; they do not change the transaction.", "导入前请明确三项费用上限。这些上限仅用于核对已签费用，不会修改交易。") }}</p>
+            <label>{{ L("Maximum system fee (GAS)", "最高系统费（GAS）") }}<input v-model.trim="feeLimits.system" inputmode="decimal" :disabled="busy || signedAttempted" /></label>
+            <label>{{ L("Maximum network fee (GAS)", "最高网络费（GAS）") }}<input v-model.trim="feeLimits.network" inputmode="decimal" :disabled="busy || signedAttempted" /></label>
+            <label>{{ L("Maximum total fee (GAS)", "最高总费用（GAS）") }}<input v-model.trim="feeLimits.total" inputmode="decimal" :disabled="busy || signedAttempted" /></label>
+            <label>{{ L("Import signed transaction file", "导入已签交易文件") }}<input type="file" accept="application/json,.json" :disabled="busy || signedAttempted" @change="importSignedTransaction" /></label>
+            <p v-if="signedTransaction && signedFileName" class="small">{{ L("Imported", "已导入") }}: {{ signedFileName }}</p>
+            <template v-if="signedTransaction">
+              <dl>
+                <dt>{{ L("Transaction hash", "交易哈希") }}</dt><dd class="mono">{{ signedTransaction.txid }}</dd>
+                <dt>{{ L("Signed system fee", "已签系统费") }}</dt><dd>{{ formatGas(signedTransaction.fees.system) }}</dd>
+                <dt>{{ L("Signed network fee", "已签网络费") }}</dt><dd>{{ formatGas(signedTransaction.fees.network) }}</dd>
+                <dt>{{ L("Signed total fee", "已签总费用") }}</dt><dd>{{ formatGas(signedTransaction.fees.total) }}</dd>
+                <dt>{{ L("Valid until block", "有效截止区块") }}</dt><dd>{{ signedTransaction.transaction.validUntilBlock }}</dd>
+              </dl>
+              <button class="secondary" :disabled="busy || signedAttempted" @click="preflightSignedTransaction">{{ L("Check signed transaction", "预检已签交易") }}</button>
+              <p v-if="signedPreflight" data-testid="native-signed-preflight">{{ L("Signatures and execution passed at snapshot block", "签名与执行预检通过，快照区块") }} {{ signedPreflight.snapshot.height }}. {{ L("This is not chain confirmation. Submission checks again using fresh state.", "这不代表链上确认。提交前会使用最新状态再次预检。") }}</p>
+              <label class="check"><input v-model="signedAccepted" type="checkbox" :disabled="busy || signedAttempted" />{{ L("I approve these exact signed fees and this transaction hash for broadcast.", "我同意广播此交易哈希对应的交易，并接受上述已签费用。") }}</label>
+              <button :disabled="busy || signedAttempted || !signedPreflight || !signedAccepted || !accepted || (review.plan.method === 'freeze' && !freezeAccepted)" @click="broadcastSignedTransaction">{{ L("Broadcast signed transaction", "广播已签交易") }}</button>
+              <p v-if="signedAttempted">{{ L("Submission was attempted for this hash. Check confirmation; this page will not resend it automatically.", "已尝试提交此哈希对应的交易。请检查确认状态，本页不会自动重发。") }}</p>
+              <button class="secondary" :disabled="busy" @click="confirmSignedTransaction">{{ L("Check imported transaction confirmation", "检查导入交易的确认状态") }}</button>
+            </template>
+          </section>
           <label
             >{{
               L(
@@ -823,6 +887,7 @@ import {
   createNativeWalletAdapter,
   nativeCodec,
   nativeAddress,
+  nativeGasLimit,
   ZERO_HASH,
   NATIVE_ACTIONS,
   actionBlockReason,
@@ -840,17 +905,27 @@ const endpoint = ref(RUNTIME_CONFIG.rpcUrl),
   profile = shallowRef(null),
   snapshot = shallowRef(null),
   pendingPolicy = shallowRef(null),
-  review = shallowRef(null);
+  review = shallowRef(null),
+  signedTransaction = shallowRef(null),
+  signedPreflight = shallowRef(null),
+  restoredTransaction = shallowRef(null);
 const tab = ref("account"),
   busy = ref(false),
   error = ref(""),
   notice = ref(""),
   accepted = ref(false),
+  freezeAccepted = ref(false),
+  signedAccepted = ref(false),
+  signedAttempted = ref(false),
+  signedFileName = ref(""),
   submitted = ref(false),
   txid = ref(""),
   feePayer = ref(""),
   signingPath = ref("wallet-invoke"),
   accountId = ref("");
+const feeLimits = reactive({ system: "", network: "", total: "" });
+const receiptFiles = reactive({ review: "", artifact: "", reviewName: "", artifactName: "" });
+let signedInputVersion = 0;
 const registration = reactive({
   custodyAddress: "",
   recoveryAddress: "",
@@ -952,15 +1027,28 @@ function clearReview() {
   review.value = null;
   workspace.clearReview();
   accepted.value = false;
+  freezeAccepted.value = false;
   submitted.value = false;
   txid.value = "";
+  clearSignedTransaction();
 }
+function clearSignedTransaction() {
+  signedInputVersion++;
+  workspace.clearImported();
+  signedTransaction.value = null;
+  signedPreflight.value = null;
+  signedAccepted.value = false;
+  signedAttempted.value = false;
+  signedFileName.value = "";
+}
+watch(feeLimits, clearSignedTransaction, { flush: "sync" });
 function invalidate() {
   workspace.invalidate();
   profile.value = null;
   snapshot.value = null;
   pendingPolicy.value = null;
   clearReview();
+  restoredTransaction.value = null;
   notice.value = "";
 }
 watch([endpoint, network], invalidate, { flush: "sync" });
@@ -1026,6 +1114,8 @@ async function run(fn) {
       profile.value = null;
       snapshot.value = null;
       pendingPolicy.value = null;
+      restoredTransaction.value = null;
+      workspace.clearArchived();
       clearReview();
     }
     error.value = String(e.message || "Request failed.").slice(0, 400);
@@ -1039,6 +1129,7 @@ async function connectNode() {
     snapshot.value = null;
     pendingPolicy.value = null;
     profile.value = null;
+    restoredTransaction.value = null;
     profile.value = await workspace.connect({
       rpcUrl: endpoint.value,
       networkMagic: network.value,
@@ -1091,8 +1182,10 @@ async function useWallet() {
   });
 }
 function setReview(value) {
+  clearSignedTransaction();
   review.value = value;
   accepted.value = false;
+  freezeAccepted.value = false;
   submitted.value = false;
   txid.value = "";
 }
@@ -1299,6 +1392,96 @@ async function confirmTransaction() {
     );
   });
 }
+async function importSignedTransaction(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  await run(async () => {
+    clearSignedTransaction();
+    if (file.size > 1048576) throw Error(L("Signed transaction file exceeds 1 MiB.", "已签交易文件超过 1 MiB。"));
+    const current = review.value;
+    const inputVersion = signedInputVersion;
+    const caps = {
+      maxSystemFee: nativeGasLimit(feeLimits.system),
+      maxNetworkFee: nativeGasLimit(feeLimits.network),
+      maxTotalFee: nativeGasLimit(feeLimits.total),
+    };
+    const text = await file.text();
+    if (review.value !== current || inputVersion !== signedInputVersion) throw Error(L("Review or fee limits changed while reading the file. Import again.", "读取文件期间审核或费用上限已改变，请重新导入。"));
+    signedTransaction.value = await workspace.importSigned(current, text, caps);
+    signedFileName.value = file.name;
+    notice.value = L("Signed bytes, signatures, network, authorities and fees match this review. Check the signed transaction before broadcasting.", "已签字节、签名、网络、权限和费用与本次审核匹配。广播前请预检已签交易。" );
+  });
+}
+async function preflightSignedTransaction() {
+  await run(async () => {
+    signedPreflight.value = null;
+    signedAccepted.value = false;
+    signedPreflight.value = await workspace.preflightSigned(signedTransaction.value);
+  });
+}
+async function broadcastSignedTransaction() {
+  await run(async () => {
+    const transaction = signedTransaction.value;
+    try {
+      await workspace.broadcastSigned(transaction);
+      if (signedTransaction.value !== transaction) throw Object.assign(Error(L("Review changed after submission. Check transaction ", "提交后审核已改变，请检查交易 ") + transaction.txid), { submissionAttempted: true, txid: transaction.txid });
+      signedAttempted.value = true;
+      submitted.value = true;
+      txid.value = transaction.txid;
+      notice.value = L("Exact signed transaction submitted. Check its chain confirmation.", "已提交精确的已签交易，请检查链上确认。" );
+    } catch (cause) {
+      if (cause.submissionAttempted) {
+        if (signedTransaction.value === transaction) {
+          signedAttempted.value = true;
+          submitted.value = true;
+          txid.value = transaction.txid;
+        }
+        throw Error(L("Submission result is uncertain. Do not create a replacement yet; check transaction ", "提交结果尚不确定。请勿立即创建替代交易，先检查交易 ") + (cause.txid || transaction.txid));
+      }
+      throw cause;
+    }
+  });
+}
+async function confirmSignedTransaction() {
+  await run(async () => {
+    const receipt = await workspace.confirmSigned(signedTransaction.value);
+    showSignedReceipt(receipt);
+  });
+}
+function showSignedReceipt(receipt) {
+  if (!receipt.confirmed) {
+    notice.value = L("This transaction is not confirmed on the selected node yet.", "所选节点尚未确认此交易。");
+  } else if (!receipt.succeeded) {
+    throw Error(L("The exact transaction is confirmed but execution failed: ", "精确交易已上链，但执行失败：") + (receipt.failures?.join("; ") || receipt.exception || receipt.vmState));
+  } else {
+    notice.value = L("The exact signed bytes are confirmed and execution succeeded. Refresh the account for current state.", "精确的已签字节已确认且执行成功，请刷新账户查看当前状态。");
+  }
+}
+async function readReceiptFile(kind, event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  await run(async () => {
+    restoredTransaction.value = null;
+    workspace.clearArchived();
+    receiptFiles[kind] = "";
+    receiptFiles[kind + "Name"] = "";
+    if (file.size > 1048576) throw Error(L("Receipt file exceeds 1 MiB.", "回执文件超过 1 MiB。"));
+    receiptFiles[kind] = await file.text();
+    receiptFiles[kind + "Name"] = file.name;
+  });
+}
+async function restoreReceipt() {
+  await run(async () => {
+    restoredTransaction.value = null;
+    restoredTransaction.value = await workspace.restoreReceipt(receiptFiles.review, receiptFiles.artifact);
+    notice.value = L("Receipt files verified for read-only confirmation. No transaction can be submitted from this import.", "回执文件已核对，仅可用于只读确认。此次导入无法提交交易。" );
+  });
+}
+async function confirmRestoredReceipt() {
+  await run(async () => showSignedReceipt(await workspace.confirmRestoredReceipt(restoredTransaction.value)));
+}
 </script>
 <style scoped>
 .native-workspace {
@@ -1309,6 +1492,7 @@ async function confirmTransaction() {
   font-size: 14px;
   line-height: 1.55;
 }
+.receipt-restore { margin-bottom: 24px; }
 .native-heading {
   display: flex;
   justify-content: space-between;

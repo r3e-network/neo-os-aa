@@ -275,10 +275,53 @@ function lifecycleFixture(role = "verifier") {
   return {
     ...f,
     accountId,
+    pendingCallBytes: c.serializeValue(
+      (function canonical(item) {
+        return {
+          type: item.type,
+          value:
+            item.type === "Array"
+              ? item.value.map(canonical)
+              : item.type === "ByteString"
+                ? Buffer.from(item.value, "base64").toString("hex")
+                : item.value,
+        };
+      })(pending),
+    ),
+    allowSimulation: (plan) => actions.add(plan.script),
     replacePending: () => {
       pending.value[6] = A([H(accountId), I(2)]);
     },
   };
+}
+function guardedCancellationScript(accountId, role, pendingCallBytes) {
+  const { sc, u } = require("@cityofzion/neon-js"),
+    args = [sc.ContractParam.hash160(accountId), role];
+  return new sc.ScriptBuilder()
+    .emitContractCall({
+      scriptHash: CORE,
+      operation: "getPendingModuleCall",
+      args,
+      callFlags: sc.CallFlags.ReadOnly,
+    })
+    .emitPush(1)
+    .emit(sc.OpCode.PACK)
+    .emitPush(sc.CallFlags.None)
+    .emitPush("serialize")
+    .emitHexString(
+      u.HexString.fromHex("acce6fd80d44e1796aa0c2c625e9e4e0ce39efc0"),
+    )
+    .emitSysCall(sc.InteropServiceCode.SYSTEM_CONTRACT_CALL)
+    .emitHexString(pendingCallBytes)
+    .emit(sc.OpCode.EQUAL)
+    .emit(sc.OpCode.ASSERT)
+    .emitContractCall({
+      scriptHash: CORE,
+      operation: "cancelModuleCall",
+      args,
+      callFlags: sc.CallFlags.All,
+    })
+    .str;
 }
 test("native transaction uses external payer first, exact proxy script, none payer scope and real P256 signed bytes", async () => {
   const f = fixture(),
@@ -334,6 +377,57 @@ for (const action of [
     assert.deepEqual(simulation.params[1], expectedSigners);
   });
 }
+test("guarded cancellation preserves the complete reviewed script through signing and transaction imports", async () => {
+  for (const role of ["verifier", "hook"]) {
+    const f = lifecycleFixture(role),
+      plan = await f.client.buildAction({
+        accountId: f.accountId,
+        action: "cancelModuleCall",
+        role,
+      }),
+      expectedScript = guardedCancellationScript(
+        f.accountId,
+        role,
+        f.pendingCallBytes,
+      ),
+      methodOnlyScript = c.dynamicCall(CORE, "cancelModuleCall", [
+        c.hashValue(f.accountId),
+        c.stringValue(role),
+      ]);
+    assert.equal(plan.script, expectedScript);
+    assert.equal(plan.requiresExactScript, true);
+    assert.equal(plan.pendingCallBytes, f.pendingCallBytes);
+    assert.notEqual(plan.script, methodOnlyScript);
+    f.allowSimulation(plan);
+    const prepared = await f.tool.prepareNativeTransaction(f.client, plan, {
+        ...f.options,
+        authoritySigners: [f.custody],
+      }),
+      signed = await f.tool.signNativeTransaction(f.client, prepared),
+      { tx } = require("@cityofzion/neon-js"),
+      imported = tx.Transaction.deserialize(signed.rawTransaction),
+      jsonImported = tx.Transaction.fromJson(imported.toJson());
+    assert.equal(prepared.transaction.script, expectedScript);
+    assert.equal(imported.script.toString(), expectedScript);
+    assert.equal(imported.serialize(), signed.rawTransaction);
+    assert.equal(jsonImported.script.toString(), expectedScript);
+    assert.equal(jsonImported.serialize(), signed.rawTransaction);
+    const simulation = f.calls.find(
+      (call) =>
+        call.method === "invokescript" &&
+        Buffer.from(call.params[0], "base64").toString("hex") === expectedScript,
+    );
+    assert.ok(simulation, "simulation must use the complete guarded script");
+    for (const quote of f.calls.filter(
+      (call) => call.method === "calculatenetworkfee",
+    )) {
+      const quoted = tx.Transaction.deserialize(
+        Buffer.from(quote.params[0], "base64").toString("hex"),
+      );
+      assert.equal(quoted.script.toString(), expectedScript);
+    }
+  }
+});
 test("replacing a pending module cancellation intent rejects signing before any wallet callback", async () => {
   for (const role of ["verifier", "hook"]) {
     const f = lifecycleFixture(role),
@@ -350,8 +444,9 @@ test("replacing a pending module cancellation intent rejects signing before any 
           signedBy.push(wallet.account);
           return wallet.sign(hex);
         },
-      }),
-      prepared = await f.tool.prepareNativeTransaction(f.client, plan, {
+      });
+    f.allowSimulation(plan);
+    const prepared = await f.tool.prepareNativeTransaction(f.client, plan, {
         ...f.options,
         feePayer: observe(f.payer),
         authoritySigners: [observe(f.custody)],
@@ -367,10 +462,7 @@ test("replacing a pending module cancellation intent rejects signing before any 
     ]);
     assert.equal(
       plan.script,
-      c.dynamicCall(CORE, "cancelModuleCall", [
-        c.hashValue(f.accountId),
-        c.stringValue(role),
-      ]),
+      guardedCancellationScript(f.accountId, role, f.pendingCallBytes),
     );
     assert.deepEqual(signedBy, []);
     f.replacePending();

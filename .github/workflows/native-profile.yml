@@ -95,6 +95,7 @@ jobs:
           python3 docs/proposals/validate-native-smartaccount-profile.py
           python3 -m unittest discover -s docs/proposals -p test_native_profile_v2.py -v
           python3 -m unittest discover -s scripts -p test_native_profile_ci.py -v
+          python3 -m unittest discover -s scripts -p test_native_budget_benchmark.py -v
           python3 -m unittest discover -s scripts -p test_native_module_profile.py -v
           python3 -m unittest discover -s scripts -p test_build_native_modules.py -v
       - name: Restore audited packages and compiler

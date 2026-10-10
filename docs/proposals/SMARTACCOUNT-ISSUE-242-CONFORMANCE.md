@@ -51,3 +51,18 @@ confirmation is still unavailable. Do not treat nested-account authority as a
 supported recovery arrangement or this audit as complete protocol clearance.
 Resolving that boundary must preserve the specified target-frame witness
 isolation and receive the corresponding native-protocol review.
+
+The [usability follow-up](../reports/aa-native-usability-20261009.md) adds
+execution-time pending-content checks to SDK cancellation, standard Neo
+CHECKMULTISIG wallet authorities, exact signed-file submission and recovery of
+historical receipts. These are client and integration guarantees; the native
+two-argument cancellation entrypoint, ABI 2, identity version 1 and parameter
+digest remain unchanged. The native core additions in this follow-up are tests.
+
+The [performance comparison](../NATIVE_ACCOUNT_PERFORMANCE.md) keeps all callback
+bounds and authorization checks. A fresh owned range copy reduces the measured
+maximum fixture's post-execution callback cost by 239,646 datoshi (0.2504%).
+The result is specific to the pinned runtime and module artifacts; it does not
+establish network throughput, arbitrary module feasibility or compiler refinement.
+None of these results resolves the nested-account authority boundary above or
+replaces independent consensus-client conformance and upstream protocol review.

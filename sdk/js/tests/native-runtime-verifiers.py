@@ -18,10 +18,12 @@ parser = argparse.ArgumentParser()
 for name in ('runtime', 'build-receipt', 'artifacts', 'module-receipt', 'dotnet', 'output'):
     parser.add_argument('--' + name, type=Path, required=True)
 parser.add_argument('--retain-on-failure', action='store_true')
+parser.add_argument('--signed-artifact-transport', action='store_true',
+                    help='Validate export, portable signature checks, exact signed preflight, submission and raw receipt')
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(repo / 'scripts'))
-from neoexpress_validate import Chain, RawKey, H, I, hash_le, ValidationFailure
+from neoexpress_validate import Chain, RawKey, H, I, S, hash_le, ValidationFailure
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
 from neoexpress_native_service_validate import CORE, check_native, check_account_record
 from neoexpress_native_modules_validate import check_module_build, nef_from_rpc
@@ -31,6 +33,7 @@ TOKEN = '0xd2a4cff31913016155e38e474a2c06d08be276cf'
 NAMES = ('NeoNativeVerifier', 'SessionKeyVerifier', 'MultiSigVerifier')
 driver = Path(__file__).with_name('native-runtime-driver.mjs')
 sources = [Path(__file__), driver, repo/'shared/nativeSmartAccount.mjs', repo/'shared/nativeSmartAccountClient.mjs',
+           repo/'shared/nativeTransactionArtifact.mjs', repo/'shared/nativeWalletWitness.mjs',
            repo/'sdk/js/src/native.js', repo/'sdk/js/src/neonCompat.js',
            *sorted((repo/'sdk/js/src/native').glob('*.js')),
            *[repo/'scripts'/n for n in ('neoexpress_validate.py', 'neoexpress_activation_validate.py',
@@ -95,7 +98,8 @@ try:
                 require(nef_from_rpc(state['nef']) == artifact.read_bytes(), 'Deployed full NEF mismatch')
                 require(state['manifest'] == json.loads(artifact.with_suffix('.manifest.json').read_text()), 'Deployed manifest mismatch')
                 row['fullArtifactReadbackMatched'] = True
-            common = {'rpcUrl': f'http://127.0.0.1:{chain.rpc_port}', 'networkMagic': chain.magic, 'diagnosticOutput': str(directory/'sdk-fault.json')}
+            common = {'rpcUrl': f'http://127.0.0.1:{chain.rpc_port}', 'networkMagic': chain.magic, 'diagnosticOutput': str(directory/'sdk-fault.json'),
+                      'signedArtifactTransport': args.signed_artifact_transport}
             secrets = {'payerPrivateKey': keys['sponsor'], 'custodyPrivateKey': keys['owner']}
             def sdk(payload, expect_error=None):
                 run = subprocess.run([shutil.which('node'), str(driver)], input=json.dumps(dict(common, **payload)),
@@ -115,6 +119,13 @@ try:
             def record(label, result):
                 require(result['preflight']['verification'] == 'Succeed' and result['preflight']['state'] == 'HALT', 'Exact signed preflight failed')
                 require(result['receipt']['confirmed'] and result['receipt']['vmState'] == 'HALT', 'SDK exact bytes not confirmed')
+                if args.signed_artifact_transport:
+                    artifact = result.get('artifactTransport', {})
+                    require(artifact.get('exactBytesMatched') is True and artifact.get('walletSignaturesVerified') is True,
+                            'Portable signed-artifact validation was not executed')
+                    require(artifact['preflight']['verification'] == 'Succeed' and artifact['preflight']['state'] == 'HALT',
+                            'Portable artifact signed preflight failed')
+                    require(result['receipt'].get('succeeded') is True, 'Portable artifact receipt did not confirm success')
                 report['transactions'].append(dict(step=label, **result))
                 print(label+': SDK signed/preflight/broadcast/readback HALT', flush=True)
                 return result
@@ -262,9 +273,31 @@ try:
             all_valid['selectedQuorumEvidence'] = {'rosterOrder':[modules[NAMES[1]],modules[NAMES[0]],modules['SessionKeyVerifier2']],
                 'threshold':2,'providedProofs':3,'selectedIndices':[0,1], 'unselectedSessionSpentUnchanged':True}
             report['transactions'][-1]['selectedQuorumEvidence'] = all_valid['selectedQuorumEvidence']
+            if args.signed_artifact_transport:
+                account = accounts[NAMES[0]]
+                before = account_state(account)
+                policy_before = value(modules[NAMES[0]], 'getConfig', [H(account)])
+                stage = 'native-root-policy-cancel-propose'
+                record(stage, sdk(dict(secrets, mode='configure', accountId=account,
+                    configuration={'role': 'verifier', 'method': 'setConfig', 'args': native_args})))
+                require(value(CORE, 'getPendingModuleCall', [H(account), S('verifier')]) is not None,
+                        'Policy cancellation fixture has no pending verifier call')
+                stage = 'native-root-policy-cancel-guarded'
+                cancelled = record(stage, sdk(dict(secrets, mode='cancel-policy', accountId=account, role='verifier')))
+                require(cancelled['artifactTransport']['guardedCancellation'] is True,
+                        'Cancellation did not preserve the reviewed exact script')
+                require(value(CORE, 'getPendingModuleCall', [H(account), S('verifier')]) is None,
+                        'Guarded cancellation did not remove the pending call')
+                require(account_state(account) == before and value(modules[NAMES[0]], 'getConfig', [H(account)]) == policy_before,
+                        'Cancellation changed the account record or active policy')
+                report['guardedCancellationReadback'] = {
+                    'pendingPresentBefore': True, 'pendingAbsentAfter': True,
+                    'accountRecordUnchanged': True, 'activePolicyUnchanged': True,
+                }
             require(all(balance(addresses[name]) == 0 for name in ('owner', 'cosigner', 'session', 'session2')), 'Authority key paid transaction fees')
             report.update(networkMagic=chain.magic, accounts=accounts, proxies=proxies, zeroGasAuthorities=True,
-                privateKeyTransport='stdin-only; temporary files mode0600', exactSignedRawReadback=True)
+                privateKeyTransport='stdin-only; temporary files mode0600', exactSignedRawReadback=True,
+                signedArtifactTransport=args.signed_artifact_transport)
         finally:
             if args.retain_on_failure and sys.exc_info()[0] is not None:
                 retained = True

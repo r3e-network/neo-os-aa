@@ -43,7 +43,8 @@ review and public-network activation remain separate draft-release gates.
    can cancel the selected pending call. Cancellation removes that proposal,
    not an active key or policy. Applying the policy after 24 hours still requires
    custody and its exact stored arguments. Delayed policy calls are exported as exact scripts; configuration
-   never masquerades as an immediate key revocation.
+   never masquerades as an immediate key revocation. A cancellation export includes
+   an execution-time comparison against the reviewed pending bytes.
 6. **Business operation**: build an exact typed operation with RPC nonce, finite
    deadline, current authority domain and digest cross-check. Show fee payer,
    exact targets, bytes and profile bounds. Native sponsorship is absent; there
@@ -74,11 +75,31 @@ selected provider must expose `getNetwork()` or `getNetworks()` with a recogniza
 active network (numeric magic or MainNet/TestNet). A supported-networks list alone
 is not proof of the selected network. The actor is the fee payer and uses
 `CalledByEntry`; Global scope is never requested. Dual-authority unfreeze,
-configuration and proxy execution remain exact-script exports with explicit
-required signer/witness details. Wallet confirmation is a user action; automated
+configuration, guarded policy cancellation and proxy execution use exact-script
+exports with explicit required signer/witness details. A standard wallet
+multisignature can represent the configured guardian as one script hash; retain
+the complete script, member keys and threshold as described in
+[threshold recovery](NATIVE_ACCOUNT_THRESHOLD_RECOVERY.md).
+Wallet confirmation is a user action; automated
 QA never requests a live signature. Wallet rejection leaves the review intact.
 A returned transaction id is submitted, not confirmed; readback checks its exact
 script and HALT application log before marking confirmation.
+
+For an exact-script review, the **Import and submit a signed transaction** panel
+accepts the SDK's exported JSON file after explicit system, network and total GAS
+ceilings are entered. **Check signed transaction** validates its canonical bytes,
+network/profile, ordered signer roster, signatures and complete signed preflight.
+**Broadcast signed transaction** repeats preflight and sends the same bytes once.
+Changing the review or fee limits invalidates the imported approval. A timeout
+keeps the original transaction ID available through **Check imported transaction
+confirmation**; a committed FAULT is shown as unsuccessful. See
+[signed transaction import](NATIVE_SIGNED_TRANSACTION_IMPORT.md) for supported
+formats and confirmation recovery.
+
+Before freezing, the review shows both custody and guardian identities, the
+effect on pending proposals and recovery timing, and the authority needed to
+unfreeze. An explicit acknowledgment is required. Freezing does not introduce
+a custody-only override if the configured guardian loses its signing quorum.
 
 ## Validation contract
 
@@ -137,14 +158,17 @@ After recovery, the descriptor still finds the same account; fresh on-chain
 state supplies current authority. A descriptor does not reset authority or
 recover a lost wallet private key.
 
-An exported policy cancellation includes both its explicit verifier/hook role
-and the pending-call snapshot reviewed for that role. Reloading before submission
-rejects replacement or removal observed by the last revalidation. The native
-call encodes only `cancelModuleCall(accountId, role)`, not the snapshot or its
-digest. Pending state can still change before inclusion, and cancellation acts
-on the role's pending call at execution. Coordinate custody devices to avoid
-concurrent changes and inspect confirmed pending state. The same cancel script
-does not prove that the original reviewed intent is still current.
+An exported policy cancellation includes its explicit verifier/hook role and
+the complete pending-call snapshot. Its signed script asserts the canonical
+pending bytes on chain before invoking cancellation, so changed or missing
+content faults before deletion even if it changed after client revalidation.
+The workspace requires exact-script signing and disables ordinary wallet invoke
+for this operation. The unchanged native method still supports deliberate role
+slot cancellation by other callers. An exactly identical record recreated in
+the same block can match the guard; this is content binding rather than a unique
+proposal-instance identifier. Inspect confirmed pending state. The
+[guard specification](NATIVE_ACCOUNT_TRANSACTION_GUARDS.md) defines the exact
+script, byte encoding and compatibility boundary.
 
 Session defaults use a 48-hour expiry so the initial 24-hour configuration delay
 leaves a useful session. New grants ending before activation are rejected. The
