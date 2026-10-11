@@ -38,6 +38,16 @@ records the actual SDK-signed transaction matrix. The
 [convergence report](../reports/aa-native-convergence-20261009.md) indexes the final
 validation and remaining upstream activation boundaries.
 
+The separate `scripts/neoexpress_activation_validate.py` receipt uses
+`evidenceKind: "syscall-smoke"` and `nativeActivationClaim: false`. It deploys
+an ordinary diagnostic contract only to exercise the
+`System.Contract.CallWithGasLimit` activation boundary, rejection path and
+budget-exhaustion behavior. It does not activate, invoke, or establish
+conformance for the native `AccountManagement` service. Native service
+lifecycle evidence is produced by the distinct native-service harness below
+and remains subject to the profile, node, upstream-review and network-activation
+gates.
+
 ## Historical intermediate ABI 2 builds
 
 The earlier ABI 2 source runner was rebuilt twice from its then-reviewed production

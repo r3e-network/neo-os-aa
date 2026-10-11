@@ -67,6 +67,27 @@ The resource budgets are fixed profile parameters. They are not operation
 fields, account-controlled values, or fee-whitelist exemptions. A later profile
 version MUST use a new ABI version and activation boundary when changing them.
 
+### Resource units and effective bounds
+
+The profile uses **datoshi** as its resource unit (`1 GAS = 100,000,000
+datoshi`). The callback schedule is fixed; the profile default and profile
+maximum are therefore the same value and cannot be supplied by an account,
+module, relayer, or operation:
+
+| Callback | Unit | Profile default | Profile maximum |
+|---|---|---:|---:|
+| Verifier validation and post-execution | datoshi | `100,000,000` | `100,000,000` |
+| Hook pre- and post-execution | datoshi | `250,000,000` | `250,000,000` |
+| Module maintenance and cleanup | datoshi | `250,000,000` | `250,000,000` |
+
+These are child-call limits, not a default or maximum for the enclosing
+transaction. The effective admission limit is the lesser of the fixed profile
+maximum, the remaining enclosing transaction budget, and every active ancestor
+budget. A non-positive limit or a limit above any of those remaining budgets
+MUST be rejected before the child context is created. The profile does not
+define an outer transaction fee default or maximum; those values remain part of
+the network fee policy and the transaction's explicit fee caps.
+
 The activation record MUST include this parameter digest:
 
 ```text

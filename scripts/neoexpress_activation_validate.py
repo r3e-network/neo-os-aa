@@ -164,7 +164,10 @@ def run_case(label, runner, height, expected, boundary_timeout=None):
 def validate(runtime, historical_runtime, dotnet, output, boundary_height=8, timeout=180):
     report = {
         "schema": "smartaccount-private-activation-regression/v2", "status": "RUNNING",
-        "scope": "Ordinary diagnostic probe and RPC simulations; not native AccountManagement conformance or native internal helper invocation.",
+        "scope": "Ordinary diagnostic probe for System.Contract.CallWithGasLimit activation boundary and budget exhaustion; syscall smoke only, not native AccountManagement activation, conformance, or native internal helper invocation.",
+        "evidenceKind": "syscall-smoke",
+        "testedCapability": "System.Contract.CallWithGasLimit",
+        "nativeActivationClaim": False,
         "publicNetworksTouched": False, "nativeAccountManagementVerified": False, "cases": [],
         "runtimeMode": "Direct execution of the selected local NeoExpress assembly; supplied runtime may be an isolated assembly overlay, not a reproducible runner rebuild.",
         "sourceSha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()

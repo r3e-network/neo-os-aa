@@ -1017,6 +1017,10 @@ Verification request. Samples spanning a block change are discarded; both
 `height - 1` and `height` must be observed. A timeout is a failure, not evidence
 of rejection. The default timeout accommodates fifteen-second blocks because
 the running protocol's block policy may override the runner's one-second hint.
+The resulting receipt is tagged `evidenceKind: "syscall-smoke"` with
+`nativeActivationClaim: false`; it is evidence for the bounded-call syscall
+gate only, not for native `AccountManagement` activation or lifecycle
+conformance.
 
 A previous PASS is invalidated before starting any chain, so interruption cannot
 leave stale success evidence. Receipts distinguish persisted diagnostic deployments from simulations and

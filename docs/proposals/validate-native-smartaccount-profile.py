@@ -97,6 +97,11 @@ assert VECTORS["serviceName"] == "AccountManagement"
 assert VECTORS["serviceHashDisplay"] == "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
 assert "| Verifier callback budget | `100,000,000` datoshi per callback |" in DOCUMENT
 assert "| Module maintenance callback budget | `250,000,000` datoshi per callback |" in DOCUMENT
+assert "### Resource units and effective bounds" in DOCUMENT
+assert "| Callback | Unit | Profile default | Profile maximum |" in DOCUMENT
+assert "`1 GAS = 100,000,000 datoshi`" in " ".join(DOCUMENT.split())
+assert "The effective admission limit is the lesser of the fixed profile" in " ".join(DOCUMENT.split())
+assert "The profile does not define an outer transaction fee default or maximum" in " ".join(DOCUMENT.split())
 assert "1,000,000,000" not in DOCUMENT
 assert "The verifier budget is `100,000,000` datoshi per callback." in DOCUMENT
 assert "less than or equal to Neo's `MaxVerificationGas` envelope of `150,000,000` datoshi" in " ".join(DOCUMENT.split())

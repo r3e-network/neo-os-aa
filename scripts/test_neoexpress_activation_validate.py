@@ -218,6 +218,10 @@ class ReceiptTests(unittest.TestCase):
             with patch.object(activation, "run_case", side_effect=lambda label, *args: {"name": label}), patch("builtins.print"):
                 report = self.run_validation(historical)
             self.assertEqual(report["status"], "PASS")
+            self.assertEqual(report["evidenceKind"], "syscall-smoke")
+            self.assertEqual(report["testedCapability"], "System.Contract.CallWithGasLimit")
+            self.assertFalse(report["nativeActivationClaim"])
+            self.assertIn("syscall smoke only", report["scope"])
             self.assertEqual(report["diagnosticDeploymentsPersisted"], 5 if historical else 4)
             self.assertIs(report["historicalRegressionReproduced"], historical)
             self.assertNotIn(str(self.root), self.output.read_text())
