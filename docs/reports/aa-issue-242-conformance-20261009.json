@@ -1,6 +1,10 @@
 {
   "schema": "native-issue-242-conformance-review/v1",
   "reviewDate": "2026-10-09",
+  "historical": true,
+  "evidenceStatus": "HISTORICAL_SOURCE_PINNED",
+  "generatedFromCommit": "8367049ebe9adf389a88fee6a16ca54fae1bf65a",
+  "sourcePinScope": "sourceSha256 identifies the exact file bytes reviewed at generatedFromCommit; it is not a claim about current origin/main or later protocol and client changes.",
   "issue": "https://github.com/neo-project/proposals/issues/242",
   "issueUpdatedAt": "2026-10-01T18:27:32Z",
   "aaBaseCommit": "455d3b189a8334f14c95b2f06a2dfbbb184cf6fc",
