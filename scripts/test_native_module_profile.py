@@ -5,10 +5,12 @@ from pathlib import Path
 import tempfile
 import json
 import hashlib
+import re
 
 import native_module_profile as profile
 
 PROFILE_DIGEST = "12" * 32
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def manifest():
@@ -134,6 +136,30 @@ class NativeModuleProfileTests(unittest.TestCase):
             profile.prepare_native_source(source,destination)
             self.assertEqual(original,source.read_bytes())
             self.assertEqual(b"#define SMARTACCOUNT_NATIVE\n"+original,destination.read_bytes())
+
+    def test_profile_digest_definitions_match_canonical_parameters(self):
+        """Client and service literals must fail closed when profile parameters change."""
+        parameters = ROOT / "docs/proposals/smartaccount-native-profile-v2-parameters.json"
+        expected = profile.profile_digest(parameters)
+        definitions = {
+            "shared client": (
+                ROOT / "shared/nativeSmartAccountClient.mjs",
+                r"NATIVE_PROFILE_PARAMETER_DIGEST\s*=\s*\"([0-9a-f]{64})\"",
+            ),
+            "frontend client": (
+                ROOT / "frontend/src/shared/nativeSmartAccountClient.mjs",
+                r"NATIVE_PROFILE_PARAMETER_DIGEST\s*=\s*\"([0-9a-f]{64})\"",
+            ),
+            "native service validator": (
+                ROOT / "scripts/neoexpress_native_service_validate.py",
+                r"\bDIGEST\s*=\s*\"([0-9a-f]{64})\"",
+            ),
+        }
+        for label, (path, pattern) in definitions.items():
+            matches = re.findall(pattern, path.read_text(encoding="utf-8"))
+            with self.subTest(label=label):
+                self.assertEqual(1, len(matches), f"expected one digest definition in {path}")
+                self.assertEqual(expected, matches[0], f"{path} is out of sync with canonical profile parameters")
 
 
 if __name__=="__main__":unittest.main()
