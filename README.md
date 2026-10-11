@@ -4,8 +4,8 @@
 
 The target architecture is **Neo N3 native SmartAccount**, implemented by the
 protocol's `AccountManagement` service. Start with the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
-[native SDK](docs/NATIVE_SDK.md), and [native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md)
-at `/native`. The service uses stable account identity, explicitly scoped
+[native SDK](docs/NATIVE_SDK.md), and [native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md).
+The service uses stable account identity, explicitly scoped
 authorization, bounded module callbacks, independent fee payment, and recovery
 that revokes old modules without calling them.
 

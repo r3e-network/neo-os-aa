@@ -63,6 +63,17 @@ TokenRestrictedHook and MultiSigVerifier. The first three profile requirements
 are defined below; the composite profile and its ephemeral approval-receipt
 callbacks are defined in `docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md`.
 
+The descriptor is the native admission boundary and currently contains exactly
+six ABI 2 artifacts: NeoNativeVerifier, WhitelistHook, SessionKeyVerifier,
+DailyLimitHook, TokenRestrictedHook and MultiSigVerifier. MultiSigVerifier is
+the only composite profile implemented by the native build. `MultiHook` remains
+an ordinary-contract composition module: it has no native project, descriptor
+entry, packaged ABI 2 artifact or native conformance receipt. Its ordinary
+`supportsComposition()` marker and legacy build artifact do not make it a native
+module, and native admission must reject it until a separate native
+implementation, descriptor entry, packaging tests and private-chain validation
+are completed.
+
 ## Artifact construction and security
 
 Compiler output is not hand-edited to hide an ABI mismatch. Native projects use

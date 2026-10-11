@@ -37,7 +37,8 @@ for heading in (
 
 for required in (
     "Version 2 uses\n`Active = 0` and `Frozen = 1`",
-    "Version 2 composites\nare the protocol-defined",
+    "current ABI 2 build\nimplements `MultiSigVerifier` as its only native composite profile",
+    "`MultiHook`\nis the ordinary-contract composition module",
     "Version 2 exposes the following Application methods:",
     "`validateCompositeSignature` for an admitted composite",
     "verifier `postExecuteComposite` for an admitted composite",

@@ -562,8 +562,8 @@ introduced.
 
 Native ABI 1 modules MUST NOT be relabelled as ABI 2. Packaged ABI 2 modules
 must declare the native-v2 profile, an explicit ABI version, and permission to
-read `getAuthorityEpoch`. All six supported native module profiles must pass
-recovery/reinstall isolation vectors. Migration of an existing ABI 1 account
+read `getAuthorityEpoch`. Every module admitted by the current native
+descriptor must pass recovery/reinstall isolation vectors. Migration of an existing ABI 1 account
 record requires a separately activated, deterministic migration routine; there
 is no implicit interpretation of a 13-field record as ABI 2.
 
@@ -738,9 +738,14 @@ under the authenticated `cleanup` context and the fixed maintenance budget;
 ABI admission alone does not establish complete removal of arbitrary plugin storage.
 
 A leaf module MUST return `false`. A composite module MUST return `true` and
-MUST NOT be installed as a child of another composite. Version 2 composites
-are the protocol-defined `MultiSigVerifier` and `MultiHook` profiles; arbitrary
-recursive composition is not part of this profile.
+MUST NOT be installed as a child of another composite. The current ABI 2 build
+implements `MultiSigVerifier` as its only native composite profile. `MultiHook`
+is the ordinary-contract composition module and remains a future native-profile
+candidate; its ordinary marker or legacy artifact MUST NOT be admitted as a
+native module. Adding a native `MultiHook` requires a separate native project,
+descriptor entry, packaged ABI 2 identity, authority/epoch implementation and
+private-chain conformance evidence. Arbitrary recursive composition is not part
+of this profile.
 
 When a composite is bound, `AccountManagement` MUST validate every child as a
 deployed module with the exact lifecycle ABI above, require a `false`
@@ -1018,9 +1023,12 @@ getModuleDependencies(accountId: Hash160, moduleType: String) -> Array
 It returns `[rootBindingOrNull, cleanupBindings, activeChildHashes]`. Each binding
 is `[Hash160 bytes, codeHash bytes]`. Empty roles return `[Null, [], []]`.
 The registry belongs to the native core, never to plugin-provided storage.
-A composite's claimed profile name does not establish honest behavior; only
-conforming, independently reviewed MultiSigVerifier and MultiHook profiles may
-be treated as those profiles. Arbitrary module behavior remains a trust boundary.
+A composite's claimed profile name does not establish honest behavior. Only the
+conforming, independently reviewed `MultiSigVerifier` implementation currently
+admitted by the native descriptor may be treated as a native ABI 2 composite.
+The ordinary `MultiHook` implementation remains outside native admission until
+the separate native profile work and evidence described above are complete.
+Arbitrary module behavior remains a trust boundary.
 
 The native MultiSig module profile uses the core-owned transient receipt for
 post-execution approval selection. The historical leaf

@@ -8,10 +8,23 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class NativeMultiSigProfileTests(unittest.TestCase):
+    def test_native_descriptor_keeps_multihook_out_of_abi2_admission(self):
+        profiles = json.loads((ROOT / 'contracts/native/profiles.json').read_text())
+        self.assertEqual({
+            'NeoNativeVerifier', 'WhitelistHook', 'SessionKeyVerifier',
+            'DailyLimitHook', 'TokenRestrictedHook', 'MultiSigVerifier',
+        }, set(profiles))
+        self.assertNotIn('MultiHook', profiles)
+        self.assertFalse((ROOT / 'contracts/native/MultiHook.Native.csproj').exists())
+        draft = (ROOT / 'docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md').read_text()
+        self.assertIn('only native composite profile', draft)
+        self.assertIn('ordinary-contract composition module', draft)
+
     def test_explicit_profile_and_sources(self):
         profiles = json.loads((ROOT / 'contracts/native/profiles.json').read_text())
         self.assertEqual({'project': 'MultiSigVerifier.Native.csproj', 'role': 'verifier',
-                          'configurationMethods': ['setConfig']}, profiles.get('MultiSigVerifier'))
+                          'configurationMethods': ['setConfig'], 'compositeVerifier': True},
+                         profiles.get('MultiSigVerifier'))
         project = ET.parse(ROOT / 'contracts/native/MultiSigVerifier.Native.csproj')
         self.assertEqual({'NativeAuthority.cs', '../verifiers/NativeOperation.cs', '../verifiers/VerifierAuthority.cs',
                           '../verifiers/VerifierModels.cs', '../verifiers/MultiSigVerifier.cs'},
