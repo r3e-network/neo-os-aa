@@ -11,12 +11,10 @@ class NativeServiceReceiptTests(unittest.TestCase):
     def manifest(self):
         return {"hash": native.CORE, "id": -13, "manifest": {"name": "AccountManagement",
             "extra": {"smartAccount": {"abiVersion": 2, "profileParameterDigest": native.DIGEST}},
-            "abi": {"methods": [{"name": n, "parameters": [{"type":t} for t in ('Hash160','Array','Integer','Integer')]}
-                                 if n in ('executeUserOp','executeUserOps') else
-                                 {"name": n, "parameters": [{"type": "ByteArray"}], "returntype": "ByteArray", "safe": True}
-                                 if n == 'canonicalP256PublicKey' else {"name":n}
-                                 for n in native.REQUIRED_METHODS | {'canonicalP256PublicKey'}],
-                    "events": [{"name": n} for n in native.REQUIRED_EVENTS]}}}
+            "abi": {"methods": [{"name": name, **copy.deepcopy(descriptor)}
+                                  for name, descriptor in native.REQUIRED_METHOD_ABI.items()],
+                    "events": [{"name": name, "parameters": copy.deepcopy(parameters)}
+                               for name, parameters in native.REQUIRED_EVENT_ABI.items()]}}}
 
     def test_valid_native_identity(self):
         native.check_native(self.manifest())
@@ -120,6 +118,56 @@ class NativeServiceReceiptTests(unittest.TestCase):
             row=next(m for m in item['manifest']['abi']['methods'] if m['name']==method)
             row['parameters']=row['parameters'][:2]
             with self.assertRaises(ValidationFailure):native.check_native(item)
+
+    def test_every_required_method_descriptor_is_checked(self):
+        for name, descriptor in native.REQUIRED_METHOD_ABI.items():
+            bad_parameters = descriptor["parameters"][:-1] or [{"name": "unexpected", "type": "Any"}]
+            for field, value in (("returntype", "Any" if descriptor["returntype"] != "Any" else "Void"),
+                                 ("safe", not descriptor["safe"]),
+                                 ("parameters", bad_parameters)):
+                item = self.manifest()
+                row = next(method for method in item["manifest"]["abi"]["methods"] if method["name"] == name)
+                row[field] = value
+                with self.subTest(method=name, field=field), self.assertRaises(ValidationFailure):
+                    native.check_native(item)
+
+            item = self.manifest()
+            row = next(method for method in item["manifest"]["abi"]["methods"] if method["name"] == name)
+            if row["parameters"]:
+                row["parameters"][0]["name"] = "wrong"
+            else:
+                row["parameters"] = [{"name": "unexpected", "type": "Any"}]
+            with self.subTest(method=name, field="parameter-name"), self.assertRaises(ValidationFailure):
+                native.check_native(item)
+
+            item = self.manifest()
+            duplicate = next(method for method in item["manifest"]["abi"]["methods"] if method["name"] == name)
+            item["manifest"]["abi"]["methods"].append(copy.deepcopy(duplicate))
+            with self.subTest(method=name, field="duplicate"), self.assertRaises(ValidationFailure):
+                native.check_native(item)
+
+    def test_every_required_event_descriptor_is_checked(self):
+        for name, parameters in native.REQUIRED_EVENT_ABI.items():
+            item = self.manifest()
+            row = next(event for event in item["manifest"]["abi"]["events"] if event["name"] == name)
+            row["parameters"] = parameters[:-1]
+            with self.subTest(event=name, field="parameters"), self.assertRaises(ValidationFailure):
+                native.check_native(item)
+
+            item = self.manifest()
+            row = next(event for event in item["manifest"]["abi"]["events"] if event["name"] == name)
+            if row["parameters"]:
+                row["parameters"][0]["type"] = "Any"
+            else:
+                row["parameters"] = [{"name": "unexpected", "type": "Any"}]
+            with self.subTest(event=name, field="parameter-type"), self.assertRaises(ValidationFailure):
+                native.check_native(item)
+
+            item = self.manifest()
+            duplicate = next(event for event in item["manifest"]["abi"]["events"] if event["name"] == name)
+            item["manifest"]["abi"]["events"].append(copy.deepcopy(duplicate))
+            with self.subTest(event=name, field="duplicate"), self.assertRaises(ValidationFailure):
+                native.check_native(item)
 
     def test_persisted_outcome_and_event_are_both_required(self):
         valid = {"vmstate": "HALT", "notifications": [{"eventname": "AccountCreated", "contract": native.CORE}]}

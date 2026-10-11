@@ -17,31 +17,116 @@ from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require,
 CORE = "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
 STDLIB = "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0"
 DIGEST = "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"
-REQUIRED_METHODS = {"registerAccount", "getAccount", "getNonce", "getAccountAddress", "getVersion", "getAuthorityEpoch", "getAuthorizationDomain", "getOperationDigest", "verify",
-                    "executeUserOp", "executeUserOps", "callVerifier", "callHook", "callVerifierChild", "callHookChild",
-                    "setVerifierDependencies", "setHookDependencies", "clearVerifierDependencies", "clearHookDependencies",
-                    "getModuleDependencies", "cancelModuleCall", "getPendingModuleCall", "proposeRecoveryAddress",
-                    "activateRecoveryAddress", "freeze", "unfreeze", "canonicalP256PublicKey"}
-REQUIRED_EVENTS = {"AccountCreated", "UserOpExecuted", "RecoveryAddressChangeProposed", "RecoveryAddressChanged", "AccountFrozen"}
+
+
+def _parameters(*entries):
+    return [{"name": name, "type": type_name} for name, type_name in entries]
+
+
+def _method(parameters, returntype, safe):
+    return {"parameters": _parameters(*parameters), "returntype": returntype, "safe": safe}
+
+
+# Keep this descriptor table aligned with section 13 of the native profile. The
+# service gate checks the complete ABI shape, while the private-chain scenario
+# below remains intentionally bounded to the lifecycle transitions it drives.
+REQUIRED_METHOD_ABI = {
+    "verify": _method((("accountId", "Hash160"),), "Boolean", True),
+    "getVersion": _method((), "Integer", True),
+    "canonicalP256PublicKey": _method((("publicKey", "ByteArray"),), "ByteArray", True),
+    "getAccount": _method((("accountId", "Hash160"),), "Any", True),
+    "getAccountAddress": _method((("accountId", "Hash160"),), "Hash160", True),
+    "getAuthorityEpoch": _method((("accountId", "Hash160"),), "Integer", True),
+    "getNonce": _method((("accountId", "Hash160"), ("channel", "Integer")), "Integer", True),
+    "getAuthorizationDomain": _method((("accountId", "Hash160"),), "ByteArray", True),
+    "getOperationDigest": _method((("accountId", "Hash160"), ("op", "Array")), "ByteArray", True),
+    "getPendingModuleCall": _method((("accountId", "Hash160"), ("moduleType", "String")), "Any", True),
+    "getModuleDependencies": _method((("accountId", "Hash160"), ("moduleType", "String")), "Array", True),
+    "hasModuleContext": _method((("accountId", "Hash160"), ("moduleType", "String"), ("module", "Hash160"), ("phase", "String")), "Boolean", True),
+    "isAccountAuthorized": _method((("accountId", "Hash160"),), "Boolean", True),
+    "registerAccount": _method((("custodyAddress", "Hash160"), ("salt", "ByteArray"), ("verifier", "Hash160"), ("hook", "Hash160"), ("recoveryAddress", "Hash160")), "Hash160", False),
+    "executeUserOp": _method((("accountId", "Hash160"), ("op", "Array"), ("expectedAuthorityEpoch", "Integer"), ("expectedConfigurationNonce", "Integer")), "Any", False),
+    "executeUserOps": _method((("accountId", "Hash160"), ("ops", "Array"), ("expectedAuthorityEpoch", "Integer"), ("expectedConfigurationNonce", "Integer")), "Array", False),
+    "callVerifier": _method((("accountId", "Hash160"), ("method", "String"), ("args", "Array")), "Any", False),
+    "callHook": _method((("accountId", "Hash160"), ("method", "String"), ("args", "Array")), "Any", False),
+    "callVerifierChild": _method((("accountId", "Hash160"), ("childVerifier", "Hash160"), ("method", "String"), ("args", "Array")), "Any", False),
+    "callHookChild": _method((("accountId", "Hash160"), ("childHook", "Hash160"), ("method", "String"), ("args", "Array")), "Any", False),
+    "cancelModuleCall": _method((("accountId", "Hash160"), ("moduleType", "String")), "Void", False),
+    "proposeVerifier": _method((("accountId", "Hash160"), ("verifier", "Hash160")), "Void", False),
+    "activateVerifier": _method((("accountId", "Hash160"),), "Void", False),
+    "cancelVerifier": _method((("accountId", "Hash160"),), "Void", False),
+    "proposeHook": _method((("accountId", "Hash160"), ("hook", "Hash160")), "Void", False),
+    "activateHook": _method((("accountId", "Hash160"),), "Void", False),
+    "cancelHook": _method((("accountId", "Hash160"),), "Void", False),
+    "proposeRecoveryAddress": _method((("accountId", "Hash160"), ("recovery", "Hash160")), "Void", False),
+    "activateRecoveryAddress": _method((("accountId", "Hash160"),), "Void", False),
+    "cancelRecoveryAddress": _method((("accountId", "Hash160"),), "Void", False),
+    "proposeRecovery": _method((("accountId", "Hash160"), ("newCustody", "Hash160")), "Void", False),
+    "executeRecovery": _method((("accountId", "Hash160"),), "Void", False),
+    "cancelRecovery": _method((("accountId", "Hash160"),), "Void", False),
+    "freeze": _method((("accountId", "Hash160"),), "Void", False),
+    "unfreeze": _method((("accountId", "Hash160"),), "Void", False),
+    "setVerifierDependencies": _method((("accountId", "Hash160"), ("children", "Array")), "Void", False),
+    "setHookDependencies": _method((("accountId", "Hash160"), ("children", "Array")), "Void", False),
+    "clearVerifierDependencies": _method((("accountId", "Hash160"),), "Void", False),
+    "clearHookDependencies": _method((("accountId", "Hash160"),), "Void", False),
+}
+
+REQUIRED_EVENT_ABI = {
+    "AccountCreated": _parameters(("accountId", "Hash160"), ("accountAddress", "Hash160"), ("custodyAddress", "Hash160"), ("verifier", "Hash160"), ("hook", "Hash160"), ("recoveryAddress", "Hash160")),
+    "RecoveryProposed": _parameters(("accountId", "Hash160"), ("newCustodyAddress", "Hash160"), ("executeAt", "Integer"), ("configurationNonce", "Integer")),
+    "RecoveryCancelled": _parameters(("accountId", "Hash160"), ("configurationNonce", "Integer")),
+    "RecoveryExecuted": _parameters(("accountId", "Hash160"), ("oldCustodyAddress", "Hash160"), ("newCustodyAddress", "Hash160"), ("configurationNonce", "Integer"), ("authorityEpoch", "Integer")),
+    "AccountFrozen": _parameters(("accountId", "Hash160")),
+    "AccountUnfrozen": _parameters(("accountId", "Hash160")),
+    "UserOpExecuted": _parameters(("accountId", "Hash160"), ("targetContract", "Hash160"), ("method", "String"), ("nonce", "Integer")),
+    "VerifierChangeProposed": _parameters(("accountId", "Hash160"), ("verifier", "Hash160"), ("activateAt", "Integer"), ("configurationNonce", "Integer")),
+    "VerifierChanged": _parameters(("accountId", "Hash160"), ("verifier", "Hash160"), ("configurationNonce", "Integer")),
+    "VerifierChangeCancelled": _parameters(("accountId", "Hash160"), ("configurationNonce", "Integer")),
+    "HookChangeProposed": _parameters(("accountId", "Hash160"), ("hook", "Hash160"), ("activateAt", "Integer"), ("configurationNonce", "Integer")),
+    "HookChanged": _parameters(("accountId", "Hash160"), ("hook", "Hash160"), ("configurationNonce", "Integer")),
+    "HookChangeCancelled": _parameters(("accountId", "Hash160"), ("configurationNonce", "Integer")),
+    "RecoveryAddressChangeProposed": _parameters(("accountId", "Hash160"), ("recoveryAddress", "Hash160"), ("activateAt", "Integer"), ("configurationNonce", "Integer")),
+    "RecoveryAddressChanged": _parameters(("accountId", "Hash160"), ("recoveryAddress", "Hash160"), ("configurationNonce", "Integer")),
+    "RecoveryAddressChangeCancelled": _parameters(("accountId", "Hash160"), ("configurationNonce", "Integer")),
+}
+
+REQUIRED_METHODS = set(REQUIRED_METHOD_ABI)
+REQUIRED_EVENTS = set(REQUIRED_EVENT_ABI)
 
 
 def check_native(state):
     require(state.get("hash") == CORE and state.get("id") == -13, "Wrong native service identity")
-    manifest = state.get("manifest", {})
+    manifest = state.get("manifest")
+    require(type(manifest) is dict, "Malformed native manifest")
     require(manifest.get("name") == "AccountManagement", "Wrong native service name")
-    metadata = (manifest.get("extra") or {}).get("smartAccount", {})
+    extra = manifest.get("extra")
+    require(extra is None or type(extra) is dict, "Malformed native manifest metadata")
+    metadata = (extra or {}).get("smartAccount", {})
+    require(type(metadata) is dict, "Malformed native profile metadata")
     require(type(metadata.get("abiVersion")) is int and metadata["abiVersion"] == 2 and metadata.get("profileParameterDigest") == DIGEST, "Wrong native profile metadata")
     abi = manifest.get("abi", {})
-    require(REQUIRED_METHODS <= {m.get("name") for m in abi.get("methods", [])}, "Incomplete native method ABI")
-    require(REQUIRED_EVENTS <= {e.get("name") for e in abi.get("events", [])}, "Incomplete native event ABI")
-    for name in ("executeUserOp", "executeUserOps"):
-        methods=[m for m in abi.get("methods",[]) if m.get("name")==name]
-        require(len(methods)==1 and [p.get("type") for p in methods[0].get("parameters",[])]==["Hash160","Array","Integer","Integer"],
-                "Native execution ABI must commit account, operation, authority epoch and configuration nonce")
-    methods = [m for m in abi.get('methods', []) if m.get('name') == 'canonicalP256PublicKey']
-    require(len(methods) == 1 and methods[0].get('safe') is True and methods[0].get('returntype') == 'ByteArray' and
-            [p.get('type') for p in methods[0].get('parameters', [])] == ['ByteArray'],
-            'Native P-256 canonicalization must be a unique safe ByteArray-to-ByteArray method')
+    require(type(abi) is dict, "Malformed native ABI")
+    methods = abi.get("methods")
+    events = abi.get("events")
+    require(type(methods) is list and type(events) is list, "Native ABI must contain method and event arrays")
+
+    def match_parameters(actual, expected):
+        return type(actual) is list and len(actual) == len(expected) and all(
+            type(item) is dict and item.get("name") == wanted["name"] and item.get("type") == wanted["type"]
+            for item, wanted in zip(actual, expected)
+        )
+
+    for name, expected in REQUIRED_METHOD_ABI.items():
+        matches = [method for method in methods if type(method) is dict and method.get("name") == name]
+        require(len(matches) == 1 and matches[0].get("returntype") == expected["returntype"] and
+                matches[0].get("safe") is expected["safe"] and
+                match_parameters(matches[0].get("parameters"), expected["parameters"]),
+                f"Native method ABI mismatch: {name}")
+    for name, expected in REQUIRED_EVENT_ABI.items():
+        matches = [event for event in events if type(event) is dict and event.get("name") == name]
+        require(len(matches) == 1 and match_parameters(matches[0].get("parameters"), expected),
+                f"Native event ABI mismatch: {name}")
 
 
 def canonical_p256_readback(chain):
