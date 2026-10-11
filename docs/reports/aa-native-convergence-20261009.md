@@ -1,6 +1,6 @@
 # Neo N3 native SmartAccount convergence — 2026-10-09
 
-Current upstream drafts are [core #4768](https://github.com/neo-project/neo/pull/4768) and [RPC #1115](https://github.com/neo-project/neo-node/pull/1115). They preserve the same source commits; the earlier PR references below identify historical review and validation records.
+Snapshot context (2026-10-09): the upstream draft references were [core #4768](https://github.com/neo-project/neo/pull/4768) and [RPC #1115](https://github.com/neo-project/neo-node/pull/1115). This report is a historical evidence record, not a live upstream-status page; the earlier PR references below identify the exact review and validation records used for this snapshot.
 
 The implementation target is consensus-native `AccountManagement`, enabled only by an explicit `HF_SmartAccountV1` activation. The AA repository supplies the matching ABI 2 modules, SDK, account workspace and conformance evidence. The deployed public V3 contract remains a separate compatibility profile. Native source integration does not activate a public network.
 
@@ -24,7 +24,7 @@ The fixed-budget maximum measured verifier callback is **95,694,229 datoshi (0.9
 
 - Native profile digest: `4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4`.
 - Reproducible runtime core pin: `ff422d940a4722c361c32398c6f28c00fb7f0693`.
-- Current core PR head: `d973071ed608aa98053695db668b0ec6587a2fd6`; the only delta is copyright headers/import ordering in two tests. The complete production `src` tree is identical.
+- Core PR head recorded by this snapshot: `d973071ed608aa98053695db668b0ec6587a2fd6`; the only delta was copyright headers/import ordering in two tests. The complete production `src` tree was identical at that checkpoint. This historical pin is not the current upstream head.
 - Node/RPC pin: `fa35e69af130661e2ac60bffd43eb6c6c78aa7d5`.
 - NeoExpress source pin: `da143f8643ebca7841cc7f56e4e3e00293819fbc`.
 - Protocol foundation head: `84b6179999bb0f169d53f803e818a97235de4d17`.
@@ -35,8 +35,8 @@ The runtime was built completely from these sources twice. No assembly overlay i
 
 | Layer | Result | Evidence |
 |---|---|---|
-| Native core | 1,786 tests, zero failed/skipped; full-solution formatting; Linux/Windows/macOS CI | [Core equivalence and source review](aa-native-final-core-equivalence-20261009.json), [core PR](https://github.com/neo-project/neo/pull/4766) |
-| RPC | 114 client + 228 server tests, zero skipped, matching native and published-package lanes | [RPC PR](https://github.com/neo-project/neo-node/pull/1114) |
+| Native core | 1,786 tests, zero failed/skipped; full-solution formatting; Linux/Windows/macOS CI | [Core equivalence and source review](aa-native-final-core-equivalence-20261009.json), [historical core PR](https://github.com/neo-project/neo/pull/4766) |
+| RPC | 114 client + 228 server tests, zero skipped, matching native and published-package lanes | [historical RPC PR](https://github.com/neo-project/neo-node/pull/1114) |
 | Native module VM | 20 budget/behavior scenarios plus 16 epoch/key regressions; actual NEF | [Budget matrix](aa-native-multisig-budget-20261009.json) |
 | Private-chain lifecycle | Ten suites pass, including expected persisted FAULT and admission-refusal controls | [Private runtime matrix](aa-native-final-private-runtime-20261009.json) |
 | SDK | 162 unit tests, declarations, four installed-tarball consumer checks; 36 real signed transactions and three rejection controls | [Final SDK runtime](aa-native-final-sdk-runtime-20261009.json) |
@@ -60,7 +60,7 @@ Earlier `aa-native-abi2-*` and `*.checkpoint.json` files remain historical check
 | Dependency PRs #8/#9 | Rejected isolated Router/Web3Auth major bumps that lacked compatible migration and acceptance evidence. Heads preserved before remote cleanup. |
 | AA native PR #13 | Merged at `5e7428272775393a57d5f52781daf5bb633f69ba`, tree-identical to reviewed `c5306571`. Seven PR build/acceptance checks passed; all five post-merge Actions jobs and Vercel passed. This does not activate the consensus feature. |
 | Old native profile PR #10 | Its tip became reachable through #13, so GitHub automatically marked it merged. The exact reviewed remote ref was removed after backup; the original dirty local worktree is retained. |
-| Core #4766 / node #1114 / proposal #243 | Keep coordinated upstream drafts for protocol and maintainer review. Green implementation tests do not satisfy upstream review or choose public activation policy. |
+| Core #4768 / node #1115 / bounded-budget prerequisite #4759 / proposal #243 | Keep the current upstream dependencies under protocol and maintainer review. The evidence rows above link closed predecessor snapshots (#4766/#1114); green implementation tests do not satisfy upstream review or choose public activation policy. |
 
 Original dirty worktrees and historical checked-out contexts are preserved. Obsolete remote branches and unoccupied integration refs are removed only after verified recoverable Git bundles. After native integration, `origin` contains only `main`; its two native development refs were deleted with exact-head leases. Final dependency follow-up and mirror cleanup readbacks belong to the accompanying maintenance record.
 
