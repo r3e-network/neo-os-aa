@@ -100,7 +100,7 @@ test(
         .click();
       await page
         .getByRole("status")
-        .filter({ hasText: "Native ABI 2 and network verified." })
+        .filter({ hasText: "Node ABI 2/profile matched. Standard implementation remains pending protocol activation." })
         .waitFor();
       await page
         .getByRole("button", { name: "Use connected Neo wallet", exact: true })
@@ -490,7 +490,7 @@ test(
       await page.getByTestId("native-endpoint").fill("https://native.fixture.test/rpc");
       await page.getByTestId("native-network").fill("123");
       await page.getByRole("button", { name: "Verify node", exact: true }).click();
-      await page.getByRole("status").filter({ hasText: "Native ABI 2 and network verified." }).waitFor();
+      await page.getByRole("status").filter({ hasText: "Node ABI 2/profile matched. Standard implementation remains pending protocol activation." }).waitFor();
       await page.getByTestId("native-account-id").fill(nativeTestIdentity.accountId);
       await page.getByRole("button", { name: "Load account", exact: true }).click();
       await page.getByTestId("native-account-summary").waitFor();
@@ -703,7 +703,7 @@ test("signed artifact import verifies public signatures, fresh preflight, exact 
     await page.getByLabel("RPC endpoint", { exact: true }).fill("https://native.fixture.test/rpc");
     await page.getByLabel("Expected network magic", { exact: true }).fill("123");
     await page.getByRole("button", { name: "Verify node", exact: true }).click();
-    await page.getByText("Native ABI 2 and network verified.", { exact: true }).waitFor();
+    await page.getByText("Node ABI 2/profile matched. Standard implementation remains pending protocol activation.", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Create account", exact: true }).click();
     await page.getByTestId("native-custody").fill(vector.recipe.custodyAddress);
     await page.getByTestId("native-recovery").fill(vector.recipe.recoveryAddress);
@@ -777,7 +777,7 @@ test("signed artifact import verifies public signatures, fresh preflight, exact 
     await page.getByLabel("RPC endpoint", { exact: true }).fill("https://native.fixture.test/rpc");
     await page.getByLabel("Expected network magic", { exact: true }).fill("123");
     await page.getByRole("button", { name: "Verify node", exact: true }).click();
-    await page.getByText("Native ABI 2 and network verified.", { exact: true }).waitFor();
+    await page.getByText("Node ABI 2/profile matched. Standard implementation remains pending protocol activation.", { exact: true }).waitFor();
     const restored = page.getByTestId("native-receipt-restore");
     await restored.locator("summary").click();
     await restored.getByLabel("Archived reviewed request", { exact: true }).setInputFiles({ name: "reviewed-request.json", mimeType: "application/json", buffer: archivedReview });

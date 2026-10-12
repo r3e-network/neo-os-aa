@@ -87,7 +87,7 @@ test("recovery cancellation separates its payer and authority and invalidates st
     await page.getByTestId("native-endpoint").fill("https://native.fixture.test/rpc");
     await page.getByTestId("native-network").fill("123");
     await page.getByRole("button", { name: "Verify node", exact: true }).click();
-    await page.getByRole("status").filter({ hasText: "Native ABI 2 and network verified." }).waitFor();
+    await page.getByRole("status").filter({ hasText: "Node ABI 2/profile matched. Standard implementation remains pending protocol activation." }).waitFor();
     await page.getByRole("button", { name: "Account & recovery", exact: true }).click();
     await page.getByTestId("native-account-id").fill(nativeTestIdentity.accountId);
     await page.getByRole("button", { name: "Load account", exact: true }).click();

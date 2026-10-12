@@ -33,6 +33,25 @@ const identity = () =>
     custodyAddress: custody,
     salt,
   });
+
+test("native UI distinguishes node profile matching from protocol activation", () => {
+  const source = readFileSync(
+    new URL("../src/features/native/NativeAccountWorkspace.vue", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    /Node ABI\/profile matched · standard implementation pending protocol activation/,
+  );
+  assert.match(source, /节点 ABI\/参数匹配 · 标准实现待协议激活/);
+  assert.match(
+    source,
+    /Node ABI 2\/profile matched\. Standard implementation remains pending protocol activation\./,
+  );
+  assert.match(source, /节点 ABI 2\/参数匹配。标准实现仍待协议激活。/);
+  assert.doesNotMatch(source, /Profile verified|Native ABI 2 and network verified/);
+});
+
 function fixture(options = {}) {
   let changed = false,
     called = 0;

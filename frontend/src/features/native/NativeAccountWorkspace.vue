@@ -15,7 +15,10 @@
       </div>
       <span class="pill" :class="{ verified: profile }">{{
         profile
-          ? L("Profile verified", "协议信息已核对")
+          ? L(
+              "Node ABI/profile matched · standard implementation pending protocol activation",
+              "节点 ABI/参数匹配 · 标准实现待协议激活",
+            )
           : L("Read only · not verified", "只读 · 尚未验证")
       }}</span>
     </header>
@@ -1156,8 +1159,8 @@ async function connectNode() {
       networkMagic: network.value,
     });
     notice.value = L(
-      "Native ABI 2 and network verified.",
-      "原生 ABI 2 和网络验证通过。",
+      "Node ABI 2/profile matched. Standard implementation remains pending protocol activation.",
+      "节点 ABI 2/参数匹配。标准实现仍待协议激活。",
     );
   });
 }
