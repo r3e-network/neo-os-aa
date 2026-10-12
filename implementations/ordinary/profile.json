@@ -2,7 +2,9 @@
   "id": "ordinary-user-contract",
   "version": 1,
   "kind": "deployed-contract",
-  "status": "active-user-contract-path",
+  "status": "go-pinned-public-artifact",
+  "implementationVerified": true,
+  "verificationScope": "The pinned public UnifiedSmartWalletV3 artifact and ordinary NeoOS integration are verified. A newer source candidate must pass a separate artifact and upgrade review before it can replace this public artifact.",
   "description": "The Neo N3 user-contract implementation used by the current NeoOS AA integration.",
   "canonicalSourceRoots": [
     "contracts",
@@ -38,6 +40,23 @@
     "contracts/build",
     "contracts/bin/v3"
   ],
+  "verifiedArtifact": {
+    "contractName": "UnifiedSmartWalletV3",
+    "path": "contracts/build/UnifiedSmartWalletV3.nef",
+    "manifestPath": "contracts/build/UnifiedSmartWalletV3.manifest.json",
+    "nefSha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+    "manifestSha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+    "publicReadbackEvidence": "docs/reports/mainnet-unified-smart-wallet-upgrade-20260915-evidence.json",
+    "network": "mainnet",
+    "coreHash": "0x0268a387913b250166ddec032b03332690a1ef78",
+    "independentRpcReadbacks": 2,
+    "abiMethodCount": 90
+  },
+  "currentSourceCandidate": {
+    "artifactRoot": "contracts/bin/v3",
+    "status": "source-ahead-of-pinned-public-artifact",
+    "releaseGate": "required-before-public-upgrade"
+  },
   "verification": {
     "profile": "ordinary",
     "commands": [

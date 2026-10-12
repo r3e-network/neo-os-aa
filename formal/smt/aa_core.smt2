@@ -11,23 +11,23 @@
 ;       not merely true because the domain was accidentally empty.
 ;
 ; The AA core now rejects negative and over-width nonce values before splitting
-; the Neo BigInteger into channel/sequence. The byte-width implementation is
-; represented below by the exact arithmetic domain 0 <= nonce < 2^256. The
-; concrete Neo VM transport and C#-to-NEF refinement remain separate scope.
+; the Neo BigInteger into channel/sequence. NeoVM Integer is a signed 256-bit
+; value, so the non-negative executable domain is exactly 0 <= nonce < 2^255.
+; The concrete Neo VM transport and C#-to-NEF refinement remain separate scope.
 ; ===========================================================================
 
 (set-logic QF_LIA)
 (set-option :produce-models true)
 
 (define-fun SEQUENCE_LIMIT () Int 18446744073709551616) ; 2^64
-(define-fun CHANNEL_LIMIT () Int 6277101735386680763835789423207666416102355444464034512896) ; 2^192
-(define-fun NONCE_LIMIT () Int 115792089237316195423570985008687907853269984665640564039457584007913129639936) ; 2^256
+(define-fun CHANNEL_LIMIT () Int 3138550867693340381917894711603833208051177722232017256448) ; 2^191
+(define-fun NONCE_LIMIT () Int 57896044618658097711785492504343953926634992332820282019728792003956564819968) ; 2^255
 
 ; ---------------------------------------------------------------------------
-; OBL 1: the core's accepted nonce domain is exactly unsigned uint256,
-;        which is the arithmetic form of its 32-byte width check.
+; OBL 1: the core's accepted nonce domain is exactly the non-negative half of
+;        NeoVM's signed 256-bit Integer domain.
 ; ---------------------------------------------------------------------------
-(echo "OBL:nonce-acceptance-is-uint256-bounded")
+(echo "OBL:nonce-acceptance-is-signed-vm-bounded")
 (push)
 (declare-const nonce Int)
 (define-fun accepted () Bool (and (>= nonce 0) (< nonce NONCE_LIMIT)))
@@ -45,7 +45,7 @@
 (check-sat)
 (pop)
 
-; OBL 2: a uint256 nonce splits into a uint192 channel and uint64 sequence,
+; OBL 2: a signed-VM-domain nonce splits into a uint191 channel and uint64 sequence,
 ;        and the split is lossless for every representable nonce.
 ; ---------------------------------------------------------------------------
 (echo "OBL:nonce-encoding-is-bounded-and-lossless")
@@ -64,10 +64,10 @@
 (pop)
 
 ; ---------------------------------------------------------------------------
-; CTRL 2: outside uint256, the same arithmetic can express a non-representable
+; CTRL 2: outside the signed-VM non-negative domain, the same arithmetic can express a non-representable
 ;        nonce. This keeps OBL 1's finite domain explicit rather than vacuous.
 ; ---------------------------------------------------------------------------
-(echo "CTRL:nonce-outside-uint256-is-expressible")
+(echo "CTRL:nonce-outside-signed-vm-domain-is-expressible")
 (push)
 (declare-const nonce Int)
 (define-fun channel () Int (div nonce SEQUENCE_LIMIT))

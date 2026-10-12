@@ -299,11 +299,11 @@ namespace AbstractAccount
         // 4. Replay Protection (ERC-4337 2D Nonce spec)
         // ========================================================================
 
-        // Canonical ERC-4337 2D nonce: the full nonce is split into a 192-bit channel (the
+        // Canonical ERC-4337 2D nonce: the full signed-VM nonce is split into a 191-bit channel (the
         // parallel lane) and a 64-bit sequence (the strictly incrementing cursor within that
         // lane). Every lane is independent and each starts at sequence 0, so a fresh, randomly
-        // chosen channel with sequence 0 yields one-shot ("salt") semantics for free without a
-        // separate code path. There is no value threshold: channel = nonce >> 64 is always the
+        // chosen channel with sequence 0 yields one-shot semantics without a separate code path.
+        // There is no value threshold: channel = nonce >> 64 is always the
         // lane, which makes every channel (including channel >= 1) reachable.
         private static bool IsNonceAcceptable(UInt160 accountId, BigInteger nonce)
         {
@@ -350,7 +350,7 @@ namespace AbstractAccount
         /// <summary>
         /// Enforces the canonical UserOperation ABI boundary before any external call.
         /// BigInteger is used by Neo's VM, but the AA wire format is deliberately bounded
-        /// to the unsigned uint256 domain for nonce and deadline.
+        /// to the non-negative signed-VM domain (`0 <= value < 2^255`) for nonce and deadline.
         /// </summary>
         private static void ValidateUserOperation(UserOperation op)
         {
@@ -384,7 +384,12 @@ namespace AbstractAccount
             byte[] encoded = value.ToByteArray();
             int length = encoded.Length;
             if (length > 0 && encoded[length - 1] == 0) length--;
-            return length <= maxBytes;
+            // NeoVM integers are signed. A value whose highest retained byte has
+            // its sign bit set would require one extra sign byte in canonical
+            // serialization, so it is outside the representable non-negative
+            // domain even when its magnitude fits the nominal byte width.
+            return length <= maxBytes
+                && (length < maxBytes || length == 0 || encoded[length - 1] < 0x80);
         }
     }
 }

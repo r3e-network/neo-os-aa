@@ -135,25 +135,22 @@ public-network activation claim.
 
 ### Neo N3 2D Nonce
 
-- **Sequential Mode (nonce < 1,000,000,000,000,000):**
+- **Canonical NeoVM signed domain (`0 <= nonce < 2^255`):**
   ```csharp
   BigInteger channel = nonce >> 64;
   BigInteger sequence = nonce & 0xFFFFFFFFFFFFFFFF;
   ```
-  - Identical to ERC-4337 semantics
-  - Used for: Standard operations
-
-- **Salt/UUID Mode (nonce >= 1,000,000,000,000,000):**
-  ```csharp
-  byte[] saltKey = Prefix_Nonce + accountId + nonce.ToByteArray();
-  ```
-  - Used for: High-frequency TEE/SessionKey concurrency
-  - Prevents collisions by storing used salts
-  - Similar to ERC-4337 proposals for "random nonce mode"
+  - The low 64 bits are the per-channel sequence; the remaining 191 bits select the channel.
+  - Every channel starts at sequence 0 and advances independently; replayed or gapped sequences are rejected.
+  - NeoVM's signed Integer representation means the upper half of a mathematical uint256 is not a valid operation value.
 
 **Mapping:**
-- Neo Sequential Mode ≈ ERC-4337 Sequential
-- Neo Salt Mode ≈ ERC-4337 EIP-4337 Random/Salted (proposed)
+- Neo bounded channel + sequence ≈ ERC-4337 sequential nonce lanes
+- Neo keeps one canonical nonce path and does not expose a separate UUID/salt mode
+
+The current ordinary source also bounds `getNonce` channel reads to `0 <= channel < 2^191`.
+An older deployed foundation artifact may accept an upper-half channel for a read until it is
+republished; those read-only values remain non-executable under the signed operation boundary.
 
 ---
 

@@ -14,6 +14,7 @@ run_neoexpress=0
 skip_contract_build=0
 skip_e2e=0
 verification_profile=ordinary
+not_run_gates=()
 
 usage() {
   cat <<'EOF'
@@ -28,6 +29,7 @@ Every selected command is required; this script does not establish network activ
 Set NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 for the release-grade cross-repository gate: a missing
 neo-os-services NeoDIDRegistry artifact, or a missing neo-os-services checkout for the Morpheus
 canonical-sync test (MORPHEUS_ORACLE_ROOT, else ../neo-os-services), then fails instead of skipping.
+Set NEOOS_REQUIRE_COMPLETE=1 to fail closed when any selected optional gate would be NOT RUN.
 Pass --formal (or set NEOOS_REQUIRE_FORMAL=1) to also run the fail-closed AA model-checking
 gate (formal/verify.py plus its runner tests). Set NEOOS_NATIVE_CORE_SOURCE to the reviewed
 core checkout matching formal/source-lock.json. It needs Coq 8.16+ (including Rocq 9), Z3, a real JDK (JAVA_BIN)
@@ -50,6 +52,14 @@ Runs the selected profile gates:
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
 - sdk: unit tests + declaration types check + installed-package smoke test + production dependency audit
 EOF
+}
+
+mark_not_run() {
+  not_run_gates+=("$1")
+  if [[ "${NEOOS_REQUIRE_COMPLETE:-0}" == "1" ]]; then
+    echo "required complete gate unavailable: $1" >&2
+    exit 2
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -90,6 +100,12 @@ case "$verification_profile" in
   all) run_ordinary=1; run_native=1 ;;
   *) echo "Unknown verification profile: $verification_profile" >&2; exit 1 ;;
 esac
+# A complete run must also fail closed on the generated Morpheus artifacts' external
+# canonical source gate, including frontend-only dispatches that do not enter the
+# contract block below.
+if [[ "${NEOOS_REQUIRE_COMPLETE:-0}" == "1" ]]; then
+  export NEOOS_REQUIRE_SERVICES_ARTIFACTS=1
+fi
 if [[ $run_ordinary -eq 0 && ( $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ) ]]; then
   echo "--neoexpress selects the compatibility probe; choose ordinary/all or use the dedicated native-chain runner." >&2
   exit 1
@@ -121,11 +137,12 @@ if [[ $run_contracts -eq 1 ]]; then
     if [[ -f "$services_build/NeoDIDRegistry.nef" && -f "$services_build/NeoDIDRegistry.manifest.json" ]]; then
       export NEOOS_REQUIRE_SERVICES_ARTIFACTS=1
       echo "cross-repo gate: NeoDIDRegistry integration proof ENABLED (artifact dir: $services_build)"
-    elif [[ "${NEOOS_REQUIRE_SERVICES_ARTIFACTS:-0}" == "1" ]]; then
+    elif [[ "${NEOOS_REQUIRE_SERVICES_ARTIFACTS:-0}" == "1" && "${NEOOS_REQUIRE_COMPLETE:-0}" != "1" ]]; then
       echo "cross-repo gate: REQUIRED NeoDIDRegistry artifact is missing: $services_build" >&2
       echo "cross-repo gate: build neo-os-services contracts and set NEOOS_SERVICES_CONTRACT_BUILD, then retry." >&2
       exit 1
     else
+      mark_not_run "cross-repo"
       echo "cross-repo gate: NeoDIDRegistry integration proof NOT RUN - 0 cross-contract assertions executed."
       echo "cross-repo gate:   missing $services_build/NeoDIDRegistry.nef"
       echo "cross-repo gate:   that artifact is built by the private sibling repository neo-os-services and is"
@@ -183,6 +200,7 @@ if [[ $run_contracts -eq 1 ]]; then
     python3 formal/verify.py
     python3 -m unittest discover -s formal -p 'test_*.py'
   else
+    mark_not_run "formal"
     echo "formal gate: NOT RUN - formal/verify.py (Coq/TLC/Z3 model checks + semantic mutations) was skipped."
     echo "formal gate:   pass --formal or set NEOOS_REQUIRE_FORMAL=1 to run it; see docs/AA-FORMAL-VERIFICATION.md."
   fi
@@ -204,6 +222,7 @@ if [[ $run_contracts -eq 1 ]]; then
       --receipt "$neoexpress_receipt" > "$provenance_receipt"
     echo "neoexpress gate: provenance receipt written to ${provenance_receipt#$ROOT_DIR/}"
   else
+    mark_not_run "neoexpress"
     echo "neoexpress gate: NOT RUN - scripts/neoexpress_validate.py (private-chain deployment, transactions, RPC readback) was skipped."
     echo "neoexpress gate:   pass --neoexpress or set NEOOS_REQUIRE_NEOEXPRESS=1 to run it."
   fi
@@ -245,4 +264,8 @@ if [[ $run_sdk -eq 1 ]]; then
 fi
 
 echo ""
-echo "verify_repo $verification_profile gates completed successfully."
+if [[ ${#not_run_gates[@]} -eq 0 ]]; then
+  echo "verify_repo $verification_profile gates completed successfully; status=PASS."
+else
+  IFS=,; echo "verify_repo $verification_profile checks passed with NOT RUN gates; status=PARTIAL; notRun=${not_run_gates[*]}."
+fi

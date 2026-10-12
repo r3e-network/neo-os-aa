@@ -134,7 +134,9 @@ export function createMultiSigTools({ digest, buildTypedData, compactSignature, 
   async function prepareMultiSigOperation({ context: inputContext, operation, read }) {
     const context = normalizeContext(inputContext);
     const channel = unsigned(operation.channel ?? 0);
-    if (BigInt(channel) >= (1n << 192n)) error('nonce channel exceeds uint192');
+    // NeoVM Integer values are signed 256-bit; nonce channels therefore have
+    // 191 usable high bits (the 192nd bit would set the sign bit).
+    if (BigInt(channel) >= (1n << 191n)) error('nonce channel exceeds uint191');
     const nonceItem = stackHead(await read(context.coreContractHash, 'getNonce', [hashParam(context.accountIdHash), integerParam(channel)]));
     if (nonceItem.type !== 'Integer' || BigInt(unsigned(nonceItem.value)) >= (1n << 64n)) error('invalid nonce sequence');
     const argsHashHex = decodeByteStringStackHex(stackHead(await read(context.coreContractHash, 'computeArgsHash', [{ type: 'Array', value: operation.args }])));

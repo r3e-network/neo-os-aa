@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 
@@ -65,6 +66,38 @@ test('ordinary and native profiles have separate, existing entrypoints', () => {
   assert.ok(native.data.openGates.includes('NATIVE-CROSS-PROXY-AUTHORITY'));
   assert.ok(native.data.openGates.includes('EXTERNAL-PROTOCOL-ACCEPTANCE'));
   assert.ok(native.data.openGates.includes('PUBLIC-HARDFORK-ACTIVATION'));
+});
+
+test('ordinary GO status is backed by the pinned public artifact and independent readbacks', () => {
+  const ordinary = readProfile('ordinary').data;
+  assert.equal(ordinary.implementationVerified, true);
+  assert.equal(ordinary.status, 'go-pinned-public-artifact');
+  assert.equal(ordinary.currentSourceCandidate.status, 'source-ahead-of-pinned-public-artifact');
+  assert.equal(ordinary.currentSourceCandidate.releaseGate, 'required-before-public-upgrade');
+
+  const verified = ordinary.verifiedArtifact;
+  assert.equal(verified.contractName, 'UnifiedSmartWalletV3');
+  const nefPath = path.join(repoRoot, verified.path);
+  const manifestPath = path.join(repoRoot, verified.manifestPath);
+  assert.equal(createHash('sha256').update(fs.readFileSync(nefPath)).digest('hex'), verified.nefSha256);
+  assert.equal(createHash('sha256').update(fs.readFileSync(manifestPath)).digest('hex'), verified.manifestSha256);
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  assert.equal(manifest.name, verified.contractName);
+  assert.equal(manifest.abi.methods.length, verified.abiMethodCount);
+
+  const evidencePath = path.join(repoRoot, verified.publicReadbackEvidence);
+  const evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+  assert.equal(evidence.network, verified.network);
+  assert.equal(evidence.coreHash, verified.coreHash);
+  assert.equal(evidence.candidate.nefSha256, `0x${verified.nefSha256}`);
+  assert.equal(evidence.candidate.manifestSha256, `0x${verified.manifestSha256}`);
+  assert.equal(evidence.nodes.length, verified.independentRpcReadbacks);
+  assert.ok(evidence.nodes.every((node) => node.networkMagic === 860833102));
+  assert.ok(evidence.nodes.every((node) => node.scriptMatches === true && node.manifestMatches === true));
+  assert.ok(evidence.nodes.every((node) => node.scriptSha256 === evidence.candidate.scriptSha256));
+  assert.ok(evidence.nodes.every((node) => node.methods === verified.abiMethodCount));
+  assert.ok(evidence.txid && evidence.blockIndex > 0 && evidence.verifiedAt);
 });
 
 test('implementation README entrypoints and profile metadata stay discoverable', () => {

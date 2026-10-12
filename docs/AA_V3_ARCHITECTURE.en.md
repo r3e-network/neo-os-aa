@@ -108,18 +108,22 @@ Here is an example of a **"Web2 player using TEE relay to play an N3 fully on-ch
 2. The frontend requests the NeoDID registry service, linking the Ethereum public key with `did:neo:xxx`, and obtains the corresponding N3 virtual account address (`AccountId`).
 3. The user signs an EIP-712 authorization: "I allow TEE node 0xABC to use up to 100 GAS for gaming over the next 24 hours."
 
-**Phase 2: High-Frequency Game Actions (TEE + Salt Nonce)**
+**Phase 2: High-Frequency Game Actions (TEE + Parallel Nonce Channels)**
 1. The player clicks "Attack" in the game.
 2. The request is sent to the TEE node. The TEE node verifies in its memory enclave: authorization is valid, not expired, and not over budget.
 3. The TEE node uses its own hardware private key to construct a `UserOperation` and signs the transaction.
-4. **Critical Optimization**: To prevent Nonce collisions from high-frequency clicking, the TEE populates the `UserOp` with a UUID acting as a **Salt Nonce**.
+4. **Parallel execution**: The TEE selects a channel in the bounded nonce domain. Each
+   channel advances its own 64-bit sequence, so independent actions can proceed without
+   a UUID/salt mode. The executable boundary is `0 <= nonce < 2^255` and the channel is
+   `nonce >> 64` with at most 191 bits.
 
 **Phase 3: Gasless On-chaining (Bundler + Paymaster)**
 1. The TEE packages the signature to the game's official Bundler.
 2. The Bundler, acting as the true initiator on N3, pays the N3 NetworkFee/SystemFee out of pocket and pushes the TEE-signed operation into the AA gateway.
 
 **Phase 4: Minimalist Routing & Execution (AA Gateway + Hooks)**
-1. **Replay Check**: The AA gateway verifies the UUID Salt is unused, then marks it as used.
+1. **Replay Check**: The AA gateway reads the channel cursor and accepts only the exact
+   next sequence; successful execution advances that cursor atomically.
 2. **Short-circuit Auth**: The AA gateway routes the data directly to the `TEE Verifier` plugin. Hardware signature verification passes instantly.
 3. **Security Interception**: The AA gateway verifies the account is not currently locked in an `Escape Hatch` countdown.
 4. **Policy Hook**: Calls the `NeoDID Credential Hook` to ensure the player's reputation score is normal.

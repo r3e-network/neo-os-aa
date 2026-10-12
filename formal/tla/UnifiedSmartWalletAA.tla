@@ -20,8 +20,9 @@
 (* Rollback is assumed only for a FAULT of the enclosing transaction, never  *)
 (* an exception caught by its caller. No liveness/refinement is claimed.    *)
 (* MaxSeq is a finite TLC exploration bound; the unbounded Coq model carries  *)
-(* the cursor as nat. The core's BigInteger-to-uint256 input boundary is an    *)
-(* explicit separate obligation in verified/smt/aa_core.smt2.                 *)
+(* the cursor as nat. The core's BigInteger-to-signed-255-bit input boundary  *)
+(* (0 <= nonce < 2^255; channel < 2^191) is an explicit separate obligation  *)
+(* in verified/smt/aa_core.smt2.                                               *)
 (*******************************************************************************)
 EXTENDS Integers
 

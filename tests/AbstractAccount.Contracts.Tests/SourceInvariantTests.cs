@@ -108,6 +108,11 @@ public class SourceInvariantTests
         StringAssert.Contains(executionSource, "Runtime.Time <= op.Deadline", "Deadline check exists");
         StringAssert.Contains(executionSource, "IsNonceAcceptable(accountId, op.Nonce)", "Nonce check before consume");
         StringAssert.Contains(executionSource, "ConsumeNonce(accountId, op.Nonce)", "Nonce consumed after validation");
+        // Non-negative NeoVM integers are signed 256-bit values. The canonical
+        // uint-like field guard must reject a full-width value whose sign bit is
+        // set instead of accepting it merely because its magnitude fits.
+        StringAssert.Contains(executionSource, "encoded[length - 1] < 0x80",
+            "Unsigned fields reject the signed-VM upper half");
 
         // Randomized invariant check: verify 2D nonce math for random values
         for (int i = 0; i < Iterations; i++)

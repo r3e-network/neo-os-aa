@@ -214,7 +214,7 @@ branch coverage remain outside the demonstrated scope.
 | --- | --- | --- |
 | **Authentication** | Verifier signature checks | Unauthorized ops rejected |
 | **Authorization** | Backup owner / Verifier separation | Privilege escalation prevented |
-| **Freshness** | Nonce increment / Salt consumption | Replay rejected |
+| **Freshness** | Per-channel nonce cursor and deadline | Replay and out-of-order operations rejected |
 | **Cross-chain isolation** | `Runtime.GetNetwork()` in payload | Can't replay across networks |
 
 ### 3.3 Policy/Hook Layer

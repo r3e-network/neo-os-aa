@@ -41,7 +41,8 @@ namespace AbstractAccount
             // callData params
             public object[] Args = new object[0];
 
-            // ERC-4337 2D nonce: high 192 bits = channel, low 64 bits = sequence
+            // ERC-4337 2D nonce under NeoVM's signed Integer domain: high 191 bits
+            // are the channel, low 64 bits are the sequence.
             public BigInteger Nonce;
 
             // Replay protection expiry

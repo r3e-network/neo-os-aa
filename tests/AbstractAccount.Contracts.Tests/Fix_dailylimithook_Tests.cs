@@ -123,4 +123,19 @@ public class Fix_DailyLimitHook_Tests
         StringAssert.Contains(source, "Storage.Delete(Storage.CurrentContext, snapKey);",
             "transient snapshots must be cleared after metering");
     }
+
+    [TestMethod]
+    public void ConfigurationRejectsInvalidTokensAndBoundsSnapshotWork()
+    {
+        string daily = ReadHook("DailyLimitHook.cs");
+        StringAssert.Contains(daily, "Invalid limited token");
+        StringAssert.Contains(daily, "Negative daily limit");
+        StringAssert.Contains(daily, "MaxConfiguredTokens = 16");
+        StringAssert.Contains(daily, "Too many limited tokens");
+
+        string restricted = ReadHook("TokenRestrictedHook.cs");
+        StringAssert.Contains(restricted, "Invalid restricted token");
+        StringAssert.Contains(restricted, "MaxRestrictedTokens = 16");
+        StringAssert.Contains(restricted, "Too many restricted tokens");
+    }
 }

@@ -106,18 +106,20 @@
 2. 前端请求 NeoDID 注册服务，将该以太坊公钥与 `did:neo:xxx` 建立关联，并获取到对应的 N3 虚拟账户地址 (`AccountId`)。
 3. 用户签署一份 EIP-712 授权：“我允许 TEE 节点 0xABC 在未来 24 小时内，每天最多动用 100 GAS 用于游戏”。
 
-**阶段 2：高频游戏动作 (TEE + Salt Nonce)**
+**阶段 2：高频游戏动作 (TEE + 并行 Nonce 通道)**
 1. 玩家在游戏中点击“攻击”。
 2. 请求发往 TEE 节点。TEE 节点在内存飞地中核对：授权有效、未超时、未超额。
 3. TEE 节点使用自身的硬件私钥，构造一个 `UserOperation`，签发交易。
-4. **关键优化**：为了防止高频点击导致 Nonce 冲突，TEE 在 `UserOp` 中填入 UUID 作为 **Salt Nonce**。
+4. **并行执行**：TEE 在有界 nonce 域中选择通道。每个通道独立递增 64 位序列，
+   不需要 UUID/Salt 模式即可让独立动作并行执行。可执行边界是 `0 <= nonce < 2^255`，
+   通道为 `nonce >> 64`，最多 191 位。
 
 **阶段 3：免 Gas 上链 (Bundler + Paymaster)**
 1. TEE 将签名打包给游戏的官方 Bundler。
 2. Bundler 作为 N3 的真正发起方，自己支付 N3 的 NetworkFee/SystemFee，将 TEE 签名的操作推入 AA 网关。
 
 **阶段 4：极简路由与执行 (AA Gateway + Hooks)**
-1. **查验重放**：AA 网关检查该 UUID Salt 未被使用，随后标记为已使用。
+1. **查验重放**：AA 网关读取通道游标，只接受严格的下一个序列；成功执行后原子递增游标。
 2. **短路鉴权**：AA 网关将数据直接路由给 `TEE Verifier` 插件，硬件验签秒过。
 3. **安全拦截**：AA 网关检查当前未处于 `Escape Hatch`（逃生舱）锁定状态。
 4. **策略钩子**：调用 `NeoDID Credential Hook` 确保玩家信誉分正常。

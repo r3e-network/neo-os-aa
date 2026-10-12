@@ -11,6 +11,25 @@
 > `docs/AA-FORMAL-VERIFICATION.md`, and the dated build receipt under
 > `docs/reports/`.
 
+### Current ordinary-profile boundary (2026-10-13)
+
+The ordinary source protocol is internally consistent for its executable nonce
+domain, operation-shape isolation, plugin lifecycle and bounded policy
+cardinality. The current source candidate is compiled and runtime-tested, while
+the pinned public artifact remains the separately verified deployment identity.
+Three release gates remain explicit:
+
+| Gate | Status | Required closure evidence |
+|---|---|---|
+| Public verifier/hook callback resource isolation | **NO-GO** | Neo core syscall or equivalent hardfork capability, public activation, rebuilt NEF/manifest, and RPC/runtime evidence |
+| Platform-account backup-owner rotation | **NO-GO** | Accepted propose/confirm/cancel semantics with new-owner authorization, ABI migration, upgraded artifact and live readback |
+| Source candidate versus pinned public artifact | **UPGRADE REVIEW** | Fresh artifact certificate, compatibility review, deployment transaction and independent RPC readback |
+
+Static tests and the host formal model gate do not close these external or
+deployment boundaries. The ordinary profile may therefore be used as the
+verified pinned public artifact, but the newer source candidate must not be
+described as already deployed until those release gates converge.
+
 ---
 
 ## Executive Summary
@@ -24,7 +43,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 | # | Requirement | Status | Notes |
 |---|---|---|---|
 | 1 | Plugin Lifecycle (install/update/remove) | ✓ | Complete with timelocks and events |
-| 2 | 2D Nonce Management (channel+sequence, salt mode) | ✓ Neo equivalent | Sequential channel/sequence semantics match the relevant ERC-4337 shape; the surrounding UserOperation and transport remain Neo-specific |
+| 2 | 2D Nonce Management (191-bit channel + 64-bit sequence) | ✓ Neo equivalent | Every accepted nonce is a signed NeoVM Integer in `0 <= nonce < 2^255`, split into an independent channel and sequence; the surrounding UserOperation and transport remain Neo-specific |
 | 3 | Escape Hatch Mechanism (timelock, cooldown, finalization) | ✓ | Production-grade L1 escape |
 | 4 | Storage Patterns (gas-efficient for Neo N3) | ✓ | Optimized prefix-key storage |
 | 5 | Account State Management (atomic) | ✓ | Atomic state updates |
@@ -63,28 +82,23 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 ---
 
-### 2. Neo 2D Nonce Management (channel+sequence, salt mode) ✓
+### 2. Neo 2D Nonce Management (191-bit channel + 64-bit sequence) ✓
 
-**Implementation Location:** `contracts/UnifiedSmartWallet.Execution.cs` lines 156-204
+**Implementation Location:** `contracts/UnifiedSmartWallet.Execution.cs` (`IsNonceAcceptable` / `ConsumeNonce`)
 
-**Sequential Mode (nonce < 1,000,000,000,000,000):**
+**Canonical nonce domain:**
 ```csharp
 BigInteger channel = nonce >> 64;
 BigInteger sequence = nonce & 0xFFFFFFFFFFFFFFFF;
 ```
-- Matches the relevant ERC-4337 2D sequential nonce shape
-- Channel 0: 0, 1, 2, 3... | Channel 1: 0, 1, 2, 3...
-- Used for standard transactions requiring ordering
+- `nonce` and `deadline` are non-negative signed NeoVM Integers with `0 <= value < 2^255`.
+- The low 64 bits are the strictly increasing sequence; the remaining 191 bits select the channel.
+- Channel 0 and every other channel advance independently from sequence 0; there is no threshold or alternate UUID/salt mode.
+- A sequence gap or replay is rejected, and a successful operation advances exactly one channel cursor.
 
-**Salt/UUID Mode (nonce >= 1,000,000,000,000,000):**
-```csharp
-byte[] saltKey = Helper.Concat(Prefix_Nonce, (byte[])accountId);
-key = Helper.Concat(key, nonce.ToByteArray());
-```
-- Used salts tracked to prevent reuse
-- Prevents collisions by storing used salts
-- Intended for high-frequency TEE/SessionKey concurrency
-- Similar to ERC-4337 EIP-4337 "random nonce mode" proposals
+The source `getNonce` query applies the same signed-VM channel bound (`0 <= channel < 2^191`).
+Older deployed foundation artifacts may still accept an upper-half channel for a read until they
+are republished; that read boundary does not make such a channel executable.
 
 **Replay Protection:**
 - `IsNonceAcceptable()` prevents re-execution
@@ -94,10 +108,10 @@ key = Helper.Concat(key, nonce.ToByteArray());
 
 **Comparison to ERC-4337:**
 - ERC-4337: `nonce = key << 64 + sequence`
-- Neo: **Equivalent semantics** for sequential mode
-- Neo: adds a Neo-specific UUID/salt mode for concurrency
+- Neo: **Equivalent per-channel semantics**, with a 191-bit channel because NeoVM Integers are signed
+- Neo: keeps one canonical nonce path; there is no separate UUID/salt mode
 
-**Assessment:** ✓ Exceeds ERC-4337 with UUID mode support
+**Assessment:** ✓ Bounded Neo-native 2D nonce semantics
 
 ---
 
@@ -147,7 +161,6 @@ The deployed names carry the account id: `initiateEscape(accountId)` and
 **Storage Layout:**
 - `Prefix_AccountState` → `accountId` → `AccountState` (large struct)
 - `Prefix_Nonce` → `accountId` + `channel` → `sequence`
-- `Prefix_Nonce` + `accountId` + `nonce` → `used` (for UUID mode)
 - `Prefix_EscapeLastInitiated` → `accountId` → timestamp
 - `Prefix_PendingVerifierUpdate` → `accountId` → `PendingConfigUpdate`
 - `Prefix_PendingHookUpdate` → `accountId` → `PendingConfigUpdate`
@@ -333,7 +346,7 @@ Response: { approved: boolean, reason?: string }
 
 **Key Documented Claims:**
 - ✓ "ERC-4337 Aligned Minimalist AA Engine" (ManifestExtra)
-- ✓ 2D nonce with sequential and UUID modes
+- ✓ 2D nonce with a bounded 191-bit channel and 64-bit sequence
 - ✓ 7-90 day escape timelock
 - ✓ L1 native fallback via BackupOwner witness
 - ✓ Reentrancy protection via ExecutionLock
@@ -380,7 +393,7 @@ Response: { approved: boolean, reason?: string }
 | Zero-deployment virtual accounts | ✓ | ✗ | **Neo Advantage** |
 | Heterogeneous signature schemes | ✓ | Limited | **Neo Advantage** |
 | L1 native escape hatch | ✓ | Not specified | **Neo Advantage** |
-| 2D nonce with UUID mode | ✓ | Proposed | **Neo Advantage** |
+| 2D nonce with bounded channel + sequence | ✓ | ✓ | **Parity** |
 | Market escrow integration | ✓ | None | **Neo Advantage** |
 | Cross-chain replay protection | ✓ | ✓ | **Parity** |
 | Reentrancy protection | ✓ | ✓ | **Parity** |
@@ -466,8 +479,8 @@ Response: { approved: boolean, reason?: string }
 ### Low Priority (Documentation)
 
 8. **Document Nonce Space Constraints**
-   - Add documentation on recommended salt space sizing
-   - Document trade-offs: larger space = lower collision probability = higher storage cost
+   - Keep the signed NeoVM boundary (`0 <= nonce < 2^255`) and resulting 191-bit channel limit visible to SDK callers
+   - Keep deployed-artifact read-boundary differences explicit until the next ordinary artifact publication
 
 9. **Add Paymaster Staking Guide**
    - Document how to register as Morpheus paymaster

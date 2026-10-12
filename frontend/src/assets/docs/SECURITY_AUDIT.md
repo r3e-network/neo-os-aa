@@ -453,31 +453,27 @@ ERC-4337 uses EIP-712 typed data encoding which prevents collision issues by inc
 
 ## Low Findings
 
-### 7. LOW: Nonce Salt Collision Probability
+### 7. LOW: Wider Read-Only Nonce Query Boundary
 
 **Severity:** Low
 
-**Affected File:** `contracts/UnifiedSmartWallet.Execution.cs:175-184`
+**Affected File:** `contracts/UnifiedSmartWallet.Execution.cs`
 
 **Issue:**
-Salt-mode nonces use a threshold of `1_000_000_000_000_000`:
+The executable `UserOperation` path accepts only the non-negative signed NeoVM Integer
+domain (`0 <= nonce < 2^255`), which gives each nonce a 191-bit channel and a 64-bit
+sequence. A historical public artifact may still allow a wider channel value through the
+read-only `getNonce` query. That value is not executable, but clients must not treat a
+successful query as proof that the channel can be submitted.
 
-```csharp
-BigInteger MAX_2D_NONCE = 1_000_000_000_000_000;
-```
-
-This creates ~1 quadrillion possible values. The probability of collision is negligible in practice (birthday problem with 1M operations = ~1 in 2 trillion), but not mathematically impossible.
-
-**Risk:**
-Extremely unlikely replay collision due to nonce reuse. The practical impact is negligible.
-
-**Mitigation Recommended:**
-Consider increasing to `2^64` (~18 quintillion) for cryptographic safety margin.
+**Mitigation:**
+The current source and native/client codecs reject channels at or above `2^191`; the
+pinned public artifact remains separately identified in `implementations/ordinary/profile.json`
+and requires an upgrade review before publication.
 
 **Ethereum Comparison:**
-ERC-4337 typically uses full 256-bit nonce space for random/salt modes.
-
----
+ERC-4337 exposes a 256-bit nonce encoding; Neo's executable boundary is narrowed by the
+signed VM Integer representation and is documented explicitly in the signing profile.
 
 ### 8. LOW: Rate Limiter Bypass via IP Rotation
 

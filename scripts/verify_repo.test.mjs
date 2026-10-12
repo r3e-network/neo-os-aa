@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-function dispatch(t, args = [], failMatch = '') {
+function dispatch(t, args = [], failMatch = '', envOverrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'account-verify-dispatch-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   for (const dir of ['scripts', 'contracts', 'frontend', 'sdk/js', 'commands']) {
@@ -24,7 +24,8 @@ function dispatch(t, args = [], failMatch = '') {
     env: { ...process.env, PATH: `${path.join(root, 'commands')}:${process.env.PATH}`,
       VERIFY_TRACE: trace, VERIFY_FAIL_MATCH: failMatch,
       NEOOS_NATIVE_EPOCH_RECEIPT: path.join(root, 'native.json'),
-      NEOOS_REQUIRE_FORMAL: '0', NEOOS_REQUIRE_NEOEXPRESS: '0', NEOOS_REQUIRE_SERVICES_ARTIFACTS: '0' },
+      NEOOS_REQUIRE_FORMAL: '0', NEOOS_REQUIRE_NEOEXPRESS: '0', NEOOS_REQUIRE_SERVICES_ARTIFACTS: '0', NEOOS_REQUIRE_COMPLETE: '0',
+      ...envOverrides },
   });
   return { ...result, trace: fs.existsSync(trace) ? fs.readFileSync(trace, 'utf8') : '' };
 }
@@ -38,6 +39,23 @@ test('ordinary is the default and never selects native package or runtime gates'
   assert.match(result.trace, /npm run test:ordinary:browser/);
   assert.match(result.trace, /npm run test:operator-recovery:browser/);
   assert.doesNotMatch(result.trace, /--include-native|native_epoch_probe|test_native_|test:native:browser/);
+});
+
+test('ordinary success is explicitly PARTIAL when optional gates are NOT RUN', (t) => {
+  const result = dispatch(t);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /cross-repo gate: NeoDIDRegistry integration proof NOT RUN/);
+  assert.match(result.stdout, /formal gate: NOT RUN/);
+  assert.match(result.stdout, /neoexpress gate: NOT RUN/);
+  assert.match(result.stdout, /status=PARTIAL; notRun=cross-repo,formal,neoexpress/);
+  assert.doesNotMatch(result.stdout, /status=PASS/);
+});
+
+test('complete ordinary verification fails closed at the first unavailable gate', (t) => {
+  const result = dispatch(t, ['--contracts-only'], '', { NEOOS_REQUIRE_COMPLETE: '1' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /required complete gate unavailable: cross-repo/);
+  assert.doesNotMatch(result.trace, /dotnet test neo-abstract-account\.sln/);
 });
 
 test('native contract validation selects its required guards and epoch probe', (t) => {

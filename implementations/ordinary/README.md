@@ -9,6 +9,14 @@ Use this path for ordinary `UnifiedSmartWalletV3` contracts, their verifier and
 hook modules, the ordinary frontend workspace, and the V3 SDK. Its gates are
 selected with `./scripts/verify_repo.sh --profile ordinary`.
 
+The profile is `go-pinned-public-artifact`: the tracked `contracts/build` pair
+matches the mainnet readback recorded in
+[`mainnet-unified-smart-wallet-upgrade-20260915-evidence.json`](../../docs/reports/mainnet-unified-smart-wallet-upgrade-20260915-evidence.json)
+through two independent RPC nodes. This verifies the artifact currently used by
+the public ordinary path. `contracts/bin/v3` is the current source candidate;
+its ABI additions require a new artifact review and governed upgrade before
+they can be called public deployment evidence.
+
 The ordinary profile is a user-contract implementation. It must not be
 labelled as native AccountManagement or used as evidence of native consensus
 activation.

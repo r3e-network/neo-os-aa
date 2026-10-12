@@ -32,6 +32,7 @@ namespace AbstractAccount.Hooks
         // Audit fix M-5: transient per-execution balance snapshot of restricted tokens, used to
         // enforce the restriction by EFFECT (balance must not fall) and not just by call target.
         private static readonly byte[] Prefix_RestrictedSnapshot = new byte[] { 0x02 };
+        private const int MaxRestrictedTokens = 16; // Bound callback work from balance snapshots
 
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
 
@@ -69,14 +70,20 @@ namespace AbstractAccount.Hooks
         public static void SetRestrictedToken(UInt160 accountId, UInt160 token, bool isRestricted)
         {
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
-#if SMARTACCOUNT_NATIVE
-            ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid restricted token");
-#endif
             byte[] key = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
             key = Helper.Concat(key, (byte[])token);
             
             if (isRestricted)
             {
+                ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid restricted token");
+                if (Storage.Get(Storage.CurrentContext, key) == null)
+                {
+                    byte[] accountPrefix = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
+                    Iterator iterator = Storage.Find(Storage.CurrentContext, accountPrefix, FindOptions.KeysOnly);
+                    int configured = 0;
+                    while (iterator.Next()) configured++;
+                    ExecutionEngine.Assert(configured < MaxRestrictedTokens, "Too many restricted tokens");
+                }
                 Storage.Put(Storage.CurrentContext, key, new byte[] { 1 });
             }
             else

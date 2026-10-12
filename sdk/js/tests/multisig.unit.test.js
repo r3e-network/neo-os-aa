@@ -53,6 +53,24 @@ test('chain-fetched context pins order, threshold, network and authorized core',
   await assert.rejects(() => f.client.fetchContext({ coreContractHash: core, accountIdHash: account }), /authorized core mismatch/);
 });
 
+test('nonce channel rejects the signed-VM upper-half boundary', async () => {
+  const f = fixture();
+  const context = await f.client.fetchContext({ coreContractHash: core, accountIdHash: account });
+  await assert.rejects(
+    () => f.client.prepareOperation({
+      context,
+      operation: {
+        targetContract: target,
+        method: 'transfer',
+        args: [],
+        channel: (1n << 191n).toString(),
+        deadline: '2000000000000',
+      },
+    }),
+    /nonce channel exceeds uint191/,
+  );
+});
+
 test('unordered supplied child proofs become exact configured slots and validate on chain', async () => {
   const f = await prepared();
   const bundle = await f.client.validateBundle({ context: f.context, operation: f.operation, childProofs: f.proofs });

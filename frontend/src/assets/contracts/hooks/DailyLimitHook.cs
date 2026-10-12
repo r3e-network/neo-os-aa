@@ -39,6 +39,7 @@ namespace AbstractAccount.Hooks
         private static readonly byte[] Prefix_BalanceSnapshot = new byte[] { 0x06 };
         private static readonly BigInteger OneDayMs = 24L * 60 * 60 * 1000;
         private const int MaxHistorySize = 50; // Maximum historical transactions to track for rolling window
+        private const int MaxConfiguredTokens = 16; // Bound callback work from balance snapshots
 
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
 
@@ -90,10 +91,7 @@ namespace AbstractAccount.Hooks
         public static void SetDailyLimit(UInt160 accountId, UInt160 token, BigInteger maxAmount, bool useRollingWindow)
         {
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
-#if SMARTACCOUNT_NATIVE
-            ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid limited token");
             ExecutionEngine.Assert(maxAmount >= 0, "Negative daily limit");
-#endif
             byte[] key = Helper.Concat(HookAuthority.AccountKey(Prefix_DailyLimit, accountId), (byte[])token);
             if (maxAmount <= 0)
             {
@@ -109,6 +107,15 @@ namespace AbstractAccount.Hooks
             }
             else
             {
+                ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid limited token");
+                if (Storage.Get(Storage.CurrentContext, key) == null)
+                {
+                    byte[] accountPrefix = HookAuthority.AccountKey(Prefix_DailyLimit, accountId);
+                    Iterator iterator = Storage.Find(Storage.CurrentContext, accountPrefix, FindOptions.KeysOnly);
+                    int configured = 0;
+                    while (iterator.Next()) configured++;
+                    ExecutionEngine.Assert(configured < MaxConfiguredTokens, "Too many limited tokens");
+                }
                 LimitConfig config = new LimitConfig { MaxAmount = maxAmount, UseRollingWindow = useRollingWindow };
                 Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(config));
             }

@@ -21,7 +21,7 @@ For actions where the policy (e.g., daily limits, whitelisted addresses, or cond
 1. The user defines their policy and stores it privately within the Morpheus TEE node.
 2. When the user wishes to execute a transaction, they send the intent to the TEE node.
 3. The TEE node evaluates the private policy.
-4. If approved, the TEE node signs a "Salt Nonce" or a direct transaction hash.
+4. If approved, the TEE node signs the channel and exact next sequence in the bounded nonce domain, or a direct transaction hash.
 5. The `TEEVerifier` contract on N3 validates the enclave's hardware-level signature before allowing the transaction to proceed.
 
 ### 3. Session Keys

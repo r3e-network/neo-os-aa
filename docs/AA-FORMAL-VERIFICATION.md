@@ -2,6 +2,27 @@
 
 ## Status
 
+### Current host gate (2026-10-13)
+
+The current repository source and model snapshot passes the host formal gate:
+**26 Coq modules, 247 rejected semantic mutations, 61,460 TLC distinct states,
+six SMT obligations and six controls**, with the native core roster checked at
+310 exact source files. The reproducible result is
+`formal/.runs/final-20261013/result.json` (SHA-256
+`689153647773f1760c403dcfac9bfa622d41062cbddcfc448e6476acaff55913`). The
+formal model gate is **GO** for its declared abstractions. It deliberately
+retains `implementationVerified: false`: these models do not prove C# to NEF to
+NeoVM refinement, complete VM fee accounting, arbitrary plugin liveness, or
+public deployment equivalence. The Docker gate was not run because the local
+Colima daemon was unavailable; it remains a separate required environment gate.
+
+The ordinary public profile also retains two protocol-level NO-GO boundaries:
+public `v3` callbacks use standard `System.Contract.Call` without an isolated
+child budget, and platform-account backup-owner rotation is still immediate in
+the deployed ABI. Closing either requires an external Neo protocol/runtime
+change plus a new artifact, migration, and public readback; this repository
+does not relabel them as closed based on static tests.
+
 ### ABI 2 convergence boundary
 
 The active native target is AccountManagement ABI 2, with identity derivation
@@ -667,10 +688,12 @@ nonzero valid target, method length 1--128 UTF-8 bytes, argument count at most
 64, canonical argument serialization at most 4096 bytes, signature at most
 1024 bytes, non-empty batch of at most 32 operations, and nonce/deadline in
 the non-negative signed-256-bit domain (`0 <= value < 2^255`). Therefore an
-executable nonce has 191 channel bits, not 192. The deployed foundation's
-`getNonce` read currently admits a wider, unsigned-192-bit query range; that does
-not make those upper-half channels executable and is not native-profile
-conformance. The new native codec rejects channels at or above `2^191`.
+executable nonce has 191 channel bits, not 192. The current ordinary source
+applies the same signed-VM bound to `getNonce` reads. A historical deployed
+foundation artifact may still admit a wider, unsigned-192-bit query range until
+it is republished; that does not make those upper-half channels executable and
+is not native-profile conformance. The native codec rejects channels at or above
+`2^191`.
 
 The AA core rejects negative and over-width values, while the VM itself limits
 an Integer to a signed 32-byte representation. Earlier documentation incorrectly
