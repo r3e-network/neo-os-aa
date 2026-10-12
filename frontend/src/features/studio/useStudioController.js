@@ -39,6 +39,7 @@ import { EC, translateError } from '../../config/errorCodes.js';
 import { TX_STATUS, waitForTransactionConfirmation } from './txConfirmation.js';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout.js';
 import { validateRegistrationOwner, supportedPendingRoles, readChainClock, readGovernanceSnapshot, buildGovernanceAction, assertGovernanceReviewCurrent } from './governance.js';
+import { captureMetadataSaveIntent, metadataIntentMatchesCurrent, metadataMirrorPayload } from './metadataSave.js';
 
 export function useStudioController() {
   const toast = useToast();
@@ -95,10 +96,12 @@ export function useStudioController() {
   });
 
   const canManageTarget = computed(() => !!manageForm.value.accountAddress && walletConnected.value);
-  const governanceBusy = computed(() => Object.values(manageBusy.value).some(Boolean));
+  const governanceBusy = computed(() => Object.values(manageBusy.value).some(Boolean) || metadataBusy.value.save);
   const governanceOutcome = ref('');
+  let contextEpoch = 0;
   const isGovernanceOwner = computed(() => manageSnapshot.value.loadedAt && !validateRegistrationOwner(manageSnapshot.value.backupOwner, connectedAccount.value));
   watch(() => [manageForm.value.accountAddress, connectedAccount.value], () => {
+    contextEpoch += 1;
     manageSnapshot.value = createManageSnapshotState();
     governanceOutcome.value = '';
   });
@@ -222,9 +225,9 @@ export function useStudioController() {
    * timeout or unreachable node degrades to 'pending confirmation' so a relayed
    * tx that FAULTed can never be reported as a success.
    */
-  async function confirmTransaction(label, txid) {
+  async function confirmTransaction(label, txid, { rpcUrl = resolveRpcUrl(walletService) } = {}) {
     const { status, exception } = await waitForTransactionConfirmation(
-      resolveRpcUrl(walletService),
+      rpcUrl,
       txid,
     );
 
@@ -257,13 +260,13 @@ export function useStudioController() {
     return status;
   }
 
-  function trackConfirmation(label, txid) {
+  function trackConfirmation(label, txid, rpcUrl = resolveRpcUrl(walletService)) {
     if (!txid) return;
     // Fire-and-forget: confirmation runs asynchronously and updates state/toasts
     // without blocking the submit handler. waitForTransactionConfirmation never
     // throws, but guard the chain defensively so a rejected promise cannot
     // surface as an unhandled rejection.
-    void confirmTransaction(label, txid).catch((err) => {
+    void confirmTransaction(label, txid, { rpcUrl }).catch((err) => {
       if (import.meta.env.DEV) console.warn('[useStudioController] confirmTransaction failed:', err?.message);
     });
   }
@@ -336,8 +339,13 @@ export function useStudioController() {
     }
   }
 
-  async function invokeOperation(label, operation, args, { waitForConfirmation = false } = {}) {
-    const aaHash = getAbstractAccountHash();
+  async function invokeOperation(label, operation, args, { waitForConfirmation = false, context = null } = {}) {
+    const operationContext = context || {
+      rpcUrl: resolveRpcUrl(walletService),
+      coreHash: getAbstractAccountHash(),
+      wallet: connectedAccount.value,
+    };
+    const aaHash = operationContext.coreHash;
     if (!aaHash) {
       throw new Error(EC.contractNotFound);
     }
@@ -346,7 +354,7 @@ export function useStudioController() {
       scriptHash: aaHash,
       operation,
       args,
-      signers: [{ account: connectedAccount.value, scopes: 1 }]
+      signers: [{ account: operationContext.wallet, scopes: 1 }]
     });
 
     const txid = result?.txid || '';
@@ -358,21 +366,34 @@ export function useStudioController() {
     toast.info(
       t('studio.toast.txSubmitted', '{label} submitted. Waiting for on-chain confirmation…').replace('{label}', label),
     );
-    if (waitForConfirmation) return { txid, status: await confirmTransaction(label, txid) };
-    trackConfirmation(label, txid);
+    if (waitForConfirmation) return { txid, status: await confirmTransaction(label, txid, { rpcUrl: operationContext.rpcUrl }) };
+    trackConfirmation(label, txid, operationContext.rpcUrl);
     return { txid, status: TX_STATUS.PENDING };
   }
 
   async function loadAccountConfiguration() {
-    if (!requireWallet() || !canManageTarget.value) return;
+    if (!requireWallet() || governanceBusy.value || !canManageTarget.value) return;
 
     manageBusy.value.load = true;
     try {
-      const accountHash = deriveAccountIdHash(normalizeAccountId(manageForm.value.accountAddress));
+      const requestedAccount = normalizeAccountId(manageForm.value.accountAddress);
+      const loadEpoch = contextEpoch;
+      const loadWallet = connectedAccount.value;
+      const loadRpcUrl = resolveRpcUrl(walletService);
+      const loadCoreHash = getAbstractAccountHash();
+      const loadWalletContext = walletService.contextVersion;
+      const accountHash = deriveAccountIdHash(requestedAccount);
+      const isCurrentLoad = () => loadEpoch === contextEpoch
+        && requestedAccount.toLowerCase() === normalizeAccountId(manageForm.value.accountAddress).toLowerCase()
+        && loadWallet === connectedAccount.value
+        && loadRpcUrl === resolveRpcUrl(walletService)
+        && loadCoreHash === getAbstractAccountHash()
+        && loadWalletContext === walletService.contextVersion
+        && walletService.sessionState === 'verified';
 
       const snapshot = await fetchGovernanceSnapshot(accountHash);
       // A different account or wallet may have been selected while RPC reads ran.
-      if (normalizeAccountId(manageForm.value.accountAddress).toLowerCase() !== accountHash.toLowerCase()) return;
+      if (!isCurrentLoad()) return;
       manageForm.value.verifierContract = `0x${snapshot.verifier}`;
       manageForm.value.hookContract = `0x${snapshot.hook}`;
       manageForm.value.backupOwner = `0x${snapshot.backupOwner}`;
@@ -385,6 +406,7 @@ export function useStudioController() {
       // Fetch off-chain metadata
       try {
         const meta = await fetchAccountMetadata(accountHash);
+        if (!isCurrentLoad()) return;
         metadataForm.value = {
           metadataUri: meta?.metadata_uri || '',
           description: meta?.description || '',
@@ -392,9 +414,12 @@ export function useStudioController() {
         };
       } catch (e) {
         if (import.meta.env.DEV) console.warn('[useStudioController] fetchAccountMetadata failed:', e?.message);
-        metadataForm.value = createMetadataFormState();
+        if (isCurrentLoad()) {
+          metadataForm.value = createMetadataFormState();
+        }
       }
 
+      if (!isCurrentLoad()) return;
       toast.success(t('studio.toast.accountLoaded', 'Current account configuration loaded.'));
     } catch (err) {
       toast.error(translateError(err?.message, t));
@@ -561,17 +586,89 @@ export function useStudioController() {
   const finalizeEscape = () => submitCurrentGovernanceAction('finalizeEscape');
 
   async function saveMetadata() {
-    if (!requireWallet() || !canManageTarget.value) return;
+    if (!requireWallet() || governanceBusy.value || !canManageTarget.value) return;
+    if (!isGovernanceOwner.value) {
+      toast.error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
+      return;
+    }
+
+    const accountAddress = normalizeAccountId(manageForm.value.accountAddress);
+    const accountIdHash = deriveAccountIdHash(accountAddress);
+    const rpcUrl = resolveRpcUrl(walletService);
+    const coreHash = getAbstractAccountHash();
+    const wallet = connectedAccount.value;
+    const snapshotOwner = manageSnapshot.value.backupOwner;
+    const idToken = (connectedDidProfile.value?.idToken || '').trim();
+    const intent = captureMetadataSaveIntent({
+      accountAddress,
+      accountIdHash,
+      backupOwner: snapshotOwner,
+      wallet,
+      rpcUrl,
+      coreHash,
+      metadataUri: metadataForm.value.metadataUri,
+      description: metadataForm.value.description,
+      logoUrl: metadataForm.value.logoUrl,
+      idToken,
+      epoch: contextEpoch,
+      walletContext: walletService.contextVersion,
+    });
+
     metadataBusy.value.save = true;
     try {
-      const accountIdHash = deriveAccountIdHash(normalizeAccountId(manageForm.value.accountAddress));
+      const sameContext = () => metadataIntentMatchesCurrent(intent, {
+        accountAddress: manageForm.value.accountAddress,
+        accountIdHash,
+        backupOwner: manageSnapshot.value.backupOwner,
+        wallet: connectedAccount.value,
+        rpcUrl: resolveRpcUrl(walletService),
+        coreHash: getAbstractAccountHash(),
+        metadataUri: metadataForm.value.metadataUri,
+        description: metadataForm.value.description,
+        logoUrl: metadataForm.value.logoUrl,
+        idToken: (connectedDidProfile.value?.idToken || '').trim(),
+        epoch: contextEpoch,
+        walletContext: walletService.contextVersion,
+      });
+
+      if (!sameContext() || walletService.sessionState !== 'verified') throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
+      const fresh = await fetchGovernanceSnapshot(accountIdHash);
+      if (!sameContext() || walletService.sessionState !== 'verified') throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
+      if (String(fresh.backupOwner || '').toLowerCase() !== intent.backupOwner) {
+        throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
+      }
+      if (validateRegistrationOwner(fresh.backupOwner, intent.wallet)) {
+        throw new Error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
+      }
 
       // On-chain: set MetadataUri
-      const metadataUri = metadataForm.value.metadataUri.trim();
-      await invokeOperation('Set metadata URI', 'setMetadataUri', [
-        { type: 'Hash160', value: accountIdHash },
-        { type: 'String', value: metadataUri },
-      ]);
+      const result = await invokeOperation('Set metadata URI', 'setMetadataUri', [
+        { type: 'Hash160', value: intent.accountIdHash },
+        { type: 'String', value: intent.metadataUri },
+      ], {
+        waitForConfirmation: true,
+        context: { rpcUrl: intent.rpcUrl, coreHash: intent.coreHash, wallet: intent.wallet },
+      });
+
+      if (result.status !== TX_STATUS.CONFIRMED) {
+        if (result.status === TX_STATUS.PENDING) {
+          governanceOutcome.value = t('ordinary.metadataPending', 'Metadata transaction is awaiting confirmation. The off-chain profile was not updated. Refresh before trying again.');
+        }
+        return;
+      }
+
+      // If the user changed the target, wallet, network, or fields while the
+      // wallet was waiting, never attach the original transaction to new data.
+      // Re-read the owner after confirmation. The wallet can remain connected
+      // while the account owner changes during a delayed signing flow.
+      const confirmedSnapshot = await fetchGovernanceSnapshot(accountIdHash);
+      if (!sameContext()
+        || walletService.sessionState !== 'verified'
+        || String(confirmedSnapshot.backupOwner || '').toLowerCase() !== intent.backupOwner
+        || validateRegistrationOwner(confirmedSnapshot.backupOwner, intent.wallet)) {
+        toast.warning(t('ordinary.metadataChanged', 'On-chain metadata was confirmed, but the account or form changed while signing. Refresh the account before syncing the off-chain profile.'));
+        return;
+      }
 
       // Off-chain: save description + logo. The on-chain setMetadataUri above is the
       // authoritative record; the off-chain mirror requires proof of account control
@@ -579,13 +676,7 @@ export function useStudioController() {
       // unavailable, keep the on-chain save successful and surface a soft warning rather
       // than failing the whole operation.
       try {
-        await upsertAccountMetadata({
-          accountIdHash,
-          description: metadataForm.value.description.trim(),
-          logoUrl: metadataForm.value.logoUrl.trim(),
-          metadataUri,
-          idToken: (connectedDidProfile.value?.idToken || '').trim() || undefined,
-        });
+        await upsertAccountMetadata(metadataMirrorPayload(intent));
         toast.success(t('studio.toast.metadataSaved', 'Account metadata saved.'));
       } catch (offChainErr) {
         toast.warning(

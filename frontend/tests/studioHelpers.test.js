@@ -76,6 +76,16 @@ test('every studio contract operation exists in the UnifiedSmartWalletV3 ABI', (
   assert.ok(operations.has('setMetadataUri'));
 });
 
+test('governance review modal renders canonical typed targets and explicit recovery mode', () => {
+  const source = fs.readFileSync(panelPath, 'utf8');
+  assert.match(source, /requestedTarget/);
+  assert.match(source, /review\.args\[1\]\?\.value/);
+  assert.match(source, /newVerifier/);
+  assert.match(source, /recoveryMode/);
+  assert.doesNotMatch(source, /0x\$\{review\.options\.module/);
+  assert.doesNotMatch(source, /0x\$\{review\.options\.verifier/);
+});
+
 test('parseRecentTransactions defaults missing status to pending and preserves valid statuses', () => {
   const raw = JSON.stringify([
     { label: 'Confirmed op', txid: '0xaaa', when: '2026-06-17', status: 'confirmed' },
