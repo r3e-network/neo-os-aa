@@ -61,6 +61,8 @@ namespace AbstractAccount
                 SetVerifierExecutionContext(accountId, state.Verifier);
             }
 
+            object[] executionArgs;
+
             try
             {
                 // [ValidateUserOp phase]
@@ -72,6 +74,7 @@ namespace AbstractAccount
                 // Step 2: Verify signature
                 if (state.Verifier != UInt160.Zero)
                 {
+                    UserOperation verificationOp = CloneUserOperation(op);
                     // Delegate to plugin for signature verification (e.g., ecrecover or TEE hardware)
 #if PLATFORM
                     bool isValid = (bool)PlatformSyscalls.CallWithGasLimit(
@@ -79,13 +82,13 @@ namespace AbstractAccount
                         "validateSignature",
                         CallFlags.ReadOnly,
                         VerifierGasLimit,
-                        new object[] { accountId, op });
+                        new object[] { accountId, verificationOp });
 #else
                     bool isValid = (bool)Contract.Call(
                         state.Verifier,
                         "validateSignature",
                         CallFlags.ReadOnly,
-                        new object[] { accountId, op });
+                        new object[] { accountId, verificationOp });
 #endif
                     ExecutionEngine.Assert(isValid, "Verifier rejected signature");
                 }
@@ -115,17 +118,28 @@ namespace AbstractAccount
                 // Step 4: NOW consume nonce (all validations passed)
                 ConsumeNonce(accountId, op.Nonce);
 
+                // Contract.Call passes VM arrays by reference. Keep the operation that was
+                // authenticated separate from the arrays exposed to policy hooks: a hook is an
+                // extension point, and a malicious/buggy implementation must not be able to
+                // rewrite the signed transfer arguments before the target call executes.
+                executionArgs = CloneOperationArguments(op.Args);
+
                 // [Hook phase] pre-execution hook
                 if (state.HookId != UInt160.Zero)
                 {
                     SetHookExecutionContext(accountId, state.HookId);
                     try
                     {
+                        object[] hookParams = BuildHookOperationParams(op, executionArgs);
+                        ByteString hookSnapshot = StdLib.Serialize(hookParams);
                         Contract.Call(
                             state.HookId,
                             "preExecute",
                             CallFlags.All,
-                            new object[] { accountId, BuildHookOperationParams(op) });
+                            new object[] { accountId, hookParams });
+                        ExecutionEngine.Assert(
+                            StdLib.MemoryCompare(hookSnapshot, StdLib.Serialize(hookParams)) == 0,
+                            "Hook mutated authenticated operation");
                     }
                     catch
                     {
@@ -140,16 +154,21 @@ namespace AbstractAccount
                 try
                 {
                     // Dynamically call target contract
-                    object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, op.Args);
+                    object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, executionArgs);
 
                     // [Hook phase] post-execution hook
                     if (state.HookId != UInt160.Zero)
                     {
+                        object[] hookParams = BuildHookOperationParams(op, executionArgs);
+                        ByteString hookSnapshot = StdLib.Serialize(hookParams);
                         Contract.Call(
                             state.HookId,
                             "postExecute",
                             CallFlags.All,
-                            new object[] { accountId, BuildHookOperationParams(op), result });
+                            new object[] { accountId, hookParams, result });
+                        ExecutionEngine.Assert(
+                            StdLib.MemoryCompare(hookSnapshot, StdLib.Serialize(hookParams)) == 0,
+                            "Hook mutated authenticated operation");
                     }
                     if (state.Verifier != UInt160.Zero)
                     {
@@ -245,16 +264,34 @@ namespace AbstractAccount
         /// hook refinement boundary explicit:
         /// <c>[TargetContract, Method, Args, Nonce, Deadline, Signature]</c>.
         /// </remarks>
-        private static object[] BuildHookOperationParams(UserOperation op)
+        private static object[] BuildHookOperationParams(UserOperation op, object[] args)
         {
             return new object[]
             {
                 op.TargetContract,
                 op.Method,
-                op.Args,
+                args,
                 op.Nonce,
                 op.Deadline,
                 op.Signature
+            };
+        }
+
+        private static object[] CloneOperationArguments(object[] args)
+        {
+            return (object[])StdLib.Deserialize(StdLib.Serialize(args));
+        }
+
+        private static UserOperation CloneUserOperation(UserOperation op)
+        {
+            return new UserOperation
+            {
+                TargetContract = op.TargetContract,
+                Method = op.Method,
+                Args = CloneOperationArguments(op.Args),
+                Nonce = op.Nonce,
+                Deadline = op.Deadline,
+                Signature = op.Signature
             };
         }
 

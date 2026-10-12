@@ -447,6 +447,15 @@ function createNativeTransactionTools(c) {
       fail("signed transaction must be produced by this SDK instance");
     const tx = await client.rpc.send("getrawtransaction", [signed.txid, true]);
     if (!tx?.blockhash) return { txid: signed.txid, confirmed: false };
+    if (String(tx.hash).toLowerCase() !== signed.txid)
+      fail("persisted transaction identity mismatch");
+    if (/^0+$/.test(c.hex(tx.blockhash, 32)))
+      fail("persisted transaction has a zero block hash");
+    if (
+      tx.confirmations !== undefined &&
+      (!Number.isSafeInteger(tx.confirmations) || tx.confirmations < 1)
+    )
+      fail("persisted transaction has invalid confirmations");
     const [wire, log] = await Promise.all([
       client.rpc.send("getrawtransaction", [signed.txid, false]),
       client.rpc.send("getapplicationlog", [signed.txid]),
@@ -458,11 +467,29 @@ function createNativeTransactionTools(c) {
       fail("persisted transaction bytes differ from signed transaction");
     if (String(log?.txid).toLowerCase() !== signed.txid)
       fail("application log transaction identity mismatch");
-    const execution = log.executions?.find((x) => x.trigger === "Application");
-    if (!execution) fail("confirmed transaction has no Application execution");
+    const executions = log.executions?.filter((x) => x.trigger === "Application");
+    if (!executions || executions.length !== 1)
+      fail("confirmed transaction must have one Application execution");
+    const execution = executions[0];
+    const failures = [];
+    if (execution.vmstate !== "HALT") {
+      failures.push(`Application state is ${execution.vmstate ?? "unknown"}`);
+    } else {
+      try {
+        for (const index of validateNativeInvocationResult(
+          signed.prepared.plan,
+          execution.stack,
+        ))
+          failures.push(`Token transfer ${index + 1} did not return Boolean true`);
+      } catch (error) {
+        failures.push(error.message);
+      }
+    }
     return {
       txid: signed.txid,
       confirmed: true,
+      succeeded: failures.length === 0,
+      failures,
       blockHash: tx.blockhash,
       vmState: execution.vmstate,
       exception: execution.exception ?? null,

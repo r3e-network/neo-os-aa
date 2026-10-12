@@ -134,12 +134,16 @@ class NativeProfileCiTests(unittest.TestCase):
             for changed in (".editorconfig", "global.json", "Directory.Build.props", "Directory.Build.targets", "nuget.config",
                     "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md", "docs/proposals/smartaccount-native-profile-v2-parameters.json",
                     "docs/proposals/test_native_profile_v2.py", "docs/reports/aa-native-ci-probe-consistency-20261009.json",
+                    "implementations/native/profile.json", "shared/nativeSmartAccountClient.mjs",
+                    "frontend/src/features/native/NativeAccountWorkspace.vue", "frontend/tests/fixtures/nativeRpcFixture.js",
+                    "sdk/js/src/native.js", "sdk/js/tests/fixtures/native-signed-execution.json",
                     "scripts/native_profile_ci.py", "scripts/native-profile-core-locks.json", "tests/NativeMultiSigProbe/Program.cs",
                     "scripts/verify_repo.sh", "scripts/verify_repo.test.mjs", "tests/NativeEpochProbe/Program.cs",
                     "tests/NativeEpochProbe/contracts/NativeEpochCore.cs", "tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs"):
                 with self.subTest(changed=changed):
                     self.assertTrue(any(fnmatch.fnmatchcase(changed, pattern) for pattern in patterns), changed)
-        self.assertIn("python3 -m unittest discover -s docs/proposals -p test_native_profile_v2.py -v", workflow)
+        self.assertIn("./scripts/verify_repo.sh --profile native --contracts-only", workflow)
+        self.assertNotIn("python3 -m unittest discover -s docs/proposals -p test_native_profile_v2.py -v", workflow)
 
     def test_probe_rejects_binary_overlay_wrong_artifacts_and_incomplete_matrix(self):
         receipt, runtime, modules, sources = self.fixture()

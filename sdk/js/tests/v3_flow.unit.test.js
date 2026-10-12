@@ -271,6 +271,28 @@ test('SDK registration helpers reject escape timelocks outside the contract regi
   );
 });
 
+test('SDK registration and verifier update helpers reject malformed verifier parameters', () => {
+  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  for (const verifierParamsHex of ['zz', '0x12zz', 'abc']) {
+    assert.throws(
+      () => client.createAccountPayload({
+        backupOwnerAddress: '0x4444444444444444444444444444444444444444',
+        verifierParamsHex,
+        escapeTimelock: 604800,
+      }),
+      /hex/i,
+    );
+    assert.throws(
+      () => client.createUpdateVerifierPayload({
+        accountScriptHash: '0x5555555555555555555555555555555555555555',
+        verifierContractHash: '0x6666666666666666666666666666666666666666',
+        verifierParamsHex,
+      }),
+      /hex/i,
+    );
+  }
+});
+
 test('testnet validators derive registration-bound account ids with the contract minimum escape timelock', () => {
   const smokeSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_smoke.js'), 'utf8');
   const marketEscrowSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_market_escrow.js'), 'utf8');

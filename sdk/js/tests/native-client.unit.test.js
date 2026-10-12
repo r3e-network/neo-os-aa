@@ -120,6 +120,9 @@ function fixture() {
       config = n;
       record = state(e, n);
     },
+    setRecord: (value) => {
+      record = value;
+    },
     setNonce: (n) => {
       nonce = n;
     },
@@ -664,6 +667,13 @@ test("malformed account epochs refuse while raw domain vectors remain independen
   const f = fixture();
   f.setState(12, 11);
   await assert.rejects(() => f.client.getAccount(h), /epoch exceeds/);
+});
+
+test("malformed account module bindings reject a zero code identity", async () => {
+  const f = fixture(), malformed = state();
+  malformed.value[5].value[1] = B("00".repeat(32));
+  f.setRecord(malformed);
+  await assert.rejects(() => f.client.getAccount(h), /invalid module binding/);
 });
 
 test("client network and profile pins cannot be switched after identity derivation", () => {

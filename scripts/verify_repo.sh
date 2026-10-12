@@ -152,6 +152,11 @@ if [[ $run_contracts -eq 1 ]]; then
     dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal
   fi
   if [[ $run_native -eq 1 ]]; then
+    # Keep the shared profile registry covered even when the native contract
+    # lane is run without the ordinary lane.
+    if [[ $run_ordinary -eq 0 ]]; then
+      node --test scripts/implementation_profiles.test.mjs
+    fi
     python3 docs/proposals/validate-native-smartaccount-profile.py
     python3 -m unittest discover -s docs/proposals -p 'test_native_profile*.py'
     python3 -m unittest discover -s scripts -p 'test_native_module_*.py'

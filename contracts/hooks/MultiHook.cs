@@ -209,7 +209,12 @@ namespace AbstractAccount.Hooks
                 UInt160[] hooks = GetHooks(accountId);
                 for (int i = 0; i < hooks.Length; i++)
                 {
-                    Contract.Call(hooks[i], "preExecute", CallFlags.All, new object[] { accountId, opParams });
+                    object[] childParams = CloneHookParams(opParams);
+                    ByteString snapshot = StdLib.Serialize(childParams);
+                    Contract.Call(hooks[i], "preExecute", CallFlags.All, new object[] { accountId, childParams });
+                    ExecutionEngine.Assert(
+                        StdLib.MemoryCompare(snapshot, StdLib.Serialize(childParams)) == 0,
+                        "Child hook mutated authenticated operation");
                 }
             }
             finally
@@ -249,7 +254,12 @@ namespace AbstractAccount.Hooks
                 UInt160[] hooks = GetHooks(accountId);
                 for (int i = hooks.Length - 1; i >= 0; i--)
                 {
-                    Contract.Call(hooks[i], "postExecute", CallFlags.All, new object[] { accountId, opParams, result });
+                    object[] childParams = CloneHookParams(opParams);
+                    ByteString snapshot = StdLib.Serialize(childParams);
+                    Contract.Call(hooks[i], "postExecute", CallFlags.All, new object[] { accountId, childParams, result });
+                    ExecutionEngine.Assert(
+                        StdLib.MemoryCompare(snapshot, StdLib.Serialize(childParams)) == 0,
+                        "Child hook mutated authenticated operation");
                 }
             }
             finally
@@ -273,6 +283,11 @@ namespace AbstractAccount.Hooks
             UInt160 core = HookAuthority.AuthorizedCore();
             Contract.Call(core, "clearHookDependencies", CallFlags.All, new object[] { accountId });
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_Hooks, (byte[])accountId));
+        }
+
+        private static object[] CloneHookParams(object[] opParams)
+        {
+            return (object[])StdLib.Deserialize(StdLib.Serialize(opParams));
         }
     }
 }

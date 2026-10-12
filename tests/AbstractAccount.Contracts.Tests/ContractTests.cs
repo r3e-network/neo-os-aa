@@ -186,7 +186,7 @@ public class ContractTests
 
         StringAssert.Contains(
             executionSource,
-            "object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, op.Args);");
+            "object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, executionArgs);");
         Assert.IsFalse(executionSource.Contains("op.CallFlags", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "ConsumeNonce(accountId, op.Nonce);");
         StringAssert.Contains(executionSource, "PlatformSyscalls.CallWithGasLimit(");
@@ -293,12 +293,17 @@ public class ContractTests
             "// [Hook phase] post-execution hook",
             "if (state.Verifier != UInt160.Zero)");
 
-        StringAssert.Contains(preHookBlock, "BuildHookOperationParams(op)");
-        StringAssert.Contains(postHookBlock, "BuildHookOperationParams(op)");
-        StringAssert.Contains(executionSource, "private static object[] BuildHookOperationParams(UserOperation op)");
+        StringAssert.Contains(preHookBlock, "BuildHookOperationParams(op, executionArgs)");
+        StringAssert.Contains(postHookBlock, "BuildHookOperationParams(op, executionArgs)");
+        StringAssert.Contains(executionSource, "private static object[] BuildHookOperationParams(UserOperation op, object[] args)");
+        StringAssert.Contains(executionSource, "private static object[] CloneOperationArguments(object[] args)");
+        StringAssert.Contains(executionSource, "Hook mutated authenticated operation");
+        StringAssert.Contains(executionSource, "executionArgs = CloneOperationArguments(op.Args)");
+        StringAssert.Contains(executionSource, "UserOperation verificationOp = CloneUserOperation(op);");
+        StringAssert.Contains(executionSource, "private static UserOperation CloneUserOperation(UserOperation op)");
         StringAssert.Contains(executionSource, "op.TargetContract,");
         StringAssert.Contains(executionSource, "op.Method,");
-        StringAssert.Contains(executionSource, "op.Args,");
+        StringAssert.Contains(executionSource, "args,");
         StringAssert.Contains(executionSource, "op.Nonce,");
         StringAssert.Contains(executionSource, "op.Deadline,");
         StringAssert.Contains(executionSource, "op.Signature");
@@ -312,6 +317,16 @@ public class ContractTests
         Assert.IsFalse(
             postHookBlock.Contains("new object[] { accountId, op, result });", StringComparison.Ordinal),
             "PostExecute must not receive an opaque UserOperation in place of the hook tuple");
+    }
+
+    [TestMethod]
+    public void MultiHookIsolatesMutableOperationArraysBetweenChildren()
+    {
+        string source = File.ReadAllText(Path.Combine(ContractsDir, "hooks", "MultiHook.cs"));
+
+        StringAssert.Contains(source, "private static object[] CloneHookParams(object[] opParams)");
+        Assert.AreEqual(2, CountOccurrences(source, "CloneHookParams(opParams)"));
+        Assert.AreEqual(2, CountOccurrences(source, "Child hook mutated authenticated operation"));
     }
 
     [TestMethod]

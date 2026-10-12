@@ -5,7 +5,7 @@
     "Directory.Build.props": "c003c09715a996e268136c35e7e8555f9bcb376cdebc40a250b07f73e86c6799",
     "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
     "contracts/UnifiedSmartWallet.Escape.cs": "433b064b7bb06f1344e5ac8977fa0e2323c588a82963c55f82a53d162059aee6",
-    "contracts/UnifiedSmartWallet.Execution.cs": "441c7213440125196d505c5b843af5a6b2f975e524d6e44aa3b1b88b1027f7c3",
+    "contracts/UnifiedSmartWallet.Execution.cs": "de94a73e3021e53747526024730b9f101204be0862ac852d4e04487ef3d31e8a",
     "contracts/UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
     "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
     "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
@@ -16,7 +16,7 @@
     "contracts/compile.sh": "103974fbd139c55d87d6d3af0698f4dc7f6b63fab1fafe416ef3fa82cb285225",
     "contracts/hooks/DailyLimitHook.cs": "2ea97d9c0d4a78570543e89d4eafba4f41000018c95670e87caee29193240f19",
     "contracts/hooks/HookAuthority.cs": "971083370fa07a2cec32493a8566ab8246d478c9fa86da9b6338355b5996aca1",
-    "contracts/hooks/MultiHook.cs": "537f4b5bc4fabe70dc54ea2c66636911853797f1090b4af323b5ae17e6d6afcd",
+    "contracts/hooks/MultiHook.cs": "20a6b3a69b3fb14ba56539f48323342be87b7cf0b97f6526e83660f295680cf7",
     "contracts/hooks/TokenRestrictedHook.cs": "a7f0d51a288b0c7ebec9908583e77e74b9926fd4d139abda64c27b5dfcfca249",
     "contracts/hooks/WhitelistHook.cs": "27f43ccb43c29a37495d13da7e2a1e5d4119420a08cdf04a160059b9dea7b09f",
     "contracts/native/DailyLimitHook.Native.csproj": "e3766888d043e00a2217a90ccba604ec7f3ba3db92ed1c5ddc5c1fac49713f9d",
@@ -55,8 +55,8 @@
     "nuget.config": "d03316715c5c46428149533dbd994d81a9fcdf97c8981a05083113523db82797",
     "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
     "scripts/check_neo_platform_packages.mjs": "3e59f2002a67fdf8ffb995834f707e984ce3260628521348b09754362bb9ba30",
-    "scripts/native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
-    "scripts/verify_repo.sh": "cdfcf5bdfba80290d28adc3e67cb106e1759d59543b61d982cd472c552578957"
+    "scripts/native_module_profile.py": "6e44912a208d9f4dd45b64de808bb4a25d183b488656e3c4bdf38f458bd2aafa",
+    "scripts/verify_repo.sh": "735fe5418a218a20bf317a603f5b18c11776b26b5dd7cf60c0f33ae7bb5939e4"
   },
   "nativeCoreSources": {
     "src/Directory.Build.props": "b6cb09e9b9112c2ff2007cad2e387edaa5cb85fc4094dfb70fbf37bd96a02c50",

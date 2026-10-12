@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def manifest():
     def method(name, result, safe, types):
         return {"name":name,"returntype":result,"safe":safe,"parameters":[{"name":"p","type":t} for t in types],"offset":0}
-    return {"name":"NeoNativeVerifier","extra":{"SmartAccountProfile":"native-v2"},"permissions":[{"contract":"0xd9421d07adf206e9dc4be746a02e8e087fa61741","methods":["getAuthorityEpoch"]}],"abi":{"methods":[
+    return {"name":"NeoNativeVerifier","extra":{"SmartAccountProfile":"native-v2"},"permissions":[{"contract":"0xd9421d07adf206e9dc4be746a02e8e087fa61741","methods":["getAuthorityEpoch", "hasModuleContext"]}],"abi":{"methods":[
         method("supportsComposition","Boolean",True,[]),method("getSignerDomains","Array",True,["Hash160"]),
         method("clearAccount","Void",False,["Hash160"]),method("validateSignature","Boolean",False,["Hash160","Array"]),
         method("postExecute","Void",False,["Hash160","Array","Any"]),method("setConfig","Void",False,["Hash160","Array","Integer"])]}}
@@ -60,14 +60,61 @@ class NativeModuleProfileTests(unittest.TestCase):
                 "parameters":[{"name":"p","type":"Hash160"}],"offset":0})
             with self.assertRaises(ValueError): self.package_manifest(wrong, "verifier", [name])
 
+    def test_native_lifecycle_callbacks_must_be_non_safe(self):
+        # Verifier validation and every module post callback are authenticated
+        # application phases, never public read-only ABI methods.
+        for name in ("validateSignature", "postExecute"):
+            wrong = copy.deepcopy(manifest())
+            next(method for method in wrong["abi"]["methods"] if method["name"] == name)["safe"] = True
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "lifecycle safety"):
+                self.package_manifest(wrong, "verifier", ["setConfig"])
+
+        # Exercise the hook branch separately because its required callback is
+        # preExecute rather than validateSignature.
+        hook = copy.deepcopy(manifest())
+        hook["name"] = "WhitelistHook"
+        hook["abi"]["methods"] = [
+            method for method in hook["abi"]["methods"]
+            if method["name"] not in ("getSignerDomains", "validateSignature", "setConfig")
+        ]
+        hook["abi"]["methods"].extend([
+            {"name": "preExecute", "returntype": "Void", "safe": False,
+             "parameters": [{"name": "p", "type": "Hash160"}, {"name": "p", "type": "Array"}], "offset": 0},
+            {"name": "setWhitelist", "returntype": "Void", "safe": False,
+             "parameters": [{"name": "p", "type": "Hash160"}, {"name": "p", "type": "Array"}], "offset": 0},
+        ])
+        self.assertIs(False, self.package_manifest(hook, "hook", ["setWhitelist"])["extra"]["smartAccount"]["compositeVerifier"])
+        next(method for method in hook["abi"]["methods"] if method["name"] == "preExecute")["safe"] = True
+        with self.assertRaisesRegex(ValueError, "lifecycle safety"):
+            self.package_manifest(hook, "hook", ["setWhitelist"])
+
     def test_native_session_requires_explicit_canonical_key_helper_permission(self):
         original = manifest(); original["name"] = "SessionKeyVerifier"
         with self.assertRaises(ValueError): self.package_manifest(original, "verifier", ["setConfig"])
-        original["permissions"][0]["methods"].append("canonicalP256PublicKey")
+        original["permissions"][0]["methods"] = [
+            "canonicalP256PublicKey", "getAccountAddress", "getAuthorizationDomain",
+            "getAuthorityEpoch", "getOperationDigest", "hasModuleContext",
+        ]
         self.package_manifest(original, "verifier", ["setConfig"])
         for methods in ("*", ["getAuthorityEpoch"]):
             wrong = copy.deepcopy(original); wrong["permissions"][0]["methods"] = methods
             with self.assertRaises(ValueError): self.package_manifest(wrong, "verifier", ["setConfig"])
+
+    def test_native_service_permissions_are_module_specific_and_exact(self):
+        for methods in (["getAuthorityEpoch"], ["getAuthorityEpoch", "hasModuleContext", "unexpected"], [{"method": "getAuthorityEpoch"}]):
+            wrong = manifest(); wrong["permissions"][0]["methods"] = methods
+            with self.assertRaisesRegex(ValueError, "allowlist"):
+                self.package_manifest(wrong, "verifier", ["setConfig"])
+
+        session = manifest(); session["name"] = "SessionKeyVerifier"
+        session["permissions"][0]["methods"] = [
+            "canonicalP256PublicKey", "getAccountAddress", "getAuthorizationDomain",
+            "getAuthorityEpoch", "getOperationDigest", "hasModuleContext",
+        ]
+        self.package_manifest(session, "verifier", ["setConfig"])
+        session["permissions"][0]["methods"].append("setConfig")
+        with self.assertRaisesRegex(ValueError, "allowlist"):
+            self.package_manifest(session, "verifier", ["setConfig"])
 
     def test_native_session_uses_the_profile_call_flag_for_canonicalization(self):
         source = (ROOT / "contracts/verifiers/SessionKeyVerifier.cs").read_text(encoding="utf-8")

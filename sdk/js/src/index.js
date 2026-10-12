@@ -464,6 +464,7 @@ class AbstractAccountClient {
     } = options || {};
 
     validateHash160(verifierContractHash);
+    if (verifierParamsHex) validateHexString(verifierParamsHex);
 
     const resolvedAccountHash = accountScriptHash
       ? normalizeAddress(accountScriptHash)

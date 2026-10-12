@@ -44,6 +44,7 @@ test('native contract validation selects its required guards and epoch probe', (
   const result = dispatch(t, ['--profile', 'native', '--contracts-only']);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.trace, /check_neo_platform_packages.mjs --include-native/);
+  assert.match(result.trace, /node --test scripts\/implementation_profiles.test.mjs/);
   assert.match(result.trace, /validate-native-smartaccount-profile.py/);
   assert.match(result.trace, /test_native_profile_ci.py/);
   assert.match(result.trace, /native_epoch_probe.py --compiler \/test\/compiler/);
@@ -105,4 +106,25 @@ test('every pull request retains an independent native browser gate without repe
   assert.ok(at < ci.indexOf('run: ./scripts/verify_repo.sh --profile ordinary'), 'browser fixtures do not depend on the contract/runtime gate completing');
   assert.equal((ci.match(/run: npm run test:native:browser/g) || []).length, 1);
   assert.equal((ci.match(/run: \.\/scripts\/verify_repo.sh/g) || []).length, 1, 'reuse the ordinary frontend unit and build checks');
+});
+
+test('native VM workflow triggers every native source family', () => {
+  const workflow = fs.readFileSync(new URL('../.github/workflows/native-profile.yml', import.meta.url), 'utf8');
+  const triggers = workflow.slice(workflow.indexOf('on:'), workflow.indexOf('workflow_dispatch:'));
+  for (const pattern of [
+    'implementations/native/**',
+    'shared/native*.mjs',
+    'frontend/src/features/native/**',
+    'frontend/src/shared/native*.mjs',
+    'frontend/tests/native*',
+    'frontend/tests/fixtures/native*',
+    'sdk/js/src/native/**',
+    'sdk/js/src/native*',
+    'sdk/js/tests/native*',
+    'sdk/js/tests/fixtures/native-*',
+  ]) {
+    const exactPathEntries = triggers.split('\n').filter((line) => line.trim() === `- '${pattern}'`);
+    assert.equal(exactPathEntries.length, 2,
+      `${pattern} must trigger both push and pull_request`);
+  }
 });

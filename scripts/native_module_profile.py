@@ -43,6 +43,23 @@ def profile_digest(parameters):
     return hashlib.sha256(b"NeoSmartAccount/Profile" + bytes([2]) + canonical).hexdigest()
 
 
+NATIVE_SERVICE = "d9421d07adf206e9dc4be746a02e8e087fa61741"
+NATIVE_SERVICE_METHODS = {
+    "NeoNativeVerifier": {"getAuthorityEpoch", "hasModuleContext"},
+    "WhitelistHook": {"getAuthorityEpoch", "hasModuleContext"},
+    "SessionKeyVerifier": {
+        "canonicalP256PublicKey", "getAccountAddress", "getAuthorizationDomain",
+        "getAuthorityEpoch", "getOperationDigest", "hasModuleContext",
+    },
+    "DailyLimitHook": {"getAccountAddress", "getAuthorityEpoch", "hasModuleContext"},
+    "TokenRestrictedHook": {"getAccountAddress", "getAuthorityEpoch", "hasModuleContext"},
+    "MultiSigVerifier": {
+        "clearVerifierDependencies", "getAuthorityEpoch", "hasModuleContext",
+        "setVerifierDependencies",
+    },
+}
+
+
 def package_manifest(original, role, capabilities, composite_verifier, parameter_digest):
     if role not in ("verifier", "hook") or original.get("extra", {}).get("SmartAccountProfile") != "native-v2":
         raise ValueError("Explicit native-v2 profile marker and role required")
@@ -50,19 +67,23 @@ def package_manifest(original, role, capabilities, composite_verifier, parameter
         raise ValueError("Explicit verifier-only compositeVerifier Boolean required")
     if type(parameter_digest) is not str or not re.fullmatch(r"[0-9a-f]{64}", parameter_digest):
         raise ValueError("Explicit canonical profile digest required")
-    service = "d9421d07adf206e9dc4be746a02e8e087fa61741"
+    name = original.get("name")
+    expected_service_methods = NATIVE_SERVICE_METHODS.get(name)
+    if expected_service_methods is None:
+        raise ValueError("Native-v2 module has no permission profile: " + str(name))
     permissions = original.get("permissions", [])
-    required_permissions = {"getAuthorityEpoch"}
-    if original.get("name") == "SessionKeyVerifier":
-        required_permissions.add("canonicalP256PublicKey")
-    for required_permission in sorted(required_permissions):
-        if not isinstance(permissions, list) or not any(
-            isinstance(p, dict) and isinstance(p.get("contract"), str)
-            and p["contract"].lower().removeprefix("0x") == service
-            and isinstance(p.get("methods"), list) and required_permission in p["methods"]
-            for p in permissions
-        ):
-            raise ValueError("Native-v2 requires explicit native service " + required_permission + " permission")
+    service_entries = [
+        p for p in permissions
+        if isinstance(p, dict) and isinstance(p.get("contract"), str)
+        and p["contract"].lower().removeprefix("0x") == NATIVE_SERVICE
+    ] if isinstance(permissions, list) else []
+    if len(service_entries) != 1 or not isinstance(service_entries[0].get("methods"), list):
+        raise ValueError("Native-v2 requires one exact native service permission entry")
+    service_methods = service_entries[0]["methods"]
+    if (any(not isinstance(method, str) for method in service_methods)
+            or set(service_methods) != expected_service_methods
+            or len(service_methods) != len(expected_service_methods)):
+        raise ValueError("Native-v2 native service permission allowlist mismatch for " + name)
     methods = original.get("abi", {}).get("methods", [])
     def require(name, result, types, safe=None):
         found = [m for m in methods if m["name"] == name and len(m["parameters"]) == len(types)]
@@ -72,8 +93,12 @@ def package_manifest(original, role, capabilities, composite_verifier, parameter
             raise ValueError("Incorrect native lifecycle safety: " + name)
     require("supportsComposition", "Boolean", [], True)
     require("clearAccount", "Void", ["Hash160"], False)
-    require("postExecute", "Void", ["Hash160", "Array", "Any"])
-    require("validateSignature" if role == "verifier" else "preExecute", "Boolean" if role == "verifier" else "Void", ["Hash160", "Array"])
+    # Lifecycle callbacks are invoked only through an authenticated native
+    # module context.  Marking one safe would expose it as a read-only ABI
+    # method and weaken the admission boundary even when the implementation
+    # happens to reject the call internally.
+    require("postExecute", "Void", ["Hash160", "Array", "Any"], False)
+    require("validateSignature" if role == "verifier" else "preExecute", "Boolean" if role == "verifier" else "Void", ["Hash160", "Array"], False)
     if role == "verifier": require("getSignerDomains", "Array", ["Hash160"], True)
     if composite_verifier:
         require("validateCompositeSignature", "Array", ["Hash160", "Array"], False)

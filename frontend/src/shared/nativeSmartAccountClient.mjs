@@ -479,9 +479,10 @@ export function createNativeClientClass(codec) {
     if (v === null) return null;
     const a = array(v, 2, "module binding");
     const contract = hash(a[0]);
-    if (contract === ZERO || contract === SERVICE)
+    const codeHash = hash(a[1], 32);
+    if (contract === ZERO || contract === SERVICE || /^0+$/.test(codeHash))
       error("invalid module binding");
-    return { contract, codeHash: hash(a[1], 32) };
+    return { contract, codeHash };
   };
   function stackValue(v) {
     if (v === null) return { type: "Null" };

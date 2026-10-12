@@ -11,6 +11,7 @@ on:
       - 'Directory.Build.targets'
       - 'nuget.config'
       - 'contracts/**'
+      - 'implementations/native/**'
       - 'docs/proposals/*native*'
       - 'docs/proposals/SMARTACCOUNT-NATIVE*'
       - 'docs/reports/aa-native-ci-probe-consistency-20261009.json'
@@ -18,6 +19,15 @@ on:
       - 'scripts/verify_repo*'
       - 'scripts/check_neo_platform_packages*'
       - 'scripts/dotnet_env.sh'
+      - 'shared/native*.mjs'
+      - 'frontend/src/features/native/**'
+      - 'frontend/src/shared/native*.mjs'
+      - 'frontend/tests/native*'
+      - 'frontend/tests/fixtures/native*'
+      - 'sdk/js/src/native/**'
+      - 'sdk/js/src/native*'
+      - 'sdk/js/tests/native*'
+      - 'sdk/js/tests/fixtures/native-*'
       - 'tests/NativeMultiSigProbe/**'
       - 'tests/NativeEpochProbe/**'
       - 'tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs'
@@ -30,6 +40,7 @@ on:
       - 'Directory.Build.targets'
       - 'nuget.config'
       - 'contracts/**'
+      - 'implementations/native/**'
       - 'docs/proposals/*native*'
       - 'docs/proposals/SMARTACCOUNT-NATIVE*'
       - 'docs/reports/aa-native-ci-probe-consistency-20261009.json'
@@ -37,6 +48,15 @@ on:
       - 'scripts/verify_repo*'
       - 'scripts/check_neo_platform_packages*'
       - 'scripts/dotnet_env.sh'
+      - 'shared/native*.mjs'
+      - 'frontend/src/features/native/**'
+      - 'frontend/src/shared/native*.mjs'
+      - 'frontend/tests/native*'
+      - 'frontend/tests/fixtures/native*'
+      - 'sdk/js/src/native/**'
+      - 'sdk/js/src/native*'
+      - 'sdk/js/tests/native*'
+      - 'sdk/js/tests/fixtures/native-*'
       - 'tests/NativeMultiSigProbe/**'
       - 'tests/NativeEpochProbe/**'
       - 'tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs'
@@ -99,11 +119,8 @@ jobs:
       - name: Check profile, metadata and evidence guards
         run: |
           python3 docs/proposals/validate-native-smartaccount-profile.py
-          python3 -m unittest discover -s docs/proposals -p test_native_profile_v2.py -v
-          python3 -m unittest discover -s scripts -p test_native_profile_ci.py -v
-          python3 -m unittest discover -s scripts -p test_native_budget_benchmark.py -v
-          python3 -m unittest discover -s scripts -p test_native_module_profile.py -v
-          python3 -m unittest discover -s scripts -p test_build_native_modules.py -v
+          # The selected profile's complete unittest matrix runs once through
+          # verify_repo.sh below; keep this step as the cheap fail-fast ABI guard.
       - name: Restore audited packages and compiler
         run: |
           node scripts/check_neo_platform_packages.mjs --include-native

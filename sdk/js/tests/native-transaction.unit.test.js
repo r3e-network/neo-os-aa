@@ -662,6 +662,56 @@ test("read-only transaction submission result never claims confirmation and txid
   );
 });
 
+async function receiptFixture() {
+  const f = fixture(),
+    prepared = await f.tool.prepareNativeTransaction(f.client, f.plan, f.options),
+    signed = await f.tool.signNativeTransaction(f.client, prepared),
+    originalSend = f.client.rpc.send;
+  f.client.rpc.send = async (method, params) => {
+    if (method === "getrawtransaction" && params[1] === true)
+      return { hash: signed.txid, blockhash: "0x" + "aa".repeat(32) };
+    if (method === "getrawtransaction" && params[1] === false)
+      return Buffer.from(signed.rawTransaction, "hex").toString("base64");
+    if (method === "getapplicationlog") return {
+      txid: signed.txid,
+      executions: [{ trigger: "Application", vmstate: "FAULT", exception: "boom", stack: [] }],
+    };
+    return originalSend(method, params);
+  };
+  return { f, signed };
+}
+
+test("confirmed native receipt reports Application FAULT as unsuccessful", async () => {
+  const { f, signed } = await receiptFixture();
+  const receipt = await f.tool.getNativeTransactionReceipt(f.client, signed);
+  assert.equal(receipt.confirmed, true);
+  assert.equal(receipt.succeeded, false);
+  assert.deepEqual(receipt.failures, ["Application state is FAULT"]);
+});
+
+test("confirmed native receipt reports a false token result as unsuccessful", async () => {
+  const f = fixture();
+  f.plan.preparedOperations[0].operation.method = "transfer";
+  const prepared = await f.tool.prepareNativeTransaction(f.client, f.plan, f.options),
+    signed = await f.tool.signNativeTransaction(f.client, prepared),
+    originalSend = f.client.rpc.send;
+  f.client.rpc.send = async (method, params) => {
+    if (method === "getrawtransaction" && params[1] === true)
+      return { hash: signed.txid, blockhash: "0x" + "aa".repeat(32) };
+    if (method === "getrawtransaction" && params[1] === false)
+      return Buffer.from(signed.rawTransaction, "hex").toString("base64");
+    if (method === "getapplicationlog") return {
+      txid: signed.txid,
+      executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Boolean", value: false }] }],
+    };
+    return originalSend(method, params);
+  };
+  const receipt = await f.tool.getNativeTransactionReceipt(f.client, signed);
+  assert.equal(receipt.confirmed, true);
+  assert.equal(receipt.succeeded, false);
+  assert.deepEqual(receipt.failures, ["Token transfer 1 did not return Boolean true"]);
+});
+
 test("broadcast requires exact signed-transaction verification and Application preflight", async () => {
   for (const override of [
     { network: 124 },

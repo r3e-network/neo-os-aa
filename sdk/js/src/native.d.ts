@@ -381,6 +381,8 @@ export declare class NativeSmartAccountClient {
   getTransactionReceipt(signed: NativeSignedTransaction): Promise<{
     txid: string;
     confirmed: boolean;
+    succeeded?: boolean;
+    failures?: string[];
     blockHash?: string;
     vmState?: string;
     exception?: string | null;

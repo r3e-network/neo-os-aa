@@ -93,6 +93,19 @@ test('deriveRegistrationAccountIdHash rejects escape timelocks outside the contr
   );
 });
 
+test('deriveRegistrationAccountIdHash rejects malformed verifier parameters', () => {
+  for (const verifierParamsHex of ['zz', '0x12zz', 'abc']) {
+    assert.throws(
+      () => deriveRegistrationAccountIdHash({
+        backupOwnerAddress: '0x13ef519c362973f9a34648a9eac5b71250b2a80a',
+        verifierParamsHex,
+        escapeTimelock: 604800,
+      }),
+      /verifier parameters hex|invalid hex length/i,
+    );
+  }
+});
+
 test('createVerifyScript matches the V3 verify script encoding', () => {
   const script = createVerifyScript(
     '5be915aea3ce85e4752d522632f0a9520e377aaf',
