@@ -1,7 +1,7 @@
 import { BrowserProvider } from 'ethers';
 import { connectedAccount, setConnectedAccount } from '../utils/wallet.js';
 import { RUNTIME_CONFIG } from '../config/runtimeConfig.js';
-import { EC } from '../config/errorCodes.js';
+import { EC, isConnectRefusal } from '../config/errorCodes.js';
 import { getScriptHashFromAddress } from '../utils/neo.js';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout.js';
 
@@ -177,6 +177,79 @@ function normalizeSignerScope(scope) {
   return byName[raw.toLowerCase()] ?? (raw || 'CalledByEntry');
 }
 
+// NEP-21 WitnessScope bit mask, keyed by the canonical label normalizeSignerScope produces.
+const SIGNER_SCOPE_BITS = {
+  None: 0,
+  CalledByEntry: 1,
+  CustomContracts: 16,
+  CustomGroups: 32,
+  WitnessRules: 64,
+  Global: 128,
+};
+
+/**
+ * The value a wallet actually signs against. NEP-21 carries WitnessScope as the bit mask, not as
+ * the label this service uses internally: sending 'CustomContracts' gives the wallet nothing to act
+ * on. Accepts either form so callers are not forced to convert, and refuses a scope no bit
+ * expresses rather than silently sending zero.
+ */
+function signerScopeBits(scope) {
+  if (typeof scope === 'number' && Number.isFinite(scope)) return scope;
+  const raw = String(scope ?? '').trim();
+  if (/^\d+$/.test(raw)) return parseInt(raw, 10);
+  if (raw.includes(',')) {
+    return raw
+      .split(',')
+      .map((part) => signerScopeBits(part.trim()))
+      .reduce((mask, bit) => mask | bit, 0);
+  }
+  const bits = SIGNER_SCOPE_BITS[normalizeSignerScope(raw)];
+  if (bits === undefined) {
+    throw new Error(EC.walletScopeUnsupported);
+  }
+  return bits;
+}
+
+/**
+ * One signer per account, in the wire form. A node refuses a transaction that names one account
+ * twice, so entries for the same account are merged here: same scope merges its allowlists, two
+ * different scopes for one account is a caller's contradiction and is refused rather than
+ * silently reduced to one of them.
+ */
+function mergeNep21Signers(signers) {
+  const byAccount = new Map();
+  for (const signer of signers || []) {
+    if (!signer || typeof signer !== 'object') continue;
+    const account = String(signer.account ?? '').trim();
+    if (!account) continue;
+    const bits = signerScopeBits(signer.scopes);
+    const allowed = Array.isArray(signer.allowedContracts) ? signer.allowedContracts.slice() : [];
+    const groups = Array.isArray(signer.allowedGroups) ? signer.allowedGroups.slice() : [];
+    const existing = byAccount.get(account);
+    if (!existing) {
+      byAccount.set(account, {
+        account,
+        scopes: bits,
+        ...(allowed.length ? { allowedContracts: allowed } : {}),
+        ...(groups.length ? { allowedGroups: groups } : {}),
+        ...(signer.rules?.length ? { rules: signer.rules } : {}),
+      });
+      continue;
+    }
+    if (existing.scopes !== bits) {
+      throw new Error(EC.walletSignerConflict);
+    }
+    if (allowed.length) {
+      existing.allowedContracts = [...new Set([...(existing.allowedContracts || []), ...allowed])];
+    }
+    if (groups.length) {
+      existing.allowedGroups = [...new Set([...(existing.allowedGroups || []), ...groups])];
+    }
+    if (signer.rules?.length && !existing.rules) existing.rules = signer.rules;
+  }
+  return [...byAccount.values()];
+}
+
 function normalizeHash160ForDapi(value, accountHash, currentAddress) {
   const raw = String(value ?? '').trim();
   if (accountHash && currentAddress && raw === currentAddress) return accountHash;
@@ -199,20 +272,64 @@ function buildNep21Invocation(entry, accountHash, currentAddress) {
         ? { ...arg, value: normalizeHash160ForDapi(arg.value, accountHash, currentAddress) }
         : arg
     )),
+    // An account that moves its own assets needs a transaction the SDK builder assembled and a
+    // verification script the dApp derived. A wallet that accepts both signs the transaction as the
+    // fee payer and submits it with that witness; a wallet that does not accept them never sees a
+    // transfer it would send wrong.
+    ...(entry.script ? { script: String(entry.script).replace(/^0x/i, '') } : {}),
+    ...(entry.proxyWitness?.verificationScript
+      ? {
+        proxyWitness: {
+          invocationScript: String(entry.proxyWitness.invocationScript || ''),
+          verificationScript: String(entry.proxyWitness.verificationScript).replace(/^0x/i, ''),
+        },
+      }
+      : {}),
     ...(entry.abortOnFail != null ? { abortOnFail: entry.abortOnFail } : {}),
   };
 }
 
 function buildNep21Signers(signers, accountHash, currentAddress) {
-  return signers?.map((signer) => ({
+  return mergeNep21Signers((signers || []).map((signer) => ({
+    ...signer,
     account: accountHash && currentAddress && signer.account === currentAddress
       ? accountHash
       : signer.account,
-    scopes: normalizeSignerScope(signer.scopes),
-    ...(signer.allowedContracts?.length ? { allowedContracts: signer.allowedContracts } : {}),
-    ...(signer.allowedGroups?.length ? { allowedGroups: signer.allowedGroups } : {}),
-    ...(signer.rules?.length ? { rules: signer.rules } : {}),
-  }));
+    allowedContracts: signer.allowedContracts?.length
+      ? signer.allowedContracts.map((hash) => String(hash).replace(/^0x/i, '').toLowerCase())
+      : signer.allowedContracts,
+  })));
+}
+
+/**
+ * Turn a provider failure into a typed one. A refusal keeps the wallet's own words so
+ * `connectErrorMessage` can name it as a refusal; anything else is a connection failure rather
+ * than a missing address.
+ */
+function classifyConnectFailure(error) {
+  if (error && typeof error === 'object' && isErrorCodeLike(error.message)) {
+    return error;
+  }
+  const text = String(error?.message ?? error?.providerMessage ?? (typeof error === 'string' ? error : '')).trim();
+  const err = error instanceof Error ? error : new Error(text || EC.walletConnectFailed);
+  if (!text) {
+    err.message = EC.walletConnectFailed;
+    err.code = EC.walletConnectFailed;
+    return err;
+  }
+  if (isConnectRefusal(err)) {
+    err.refused = true;
+    err.code = EC.walletConnectRefused;
+    err.providerMessage = text;
+    return err;
+  }
+  err.code = EC.walletConnectFailed;
+  err.providerMessage = text;
+  return err;
+}
+
+function isErrorCodeLike(message) {
+  return typeof message === 'string' && message.startsWith('EC_');
 }
 
 class WalletService {
@@ -245,6 +362,17 @@ class WalletService {
     setConnectedAccount(cached.address);
     this.account = { ...cached };
     this.sessionState = SESSION_STATES.PENDING;
+  }
+
+  /**
+   * True only for a provider that can carry a verification script it did not create. An ordinary
+   * invoke wallet broadcasts its own transaction and would drop the proxy witness, which would send
+   * a transfer that returns false and still burn the fee, so the capability is an explicit opt-in
+   * rather than something inferred from the provider's name.
+   */
+  get supportsProxyWitness() {
+    const candidate = this.findNep21ProviderCandidate();
+    return Boolean(candidate?.api?.carriesProxyWitness === true && typeof candidate.api.invoke === 'function');
   }
 
   get isConnected() {
@@ -427,8 +555,15 @@ class WalletService {
   }
 
   async resolveNep21Account(provider) {
-    const accounts = await provider.getAccounts().catch(() => []);
-    const selected = accounts.find((entry) => entry?.isDefault) || accounts[0];
+    // A wallet that turns the request down must not be reported as a wallet with no address: the
+    // user did something, and the sentence has to say so.
+    let accounts;
+    try {
+      accounts = await provider.getAccounts();
+    } catch (error) {
+      throw classifyConnectFailure(error);
+    }
+    const selected = (accounts || []).find((entry) => entry?.isDefault) || (accounts || [])[0];
     const normalized = normalizeNep21Account(selected);
     if (normalized?.address) return normalized;
 
@@ -436,7 +571,9 @@ class WalletService {
       throw new Error(EC.walletAddressMissing);
     }
 
-    const authenticated = await provider.authenticate({
+    let authenticated;
+    try {
+      authenticated = await provider.authenticate({
       action: 'Authentication',
       grant_type: 'Signature',
       allowed_algorithms: ['ECDSA-P256'],
@@ -445,8 +582,11 @@ class WalletService {
         ? provider.supportedNetworks
         : [TESTNET_MAGIC, MAINNET_MAGIC],
       nonce: createNonce(),
-      timestamp: Date.now(),
-    });
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      throw classifyConnectFailure(error);
+    }
     const address = String(authenticated?.address || '').trim();
     if (!address) throw new Error(EC.walletAddressMissing);
     const refreshed = await provider.getAccounts().catch(() => []);
@@ -576,7 +716,12 @@ class WalletService {
       throw new Error(EC.walletProviderMissing);
     }
 
-    const result = await provider.getAccount();
+    let result;
+    try {
+      result = await provider.getAccount();
+    } catch (error) {
+      throw classifyConnectFailure(error);
+    }
     const address = result?.address || result?.account?.address || '';
     if (!address) {
       throw new Error(EC.walletAddressMissing);
@@ -605,7 +750,11 @@ class WalletService {
     }
 
     const browserProvider = new BrowserProvider(provider);
-    await browserProvider.send('eth_requestAccounts', []);
+    try {
+      await browserProvider.send('eth_requestAccounts', []);
+    } catch (error) {
+      throw classifyConnectFailure(error);
+    }
     const signer = await browserProvider.getSigner();
     const address = await signer.getAddress();
     return { provider: 'ethereum', address };
@@ -660,6 +809,13 @@ class WalletService {
     const provider = this.getInvokeProvider();
     if (!provider) {
       throw new Error(EC.walletProviderMissing);
+    }
+
+    // The same boundary as executeBroadcast, enforced at the last step as well: a wallet that
+    // cannot carry the dApp's verification script must not be handed a transfer it would send
+    // without it.
+    if (params?.proxyWitness?.verificationScript && !this.supportsProxyWitness) {
+      throw new Error(EC.walletProxyWitnessUnsupported);
     }
 
     return provider.invoke(params);

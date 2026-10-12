@@ -763,6 +763,178 @@ def sc_sdk_proxy_builder(c, x):
             "refused": refused, "refusedExit": refused_exit}
 
 
+def sc_wallet_shim_signing(c, x):
+    """AA-13 the browser-wallet signing path end to end: the frontend's own wallet service and
+    broadcast builder, driven through a NEP-21 wallet shim on the local chain.
+
+    A gasless session-key GAS move. The account is verifier-checked (it carries the session-key
+    verifier), its operation is authorized by a session key armed through the real 24 h timelock, its
+    proxy moves exactly the signed amount, and a throwaway key that is neither the account owner nor
+    the proxy pays the fee — so the owner key signs nothing and pays nothing. The wallet is asked for
+    the custom-contracts scope over exactly the contracts the transaction calls, because a
+    verifier-checked owner cannot authorize through CalledByEntry.
+
+    The second half is the connect feedback: a wallet that turns the connection down is reported as a
+    refusal that keeps the wallet's own words, and a CalledByEntry request for this account is refused
+    before any wallet is asked."""
+    c.records.append({"scenario": "AA-13 browser wallet signing scopes and connect feedback (wallet shim)"})
+    core = x.core
+    buyer, owner = c.hashes["buyer"], c.hashes["owner"]
+    sess_v = c.contracts["SessionKeyVerifier"]
+    key = v.P256Key(x.workdir, "wallet-shim-session")
+
+    # One throwaway key stands in for the browser wallet: it connects through the shim, is asked for
+    # the scope, signs as the fee payer and submits. It is not the account owner and never holds the
+    # account's assets.
+    payer = "wallet-shim-payer"
+    c.keys[payer] = v.RawKey(c.workdir, payer, os.urandom(32))
+    c.hashes[payer] = "0x" + c.keys[payer].script_hash[::-1].hex()
+    c.fund([payer], 100)
+
+    account, proxy = x.register("wallet-shim", verifier=sess_v, owner="owner")
+    sess_args = [H(account), B(key.compressed), H(GAS_HASH), S("transfer"), I(c.now_ms() + 20 * DAY * 1000), I(0), S("wallet-shim")]
+    rec = c.send("arm setSessionKey for the wallet-shim account (24 h timelock)", [{"w": "owner"}], core,
+                 "callVerifier", [H(account), S("setSessionKey"), A(*sess_args)])
+    c.check(rec["result"] is False, "the first setSessionKey call arms the 24 h timelock and returns false")
+    deadline = c.read(core, "getPendingVerifierCallTime", H(account))
+    c.check(deadline > c.now_ms(), "the chain records the 24 h deadline in the future")
+    c.jump_to(deadline)
+    c.send("execute setSessionKey for the wallet-shim account", [{"w": "owner"}], core,
+           "callVerifier", [H(account), S("setSessionKey"), A(*sess_args)])
+    c.check(c.read(sess_v, "getSessionKey", H(account))[0] == key.compressed,
+            "the session key is stored after the chain-reported deadline passed")
+
+    c.send("admin sets the verify-scope target to GAS", [{"w": "deployer"}], core, "setVerifyScopeTarget",
+           [H(account), H(GAS_HASH)])
+    c.check(c.hash_of(core, "getVerifyScopeTarget", H(account)) == GAS_HASH, "the account's verify-scope target is GAS")
+    c.send("fund the proxy address with 6 GAS", [{"w": "owner"}], GAS_HASH, "transfer",
+           [H(owner), H(proxy), I(6 * GAS), B(b"")])
+    c.check(c.gas(proxy) == 6 * GAS, "the proxy address holds 6 GAS before the move")
+    verifier = c.hash_of(core, "getVerifier", H(account))
+    c.check(verifier == sess_v, "the account is verifier-checked before any wallet is asked")
+
+    ar = [H(proxy), H(buyer), I(GAS), B(b"")]
+    payload = c.read(sess_v, "getPayload", H(account), H(GAS_HASH), S("transfer"), A(*ar), I(0), I(FAR_DEADLINE))
+    session_signature = bytes(key.sign(payload))
+
+    def run_shim(body, label):
+        path = c.workdir / f"wallet-shim-{label}.json"
+        path.write_text(json.dumps(body))
+        done = subprocess.run([NODE, str(AA / "scripts/localchain/wallet_shim_sign_proxy_transfer.mjs"), str(path)],
+                              capture_output=True, text=True, cwd=str(AA), timeout=300)
+        try:
+            return json.loads(done.stdout.strip().splitlines()[-1]), done.returncode
+        except Exception:
+            raise Fail(f"the wallet shim produced no JSON (exit {done.returncode}): {(done.stderr or done.stdout)[-400:]}")
+
+    base_request = {
+        "rpcUrl": f"http://127.0.0.1:{c.port}",
+        "magic": int(c.magic),
+        "core": core,
+        "accountId": account,
+        "target": GAS_HASH,
+        "method": "transfer",
+        "args": [{"type": "Hash160", "value": proxy}, {"type": "Hash160", "value": buyer},
+                 {"type": "Integer", "value": str(GAS)}, {"type": "ByteArray", "value": "0x"}],
+        "nonce": "0",
+        "deadline": str(FAR_DEADLINE),
+        "signatureHex": session_signature.hex(),
+        "feePayer": c.hashes[payer],
+        "feePayerKeyDer": str(c.keys[payer].der),
+        "feePayerAddress": "NWalletShimPayerAddress",
+    }
+
+    before_buyer, before_proxy, before_payer, before_owner = c.gas(buyer), c.gas(proxy), c.gas(payer), c.gas(owner)
+    before_nonce = x.nonce(account)
+    result, exit_code = run_shim(base_request, "transfer")
+    if exit_code != 0 or result.get("leg") != "transfer":
+        raise Fail(f"the wallet shim drive did not complete: {result.get('error') or result.get('submitError') or result}")
+    submit = result.get("submission") or {}
+    if result.get("submitError"):
+        raise Fail(f"the wallet shim could not submit: {result['submitError']}")
+
+    # The drive is recorded before it is judged, so a red here still says what the service saw.
+    c.records.append({"step": "AA-13 the wallet shim drive", "leg": result.get("leg"),
+                      "connect": result.get("connect"), "invocations": result.get("invocationCount"),
+                      "signersSeen": result.get("signersSeen"),
+                      "invokeArgsSeen": result.get("invokeArgsSeen"),
+                      "walletSignRequest": result.get("walletSignRequest")})
+    connect = result.get("connect") or {}
+    c.check(connect.get("address") == base_request["feePayerAddress"]
+            and connect.get("connects", 0) >= 1 and connect.get("kept") is True,
+            "the wallet service connected through the NEP-21 shim and kept the shim's address")
+    def bare(value):
+        return str(value or "").replace("0x", "").lower()
+
+    asked = result["walletSignRequest"]
+    c.check(asked["scope"] == "CustomContracts"
+            and [bare(h) for h in (asked["allowedContracts"] or [])] == [bare(core), bare(GAS_HASH)],
+            "the wallet was asked for the custom-contracts scope over exactly the core and the target")
+    seen = result["signersSeen"]
+    c.check([bare(s["account"]) for s in seen] == [bare(c.hashes[payer]), bare(result["proxyHash"])]
+            and seen[0]["scopes"] == 16 and seen[1]["scopes"] == 64
+            and [bare(h) for h in (seen[0].get("allowedContracts") or [])] == [bare(core), bare(GAS_HASH)],
+            "the wallet received the custom-contracts bits and the proxy's WitnessRules bits")
+    def norm_rules(rules):
+        return [{"action": rule["action"],
+                 "condition": {"type": rule["condition"]["type"],
+                               "expressions": [{"type": e["type"], "hash": bare(e["hash"])}
+                                               for e in rule["condition"]["expressions"]]}}
+                for rule in (rules or [])]
+
+    c.check(seen[1]["scopes"] == 64
+            and norm_rules(seen[1].get("rules")) == norm_rules(v.aa_proxy_rules(core, GAS_HASH))
+            and bare(seen[0]["account"]) != bare(result["proxyHash"]),
+            "the signing request carries the throwaway fee payer and the restricted proxy signer only")
+
+    # One object, one spelling: the script the frontend built is the script the wallet signed and the
+    # packet carried, and it is compared against the node's own assembler as bytes.
+    wallet_script = bytes.fromhex(submit["scriptHex"])
+    node_script = base64.b64decode(c.rpc("invokefunction", [core, "executeUserOp",
+                                                            [H(account), x.op(GAS_HASH, "transfer", ar, 0, sig=session_signature)], []])["script"])
+    c.check(wallet_script == node_script and submit["scriptBytes"] == len(wallet_script),
+            "the wallet-signed script is byte-identical to the node's own assembler")
+    expected_proxy_script = proxy_script_for(account, core)
+    c.check(bytes.fromhex(result["proxyWitness"]["verificationScript"].replace("0x", "")) == expected_proxy_script
+            and (result["proxyWitness"].get("invocationScript") or "") == "",
+            "the proxy witness the dApp attaches is the core's own derivation and carries no signature")
+
+    c.check(submit["outcome"] == "HALT" and submit["txid"],
+            "the wallet-signed session-key transfer HALTed and moved the signed amount")
+    c.check(c.gas(buyer) - before_buyer == GAS and before_proxy - c.gas(proxy) == GAS,
+            "buyer received exactly 1 GAS and the proxy address paid exactly 1 GAS")
+    c.check(c.gas(owner) == before_owner and c.gas(payer) < before_payer,
+            "the owner key neither signed nor paid: a throwaway key covered the fee")
+    c.check(x.nonce(account) == before_nonce + 1, "the account nonce advanced")
+    c.records.append({"step": "AA-13 the wallet-signed session-key GAS move", "txid": submit.get("txid"),
+                      "vmstate": submit.get("outcome"), "gas": submit.get("gas"),
+                      "scriptHex": submit.get("scriptHex"), "scriptBytes": submit.get("scriptBytes"),
+                      "packetBytes": submit.get("packetBytes"), "signers": seen,
+                      "walletSignRequest": asked, "proxyWitness": result.get("proxyWitness")})
+
+    refused, refused_exit = run_shim(dict(base_request, refuseConnect=True,
+                                          refuseWords="User rejected the request."), "refused")
+    c.check(refused_exit == 0 and refused.get("refused") is True
+            and refused.get("classifiedCode") == "EC_wallet_connect_refused"
+            and "User rejected the request." in (refused.get("providerMessage") or "")
+            and "refus" in (refused.get("renderedEn") or "").lower()
+            and "User rejected the request." in (refused.get("renderedEn") or ""),
+            "a refused wallet connection is reported as a refusal with the wallet's own words")
+    c.records.append({"step": "AA-13 a refused wallet connection", "exit": refused_exit,
+                      "errorCode": refused.get("errorCode"), "classifiedCode": refused.get("classifiedCode"),
+                      "providerMessage": refused.get("providerMessage"), "rendered": refused.get("renderedEn")})
+
+    refused_scope, scope_exit = run_shim(dict(base_request, scope="CalledByEntry"), "scope-refused")
+    c.check(scope_exit == 0 and refused_scope.get("leg") == "refused-build"
+            and (refused_scope.get("refusal") or {}).get("code") == "EC_wallet_scope_owner_requires_custom_scope"
+            and refused_scope.get("invokes") == 0,
+            "a CalledByEntry request for a verifier-checked owner is refused before any wallet is asked")
+    c.records.append({"step": "AA-13 a CalledByEntry request for a verifier-checked owner is refused",
+                      "exit": scope_exit, "refusal": refused_scope.get("refusal"),
+                      "invokes": refused_scope.get("invokes")})
+    return {"submit": submit, "walletSignRequest": asked, "signers": seen}
+
+
 def sc_timelock_boundaries(c, x):
     """AA-10 the 24 h configuration timelock and the 7 d escape timelock, observed on both sides of the
     boundary: the change is refused strictly before the on-chain deadline and executes at or after it, with
@@ -1273,6 +1445,7 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
         attempt("AA-08 on-chain paymaster", sc_paymaster, c, x)
         attempt("AA-11 SDK sponsored operation end to end", sc_sdk_sponsored, c, x)
         attempt("AA-12 SDK proxy-witness transaction builder", sc_sdk_proxy_builder, c, x)
+        attempt("AA-13 browser wallet signing scopes and connect feedback", sc_wallet_shim_signing, c, x)
         attempt("AA-09 relay route", sc_relay_route, c, x)
         receipt["sdkSponsored"] = getattr(x, "sdkSponsored", None)
         receipt["status"] = "DONE"

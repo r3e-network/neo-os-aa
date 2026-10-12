@@ -1,8 +1,8 @@
 {
   "variant": "deployed",
   "totals": {
-    "checks": 143,
-    "executedTransactions": 95,
+    "checks": 161,
+    "executedTransactions": 101,
     "simulatedFaults": 30,
     "nodeRefusals": 6
   },
@@ -247,6 +247,29 @@
         "nonce advanced",
         "the builder refuses when the account has no scope target",
         "the refused build moved neither balance nor nonce"
+      ]
+    },
+    {
+      "name": "AA-13 browser wallet signing scopes and connect feedback",
+      "checks": [
+        "the first setSessionKey call arms the 24 h timelock and returns false",
+        "the chain records the 24 h deadline in the future",
+        "the session key is stored after the chain-reported deadline passed",
+        "the account's verify-scope target is GAS",
+        "the proxy address holds 6 GAS before the move",
+        "the account is verifier-checked before any wallet is asked",
+        "the wallet service connected through the NEP-21 shim and kept the shim's address",
+        "the wallet was asked for the custom-contracts scope over exactly the core and the target",
+        "the wallet received the custom-contracts bits and the proxy's WitnessRules bits",
+        "the signing request carries the throwaway fee payer and the restricted proxy signer only",
+        "the wallet-signed script is byte-identical to the node's own assembler",
+        "the proxy witness the dApp attaches is the core's own derivation and carries no signature",
+        "the wallet-signed session-key transfer HALTed and moved the signed amount",
+        "buyer received exactly 1 GAS and the proxy address paid exactly 1 GAS",
+        "the owner key neither signed nor paid: a throwaway key covered the fee",
+        "the account nonce advanced",
+        "a refused wallet connection is reported as a refusal with the wallet's own words",
+        "a CalledByEntry request for a verifier-checked owner is refused before any wallet is asked"
       ]
     },
     {
