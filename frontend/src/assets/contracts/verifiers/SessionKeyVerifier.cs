@@ -131,7 +131,11 @@ namespace AbstractAccount.Verifiers
             // its compressed identity. The generic standard-account syscall alone
             // does not validate the y coordinate of an uncompressed encoding.
             object normalized = Contract.Call(NativeAuthority.Service, "canonicalP256PublicKey",
-                CallFlags.ReadOnly, new object[] { pubKey });
+                // The native profile marks this helper as a pure, account-free
+                // query and requires the exact None call flag. The ordinary
+                // contract build remains outside this conditional while the
+                // native module uses the profile's canonical invocation shape.
+                CallFlags.None, new object[] { pubKey });
             ExecutionEngine.Assert(normalized is ByteString && ((ByteString)normalized).Length == 33,
                 "Invalid canonical P256 public key");
             pubKey = (ByteString)normalized;
