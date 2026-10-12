@@ -69,6 +69,14 @@ class NativeModuleProfileTests(unittest.TestCase):
             wrong = copy.deepcopy(original); wrong["permissions"][0]["methods"] = methods
             with self.assertRaises(ValueError): self.package_manifest(wrong, "verifier", ["setConfig"])
 
+    def test_native_session_uses_the_profile_call_flag_for_canonicalization(self):
+        source = (ROOT / "contracts/verifiers/SessionKeyVerifier.cs").read_text(encoding="utf-8")
+        method = source.split("public static void SetSessionKey", 1)[1]
+        native_block = method.split("#endif", 1)[0]
+        self.assertIn('"canonicalP256PublicKey"', native_block)
+        self.assertIn("CallFlags.None", native_block)
+        self.assertNotIn("CallFlags.ReadOnly", native_block)
+
     def test_descriptor_is_nonempty_and_path_bounded(self):
         valid = {"NeoNativeVerifier": {"project":"NeoNativeVerifier.Native.csproj", "role":"verifier", "configurationMethods":["setConfig"], "compositeVerifier":False}}
         self.assertEqual(valid, profile.validate_descriptor(valid))
