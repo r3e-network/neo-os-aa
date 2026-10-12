@@ -3,6 +3,7 @@
   "version": 1,
   "kind": "native-protocol-submission",
   "status": "draft-unactivated",
+  "implementationVerified": false,
   "description": "The native SmartAccount ABI 2 profile, modules, SDK and UI prepared for standard submission.",
   "canonicalSourceRoots": [
     "contracts/native",
@@ -55,5 +56,12 @@
     "neo/neo: the consensus AccountManagement service and native VM enforcement are maintained outside this repository",
     "neo-project/proposals#243: ABI 2 proposal and review acceptance are external protocol gates",
     "Hardfork activation, node integration, formal refinement and public-network readback remain required before native status can change"
+  ],
+  "openGates": [
+    "NATIVE-CROSS-PROXY-AUTHORITY",
+    "EXTERNAL-PROTOCOL-ACCEPTANCE",
+    "FORMAL-NEOVM-COMPILER-REFINEMENT",
+    "FORMAL-NATIVE-FEE-RESOURCE-REFINEMENT",
+    "PUBLIC-HARDFORK-ACTIVATION"
   ]
 }

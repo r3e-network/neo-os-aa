@@ -61,6 +61,10 @@ test('ordinary and native profiles have separate, existing entrypoints', () => {
 
   assert.ok(native.data.externalBoundaries.length >= 2, 'native external boundary must be documented');
   assert.match(native.data.externalBoundaries.join('\n'), /AccountManagement/);
+  assert.equal(native.data.implementationVerified, false);
+  assert.ok(native.data.openGates.includes('NATIVE-CROSS-PROXY-AUTHORITY'));
+  assert.ok(native.data.openGates.includes('EXTERNAL-PROTOCOL-ACCEPTANCE'));
+  assert.ok(native.data.openGates.includes('PUBLIC-HARDFORK-ACTIVATION'));
 });
 
 test('implementation README entrypoints and profile metadata stay discoverable', () => {

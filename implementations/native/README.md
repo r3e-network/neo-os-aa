@@ -9,4 +9,6 @@ The native consensus `AccountManagement` service itself belongs to the matching
 Neo core repository. This repository can validate the profile, modules, client,
 fixtures and test-only VM probes, but it cannot claim hardfork activation,
 node admission, formal refinement or public-network acceptance from those local
-checks. The native track is currently draft/unactivated.
+checks. The native track is currently draft/unactivated and keeps
+`implementationVerified: false` until the open gates listed in `profile.json`
+are independently closed.
