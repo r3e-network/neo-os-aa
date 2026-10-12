@@ -1,0 +1,49 @@
+{
+  "id": "ordinary-user-contract",
+  "version": 1,
+  "kind": "deployed-contract",
+  "status": "active-user-contract-path",
+  "description": "The Neo N3 user-contract implementation used by the current NeoOS AA integration.",
+  "canonicalSourceRoots": [
+    "contracts",
+    "frontend",
+    "sdk/js/src/v3",
+    "shared"
+  ],
+  "excludedSourceRoots": [
+    "contracts/native",
+    "frontend/src/features/native",
+    "frontend/src/shared/nativeSmartAccount.mjs",
+    "frontend/src/shared/nativeSmartAccountClient.mjs",
+    "frontend/src/shared/nativeTransactionArtifact.mjs",
+    "frontend/src/shared/nativeWalletWitness.mjs",
+    "sdk/js/src/native",
+    "shared/nativeSmartAccount.mjs",
+    "shared/nativeSmartAccountClient.mjs",
+    "shared/nativeTransactionArtifact.mjs",
+    "shared/nativeWalletWitness.mjs"
+  ],
+  "compatibilityPaths": [
+    "contracts",
+    "frontend",
+    "sdk/js/src/v3",
+    "shared"
+  ],
+  "entrypoints": [
+    "contracts/UnifiedSmartWallet.csproj",
+    "frontend",
+    "sdk/js"
+  ],
+  "artifactRoots": [
+    "contracts/build",
+    "contracts/bin/v3"
+  ],
+  "verification": {
+    "profile": "ordinary",
+    "commands": [
+      "./scripts/verify_repo.sh --profile ordinary",
+      "cd frontend && npm run test:ordinary:browser"
+    ]
+  },
+  "nativeBoundary": "This profile does not claim native AccountManagement consensus semantics or native-chain activation."
+}

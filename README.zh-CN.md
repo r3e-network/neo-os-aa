@@ -30,12 +30,21 @@
 6. `docs/AA_V3_ARCHITECTURE.zh-CN.md`
 7. `docs/TESTNET_DEPLOYMENT.md`
 
+同一主分支保留两个实现入口：
+[用户合约实现](implementations/ordinary/README.md) 和
+[原生 AccountManagement 提交实现](implementations/native/README.md)。
+两个目录中的 `profile.json` 记录各自的源码根、兼容路径、构建产物和
+验证命令。源码继续放在现有构建路径中，避免破坏当前工具链；原生
+AccountManagement 共识服务仍属于对应的 Neo core 仓库。
+
 ## 说明
 
 本文件是中文导航入口。英文 README 仍然是仓库的主事实来源。
 
 ## 项目结构
 
+- `implementations/ordinary/`：当前可用的 `UnifiedSmartWalletV3` 用户合约实现入口。
+- `implementations/native/`：原生 ABI 2 标准提交实现入口，当前为 draft/unactivated。
 - `contracts/`：C# 主入口合约实现。
 - `contracts/verifiers/`：验证器插件（Web3Auth、TEE、WebAuthn、SessionKey、MultiSig 等）。
 - `contracts/hooks/`：钩子插件（DailyLimit、Whitelist、TokenRestricted、MultiHook、NeoDIDCredential）。

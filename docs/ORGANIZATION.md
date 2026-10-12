@@ -17,6 +17,8 @@ Abstract Accounts.
 
 ## Directory Structure
 
+    implementations/ordinary/ user-contract delivery profile and entrypoint
+    implementations/native/   native ABI 2 submission profile and entrypoint
     .github/                 CI workflows
     contracts/               Neo N3 AA contract sources
     formal/                  formal verification inputs and checks
@@ -30,9 +32,24 @@ Abstract Accounts.
     neo-abstract-account.sln .NET solution
     README.md                public project and boundary documentation
 
+`implementations/ordinary/` and `implementations/native/` are the two
+implementation entrypoints on the same branch. They intentionally point at
+the existing build-compatible source locations through `profile.json`; source
+files are not duplicated. The ordinary profile is the current user-contract
+delivery path. The native profile contains the native modules, SDK and UI
+profile prepared for standard submission, while the consensus
+`AccountManagement` service remains in the matching Neo core repository.
+
 ## File Organization Rules
 
 - Keep contract sources and contract-specific checks under contracts/.
+- Use `implementations/ordinary/profile.json` and
+  `implementations/native/profile.json` to select the implementation profile;
+  do not infer profile identity from a deployment label or a shared artifact
+  directory.
+- Keep native-only modules and client code under the native roots listed by
+  `implementations/native/profile.json`; ordinary source must not import native
+  entrypoints as proof of native activation.
 - Keep frontend routes, UI, and frontend configuration under frontend/.
 - Keep AA client types and builders under sdk/ and shared/.
 - Keep formal evidence and verification inputs under formal/.

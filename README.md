@@ -41,6 +41,14 @@ Runtime and deployment boundaries:
 - The canonical mainnet AA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `morpheus-aa.miniapp.neo` plus `morpheus-aa-alias.miniapp.neo`.
 - The canonical shared testnet AA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
+The two implementation versions live on this branch behind explicit directory
+entrypoints: [ordinary user-contract](implementations/ordinary/README.md) and
+[native AccountManagement profile](implementations/native/README.md). Their
+`profile.json` files map canonical source roots, compatibility paths, artifacts
+and profile-specific verification commands. Source stays in the existing
+build-compatible directories so current tooling and artifact checks address the
+same files.
+
 ## Architecture authority
 
 In the NeoOS workspace ownership map, `neo-os-aa` owns account abstraction: user operations, proxy

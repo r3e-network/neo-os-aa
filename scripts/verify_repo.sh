@@ -147,6 +147,7 @@ if [[ $run_contracts -eq 1 ]]; then
       scripts/fuzz_continuous.test.mjs \
       scripts/repo_hygiene.test.mjs \
       scripts/verify-private-artifact-provenance.test.mjs \
+      scripts/implementation_profiles.test.mjs \
       scripts/verify_repo.test.mjs
     dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal
   fi
