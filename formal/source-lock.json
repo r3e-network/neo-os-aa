@@ -56,7 +56,7 @@
     "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
     "scripts/check_neo_platform_packages.mjs": "3e59f2002a67fdf8ffb995834f707e984ce3260628521348b09754362bb9ba30",
     "scripts/native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
-    "scripts/verify_repo.sh": "4ae5603534db3de441449a686bd183b8b470ec1683196d051fd47672f1dfde84"
+    "scripts/verify_repo.sh": "cdfcf5bdfba80290d28adc3e67cb106e1759d59543b61d982cd472c552578957"
   },
   "nativeCoreSources": {
     "src/Directory.Build.props": "b6cb09e9b9112c2ff2007cad2e387edaa5cb85fc4094dfb70fbf37bd96a02c50",
