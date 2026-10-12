@@ -12,3 +12,7 @@ node admission, formal refinement or public-network acceptance from those local
 checks. The native track is currently draft/unactivated and keeps
 `implementationVerified: false` until the open gates listed in `profile.json`
 are independently closed.
+
+The current evidence is recorded in
+[`aa-native-protocol-review-20261009.json`](../../docs/reports/aa-native-protocol-review-20261009.json)
+and [`aa-native-open-boundaries-20261008.json`](../../docs/reports/aa-native-open-boundaries-20261008.json).
