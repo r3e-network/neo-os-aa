@@ -2,18 +2,28 @@
 
 `neo-os-aa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Abstract Accounts on Neo N3.
 
-The target architecture is **Neo N3 native SmartAccount**, implemented by the
-protocol's `AccountManagement` service. Start with the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
+The project keeps two implementation tracks for one smart-account protocol.
+`UnifiedSmartWalletV3` is the current user-contract delivery path for NeoOS;
+the protocol's native `AccountManagement` service is developed in parallel for
+the standard submission path. Start with the [implementation strategy](docs/AA-IMPLEMENTATION-STRATEGY.md)
+and [capability boundaries](docs/AA-SYSTEM-STATUS.md). For the native track,
+see the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
 [native SDK](docs/NATIVE_SDK.md), and [native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md).
 The service uses stable account identity, explicitly scoped
 authorization, bounded module callbacks, independent fee payment, and recovery
 that revokes old modules without calling them.
 
-This branch implements the unactivated ABI 2 draft associated with
+The native track implements the unactivated ABI 2 draft associated with
 [proposal #243](https://github.com/neo-project/proposals/pull/243) and
 [discussion #242](https://github.com/neo-project/proposals/issues/242).
 Selecting a public RPC endpoint cannot enable it. The workspace verifies native
 activation and the exact protocol profile before enabling account actions.
+
+The deployed-contract track is usable on the published Neo N3 runtime after
+its own artifact, integration, and deployment readback gates. Its identity,
+wire format, callback resources, recovery and sponsorship guarantees remain
+profile-specific; passing native profile checks does not reclassify a V3
+deployment as native.
 
 The [usability follow-up](docs/reports/aa-native-usability-20261009.md) covers
 guarded policy cancellation, standard wallet threshold recovery, signed-file
