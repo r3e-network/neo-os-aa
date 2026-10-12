@@ -32,6 +32,35 @@ dotnet test neo-abstract-account.sln -c Release
 `./scripts/verify_repo.sh --contracts-only` runs the same steps plus the deploy-tool tests and the format
 check. To prove a clean restore, point `NUGET_PACKAGES` at an empty directory first.
 
+### Select the validation profile
+
+`./scripts/verify_repo.sh --profile ordinary` is the default. It runs the public
+contract build and tests, deployment-tool regressions, frontend checks and SDK
+checks without restoring native probe projects or building the native epoch VM
+fixture. `--contracts-only`, `--frontend-only` and `--sdk-only` still select the
+component to validate. Shared deterministic frontend/SDK unit tests remain in
+both profiles; they do not require a native node.
+
+`--profile native` selects native package locks, protocol and runner guards, the
+native module epoch VM regression and native browser coverage. `--profile all`
+runs both profiles. Every selected command is mandatory and its failure stops
+the gate. The native epoch fixture is module-level VM evidence; the independent
+`native-profile.yml` workflow additionally builds the pinned native core and
+executes the native VM matrix. Neither command establishes public activation or
+full-chain admission.
+
+The main CI workflow also runs the native browser fixture in a separate required
+step after installing the frontend dependencies and Playwright. It reuses those
+installations and does not repeat the frontend build or full unit suites. This
+workflow has no path filter, so native UI, shared code, SDK and frontend test
+changes all select the browser gate without needing a native node.
+
+`--formal` explicitly adds the aggregate formal checks and their source-lock
+requirements. `--neoexpress` selects the existing compatibility deployment probe
+and is accepted for `ordinary` or `all`; native full-chain validation follows its
+separate documented runner. These optional checks keep their explicit NOT RUN
+messages when they are not selected.
+
 ## Reproduce
 
 ### Public and private profiles
@@ -53,6 +82,21 @@ transaction-fee limits before sponsorship; these controls do not establish a pro
 budget. Unrestricted sponsored admission remains unsafe. `contracts/build` remains the historical
 deployed-artifact fixture. Public deploy/upgrade helpers select `contracts/bin/v3` and reject paths
 escaping that directory; `contracts/bin/platform` is never a public release source.
+
+### Public verifier release selection
+
+`scripts/deploy_latest_aa_verifiers.js` selects SessionKeyVerifier from
+`contracts/bin/v3/verifiers/` and SocialRecoveryVerifier from `contracts/bin/v3/`
+through the same constrained artifact-path helper as the other public deployment
+scripts. It must fail if that reviewed public NEF/manifest pair is absent; it
+must never fall back to historical `contracts/build` fixtures or a private/native
+profile. The selected manifest must match the expected module name, version and
+account-ID ABI. Deployment readback must match the selected NEF script and complete
+manifest before the existing authorized-core binding check can succeed.
+
+Rebuild and review the public artifact pair before release. Offline loader tests
+exercise path selection and reject missing or mismatched pairs; they neither
+broadcast a transaction nor establish public deployment parity.
 
 ### Two-build comparison
 

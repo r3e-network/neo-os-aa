@@ -1,12 +1,16 @@
 # Neo N3 native smart accounts
 
-The target is a protocol-native account service, `AccountManagement`, with a
+This document describes the native implementation of the parallel
+[smart-account strategy](AA-IMPLEMENTATION-STRATEGY.md). The deployed-contract
+implementation is the near-term NeoOS delivery priority. The native path is
+`AccountManagement`, a protocol service with a
 small, explicit authorization boundary. The [ABI 2 profile](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)
 defines the wire contract. The [SDK](NATIVE_SDK.md) and [workspace](NATIVE_ACCOUNT_WORKSPACE.md)
 consume that contract; neither can grant authority the native service rejects.
 The profile remains a draft until the Neo proposal and activation process is
 complete. Public `UnifiedSmartWalletV3` and private `PLATFORM` are separate
-compatibility profiles with separate account identities and artifacts.
+runtime profiles with separate account identities and artifacts. Native
+implementation progress does not retire or suspend deployed-contract development.
 
 The [account user guide](NATIVE_ACCOUNT_USER_GUIDE.md) covers setup, backups,
 the authority and timing matrix, and recovery decisions.

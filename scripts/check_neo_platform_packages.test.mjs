@@ -352,7 +352,7 @@ test("CI installs exactly the pinned compiler and names the pinned versions", ()
 
 test("verify_repo.sh runs the package and compiler gates before the first contract build", () => {
   const script = read("scripts/verify_repo.sh");
-  const gate = script.indexOf("node scripts/check_neo_platform_packages.mjs --include-native\n");
+  const gate = script.indexOf("node scripts/check_neo_platform_packages.mjs\n");
   const compiler = script.indexOf("node scripts/check_neo_platform_packages.mjs --compiler-only");
   assert.notEqual(gate, -1);
   assert.notEqual(compiler, -1);

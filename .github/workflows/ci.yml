@@ -32,7 +32,7 @@ jobs:
             sdk/js/package-lock.json
       # Needs no packages, so it still runs when the gate below fails.
       - name: Repository hygiene and package-pin tests
-        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/fuzz_continuous.test.mjs scripts/source_map_js_pin.test.mjs
+        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/fuzz_continuous.test.mjs scripts/source_map_js_pin.test.mjs scripts/verify_repo.test.mjs
       # Neo.SmartContract.Framework and Neo.SmartContract.Testing 3.10.1, the Neo packages they pull
       # in and every other NuGet package are published on nuget.org, which nuget.config makes the
       # only source. Directory.Build.props pins the framework and the packages.lock.json next to
@@ -54,5 +54,10 @@ jobs:
       - name: Install Playwright browser for frontend e2e
         working-directory: frontend
         run: npm run test:e2e:install
-      - name: Verify repository
-        run: ./scripts/verify_repo.sh
+      # Uses local RPC/wallet fixtures and the dependencies installed above.
+      # This workflow has no path filter: UI, shared, SDK and test changes all run it.
+      - name: Verify native account browser fixtures
+        working-directory: frontend
+        run: npm run test:native:browser
+      - name: Verify ordinary contracts and clients
+        run: ./scripts/verify_repo.sh --profile ordinary

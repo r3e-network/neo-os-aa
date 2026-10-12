@@ -6,7 +6,13 @@ import path from 'node:path';
 import { decodeStackHash160, decodeStackHashArray, hash160Param, parseRecentTransactions } from '../src/features/studio/helpers.js';
 
 const controllerPath = path.resolve('src/features/studio/useStudioController.js');
-const manifestPath = path.resolve('../contracts/build/UnifiedSmartWalletV3.manifest.json');
+const governancePath = path.resolve('src/features/studio/governance.js');
+const panelPath = path.resolve('src/features/studio/components/ManageGovernancePanel.vue');
+const manifestCandidates = [
+  path.resolve('../contracts/bin/v3/UnifiedSmartWalletV3.manifest.json'),
+  path.resolve('../contracts/build/UnifiedSmartWalletV3.manifest.json'),
+];
+const manifestPath = manifestCandidates.find((candidate) => fs.existsSync(candidate)) || manifestCandidates[1];
 
 // Display form (big-endian) of a UInt160 and its node wire form: RPC result
 // stacks return UInt160 values as ByteString of the internal little-endian
@@ -44,15 +50,18 @@ test('decodeStackHashArray decodes each little-endian entry to display form', ()
 });
 
 test('every studio contract operation exists in the UnifiedSmartWalletV3 ABI', () => {
-  const source = fs.readFileSync(controllerPath, 'utf8');
+  const source = [controllerPath, governancePath, panelPath].map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const abiMethods = new Set(manifest.abi.methods.map((method) => method.name));
 
   const operations = new Set();
-  for (const match of source.matchAll(/invokeReadOperation\(\s*'([^']+)'/g)) {
+  for (const match of source.matchAll(/invokeReadOperation\(\s*["']([^"']+)["']/g)) {
     operations.add(match[1]);
   }
-  for (const match of source.matchAll(/invokeOperation\(\s*'[^']*',\s*'([^']+)'/g)) {
+  for (const match of source.matchAll(/invokeOperation\(\s*["'][^"']*["'],\s*["']([^"']+)["']/g)) {
+    operations.add(match[1]);
+  }
+  for (const match of source.matchAll(/(?:canGovernanceAction|submitCurrentGovernanceAction|buildGovernanceAction|operation\s*===)\(?'([^']+)'\)?/g)) {
     operations.add(match[1]);
   }
 
