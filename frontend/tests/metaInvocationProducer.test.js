@@ -37,9 +37,9 @@ const CLIENT_SURFACE_FUNCTIONS = {
     'recoverPublicKeyFromTypedDataSignature', 'toCompactEcdsaSignature',
   ],
   execution: [
-    'buildClientBroadcastRequest', 'buildDraftApprovalTypedData', 'buildDraftExportBundle',
-    'buildRelayBroadcastRequest', 'buildRelayPayloadOptions', 'buildStagedTransactionBody',
-    'executeBroadcast', 'resolveRelayPayloadMode',
+    'buildClientBroadcastRequest', 'buildClientProxyWitnessTransaction', 'buildDraftApprovalTypedData',
+    'buildDraftExportBundle', 'buildRelayBroadcastRequest', 'buildRelayPayloadOptions',
+    'buildStagedTransactionBody', 'executeBroadcast', 'resolveRelayPayloadMode',
   ],
   signedInvocation: ['DEPLOYED_ENTRYPOINTS', 'isDeployedEntrypoint', 'selectSignedInvocation'],
 };

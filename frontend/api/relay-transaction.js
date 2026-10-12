@@ -490,19 +490,25 @@ async function fetchValidationPreview({ rpcUrl, invocation }) {
 }
 
 async function resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation }) {
-  const proxy = await resolveProxyTransferWitness({
+  const proxyTransaction = await resolveProxyTransferWitness({
     invocation, feePayer: account.scriptHash, rpcClient, sc,
     enabled: resolveOptionalBoolean(process.env.AA_RELAY_PROXY_WITNESS_ENABLED, false),
   });
-  if (proxy && resolvePositiveBigIntEnv('AA_RELAY_PROXY_NETWORK_FEE_RESERVE') == null) {
+  if (proxyTransaction && resolvePositiveBigIntEnv('AA_RELAY_PROXY_NETWORK_FEE_RESERVE') == null) {
     throw new Error('AA_RELAY_PROXY_NETWORK_FEE_RESERVE must be configured for proxy witnesses');
   }
-  if (proxy && resolveMaxNetworkFee() == null && resolveMaxTotalFee() == null) {
+  if (proxyTransaction && resolveMaxNetworkFee() == null && resolveMaxTotalFee() == null) {
     throw new Error('A network or total fee ceiling must be configured for proxy witnesses');
   }
+  // The SDK builder owns this authority: its script, its two signers and its proxy witness are the
+  // only shape the node will verify. Nothing here assembles a signer or a witness of its own.
   return {
-    signers: [{ account: account.scriptHash, scopes: tx.WitnessScope.CalledByEntry }, ...(proxy ? [proxy.signer] : [])],
-    proxyWitness: proxy?.witness,
+    signers: proxyTransaction
+      ? [...proxyTransaction.signers]
+      : [{ account: account.scriptHash, scopes: tx.WitnessScope.CalledByEntry }],
+    proxyWitness: proxyTransaction?.proxyWitness,
+    proxyScript: proxyTransaction?.script,
+    proxyTransaction,
   };
 }
 
@@ -533,8 +539,8 @@ function transferRefusal({ invocation, simulation, validationPreview }) {
 
 async function simulateMetaInvocation({ rpcUrl, relayWif, invocation }) {
   const { rpc, tx, sc, u, rpcClient, account } = loadRelayInvocationContext({ rpcUrl, relayWif });
-  const { signers } = await resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation });
-  const script = buildInvocationScript({ invocation, sc, u });
+  const { signers, proxyScript } = await resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation });
+  const script = proxyScript || buildInvocationScript({ invocation, sc, u });
   const validationPreview = await fetchValidationPreview({ rpcUrl, invocation });
 
   const simulation = await rpcClient.invokeScript(u.HexString.fromHex(script), signers);
@@ -568,8 +574,8 @@ async function simulateMetaInvocation({ rpcUrl, relayWif, invocation }) {
 async function relayMetaInvocation({ rpcUrl, relayWif, invocation, feePolicy = {} }) {
   const { rpc, tx, sc, u, rpcClient, account } = loadRelayInvocationContext({ rpcUrl, relayWif });
   const magic = await getNetworkMagic(rpcClient, rpc);
-  const { signers, proxyWitness } = await resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation });
-  const script = buildInvocationScript({ invocation, sc, u });
+  const { signers, proxyWitness, proxyScript } = await resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation });
+  const script = proxyScript || buildInvocationScript({ invocation, sc, u });
 
   const simulation = await rpcClient.invokeScript(u.HexString.fromHex(script), signers);
   if (simulation?.state === 'FAULT') {

@@ -6,6 +6,7 @@ import { EC } from '../../config/errorCodes.js';
 import { RUNTIME_CONFIG } from '../../config/runtimeConfig.js';
 import { selectSignedInvocation, isDeployedEntrypoint } from './signedInvocation.js';
 import { isProxySourcedTransfer } from '../../shared/transferOutcome.mjs';
+import { buildProxyWalletSignRequest, resolveProxyWitnessTransaction } from '../../shared/proxyWitness.mjs';
 import {
   computeArgsHash,
   buildExecuteUserOpInvocation as buildV3ExecuteUserOpInvocation,
@@ -192,7 +193,7 @@ export function buildDraftApprovalTypedData({ draftRecord, chainId = RUNTIME_CON
   };
 }
 
-function assertClientWitnessSupported(transactionBody, invocation) {
+function proxySourcedCalls(transactionBody, invocation) {
   const proxy = transactionBody?.accountAddressScriptHash;
   const args = invocation?.args || [];
   // Only the deployed V3 envelopes are decoded here. A V1/V2 envelope is refused earlier, by
@@ -204,16 +205,96 @@ function assertClientWitnessSupported(transactionBody, invocation) {
   } else if (['executeUserOps', 'executeSponsoredUserOps'].includes(invocation?.operation)) {
     calls = (args[1]?.value || []).map((op) => ({ method: op?.value?.[1]?.value, args: op?.value?.[2]?.value }));
   }
-  if (transactionBody?.requiresProxyWitness || calls.some((call) => isProxySourcedTransfer({
+  return calls.filter((call) => isProxySourcedTransfer({
     method: call.method,
     from: call.args?.[0]?.type === 'Hash160' ? call.args[0].value : '',
     proxy,
-  }))) {
-    throw new Error('Account asset transfers require a proxy witness. Use a relay with proxy witness support; the connected wallet cannot attach this verification script.');
-  }
+  }));
 }
 
-export function buildClientBroadcastRequest({ signerAddress = '', transactionBody = {}, signatures = [], morpheusNetwork = RUNTIME_CONFIG.morpheusNetwork, networkMagic } = {}) {
+function proxyWitnessRequired(transactionBody, invocation) {
+  return Boolean(transactionBody?.requiresProxyWitness) || proxySourcedCalls(transactionBody, invocation).length > 0;
+}
+
+function decodeHash160StackHex(item) {
+  if (item?.type === 'Hash160' && item.value) return sanitizeHex(item.value);
+  if (item?.type === 'ByteString' && item.value) {
+    const binary = globalThis.atob ? globalThis.atob(item.value) : '';
+    const raw = Array.from(binary, (char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+    return raw ? Array.from(raw.match(/../g) || []).reverse().join('') : '';
+  }
+  return '';
+}
+
+async function readProxyScopeStateWith({ rpcUrl, coreHash, accountId, fetchImpl }) {
+  const read = async (operation) => {
+    const response = await fetchImpl(rpcUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'invokefunction',
+        params: [coreHash, operation, [{ type: 'Hash160', value: `0x${accountId}` }]],
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    const result = payload?.result;
+    if (payload?.error || result?.state !== 'HALT') throw new Error('Proxy witness requires a successful core scope read');
+    return decodeHash160StackHex(result?.stack?.[0]);
+  };
+  return {
+    expectedProxyHash: await read('getProxyScriptHash'),
+    scopeTarget: await read('getVerifyScopeTarget'),
+  };
+}
+
+/**
+ * The browser-wallet signing path for an account that moves its own assets. It is the SDK builder's
+ * transaction: the shape-bound executeUserOp(s) script, the wallet's fee-payer signer in a custom
+ * scope a browser wallet will accept, and the proxy verification witness the dApp attaches after the
+ * wallet has signed. The scope target and the core's own proxy derivation are read from the chain;
+ * neither is taken from the draft or from any other client-supplied field.
+ */
+export async function buildClientProxyWitnessTransaction({
+  transactionBody = {},
+  invocation = null,
+  feePayer = '',
+  rpcUrl = RUNTIME_CONFIG.rpcUrl,
+  feePayerScope = 'CustomContracts',
+  feePayerAllowedContracts = null,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const target = invocation || cloneImmutable(transactionBody?.clientInvocation || transactionBody?.v3Invocation || {});
+  if (!target?.scriptHash || !target?.operation) throw new Error(EC.clientInvocationMissing);
+  const args = target.args || [];
+  if (args[0]?.type !== 'Hash160') throw new Error(EC.clientInvocationMissing);
+  const accountId = sanitizeHex(args[0].value);
+  const coreHash = sanitizeHex(target.scriptHash);
+  const built = await resolveProxyWitnessTransaction({
+    coreHash,
+    accountId,
+    invocation: target,
+    feePayer: sanitizeHex(feePayer),
+    feePayerScope: 'CalledByEntry',
+    readState: (request) => readProxyScopeStateWith({ rpcUrl, coreHash, accountId: request.accountId, fetchImpl }),
+  });
+  return buildProxyWalletSignRequest({
+    transaction: built,
+    scope: feePayerScope,
+    allowedContracts: feePayerAllowedContracts
+      || (feePayerScope === 'CustomContracts' ? [coreHash, built.targetContract] : undefined),
+  });
+}
+
+export function buildClientBroadcastRequest({
+  signerAddress = '',
+  transactionBody = {},
+  signatures = [],
+  morpheusNetwork = RUNTIME_CONFIG.morpheusNetwork,
+  networkMagic,
+  proxyWitnessTransaction = null,
+} = {}) {
   const signed = selectSignedInvocation({ transactionBody, signatures, morpheusNetwork, networkMagic });
   if (signed && !transactionBody?.clientInvocation && !transactionBody?.v3Invocation) {
     throw new Error('Draft signed invocation mismatch: client submission requires a staged operation anchor');
@@ -223,7 +304,6 @@ export function buildClientBroadcastRequest({ signerAddress = '', transactionBod
   if (signed && transactionBody?.clientInvocation?.signers) {
     invocation.signers = cloneImmutable(transactionBody.clientInvocation.signers);
   }
-  assertClientWitnessSupported(transactionBody, invocation);
   if (!invocation.scriptHash || !invocation.operation) {
     throw new Error(EC.clientInvocationMissing);
   }
@@ -239,6 +319,23 @@ export function buildClientBroadcastRequest({ signerAddress = '', transactionBod
       throw new Error(EC.signerRequired);
     }
     invocation.signers = [{ account: signerAddress, scopes: 1 }];
+  }
+
+  // An account that moves its own assets is authorized by the proxy verification witness, which the
+  // SDK builder alone assembles. The request carries its script, its two signers and that witness so
+  // a wallet that can sign a built transaction completes the move; without a built transaction the
+  // client path must not pretend an ordinary invoke would move anything.
+  if (proxyWitnessRequired(transactionBody, invocation)) {
+    if (!proxyWitnessTransaction) {
+      throw new Error('Account asset transfers require a proxy witness built by the SDK; call buildClientProxyWitnessTransaction before broadcasting from the client.');
+    }
+    invocation.script = proxyWitnessTransaction.script;
+    invocation.signers = cloneImmutable([...proxyWitnessTransaction.signers]);
+    invocation.proxyWitness = cloneImmutable(proxyWitnessTransaction.proxyWitness);
+    invocation.walletSignRequest = cloneImmutable({
+      scope: proxyWitnessTransaction.feePayerSigner.scopes,
+      signers: cloneImmutable([...proxyWitnessTransaction.signers]),
+    });
   }
 
   return invocation;
@@ -325,7 +422,31 @@ export async function executeBroadcast({
     return response;
   }
 
-  const request = buildClientBroadcastRequest({ signerAddress, transactionBody, signatures, morpheusNetwork, networkMagic });
+  // An account that moves its own assets is authorized by the proxy verification witness. That
+  // witness is assembled by the SDK builder and attached to a transaction the wallet signs; a wallet
+  // invoke API that cannot carry it would send a transfer that returns false and still burn the fee,
+  // so the client path refuses rather than submit one. The built transaction is still produced and
+  // returned on the error so a wallet with a real signing path can complete the move.
+  let proxyWitnessTransaction = null;
+  const stagedInvocation = selectSignedInvocation({ transactionBody, signatures, morpheusNetwork, networkMagic })
+    || cloneImmutable(transactionBody?.clientInvocation || transactionBody?.v3Invocation || {});
+  if (proxyWitnessRequired(transactionBody, stagedInvocation)) {
+    proxyWitnessTransaction = await (deps.buildClientProxyWitnessTransaction || buildClientProxyWitnessTransaction)({
+      transactionBody,
+      invocation: stagedInvocation,
+      feePayer: signerAddress,
+      rpcUrl: walletService.rpcUrl,
+    });
+    if (walletService.supportsProxyWitness !== true) {
+      const error = new Error('Account asset transfers require a proxy witness. The connected wallet cannot attach this verification script; use a relay with proxy witness support or a wallet that signs a built transaction.');
+      error.proxyWitnessTransaction = proxyWitnessTransaction;
+      throw error;
+    }
+  }
+
+  const request = buildClientBroadcastRequest({
+    signerAddress, transactionBody, signatures, morpheusNetwork, networkMagic, proxyWitnessTransaction,
+  });
   const typedRecords = signatures.filter((item) => item?.metadata?.metaInvocation && item?.metadata?.typedData);
   if (request.operation === 'executeUserOp' && typedRecords.length) {
     // Metadata hashes are untrusted. Recompute the actual staged argument hash with the target core.

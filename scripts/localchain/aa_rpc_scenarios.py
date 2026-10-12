@@ -642,6 +642,127 @@ def sc_sdk_sponsored(c, x):
     return x.sdkSponsored
 
 
+def sc_sdk_proxy_builder(c, x):
+    """AA-12 the SDK proxy-witness transaction builder on the deployed core.
+
+    The transaction is composed by the SDK's own builder (scripts/localchain/sdk_proxy_builder_fixture.mjs),
+    not by the harness helpers: the fixture reads the account's scope target from the chain and returns
+    the shape-bound executeUserOp script, the fee-payer signer, the restricted WitnessRules proxy signer
+    and the proxy verification witness. A throwaway key that is not the contract admin registers the
+    account, pays the fee and moves GAS out of its proxy address, and the builder refuses an account
+    the admin never scoped before any transaction exists."""
+    c.records.append({"scenario": "AA-12 SDK proxy-witness transaction builder (transaction built by the SDK)"})
+    core = x.core
+    buyer, owner = c.hashes["buyer"], c.hashes["owner"]
+    # One throwaway key: the account's backup owner and the fee payer of the SDK-built transaction.
+    # It holds nothing but the GAS it is given here and it is not the contract admin.
+    payer = "sdk-proxy-payer"
+    c.keys[payer] = v.RawKey(c.workdir, payer, os.urandom(32))
+    c.hashes[payer] = "0x" + c.keys[payer].script_hash[::-1].hex()
+    c.fund([payer], 100)
+    account, proxy = x.register("sdk-proxy", owner=payer)
+    c.send("fund the proxy address with 10 GAS", [{"w": "owner"}], GAS_HASH, "transfer",
+           [H(owner), H(proxy), I(10 * GAS), B(b"")])
+    c.check(c.gas(proxy) == 10 * GAS, "proxy address holds 10 GAS")
+    c.send("admin sets the verify-scope target to GAS", [{"w": "deployer"}], core, "setVerifyScopeTarget",
+           [H(account), H(GAS_HASH)])
+    c.check(c.hash_of(core, "getVerifyScopeTarget", H(account)) == GAS_HASH, "scope target recorded")
+
+    def build(body, label):
+        path = c.workdir / f"sdk-proxy-{label}.json"
+        path.write_text(json.dumps(body))
+        done = subprocess.run([NODE, str(AA / "scripts/localchain/sdk_proxy_builder_fixture.mjs"), str(path)],
+                              capture_output=True, text=True, cwd=str(AA), timeout=180)
+        try:
+            return json.loads(done.stdout.strip().splitlines()[-1]), done.returncode
+        except Exception:
+            raise Fail(f"the SDK proxy fixture produced no JSON (exit {done.returncode}): {done.stderr[-300:]}")
+
+    request = {
+        "rpcUrl": f"http://127.0.0.1:{c.port}", "core": core, "accountId": account,
+        "target": GAS_HASH, "method": "transfer",
+        "args": [H(proxy), H(buyer), I(GAS), {"type": "ByteArray", "value": "0x"}],
+        "nonce": "0", "deadline": FAR_DEADLINE, "signatureHex": "",
+        "feePayer": c.hashes[payer], "feePayerScope": "CalledByEntry",
+    }
+    built, exit_code = build(request, "built")
+    if not built.get("ok"):
+        raise Fail(f"the SDK refused a valid proxy-witness request: {built.get('error')}")
+    expected_script = proxy_script_for(account, core).hex()
+    c.check(built["proxyWitness"]["verificationScript"] == expected_script
+            and built["proxyHash"] == proxy[2:].lower(),
+            "the SDK builder derives the proxy script and the core agrees")
+    sdk_rules = [{"action": rule["action"], "condition": {
+        "type": rule["condition"]["type"],
+        "expressions": [{"type": e["type"], "hash": "0x" + e["hash"]} for e in rule["condition"]["expressions"]],
+    }} for rule in built["signers"][1]["rules"]]
+    c.check(sdk_rules == v.aa_proxy_rules(core, GAS_HASH) and built["signers"][1]["scopes"] == "WitnessRules",
+            "the SDK's proxy signer carries the single restricted rule the node verifies")
+    gas_op = x.op(GAS_HASH, "transfer", [H(proxy), H(buyer), I(GAS), B(b"")], 0)
+    node_script = base64.b64decode(c.rpc("invokefunction", [core, "executeUserOp", [H(account), gas_op], []])["script"]).hex()
+    c.check(built["script"] == node_script, "the SDK script is byte-identical to the node's own assembler")
+    batch_built, batch_exit = build(dict(request, batch=True, nonce="1", ops=[{
+        "target": GAS_HASH, "method": "transfer",
+        "args": [H(proxy), H(buyer), I(GAS), {"type": "ByteArray", "value": "0x"}],
+        "nonce": "1", "deadline": FAR_DEADLINE, "signatureHex": "",
+    }]), "batch")
+    if not batch_built.get("ok"):
+        raise Fail(f"the SDK refused a valid batch proxy-witness request: {batch_built.get('error')}")
+    node_batch_script = base64.b64decode(c.rpc("invokefunction", [core, "executeUserOps", [H(account), A(x.op(GAS_HASH, "transfer", [H(proxy), H(buyer), I(GAS), B(b"")], 1))], []])["script"]).hex()
+    c.check(batch_exit == 0 and batch_built["script"] == node_batch_script,
+            "the SDK batch script is byte-identical to the node's own assembler")
+    wallet_req, wallet_exit = build(dict(request, feePayerScope="CustomContracts",
+                                         feePayerAllowedContracts=[core, GAS_HASH]), "wallet")
+    if not wallet_req.get("ok"):
+        raise Fail(f"the SDK refused the browser-wallet signing request: {wallet_req.get('error')}")
+    c.check(wallet_exit == 0 and wallet_req["walletSignRequest"]["scope"] == "CustomContracts"
+            and wallet_req["feePayerSigner"]["allowedContracts"] == [core[2:].lower(), GAS_HASH[2:].lower()]
+            and wallet_req["signers"][0]["account"] == c.hashes[payer][2:].lower()
+            and wallet_req["signers"][1] == built["signers"][1],
+            "the SDK signing request expresses the throwaway fee payer in a custom scope")
+    c.check(built["signers"][0]["scopes"] == "CalledByEntry"
+            and built["signers"][0]["account"] == c.hashes[payer][2:].lower()
+            and [s["account"] for s in built["signers"]] == [c.hashes[payer][2:].lower(), built["proxyHash"]],
+            "the SDK transaction signs with exactly the fee payer and the proxy, in that order")
+    pscript = bytes.fromhex(built["proxyWitness"]["verificationScript"])
+    psig = {"proxy": proxy, "core": core, "target": GAS_HASH, "script": pscript}
+    before_buyer, before_payer, before_nonce = c.gas(buyer), c.gas(payer), x.nonce(account)
+    rec = c.send_params("broadcast the SDK-built proxy-witness transaction (throwaway key pays the fee)",
+                        [{"w": payer}, psig], core, "executeUserOp", [H(account), gas_op],
+                        script=base64.b64decode(built["scriptBase64"]), fixed_sysfee=3 * GAS, netfee=GAS)
+    c.check(rec["outcome"] == "HALT", "the SDK-built proxy-witness transaction HALTed and moved the signed amount")
+    c.check(c.gas(buyer) - before_buyer == GAS, "buyer received exactly 1 GAS from the AA proxy address")
+    c.check(c.gas(proxy) == 9 * GAS and c.gas(payer) < before_payer,
+            "proxy address paid exactly 1 GAS; the throwaway key paid the fees")
+    c.check(x.nonce(account) == before_nonce + 1, "nonce advanced")
+    c.records.append({"step": "AA-12 SDK-built proxy-witness transaction", "txid": rec.get("txid"),
+                      "vmstate": rec.get("outcome"), "gas": rec.get("gas"),
+                      "script": built["script"], "proxyScript": built["proxyWitness"]["verificationScript"],
+                      "signers": built["signers"], "walletSignRequest": built["walletSignRequest"]})
+
+    # The refusal half: an account the admin never scoped has no proxy-witness transaction at all.
+    unscoped, unscoped_proxy = x.register("sdk-proxy-unscoped")
+    c.send("fund the unscoped proxy address with 5 GAS", [{"w": "owner"}], GAS_HASH, "transfer",
+           [H(owner), H(unscoped_proxy), I(5 * GAS), B(b"")])
+    unscoped_before = (c.gas(unscoped_proxy), c.gas(payer), x.nonce(unscoped))
+    refused, refused_exit = build({
+        "rpcUrl": f"http://127.0.0.1:{c.port}", "core": core, "accountId": unscoped,
+        "target": GAS_HASH, "method": "transfer",
+        "args": [H(unscoped_proxy), H(buyer), I(GAS), {"type": "ByteArray", "value": "0x"}],
+        "nonce": "0", "deadline": FAR_DEADLINE, "signatureHex": "",
+        "feePayer": c.hashes[payer],
+    }, "refused")
+    c.check(refused_exit != 0 and refused.get("ok") is not True and refused.get("code") == "proxy_scope_target_required",
+            "the builder refuses when the account has no scope target")
+    c.check((c.gas(unscoped_proxy), c.gas(payer), x.nonce(unscoped)) == unscoped_before,
+            "the refused build moved neither balance nor nonce")
+    c.records.append({"step": "AA-12 the builder refuses an account with no scope target",
+                      "exit": refused_exit, "error": refused.get("error"), "code": refused.get("code")})
+    return {"sdkScript": built["script"], "proxyScript": built["proxyWitness"]["verificationScript"],
+            "signers": built["signers"], "walletSignRequest": built["walletSignRequest"],
+            "refused": refused, "refusedExit": refused_exit}
+
+
 def sc_timelock_boundaries(c, x):
     """AA-10 the 24 h configuration timelock and the 7 d escape timelock, observed on both sides of the
     boundary: the change is refused strictly before the on-chain deadline and executes at or after it, with
@@ -1151,6 +1272,7 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
         attempt("AA-03b value flow (session key + proxy witness + daily limit)", sc_value_flow, c, x)
         attempt("AA-08 on-chain paymaster", sc_paymaster, c, x)
         attempt("AA-11 SDK sponsored operation end to end", sc_sdk_sponsored, c, x)
+        attempt("AA-12 SDK proxy-witness transaction builder", sc_sdk_proxy_builder, c, x)
         attempt("AA-09 relay route", sc_relay_route, c, x)
         receipt["sdkSponsored"] = getattr(x, "sdkSponsored", None)
         receipt["status"] = "DONE"

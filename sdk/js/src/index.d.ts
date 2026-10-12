@@ -988,6 +988,93 @@ export function createProxyWitness(options: {
   witness: { invocationScript: string; verificationScript: string };
 };
 
+/** Thrown when the account has no verify-scope target: no proxy-witness transaction exists. */
+export declare const PROXY_SCOPE_TARGET_REQUIRED: string;
+
+/** The signer of the fee-paying wallet. Only custom scopes a wallet can express are accepted. */
+export type ProxyFeePayerScope = 'None' | 'CalledByEntry' | 'CustomContracts' | 'Global';
+
+export interface ProxySigner {
+  account: string;
+  scopes: 'WitnessRules';
+  rules: Array<{ action: 'Allow'; condition: {
+    type: 'Or'; expressions: Array<{ type: 'CalledByContract'; hash: string }>;
+  } }>;
+}
+
+export interface ProxyFeePayerSigner {
+  account: string;
+  scopes: ProxyFeePayerScope;
+  allowedContracts?: string[];
+}
+
+export interface ProxyWitness {
+  invocationScript: string;
+  verificationScript: string;
+}
+
+/**
+ * The complete proxy-witness account transaction. `script` is the shape-bound
+ * `executeUserOp`/`executeUserOps` call, `signers` is `[feePayer, proxy]` in that order, and
+ * `proxyWitness` is attached to the transaction after the fee payer has signed it.
+ */
+export interface ProxyWitnessTransaction {
+  readonly script: string;
+  readonly operation: 'executeUserOp' | 'executeUserOps';
+  readonly coreHash: string;
+  readonly accountId: string;
+  readonly scopeTarget: string;
+  readonly targetContract: string;
+  readonly proxyHash: string;
+  readonly proxySigner: ProxySigner;
+  readonly proxyWitness: ProxyWitness;
+  readonly feePayerSigner: ProxyFeePayerSigner;
+  readonly signers: readonly [ProxyFeePayerSigner, ProxySigner];
+  /** Alias of `proxyWitness`, for the transaction API's `addWitness`. */
+  readonly witness: ProxyWitness;
+}
+
+/**
+ * The one application call a proxy witness may authorize. Refuses every other entrypoint, a second
+ * call, another core or another account, so the emitted script is bound to its shape.
+ */
+export function buildExecuteUserOpScript(options: {
+  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation;
+}): string;
+
+/**
+ * Build the proxy-witness transaction. `scopeTarget` must be freshly read from the same core/RPC
+ * that submits the transaction; an absent or all-zero scope target is refused with
+ * `PROXY_SCOPE_TARGET_REQUIRED`. The proxy is never permitted to pay the enclosing fees.
+ */
+export function buildProxyWitnessTransaction(options: {
+  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation;
+  scopeTarget: Hash160 | null | undefined; expectedProxyHash?: Hash160;
+  feePayer: Hash160; feePayerScope?: ProxyFeePayerScope; feePayerAllowedContracts?: string[];
+}): ProxyWitnessTransaction;
+
+/**
+ * The browser-wallet signing path: the same transaction with the fee payer expressed in a custom
+ * scope (`CustomContracts` with an allowlist, or `Global`) that a wallet will accept. The proxy
+ * keeps its restricted WitnessRules and its witness is still attached by the dApp.
+ */
+export function buildProxyWalletSignRequest(options: {
+  transaction: ProxyWitnessTransaction;
+  scope?: ProxyFeePayerScope; allowedContracts?: string[];
+}): ProxyWitnessTransaction;
+
+/**
+ * Build the transaction from the account's on-chain scope state. `readState` is the only source of
+ * `scopeTarget` and `expectedProxyHash` and must read the same core/RPC that submits the
+ * transaction; neither value may be taken from request metadata. Injected so the relay, the wallet
+ * frontend and the local chain fixture all resolve this authority through one entry point.
+ */
+export function resolveProxyWitnessTransaction(options: {
+  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation; feePayer: Hash160;
+  readState: (request: { coreHash: string; accountId: string }) => Promise<{ scopeTarget?: Hash160 | null; expectedProxyHash?: Hash160 | null }>;
+  feePayerScope?: ProxyFeePayerScope; feePayerAllowedContracts?: string[];
+}): Promise<ProxyWitnessTransaction>;
+
 /** MultiSig config read from the bound verifier. configDigest pins order and threshold; no client claim of quorum. */
 export interface MultiSigContext {
   readonly version: 1;

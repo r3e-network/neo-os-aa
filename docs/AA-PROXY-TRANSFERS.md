@@ -8,9 +8,20 @@ The transaction has exactly one application call: `core.executeUserOp(accountId,
 
 Signer 0 is the fee-paying relay with `CalledByEntry`. Signer 1 is the derived proxy, with precisely one `Allow` rule containing `Or(CalledByContract(core), CalledByContract(configuredTarget))`. The proxy witness has an empty invocation script and a verification script consisting of `core.verify(accountId)`. The relay signature covers the complete transaction, including both signers, script and fees. Both witnesses are present during network-fee calculation and final serialization. The proxy is never permitted to pay the enclosing transaction's fees.
 
-The relay derives the script locally, compares its hash with `getProxyScriptHash(accountId)`, and reads `getVerifyScopeTarget(accountId)` from the selected core/RPC. The configured target must equal the token being transferred. Multiple proxy transfers within a batch must share that target. A scope change racing submission is rejected by transaction verification. Client-supplied signer or witness metadata is not used to construct this authority.
+The relay derives the script locally, compares its hash with `getProxyScriptHash(accountId)`, and reads `getVerifyScopeTarget(accountId)` from the selected core/RPC. The configured target must equal the token being transferred. Every operation in a batch must name that same target. A scope change racing submission is rejected by transaction verification. Client-supplied signer or witness metadata is not used to construct this authority.
 
-The SDK exports `createProxyVerificationScript` and `createProxyWitness` using display-order Hash160 inputs. `createProxyWitness` requires the caller to supply the freshly read scope target and the separate fee payer; `expectedProxyHash` enables comparison with the core's readback.
+## The SDK builder
+
+The whole transaction is assembled in one place, `shared/proxyWitness.mjs`, and the relay route and the wallet frontend both call it:
+
+- `buildExecuteUserOpScript({ coreHash, accountId, invocation })` emits the shape-bound script. It refuses every entrypoint other than `executeUserOp`/`executeUserOps`, a wrong core, a wrong account, a wrong argument count and an empty batch, so the bytes it produces can only be the one application call. Its Neo VM push encoder is pinned by test to be byte-identical to the node's own assembler (`neon-js sc.createScript`) for single, batch and nested-argument invocations.
+- `buildProxyWitnessTransaction({ coreHash, accountId, invocation, scopeTarget, expectedProxyHash, feePayer, … })` returns the script, the fee-payer signer, the restricted `WitnessRules` proxy signer and the proxy verification witness, in that signer order. It refuses an absent or all-zero `scopeTarget` with `PROXY_SCOPE_TARGET_REQUIRED`, a scope target that is the core, a scope target that is not the transferred token, mixed targets in a batch, and a fee payer that is the proxy.
+- `resolveProxyWitnessTransaction({ …, readState })` performs the same build after reading `scopeTarget` and `expectedProxyHash` through an injected reader. The reader must be the submitting core/RPC; no caller can pass those two values in from request metadata.
+- `buildProxyWalletSignRequest({ transaction, scope, allowedContracts })` is the browser-wallet signing path. It re-expresses the fee payer in a custom scope — `CustomContracts` with an explicit allowlist, or `Global` — while the proxy keeps its restricted rules and its witness.
+
+`sdk/js/src/proxyWitness.js` re-exports the module, so the SDK carries the same builder. The frontend vendors a byte-identical copy under `frontend/src/shared/` (enforced by `frontend/tests/transferOutcomeShared.test.js`).
+
+The local-chain scenario `AA-12` drives this builder end to end on the deployed core: a throwaway key that is not the contract admin registers an account, pays the fee and moves exactly 1 GAS out of the account's proxy address from a transaction the SDK built, and the same builder refuses an account the admin never scoped before any transaction exists. The receipt records the built script, both signers and the wallet signing request.
 
 ## Fee estimation
 
@@ -30,7 +41,7 @@ Direct proxy transfers can still use an off-chain relay sponsorship policy: the 
 
 ## Wallet behavior and acceptance
 
-The NEP-17 preset can stage a proxy transfer in relay mode. The staged operation records that a proxy witness is required. Ordinary wallet invoke APIs cannot attach this verification script, so client mode remains refused; imported drafts receive the same check at client broadcast. A relay without the feature enabled retains its previous behavior and refuses a standard token transfer that lacks a valid witness.
+The NEP-17 preset can stage a proxy transfer in relay mode. The staged operation records that a proxy witness is required. The client path now builds the complete proxy-witness transaction with the SDK builder (`buildClientProxyWitnessTransaction`) and carries its custom-scope wallet signing request, so a wallet that signs a built transaction can complete the move: the dApp asks the wallet to sign the transaction as the fee payer and attaches the proxy verification witness itself. Ordinary wallet `invoke` APIs broadcast their own transaction and cannot carry a verification script they did not create, so `executeBroadcast` still refuses to send through such a wallet rather than submit a transfer that would return false and still burn the fee; imported drafts receive the same check at client broadcast. The wallet end-to-end path (a wallet shim on the local chain) is tracked separately. A relay without the feature enabled retains its previous behavior and refuses a standard token transfer that lacks a valid witness.
 
 The configured scope remains an administrator-managed prerequisite. This change does not make arbitrary accounts self-service for scope configuration or activate a native SmartAccount profile.
 

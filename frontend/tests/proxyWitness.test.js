@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import { resolveProxyTransferWitness } from '../api/proxyWitness.js';
+import { buildClientProxyWitnessTransaction, buildClientBroadcastRequest } from '../src/features/operations/execution.js';
 import { buildOperationFromPreset } from '../src/features/operations/presets.js';
 import { post, withRelay, relayAccount } from './fixtures/relayHarness.js';
 import { CORE_HASH, GAS_HASH, BUYER_HASH } from './fixtures/aaChainFixtures.js';
 const require = createRequire(new URL('../../sdk/js/package.json', import.meta.url));
 const { tx, sc, wallet } = require('@cityofzion/neon-js');
-const { createProxyWitness } = require('../../sdk/js/src/proxyWitness.js');
+const sdk = require('../../sdk/js/src/proxyWitness.js');
+const { createProxyWitness, buildProxyWitnessTransaction, buildProxyWalletSignRequest } = sdk;
 const accountId = 'ab'.repeat(20);
 const core = CORE_HASH.replace(/^0x/, '');
 const target = GAS_HASH.replace(/^0x/, '');
@@ -30,7 +32,14 @@ test('resolver derives immutable proxy signer and rejects unconfigured/mismatche
   const calls = [];
   const rpcClient = { async invokeFunction(hash, method) { calls.push([hash, method]); return hashResult(method === 'getProxyScriptHash' ? proxy : target); } };
   const options = { invocation: invocation(), feePayer: relayAccount.scriptHash, rpcClient, sc, enabled: true };
-  assert.deepEqual(await resolveProxyTransferWitness(options), expected);
+  // The relay adapter is the SDK builder: the same invocation, the same scope readback, one authority.
+  const sdkTransaction = buildProxyWitnessTransaction({
+    coreHash: core, accountId, invocation: invocation(), scopeTarget: target, expectedProxyHash: proxy,
+    feePayer: relayAccount.scriptHash,
+  });
+  assert.deepEqual(await resolveProxyTransferWitness(options), sdkTransaction);
+  assert.deepEqual(sdkTransaction.proxySigner, expected.signer);
+  assert.deepEqual(sdkTransaction.proxyWitness, expected.witness);
   assert.deepEqual(calls.map((item) => item[1]), ['getProxyScriptHash', 'getVerifyScopeTarget']);
   await assert.rejects(resolveProxyTransferWitness({ ...options, invocation: invocation(true) }), /Sponsored proxy transfers are not supported/);
   for (const badScope of ['0'.repeat(40), 'dd'.repeat(20)]) {
@@ -38,6 +47,49 @@ test('resolver derives immutable proxy signer and rejects unconfigured/mismatche
   }
   await assert.rejects(resolveProxyTransferWitness({ ...options, rpcClient: { async invokeFunction() { return hashResult('cc'.repeat(20)); } } }), /scope|proxy/i);
   assert.equal(await resolveProxyTransferWitness({ ...options, enabled: false }), null);
+});
+
+test('the frontend client path builds the same transaction and the custom-scope wallet request', async () => {
+  const inv = invocation();
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    return { async json() { return { jsonrpc: '2.0', id: 1, result: hashResult(body.params[1] === 'getProxyScriptHash' ? proxy : target) }; } };
+  };
+  const built = await buildClientProxyWitnessTransaction({
+    invocation: inv, feePayer: relayAccount.scriptHash, rpcUrl: 'http://127.0.0.1:1', fetchImpl,
+  });
+  assert.deepEqual(built, buildProxyWalletSignRequest({
+    transaction: buildProxyWitnessTransaction({
+      coreHash: core, accountId, invocation: inv, scopeTarget: target, expectedProxyHash: proxy,
+      feePayer: relayAccount.scriptHash,
+    }),
+    scope: 'CustomContracts', allowedContracts: [core, target],
+  }));
+  assert.equal(built.feePayerSigner.scopes, 'CustomContracts');
+  assert.deepEqual(built.feePayerSigner.allowedContracts, [core, target]);
+  assert.deepEqual(built.proxySigner, expected.signer);
+
+  // A client broadcast carries the builder's script, both signers and the proxy witness.
+  const body = {
+    requiresProxyWitness: true,
+    accountAddressScriptHash: proxy,
+    clientInvocation: inv,
+  };
+  const request = buildClientBroadcastRequest({ signerAddress: relayAccount.scriptHash, transactionBody: body, proxyWitnessTransaction: built });
+  assert.equal(request.script, built.script);
+  assert.deepEqual(request.signers, [...built.signers]);
+  assert.deepEqual(request.proxyWitness, built.proxyWitness);
+  assert.equal(request.walletSignRequest.scope, 'CustomContracts');
+  assert.throws(() => buildClientBroadcastRequest({ signerAddress: relayAccount.scriptHash, transactionBody: body }), /proxy witness/);
+
+  // No scope target on chain: the builder refuses and the client path does not broadcast.
+  await assert.rejects(
+    buildClientProxyWitnessTransaction({
+      invocation: inv, feePayer: relayAccount.scriptHash, rpcUrl: 'http://127.0.0.1:1',
+      fetchImpl: async () => ({ async json() { return { jsonrpc: '2.0', id: 1, result: hashResult('0'.repeat(40)) }; } }),
+    }),
+    /scope/i,
+  );
 });
 
 test('proxy NEP-17 preset is available only for relay and preserves required-witness marker', () => {

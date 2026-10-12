@@ -1,8 +1,8 @@
 {
   "variant": "deployed",
   "totals": {
-    "checks": 129,
-    "executedTransactions": 88,
+    "checks": 143,
+    "executedTransactions": 95,
     "simulatedFaults": 30,
     "nodeRefusals": 6
   },
@@ -228,6 +228,25 @@
         "the relay is made whole on the allowed side of the bound",
         "the SDK refuses a zero reimbursement request",
         "the SDK refuses a negative reimbursement request"
+      ]
+    },
+    {
+      "name": "AA-12 SDK proxy-witness transaction builder",
+      "checks": [
+        "proxy address holds 10 GAS",
+        "scope target recorded",
+        "the SDK builder derives the proxy script and the core agrees",
+        "the SDK's proxy signer carries the single restricted rule the node verifies",
+        "the SDK script is byte-identical to the node's own assembler",
+        "the SDK batch script is byte-identical to the node's own assembler",
+        "the SDK signing request expresses the throwaway fee payer in a custom scope",
+        "the SDK transaction signs with exactly the fee payer and the proxy, in that order",
+        "the SDK-built proxy-witness transaction HALTed and moved the signed amount",
+        "buyer received exactly 1 GAS from the AA proxy address",
+        "proxy address paid exactly 1 GAS; the throwaway key paid the fees",
+        "nonce advanced",
+        "the builder refuses when the account has no scope target",
+        "the refused build moved neither balance nor nonce"
       ]
     },
     {
