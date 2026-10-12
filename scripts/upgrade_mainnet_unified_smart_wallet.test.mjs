@@ -33,9 +33,10 @@ test("mainnet candidate removes the instant admin transfer surface", () => {
   const artifact = script.candidateArtifact();
   assert.equal(script.REMOVED_METHODS.includes("transferAdmin"), true);
   assert.equal(artifact.methodCount > 0, true);
-  // The current public build includes the two pending-update read methods and
-  // the existing child-dispatch surface. Keep this explicit so a stale artifact
-  // cannot silently pass the release check.
+  // The public candidate remains the checked-in 92-method build. The ordinary
+  // source track compiles two additive pending-update reads locally, but those
+  // source-only methods are not a release artifact until their deployment review
+  // publishes a new manifest.
   assert.equal(artifact.methodCount, 92);
   const manifest = JSON.parse(artifact.manifestText);
   const childConfiguration = manifest.abi.methods.find((method) => method.name === 'callVerifierChild');

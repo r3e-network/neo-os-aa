@@ -57,7 +57,28 @@ const CURRENT_DOCS = [
   'frontend/src/assets/docs/mixed-multisig.md',
   'frontend/src/assets/docs/architecture.md',
   'docs/PLUGIN_DEVELOPER_GUIDE.md',
+  // The ordinary-account delivery track has a source-level ABI extension whose
+  // compatibility note intentionally distinguishes newly compiled artifacts
+  // from older public deployments. Keep these current workflow documents out
+  // of the historical dead-entrypoint ratchet.
+  'docs/ORDINARY_ACCOUNT_WORKSPACE.md',
+  'docs/PENDING_CONFIG_UPDATE_READ_ABI.md',
 ];
+
+// The ordinary delivery track has two additive reads in source that are deliberately not copied
+// into contracts/build until a release/deployment review publishes the new artifact. Keep this
+// allowlist file-scoped and caveat-scoped: it is an explicit source-versus-deployment boundary,
+// not a general exemption for undocumented or unshipped entrypoints.
+const SOURCE_ONLY_ORDINARY_READS = new Map([
+  ['docs/ORDINARY_ACCOUNT_WORKSPACE.md', {
+    names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
+    caveat: /旧部署只提供存在性和成熟时间|完整审阅需要部署/i,
+  }],
+  ['docs/PENDING_CONFIG_UPDATE_READ_ABI.md', {
+    names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
+    caveat: /newly compiled source|Existing deployments|not evidence of a deployed upgrade/i,
+  }],
+]);
 
 // A snapshot audit: its method names are the ones that existed when it was written, so it is not
 // held to the current ABI, but its VULN-001 status must still agree with the deployed artifact and
@@ -779,6 +800,13 @@ function failures() {
         if (deployedAbi.has(name)) continue;
         if (deployedAbiLower.has(name.toLowerCase())) {
           problems.push(`${where}: ${name} is not a deployed ABI name; the artifact spells it ${deployedAbiLower.get(name.toLowerCase())}`);
+          continue;
+        }
+        const sourceOnly = SOURCE_ONLY_ORDINARY_READS.get(file);
+        if (sourceOnly?.names.has(name)) {
+          if (!sourceOnly.caveat.test(read(file))) {
+            problems.push(`${where}: ${name} is source-only in the ordinary track but the document does not disclose the unshipped-artifact boundary`);
+          }
           continue;
         }
         if (definedNames.has(name)) continue;
