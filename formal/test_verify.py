@@ -18,6 +18,10 @@ class VerificationGateTests(unittest.TestCase):
     def test_current_ordinary_receipt_is_tracked_and_source_bound(self):
         receipt_path = verify.ROOT.parent / 'docs/reports/aa-formal-ordinary-go-20261013.json'
         self.assertTrue(receipt_path.exists())
+        self.assertEqual(
+            'a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21',
+            hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+        )
         receipt = json.loads(receipt_path.read_text())
         self.assertTrue(receipt['modelChecksPassed'])
         self.assertFalse(receipt['implementationVerified'])
