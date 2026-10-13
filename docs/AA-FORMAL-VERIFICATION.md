@@ -5,16 +5,16 @@
 ### Current host gate (2026-10-13)
 
 The current repository source and model snapshot passes the host formal gate:
-**26 Coq modules, 446 closed declarations, 247 rejected semantic mutations,
+**27 Coq modules, 460 closed declarations, 258 rejected semantic mutations,
 61,460 TLC distinct states, six SMT obligations and six controls**, with the
-native core roster checked at 310 exact source files. The current-head receipt is
-`formal/.runs/current-head-20261013/result.json` (SHA-256
-`4225e5fe069c88f63f5dfb89903ef78bfcca51b7435fe49ea0df03cb46698e7f`). It ran
+native core roster checked at 310 exact source files. The current ordinary-governance
+receipt is `formal/.runs/ordinary-go-20261013/result.json` (SHA-256
+`a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21`). It ran
 with OpenJDK 26.0.2.1 and is the source-bound evidence for this repository head.
 The earlier receipt `formal/.runs/final-20261013-platform/result.json` (SHA-256
-`f1b0f876b9219bf4cab19f3da6beeaaed8ef50756564eb9e52b75389b7dcf887`) has the
-same model/source results but ran with OpenJDK 17.0.20.1; retain it only as
-historical Java 17-equivalent evidence, not as the current-head receipt. The
+`f1b0f876b9219bf4cab19f3da6beeaaed8ef50756564eb9e52b75389b7dcf887`) covers
+the preceding model/source snapshot and ran with OpenJDK 17.0.20.1; retain it
+only as historical Java 17-equivalent evidence, not as the current-head receipt. The
 formal model gate is **GO** for its declared abstractions. It deliberately
 retains `implementationVerified: false`: these models do not prove C# to NEF to
 NeoVM refinement, complete VM fee accounting, arbitrary plugin liveness, or
@@ -29,6 +29,13 @@ proposal/confirmation/cancellation path with a new-owner witness, but closing
 the public boundary requires an ABI migration from the pinned 90-entry artifact
 to the reviewed 98-entry source candidate, an upgraded artifact, and public
 readback; this repository does not relabel it as closed based on static tests.
+
+The ordinary source candidate now has an explicit Coq governance model
+(`OrdinaryGovernance.v`) covering registrar and owner authorization, duplicate
+pending proposals, seven-day confirmation delay, new-owner witness, escape and
+escrow exclusion, cancellation, boundary cleanup, and failed-transition
+atomicity. This is a bounded state-machine correspondence model; it does not
+prove storage serialization, C# to NEF/NeoVM refinement, or public deployment.
 
 ### ABI 2 convergence boundary
 

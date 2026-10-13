@@ -15,6 +15,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent
 ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
              "coq/ProxyWitnessScript.v",
+             "coq/OrdinaryGovernance.v",
              "coq/CallbackPluginTopology.v", "coq/VerifierGasBudget.v",
              "coq/AuthorizationEvidence.v", "coq/WitnessRuleSemantics.v",
              "coq/NeoVmCallSubset.v", "coq/AttestationProofBinding.v",
@@ -42,6 +43,7 @@ RUNTIME_PROFILES = {
                "verifierBudgetDatoshi": 100000000, "hookBudgetDatoshi": 250000000},
 }
 PUBLIC_MODELS = {"coq/UnifiedSmartWalletAA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
+                 "coq/OrdinaryGovernance.v",
                  "tla/UnifiedSmartWalletAA.tla", "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
 MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
                          ["v3", "platform"] if name in PUBLIC_MODELS else ["native"])
@@ -62,6 +64,7 @@ SOURCE_FILES = {"contracts/compile.sh", "contracts/UnifiedSmartWallet.csproj",
                 "contracts/UnifiedSmartWallet.VerifierChildren.cs",
                 "contracts/UnifiedSmartWallet.Execution.cs",
                 "contracts/UnifiedSmartWallet.Accounts.cs",
+                "contracts/UnifiedSmartWallet.PlatformRegistrar.cs",
                 "contracts/UnifiedSmartWallet.Internal.cs",
                 "contracts/UnifiedSmartWallet.Models.cs",
                 "contracts/UnifiedSmartWallet.State.cs",
@@ -190,6 +193,45 @@ CALLBACK_PLUGIN_COQ_MUTATIONS = {
     "topology-all-children-leaf": (
         "forallb (fun child => negb (composite child)) children.",
         "true."),
+}
+ORDINARY_GOVERNANCE_COQ_MUTATIONS = {
+    # These mutations remove one source-candidate owner-rotation invariant.
+    # The model is a bounded state machine: registrar identity, witnesses,
+    # time, binding and escrow state are explicit abstract inputs; storage and
+    # C# to NEF/NeoVM refinement remain outside this proof.
+    "proposal-registrar-binding": (
+        "if registrar_is_current state caller && valid_owner new_owner &&\n     pending_is_empty",
+        "if true && valid_owner new_owner &&\n     pending_is_empty"),
+    "proposal-no-duplicate-pending": (
+        "     pending_is_empty state && negb (Nat.eqb new_owner (platform_owner state)) &&\n     negb (escape_active",
+        "     true && negb (Nat.eqb new_owner (platform_owner state)) &&\n     negb (escape_active"),
+    "proposal-no-escape": (
+        "     negb (escape_active state) && negb (escrow_active state)\n  then Some",
+        "     true && negb (escrow_active state)\n  then Some"),
+    "proposal-no-escrow": (
+        "     negb (escape_active state) && negb (escrow_active state)\n  then Some",
+        "     negb (escape_active state) && true\n  then Some"),
+    "confirmation-delay": (
+        "Nat.leb (pending_at state + min_upgrade_delay) now && new_owner_witness &&",
+        "true && new_owner_witness &&"),
+    "confirmation-witness": (
+        "&& new_owner_witness &&\n  valid_owner pending &&",
+        "&& true &&\n  valid_owner pending &&"),
+    "confirmation-registrar-binding": (
+        "registrar_is_current state caller &&\n  Nat.leb",
+        "true &&\n  Nat.leb"),
+    "cancellation-authorization": (
+        "if registrar_is_current state caller || owner_is_current state caller owner_witness\n  then",
+        "if true\n  then"),
+    "boundary-clears-pending": (
+        "Definition clear_pending_on_boundary (state : GovernanceState) : GovernanceState :=\n  mkGovernanceState\n    (registrar state) (platform_owner state) None 0\n    (escape_active state)",
+        "Definition clear_pending_on_boundary (state : GovernanceState) : GovernanceState :=\n  mkGovernanceState\n    (registrar state) (platform_owner state) (pending_owner state) (pending_at state)\n    (escape_active state)"),
+    "confirmation-retains-pending": (
+        "(registrar state) new_owner None 0\n        (escape_active state)",
+        "(registrar state) new_owner (Some new_owner) 0\n        (escape_active state)"),
+    "proposal-failure-commits": (
+        "| None => state\n  end.\n\nDefinition apply_confirmation",
+        "| None => clear_pending_on_boundary state\n  end.\n\nDefinition apply_confirmation"),
 }
 VERIFIER_GAS_BUDGET_COQ_MUTATIONS = {
     # These mutations remove the concrete budget obligations.  They must make
@@ -629,6 +671,7 @@ COQ_MODULES = {
     "NativeDailyPolicy.v": NATIVE_DAILY_COQ_MUTATIONS,
     "NativeSessionPolicy.v": NATIVE_SESSION_COQ_MUTATIONS,
     "UnifiedSmartWalletAA.v": COQ_MUTATIONS,
+    "OrdinaryGovernance.v": ORDINARY_GOVERNANCE_COQ_MUTATIONS,
     "MultiSigPolicy.v": MULTISIG_COQ_MUTATIONS,
     "ProxyWitnessScript.v": PROXY_WITNESS_COQ_MUTATIONS,
     "CallbackPluginTopology.v": CALLBACK_PLUGIN_COQ_MUTATIONS,

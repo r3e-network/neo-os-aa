@@ -51,12 +51,13 @@
     "docs/proposals/smartaccount-native-profile-v2-vectors.json": "b934135041e7224fa4b53afe1f55bd2489a7d78d8c049807abf4b27b09d9ae92",
     "docs/proposals/validate-native-smartaccount-profile.py": "49c9d844430681e26682d155a0ba7ae53f2e2c293a92f5af05f59e4a98f39106",
     "formal/verify-in-docker.sh": "c2e99bdc5329ed7b525b04682354cfbe99f9a25fc5a7faf0aa0e681e40af418f",
-    "formal/verify.py": "6041b08be48ca30dddfddbf7f5304f50e02a2cced2aa8524c0b0390f6af33065",
+    "formal/verify.py": "f8729b1f2f45c50cc29542f8aeb25d20887b2f77e8c4908ded79c3d790fda205",
     "nuget.config": "d03316715c5c46428149533dbd994d81a9fcdf97c8981a05083113523db82797",
     "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
     "scripts/check_neo_platform_packages.mjs": "3e59f2002a67fdf8ffb995834f707e984ce3260628521348b09754362bb9ba30",
     "scripts/native_module_profile.py": "6e44912a208d9f4dd45b64de808bb4a25d183b488656e3c4bdf38f458bd2aafa",
-    "scripts/verify_repo.sh": "242f6a16c8a38702961d568bc39b8c5001a32fa147977b72803ff0a1742b075f"
+    "scripts/verify_repo.sh": "242f6a16c8a38702961d568bc39b8c5001a32fa147977b72803ff0a1742b075f",
+    "contracts/UnifiedSmartWallet.PlatformRegistrar.cs": "c524c6db9682caa5e18b3e26f66ffc2430ddf733416af81a7212ecfeb6e9b098"
   },
   "nativeCoreSources": {
     "src/Directory.Build.props": "b6cb09e9b9112c2ff2007cad2e387edaa5cb85fc4094dfb70fbf37bd96a02c50",
@@ -487,6 +488,10 @@
       "platform"
     ],
     "tla/UnifiedSmartWalletAA.tla": [
+      "v3",
+      "platform"
+    ],
+    "coq/OrdinaryGovernance.v": [
       "v3",
       "platform"
     ]

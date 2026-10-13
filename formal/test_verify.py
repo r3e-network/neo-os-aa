@@ -131,6 +131,26 @@ class VerificationGateTests(unittest.TestCase):
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeIntegerDomain.v"])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/PluginLifecycle.v"])
 
+    def test_ordinary_governance_model_is_registered_and_scoped(self):
+        self.assertIn('coq/OrdinaryGovernance.v', verify.ARTIFACTS)
+        model = (verify.ROOT / 'coq' / 'OrdinaryGovernance.v').read_text()
+        for theorem in (
+            'OG_001_proposal_requires_current_registrar_and_valid_owner',
+            'OG_002_duplicate_pending_proposal_is_rejected',
+            'OG_003_confirm_requires_delay_and_new_owner_witness',
+            'OG_004_confirm_before_delay_preserves_state',
+            'OG_005_cancel_requires_registrar_or_current_owner',
+            'OG_006_unauthorized_cancel_preserves_state',
+            'OG_007_boundary_clears_pending_rotation',
+            'OG_011_successful_confirmation_clears_pending_and_sets_owner',
+            'OG_012_successful_proposal_records_pending_owner_and_time',
+            'OG_013_successful_confirmation_requires_current_registrar',
+            'OG_014_successful_proposal_requires_no_escape_or_escrow'):
+            self.assertIn(theorem, verify.coq_declarations(model))
+        self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinaryGovernance.v'])
+        self.assertIn('contracts/UnifiedSmartWallet.PlatformRegistrar.cs', verify.SOURCE_FILES)
+        self.assertEqual(11, len(verify.COQ_MODULES['OrdinaryGovernance.v']))
+
     def test_native_core_provenance_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             core = Path(directory)
