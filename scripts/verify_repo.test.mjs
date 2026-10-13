@@ -19,15 +19,26 @@ function dispatch(t, args = [], failMatch = '', envOverrides = {}) {
     fs.writeFileSync(path.join(root, 'commands', command), stub, { mode: 0o755 });
   }
   fs.writeFileSync(path.join(root, 'contracts/compile.sh'), '#!/bin/bash\nprintf "compile-public\\n" >> "$VERIFY_TRACE"\n');
+  // This is a command-dispatch fixture, not a checkout of the real dependencies.
+  // Start from a small environment instead of inheriting release-mode paths,
+  // BASH_ENV or tool configuration from the gate that is running these tests.
+  // Report redirections still execute in bash, so ROOT_DIR, HOME and TMPDIR must
+  // all resolve inside the fixture even though node/python/dotnet/npm are stubs.
   const result = spawnSync('bash', [path.join(root, 'scripts/verify_repo.sh'), ...args], {
     cwd: root, encoding: 'utf8',
-    env: { ...process.env, PATH: `${path.join(root, 'commands')}:${process.env.PATH}`,
+    env: { PATH: `${path.join(root, 'commands')}:${process.env.PATH}`, HOME: root, TMPDIR: root,
+      LANG: 'C',
       VERIFY_TRACE: trace, VERIFY_FAIL_MATCH: failMatch,
       NEOOS_NATIVE_EPOCH_RECEIPT: path.join(root, 'native.json'),
+      NEOOS_SERVICES_CONTRACT_BUILD: path.join(root, 'missing-services/contracts/build'),
+      MORPHEUS_ORACLE_ROOT: path.join(root, 'missing-services'),
+      NEOOS_NEOXP: path.join(root, 'published-neoxp'),
+      NEOXP: path.join(root, 'published-neoxp'),
       NEOOS_REQUIRE_FORMAL: '0', NEOOS_REQUIRE_NEOEXPRESS: '0', NEOOS_REQUIRE_SERVICES_ARTIFACTS: '0', NEOOS_REQUIRE_COMPLETE: '0',
       ...envOverrides },
   });
-  return { ...result, trace: fs.existsSync(trace) ? fs.readFileSync(trace, 'utf8') : '' };
+  return { ...result, root, reportDir: path.join(root, 'docs/reports'),
+    trace: fs.existsSync(trace) ? fs.readFileSync(trace, 'utf8') : '' };
 }
 
 test('ordinary is the default and never selects native package or runtime gates', (t) => {
@@ -69,6 +80,24 @@ test('ordinary NeoExpress selects public source acceptance and its bounded evide
   assert.match(result.stdout, /eight deployed modules/);
   assert.match(result.stdout, /unselected PLATFORM matrix: NOT RUN/);
   assert.match(result.stdout, /notRun=cross-repo,formal\./);
+});
+
+test('stubbed NeoExpress report redirections stay in the temporary checkout', (t) => {
+  const repoReports = new URL('../docs/reports/', import.meta.url);
+  const snapshot = () => Object.fromEntries(fs.readdirSync(repoReports).sort().map((name) => {
+    const stat = fs.statSync(new URL(name, repoReports));
+    return [name, { size: stat.size, mtimeMs: stat.mtimeMs }];
+  }));
+  const before = snapshot();
+  const result = dispatch(t, ['--contracts-only', '--neoexpress']);
+  assert.equal(result.status, 0, result.stderr);
+  const reports = fs.readdirSync(result.reportDir).sort();
+  assert.equal(reports.length, 2, 'only the two shell-redirected stub reports exist');
+  assert.match(reports[0], /^aa-artifact-reproducibility-\d{8}\.json$/);
+  assert.match(reports[1], /^aa-ordinary-runtime-provenance-\d{8}\.json$/);
+  assert.ok(reports.every((name) => fs.statSync(path.join(result.reportDir, name)).size === 0));
+  assert.match(result.trace, new RegExp(result.reportDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.deepEqual(snapshot(), before, 'real repository reports must not be created or overwritten');
 });
 
 test('source-chain and provenance failures stop before a success status', (t) => {
