@@ -54,9 +54,9 @@ the network's global Verification budget.
 | Daily limits | Fixed-window accounting and actual net debit, including targets returning false or zero | Token `balanceOf` is a trust dependency; this is not a per-asset universal balance oracle |
 | Subscription transfers | Positive amount and successful NEP-17 outcome before consuming a period | Generic non-transfer targets retain their documented return semantics |
 | Direct proxy transfer | Derived witness, core scope readback and explicit bounded fee reserve | Relay mode and administrator-configured scope; ordinary wallet invoke APIs cannot add this witness |
-| Sponsored execution | Existing policy-checked paymaster execution for supported operations | Sponsored proxy witnesses are refused; arbitrary settlement must not inherit proxy asset authority |
+| Sponsored execution | Policy-checked settlement with a shared transaction reimbursement ceiling in each core | Sponsored proxy witnesses are refused; arbitrary settlement must not inherit proxy asset authority |
 | Operator key recovery | Durable browser key storage and passphrase-encrypted backup | Import requires the draft's already-pinned public key; a link alone cannot replace it |
-| Backup-owner escape | Timelock, owner witness, replacement ABI validation and atomic cleanup | A faulting old plugin can block finalization; native authority-epoch recovery is a different profile |
+| Backup-owner escape | Timelock and owner witness; ordinary cleanup-based finalization or callback-free permanent owner-only recovery | Owner-only recovery cannot be undone or reinstall plugins; escrow, external approvals and plugin-held funds remain separate |
 
 ## Plugin names are not full product guarantees
 
@@ -94,3 +94,20 @@ Before a public rollout, compare every deployed artifact and authorization bindi
 with the reviewed source; exercise account creation, configuration, transfer,
 failure rollback, recovery and fee settlement on the intended runtime. User wallet
 signing and public-chain deployment are separate operational steps.
+
+## Current source: permanent owner-only recovery
+
+After the escape delay, `finalizeEscapeToOwner(accountId)` detaches both plugin
+roots without calling either plugin. The independent owner-only recovery state
+is permanent: the same account cannot install a verifier or hook again, including
+through a new composite root, old pending update, market transfer or platform
+backup-owner rotation. Identity, asset address and nonce history remain intact.
+The backup owner authorizes subsequent operations through the ordinary fallback.
+
+Use ordinary `finalizeEscape` when plugin cleanup works and continued plugin use
+is required. Owner-only recovery is the alternative when cleanup cannot complete.
+Neither route bypasses an active market escrow. Owner-only recovery does not
+erase old plugin storage, refund plugin-held funds, revoke token allowances, or
+remove an independent contract upgrade administrator. These additions are source
+candidate capabilities; integrations must discover the selected deployment ABI
+and read the chain state before exposing them.

@@ -16,6 +16,9 @@ transaction script, covering custody fallback and native transaction witnesses;
 operation-signature preimages also bind them. Prior-generation
 keys or signatures cannot be restored by reinstalling a module. This is distinct
 from ordinary `finalizeEscape`, whose old-module cleanup can still fail closed.
+The current source additionally offers callback-free `finalizeEscapeToOwner`,
+which permanently disables all plugin installation for that account; it does
+not provide native epoch-module reinstallation.
 The normative rules are in `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`.
 The amended native composite path uses a core-owned, single-operation receipt:
 only the first threshold of valid children obtains post-execution authority.
@@ -233,7 +236,7 @@ branch coverage remain outside the demonstrated scope.
 | --- | --- | --- |
 | **L1 fallback** | Backup owner native witness | Verifier failure recovery |
 | **Delayed takeover** | Escape timelock (7-90 days) | Immediate takeover prevented |
-| **Activity cancellation** | Normal ops cancel escape | Stolen wallet can't quietly takeover |
+| **Activity cancellation** | Only a successful operation with the current BackupOwner witness cancels escape | Verifier-only operations cannot cancel recovery |
 | **Auditability** | Escape events logged | Recovery attempts visible |
 
 ---
@@ -330,7 +333,9 @@ back target writes and nonce state on that fault; transaction fees remain charge
    recovery owner, consumed action nullifiers retained as replay protection). The recovery verifier
    artifacts recorded as deployed on TestNet and MainNet predate this method, so an account bound to
    a deployed instance cannot rotate away from it, finalize an escape or be sold until that instance
-   is upgraded through its timelocked `proposeUpdate`/`update` path.
+   is upgraded through its timelocked `proposeUpdate`/`update` path. On the newer
+   core candidate, callback-free permanent owner-only recovery provides an alternative
+   for regaining account execution; it does not refund credits retained by the old plugin.
 3. **Session Key Revocation:** *(DEFINED)* Revocation is effective at canonical transaction execution order; a later validation sees no active key, and `SessionKeyRevoked` is emitted. No protocol component promises mempool cancellation or retroactive invalidation of an operation already executed earlier in the chain.
 4. **Transfer-Source Metering:** A virtual account's assets live at the core-derived proxy script
    hash (`getProxyScriptHash(accountId)`), never at the `accountId`. A verifier or hook that pins or
@@ -516,28 +521,23 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 | **Network Isolation** | Testnet/Mainnet separation |
 | **Reason Disclosure** | Explain rejections to users |
 
-**Reimbursement cap and fee estimation:** For a fee-bearing transaction,
-`executeSponsoredUserOp` and its batch variant settle
-`min(requested reimbursement, transaction.SystemFee + transaction.NetworkFee)`.
-The policy's `MaxPerOp`, daily budget and total budget apply to that settled amount.
-A transaction fee above `MaxPerOp` does not by itself cause rejection: for example,
-fees of 150 datoshi, a request of 70 and a limit of 100 settle 70. A settled amount
-above the limit faults atomically, reverting the deposit and nonce changes.
-The relay pays any fee portion that the sponsor does not reimburse.
+**Reimbursement cap and fee estimation:** For fee-bearing transactions, each
+core keeps one bounded `(transaction hash, reserved amount)` record. Every
+sponsored single or batch entry reserves
+`min(request, max(transaction.SystemFee + transaction.NetworkFee - reserved, 0))`
+before any external call, and rejects a zero result. Sequential, nested and
+cross-account/paymaster entries therefore share one fee ceiling within that core.
+A different transaction hash resets the record; any application fault rolls back
+the reservation together with balances and nonce changes. Independent core
+deployments do not share this ledger. The paymaster's per-operation, daily and
+total limits apply additionally to the settled amount.
 
-A container whose
-fees are both zero can only be an `invokescript`/`invokefunction` estimation (a persisted
-transaction must pay for its consumed gas and for witness verification), so that container
-caps at the requested amount, the largest amount the chain could settle; every transaction
-that reaches a block is capped by its real fees. The cap is computed without a branch so the
-estimation and the persisted transaction execute the same instruction sequence, and the
-private-chain validation asserts that the estimate equals the persisted gas to the datoshi.
-Both were found on a private NeoExpress chain: the original cap faulted the estimation with
-"Reimbursement exceeds actual gas cost", and an early-return fix under-estimated the system fee
-by the instructions it skipped, so the persisted transaction faulted with "Insufficient GAS".
-The settled amount itself still differs between the two containers, which can change the byte
-length of a stored balance at a power-of-256 boundary and move the storage fee by one unit, so
-a relay should keep the customary system-fee margin on sponsored submissions.
+Zero-fee RPC estimation executes both policy and settlement paths at each
+requested amount. This deliberately over-approximates reimbursement and is not a
+zero-fee persisted-transaction rule. Fee arithmetic has no estimation early return,
+but storage initialization, record reset and serialization sizes still affect gas.
+Relays must simulate the complete invocation and retain a fee margin; neither
+the old single-operation receipt nor a VM fixture proves exact production pricing.
 
 ### 8.3 TEE Security
 
@@ -574,7 +574,7 @@ back to (`contracts/build/UnifiedSmartWalletV3.manifest.json`, implemented in
 | Property | Guarantee |
 | --- | --- |
 | **Delayed Takeover** | 7-90 day minimum timelock |
-| **Cancel-on-Use** | Any valid op cancels escape |
+| **Cancel-on-Use** | A successful operation with the current BackupOwner witness cancels escape |
 | **Audit Trail** | All escape events emitted |
 | **No Bypass** | *(PARTIAL)* Market escrow can clear escape |
 
@@ -582,8 +582,14 @@ Finalization validates a nonzero replacement verifier against the same V3 lifecy
 as normal verifier rotation before cleanup or state writes. It still calls the old
 verifier and hook's `clearAccount` and fails atomically if either module faults or aborts.
 The timelock therefore authorizes recovery but does not guarantee recovery liveness
-against an unavailable or malicious old plugin. Emergency detach would need an explicit
-authority-revocation and plugin-state design; it is not implemented by these changes.
+against an unavailable or malicious old plugin. The current source's separate `finalizeEscapeToOwner` removes that old-plugin
+dependency: it checks maturity, owner witness, escrow and all active contexts,
+then detaches roots, clears pending authority and latches permanent owner-only
+mode without callbacks. All plugin installation/configuration/execution authority
+checks honor the latch, which persists through market and platform ownership
+changes. The account identity and nonce history are retained. Recovery is not
+a promise to refund plugin-held funds, revoke external allowances, bypass a
+market escrow or remove the independent core upgrade administrator.
 
 ---
 
@@ -607,7 +613,7 @@ authority-revocation and plugin-state design; it is not implemented by these cha
 | **Sanctions Screening** | Via `WhitelistHook` |
 | **Transaction Monitoring** | Via relay server logs |
 | **Recovery Standard** | L1 timelock escape hatch |
-| **User Sovereignty** | Backup owner authorizes delayed recovery; successful plugin cleanup remains required |
+| **User Sovereignty** | Backup owner authorizes delayed recovery; current source offers either successful plugin cleanup or permanent owner-only recovery |
 
 ---
 

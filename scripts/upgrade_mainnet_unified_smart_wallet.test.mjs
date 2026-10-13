@@ -34,14 +34,22 @@ test("mainnet candidate removes the instant admin transfer surface", () => {
   assert.equal(script.REMOVED_METHODS.includes("transferAdmin"), true);
   assert.equal(artifact.methodCount > 0, true);
   // The ordinary source candidate is intentionally ahead of the pinned public
-  // 90-method artifact. Its 98-entry ABI is release-gated until deployment
+  // 90-method artifact. Its 100-entry ABI is release-gated until deployment
   // review publishes a new manifest and updates the digest pin.
-  assert.equal(artifact.methodCount, 98);
+  assert.equal(artifact.methodCount, 100);
   const manifest = JSON.parse(artifact.manifestText);
   const childConfiguration = manifest.abi.methods.find((method) => method.name === 'callVerifierChild');
   assert.equal(childConfiguration.safe, false);
   assert.deepEqual(childConfiguration.parameters.map((parameter) => parameter.type),
     ['Hash160', 'Hash160', 'String', 'Array']);
+  for (const [name, safe, returntype] of [
+    ['finalizeEscapeToOwner', false, 'Void'], ['isOwnerOnlyRecovery', true, 'Boolean'],
+  ]) {
+    const method = manifest.abi.methods.find((entry) => entry.name === name);
+    assert.equal(method.safe, safe);
+    assert.equal(method.returntype, returntype);
+    assert.deepEqual(method.parameters.map((parameter) => parameter.type), ['Hash160']);
+  }
 });
 
 test("mainnet candidate contains the governed upgrade surface", () => {

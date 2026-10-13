@@ -69,10 +69,11 @@ test('ordinary and native profiles have separate, existing entrypoints', () => {
   assert.ok(native.data.openGates.includes('PUBLIC-HARDFORK-ACTIVATION'));
 });
 
-test('ordinary GO status is backed by the pinned public artifact and independent readbacks', () => {
+test('ordinary artifact identity does not certify the newer source fixes or a public upgrade', () => {
   const ordinary = readProfile('ordinary').data;
-  assert.equal(ordinary.implementationVerified, true);
-  assert.equal(ordinary.status, 'go-pinned-public-artifact');
+  assert.equal(ordinary.implementationVerified, false);
+  assert.equal(ordinary.artifactIdentityVerified, true);
+  assert.equal(ordinary.status, 'public-artifact-identity-verified-upgrade-required');
   assert.equal(ordinary.protocolStatus, 'source-checks-passed-conformance-open');
   assert.match(ordinary.protocolScope, /Full protocol conformance remains open/);
   assert.deepEqual(ordinary.protocolEvidence, [

@@ -2,7 +2,7 @@
   "id": "ordinary-user-contract",
   "version": 1,
   "kind": "deployed-contract",
-  "status": "go-pinned-public-artifact",
+  "status": "public-artifact-identity-verified-upgrade-required",
   "protocolStatus": "source-checks-passed-conformance-open",
   "protocolScope": "Source checks pass for the specified ordinary user-contract behavior. Full protocol conformance remains open because the public runtime lacks isolated callback budgets; candidate deployment and readback remain separate gates.",
   "protocolEvidence": [
@@ -15,13 +15,13 @@
     "PINNED-ARTIFACT-UPGRADE-REVIEW",
     "PUBLIC-DEPLOYMENT-READBACK"
   ],
-  "implementationVerified": true,
-  "verificationScope": "The pinned public UnifiedSmartWalletV3 artifact and ordinary NeoOS integration are verified. A newer source candidate must pass a separate artifact and upgrade review before it can replace this public artifact.",
+  "implementationVerified": false,
+  "verificationScope": "The pinned public artifact matches its historical independent RPC readbacks. This establishes artifact identity, not current-source security acceptance. Transaction reimbursement and callback-free recovery fixes require the separately reviewed candidate upgrade.",
   "description": "The Neo N3 user-contract implementation used by the current NeoOS AA integration.",
   "canonicalSourceRoots": [
     "contracts",
     "frontend",
-    "sdk/js/src/v3",
+    "sdk/js/src",
     "shared"
   ],
   "excludedSourceRoots": [
@@ -40,7 +40,7 @@
   "compatibilityPaths": [
     "contracts",
     "frontend",
-    "sdk/js/src/v3",
+    "sdk/js/src",
     "shared"
   ],
   "entrypoints": [
@@ -67,8 +67,13 @@
   "currentSourceCandidate": {
     "artifactRoot": "contracts/bin/v3",
     "status": "source-ahead-of-pinned-public-artifact",
-    "abiMethodCount": 98,
-    "releaseGate": "required-before-public-upgrade"
+    "abiMethodCount": 100,
+    "releaseGate": "required-before-public-upgrade",
+    "localAcceptance": {
+      "status": "GO-DECLARED-ORDINARY-SCOPE",
+      "evidence": "docs/reports/aa-ordinary-acceptance-20261013.md",
+      "scope": "Contract, SDK, frontend and formal-model gates; selected eight-module private-chain source acceptance. Registrar deployment compatibility and native conformance remain separate."
+    }
   },
   "verification": {
     "profile": "ordinary",
@@ -77,5 +82,6 @@
       "cd frontend && npm run test:ordinary:browser"
     ]
   },
-  "nativeBoundary": "This profile does not claim native AccountManagement consensus semantics or native-chain activation."
+  "nativeBoundary": "This profile does not claim native AccountManagement consensus semantics or native-chain activation.",
+  "artifactIdentityVerified": true
 }

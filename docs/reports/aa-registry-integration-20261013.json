@@ -1,0 +1,146 @@
+{
+  "repository": "/Users/jinghuiliao/git/neo-os/neo-os-contracts",
+  "owned_files_sha256": {
+    "contracts/platform/PlatformRegistry/PlatformRegistry.Governance.cs": "b81a6626dd24e0a7ec19a8ca5701d58668e5cadee5d61011705aa5c04a452978",
+    "contracts/platform/PlatformRegistry/PlatformRegistry.AbstractAccounts.cs": "117aca25ebdfaf43d83f23262e6f51b36876e464000665574ee2f9e0014df2f7",
+    "contracts/platform/PlatformRegistry/PlatformRegistry.cs": "db4add526dbb3c6bf1b1dc9fad5188b9c0967242140aa35bb3e07935069fb60a",
+    "contracts/AbstractAccountCoreMockFixture/AbstractAccountCoreMockFixture.cs": "4c8d680e6b56f992bed8227055fcf52fd5430e2d1bfc5aae3b0c323244e6189c",
+    "contracts/__tests__/PlatformRegistryHarness.cs": "8854510167ea8f8ed061e225342ba3a8d4786136de5925d30ff2d65d6b320983",
+    "contracts/__tests__/PlatformRegistryOwnerRotationTests.cs": "ec4e63bf7a83defbcfde1cea53f59f2e05e9f630b012fd27128e4719e87ec707",
+    "contracts/__tests__/PlatformRegistryAbstractAccountTests.cs": "b5f98bd55b7b677a15f2c7ee6db446374d7152b8b60dda0087c81f65f00d60ad",
+    "contracts/__tests__/PlatformRegistrySourceSecurityTests.cs": "1f79cc3aa13cf7a488d19ede2a40f96d849d31cffd451d891c08338c01266c90",
+    "docs/PLATFORM_AA_OWNER_ROTATION_MIGRATION.md": "329bb87700a9bee53058b8392a096185ee02910a8af03d8b7fa99537435f0caf",
+    "contracts/platform/PlatformRegistry/PlatformRegistry.Consolidation.cs": "39ca00cbc76c6b28d1ce6a699165a5655ad8848ebacf56709448ef361f3924a9",
+    "contracts/__tests__/PlatformRegistryConsolidationTests.cs": "2015e79978120245be2f88861ebd4da3c536c826bdfddda1beae1a4541424f19",
+    "docs/PLATFORM_REGISTRY_CATALOG_ABI.md": "026710647ce1144ec5dcd31981f34b364c71b92126500673066dc805148a6d95",
+    "scripts/audit_joint_abstract_account_interface.mjs": "04bfa53718170b89bb333a16447f62dcd4b0a4dfe816cb349e327e6173573ad0",
+    "scripts/lib/joint_abstract_account_interface.test.mjs": "6e0d7cbb7f5750ad6aed13c43c7068f5ebb7ff25a4a9df65519f6fe8352fd37f",
+    "contracts/__tests__/fixtures/ordinary-aa-owner-rotation/README.md": "73084c67a5a6314104846e61989706cecc9a79a04ed076eeee5c6c119a8dc8ea",
+    "contracts/__tests__/fixtures/ordinary-aa-owner-rotation/candidate100/UnifiedSmartWalletV3.manifest.json": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+    "contracts/__tests__/fixtures/ordinary-aa-owner-rotation/candidate100/UnifiedSmartWalletV3.nef": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+    "contracts/__tests__/fixtures/ordinary-aa-owner-rotation/provenance.json": "0db4bb510a05b48e128db78c848ea61463c74d3707eff29995e0fb815c41f332",
+    "contracts/__tests__/fixtures/ordinary-aa-owner-rotation/public90/UnifiedSmartWalletV3.manifest.json": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+    "contracts/__tests__/fixtures/ordinary-aa-owner-rotation/public90/UnifiedSmartWalletV3.nef": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b"
+  },
+  "local_artifacts_sha256": {
+    "contracts/build/PlatformRegistry.nef": "d2a692b2a938c06494d0db28b2cf614d9f51cb7e43916d335d2ca5dc55dbcab5",
+    "contracts/build/PlatformRegistry.manifest.json": "e7443a98e8027934b331b87a6b29176883b494d44556de8f74d0476dfd28278e",
+    "contracts/build/AbstractAccountCoreMockFixture.nef": "4ec1f00b4ec65bac58034fc5b94ffa6e43a7157b5708ee59db75ab18956edf54",
+    "contracts/build/AbstractAccountCoreMockFixture.manifest.json": "107deb4a585e9df63e626cf658423802e096e7e2510662261fc0639cf629f1cb"
+  },
+  "aa_candidate": {
+    "UnifiedSmartWalletV3.nef": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+    "UnifiedSmartWalletV3.manifest.json": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156"
+  },
+  "command": "dotnet test contracts/__tests__/NeoContracts.Tests.csproj --no-restore --filter 'FullyQualifiedName~PlatformRegistry' --logger 'trx;LogFileName=registry-full-final.trx' --results-directory /private/tmp/registry-rotation-tests/results --verbosity normal",
+  "registry_tests": {
+    "total": 118,
+    "passed": 118,
+    "failed": 0,
+    "skipped": 0
+  },
+  "new_rotation_cases": [
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryOwnerRotationTests.PendingUnmaterializedAppCannotAcquireAaViaEitherEntryPoint",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryRealAaRotationTests.RealCandidateKeepsOwnersAtomicWithRestrictedIncomingOwnerWitness",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryOwnerRotationTests.CancellationFaultPreservesBothPendingIntents",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryOwnerRotationTests.SharedProposalStartsAaIntentAndWaitsSevenDays",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryOwnerRotationTests.CalledByEntryOwnerCannotConfirmNestedAaButExplicitScopeCan",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryOwnerRotationTests.ReplacingProposalKeepsBothTargetsAndCommitmentSynchronized",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryOwnerRotationTests.CommittedExecutionStillRequiresIncomingOwnerScope",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryRealAaRotationTests.LegacyLocalOnlyPendingCanBeCancelledWithoutRotatingLegacyAa",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryOwnerRotationTests.ConfirmationFaultRollsBackBothOwnersAndPendingIntents",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryRealAaRotationTests.RealPinnedLegacyCoreExplicitlyRejectsNewSharedAdminProposal",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryRealAaRotationTests.RealCandidateOwnerCanCancelAaThenRegistryDiscardsLocalIntent",
+    "NeoMiniAppPlatform.Contracts.Tests.PlatformRegistryOwnerRotationTests.SharedCancellationClearsBothIntents"
+  ],
+  "log": "/private/tmp/registry-rotation-tests/registry-full-final.log",
+  "trx": "/private/tmp/registry-rotation-tests/results/registry-full-final.trx",
+  "boundary": "Normal complete production Registry artifact; normal test project retains its existing unrelated PlatformGameComprehensiveTests exclusion. Local NeoVM cross-contract tests, not joint formal proof or public deployment/readback.",
+  "schema": "neoos-aa-platform-registry-integration/v1",
+  "observedOn": "2026-10-13",
+  "publicNetworkWritesPerformed": false,
+  "jointFormalProof": false,
+  "formalBoundary": "External Registry state and coupled transactions are not part of the 490 declarations or AA source-lock.",
+  "logs_sha256": {
+    "/private/tmp/registry-rotation-tests/registry-full-final.log": "86ce802329767abe8c829ad3ceb75843b74517ebd443b91eb72749caffa2127e",
+    "/private/tmp/registry-rotation-tests/results/registry-full-final.trx": "7f1f4c912fa55557aef87eb76235edd1d259f23bf59b4f94f85dea43e69cf69b",
+    "/private/tmp/registry-rotation-tests/results/standalone-registry-full.trx": "9a4dd0de284b63195ea99fd44c1558873579b40078fa1117956dbe39a7c15e20",
+    "/private/tmp/registry-rotation-tests/results/explicit-sibling-aa.trx": "385bac42ea4d9788c8ff10309df4deaf4cd19fe78dfef0bc72b8bec7b1732825",
+    "/private/tmp/registry-rotation-tests/standalone-before.log": "8079f90e2a34f314ee8b85aaef423c62be118edf818f1df71adb2c5f48899664",
+    "/private/tmp/registry-rotation-tests/standalone-rotation-after.log": "b2f5f4621ec8829c89bfc9eecf5cb84ac5f9a210a39074f23865df1c2c7aadff",
+    "/private/tmp/registry-rotation-tests/standalone-registry-full.log": "47050e75daf607049df2dd1eb0a662cdccf76ab8182fc48cae14d662df072364",
+    "/private/tmp/registry-rotation-tests/explicit-sibling-aa.log": "e7ea3cf3403440b17524df2ced376630385ae433282c827a6670694b14b7c472",
+    "/private/tmp/registry-rotation-tests/standalone-tampered-manifest.log": "77eac5a1d205663e0b3581e489bc6b83e8c35c1f7d8d5a2813091c2bbf53ca5a",
+    "/private/tmp/registry-rotation-tests/standalone-missing-override.log": "af920c59802bf03ac342eabc86207c48de0131ef8d614004b7b5a9f24544d900"
+  },
+  "consolidation_tests": {
+    "total": 29,
+    "passed": 29,
+    "failed": 0,
+    "skipped": 0,
+    "includedInRegistryTotal": true
+  },
+  "consolidation": {
+    "normalProductionBuild": "PASS",
+    "fullPartialNefCompile": "PASS",
+    "catalogGetter": "getCatalogModule",
+    "existingCompositionGetModulePreserved": true,
+    "grantKeyBytes": 33,
+    "grantKeyFormat": "0x35 || SHA256(SHA256(appId) || SHA256(moduleId))",
+    "ambiguousLegacyGrantFallback": false,
+    "migration": "Owner/admin reviewed regrant required; old catalog-only getter consumers require explicit migration."
+  },
+  "artifactScope": "Complete local Registry NEF/manifest with 103 ABI entries; actual AA candidate and historical pinned AA loaded in NeoVM tests. No public Registry identity or deployment claim.",
+  "offlineInterfaceGate": {
+    "status": "PASS",
+    "checksPassed": 14,
+    "unitTests": 64,
+    "unitTestsInIsolatedCheckoutWithoutAaSibling": 64,
+    "legacyPinnedArtifactExitCode": 1,
+    "candidateExitCode": 0,
+    "sourceCheckBoundary": "Canonical reviewed helper source-shape pin plus interface and order checks; not control-flow or compiler correctness proof.",
+    "logSha256": {
+      "/tmp/joint-aa-gate-body-pin-green.log": "25dfbcb3afb6d75d52dd0c66b5afff9f3d4a24d7fa21c5a2438537db3fca78a4",
+      "/tmp/joint-aa-gate-body-pin-isolated.log": "34d2b99f699075b9e6ddf3dda75c4698742ff03cc8c444532a43b5f4b799b722",
+      "/tmp/aa-registry-interface-final-20261013.log": "d5e46e685f6e8eb8d52a58ca60c06cfa95cd521f7dc587c336603fcfc9053f03",
+      "/tmp/aa-registry-interface-legacy-final-20261013.log": "f66224eebbc61f24c00243f40fcfdfc6cf2a7319a95d5db9a99bc3526cbe382d"
+    },
+    "command": "node scripts/audit_joint_abstract_account_interface.mjs --check --no-write",
+    "legacyCommand": "NEO_ABSTRACT_ACCOUNT_ARTIFACT_DIR=/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/build node scripts/audit_joint_abstract_account_interface.mjs --check --no-write"
+  },
+  "portability": {
+    "isolatedCheckout": "/private/tmp/registry-standalone-ci/neo-os-contracts",
+    "siblingAaPresent": false,
+    "baseline12": {
+      "passed": 8,
+      "failed": 4,
+      "log": "/private/tmp/registry-rotation-tests/standalone-before.log"
+    },
+    "fixtureRotation12": {
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/private/tmp/registry-rotation-tests/standalone-rotation-after.log"
+    },
+    "fixtureRegistry118": {
+      "passed": 118,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/private/tmp/registry-rotation-tests/standalone-registry-full.log"
+    },
+    "explicitSiblingReal4": {
+      "passed": 4,
+      "failed": 0,
+      "log": "/private/tmp/registry-rotation-tests/explicit-sibling-aa.log"
+    },
+    "failClosedControls": {
+      "tamperedManifest": "expected 1 failure, 0skip; /private/tmp/registry-rotation-tests/standalone-tampered-manifest.log",
+      "missingExplicitDirectory": "expected 1 failure, 0skip; /private/tmp/registry-rotation-tests/standalone-missing-override.log"
+    },
+    "commandFocused": "dotnet test contracts/__tests__/NeoContracts.Tests.csproj --no-restore --filter 'FullyQualifiedName~PlatformRegistryOwnerRotationTests|FullyQualifiedName~PlatformRegistryRealAaRotationTests'",
+    "commandFull": "dotnet test contracts/__tests__/NeoContracts.Tests.csproj --no-restore --filter 'FullyQualifiedName~PlatformRegistry'"
+  },
+  "baseCommit": "193d0b0f705d981908672d5da99f6143fbc49c05",
+  "implementationCommit": "630d82db4b46db102874f9135d1cc1917ed79e5d",
+  "branch": "master"
+}

@@ -1,0 +1,140 @@
+{
+  "schema": "neoos-aa-ordinary-local-acceptance/v1",
+  "observedOn": "2026-10-13",
+  "branch": "main",
+  "sourceAndSdkCommit": "708b7c09553e9196f369476a7cc42d2ccfad359e",
+  "contractSourceCommit": "d41aec3c5843b0f3ce33a032970aa307817cd52f",
+  "publicNetworkWritesPerformed": false,
+  "remotePushesPerformed": false,
+  "decisions": {
+    "ordinaryDeclaredCandidateScope": "GO",
+    "declaredFormalModels": "GO",
+    "sdk": "GO",
+    "frontend": "GO",
+    "platformRegistryIntegration": "GO-LOCAL-COMPLETE-ARTIFACT-AND-REAL-AA-NEOVM",
+    "publicUpgrade": "NO-GO-PENDING-MIGRATION-REVIEW-SIGNING-AND-READBACK",
+    "fullNativeConformanceAndActivation": "NO-GO",
+    "registryOfflineInterfaceGate": "GO-DECLARED-OFFLINE-INTERFACE-SCOPE"
+  },
+  "implementationVerified": false,
+  "sourceSnapshotSha256": "d2f29f455bd9da5aa9005de2a2a0ec8d34b905f7aa55c1a375f344c6f33dece3",
+  "candidate": {
+    "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+    "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+    "abiEntries": 100
+  },
+  "gates": {
+    "contractTests": 438,
+    "scriptTests": 131,
+    "runtimePythonTests": 31,
+    "sdkUnitTests": 296,
+    "sdkInstalledPackageTests": 5,
+    "sdkTypes": "PASS",
+    "frontendUnitTests": 782,
+    "frontendBrowserTests": 20,
+    "skips": 0,
+    "artifactFilesReproduced": 80,
+    "sourceChainChecks": 38,
+    "sourceChainTransactions": 47,
+    "sourceChainNodeRefusals": 4,
+    "runtimeArtifactsChecked": 8,
+    "fullModuleProvenanceVerified": false,
+    "coqModules": 29,
+    "closedDeclarations": 490,
+    "semanticMutationsRejected": 287,
+    "tlcDistinctStates": 61460,
+    "tlcGeneratedStates": 11859476,
+    "smtObligations": 7,
+    "smtControls": 7,
+    "formalRegressionTestsPerEnvironment": 68,
+    "formalEnvironments": [
+      "host",
+      "pinned-container"
+    ],
+    "finalDocsAndProfileTests": 101,
+    "sourceChainSimulationOnlyFaults": 6,
+    "sourceChainTotalSimulationFaults": 7,
+    "registryTests": 118,
+    "registryCatalogTestsIncluded": 29,
+    "registryNewRotationTestsIncluded": 12,
+    "registryOfflineInterfaceChecks": 14,
+    "registryInterfaceUnitTestsPerEnvironment": 64,
+    "registryTestsInIsolatedCheckoutWithoutAaSibling": 118,
+    "registryExplicitSiblingArtifactTests": 4,
+    "finalSdkAbiTests": 7
+  },
+  "dependencyPolicy": {
+    "sdkProductionReportedVulnerabilities": 0,
+    "frontend": "PASS with existing allowlist of 24 low advisories"
+  },
+  "commands": {
+    "contracts": "PATH=\"/opt/homebrew/opt/openssl@3/bin:$PATH\" NEOOS_SERVICES_CONTRACT_BUILD=/Users/jinghuiliao/git/neo-os/neo-os-services/contracts/build MORPHEUS_ORACLE_ROOT=/Users/jinghuiliao/git/neo-os/neo-os-services NEOOS_NATIVE_CORE_SOURCE=/Users/jinghuiliao/git/neo-os/.worktrees/native-account-core-convergence NEOOS_REQUIRE_COMPLETE=1 bash scripts/verify_repo.sh --profile ordinary --contracts-only --skip-contract-build --formal --neoexpress",
+    "frontend": "MORPHEUS_ORACLE_ROOT=/Users/jinghuiliao/git/neo-os/neo-os-services NEOOS_REQUIRE_COMPLETE=1 bash scripts/verify_repo.sh --profile ordinary --frontend-only",
+    "sdk": "NEOOS_REQUIRE_COMPLETE=1 bash scripts/verify_repo.sh --profile ordinary --sdk-only"
+  },
+  "receipts": {
+    "aa-ordinary-artifact-reproducibility-20261013.json": {
+      "sha256": "6eee97464e9c1f9a38d0ef127a14045eec9288889ba5610d882cba8f127d40a9"
+    },
+    "aa-artifact-reproducibility-20261013.json": {
+      "sha256": "6eee97464e9c1f9a38d0ef127a14045eec9288889ba5610d882cba8f127d40a9"
+    },
+    "aa-ordinary-source-chain-20261013.json": {
+      "sha256": "c322899418e166df64c72c48999a1c1d1bfe106fa73af1364a89e45c01dab869"
+    },
+    "aa-ordinary-runtime-provenance-20261013.json": {
+      "sha256": "763a9f2d9a991ce5531d4d03c11aaa9f4541ad1b416b5bd6b30f5fb2f70355e8"
+    },
+    "aa-ordinary-candidate-compatibility-20261013.json": {
+      "sha256": "e0daac4fe18f8c3c23bc947e35d96a06dc1020c330d1d3bccbfd1a3f8bc4b82f"
+    },
+    "aa-formal-ordinary-closure-20261013.json": {
+      "sha256": "7ad982a403b7c2b953c946f49ce42fe544be1b87fa3fbdd668078623070bc5b9"
+    },
+    "aa-formal-ordinary-closure-docker-20261013.json": {
+      "sha256": "283e7517b9c113fb829f4735206da2c882e84be8065ffbeae09ed8259bc9289e"
+    },
+    "aa-formal-container-build-20261013.json": {
+      "sha256": "d17b6b6d61568bdad038adf19baa3615d7fce00f1fad9fa9de82cda1e9891a8c"
+    },
+    "aa-registry-integration-20261013.json": {
+      "sha256": "c999122c13373274470c4ed202db9d02188daa0dfc23a84d820480295ba03749"
+    }
+  },
+  "localLogs": {
+    "contracts": {
+      "path": "/tmp/aa-main-contracts-final-20261013.log",
+      "sha256": "ab0924df954a3d2a19db00ed2b5f463240ca5fb88ffb878f7e0afe01e85878f7"
+    },
+    "frontend": {
+      "path": "/tmp/aa-main-frontend-final-20261013.log",
+      "sha256": "2149555788fa8580cda27a561a25c6985ce474136a93ef147d8addf89f6c172e"
+    },
+    "sdk": {
+      "path": "/tmp/aa-main-sdk-complete-final-20261013.log",
+      "sha256": "8dc44b4f78e913a04615ec3452edf5a5494f836f6c8de2449273406f87087a51"
+    },
+    "docsAndProfile": {
+      "path": "/tmp/aa-main-docs-profile-final-20261013.log",
+      "sha256": "e1706e718605c626db4d860a341e69697706419b16d8e50eacc6e5d03fbc678c"
+    },
+    "sdkAbi": {
+      "path": "/tmp/aa-main-sdk-abi-final-20261013.log",
+      "sha256": "f8b93f5148a8721c50813f78b519402a11dcecd1920df5dd72089900ffc43f7d"
+    }
+  },
+  "scope": "Specified ordinary candidate behavior and selected eight-module private-chain source acceptance; handwritten formal models plus source correspondence checks, not compiler/VM refinement, universal plugin liveness, public deployment or native activation.",
+  "finalProofInputReadback": {
+    "aaSourceFiles": 59,
+    "formalArtifacts": 32,
+    "nativeCoreSourceFiles": 310,
+    "hostContainerAndCurrentBytesMatch": true
+  },
+  "formalBoundary": {
+    "ordinaryGovernanceDeclarations": 18,
+    "ordinaryGovernanceMutations": 14,
+    "externalPlatformRegistryFormallyVerified": false,
+    "reason": "Registry appAdmin, coupled pending records, ABI discovery and cross-contract atomicity are not part of the AA governance model or source-lock."
+  },
+  "registryImplementationCommit": "630d82db4b46db102874f9135d1cc1917ed79e5d"
+}

@@ -31,9 +31,11 @@
   "behavioralCompatibility": "Registrar migration required: rotatePlatformAccountOwner proposes a seven-day delayed change with new-owner witness. Sponsored single/batch/nested calls now share one reimbursement fee ceiling per transaction within a core. New optional callback-free recovery permanently disables plugin installation for that account; legacy cleanup-based recovery remains available.",
   "releaseStatus": "NO-GO-PENDING-UPGRADE-REVIEW-AND-AUTHORIZED-DEPLOYMENT",
   "remainingGates": [
-    "Registrar integration migration for delayed rotation",
+    "Review and deploy migrated Registrar integration; local complete Registry/real-AA tests pass",
     "Public callback child-budget capability (full foundation conformance)",
     "Reviewed governed deployment transaction and independent RPC readback"
   ],
-  "newRecoveryConsequence": "Permanent owner-only mode retains identity and nonce history, survives ownership transfers, and cannot reinstall any verifier/hook. It does not refund plugin-held funds or revoke external allowances."
+  "newRecoveryConsequence": "Permanent owner-only mode retains identity and nonce history, survives ownership transfers, and cannot reinstall any verifier/hook. It does not refund plugin-held funds or revoke external allowances.",
+  "registrarSourceEvidence": "aa-registry-integration-20261013.json",
+  "registrarImplementationCommit": "630d82db4b46db102874f9135d1cc1917ed79e5d"
 }

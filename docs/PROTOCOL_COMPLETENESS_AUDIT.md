@@ -20,8 +20,13 @@ The ordinary source protocol is internally consistent for its executable nonce
 domain, operation-shape isolation, plugin lifecycle and bounded policy
 cardinality. The current source candidate is compiled and runtime-tested, while
 the pinned public artifact remains the separately verified deployment identity.
-The source candidate currently has a 98-entry ABI (97 unique method names because
+The source candidate currently has a 100-entry ABI (99 unique method names because
 of a retained overload entry); the pinned public artifact has 90 ABI entries.
+The current source also adds a shared per-transaction reimbursement ceiling within
+each core and callback-free `finalizeEscapeToOwner`: a permanent owner-only
+recovery mode. The latter preserves identity and nonce history while prohibiting
+all later plugin installation; it does not provide native epoch-module reinstallation.
+These local fixes have NeoVM regression coverage and corresponding formal models.
 Three release gates remain explicit:
 
 | Gate | Status | Required closure evidence |
@@ -30,10 +35,12 @@ Three release gates remain explicit:
 | Platform-account backup-owner rotation | **NO-GO** | The source candidate now has propose/confirm/cancel semantics with new-owner authorization; public closure still requires ABI migration, upgraded artifact and live readback |
 | Source candidate versus pinned public artifact | **UPGRADE REVIEW** | Fresh artifact certificate, compatibility review, deployment transaction and independent RPC readback |
 
-Static tests and the host formal model gate do not close these external or
-deployment boundaries. The ordinary profile may therefore be used as the
-verified pinned public artifact, but the newer source candidate must not be
-described as already deployed until those release gates converge.
+The host and container formal model gates and the fresh ordinary source-chain
+acceptance do not close these external or deployment boundaries. The pinned
+public artifact has historical identity evidence, not acceptance against the
+newly fixed sponsorship and recovery issues. The current candidate may be
+evaluated for internal use within its declared profile; public upgrade approval
+and independent readback remain required before claiming a deployed fix.
 
 ---
 
@@ -142,7 +149,7 @@ The deployed names carry the account id: `initiateEscape(accountId)` and
 - **Timelock:** Configurable 7-90 days (604,800-7,776,000 seconds)
 - **Cooldown:** One hour between initiation attempts while the cooldown marker is retained; successful finalization deletes that marker
 - **Activity Cancellation:** A successful `executeUserOp()` may cancel an active escape only with the current BackupOwner witness; verifier-only execution cannot cancel it
-- **Finalization:** `finalizeEscape()` installs a selected V3 verifier (with optional parameters), or zero for BackupOwner authorization, and removes the old hook; old plugin cleanup must succeed or the transaction rolls back
+- **Finalization:** `finalizeEscape()` installs a selected V3 verifier (with optional parameters), or zero for BackupOwner authorization, and removes the old hook; old plugin cleanup must succeed or the transaction rolls back. The current source additionally offers `finalizeEscapeToOwner(accountId)`, which invokes no plugin, preserves identity/nonces and permanently disables all plugin installation
 - **Events:** `EscapeInitiated`, `EscapeFinalized`, `EscapeCancelled` emitted
 
 **Security Properties:**
@@ -320,7 +327,7 @@ persisted failed transaction may still cost the relay fees.
 
 **Features:**
 - **On-chain policy enforcement:** AAPaymaster checks sponsor authorization, target/method restrictions, expiry, per-operation/daily/total budgets and deposit balance during settlement
-- **Reimbursement cap:** The core caps reimbursement at the actual enclosing transaction fees; the zero-fee RPC estimation container has a separate pricing interpretation
+- **Reimbursement cap:** Each core reserves one shared budget for the complete transaction before any external call. Single, batch, nested and cross-account/paymaster executions collectively cannot reimburse more than the enclosing transaction fees from that core. Independent core deployments do not share this ledger; the zero-fee RPC estimation container has a separate pricing interpretation
 - **Sponsored batch:** Every operation must share the target and method used for the policy check
 - **Off-chain preflight:** Morpheus authorization and RPC simulation help a relay decide whether to submit; they do not replace on-chain settlement checks
 - **Public resource boundary:** Transaction fee ceilings and sponsor admission policy do not supply an isolated verifier/hook callback budget
