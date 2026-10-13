@@ -294,6 +294,11 @@ another. Post callbacks receive detached copies of the authenticated operation a
 so a verifier or hook cannot rewrite the operation later used for the execution event or sponsored
 settlement. A real NeoVM regression vector confirms that `WhitelistHook` accepts the signed target,
 rejects an unlisted target before dispatch, and rolls back the nonce on rejection.
+The callback result is required to cross the Neo StdLib serialization boundary: ordinary VM values
+such as Null, Boolean, Integer, ByteString, Buffer, Array, Struct and Map are copied, while
+InteropInterface values (including iterators and storage contexts), Pointer values, cyclic graphs,
+and repeated container references fail closed before post callbacks. The enclosing invocation rolls
+back target writes and nonce state on that fault; transaction fees remain chargeable.
 
 ### Layer 4: Off-Chain Infrastructure
 - **TEE Attestation:** Hardware root of trust (future)

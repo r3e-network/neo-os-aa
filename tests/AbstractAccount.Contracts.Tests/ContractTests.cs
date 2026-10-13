@@ -332,6 +332,17 @@ public class ContractTests
     }
 
     [TestMethod]
+    public void CallbackResultIsolationDocumentsUnsupportedInteropBoundary()
+    {
+        string executionSource = ReadContractFile("UnifiedSmartWallet.Execution.cs");
+        string securityModel = File.ReadAllText(Path.Combine(RepoRoot, "docs", "SECURITY_MODEL.md"));
+
+        StringAssert.Contains(executionSource, "StdLib.Deserialize(StdLib.Serialize(value))");
+        StringAssert.Contains(securityModel, "InteropInterface values (including iterators and storage contexts)");
+        StringAssert.Contains(securityModel, "repeated container references fail closed before post callbacks");
+    }
+
+    [TestMethod]
     public void MarketEscrowSettlementWipesInheritedVerifierAndHookState()
     {
         string marketSource = ReadContractFile("UnifiedSmartWallet.MarketEscrow.cs");
