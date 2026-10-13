@@ -40,6 +40,7 @@ test('ordinary and native profiles have separate, existing entrypoints', () => {
     assertLocalPaths(profile, 'compatibilityPaths');
     assertLocalPaths(profile, 'entrypoints');
     assertLocalPaths(profile, 'artifactRoots');
+    if (profile.data.protocolEvidence) assertLocalPaths(profile, 'protocolEvidence');
   }
 
   // A broad ordinary root may contain native files for build compatibility, but
@@ -72,6 +73,18 @@ test('ordinary GO status is backed by the pinned public artifact and independent
   const ordinary = readProfile('ordinary').data;
   assert.equal(ordinary.implementationVerified, true);
   assert.equal(ordinary.status, 'go-pinned-public-artifact');
+  assert.equal(ordinary.protocolStatus, 'go-source-scoped');
+  assert.match(ordinary.protocolScope, /Neo-native ordinary protocol rules/);
+  assert.deepEqual(ordinary.protocolEvidence, [
+    'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
+    'docs/AA-SYSTEM-STATUS.md',
+    'docs/AA-FORMAL-VERIFICATION.md',
+  ]);
+  assert.deepEqual(ordinary.releaseBoundaries, [
+    'PUBLIC-CALLBACK-RESOURCE-ISOLATION',
+    'PINNED-ARTIFACT-UPGRADE-REVIEW',
+    'PUBLIC-DEPLOYMENT-READBACK',
+  ]);
   assert.equal(ordinary.currentSourceCandidate.status, 'source-ahead-of-pinned-public-artifact');
   assert.equal(ordinary.currentSourceCandidate.releaseGate, 'required-before-public-upgrade');
 

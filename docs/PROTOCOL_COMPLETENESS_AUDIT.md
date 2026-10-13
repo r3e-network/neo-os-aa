@@ -2,7 +2,12 @@
 
 **Date:** 2026-09-13
 **Auditor:** NeoOS protocol remediation review
-**Status:** Conditional compatibility; Neo-native implementation with explicit adapters
+**Status:** **GO for the declared Neo-native ordinary protocol scope; conditional for
+cross-implementation compatibility and release.** The protocol rules, encoding,
+authorization order, replay domain, lifecycle, rollback semantics, and documented
+capability limits are explicit and source-verified. Public resource isolation,
+artifact migration, deployment parity, and native AccountManagement activation are
+release or external gates; they are not silently included in this GO.
 
 > **Snapshot notice:** This is a 2026-09-13 compatibility snapshot. Its
 > historical finding list and recommendations are not the current remediation
@@ -10,6 +15,11 @@
 > unresolved boundaries, use `docs/SECURITY_MODEL.md`,
 > `docs/AA-FORMAL-VERIFICATION.md`, and the dated build receipt under
 > `docs/reports/`.
+
+The word **GO** in this document means that the ordinary protocol is internally
+defined for the capabilities it actually exposes. It does not mean that a newer
+source candidate is already deployed, that a public Neo runtime supplies a child
+callback budget, or that the native AccountManagement proposal has been accepted.
 
 ### Current ordinary-profile boundary (2026-10-13)
 

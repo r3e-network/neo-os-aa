@@ -20,3 +20,10 @@ they can be called public deployment evidence.
 The ordinary profile is a user-contract implementation. It must not be
 labelled as native AccountManagement or used as evidence of native consensus
 activation.
+
+The ordinary protocol itself is `go-source-scoped`: its operation encoding,
+nonce domain, lifecycle, callback ordering, rollback rules and documented
+capability limits are defined and tested in the source. The profile keeps the
+public callback-resource, candidate-upgrade and deployment-readback boundaries
+explicit so an implementation reader can distinguish protocol correctness from
+release evidence.

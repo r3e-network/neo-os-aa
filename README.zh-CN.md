@@ -9,7 +9,7 @@
 - **钩子插件策略执行**：可附加可选的钩子插件用于每日限额、代币限制、凭证门控和执行后控制。
 - **备份所有者逃生通道**：每个账户可定义原生 Neo 备份所有者及时间锁验证器轮换。
 - **跨链 EVM 兼容**：V3 通过 Web3Auth 验证器路径支持 secp256k1 / Keccak256 EIP-712 `UserOperation` 签名。
-- **链上 Paymaster（赞助交易）**：`AAPaymaster` 合约实现无需信任的无 GAS 执行 —— 赞助商存入 GAS，创建每账户或全局赞助策略，中继在 `UserOp` 成功执行后自动获得报销。支持每笔操作限额、每日预算、总预算、目标/方法限制和过期时间戳。
+- **链上 Paymaster（赞助交易）**：`AAPaymaster` 为支持的普通 UserOperation 提供无需信任的 GAS 赞助 —— 赞助商存入 GAS，创建每账户或全局策略，中继在成功执行后自动获得报销。代理地址转账仍要求独立见证，赞助代理转账明确拒绝；具体可用性还取决于已部署 Paymaster、策略、费用上限和链上回读。
 - **策略门控执行**：新集成应通过 `executeUserOp(accountId, op)` 执行，nonce 处理、验证、钩子和目标执行保持集中化。
 
 ## 项目内容
@@ -27,8 +27,11 @@
 3. `docs/WORKFLOWS.zh-CN.md`
 4. `docs/DATA_FLOW.zh-CN.md`
 5. `docs/architecture.zh-CN.md`
-6. `docs/AA_V3_ARCHITECTURE.zh-CN.md`
-7. `docs/TESTNET_DEPLOYMENT.md`
+6. `docs/AA-SYSTEM-STATUS.md`
+7. `docs/ORDINARY_ACCOUNT_WORKSPACE.md`
+8. `docs/AA-FORMAL-VERIFICATION.md`
+9. `docs/AA_V3_ARCHITECTURE.zh-CN.md`（历史架构说明）
+10. `docs/TESTNET_DEPLOYMENT.md`
 
 同一主分支保留两个实现入口：
 [用户合约实现](implementations/ordinary/README.md) 和

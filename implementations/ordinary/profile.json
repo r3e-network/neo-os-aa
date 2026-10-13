@@ -3,6 +3,18 @@
   "version": 1,
   "kind": "deployed-contract",
   "status": "go-pinned-public-artifact",
+  "protocolStatus": "go-source-scoped",
+  "protocolScope": "The Neo-native ordinary protocol rules are complete for the capabilities exposed by this user-contract profile; deployment and runtime capability boundaries remain separate release gates.",
+  "protocolEvidence": [
+    "docs/PROTOCOL_COMPLETENESS_AUDIT.md",
+    "docs/AA-SYSTEM-STATUS.md",
+    "docs/AA-FORMAL-VERIFICATION.md"
+  ],
+  "releaseBoundaries": [
+    "PUBLIC-CALLBACK-RESOURCE-ISOLATION",
+    "PINNED-ARTIFACT-UPGRADE-REVIEW",
+    "PUBLIC-DEPLOYMENT-READBACK"
+  ],
   "implementationVerified": true,
   "verificationScope": "The pinned public UnifiedSmartWalletV3 artifact and ordinary NeoOS integration are verified. A newer source candidate must pass a separate artifact and upgrade review before it can replace this public artifact.",
   "description": "The Neo N3 user-contract implementation used by the current NeoOS AA integration.",

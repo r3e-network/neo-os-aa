@@ -1,4 +1,15 @@
-# 🚀 Neo N3 终极账户抽象 (AA) 与可信身份架构设计蓝图 V3
+# Neo N3 抽象账户 V3 历史架构说明
+
+> 本文是 V3 设计阶段的历史说明，不是当前部署或协议采纳证明。当前运行时行为、
+> 普通用户合约的能力边界、正式验证收据和发布状态以
+> [`docs/AA-SYSTEM-STATUS.md`](AA-SYSTEM-STATUS.md)、
+> [`docs/ORDINARY_ACCOUNT_WORKSPACE.md`](ORDINARY_ACCOUNT_WORKSPACE.md)、
+> [`docs/AA-FORMAL-VERIFICATION.md`](AA-FORMAL-VERIFICATION.md) 以及对应的
+> `implementations/*/profile.json` 为准。本文中的方案、示例和产品设想不能替代
+> 当前 ABI、字节码、链上回读或原生 AccountManagement 的协议激活。
+
+当前普通协议在声明的 Neo 原生范围内为 **GO**；公共回调资源隔离、候选源码升级、
+部署等价性和原生协议激活仍是单独的发布/外部门禁。
 
 ## 一、 系统宏观定位 (System Positioning)
 本架构不仅是一个智能钱包底座，而是一个 **“多维身份与可信执行的统一聚合网关”**。
