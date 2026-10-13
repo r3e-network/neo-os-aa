@@ -1,6 +1,6 @@
 {
   "schema": "neoos-aa-artifact-reproducibility/v2",
-  "generated_at": "2026-10-13T02:35:29.814Z",
+  "generated_at": "2026-10-13T03:23:29.811Z",
   "release_dir": "contracts/bin/v3",
   "profiles": {
     "v3": {
@@ -73,14 +73,14 @@
         },
         {
           "artifact": "MockVerifierCore.manifest.json",
-          "expected_sha256": "b1cb996174e50f3066376eacb2a02c6a048f31b5e43d2adb3c3c59217ff650e3",
-          "actual_sha256": "b1cb996174e50f3066376eacb2a02c6a048f31b5e43d2adb3c3c59217ff650e3",
+          "expected_sha256": "6d8f9b7c3555ee32a07ecb6552cae3975868dddff91809292c75e17569e44120",
+          "actual_sha256": "6d8f9b7c3555ee32a07ecb6552cae3975868dddff91809292c75e17569e44120",
           "match": true
         },
         {
           "artifact": "MockVerifierCore.nef",
-          "expected_sha256": "d14cd34a5e546eced6d05f28ca4d8238a905004a2e96d08b67a89222f1c3879c",
-          "actual_sha256": "d14cd34a5e546eced6d05f28ca4d8238a905004a2e96d08b67a89222f1c3879c",
+          "expected_sha256": "41d74e71eeb590e0e2c856e14fffa748054041c749a44b3db24e4d0f2b290911",
+          "actual_sha256": "41d74e71eeb590e0e2c856e14fffa748054041c749a44b3db24e4d0f2b290911",
           "match": true
         },
         {
@@ -217,14 +217,14 @@
         },
         {
           "artifact": "UnifiedSmartWalletV3.manifest.json",
-          "expected_sha256": "686d723b2eb60e65a4f83608480f591dfd4b6a6771c6e2292d714254ae85337b",
-          "actual_sha256": "686d723b2eb60e65a4f83608480f591dfd4b6a6771c6e2292d714254ae85337b",
+          "expected_sha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+          "actual_sha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
           "match": true
         },
         {
           "artifact": "UnifiedSmartWalletV3.nef",
-          "expected_sha256": "b6ccccd3be7421624973d202a067230bee6d7d706c788291e921588dafd00c05",
-          "actual_sha256": "b6ccccd3be7421624973d202a067230bee6d7d706c788291e921588dafd00c05",
+          "expected_sha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+          "actual_sha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
           "match": true
         },
         {
@@ -491,14 +491,14 @@
       "artifacts": [
         {
           "artifact": "UnifiedSmartWalletV3.manifest.json",
-          "expected_sha256": "fe9ff321b6f8ab3dfab1b39901e9a39b3127943cb65c399fe5247ec9692af52e",
-          "actual_sha256": "fe9ff321b6f8ab3dfab1b39901e9a39b3127943cb65c399fe5247ec9692af52e",
+          "expected_sha256": "7b431c5aa18ac547ede7d5abe60d2b15737d6d49f9efa353ff7870627f75ffb4",
+          "actual_sha256": "7b431c5aa18ac547ede7d5abe60d2b15737d6d49f9efa353ff7870627f75ffb4",
           "match": true
         },
         {
           "artifact": "UnifiedSmartWalletV3.nef",
-          "expected_sha256": "8580bee1f4dd38890899bb0f5abdb8a4b3501812b8453533d9c6117134a1f3d3",
-          "actual_sha256": "8580bee1f4dd38890899bb0f5abdb8a4b3501812b8453533d9c6117134a1f3d3",
+          "expected_sha256": "7d421d38e3256ea66fe696eae8212a1bc2da1dde5e1edd5cd985e5e5de024b06",
+          "actual_sha256": "7d421d38e3256ea66fe696eae8212a1bc2da1dde5e1edd5cd985e5e5de024b06",
           "match": true
         }
       ]
@@ -511,7 +511,7 @@
   "tracked_anchor": [
     {
       "artifact": "UnifiedSmartWalletV3.nef",
-      "expected_sha256": "b6ccccd3be7421624973d202a067230bee6d7d706c788291e921588dafd00c05",
+      "expected_sha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
       "actual_sha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
       "match": false,
       "provenance": "tracked contracts/build; deployed-mainnet bytecode anchor"
@@ -590,7 +590,7 @@
       "contracts/mocks/MarkerOnlyModule.csproj": "2eede6c9f6b04140b568ef5efc2d1107152620f96457c7afe0a3d0ab70d9dd90",
       "contracts/mocks/MockTransferTarget.cs": "aa53c1fb0354d51efcb9acd6518a81635be6f07b5fd7e5f1158a9bec70e0cb3a",
       "contracts/mocks/MockTransferTarget.csproj": "c08a000c02eed60900d3d3c87cbf0e3d6cdcee953e47c31400cdfd1b6f9d177b",
-      "contracts/mocks/MockVerifierCore.cs": "a334ff753377ec5e75e6a3aebf3267feb00d7e8cd0e390c4f512d3fa4b90df4c",
+      "contracts/mocks/MockVerifierCore.cs": "25732d384dcebb423db7aefd2392bd0207f74e5de31ff9f72a9ea41e071371d5",
       "contracts/mocks/MockVerifierCore.csproj": "d8e4363563ececd72ab5109f1747e44443406b497dca7bc4489558fabba9d03c",
       "contracts/mocks/packages.MarkerOnlyModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
       "contracts/mocks/packages.MockTransferTarget.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
@@ -636,22 +636,22 @@
       "contracts/recovery/MorpheusSocialRecoveryVerifier.V3.cs": "8491e0b58721f35c3f5ec5c3ae88abf6826edd730d1811883a0bfd6f7c1e4a43",
       "contracts/recovery/MorpheusSocialRecoveryVerifier.Validation.cs": "747ef44e566aaeb81255fe1adddb994447014f9e9c9bfd2e4b4f7e645da3f859",
       "contracts/recovery/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
-      "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
+      "contracts/UnifiedSmartWallet.Accounts.cs": "a03dab3c8b1f9fb8b3fd7937deb539ceacd14b1a9383fcbcce351ea22d6e9627",
       "contracts/UnifiedSmartWallet.Admin.cs": "74fa83c1f5e39a3cc1661a71efa5b061e87374b8d7904b9d61e9662c39738f52",
-      "contracts/UnifiedSmartWallet.cs": "074254f8ab2c38899c8c5a60c4b8cba3be94df10b81793696b3c48e9a41cb301",
+      "contracts/UnifiedSmartWallet.cs": "38c0a815c429233d53cd0b3ca8f0f9ff813401b06b401593e776820d6109aaa8",
       "contracts/UnifiedSmartWallet.csproj": "701a59fc3ea905c7ee37f246759a7f3e558e30a57f6b515eb107f4c5e248f20e",
-      "contracts/UnifiedSmartWallet.Escape.cs": "0122de83a392e2fd400c2f3aa734a43b566ca7fd0e30c283670a7c6ea57a57e2",
+      "contracts/UnifiedSmartWallet.Escape.cs": "9c9b4b574e5e879fb9175e84e5233a82371b93e6be79cb3a310c989cbb78130a",
       "contracts/UnifiedSmartWallet.Events.cs": "361b616f6557bd8b845c2c790d32152653e0b09668ac4c2baeea302429fa8f2f",
       "contracts/UnifiedSmartWallet.Execution.cs": "e313f0c82e9b1c0d73a8ca73dac8c657d0297e9e1db43e5a5f81b411c046e5bc",
       "contracts/UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
       "contracts/UnifiedSmartWallet.MarketEscrow.cs": "1dbd226147a66d8a03f0b28b152e9dcd395231f68574ef8e6a6ef750ccf005df",
       "contracts/UnifiedSmartWallet.Models.cs": "bd3b2743cdb0adb5382d552c375d6b351b7b8765fd364945dbee5fbd781181f4",
-      "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
+      "contracts/UnifiedSmartWallet.Paymaster.cs": "85cc25838737641c1884038b685343562aa9787b17ec73b2eb8e72dcb3b08543",
       "contracts/UnifiedSmartWallet.PlatformRegistrar.cs": "c524c6db9682caa5e18b3e26f66ffc2430ddf733416af81a7212ecfeb6e9b098",
       "contracts/UnifiedSmartWallet.Proxy.cs": "46427b4d2046f03d29bd51130c902d2ef7e2239f97617e85c6e0d51d1bb123e6",
       "contracts/UnifiedSmartWallet.State.cs": "83d70a55943b3904587258e9fbed02953391c06e81b3477dbd5953d5928cd437",
-      "contracts/UnifiedSmartWallet.VerifierChildren.cs": "38d414912d0fafc678d4e7c49000c6c7dc5e817ba6e21db7074c0d66f060ab5a",
-      "contracts/UnifiedSmartWallet.VerifyContext.cs": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7",
+      "contracts/UnifiedSmartWallet.VerifierChildren.cs": "f0bfc1ff7835bf237e445bcb20a085ec52951388ba48a7477cf543f9389cd28f",
+      "contracts/UnifiedSmartWallet.VerifyContext.cs": "459f7631dd06d0b01698d7f6b390e81951da7f1fdcf7a2c55774306239ce8025",
       "contracts/verifiers/MultiSigVerifier.cs": "cd8b5c3189fbbb3b0088da9fa08a9469f61e3e40ac866dad1d24dcbca6930a77",
       "contracts/verifiers/MultiSigVerifier.csproj": "7ea0f896fc2348ef3e46c605f013144c91ec4a700d22ce9812106a5ed8bde1f0",
       "contracts/verifiers/NativeOperation.cs": "682e6a13c7aa7eeb6987bd32668439dde76fb6dd9b24746d724dccda5024254f",
@@ -690,7 +690,7 @@
       "scripts/check_neo_platform_packages.mjs": "3e59f2002a67fdf8ffb995834f707e984ce3260628521348b09754362bb9ba30",
       "scripts/dotnet_env.sh": "8b7e70f90584bbb2664716ec8ae1a373e314ef04185860455c28cc3ff5e9a39b"
     },
-    "source_snapshot_sha256": "79bd33d8f6ef32d1c9ded067c0682cb261c7405c9a1afce799ea599765ae3b81",
+    "source_snapshot_sha256": "d2f29f455bd9da5aa9005de2a2a0ec8d34b905f7aa55c1a375f344c6f33dece3",
     "compiler": {
       "tool": "nccs",
       "version": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"
@@ -715,8 +715,8 @@
       "v3/MarkerOnlyModule.nef": "aff6624a898dacdfc48355d4cd4fb07f61e40be4a2bdf935829ebcb9c834f9b9",
       "v3/MockTransferTarget.manifest.json": "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c",
       "v3/MockTransferTarget.nef": "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
-      "v3/MockVerifierCore.manifest.json": "b1cb996174e50f3066376eacb2a02c6a048f31b5e43d2adb3c3c59217ff650e3",
-      "v3/MockVerifierCore.nef": "d14cd34a5e546eced6d05f28ca4d8238a905004a2e96d08b67a89222f1c3879c",
+      "v3/MockVerifierCore.manifest.json": "6d8f9b7c3555ee32a07ecb6552cae3975868dddff91809292c75e17569e44120",
+      "v3/MockVerifierCore.nef": "41d74e71eeb590e0e2c856e14fffa748054041c749a44b3db24e4d0f2b290911",
       "v3/MultiHook.manifest.json": "1f93c73a7282d85aa37c63af04b49053426467ae52092898e250f1b2c965c81e",
       "v3/MultiHook.nef": "635b03965425d57bb34eb7831dc144f073ab3ed0d3b9adce3fb66a255222655b",
       "v3/MultiSigVerifier.manifest.json": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
@@ -739,8 +739,8 @@
       "v3/TEEVerifier.nef": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
       "v3/TokenRestrictedHook.manifest.json": "ee8feb705fc945caadb59aee672736bb1a53bc3652646b78d166bf8e44539efa",
       "v3/TokenRestrictedHook.nef": "41716994c966832b69a91864e8bfd0bcf860faafac5336c20bac8e8e7c79d210",
-      "v3/UnifiedSmartWalletV3.manifest.json": "686d723b2eb60e65a4f83608480f591dfd4b6a6771c6e2292d714254ae85337b",
-      "v3/UnifiedSmartWalletV3.nef": "b6ccccd3be7421624973d202a067230bee6d7d706c788291e921588dafd00c05",
+      "v3/UnifiedSmartWalletV3.manifest.json": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+      "v3/UnifiedSmartWalletV3.nef": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
       "v3/Web3AuthVerifier.manifest.json": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
       "v3/Web3AuthVerifier.nef": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
       "v3/WebAuthnVerifier.manifest.json": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
@@ -783,8 +783,8 @@
       "v3/verifiers/ZKEmailVerifier.nef": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
       "v3/verifiers/ZkLoginVerifier.manifest.json": "0513f9e17e85872aafc7d298e8a9776bda9f29be6d9fecf2c9cfcc031ea090ac",
       "v3/verifiers/ZkLoginVerifier.nef": "1bd2f90ac64e4710e94e0d6414f60faa988473894841186050a52ba8d40f3e84",
-      "platform/UnifiedSmartWalletV3.manifest.json": "fe9ff321b6f8ab3dfab1b39901e9a39b3127943cb65c399fe5247ec9692af52e",
-      "platform/UnifiedSmartWalletV3.nef": "8580bee1f4dd38890899bb0f5abdb8a4b3501812b8453533d9c6117134a1f3d3"
+      "platform/UnifiedSmartWalletV3.manifest.json": "7b431c5aa18ac547ede7d5abe60d2b15737d6d49f9efa353ff7870627f75ffb4",
+      "platform/UnifiedSmartWalletV3.nef": "7d421d38e3256ea66fe696eae8212a1bc2da1dde5e1edd5cd985e5e5de024b06"
     },
     "release_artifact_sha256": {
       "v3/AAAddressMarket.manifest.json": "5a566e145e98a21a4d4fdcfb518772647f410b788fa23bc792836b3ae351861a",
@@ -797,8 +797,8 @@
       "v3/MarkerOnlyModule.nef": "aff6624a898dacdfc48355d4cd4fb07f61e40be4a2bdf935829ebcb9c834f9b9",
       "v3/MockTransferTarget.manifest.json": "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c",
       "v3/MockTransferTarget.nef": "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
-      "v3/MockVerifierCore.manifest.json": "b1cb996174e50f3066376eacb2a02c6a048f31b5e43d2adb3c3c59217ff650e3",
-      "v3/MockVerifierCore.nef": "d14cd34a5e546eced6d05f28ca4d8238a905004a2e96d08b67a89222f1c3879c",
+      "v3/MockVerifierCore.manifest.json": "6d8f9b7c3555ee32a07ecb6552cae3975868dddff91809292c75e17569e44120",
+      "v3/MockVerifierCore.nef": "41d74e71eeb590e0e2c856e14fffa748054041c749a44b3db24e4d0f2b290911",
       "v3/MultiHook.manifest.json": "1f93c73a7282d85aa37c63af04b49053426467ae52092898e250f1b2c965c81e",
       "v3/MultiHook.nef": "635b03965425d57bb34eb7831dc144f073ab3ed0d3b9adce3fb66a255222655b",
       "v3/MultiSigVerifier.manifest.json": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362",
@@ -821,8 +821,8 @@
       "v3/TEEVerifier.nef": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
       "v3/TokenRestrictedHook.manifest.json": "ee8feb705fc945caadb59aee672736bb1a53bc3652646b78d166bf8e44539efa",
       "v3/TokenRestrictedHook.nef": "41716994c966832b69a91864e8bfd0bcf860faafac5336c20bac8e8e7c79d210",
-      "v3/UnifiedSmartWalletV3.manifest.json": "686d723b2eb60e65a4f83608480f591dfd4b6a6771c6e2292d714254ae85337b",
-      "v3/UnifiedSmartWalletV3.nef": "b6ccccd3be7421624973d202a067230bee6d7d706c788291e921588dafd00c05",
+      "v3/UnifiedSmartWalletV3.manifest.json": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+      "v3/UnifiedSmartWalletV3.nef": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
       "v3/Web3AuthVerifier.manifest.json": "b1aeb27131b5eebc77a640d671fa6750f111290635f6e550e2bb574e539d518e",
       "v3/Web3AuthVerifier.nef": "85ca79efdc79bc2eb038e1e642780686375b01e3fce6a8144dfda79550994cfa",
       "v3/WebAuthnVerifier.manifest.json": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7",
@@ -865,8 +865,8 @@
       "v3/verifiers/ZKEmailVerifier.nef": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
       "v3/verifiers/ZkLoginVerifier.manifest.json": "0513f9e17e85872aafc7d298e8a9776bda9f29be6d9fecf2c9cfcc031ea090ac",
       "v3/verifiers/ZkLoginVerifier.nef": "1bd2f90ac64e4710e94e0d6414f60faa988473894841186050a52ba8d40f3e84",
-      "platform/UnifiedSmartWalletV3.manifest.json": "fe9ff321b6f8ab3dfab1b39901e9a39b3127943cb65c399fe5247ec9692af52e",
-      "platform/UnifiedSmartWalletV3.nef": "8580bee1f4dd38890899bb0f5abdb8a4b3501812b8453533d9c6117134a1f3d3"
+      "platform/UnifiedSmartWalletV3.manifest.json": "7b431c5aa18ac547ede7d5abe60d2b15737d6d49f9efa353ff7870627f75ffb4",
+      "platform/UnifiedSmartWalletV3.nef": "7d421d38e3256ea66fe696eae8212a1bc2da1dde5e1edd5cd985e5e5de024b06"
     },
     "byte_equal_release": true,
     "semantic_scope": "Rebuild and byte comparison; not a mechanized C# to NEF or full NeoVM refinement proof"

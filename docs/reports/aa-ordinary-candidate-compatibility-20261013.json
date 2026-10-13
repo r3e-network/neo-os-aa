@@ -1,6 +1,6 @@
 {
   "schema": "neoos-aa-ordinary-candidate-compatibility/v1",
-  "sourceCommit": "bc621a76193c3715e469be578591f130a0281ca4",
+  "sourceCommit": "d41aec3c5843b0f3ce33a032970aa307817cd52f",
   "scope": "Offline ABI and artifact comparison; not deployment approval or a compiler refinement proof.",
   "publicNetworksTouched": false,
   "pinnedArtifact": {
@@ -9,28 +9,31 @@
     "abiEntries": 90
   },
   "candidateArtifact": {
-    "nefSha256": "b6ccccd3be7421624973d202a067230bee6d7d706c788291e921588dafd00c05",
-    "manifestSha256": "686d723b2eb60e65a4f83608480f591dfd4b6a6771c6e2292d714254ae85337b",
-    "abiEntries": 98
+    "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+    "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+    "abiEntries": 100
   },
   "addedMethods": [
     "callVerifierChild/4",
     "cancelPlatformAccountOwnerRotation/2",
     "confirmPlatformAccountOwnerRotation/2",
+    "finalizeEscapeToOwner/1",
     "getPendingHookUpdate/1",
     "getPendingPlatformAccountOwnerRotation/1",
     "getPendingVerifierUpdate/1",
     "getPlatformAccountOwnerRotationAvailableAt/1",
+    "isOwnerOnlyRecovery/1",
     "proposePlatformAccountOwnerRotation/3"
   ],
   "removedMethods": [],
   "signatureChanges": [],
   "manifestPermissionChange": false,
-  "behavioralCompatibility": "NOT backward-behavior-compatible: rotatePlatformAccountOwner now proposes a delayed rotation instead of immediately changing the owner. Existing registrar integrations need the confirmation/cancellation workflow and new-owner witness.",
+  "behavioralCompatibility": "Registrar migration required: rotatePlatformAccountOwner proposes a seven-day delayed change with new-owner witness. Sponsored single/batch/nested calls now share one reimbursement fee ceiling per transaction within a core. New optional callback-free recovery permanently disables plugin installation for that account; legacy cleanup-based recovery remains available.",
   "releaseStatus": "NO-GO-PENDING-UPGRADE-REVIEW-AND-AUTHORIZED-DEPLOYMENT",
   "remainingGates": [
     "Registrar integration migration for delayed rotation",
     "Public callback child-budget capability (full foundation conformance)",
     "Reviewed governed deployment transaction and independent RPC readback"
-  ]
+  ],
+  "newRecoveryConsequence": "Permanent owner-only mode retains identity and nonce history, survives ownership transfers, and cannot reinstall any verifier/hook. It does not refund plugin-held funds or revoke external allowances."
 }

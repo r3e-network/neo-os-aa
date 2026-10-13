@@ -182,6 +182,43 @@ function sponsoredUserOpParameter(op, depth) {
   }
 }
 
+// This optional ordinary ABI is checked against the deployed manifest before
+// reading its permanent mode. Missing/incompatible methods are unsupported;
+// invalid RPC data is an error, never a false capability or mode value.
+function supportsOrdinaryOwnerOnlyRecovery(contractState, expectedCore) {
+  if (contractState?.state === 'FAULT') {
+    throw createError(EC.CONTRACT_VM_FAULT, { exception: contractState.exception });
+  }
+  const methods = contractState?.manifest?.abi?.methods;
+  const abiTypes = new Set(['Any', 'Boolean', 'Integer', 'ByteArray', 'String', 'Hash160',
+    'Hash256', 'PublicKey', 'Signature', 'Array', 'Map', 'InteropInterface', 'Void']);
+  if (typeof contractState?.hash !== 'string'
+      || !/^(?:0x)?[0-9a-f]{40}$/i.test(contractState.hash)
+      || sanitizeHex(contractState.hash) !== expectedCore || !Array.isArray(methods)) {
+    throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Malformed or mismatched ordinary contract state' });
+  }
+  for (const method of methods) {
+    if (!method || typeof method.name !== 'string' || !method.name
+        || !Array.isArray(method.parameters) || typeof method.safe !== 'boolean'
+        || !Number.isSafeInteger(method.offset) || method.offset < 0
+        || !abiTypes.has(method.returntype)
+        || method.parameters.some((parameter) => !parameter
+          || typeof parameter.name !== 'string' || !parameter.name
+          || !abiTypes.has(parameter.type) || parameter.type === 'Void')) {
+      throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Malformed ordinary ABI descriptor' });
+    }
+  }
+  return [
+    ['finalizeEscapeToOwner', 'Void', false],
+    ['isOwnerOnlyRecovery', 'Boolean', true],
+  ].every(([name, returntype, safe]) => {
+    const candidates = methods.filter((method) => method.name === name);
+    return candidates.length === 1 && candidates[0].returntype === returntype
+      && candidates[0].safe === safe && candidates[0].parameters.length === 1
+      && candidates[0].parameters[0].type === 'Hash160';
+  });
+}
+
 const DEFAULT_RPC_READ_RETRY_ATTEMPTS = 4;
 const DEFAULT_RPC_READ_RETRY_DELAY_MS = 250;
 
@@ -256,6 +293,62 @@ class AbstractAccountClient {
 
   async invokeFunctionWithRetry(scriptHash, operation, params = [], signers = undefined) {
     return invokeRpcReadWithRetry(() => this.rpcClient.invokeFunction(scriptHash, operation, params, signers));
+  }
+
+  /**
+   * Builds a direct core call for irreversible ordinary owner-only recovery.
+   * This is not a UserOperation and must be signed by the backup owner after
+   * the escape timelock. It never installs a replacement module.
+   * @param {Object} options Exactly one accountScriptHash/accountAddress (account ID, not asset proxy).
+   * @returns {Object} Contract invocation payload; construction does not establish deployment support.
+   */
+  createFinalizeEscapeToOwnerPayload(options) {
+    const { accountScriptHash = '', accountAddress = '' } = options || {};
+    if (Boolean(accountScriptHash) === Boolean(accountAddress)) {
+      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, {
+        hint: 'Supply exactly one of accountScriptHash or accountAddress',
+      });
+    }
+    const accountId = normalizeAddress(accountScriptHash || accountAddress);
+    if (accountId === '0'.repeat(40)) {
+      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, { hint: 'Account ID must be nonzero' });
+    }
+    validateHash160(this.masterContractHash);
+    return {
+      scriptHash: this.masterContractHash,
+      operation: 'finalizeEscapeToOwner',
+      args: [sc.ContractParam.hash160(accountId)],
+    };
+  }
+
+  /**
+   * Reads deployed ordinary owner-only recovery capability and permanent mode.
+   * Unsupported manifests return a null mode; malformed state, RPC errors, VM
+   * faults and non-Boolean mode responses throw. No capability is cached.
+   * @param {string} accountHashOrAddress Account ID hash or equivalent address, never the asset proxy.
+   * @returns {Promise<Object>} {supported:false, ownerOnlyRecovery:null} or {supported:true, ownerOnlyRecovery:boolean}.
+   */
+  async getOwnerOnlyRecoveryStatus(accountHashOrAddress) {
+    const accountId = normalizeAddress(accountHashOrAddress);
+    if (accountId === '0'.repeat(40)) {
+      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, { hint: 'Account ID must be nonzero' });
+    }
+    validateHash160(this.masterContractHash);
+    const contractState = await invokeRpcReadWithRetry(() =>
+      this.rpcClient.send('getcontractstate', [`0x${this.masterContractHash}`]));
+    if (!supportsOrdinaryOwnerOnlyRecovery(contractState, this.masterContractHash)) {
+      return { supported: false, ownerOnlyRecovery: null };
+    }
+    const response = await this.invokeFunctionWithRetry(this.masterContractHash,
+      'isOwnerOnlyRecovery', [{ type: 'Hash160', value: accountId }], []);
+    if (response?.state === 'FAULT') {
+      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
+    }
+    if (response?.state !== 'HALT' || !Array.isArray(response.stack) || response.stack.length !== 1
+        || response.stack[0]?.type !== 'Boolean' || typeof response.stack[0].value !== 'boolean') {
+      throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Expected one HALT Boolean owner-only recovery value' });
+    }
+    return { supported: true, ownerOnlyRecovery: response.stack[0].value };
   }
 
   /**

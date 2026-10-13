@@ -56,3 +56,28 @@ Existing package-name imports need no migration. Direct imports from `src` were
 already blocked by the export map and remain unsupported. Build and tarball
 artifacts are disposable; edit canonical source and rebuild. These checks establish
 local package usability, not npm publication or deployed-contract compatibility.
+
+## Ordinary owner-only recovery
+
+`AbstractAccountClient.getOwnerOnlyRecoveryStatus(accountId)` checks the deployed
+core's exact recovery ABI before reading permanent mode. It returns
+`{ supported: false, ownerOnlyRecovery: null }` for an old or incompatible ABI;
+with matching support it returns a strict Boolean mode. RPC faults and malformed
+responses throw. This check is current deployment capability, not a release or
+protocol-activation proof.
+
+After initiating escape and waiting for its timelock, build a direct core call:
+
+```js
+const status = await client.getOwnerOnlyRecoveryStatus(accountId);
+if (!status.supported) throw new Error('This deployment does not support owner-only recovery');
+const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: accountId });
+// Send payload through the backup owner's wallet as a direct core invocation.
+```
+
+Use the account ID, never its asset proxy address. Payload construction does not
+sign, submit or verify deployment support. Successful recovery permanently
+removes both plugin roots and forbids plugin reinstallation, including after an
+owner transfer. It preserves account identity, asset address and nonce channels;
+it does not refund plugin-held balances or revoke external allowances. It is an
+ordinary contract capability and does not use native recovery or a UserOperation.

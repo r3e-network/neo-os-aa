@@ -35,6 +35,7 @@ import type {
   UserOperationTypedData,
   MetaTransactionTypedData,
   AccountState,
+  OwnerOnlyRecoveryStatus,
   SimulationResult,
   ContractInvocationPayload,
   SdkError,
@@ -106,6 +107,17 @@ async function exercisePayloads(): Promise<void> {
 
   const argsHash: string = await client.computeArgsHash([]);
   void argsHash;
+
+  const recoveryPayload: ContractInvocationPayload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: ACCOUNT_ID });
+  const recoveryStatus: OwnerOnlyRecoveryStatus = await client.getOwnerOnlyRecoveryStatus(ACCOUNT_ID);
+  if (recoveryStatus.supported) {
+    const permanent: boolean = recoveryStatus.ownerOnlyRecovery;
+    void permanent;
+  } else {
+    const unsupportedMode: null = recoveryStatus.ownerOnlyRecovery;
+    void unsupportedMode;
+  }
+  void recoveryPayload;
 
   // getAccountState return shape.
   const state: AccountState = await client.getAccountState(ACCOUNT_ID);

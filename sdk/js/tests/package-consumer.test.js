@@ -98,6 +98,39 @@ test('the real npm tarball is a self-contained, reproducible production package'
     `], consumer);
   });
 
+  await t.test('installed ordinary client builds direct recovery and strictly reads verified permanent mode', async () => {
+    const fixture = JSON.parse(await fs.readFile(path.join(__dirname, 'fixtures', 'ordinary-owner-only-contract-state.json'), 'utf8'));
+    run(process.execPath, ['--input-type=commonjs', '-e', `
+      const assert = require('node:assert/strict');
+      const { AbstractAccountClient } = require('neo-abstract-account');
+      const client = new AbstractAccountClient('http://127.0.0.1:9', '11'.repeat(20));
+      const state = ${JSON.stringify(fixture)};
+      const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: '22'.repeat(20) });
+      assert.equal(payload.operation, 'finalizeEscapeToOwner');
+      assert.equal(payload.scriptHash, '11'.repeat(20));
+      assert.deepEqual(payload.args.map((arg) => arg.toJSON()), [{ type: 'Hash160', value: '22'.repeat(20) }]);
+      client.rpcClient = {
+        async send(method, params) {
+          assert.equal(method, 'getcontractstate');
+          assert.deepEqual(params, ['0x' + '11'.repeat(20)]);
+          return state;
+        },
+        async invokeFunction(hash, method, params, signers) {
+          assert.equal(hash, '11'.repeat(20));
+          assert.equal(method, 'isOwnerOnlyRecovery');
+          assert.deepEqual(params, [{type:'Hash160', value:'22'.repeat(20)}]);
+          assert.deepEqual(signers, []);
+          return {state:'HALT', stack:[{type:'Boolean', value:true}]};
+        },
+      };
+      (async () => {
+        assert.deepEqual(await client.getOwnerOnlyRecoveryStatus('22'.repeat(20)), {supported:true, ownerOnlyRecovery:true});
+        state.manifest.abi.methods = [];
+        assert.deepEqual(await client.getOwnerOnlyRecoveryStatus('22'.repeat(20)), {supported:false, ownerOnlyRecovery:null});
+      })().catch((error) => { console.error(error); process.exitCode = 1; });
+    `], consumer);
+  });
+
   const packageRoot = path.join(consumer, 'node_modules', packed.name);
   const manifest = JSON.parse(await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8'));
   await t.test('all exported paths and relative module imports stay inside the installed package', async () => {

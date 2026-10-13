@@ -16,6 +16,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { AbstractAccountClient } = require('../src/index');
 const neonCompat = require('../src/neonCompat');
+const { createHash } = require('node:crypto');
+const recoveryStateFixture = require('./fixtures/ordinary-owner-only-contract-state.json');
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const indexSourcePath = path.join(repoRoot, 'sdk', 'js', 'src', 'index.js');
@@ -39,6 +41,57 @@ function loadAbiMethods(manifestFileName) {
 const walletAbi = loadAbiMethods('UnifiedSmartWalletV3.manifest.json');
 const paymasterAbi = loadAbiMethods('AAPaymaster.manifest.json');
 
+// Optional methods are backed by the complete candidate manifest and its
+// source-to-artifact receipt, not promoted into the deployed 90-method ABI.
+const candidateFixturePath = path.join(__dirname, 'fixtures', 'ordinary-owner-only-candidate.manifest.json');
+const candidateBytes = fs.readFileSync(candidateFixturePath);
+const candidateManifest = JSON.parse(candidateBytes);
+const candidateRecoveryMethods = recoveryStateFixture.manifest.abi.methods;
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const descriptor = (method) => ({
+  name: method.name, parameters: method.parameters, returntype: method.returntype, safe: method.safe,
+});
+
+function assertCandidateEvidence(bytes = candidateBytes) {
+  const compatibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-candidate-compatibility-20261013.json')));
+  const reproducibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-artifact-reproducibility-20261013.json')));
+  const manifestReceipt = reproducibility.profiles.v3.artifacts.filter((entry) => entry.artifact === 'UnifiedSmartWalletV3.manifest.json');
+  assert.equal(manifestReceipt.length, 1);
+  assert.equal(reproducibility.release_matches_fresh_build, true);
+  assert.equal(manifestReceipt[0].match, true);
+  assert.equal(manifestReceipt[0].expected_sha256, manifestReceipt[0].actual_sha256);
+  assert.equal(sha256(bytes), manifestReceipt[0].actual_sha256, 'candidate fixture must be the reproducibly compiled manifest');
+  assert.equal(sha256(bytes), compatibility.candidateArtifact.manifestSha256);
+  const publicBytes = fs.readFileSync(path.join(repoRoot, 'contracts/build/UnifiedSmartWalletV3.manifest.json'));
+  assert.equal(sha256(publicBytes), '24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4', 'pinned public artifact is unchanged');
+  assert.equal(sha256(publicBytes), compatibility.pinnedArtifact.manifestSha256);
+  assert.equal(JSON.parse(publicBytes).abi.methods.length, 90);
+  assert.equal(JSON.parse(bytes).abi.methods.length, compatibility.candidateArtifact.abiEntries);
+  // Fail if the checked-in compilation source diverges from the receipt that
+  // supplies this candidate. No local bin/ directory or compiler is required.
+  for (const [relative, digest] of Object.entries(reproducibility.certificate.source_files)) {
+    assert.equal(sha256(fs.readFileSync(path.join(repoRoot, relative))), digest, `candidate source drift: ${relative}`);
+  }
+  for (const required of candidateRecoveryMethods) {
+    const matches = candidateManifest.abi.methods.filter((entry) => entry.name === required.name);
+    assert.equal(matches.length, 1);
+    assert.deepEqual(descriptor(matches[0]), descriptor(required), `capability descriptor matches compiled candidate: ${required.name}`);
+    assert.equal(walletAbi.has(required.name), false, 'candidate-only methods do not enter the public ABI map');
+    assert.ok(compatibility.addedMethods.includes(`${required.name}/${required.parameters.length}`));
+  }
+}
+
+function assertOperationSurface(operations) {
+  assertCandidateEvidence();
+  for (const operation of operations) {
+    if (walletAbi.has(operation) || paymasterAbi.has(operation)) continue;
+    const gated = candidateRecoveryMethods.find((entry) => entry.name === operation);
+    assert.ok(gated, `SDK operation has no pinned public ABI or verified capability-gated candidate descriptor: ${operation}`);
+    assert.ok(candidateManifest.abi.methods.some((entry) => JSON.stringify(descriptor(entry)) === JSON.stringify(descriptor(gated))));
+  }
+}
+
+
 test('every operation string in the SDK source exists in a compiled ABI', () => {
   const source = fs.readFileSync(indexSourcePath, 'utf8');
   const operations = new Set();
@@ -53,9 +106,55 @@ test('every operation string in the SDK source exists in a compiled ABI', () => 
   assert.ok(operations.size >= 30,
     `expected to extract the full operation surface from index.js, got only ${operations.size}`);
 
-  const missing = [...operations].filter((op) => !walletAbi.has(op) && !paymasterAbi.has(op));
-  assert.deepEqual(missing, [],
-    `SDK emits operations that exist in no compiled ABI (method-not-found FAULT on-chain): ${missing.join(', ')}`);
+  assertOperationSurface(operations);
+});
+
+test('candidate evidence and method surfaces fail closed on drift or ungated additions', () => {
+  assert.throws(() => assertCandidateEvidence(Buffer.from(candidateBytes.toString().replace('finalizeEscapeToOwner', 'finalizeEscapeToAttacker'))), /candidate fixture/);
+  assert.throws(() => assertOperationSurface(['finalizeEscapeToAttacker']), /no pinned public ABI/);
+  // This method really exists in the candidate, but is not covered by the
+  // recovery capability path. Candidate membership alone is insufficient.
+  assert.ok(candidateManifest.abi.methods.some((entry) => entry.name === 'getPendingHookUpdate'));
+  assert.throws(() => assertOperationSurface(['getPendingHookUpdate']), /no pinned public ABI/);
+});
+
+test('candidate recovery payload and read use exact compiled descriptors after capability verification', async () => {
+  assertCandidateEvidence();
+  const client = new AbstractAccountClient('https://example.invalid', MASTER_HASH);
+  const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: ACCOUNT_HASH });
+  const write = candidateManifest.abi.methods.find((entry) => entry.name === payload.operation);
+  assert.equal(write.safe, false);
+  assert.equal(write.returntype, 'Void');
+  assert.deepEqual(payload.args.map((arg) => arg.toJSON().type), write.parameters.map((parameter) => parameter.type));
+  const calls = [];
+  client.rpcClient = {
+    async send(method, params) {
+      calls.push(method);
+      assert.equal(method, 'getcontractstate');
+      assert.deepEqual(params, [`0x${MASTER_HASH}`]);
+      return { hash: `0x${MASTER_HASH}`, manifest: candidateManifest };
+    },
+    async invokeFunction(hash, operation, params, signers) {
+      calls.push(operation);
+      assert.equal(calls[0], 'getcontractstate', 'query cannot precede capability read');
+      assert.equal(hash, MASTER_HASH);
+      const read = candidateManifest.abi.methods.find((entry) => entry.name === operation);
+      assert.equal(read.safe, true);
+      assert.equal(read.returntype, 'Boolean');
+      assert.equal(params.length, read.parameters.length);
+      assert.deepEqual(params.map((parameter) => parameter.type), read.parameters.map((parameter) => parameter.type));
+      assert.deepEqual(signers, []);
+      return { state: 'HALT', stack: [{ type: 'Boolean', value: false }] };
+    },
+  };
+  assert.deepEqual(await client.getOwnerOnlyRecoveryStatus(ACCOUNT_HASH), { supported: true, ownerOnlyRecovery: false });
+  assert.deepEqual(calls, ['getcontractstate', 'isOwnerOnlyRecovery']);
+  // The original public artifact is still exercised and cannot authorize the
+  // new query. It reports unknown mode without making a query invocation.
+  const pinned = JSON.parse(fs.readFileSync(path.join(repoRoot, 'contracts/build/UnifiedSmartWalletV3.manifest.json')));
+  client.rpcClient.send = async () => ({ hash: `0x${MASTER_HASH}`, manifest: pinned });
+  client.rpcClient.invokeFunction = async () => assert.fail('old public ABI must not invoke candidate read');
+  assert.deepEqual(await client.getOwnerOnlyRecoveryStatus(ACCOUNT_HASH), { supported: false, ownerOnlyRecovery: null });
 });
 
 test('the six phantom PascalCase operations stay out of the SDK', () => {

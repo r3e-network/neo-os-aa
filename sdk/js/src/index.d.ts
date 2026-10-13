@@ -679,6 +679,11 @@ export interface AccountScopedOptions {
   accountAddress?: Hash160 | NeoAddress;
 }
 
+/** Deployed ordinary recovery support is distinct from the account's permanent mode. */
+export type OwnerOnlyRecoveryStatus =
+  | { supported: false; ownerOnlyRecovery: null }
+  | { supported: true; ownerOnlyRecovery: boolean };
+
 /** Options for {@link AbstractAccountClient.createUpdateVerifierPayload}. */
 export interface UpdateVerifierPayloadOptions extends AccountScopedOptions {
   verifierContractHash: Hash160;
@@ -824,6 +829,19 @@ export declare class AbstractAccountClient {
     params?: unknown[],
     signers?: unknown[],
   ): Promise<any>;
+
+  /**
+   * Builds a direct core invocation for irreversible owner-only recovery.
+   * Requires the backup-owner witness and mature escape timelock on chain.
+   * Does not sign, submit or establish deployed capability. Use the account ID,
+   * never its asset proxy address. Plugins cannot be reinstalled after success.
+   */
+  createFinalizeEscapeToOwnerPayload(options: AccountScopedOptions): ContractInvocationPayload;
+  /**
+   * Validates deployed manifest capability, then strictly reads permanent mode.
+   * Unsupported ABI yields null; malformed RPC data and VM faults throw.
+   */
+  getOwnerOnlyRecoveryStatus(accountHashOrAddress: Hash160 | NeoAddress): Promise<OwnerOnlyRecoveryStatus>;
 
   /** Builds the verification script from a display-order account id. */
   buildVerifyScript(accountIdHex: string): string;
