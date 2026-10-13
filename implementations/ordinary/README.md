@@ -21,9 +21,9 @@ The ordinary profile is a user-contract implementation. It must not be
 labelled as native AccountManagement or used as evidence of native consensus
 activation.
 
-The ordinary protocol itself is `go-source-scoped`: its operation encoding,
-nonce domain, lifecycle, callback ordering, rollback rules and documented
-capability limits are defined and tested in the source. The profile keeps the
+The ordinary protocol status is `source-checks-passed-conformance-open`: its
+operation encoding, nonce domain, lifecycle, callback ordering and rollback
+rules have source and runtime checks, while full protocol conformance remains open. The profile keeps the
 public callback-resource, candidate-upgrade and deployment-readback boundaries
 explicit so an implementation reader can distinguish protocol correctness from
 release evidence.

@@ -1,0 +1,36 @@
+{
+  "schema": "neoos-aa-ordinary-candidate-compatibility/v1",
+  "sourceCommit": "bc621a76193c3715e469be578591f130a0281ca4",
+  "scope": "Offline ABI and artifact comparison; not deployment approval or a compiler refinement proof.",
+  "publicNetworksTouched": false,
+  "pinnedArtifact": {
+    "nefSha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+    "manifestSha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+    "abiEntries": 90
+  },
+  "candidateArtifact": {
+    "nefSha256": "b6ccccd3be7421624973d202a067230bee6d7d706c788291e921588dafd00c05",
+    "manifestSha256": "686d723b2eb60e65a4f83608480f591dfd4b6a6771c6e2292d714254ae85337b",
+    "abiEntries": 98
+  },
+  "addedMethods": [
+    "callVerifierChild/4",
+    "cancelPlatformAccountOwnerRotation/2",
+    "confirmPlatformAccountOwnerRotation/2",
+    "getPendingHookUpdate/1",
+    "getPendingPlatformAccountOwnerRotation/1",
+    "getPendingVerifierUpdate/1",
+    "getPlatformAccountOwnerRotationAvailableAt/1",
+    "proposePlatformAccountOwnerRotation/3"
+  ],
+  "removedMethods": [],
+  "signatureChanges": [],
+  "manifestPermissionChange": false,
+  "behavioralCompatibility": "NOT backward-behavior-compatible: rotatePlatformAccountOwner now proposes a delayed rotation instead of immediately changing the owner. Existing registrar integrations need the confirmation/cancellation workflow and new-owner witness.",
+  "releaseStatus": "NO-GO-PENDING-UPGRADE-REVIEW-AND-AUTHORIZED-DEPLOYMENT",
+  "remainingGates": [
+    "Registrar integration migration for delayed rotation",
+    "Public callback child-budget capability (full foundation conformance)",
+    "Reviewed governed deployment transaction and independent RPC readback"
+  ]
+}

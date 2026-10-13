@@ -73,8 +73,8 @@ test('ordinary GO status is backed by the pinned public artifact and independent
   const ordinary = readProfile('ordinary').data;
   assert.equal(ordinary.implementationVerified, true);
   assert.equal(ordinary.status, 'go-pinned-public-artifact');
-  assert.equal(ordinary.protocolStatus, 'go-source-scoped');
-  assert.match(ordinary.protocolScope, /Neo-native ordinary protocol rules/);
+  assert.equal(ordinary.protocolStatus, 'source-checks-passed-conformance-open');
+  assert.match(ordinary.protocolScope, /Full protocol conformance remains open/);
   assert.deepEqual(ordinary.protocolEvidence, [
     'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
     'docs/AA-SYSTEM-STATUS.md',

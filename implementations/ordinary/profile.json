@@ -3,8 +3,8 @@
   "version": 1,
   "kind": "deployed-contract",
   "status": "go-pinned-public-artifact",
-  "protocolStatus": "go-source-scoped",
-  "protocolScope": "The Neo-native ordinary protocol rules are complete for the capabilities exposed by this user-contract profile; deployment and runtime capability boundaries remain separate release gates.",
+  "protocolStatus": "source-checks-passed-conformance-open",
+  "protocolScope": "Source checks pass for the specified ordinary user-contract behavior. Full protocol conformance remains open because the public runtime lacks isolated callback budgets; candidate deployment and readback remain separate gates.",
   "protocolEvidence": [
     "docs/PROTOCOL_COMPLETENESS_AUDIT.md",
     "docs/AA-SYSTEM-STATUS.md",
