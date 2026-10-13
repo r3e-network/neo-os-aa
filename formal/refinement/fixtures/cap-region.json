@@ -1,0 +1,1166 @@
+{
+  "source": "actual exporter /tmp/aa-refinement-inventory-final.json; fixture for proof mutation tests only",
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "start": 13667,
+  "endExclusive": 13689,
+  "hex": "11116bb99f74106b6a11ce9fba6c78a09e756d78b976",
+  "operations": [
+    [
+      "estimationFlag",
+      {
+        "kind": "Binary",
+        "type": "global::System.Numerics.BigInteger",
+        "implicit": false,
+        "constant": null,
+        "location": {
+          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+          "startLine": 66,
+          "startColumn": 41,
+          "endLine": 66,
+          "endColumn": 74,
+          "start": 3983,
+          "length": 33
+        },
+        "details": {
+          "operator": "Subtract",
+          "checked": false,
+          "lifted": false,
+          "operatorMethod": "M:System.Numerics.BigInteger.op_Subtraction(System.Numerics.BigInteger,System.Numerics.BigInteger)"
+        },
+        "boundMetadata": {
+          "IBinaryOperation.OperatorKind": "Subtract",
+          "IBinaryOperation.LeftOperand": "Operation child; see ordered children",
+          "IBinaryOperation.RightOperand": "Operation child; see ordered children",
+          "IBinaryOperation.IsLifted": false,
+          "IBinaryOperation.IsChecked": false,
+          "IBinaryOperation.IsCompareText": false,
+          "IBinaryOperation.OperatorMethod": {
+            "id": "M:System.Numerics.BigInteger.op_Subtraction(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+            "type": null
+          },
+          "IBinaryOperation.ConstrainedToType": null
+        },
+        "unexportedMetadata": [],
+        "children": [
+          {
+            "kind": "Conversion",
+            "type": "global::System.Numerics.BigInteger",
+            "implicit": true,
+            "constant": null,
+            "location": {
+              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "startLine": 66,
+              "startColumn": 41,
+              "endLine": 66,
+              "endColumn": 42,
+              "start": 3983,
+              "length": 1
+            },
+            "details": {
+              "checked": false,
+              "tryCast": false,
+              "conversion": {
+                "Exists": true,
+                "IsIdentity": false,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": true,
+                "method": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger"
+              }
+            },
+            "boundMetadata": {
+              "IConversionOperation.Operand": "Operation child; see ordered children",
+              "IConversionOperation.OperatorMethod": {
+                "id": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger",
+                "type": null
+              },
+              "IConversionOperation.ConstrainedToType": null,
+              "IConversionOperation.Conversion": {
+                "Exists": true,
+                "IsIdentity": false,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": true,
+                "method": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger"
+              },
+              "IConversionOperation.IsTryCast": false,
+              "IConversionOperation.IsChecked": false
+            },
+            "unexportedMetadata": [],
+            "children": [
+              {
+                "kind": "Literal",
+                "type": "int",
+                "implicit": false,
+                "constant": {
+                  "hasValue": true,
+                  "value": {
+                    "runtimeType": "System.Int32",
+                    "value": "1"
+                  }
+                },
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 66,
+                  "startColumn": 41,
+                  "endLine": 66,
+                  "endColumn": 42,
+                  "start": 3983,
+                  "length": 1
+                },
+                "details": {},
+                "boundMetadata": {},
+                "unexportedMetadata": [],
+                "children": [],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              }
+            ],
+            "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+          },
+          {
+            "kind": "Invocation",
+            "type": "global::System.Numerics.BigInteger",
+            "implicit": false,
+            "constant": null,
+            "location": {
+              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "startLine": 66,
+              "startColumn": 45,
+              "endLine": 66,
+              "endColumn": 74,
+              "start": 3987,
+              "length": 29
+            },
+            "details": {
+              "callee": "M:System.Numerics.BigInteger.Min(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+              "virtual": false
+            },
+            "boundMetadata": {
+              "IInvocationOperation.TargetMethod": {
+                "id": "M:System.Numerics.BigInteger.Min(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+                "type": null
+              },
+              "IInvocationOperation.ConstrainedToType": null,
+              "IInvocationOperation.Instance": null,
+              "IInvocationOperation.IsVirtual": false
+            },
+            "unexportedMetadata": [
+              "IInvocationOperation.Arguments:System.Collections.Immutable.ImmutableArray`1[[Microsoft.CodeAnalysis.Operations.IArgumentOperation, Microsoft.CodeAnalysis, Version=4.14.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]"
+            ],
+            "children": [
+              {
+                "kind": "Argument",
+                "type": null,
+                "implicit": false,
+                "constant": null,
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 66,
+                  "startColumn": 60,
+                  "endLine": 66,
+                  "endColumn": 70,
+                  "start": 4002,
+                  "length": 10
+                },
+                "details": {
+                  "argumentKind": "Explicit",
+                  "parameter": "left",
+                  "inConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  },
+                  "outConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  }
+                },
+                "boundMetadata": {
+                  "IArgumentOperation.ArgumentKind": "Explicit",
+                  "IArgumentOperation.Parameter": {
+                    "id": "left",
+                    "type": null
+                  },
+                  "IArgumentOperation.Value": "Operation child; see ordered children",
+                  "IArgumentOperation.InConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  },
+                  "IArgumentOperation.OutConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  }
+                },
+                "unexportedMetadata": [],
+                "children": [
+                  {
+                    "kind": "LocalReference",
+                    "type": "global::System.Numerics.BigInteger",
+                    "implicit": false,
+                    "constant": null,
+                    "location": {
+                      "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                      "startLine": 66,
+                      "startColumn": 60,
+                      "endLine": 66,
+                      "endColumn": 70,
+                      "start": 4002,
+                      "length": 10
+                    },
+                    "details": {
+                      "symbol": "actualCost"
+                    },
+                    "boundMetadata": {
+                      "ILocalReferenceOperation.Local": {
+                        "id": "actualCost",
+                        "type": null
+                      },
+                      "ILocalReferenceOperation.IsDeclaration": false
+                    },
+                    "unexportedMetadata": [],
+                    "children": [],
+                    "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                  }
+                ],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              },
+              {
+                "kind": "Argument",
+                "type": null,
+                "implicit": false,
+                "constant": null,
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 66,
+                  "startColumn": 72,
+                  "endLine": 66,
+                  "endColumn": 73,
+                  "start": 4014,
+                  "length": 1
+                },
+                "details": {
+                  "argumentKind": "Explicit",
+                  "parameter": "right",
+                  "inConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  },
+                  "outConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  }
+                },
+                "boundMetadata": {
+                  "IArgumentOperation.ArgumentKind": "Explicit",
+                  "IArgumentOperation.Parameter": {
+                    "id": "right",
+                    "type": null
+                  },
+                  "IArgumentOperation.Value": "Operation child; see ordered children",
+                  "IArgumentOperation.InConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  },
+                  "IArgumentOperation.OutConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  }
+                },
+                "unexportedMetadata": [],
+                "children": [
+                  {
+                    "kind": "Conversion",
+                    "type": "global::System.Numerics.BigInteger",
+                    "implicit": true,
+                    "constant": null,
+                    "location": {
+                      "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                      "startLine": 66,
+                      "startColumn": 72,
+                      "endLine": 66,
+                      "endColumn": 73,
+                      "start": 4014,
+                      "length": 1
+                    },
+                    "details": {
+                      "checked": false,
+                      "tryCast": false,
+                      "conversion": {
+                        "Exists": true,
+                        "IsIdentity": false,
+                        "IsImplicit": true,
+                        "IsNullable": false,
+                        "IsNumeric": false,
+                        "IsReference": false,
+                        "IsUserDefined": true,
+                        "method": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger"
+                      }
+                    },
+                    "boundMetadata": {
+                      "IConversionOperation.Operand": "Operation child; see ordered children",
+                      "IConversionOperation.OperatorMethod": {
+                        "id": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger",
+                        "type": null
+                      },
+                      "IConversionOperation.ConstrainedToType": null,
+                      "IConversionOperation.Conversion": {
+                        "Exists": true,
+                        "IsIdentity": false,
+                        "IsImplicit": true,
+                        "IsNullable": false,
+                        "IsNumeric": false,
+                        "IsReference": false,
+                        "IsUserDefined": true,
+                        "method": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger"
+                      },
+                      "IConversionOperation.IsTryCast": false,
+                      "IConversionOperation.IsChecked": false
+                    },
+                    "unexportedMetadata": [],
+                    "children": [
+                      {
+                        "kind": "Literal",
+                        "type": "int",
+                        "implicit": false,
+                        "constant": {
+                          "hasValue": true,
+                          "value": {
+                            "runtimeType": "System.Int32",
+                            "value": "1"
+                          }
+                        },
+                        "location": {
+                          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                          "startLine": 66,
+                          "startColumn": 72,
+                          "endLine": 66,
+                          "endColumn": 73,
+                          "start": 4014,
+                          "length": 1
+                        },
+                        "details": {},
+                        "boundMetadata": {},
+                        "unexportedMetadata": [],
+                        "children": [],
+                        "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                      }
+                    ],
+                    "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                  }
+                ],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              }
+            ],
+            "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+          }
+        ],
+        "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+      }
+    ],
+    [
+      "cap",
+      {
+        "kind": "Binary",
+        "type": "global::System.Numerics.BigInteger",
+        "implicit": false,
+        "constant": null,
+        "location": {
+          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+          "startLine": 67,
+          "startColumn": 30,
+          "endLine": 67,
+          "endColumn": 106,
+          "start": 4047,
+          "length": 76
+        },
+        "details": {
+          "operator": "Add",
+          "checked": false,
+          "lifted": false,
+          "operatorMethod": "M:System.Numerics.BigInteger.op_Addition(System.Numerics.BigInteger,System.Numerics.BigInteger)"
+        },
+        "boundMetadata": {
+          "IBinaryOperation.OperatorKind": "Add",
+          "IBinaryOperation.LeftOperand": "Operation child; see ordered children",
+          "IBinaryOperation.RightOperand": "Operation child; see ordered children",
+          "IBinaryOperation.IsLifted": false,
+          "IBinaryOperation.IsChecked": false,
+          "IBinaryOperation.IsCompareText": false,
+          "IBinaryOperation.OperatorMethod": {
+            "id": "M:System.Numerics.BigInteger.op_Addition(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+            "type": null
+          },
+          "IBinaryOperation.ConstrainedToType": null
+        },
+        "unexportedMetadata": [],
+        "children": [
+          {
+            "kind": "Invocation",
+            "type": "global::System.Numerics.BigInteger",
+            "implicit": false,
+            "constant": null,
+            "location": {
+              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "startLine": 67,
+              "startColumn": 30,
+              "endLine": 67,
+              "endColumn": 77,
+              "start": 4047,
+              "length": 47
+            },
+            "details": {
+              "callee": "M:System.Numerics.BigInteger.Max(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+              "virtual": false
+            },
+            "boundMetadata": {
+              "IInvocationOperation.TargetMethod": {
+                "id": "M:System.Numerics.BigInteger.Max(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+                "type": null
+              },
+              "IInvocationOperation.ConstrainedToType": null,
+              "IInvocationOperation.Instance": null,
+              "IInvocationOperation.IsVirtual": false
+            },
+            "unexportedMetadata": [
+              "IInvocationOperation.Arguments:System.Collections.Immutable.ImmutableArray`1[[Microsoft.CodeAnalysis.Operations.IArgumentOperation, Microsoft.CodeAnalysis, Version=4.14.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]"
+            ],
+            "children": [
+              {
+                "kind": "Argument",
+                "type": null,
+                "implicit": false,
+                "constant": null,
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 67,
+                  "startColumn": 45,
+                  "endLine": 67,
+                  "endColumn": 73,
+                  "start": 4062,
+                  "length": 28
+                },
+                "details": {
+                  "argumentKind": "Explicit",
+                  "parameter": "left",
+                  "inConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  },
+                  "outConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  }
+                },
+                "boundMetadata": {
+                  "IArgumentOperation.ArgumentKind": "Explicit",
+                  "IArgumentOperation.Parameter": {
+                    "id": "left",
+                    "type": null
+                  },
+                  "IArgumentOperation.Value": "Operation child; see ordered children",
+                  "IArgumentOperation.InConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  },
+                  "IArgumentOperation.OutConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  }
+                },
+                "unexportedMetadata": [],
+                "children": [
+                  {
+                    "kind": "Binary",
+                    "type": "global::System.Numerics.BigInteger",
+                    "implicit": false,
+                    "constant": null,
+                    "location": {
+                      "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                      "startLine": 67,
+                      "startColumn": 45,
+                      "endLine": 67,
+                      "endColumn": 73,
+                      "start": 4062,
+                      "length": 28
+                    },
+                    "details": {
+                      "operator": "Subtract",
+                      "checked": false,
+                      "lifted": false,
+                      "operatorMethod": "M:System.Numerics.BigInteger.op_Subtraction(System.Numerics.BigInteger,System.Numerics.BigInteger)"
+                    },
+                    "boundMetadata": {
+                      "IBinaryOperation.OperatorKind": "Subtract",
+                      "IBinaryOperation.LeftOperand": "Operation child; see ordered children",
+                      "IBinaryOperation.RightOperand": "Operation child; see ordered children",
+                      "IBinaryOperation.IsLifted": false,
+                      "IBinaryOperation.IsChecked": false,
+                      "IBinaryOperation.IsCompareText": false,
+                      "IBinaryOperation.OperatorMethod": {
+                        "id": "M:System.Numerics.BigInteger.op_Subtraction(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+                        "type": null
+                      },
+                      "IBinaryOperation.ConstrainedToType": null
+                    },
+                    "unexportedMetadata": [],
+                    "children": [
+                      {
+                        "kind": "LocalReference",
+                        "type": "global::System.Numerics.BigInteger",
+                        "implicit": false,
+                        "constant": null,
+                        "location": {
+                          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                          "startLine": 67,
+                          "startColumn": 45,
+                          "endLine": 67,
+                          "endColumn": 55,
+                          "start": 4062,
+                          "length": 10
+                        },
+                        "details": {
+                          "symbol": "actualCost"
+                        },
+                        "boundMetadata": {
+                          "ILocalReferenceOperation.Local": {
+                            "id": "actualCost",
+                            "type": null
+                          },
+                          "ILocalReferenceOperation.IsDeclaration": false
+                        },
+                        "unexportedMetadata": [],
+                        "children": [],
+                        "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                      },
+                      {
+                        "kind": "FieldReference",
+                        "type": "global::System.Numerics.BigInteger",
+                        "implicit": false,
+                        "constant": null,
+                        "location": {
+                          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                          "startLine": 67,
+                          "startColumn": 58,
+                          "endLine": 67,
+                          "endColumn": 73,
+                          "start": 4075,
+                          "length": 15
+                        },
+                        "details": {
+                          "symbol": "F:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement.Reserved"
+                        },
+                        "boundMetadata": {
+                          "IMemberReferenceOperation.Instance": "Operation child; see ordered children",
+                          "IMemberReferenceOperation.Member": {
+                            "id": "F:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement.Reserved",
+                            "type": null
+                          },
+                          "IMemberReferenceOperation.ConstrainedToType": null,
+                          "IFieldReferenceOperation.Field": {
+                            "id": "F:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement.Reserved",
+                            "type": null
+                          },
+                          "IFieldReferenceOperation.IsDeclaration": false
+                        },
+                        "unexportedMetadata": [],
+                        "children": [
+                          {
+                            "kind": "LocalReference",
+                            "type": "global::AbstractAccount.UnifiedSmartWallet.TransactionReimbursement",
+                            "implicit": false,
+                            "constant": null,
+                            "location": {
+                              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                              "startLine": 67,
+                              "startColumn": 58,
+                              "endLine": 67,
+                              "endColumn": 64,
+                              "start": 4075,
+                              "length": 6
+                            },
+                            "details": {
+                              "symbol": "budget"
+                            },
+                            "boundMetadata": {
+                              "ILocalReferenceOperation.Local": {
+                                "id": "budget",
+                                "type": null
+                              },
+                              "ILocalReferenceOperation.IsDeclaration": false
+                            },
+                            "unexportedMetadata": [],
+                            "children": [],
+                            "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                          }
+                        ],
+                        "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                      }
+                    ],
+                    "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                  }
+                ],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              },
+              {
+                "kind": "Argument",
+                "type": null,
+                "implicit": false,
+                "constant": null,
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 67,
+                  "startColumn": 75,
+                  "endLine": 67,
+                  "endColumn": 76,
+                  "start": 4092,
+                  "length": 1
+                },
+                "details": {
+                  "argumentKind": "Explicit",
+                  "parameter": "right",
+                  "inConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  },
+                  "outConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  }
+                },
+                "boundMetadata": {
+                  "IArgumentOperation.ArgumentKind": "Explicit",
+                  "IArgumentOperation.Parameter": {
+                    "id": "right",
+                    "type": null
+                  },
+                  "IArgumentOperation.Value": "Operation child; see ordered children",
+                  "IArgumentOperation.InConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  },
+                  "IArgumentOperation.OutConversion": {
+                    "Exists": true,
+                    "IsIdentity": true,
+                    "IsImplicit": true,
+                    "IsNullable": false,
+                    "IsNumeric": false,
+                    "IsReference": false,
+                    "IsUserDefined": false,
+                    "method": null
+                  }
+                },
+                "unexportedMetadata": [],
+                "children": [
+                  {
+                    "kind": "Conversion",
+                    "type": "global::System.Numerics.BigInteger",
+                    "implicit": true,
+                    "constant": null,
+                    "location": {
+                      "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                      "startLine": 67,
+                      "startColumn": 75,
+                      "endLine": 67,
+                      "endColumn": 76,
+                      "start": 4092,
+                      "length": 1
+                    },
+                    "details": {
+                      "checked": false,
+                      "tryCast": false,
+                      "conversion": {
+                        "Exists": true,
+                        "IsIdentity": false,
+                        "IsImplicit": true,
+                        "IsNullable": false,
+                        "IsNumeric": false,
+                        "IsReference": false,
+                        "IsUserDefined": true,
+                        "method": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger"
+                      }
+                    },
+                    "boundMetadata": {
+                      "IConversionOperation.Operand": "Operation child; see ordered children",
+                      "IConversionOperation.OperatorMethod": {
+                        "id": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger",
+                        "type": null
+                      },
+                      "IConversionOperation.ConstrainedToType": null,
+                      "IConversionOperation.Conversion": {
+                        "Exists": true,
+                        "IsIdentity": false,
+                        "IsImplicit": true,
+                        "IsNullable": false,
+                        "IsNumeric": false,
+                        "IsReference": false,
+                        "IsUserDefined": true,
+                        "method": "M:System.Numerics.BigInteger.op_Implicit(System.Int32)~System.Numerics.BigInteger"
+                      },
+                      "IConversionOperation.IsTryCast": false,
+                      "IConversionOperation.IsChecked": false
+                    },
+                    "unexportedMetadata": [],
+                    "children": [
+                      {
+                        "kind": "Literal",
+                        "type": "int",
+                        "implicit": false,
+                        "constant": {
+                          "hasValue": true,
+                          "value": {
+                            "runtimeType": "System.Int32",
+                            "value": "0"
+                          }
+                        },
+                        "location": {
+                          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                          "startLine": 67,
+                          "startColumn": 75,
+                          "endLine": 67,
+                          "endColumn": 76,
+                          "start": 4092,
+                          "length": 1
+                        },
+                        "details": {},
+                        "boundMetadata": {},
+                        "unexportedMetadata": [],
+                        "children": [],
+                        "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                      }
+                    ],
+                    "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+                  }
+                ],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              }
+            ],
+            "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+          },
+          {
+            "kind": "Binary",
+            "type": "global::System.Numerics.BigInteger",
+            "implicit": false,
+            "constant": null,
+            "location": {
+              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "startLine": 67,
+              "startColumn": 80,
+              "endLine": 67,
+              "endColumn": 106,
+              "start": 4097,
+              "length": 26
+            },
+            "details": {
+              "operator": "Multiply",
+              "checked": false,
+              "lifted": false,
+              "operatorMethod": "M:System.Numerics.BigInteger.op_Multiply(System.Numerics.BigInteger,System.Numerics.BigInteger)"
+            },
+            "boundMetadata": {
+              "IBinaryOperation.OperatorKind": "Multiply",
+              "IBinaryOperation.LeftOperand": "Operation child; see ordered children",
+              "IBinaryOperation.RightOperand": "Operation child; see ordered children",
+              "IBinaryOperation.IsLifted": false,
+              "IBinaryOperation.IsChecked": false,
+              "IBinaryOperation.IsCompareText": false,
+              "IBinaryOperation.OperatorMethod": {
+                "id": "M:System.Numerics.BigInteger.op_Multiply(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+                "type": null
+              },
+              "IBinaryOperation.ConstrainedToType": null
+            },
+            "unexportedMetadata": [],
+            "children": [
+              {
+                "kind": "LocalReference",
+                "type": "global::System.Numerics.BigInteger",
+                "implicit": false,
+                "constant": null,
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 67,
+                  "startColumn": 80,
+                  "endLine": 67,
+                  "endColumn": 94,
+                  "start": 4097,
+                  "length": 14
+                },
+                "details": {
+                  "symbol": "estimationFlag"
+                },
+                "boundMetadata": {
+                  "ILocalReferenceOperation.Local": {
+                    "id": "estimationFlag",
+                    "type": null
+                  },
+                  "ILocalReferenceOperation.IsDeclaration": false
+                },
+                "unexportedMetadata": [],
+                "children": [],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              },
+              {
+                "kind": "ParameterReference",
+                "type": "global::System.Numerics.BigInteger",
+                "implicit": false,
+                "constant": null,
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 67,
+                  "startColumn": 97,
+                  "endLine": 67,
+                  "endColumn": 106,
+                  "start": 4114,
+                  "length": 9
+                },
+                "details": {
+                  "symbol": "requested",
+                  "ordinal": 0
+                },
+                "boundMetadata": {
+                  "IParameterReferenceOperation.Parameter": {
+                    "id": "requested",
+                    "type": null
+                  }
+                },
+                "unexportedMetadata": [],
+                "children": [],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              }
+            ],
+            "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+          }
+        ],
+        "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+      }
+    ],
+    [
+      "settled",
+      {
+        "kind": "Invocation",
+        "type": "global::System.Numerics.BigInteger",
+        "implicit": false,
+        "constant": null,
+        "location": {
+          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+          "startLine": 68,
+          "startColumn": 34,
+          "endLine": 68,
+          "endColumn": 64,
+          "start": 4158,
+          "length": 30
+        },
+        "details": {
+          "callee": "M:System.Numerics.BigInteger.Min(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+          "virtual": false
+        },
+        "boundMetadata": {
+          "IInvocationOperation.TargetMethod": {
+            "id": "M:System.Numerics.BigInteger.Min(System.Numerics.BigInteger,System.Numerics.BigInteger)",
+            "type": null
+          },
+          "IInvocationOperation.ConstrainedToType": null,
+          "IInvocationOperation.Instance": null,
+          "IInvocationOperation.IsVirtual": false
+        },
+        "unexportedMetadata": [
+          "IInvocationOperation.Arguments:System.Collections.Immutable.ImmutableArray`1[[Microsoft.CodeAnalysis.Operations.IArgumentOperation, Microsoft.CodeAnalysis, Version=4.14.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]"
+        ],
+        "children": [
+          {
+            "kind": "Argument",
+            "type": null,
+            "implicit": false,
+            "constant": null,
+            "location": {
+              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "startLine": 68,
+              "startColumn": 49,
+              "endLine": 68,
+              "endColumn": 58,
+              "start": 4173,
+              "length": 9
+            },
+            "details": {
+              "argumentKind": "Explicit",
+              "parameter": "left",
+              "inConversion": {
+                "Exists": true,
+                "IsIdentity": true,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": false,
+                "method": null
+              },
+              "outConversion": {
+                "Exists": true,
+                "IsIdentity": true,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": false,
+                "method": null
+              }
+            },
+            "boundMetadata": {
+              "IArgumentOperation.ArgumentKind": "Explicit",
+              "IArgumentOperation.Parameter": {
+                "id": "left",
+                "type": null
+              },
+              "IArgumentOperation.Value": "Operation child; see ordered children",
+              "IArgumentOperation.InConversion": {
+                "Exists": true,
+                "IsIdentity": true,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": false,
+                "method": null
+              },
+              "IArgumentOperation.OutConversion": {
+                "Exists": true,
+                "IsIdentity": true,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": false,
+                "method": null
+              }
+            },
+            "unexportedMetadata": [],
+            "children": [
+              {
+                "kind": "ParameterReference",
+                "type": "global::System.Numerics.BigInteger",
+                "implicit": false,
+                "constant": null,
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 68,
+                  "startColumn": 49,
+                  "endLine": 68,
+                  "endColumn": 58,
+                  "start": 4173,
+                  "length": 9
+                },
+                "details": {
+                  "symbol": "requested",
+                  "ordinal": 0
+                },
+                "boundMetadata": {
+                  "IParameterReferenceOperation.Parameter": {
+                    "id": "requested",
+                    "type": null
+                  }
+                },
+                "unexportedMetadata": [],
+                "children": [],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              }
+            ],
+            "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+          },
+          {
+            "kind": "Argument",
+            "type": null,
+            "implicit": false,
+            "constant": null,
+            "location": {
+              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "startLine": 68,
+              "startColumn": 60,
+              "endLine": 68,
+              "endColumn": 63,
+              "start": 4184,
+              "length": 3
+            },
+            "details": {
+              "argumentKind": "Explicit",
+              "parameter": "right",
+              "inConversion": {
+                "Exists": true,
+                "IsIdentity": true,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": false,
+                "method": null
+              },
+              "outConversion": {
+                "Exists": true,
+                "IsIdentity": true,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": false,
+                "method": null
+              }
+            },
+            "boundMetadata": {
+              "IArgumentOperation.ArgumentKind": "Explicit",
+              "IArgumentOperation.Parameter": {
+                "id": "right",
+                "type": null
+              },
+              "IArgumentOperation.Value": "Operation child; see ordered children",
+              "IArgumentOperation.InConversion": {
+                "Exists": true,
+                "IsIdentity": true,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": false,
+                "method": null
+              },
+              "IArgumentOperation.OutConversion": {
+                "Exists": true,
+                "IsIdentity": true,
+                "IsImplicit": true,
+                "IsNullable": false,
+                "IsNumeric": false,
+                "IsReference": false,
+                "IsUserDefined": false,
+                "method": null
+              }
+            },
+            "unexportedMetadata": [],
+            "children": [
+              {
+                "kind": "LocalReference",
+                "type": "global::System.Numerics.BigInteger",
+                "implicit": false,
+                "constant": null,
+                "location": {
+                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "startLine": 68,
+                  "startColumn": 60,
+                  "endLine": 68,
+                  "endColumn": 63,
+                  "start": 4184,
+                  "length": 3
+                },
+                "details": {
+                  "symbol": "cap"
+                },
+                "boundMetadata": {
+                  "ILocalReferenceOperation.Local": {
+                    "id": "cap",
+                    "type": null
+                  },
+                  "ILocalReferenceOperation.IsDeclaration": false
+                },
+                "unexportedMetadata": [],
+                "children": [],
+                "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+              }
+            ],
+            "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+          }
+        ],
+        "evaluationOrder": "Roslyn ChildOperations order; formal semantics still required"
+      }
+    ]
+  ]
+}

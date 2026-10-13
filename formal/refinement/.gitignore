@@ -1,0 +1,8 @@
+__pycache__/
+.runs/
+coq/*.vo
+coq/*.vos
+coq/*.vok
+coq/*.glob
+coq/.*.aux
+coq/.lia.cache

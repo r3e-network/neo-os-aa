@@ -1,0 +1,57 @@
+{
+  "schema": "neoos-aa-refinement-runtime-checks/v1",
+  "scope": "Concrete pinned Neo.VM execution checks only; not universal implementation refinement proof. Full method prefix, syscalls, storage, ApplicationEngine gas charging and transaction rollback remain outside this arithmetic region check.",
+  "testSource": "/Users/jinghuiliao/git/neo-os/neo-os-aa/tests/AbstractAccount.Contracts.Tests/ImplementationRefinementRuntimeTests.cs",
+  "testSourceSha256": "ad87b023934e8e2ffe287a4388ff85e42a4790d99e1500852a3f950b63550986",
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "neoVm": {
+    "lockedVersion": "3.10.1",
+    "informationalVersion": "3.10.1+004cd6070a940405818d9357638277dd44407e2e",
+    "executedDllSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9"
+  },
+  "region": {
+    "methodEntryPc": 13557,
+    "entryBytes": "570701",
+    "startPc": 13667,
+    "endExclusivePc": 13689,
+    "bytes": "11116bb99f74106b6a11ce9fba6c78a09e756d78b976",
+    "instructionCount": 22,
+    "initialStack": [],
+    "frame": "original INITSLOT 7 local / 1 arg dispatched through pinned public JumpTable; local2=[32-byte hash,reserved],local3=cost,arg0=requested",
+    "stop": "observe local6=settled at original PC13689; no synthetic RET or region relocation"
+  },
+  "oracle": "Coq source_charge(cost,requested,reserved): cost=0 ? requested : min(requested,max(cost-reserved,0)).",
+  "domainCases": 806,
+  "validOpcodeSemanticNegativeControls": 11,
+  "signedOverflowNegativeControls": 3,
+  "outsideCertificateSuffixes": {
+    "feeCapExhaustion": "actual ABORTMSG13733 executed after settled0",
+    "reservationOverflow": "actual ADD13739 faults at VMmax+1; VMmax-1+1 succeeds before storage serialization"
+  },
+  "tests": {
+    "total": "7",
+    "executed": "7",
+    "passed": "7",
+    "failed": "0",
+    "error": "0",
+    "timeout": "0",
+    "aborted": "0",
+    "inconclusive": "0",
+    "passedButRunAborted": "0",
+    "notRunnable": "0",
+    "notExecuted": "0",
+    "disconnected": "0",
+    "warning": "0",
+    "completed": "0",
+    "inProgress": "0",
+    "pending": "0"
+  },
+  "testsBeforeRunnerImplementation": {
+    "failed": 6,
+    "passed": 1,
+    "log": "/private/tmp/aa-refinement-runtime-red.log"
+  },
+  "command": "dotnet test tests/AbstractAccount.Contracts.Tests/AbstractAccount.Contracts.Tests.csproj --no-restore --filter 'FullyQualifiedName~ImplementationRefinementRuntimeTests' --logger 'trx;LogFileName=refinement-runtime-final.trx' --results-directory /private/tmp/aa-refinement-runtime-results --verbosity minimal",
+  "log": "/private/tmp/aa-refinement-runtime-final.log",
+  "trx": "/private/tmp/aa-refinement-runtime-results/refinement-runtime-final.trx"
+}

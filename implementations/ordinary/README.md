@@ -40,3 +40,9 @@ formal-model gates. The [dated acceptance report](../../docs/reports/aa-ordinary
 binds the exact candidate, private-chain module scope and remaining integration
 and deployment boundaries. The package entrypoint is `sdk/js/src/index.js`;
 `src/v3` alone is not the complete ordinary client.
+
+The [implementation refinement gate](../../docs/AA-IMPLEMENTATION-REFINEMENT.md)
+binds typed C# source to the exact candidate NEF and checks a universal arithmetic
+region certificate with Coq. Complete C# to NEF to NeoVM refinement remains open;
+the default command returns exit `2` while any public entrypoint is unproved.
+The separate `--allow-partial` mode is only for developing the region proof.

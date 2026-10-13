@@ -1,0 +1,10 @@
+test_arithmetic_proof_has_universal_preservation_and_fault_theorems (test_proofs.CapProofTests.test_arithmetic_proof_has_universal_preservation_and_fault_theorems) ... ok
+test_legal_opcode_semantic_mutants_are_kernel_rejected (test_proofs.CapProofTests.test_legal_opcode_semantic_mutants_are_kernel_rejected) ... ok
+test_region_cannot_execute_pushdata_payload_as_instructions (test_proofs.CapProofTests.test_region_cannot_execute_pushdata_payload_as_instructions) ... ok
+test_source_wrapper_rejects_ignored_extra_statement (test_proofs.CapProofTests.test_source_wrapper_rejects_ignored_extra_statement) ... ok
+test_typed_source_projection_rejects_type_call_operator_and_flags (test_proofs.CapProofTests.test_typed_source_projection_rejects_type_call_operator_and_flags) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 30.274s
+
+OK

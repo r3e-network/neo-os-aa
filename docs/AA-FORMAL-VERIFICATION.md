@@ -2,6 +2,33 @@
 
 ## Status
 
+### Artifact-specific implementation refinement (2026-10-13)
+
+The separate [implementation refinement gate](AA-IMPLEMENTATION-REFINEMENT.md)
+now binds typed Roslyn operations, a byte-identical NCCS rebuild, the complete
+100-entry manifest and independently decoded candidate NEF to an actual Coq
+certificate. The proved region is the reimbursement arithmetic at PC
+`[13667,13689)`: 22 original instructions, with signed-256 bounds, typed entry
+conditions, result equality, argument/local-frame preservation and equality to
+the existing `OrdinarySponsorship.charge` definition.
+
+Host Rocq 9.2 and pinned-container Coq 8.18 independently accept the same generated
+certificate and recheck it with `coqchk`. Each checks **38 closed declarations**:
+23 new/local declarations and 15 imported protocol declarations. Do not add 38
+to the historical 490 count, which already includes those 15. This is a
+gas-erased Integer-typed reference-semantics theorem; actual NeoVM execution is
+separately checked by seven runtime tests, not proved equivalent for all states.
+
+**Full implementation refinement remains NO-GO.** No complete public entrypoint
+is proved. Source/debug extraction, entry-state establishment and numeric tag
+coercions, storage/serialization, exceptions and transaction rollback, external
+calls/reentrancy, gas/resource faults and the ApplicationEngine correspondence
+remain open. The default fresh gate returns exit `2` and
+`implementationVerified: false`; `--allow-partial` preserves that false status
+while accepting only the explicitly scoped arithmetic region. The
+[dated refinement report](reports/aa-implementation-refinement-20261013.md)
+contains the exact artifacts, commands, controls and remaining method obligations.
+
 ### Current source-candidate host closure (2026-10-13)
 
 The frozen ordinary source-candidate snapshot passes the host model gate:
