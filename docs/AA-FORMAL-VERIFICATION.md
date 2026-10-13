@@ -21,7 +21,8 @@ public `v3` callbacks use standard `System.Contract.Call` without an isolated
 child budget, and the pinned public ABI still exposes immediate platform-account
 backup-owner rotation. The source candidate now contains a two-stage
 proposal/confirmation/cancellation path with a new-owner witness, but closing
-the public boundary requires an ABI migration, upgraded artifact, and public
+the public boundary requires an ABI migration from the pinned 90-entry artifact
+to the reviewed 98-entry source candidate, an upgraded artifact, and public
 readback; this repository does not relabel it as closed based on static tests.
 
 ### ABI 2 convergence boundary
