@@ -11,12 +11,13 @@ native core roster checked at 310 exact source files. The tracked ordinary-gover
 receipt is [`aa-formal-ordinary-go-20261013.json`](reports/aa-formal-ordinary-go-20261013.json)
 (SHA-256 `a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21`).
 The verification run also wrote `formal/.runs/ordinary-go-20261013/result.json`;
-the tracked copy is the reviewable source-bound evidence for this repository head.
+the tracked copy is the reviewable source-bound evidence for the current
+implementation source/model snapshot.
 It ran with OpenJDK 26.0.2.1.
 The earlier receipt `formal/.runs/final-20261013-platform/result.json` (SHA-256
 `f1b0f876b9219bf4cab19f3da6beeaaed8ef50756564eb9e52b75389b7dcf887`) covers
 the preceding model/source snapshot and ran with OpenJDK 17.0.20.1; retain it
-only as historical Java 17-equivalent evidence, not as the current-head receipt. The
+only as historical Java 17-equivalent evidence, not as the current source/model receipt. The
 formal model gate is **GO** for its declared abstractions. It deliberately
 retains `implementationVerified: false`: these models do not prove C# to NEF to
 NeoVM refinement, complete VM fee accounting, arbitrary plugin liveness, or
