@@ -15,6 +15,19 @@ import verify
 
 
 class VerificationGateTests(unittest.TestCase):
+    def test_current_ordinary_receipt_is_tracked_and_source_bound(self):
+        receipt_path = verify.ROOT.parent / 'docs/reports/aa-formal-ordinary-go-20261013.json'
+        self.assertTrue(receipt_path.exists())
+        receipt = json.loads(receipt_path.read_text())
+        self.assertTrue(receipt['modelChecksPassed'])
+        self.assertFalse(receipt['implementationVerified'])
+        self.assertIn('coq/OrdinaryGovernance.v', receipt['modelProfiles'])
+        self.assertEqual(['v3', 'platform'], receipt['modelProfiles']['coq/OrdinaryGovernance.v'])
+        self.assertEqual(27, len(receipt['coqDeclarations']))
+        self.assertEqual(6, receipt['smt']['obligations'])
+        self.assertEqual(6, receipt['smt']['controls'])
+        self.assertEqual(310, len(receipt['nativeCoreSourceSha256']))
+
     def test_native_composite_phase_model_is_registered(self):
         self.assertIn('coq/NativeCompositePhase.v', verify.ARTIFACTS)
         model = (verify.ROOT / 'coq/NativeCompositePhase.v').read_text()

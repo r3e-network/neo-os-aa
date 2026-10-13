@@ -7,10 +7,12 @@
 The current repository source and model snapshot passes the host formal gate:
 **27 Coq modules, 460 closed declarations, 258 rejected semantic mutations,
 61,460 TLC distinct states, six SMT obligations and six controls**, with the
-native core roster checked at 310 exact source files. The current ordinary-governance
-receipt is `formal/.runs/ordinary-go-20261013/result.json` (SHA-256
-`a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21`). It ran
-with OpenJDK 26.0.2.1 and is the source-bound evidence for this repository head.
+native core roster checked at 310 exact source files. The tracked ordinary-governance
+receipt is [`aa-formal-ordinary-go-20261013.json`](reports/aa-formal-ordinary-go-20261013.json)
+(SHA-256 `a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21`).
+The verification run also wrote `formal/.runs/ordinary-go-20261013/result.json`;
+the tracked copy is the reviewable source-bound evidence for this repository head.
+It ran with OpenJDK 26.0.2.1.
 The earlier receipt `formal/.runs/final-20261013-platform/result.json` (SHA-256
 `f1b0f876b9219bf4cab19f3da6beeaaed8ef50756564eb9e52b75389b7dcf887`) covers
 the preceding model/source snapshot and ran with OpenJDK 17.0.20.1; retain it
