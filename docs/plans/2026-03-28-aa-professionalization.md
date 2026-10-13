@@ -1,6 +1,5 @@
 # Neo Abstract Account Professionalization Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Refactor the Neo Abstract Account stack so the core account model, plugins, relay, SDK, and docs look like a production AA system rather than a feature-accumulated prototype.
 

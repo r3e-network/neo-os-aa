@@ -43,17 +43,16 @@ The result is:
 
 ### Account Discovery and Batch Operations
 
-The system includes efficient account discovery through reverse indices:
+V3 has no admin, manager or threshold state and no reverse indices: that V1/V2 role model was
+removed in the V3 rewrite, and the SDK keeps `getAccountsByAdmin`/`getAccountsByManager` only as
+stubs that throw `LEGACY_V3_REMOVED`. Per-account state is read with `getAccountState(accountIdHash)`,
+one account at a time.
 
-- **Role-based queries:** Find all accounts where an address is admin or manager via `GetAccountsByAdmin` and `GetAccountsByManager`
-- **O(1) lookups:** Reverse indices provide constant-time account discovery without scanning
-- **Batch creation:** Deploy multiple accounts with shared governance in a single transaction via `CreateAccountBatch`
-- **Creator defaults:** Transaction sender automatically becomes default admin when creating accounts
-
-This enables:
-- Portfolio management: users can query all accounts they control
-- Organizational oversight: admins can discover accounts under their authority
-- Efficient onboarding: create multiple accounts for teams or projects in one operation
+- **Batch creation:** `registerAccounts(UInt160[], UInt160, ByteString[], UInt160, UInt160, Integer)`
+  on the deployed core registers several accounts in one transaction; the SDK has no batch payload
+  builder, so build one `createAccountPayload` per account and submit them through that entrypoint.
+- **Registration authority:** `registerAccount` requires the witness of the `backupOwner` argument
+  (`contracts/UnifiedSmartWallet.Accounts.cs:75`), not of the transaction sender.
 
 ## 3. Choose the Right Path
 
@@ -104,7 +103,7 @@ sequenceDiagram
   Relay->>Chain: Submit wrapped invocation
 ```
 
-The key design choice is that the downstream target contract is **not** called directly by a raw proxy-signed transaction. Instead, execution routes through AA wrapper entrypoints such as `executeUnifiedByAddress` or `executeUnifiedByAddress`, where the policy engine can enforce role checks, whitelists, blacklists, and transfer limits.
+The key design choice is that the downstream target contract is **not** called directly by a raw proxy-signed transaction. Instead, execution routes through `executeUserOp(accountId, op)` (or `executeUserOps(accountId, ops)` for a batch), where the policy engine can enforce verifier, hook and target checks. The V1/V2 wrapper entrypoints were removed and exist in no deployed manifest and no contract source.
 
 ## 6. Draft Collaboration Model
 
@@ -176,7 +175,7 @@ The on-chain `AAPaymaster` contract enables users to execute operations without 
 
 1. A **sponsor** (dApp, organization, or service) deposits GAS into the Paymaster contract and creates a sponsorship policy specifying which accounts, contracts, methods, and budgets to fund.
 2. The **relay** calls `executeSponsoredUserOp` on the AA core with the sponsor and paymaster details.
-3. Relays can optionally preflight `ValidatePaymasterOp`, while the AA core executes the UserOp normally (verifier + hooks) and then atomically settles the reimbursement — deducting from the sponsor's deposit and sending GAS to the relay.
+3. Relays can optionally preflight `validatePaymasterOp`, while the AA core executes the UserOp normally (verifier + hooks) and then atomically settles the reimbursement — deducting from the sponsor's deposit and sending GAS to the relay.
 
 Sponsors can create **per-account policies** (specific accountId) or **global policies** (accountId = Zero) to sponsor any account. Policies support:
 - Per-operation GAS limits
@@ -226,10 +225,9 @@ If you are learning the system for the first time, read these pages in order:
 - **Collaborator link** — a scoped link for signature collection only
 - **Operator link** — a scoped link for relay, broadcast, receipts, and link rotation
 - **Relay preflight** — a server-backed simulation of a relay-ready invocation before submission
-- **Meta invocation** — the AA wrapper payload created from EVM typed-data signatures
-- **Account discovery** — querying all accounts where an address holds admin or manager roles via reverse indices
-- **Batch creation** — creating multiple accounts with shared governance configuration in a single transaction
-- **Reverse index** — on-chain storage mapping addresses to their associated account IDs for O(1) role-based queries
+- **Meta invocation** — the AA payload created from EVM typed-data signatures; it targets `executeUserOp`
+- **Account discovery** — reading one account's state with `getAccountState(accountIdHash)`; the V1/V2 reverse indices were removed, so there is no admin/manager role query
+- **Batch registration** — registering several accounts in one transaction with `registerAccounts` (no shared governance: every account carries its own verifier, hook and backup owner)
 - **Paymaster** — on-chain contract (`AAPaymaster`) that holds sponsor GAS deposits and reimburses relays after successful execution
 - **Sponsor** — an address that deposits GAS into the Paymaster and creates policies to fund operations for other accounts
 - **Sponsorship policy** — configuration defining which accounts, contracts, methods, and budgets a sponsor will fund

@@ -12,6 +12,9 @@ namespace AbstractAccount.Contracts.Mocks
     [ContractPermission("*", "computeStablePlatformAccountId")]
     [ContractPermission("*", "registerStablePlatformAccount")]
     [ContractPermission("*", "rotatePlatformAccountOwner")]
+    [ContractPermission("*", "proposePlatformAccountOwnerRotation")]
+    [ContractPermission("*", "confirmPlatformAccountOwnerRotation")]
+    [ContractPermission("*", "cancelPlatformAccountOwnerRotation")]
     public class PlatformRegistrarMock : SmartContract
     {
         public static UInt160 Register(UInt160 core, ByteString appBinding, UInt160 backupOwner, uint escapeTimelock)
@@ -57,11 +60,21 @@ namespace AbstractAccount.Contracts.Mocks
         {
             Contract.Call(
                 core,
-                "rotatePlatformAccountOwner",
+                "proposePlatformAccountOwnerRotation",
                 CallFlags.All,
                 accountId,
                 appBinding,
                 newBackupOwner);
+        }
+
+        public static void ConfirmRotate(UInt160 core, UInt160 accountId, ByteString appBinding)
+        {
+            Contract.Call(core, "confirmPlatformAccountOwnerRotation", CallFlags.All, accountId, appBinding);
+        }
+
+        public static void CancelRotate(UInt160 core, UInt160 accountId, ByteString appBinding)
+        {
+            Contract.Call(core, "cancelPlatformAccountOwnerRotation", CallFlags.All, accountId, appBinding);
         }
     }
 }

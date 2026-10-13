@@ -34,12 +34,18 @@ public class ProxyWitnessRuntimeTests
     /// Data pushes followed by exactly one `core.&lt;method&gt;(accountId, op)` call, the
     /// only transaction shape the proxy witness accepts.
     /// </summary>
-    private static byte[] AccountBoundScript(UInt160 core, string method, int opBytes, UInt160? accountId = null)
+    private static byte[] AccountBoundScript(UInt160 core, string method, int opBytes, UInt160? accountId = null, int argumentCount = 2)
     {
         using ScriptBuilder sb = new();
+        if (argumentCount == 5)
+        {
+            sb.EmitPush(100); // reimbursement
+            sb.EmitPush(AccountId.GetSpan().ToArray()); // sponsor
+            sb.EmitPush(core.GetSpan().ToArray()); // paymaster (validated during Application)
+        }
         sb.EmitPush(new byte[opBytes]);
         sb.EmitPush((accountId ?? AccountId).GetSpan().ToArray());
-        sb.EmitPush(2);
+        sb.EmitPush(argumentCount);
         sb.Emit(OpCode.PACK);
         sb.EmitPush((byte)CallFlags.All);
         sb.EmitPush(method);
@@ -207,4 +213,23 @@ public class ProxyWitnessRuntimeTests
         Assert.IsFalse(h.Verify(false, false, AccountBoundScript(h.Wallet, "executeUserOp", 16), proxyPaysFees: true),
             "A proxy funding its own witness must be rejected so a faulting transaction cannot burn account GAS");
     }
+    [TestMethod]
+    [DataRow("executeSponsoredUserOp")]
+    [DataRow("executeSponsoredUserOps")]
+    public void SponsoredProxyWitnessIsRefusedEvenWithCorrectEnvelope(string method)
+    {
+        ProxyHarness h = new();
+        UInt160 other = UInt160.Parse("0x2222222222222222222222222222222222222222");
+        byte[] shaped = AccountBoundScript(h.Wallet, method, 16, argumentCount: 5);
+        Assert.IsFalse(h.Verify(false, false, shaped), "Settlement can outlive the active operation; sponsored proxy witnesses remain disabled");
+        Assert.IsFalse(h.Verify(false, false, AccountBoundScript(h.Wallet, method, 16)), "Two arguments cannot authorize sponsored execution");
+        Assert.IsFalse(h.Verify(false, false, AccountBoundScript(h.Wallet, method, 16, other, 5)), "Other account rejected");
+        Assert.IsFalse(h.Verify(false, false, AccountBoundScript(other, method, 16, argumentCount: 5)), "Other core rejected");
+        Assert.IsFalse(h.Verify(false, false, shaped, proxyPaysFees: true), "Proxy must never pay fees");
+        Assert.IsFalse(h.Verify(true, false, shaped), "Global scope rejected");
+        Assert.IsFalse(h.Verify(false, false, WithPrefix((byte)OpCode.NOP, shaped)), "Executable prefix rejected");
+        Assert.IsFalse(h.Verify(false, false, WithSuffix(shaped, (byte)OpCode.RET)), "Executable suffix rejected");
+        Assert.IsFalse(h.Verify(false, false, AccountBoundScript(h.Wallet, "executeUserOp", 16, argumentCount: 5)), "Direct entrypoint requires two args");
+    }
+
 }

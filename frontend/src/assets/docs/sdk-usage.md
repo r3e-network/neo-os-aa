@@ -10,13 +10,16 @@ npm install @cityofzion/neon-js ethers
 
 ## 1. Initialize the Client
 
-Use a Neo N3 RPC endpoint and the verified hardened testnet deployment hash unless you explicitly override it with another instance.
+Use a Neo N3 RPC endpoint and the canonical shared testnet AA core, unless you explicitly override it
+with another instance. The canonical anchors are generated from neo-os-services into
+`frontend/src/config/generatedMorpheusRegistry.js`; the repository README restates them and that
+generated module wins on any conflict.
 
 ```javascript
 const { AbstractAccountClient } = require('./sdk/js/src');
 
 const rpcUrl = 'https://testnet1.neo.coz.io:443';
-const masterHash = '0x5be915aea3ce85e4752d522632f0a9520e377aaf';
+const masterHash = '0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2';
 
 const aaClient = new AbstractAccountClient(rpcUrl, masterHash);
 ```
@@ -33,12 +36,13 @@ The derived address corresponds to the deterministic `verify(accountId)` script 
 
 ## 3. Build an Account-Creation Payload
 
-Use `deriveRegistrationAccountIdHash` so the SDK, frontend, and contract agree on the exact `accountId` that `registerAccount` will accept: all three share one derivation (single-sourced in `shared/registrationAccountId.mjs`). The returned value is the big-endian display form — identical to the on-chain `ComputeRegistrationAccountId` display string — so pass it directly as the `{ type: 'Hash160' }` accountId argument. (Only raw script pushes, e.g. building a verify script by hand, need the byte-reversed internal form.)
+Use `deriveRegistrationAccountIdHash` so the SDK, frontend, and contract agree on the exact `accountId` that `registerAccount` will accept: all three share one derivation (single-sourced in `shared/registrationAccountId.mjs`). The returned value is the big-endian display form — identical to the on-chain `computeRegistrationAccountId` display string — so pass it directly as the `{ type: 'Hash160' }` accountId argument. (Only raw script pushes, e.g. building a verify script by hand, need the byte-reversed internal form.)
 
 ```javascript
 const verifierParamsHex = evmPubKey.slice(2);
 const backupOwnerAddress = 'NQh...ownerAddress';
-const web3AuthVerifierHash = '0xf5c452cd4ba29dcdc47026383568c0d8b38d9272';
+// canonical testnet verifier from generatedMorpheusRegistry.js
+const web3AuthVerifierHash = '0x1111f5b6b046a964c75d208998c13945ce172e85';
 
 const accountIdHash = aaClient.deriveRegistrationAccountIdHash({
   verifierContractHash: web3AuthVerifierHash,
@@ -112,6 +116,22 @@ const payload = await aaClient.createSponsoredUserOpPayload({
 
 The AA core method called under the hood is `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)`. A batch variant `createSponsoredBatchPayload` works identically but targets the batch execution entrypoint.
 
+These payloads are relay DTOs: their `ByteArray` values are explicit `0x` hex,
+including the signature. They are not direct Neo RPC JSON (which uses base64).
+Both sponsored builders and `computeArgsHash` accept typed argument DTOs or Neon
+`ContractParam` instances and preserve nested arrays/maps, hashes, and public keys.
+For plain `ByteArray` input, use `0x` hex or unambiguous canonical base64; ambiguous
+bare hex such as `aabb` is rejected, so migrate it to `0xaabb`. Numeric enum types
+require a real `ContractParam` instance; do not JSON-stringify the instance first.
+Unknown types, non-null `Any`, coerced booleans and unsafe numeric integers are
+rejected. Map entry order is preserved across RPC hashing and relay execution;
+duplicate VM keys (including String/ByteArray aliases) are rejected before signing.
+Use decimal strings for large integers. Argument nesting must fit the
+relay's depth-eight limit, including the surrounding operation/batch arrays.
+Use `computeArgsHash` with the same arguments before signing; the sponsored wrapper
+does not recompute or verify a signature supplied by its caller.
+
+
 ### Validate Before Submission
 
 ```javascript
@@ -131,6 +151,14 @@ const ok = await aaClient.validatePaymasterOp({
 
 Settlement is atomic: the Paymaster validates the sponsor's policy (`setPolicy(accountId, targetContract, method, maxPerOp, dailyBudget, totalBudget, validUntil)`), deducts the reimbursement from the sponsor's deposit, and transfers GAS to the relay, all inside the same contract call. Use `accountId = UInt160.Zero` when creating a global policy that sponsors any account.
 
+For fee-bearing transactions, the core settles
+`min(reimbursementAmount, transaction.SystemFee + transaction.NetworkFee)`.
+The policy's `maxPerOp` and daily/total budgets bound that settlement. Fees above
+`maxPerOp` can still be accepted if the requested reimbursement is within the policy;
+the relay pays the remainder. Zero-fee estimation uses the requested amount as its
+conservative cap, and relays should keep a system-fee margin. Global policies share
+one spending scope across accounts.
+
 The Paymaster never authorizes execution. Verifier and hook plugins must approve the operation independently; the Paymaster only funds the relay after those checks pass.
 
 ## 6. App Workspace Runtime Setup
@@ -149,11 +177,11 @@ VITE_AA_RELAY_META_ENABLED=1
 
 - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` enable anonymous draft persistence.
 - `VITE_AA_RELAY_URL` points the UI at the relay submission endpoint.
-- `VITE_AA_RELAY_META_ENABLED` tells the frontend that the backend relay is configured to submit stored `executeUnifiedByAddress` invocations.
-- `AA_RELAY_WIF` on the server enables relay submission of stored `executeUnifiedByAddress` invocations built from collected EVM signatures.
+- `VITE_AA_RELAY_META_ENABLED` tells the frontend that the backend relay is configured to submit stored `executeUserOp` invocations.
+- `AA_RELAY_WIF` on the server enables relay submission of stored `executeUserOp` invocations built from collected EVM signatures.
 - shared draft metadata is intentionally bounded: the frontend retains the latest 100 activity entries and the latest 12 submission receipts per draft in both local and Supabase-backed storage.
 - client-side broadcast remains the default safe path, while relay mode is reserved for already-signed raw transactions.
-- the app workspace presets now stage concrete AA wrapper payloads, so a browser-wallet submission targets `executeUnifiedByAddress` on the AA contract rather than the downstream contract directly.
+- the app workspace presets now stage concrete AA wrapper payloads, so a browser-wallet submission targets `executeUserOp` on the AA contract rather than the downstream contract directly.
 
 ### Server Runtime Add-Ons
 
@@ -162,7 +190,7 @@ If you deploy the bundled Vercel-style API routes, keep the relay signer and ope
 ```bash
 AA_RELAY_RPC_URL=https://testnet1.neo.coz.io:443
 AA_RELAY_WIF=your-relay-wif
-AA_RELAY_ALLOWED_HASH=0x5be915aea3ce85e4752d522632f0a9520e377aaf
+AA_RELAY_ALLOWED_HASH=0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2
 AA_RELAY_ALLOW_RAW_FORWARD=0
 AA_RELAY_INCLUDE_RAW_ERRORS=0
 MORPHEUS_NETWORK=testnet
@@ -192,7 +220,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 | `VITE_AA_EXPLORER_BASE_URL` | Frontend | Optional transaction explorer base for tx links and receipts. |
 | `VITE_AA_MATRIX_CONTRACT_HASH` | Frontend | Optional `.matrix` contract hash override used for domain resolution and same-transaction registration. |
 | `AA_RELAY_RPC_URL` | Server | Preferred RPC for `frontend/api/relay-transaction.js` when you do not want the server to inherit the browser-facing RPC setting. |
-| `AA_RELAY_WIF` | Server | Enables server-side submission of stored `executeUnifiedByAddress` invocations. |
+| `AA_RELAY_WIF` | Server | Enables server-side submission of stored `executeUserOp` invocations. |
 | `AA_RELAY_ALLOWED_HASH` | Server | Pins relayable meta invocations to the expected Abstract Account contract hash. |
 | `AA_RELAY_ALLOW_RAW_FORWARD` | Server | Explicit opt-in for relaying already-signed raw transactions; keep disabled by default. |
 | `AA_RELAY_INCLUDE_RAW_ERRORS` | Server | Optional operator debug switch that includes the unsanitized exception message and stack in relay API responses. |
@@ -215,7 +243,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 | missing | any | any | No relay path; the UI stays on client-side broadcast only. |
 | set | off | missing or set | Preflight only for relay-ready payload inspection, plus signed raw relay when a raw transaction already exists. |
 | set | on | missing | Signed raw relay works, and meta payloads can be prepared, but meta relay submission is blocked server-side without the relay signer. |
-| set | on | set | Full relay path: preflight only when simulating, signed raw relay, and meta relay submission for stored `executeUnifiedByAddress` invocations. |
+| set | on | set | Full relay path: preflight only when simulating, signed raw relay, and meta relay submission for stored `executeUserOp` invocations. |
 
 ## Safe Defaults
 
@@ -285,7 +313,7 @@ VITE_AA_EXPLORER_BASE_URL=https://testnet.ndoras.com/transaction
 
 ## 7. Execution Model Reminder
 
-The typed-data signature authorizes an Abstract Account wrapper call. On hardened deployments, external interactions must flow through AA the canonical runtime entrypoints `executeUnified` / `executeUnifiedByAddress` (plus legacy compatibility wrappers); raw direct proxy-signed external spends are intentionally rejected.
+The typed-data signature authorizes an Abstract Account wrapper call. On hardened deployments, external interactions must flow through the canonical V3 runtime entrypoint `executeUserOp` (or `executeUserOps` for a batch); raw direct proxy-signed external spends are intentionally rejected. The `executeUnified` and `executeUnifiedByAddress` wrappers of the V1/V2 runtime were removed: no deployed manifest and no contract source defines them, so a payload naming them cannot execute.
 
 
 ## Matrix Domain Support

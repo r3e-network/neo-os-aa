@@ -1,0 +1,75 @@
+{
+  "schema": "smartaccount-composite-final-build-proof/v1",
+  "status": "PASS",
+  "recordedAtUtc": "2026-10-08T17:57:31.771075+00:00",
+  "profileParameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4",
+  "sourceCommits": {
+    "core": "ff422d940a4722c361c32398c6f28c00fb7f0693",
+    "node": "fa35e69af130661e2ac60bffd43eb6c6c78aa7d5",
+    "express": "da143f8643ebca7841cc7f56e4e3e00293819fbc"
+  },
+  "sourceLockSha256": "08900a398207449a09e11eccf9f6fe1adf224fe316569621b1947ccdaa5152ac",
+  "sourceCounts": {
+    "aa": 55,
+    "formalCore": 310,
+    "core": 314,
+    "node": 123,
+    "express": 182
+  },
+  "formal": {
+    "modelChecksPassed": true,
+    "coqModules": 26,
+    "closedDeclarations": 443,
+    "coqMutationsRejected": 243,
+    "tlcMutationsRejected": 4,
+    "tlcDistinctStates": 61460,
+    "smt": {
+      "obligations": 6,
+      "controls": 6
+    },
+    "implementationVerified": false
+  },
+  "runtime": {
+    "independentCleanBuilds": 2,
+    "runtimeFileCount": 104,
+    "packageCount": 50,
+    "runtimeByteIdentical": true,
+    "sourceInputsUnchanged": true
+  },
+  "modules": {
+    "independentBuilds": 2,
+    "reproducible": true,
+    "packagedArtifactCount": 13
+  },
+  "public": {
+    "artifactCount": 80,
+    "reproducible": true,
+    "testsPassed": 396,
+    "testsSkipped": 0
+  },
+  "reports": {
+    "formal": {
+      "file": "aa-native-composite-final-formal-20261009.json",
+      "sha256": "42be9100423935fcda24e58196d2d1e527191570bc71a7e5e1ca8ea3b96b3300"
+    },
+    "runner-build": {
+      "file": "aa-native-composite-final-runner-build-20261009.json",
+      "sha256": "0163cbf7de2884cbd3041a57682aa18db4c8ecb69dd289d963e081958ab7b345"
+    },
+    "module-build": {
+      "file": "aa-native-composite-final-module-build-20261009.json",
+      "sha256": "2f9f2dc15489dcc2ea9e5d319f32be2561401b3a9897f3aa35d8a04ab5c5b72e"
+    },
+    "public-platform-reproducibility": {
+      "file": "aa-native-composite-final-public-platform-reproducibility-20261009.json",
+      "sha256": "cfdd6246ae054fe51849e941714d6536e4a45000c66ff2e21d0519b3f6cc3cd9"
+    },
+    "public-tests": {
+      "file": "aa-native-composite-final-public-tests-20261009.json",
+      "sha256": "a9d3ac994e5abed75e394f2fbdf51e837e26480fdc2916a25dd18f9fc440b221"
+    }
+  },
+  "runtimeIntegration": "Separate final native private-chain and SDK receipts are required; running at this checkpoint.",
+  "boundary": "Frozen-source model checks and reproducible builds only. No public-network activation, source/VM/NEF refinement, arbitrary module liveness, or all-pricing gas-feasibility claim.",
+  "publicNetworksTouched": false
+}

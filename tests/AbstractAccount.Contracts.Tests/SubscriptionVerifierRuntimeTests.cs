@@ -161,7 +161,7 @@ public class SubscriptionVerifierRuntimeTests
     {
         Token,                                              // TargetContract
         "transfer",                                         // Method
-        new object[] { from, Merchant, (BigInteger)Amount }, // Args: [from, to, amount]
+        new object[] { from, Merchant, (BigInteger)Amount, null! }, // NEP-17 [from, to, amount, data]
         nonce,                                              // Nonce
         BigInteger.Zero,                                    // Deadline (unused by this verifier)
         SubId                                               // Signature carries the subscription id

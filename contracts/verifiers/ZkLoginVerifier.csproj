@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <Compile Include="VerifierAuthority.cs" />
+    <Compile Include="SignerDomain.cs" />
     <Compile Include="ZkLoginVerifier.cs" />
   </ItemGroup>
 

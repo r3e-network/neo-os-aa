@@ -84,35 +84,33 @@ export class DidService {
   async initializeClient() {
     const modal = await this.loadModal();
     const config = this.config;
-    const chainNamespace = modal.CHAIN_NAMESPACES?.EIP155 || config.web3AuthChainNamespace || 'eip155';
+    const chainNamespace = config.web3AuthChainNamespace || modal.CHAIN_NAMESPACES?.EIP155 || 'eip155';
     const network = modal.WEB3AUTH_NETWORK?.[config.web3AuthNetwork] || config.web3AuthNetwork;
-    const loginMethods = {};
-
-    if (config.web3AuthEmailLoginEnabled) {
-      loginMethods.email_passwordless = { name: 'Email' };
-    }
-    if (config.web3AuthSmsLoginEnabled) {
-      loginMethods.sms_passwordless = { name: 'SMS' };
-    }
+    const loginMethods = {
+      email_passwordless: { name: 'Email', showOnModal: Boolean(config.web3AuthEmailLoginEnabled) },
+      sms_passwordless: { name: 'SMS', showOnModal: Boolean(config.web3AuthSmsLoginEnabled) },
+    };
 
     const options = {
       clientId: config.web3AuthClientId,
       web3AuthNetwork: network,
-      chainConfig: {
+      chains: [{
         chainNamespace,
         chainId: config.web3AuthChainId,
         rpcTarget: config.web3AuthRpcTarget,
-      },
-      modalConfig: {},
+      }],
+      defaultChainId: config.web3AuthChainId,
+      modalConfig: { connectors: { auth: { label: 'Web3Auth', loginMethods } } },
       uiConfig: {
         appName: config.web3AuthProjectName || 'DID.Morpheus',
         mode: 'dark',
-        loginMethods,
       },
     };
 
     if (trim(config.web3AuthRedirectUrl)) {
-      options.redirectUrl = config.web3AuthRedirectUrl;
+      options.connectors = [modal.authConnector({
+        connectorSettings: { redirectUrl: config.web3AuthRedirectUrl },
+      })];
     }
 
     const client = new modal.Web3Auth(options);
@@ -163,7 +161,7 @@ export class DidService {
       const modal = await this.loadModal();
       this.assertCurrent(generation);
       const connector = modal.WALLET_CONNECTORS?.AUTH || 'auth';
-      await client.connectTo(connector, { loginProvider });
+      await client.connectTo(connector, { authConnection: loginProvider });
     } else {
       await client.connect();
     }

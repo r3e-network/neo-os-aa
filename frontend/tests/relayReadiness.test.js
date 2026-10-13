@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { evaluateRelayReadiness } from '../src/features/operations/relayReadiness.js';
+import { executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
 
 test('relay readiness marks raw transactions as payload-ready until preflight passes', () => {
   const readiness = evaluateRelayReadiness({
@@ -40,13 +41,7 @@ test('relay readiness marks relay invocations as payload-ready until preflight p
     transactionBody: {},
     signatures: [{
       kind: 'evm',
-      metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUnifiedByAddress',
-          args: [],
-        },
-      },
+      metadata: { metaInvocation: executeUserOpInvocation() },
     }],
   });
 
@@ -63,13 +58,7 @@ test('relay readiness is warning-only when relay invocations exist but relay inv
     transactionBody: {},
     signatures: [{
       kind: 'evm',
-      metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUnifiedByAddress',
-          args: [],
-        },
-      },
+      metadata: { metaInvocation: executeUserOpInvocation() },
     }],
   });
 

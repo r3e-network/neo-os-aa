@@ -1,0 +1,32 @@
+{
+  "schema": "aa-public-contract-final-runtime/v1",
+  "date": "2026-10-08",
+  "status": "PASS",
+  "testsPassed": 396,
+  "testsFailed": 0,
+  "testsRemainingSkipped": 0,
+  "runs": [
+    {
+      "passed": 394,
+      "skipped": 2,
+      "reason": "NeoDID sibling artifact environment not supplied",
+      "command": "dotnet test neo-abstract-account.sln -c Release --no-build --no-restore --nologo"
+    },
+    {
+      "passed": 2,
+      "skipped": 0,
+      "filter": "FullyQualifiedName~NeoDidActionTicketIntegrationRuntimeTests",
+      "requiredSiblingArtifacts": true
+    }
+  ],
+  "artifactSource": "contracts/bin/v3 (read by RuntimeTestSupport.Deploy at test runtime)",
+  "reproductionReceipt": "aa-native-abi2-public-platform-reproducibility-20261008.json",
+  "neoDidExternalArtifactInput": {
+    "artifactDirectory": "/Users/jinghuiliao/git/neo-os/neo-os-services/contracts/build",
+    "sha256": {
+      "NeoDIDRegistry.nef": "08eaca068431e3ecdbd61eaebb5b2a775faac3abc7eaa74d8cd6419ee81d0f0b",
+      "NeoDIDRegistry.manifest.json": "ab167914648628b97750118fac114387733d48d78beb9d3e5886f0d8d91d40de"
+    }
+  },
+  "boundary": "The two skipped optional cross-repository tests were rerun with required explicit artifacts and passed. These are public-profile VM tests, not native-chain proof."
+}

@@ -4,10 +4,19 @@ Date: 2026-03-13
 Network: Neo N3 Testnet (`894710606`)
 Executor address: `NTmHjwiadq4g3VHpJ5FQigQcD4fF5m8TyX`
 
-Refresh note on 2026-03-15:
+This is a historical record. It was produced on 2026-03-13 against the deployment set below, which
+is not the current canonical one; the positive executions all called the repository's
+`MockTransferTarget` test contract (`contracts/mocks/MockTransferTarget.cs`), whose `transfer`
+returns true without moving an asset and whose `balanceOf` is always 0, so the record proves the
+authorization path and the negative cases, not value movement. The evidence this repository can
+reproduce today is the local-chain suite (`tests/localchain/README.md`).
 
-- the current shared testnet AA core is now `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`
-- the current shared testnet `Web3AuthVerifier` anchor is now `0x7147f9a508594a7656a25f45d0a7a7dede7c227f`
+Refresh note on 2026-03-15 (corrected 2026-10-09):
+
+- the canonical shared testnet AA core is `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`
+- the canonical shared testnet `AA Web3AuthVerifier` anchor is
+  `0x1111f5b6b046a964c75d208998c13945ce172e85`; the `0x7147f9a508594a7656a25f45d0a7a7dede7c227f`
+  this note used to name is absent from `frontend/src/config/generatedMorpheusRegistry.js`
 - the deployment set below is preserved as the historical matrix run environment
 
 This report records the V3 verifier/hook matrix that was executed on testnet after hardening the current branch.
@@ -112,7 +121,7 @@ These failures confirm that configuration must still enter through the V3 core c
 - Positive execution tx: `0x6fb033541403164bb66bcdcf58c3c28a76096d74a3da99145d756d8ee402394b`
 - Attack: amount exceeds configured subscription amount
   - Result: `FAULT`
-  - Reason: `Transfer amount exceeds subscription`
+  - Reason: Transfer amount exceeds subscription
 - Attack: replay the same billing-period nonce
   - Result: `FAULT`
   - Reason: `Salt already used`
@@ -184,7 +193,8 @@ Conclusion:
 
 ## Overall Status
 
-Passed on testnet:
+Passed on testnet on 2026-03-13, with every positive execution calling `MockTransferTarget`
+(see the header: no asset moved, and no live token or third-party contract was involved):
 
 - Web3AuthVerifier
 - TEEVerifier
@@ -202,16 +212,34 @@ Intentionally disabled:
 
 - ZKEmailVerifier
 
-Security conclusion:
+Security conclusion, scoped to what the record shows:
 
-- The production-capable plugin set now resists the tested direct-config, signature-tampering, nonce-replay, method-scope, amount-limit, restricted-target, and credential-revocation attack scenarios.
-- The previous placeholder `ZKEmailVerifier` is no longer silently permissive and is now blocked until a real proof verifier is implemented.
+- the tested direct-config, signature-tampering, nonce-replay, method-scope, amount-limit,
+  restricted-target and credential-revocation cases faulted as recorded above;
+- the positive path is an authorization-path result against a mock target, not a value-transfer or
+  third-party-integration result, and only `WebAuthnVerifier`, `SessionKeyVerifier`,
+  `WhitelistHook`, `DailyLimitHook` and `SocialRecoveryVerifier` are exercised by the reproducible
+  local-chain suite today;
+- the previous placeholder `ZKEmailVerifier` is no longer silently permissive and is blocked until a
+  real proof verifier is implemented.
 
 ## Paymaster Compatibility
 
-All production-capable verifiers and hooks in the matrix above are fully compatible with the on-chain `AAPaymaster` contract via `executeSponsoredUserOp`. The Paymaster operates at the core execution layer: relays can preflight `ValidatePaymasterOp` off-chain, while the on-chain path delegates to the standard `executeUserOp` flow (which runs the configured verifier and hooks) and then settles the relay reimbursement atomically. No plugin modifications are required.
+The on-chain `AAPaymaster` settles after the AA core has run the configured verifier and hooks, and
+the core calls it only from the linked core contract, so a plugin does not need to know about it.
+That structural property is what "compatible" means here; the per-plugin combinations below were
+**not** executed on chain. What the reproducible acceptance suite exercises is the generic
+sponsored path only: `AA-08` in `tests/localchain/` funds a sponsor deposit, broadcasts
+`executeSponsoredUserOp` on the deployed core with a real fee, and asserts that the settlement is
+capped at the fee the relay actually paid and that a per-operation bound below that fee refuses the
+operation and moves nothing. Relays can preflight `validatePaymasterOp` off-chain, and the
+on-chain path runs the standard `executeUserOp` flow before settling the reimbursement atomically.
+Note the measured limit: in the zero-fee container the relay route uses (`invokefunction`), the
+deployed core aborts the settlement, so a sponsored invocation is not priceable there and must be
+broadcast with a real fee (`AA-09` case 16 in the same suite).
 
-Compatible combinations include:
+Combinations the matrix's plugins are expected to support, but which no run in this repository has
+executed as a combination:
 - **Web3AuthVerifier + DailyLimitHook + Paymaster** — EVM wallet users with spending limits, gas-free
 - **SessionKeyVerifier + WhitelistHook + Paymaster** — delegated game sessions with whitelisted contracts, sponsored
 - **MultiSigVerifier + MultiHook + Paymaster** — threshold-approved DAO treasury ops, gas-free for signers

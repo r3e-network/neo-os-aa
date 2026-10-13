@@ -17,6 +17,9 @@ namespace AbstractAccount.Mocks
         [Safe]
         public static bool SupportsV3() => true;
 
+        [Safe]
+        public static bool SupportsComposition() => false;
+
         // `object` compiles to ABI return type Any, not Boolean.
         public static object ValidateSignature(UInt160 accountId, object op) => true;
 

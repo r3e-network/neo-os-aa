@@ -58,16 +58,18 @@ const batchPayload = client.createSponsoredBatchPayload({
 
 | 方法 | 访问权限 | 用途 |
 | --- | --- | --- |
-| `OnNEP17Payment` | GAS 转账 | 接受赞助商存款 |
-| `WithdrawDeposit(amount)` | 赞助商见证 | 提取多余 GAS |
-| `SetPolicy(accountId, target, method, maxPerOp, dailyBudget, totalBudget, validUntil)` | 赞助商见证 | 创建/更新赞助策略 |
-| `RevokePolicy(accountId)` | 赞助商见证 | 移除策略 + 清除计数器 |
-| `ValidatePaymasterOp(sponsor, accountId, target, method, amount)` | 安全（任何人） | 只读预检查询 |
-| `SettleReimbursement(sponsor, accountId, target, method, relay, amount)` | 仅 AA 核心 | 执行后原子结算 |
-| `GetSponsorDeposit(sponsor)` | 安全 | 查询存款余额 |
-| `GetPolicy(sponsor, accountId)` | 安全 | 查询策略详情 |
-| `GetDailySpent(sponsor, accountId)` | 安全 | 查询 24 小时花费 |
-| `GetTotalSpent(sponsor, accountId)` | 安全 | 查询生命周期花费 |
+| `onNEP17Payment` | GAS 转账 | 接受赞助商存款 |
+| `withdrawDeposit(amount)` | 赞助商见证 | 提取多余 GAS |
+| `setPolicy(accountId, target, method, maxPerOp, dailyBudget, totalBudget, validUntil)` | 赞助商见证 | 创建/更新赞助策略 |
+| `revokePolicy(accountId)` | 赞助商见证 | 移除策略 + 清除计数器 |
+| `validatePaymasterOp(sponsor, accountId, target, method, amount)` | 安全（任何人） | 只读预检查询 |
+| `settleReimbursement(sponsor, accountId, target, method, relay, amount)` | 仅 AA 核心 | 执行后原子结算 |
+| `getSponsorDeposit(sponsor)` | 安全 | 查询存款余额 |
+| `getPolicy(sponsor, accountId)` | 安全 | 查询策略详情 |
+| `getDailySpent(sponsor, accountId)` | 安全 | 查询 24 小时花费 |
+| `getTotalSpent(sponsor, accountId)` | 安全 | 查询生命周期花费 |
+
+上表方法名与已部署 manifest `contracts/build/AAPaymaster.manifest.json` 完全一致；Neo ABI 名称区分大小写。
 
 ## 核心文档
 

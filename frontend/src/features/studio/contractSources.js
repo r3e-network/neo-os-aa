@@ -3,6 +3,7 @@ const CONTRACT_SOURCE_DEFINITIONS = [
   { name: 'UnifiedSmartWallet.Models.cs', loader: () => import('@/assets/contracts/UnifiedSmartWallet.Models.cs?raw') },
   { name: 'UnifiedSmartWallet.Internal.cs', loader: () => import('@/assets/contracts/UnifiedSmartWallet.Internal.cs?raw') },
   { name: 'UnifiedSmartWallet.Accounts.cs', loader: () => import('@/assets/contracts/UnifiedSmartWallet.Accounts.cs?raw') },
+  { name: 'UnifiedSmartWallet.VerifierChildren.cs', loader: () => import('@/assets/contracts/UnifiedSmartWallet.VerifierChildren.cs?raw') },
   { name: 'UnifiedSmartWallet.State.cs', loader: () => import('@/assets/contracts/UnifiedSmartWallet.State.cs?raw') },
   { name: 'UnifiedSmartWallet.Execution.cs', loader: () => import('@/assets/contracts/UnifiedSmartWallet.Execution.cs?raw') },
   { name: 'UnifiedSmartWallet.VerifyContext.cs', loader: () => import('@/assets/contracts/UnifiedSmartWallet.VerifyContext.cs?raw') },

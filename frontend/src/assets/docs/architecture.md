@@ -97,7 +97,7 @@ flowchart TD
   Settle --> Return[Return result]
 ```
 
-Sponsors deposit GAS into the Paymaster via NEP-17 transfer and create policies with `setPolicy(accountId, targetContract, method, maxPerOp, dailyBudget, totalBudget, validUntil)`. Use `accountId = UInt160.Zero` for a global policy that sponsors any account. Settlement is atomic: policy check, deposit deduction, and relay reimbursement happen inside a single call.
+Sponsors deposit GAS into the Paymaster via NEP-17 transfer and create policies with `setPolicy(accountId, targetContract, method, maxPerOp, dailyBudget, totalBudget, validUntil)`. Use `accountId = UInt160.Zero` for a global policy that sponsors any account. Settlement is atomic: policy check, deposit deduction, and relay reimbursement happen inside a single call. For fee-bearing transactions, reimbursement is `min(requested, SystemFee + NetworkFee)`. `maxPerOp` caps that settlement, not the total fee; the relay bears any unreimbursed portion. Daily and total budgets apply to the resolved policy scope, with global policies sharing one scope across accounts. Zero-fee RPC estimation uses the requested amount as its conservative cap; it does not unconditionally abort.
 
 ## 6. Authorization Modes
 
@@ -130,7 +130,9 @@ The app workspace is V3-first:
 - operators can choose client broadcast or relay submission
 - shared drafts keep only the latest 100 activity entries and 12 submission receipts
 
-Legacy `executeUnifiedByAddress` handling remains compatibility-only and should not be presented as the primary runtime path.
+The V1/V2 wrappers `executeUnified` and `executeUnifiedByAddress` were removed: no deployed
+manifest and no contract source defines them, so only `executeUserOp` (or `executeUserOps` for
+a batch) reaches the current runtime.
 
 ## 9. Module Lifecycle
 

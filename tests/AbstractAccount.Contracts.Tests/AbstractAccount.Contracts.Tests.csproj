@@ -7,15 +7,11 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <!-- Must match the Neo core/DevPack package that emits CallWithGasLimit. -->
-    <NeoSmartContractFrameworkVersion Condition="'$(NeoSmartContractFrameworkVersion)' == ''">3.10.2-CI00384</NeoSmartContractFrameworkVersion>
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.10.4" />
     <PackageReference Include="MSTest.TestFramework" Version="3.10.4" />
+    <!-- Released in lockstep with the framework; the version comes from Directory.Build.props. -->
     <PackageReference Include="Neo.SmartContract.Testing" Version="$(NeoSmartContractFrameworkVersion)" />
   </ItemGroup>
 

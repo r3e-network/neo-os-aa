@@ -182,11 +182,17 @@ public class AAFormalCorrespondenceRuntimeTests
         TestException accountFault = Assert.ThrowsExactly<TestException>(() =>
             fx.Call(wallet, "getNonce", UInt160.Zero, 0));
         StringAssert.Contains(accountFault.Message, "Account id required");
-        foreach (BigInteger channel in new[] { -BigInteger.One, BigInteger.One << 192 })
+        foreach (BigInteger channel in new[] { -BigInteger.One, BigInteger.One << 191, BigInteger.One << 192 })
         {
-            TestException fault = Assert.ThrowsExactly<TestException>(() =>
-                fx.Call(wallet, "getNonce", account, channel));
-            StringAssert.Contains(fault.Message, "Invalid channel");
+            try
+            {
+                fx.Call(wallet, "getNonce", account, channel);
+                Assert.Fail($"channel {channel} unexpectedly passed the signed-VM channel bound");
+            }
+            catch (TestException fault)
+            {
+                StringAssert.Contains(fault.Message, "Invalid channel");
+            }
         }
         Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
     }

@@ -1,0 +1,194 @@
+# Native AccountManagement SDK (ABI 2)
+
+`NativeSmartAccountClient` targets the consensus-native service. `AbstractAccountClient` remains the independent public deployed-contract V3 client. Changing its core hash does not convert V3 registration, EIP-712 signatures, identity or transaction format into the native protocol.
+
+Discovery requires the exact ABI 2 manifest/profile digest, native id/hash/name, explicit expected network magic, and callable `getVersion() == 2`. The node must activate `HF_SmartAccountV1`. Private tests do not establish public activation.
+
+For setup, backups and key-loss decisions, start with the [account user guide](NATIVE_ACCOUNT_USER_GUIDE.md).
+
+## Typed bytes and authority
+
+Account identity, asset address, custody, recovery authority, and fee payer are distinct. Identity derivation remains version 1. ABI 2 adds authorityEpoch at index 13 of its exact fourteen-field account record. The signing domain binds authorization version 2, network, service, account, authorityEpoch and configurationNonce. Canonical execution also requires all four arguments `(accountId, opOrBatch, expectedAuthorityEpoch, expectedConfigurationNonce)`. This transaction-level commitment protects native witness-only authorization after custody or configuration changes. The old two-argument envelope is rejected, with no zero-counter default. Recovery advances both counters and revokes installed modules while preserving identity/assets/nonce channels/Frozen status.
+
+Hash160 inputs are display-order hex; `nativeCodec.hashValue(hash)` converts them to wire-order ByteString. ByteString.value is always hex, never implicit base64. Use `stringValue(text)` for strict UTF-8. Large integers use decimal strings or BigInt. Exact Array/Struct types are preserved; Map, Buffer, cycles/shared compounds and profile-bound violations are rejected. Reads use canonical `invokescript` to avoid RPC conversions that lose Struct values.
+
+## Registration and custody execution
+
+Provide wallet adapters `{account, verificationScript, sign(signDataHex)}` for standard Neo P-256 CHECKSIG or canonical CHECKMULTISIG accounts. `sign` signs the exact supplied bytes using P-256/SHA-256 once. A single-signature adapter returns 64-byte IEEE P1363 r||s hex; a multisignature adapter returns `{publicKey, signature}` records. The SDK verifies every submitted signature and assembles the required quorum in script order. Do not apply a message prefix or hash an already hashed digest again. The SDK stores no private keys. See [threshold recovery](NATIVE_ACCOUNT_THRESHOLD_RECOVERY.md) for script limits and backup requirements.
+
+```js
+const { NativeSmartAccountClient, nativeCodec: c } = require('neo-abstract-account');
+const client = new NativeSmartAccountClient({rpcUrl, networkMagic});
+await client.discover();
+const registration = client.buildRegistration({
+  custodyAddress: custodyWallet.account,
+  salt: random32BytesHex,
+  recoveryAddress: recoveryWallet.account,
+});
+const limits = {maxSystemFee:'1000000000', maxNetworkFee:'300000000', maxTotalFee:'1300000000'};
+const tx = await client.prepareTransaction(registration, {
+  feePayer: payerWallet, authoritySigners:[custodyWallet], ...limits,
+});
+const signed = await client.signTransaction(tx);
+await client.preflightTransaction(signed);
+await client.broadcastTransaction(signed);
+```
+
+Wait for a confirmed receipt and verify AccountCreated/getAccount against the independently derived identity. Fund `registration.accountAddress`, the asset principal. Persist the salt; recovery does not replace the account identity. Submission returns `{submitted:true,confirmed:false}`. `getTransactionReceipt(signed)` verifies persisted raw bytes and returns Application results. An unknown/pending transaction can produce an RPC error; poll the same txid with bounded retries, never silently sign a replacement after timeout.
+
+```js
+const state = await client.getAccount(registration.accountId);
+const prepared = await client.prepareOperation({
+  accountId:state.accountId, targetContract:gasTokenHash, method:'transfer',
+  args:[c.hashValue(state.accountAddress), c.hashValue(recipientHash),
+        {type:'Integer',value:'100000000'}, {type:'Null'}],
+  channel:3n, deadline:deadlineMilliseconds,
+});
+// verifier=null: real custody transaction witness, empty operation signature.
+const plan = client.buildExecution([prepared]);
+const transferTx = await client.prepareTransaction(plan, {
+  feePayer:payerWallet, authoritySigners:[custodyWallet], ...limits,
+});
+await client.broadcastTransaction(await client.signTransaction(transferTx));
+```
+
+The external payer is signer zero. Its scope is None unless it is also an explicitly required custody/recovery authority. Proxy scope is CustomContracts restricted to operation targets; its witness is empty invocation plus canonical verification script. Custody/recovery scopes target AccountManagement. Proxy-as-payer, conflicting wallet identities and unsupported wallet scripts are rejected. A wallet explicitly selected in several authority roles is encoded once with only those derived scopes. Standard wallet multisignatures are supported for custody, recovery and the payer. They count public-key signatures within one wallet witness and are distinct from the native MultiSigVerifier's module quorum.
+
+`client.exportSignedTransaction(signed)` produces a versioned public artifact with the exact signed bytes, transaction fields, profile and witnesses. The browser can import it for the same reviewed plan, validate wallet signatures and fee ceilings, perform complete signed preflight, and explicitly send those bytes. See [signed transaction import](NATIVE_SIGNED_TRANSACTION_IMPORT.md). Import does not grant the workspace access to signing keys.
+
+For `cancelRecovery`, keep the cancellation authority separate from the payer.
+Pass `cancellationAuthority: custodyWallet.account` or the recovery wallet account
+alongside its wallet in `authoritySigners` (or as `feePayer` if it also pays).
+An explicit choice determines the native-service witness scope even when the
+other authority pays. Custody can cancel only before maturity; recovery can
+cancel any pending recovery. The SDK rechecks custody's chain-time window before
+requesting signatures. Without an explicit choice, the existing recovery-first
+selection remains. The final native execution always enforces the actual block
+state and time.
+
+## Fees and final preflight
+
+Fees from RPC must be canonical nonnegative Int64 decimal strings; malformed values and a `minimumrequiredfee` below `gasconsumed` are rejected before signing. Missing minimum admission data permits only explicit preparation budgets, which must still cover actual consumption. Final signed preflight requires both fields and applies the same checks. `gasconsumed` is actual consumption; bounded callbacks can need a larger admission budget. Automatic SystemFee requires `minimumrequiredfee`; an older node needs an explicit SystemFee budget for preparation. This does not bypass final validation. Fee caps are mandatory. `calculatenetworkfee` accounts for complete witness shape and is repeated using final signed witnesses.
+
+`preflightTransaction` calls `invoketransaction(base64RawTx)` and requires matching hash/network, snapshot identity, Verification Succeed, Application HALT, `relayed:false`, `mempoolChecked:false`, and minimum admission fee within the signed SystemFee. It also requires the RPC's `simulation` declaration: `mode:'single-transaction-next-block'`, `height:snapshot.height+1`, a canonical UInt64 decimal-string `timestamp`, UInt8 `primaryIndex`, `view:0`, `transactionCount:1`, `onPersist:'HALT'`, and canonical UInt160 `nextConsensus`. This confirms native fee processing ran before Application in a disposable single-transaction next-block context. It does not predict other transactions, the actual next primary or timestamp, or mempool acceptance. Broadcast repeats preflight on identical signed bytes. Unsupported RPC, a missing preparation declaration, or any mismatch refuses broadcast; the signed raw artifact remains exportable.
+
+This checks a ledger snapshot, not nonce reservation or guaranteed mempool admission. Concurrent submissions of the same txid and raw bytes share one in-flight request. Preflight failures can be retried without re-signing. Once sendrawtransaction was attempted its outcome is retained; errors carry txid and submissionAttempted, so resolve a timeout by querying that txid. Do not automatically increase fees or re-sign after refusal. A simulated transfer returning Boolean false is rejected even if the VM HALTs. After confirmation verify actual asset/nonce/policy changes. A committed FAULT still charges the fee payer; rollback and fee effects are different.
+
+## Chain time and migration boundaries
+
+Deadlines and delays use chain milliseconds, not the client clock. Standard witness Verification reads the snapshot's persisted block time; Application reads the executing block time. Equality at the deadline is valid, but the next block may already be too late. Final preflight uses its declared hypothetical timestamp, so check the persisted result even after a successful replay. Configuration/recovery maturity is inclusive; custody cancellation of recovery ends strictly before maturity.
+
+ABI 2 has no legacy import endpoint, import registry or migration event. Registering a native identity does not move legacy assets. Old native records/modules and two-argument execution envelopes are rejected; identity derivation version 1 does not imply storage or authorization compatibility. A legacy migration adapter or prior native-state conversion requires a separate specification and validation before use.
+
+## Module configuration and signing
+
+`buildModuleCall({accountId,role,child?,method,args})` accepts only method-specific args; the core prepends accountId. It checks the deployed configuration capability and resolves the ABI by method name plus argument count, including the account ID prepended by the core. Different-arity overloads are valid; duplicate matching signatures, safe methods and methods without a leading Hash160 are refused. Module admission for both configuration and witness signing requires metadata with numeric `abiVersion: 2`, the exact service profile digest and a Boolean composition marker. Missing, old or mistyped versions are refused. The core revalidates identity/code hash/authority/delay/epoch independently.
+
+For the declared native-v2 `MultiSigVerifier` profile and its exact `setConfig(Hash160, Array, Integer)` capability, the SDK also checks the known configuration shape before staging: 1–3 ordered, unique child hashes and an integer threshold of 1–2 that does not exceed the roster size. Zero, self and service hashes are refused. This is a convenience for the built-in schema, not an inference about arbitrary third-party `setConfig` methods. The three-domain total, disjoint child signer domains, code pins and current child policies remain core-authoritative checks. Initial staging can succeed before child configuration is ready; its simulation does not prove the future configuration can be applied. After maturity, rebuild the complete confirmation and simulate it again before signing.
+
+For native SessionKeyVerifier:
+
+```js
+const config = await client.buildModuleCall({
+  accountId, role:'verifier', method:'setSessionKey',
+  args:[{type:'ByteString',value:compressedP256PublicKeyHex}, c.hashValue(targetHash),
+        c.stringValue('transfer'), {type:'Integer',value:sessionExpiryMilliseconds},
+        {type:'Integer',value:spendLimitDatoshi}, c.stringValue('limited session')],
+});
+```
+
+Submit with custody, inspect `getPendingModuleCall`, wait the chain's full 24-hour maturity, then rebuild and submit the identical call. Issued plans are immutable and tied to the current account snapshot. Staging false differs from a completed callback whose result is false: distinguish them by pending state and configurationNonce.
+
+Cancel an unwanted pending policy call with an explicit role:
+
+```js
+const cancellation = await client.buildAction({
+  accountId, action:'cancelModuleCall', role:'verifier',
+});
+// Present cancellation.pending in your application: selected module, method,
+// typed arguments and maturity. Obtain approval before preparing or signing.
+const cancellationTx = await client.prepareTransaction(cancellation, {
+  feePayer:payerWallet, authoritySigners:[custodyWallet], ...limits,
+});
+await client.broadcastTransaction(await client.signTransaction(cancellationTx));
+```
+
+Use `role:'hook'` for a hook policy call. The cancellation plan retains the role,
+pending-call snapshot and its canonical `pendingCallBytes`. Its complete signed
+script reads and serializes the current pending record, asserts byte equality,
+then calls `cancelModuleCall(accountId, role)` in the same transaction. Changed
+or missing content therefore faults before cancellation, including changes after
+the last client revalidation. Preserve `requiresExactScript: true`; a wallet
+method-and-arguments invocation would omit this protection and is refused by the
+workspace. The native entrypoint itself remains unchanged for deliberate slot
+cancellation. This binds content, not a unique proposal instance: an exactly
+identical record recreated in the same block can still match. See the
+[transaction guard specification](NATIVE_ACCOUNT_TRANSACTION_GUARDS.md).
+Cancellation removes a proposal, not the active policy. Build and review a fresh
+plan after a change, and inspect the confirmed pending state.
+
+A Session signer signs `prepared.preimage` with P-256/SHA-256 once. `prepared.digest` is its independently computed, chain-matched SHA-256. Attach the signature with `attachSignature(prepared, signatureHex)` and buildExecution. A verifier-authorized operation can use an independent payer without a custody transaction signature. For NeoNativeVerifier, pass `verifierSigners:[walletAdapter]` explicitly to `prepareTransaction`. The SDK reads the core-owned verifier root and active leaf roster, reconstructs complete deployed NEF bytes and JCS manifest code hashes, checks stored pins, and reads each native witness leaf's configured signer list. CustomContracts includes only matching leaves. A MultiSigVerifier root with direct native witness children is supported; recursive or unregistered children are refused. Merely paying fees does not grant verifier authority. Payer/custody and verifier roles can deliberately share a key, but only explicit selection adds that module scope. Config/roster/code pins are rechecked before and after signing and before broadcast.
+
+For native MultiSig, the configured child order is significant: validation selects the first `threshold` children whose submitted proofs pass. Only that selected quorum receives execution-after callbacks and consumes Session policy counters. Three submitted valid proofs in a 2-of-3 account do not mean three child policies were consumed. A caller can deliberately omit a child with a Null slot to choose another allowed quorum; an empty ByteString is a present proof for a NeoNative witness child. Use simulation and the confirmed policy-state readback when reviewing the selected quorum.
+
+Removing an active child clears its account-specific policy and removes it from the enrolled roster. Adding that module back later requires re-enrolling and configuring it through the full delayed child-configuration flow before confirming the new MultiSig roster. A previously successful child configuration is not preserved across removal.
+
+The application supplies the signer adapter; a generic signature record does not prove module approval. Native MultiSig adapters must use core dependency order, current config and disjoint signer domains. Do not reuse public V3 EIP-712 aggregation for native signatures.
+
+`getModuleDependencies` reads authoritative active/cleanup rosters. Dependency setters are internal module continuations; the SDK exposes no custody-authorized helper for them.
+
+## Nonces and recovery
+
+`prepareOperations({accountId,operations})` allocates sequences in input order per channel; buildExecution emits the canonical batch. Channels are below 2^191, sequences below 2^64, and nonce/deadline below 2^255. Cursor 2^64 means exhausted. Thirty-two operations is a syntax limit, not a guarantee they fit the global Verification gas cap.
+
+`buildAction` supports the lifecycle below. Every transaction needs a fee payer;
+the table lists account authority required in addition to payment. The fee payer
+may also be the listed authority if it has the corresponding key.
+
+| Action | Required account authority | Timing and state | Cancellation |
+| --- | --- | --- | --- |
+| `proposeVerifier`, `proposeHook`, `proposeRecoveryAddress` | Custody | Active; no pending custody recovery; starts a 24-hour delay | Custody uses the matching cancel action while the intent remains pending |
+| `activateVerifier`, `activateHook`, `activateRecoveryAddress` | None; payer only | Current pending intent at or after maturity; Active; no pending custody recovery | Custody can cancel a still-pending intent, including after maturity, before activation executes |
+| `buildModuleCall` proposal and application | Custody for both calls | Active; no pending custody recovery; repeat the exact method/arguments after 24 hours | Custody uses `cancelModuleCall` with the explicit role and reviewed pending call |
+| `proposeRecovery` | Configured guardian | Active or Frozen; starts a seven-day delay | Guardian while pending; custody only strictly before maturity |
+| `executeRecovery` | None; payer only | Current pending recovery at or after maturity | No pending recovery remains after execution |
+| `freeze` | Configured guardian | Active; no protocol waiting period | Clears every pending intent; use `unfreeze` to resume |
+| `unfreeze` | Custody and configured guardian | Frozen; no protocol waiting period | No pending proposal |
+
+For example, a mature activation needs only `feePayer:payerWallet` and the fee
+caps in `prepareTransaction`; `authoritySigners` may be omitted. Payer-only
+activation does not waive pending-state, maturity, module-pin or cleanup checks.
+Module-policy application is a distinct flow and still requires custody.
+Final simulation rechecks the selected actor and current pending state.
+Account-only lifecycle calls, such as `executeRecovery(accountId)`, do not encode
+the reviewed pending payload. Client revalidation detects observed changes but
+cannot lock pending state through inclusion; read confirmed state after execution.
+
+Freeze advances the configuration counter and clears pending recovery,
+verifier/hook/address changes and module-policy calls. If both containment and
+recovery are needed, freeze and confirm first, then propose recovery. Recovery
+preserves Frozen status and the configured guardian; unfreezing still needs the
+new custody and that guardian. Losing the guardian key while Frozen has no
+custody-only override in this profile. While Active without pending custody
+recovery, custody can propose a 24-hour guardian replacement. Use accepted Neo
+wallet authorities and an independently controlled guardian; the current SDK
+transport support remains the standard P-256 wallet interface described above.
+
+Recovery/configuration invalidate old signatures through authorityEpoch/configurationNonce. The SDK rechecks state/domain/digest/nonce before signing and broadcast. Prepared operations and plans are issued by one client instance. Imported JSON must be rebuilt from chain state, not promoted to a trusted signing request.
+
+## Browser and validation boundaries
+
+`shared/nativeSmartAccount.mjs` is the pure Uint8Array codec with injected synchronous hex hash adapters. `shared/nativeSmartAccountClient.mjs` provides the same read/action/operation client with injected RPC. Frontend mirrors are byte-identical. Node P-256 transaction signing is separate in `sdk/js/src/native/transaction.js`.
+
+Native tests cover independent v2 byte vectors, epochs/counter maxima, exact envelopes, strict types, hostile RPC responses, 2Dnonce/batches, fee caps, real P-256 transaction signatures and preflight rejection. `npm run test:package` installs a real tarball outside the repo and checks CJS/ESM/types. Real activated-node execution is an independent gate; inspect the current runtime receipt before claiming it passed.
+
+
+RPC execution evidence is checked before transaction signing and again on the exact signed transaction. A single operation must return exactly one well-formed, serializable VM item. A batch must return one exact Array with one result per operation. A method named `transfer` must return strictly Boolean `true`; absent, truncated, mistyped, false, or non-Boolean transfer results cannot authorize submission. Other target methods keep their native return semantics, including Boolean `false` and Null. Lifecycle calls may legitimately return an empty stack, but a missing or malformed stack is rejected. Faulted simulations remain available for diagnosis and never supply an automatic fee approval.
+
+The default RPC transport preserves a JSON-RPC error's numeric `code` and structured `data`. Signed preflight errors also retain the original `cause`; broadcast adds the immutable `txid` and `submissionAttempted`. A preflight failure can be retried with the same signed bytes after the node recovers. Once submission has been attempted, inspect that transaction's receipt to resolve uncertainty instead of silently signing or sending another transaction.
+
+The reproducible private integration entry point is `sdk/js/tests/native-runtime-verifiers.py`. Supply `--runtime`, `--build-receipt`, `--artifacts`, `--module-receipt`, `--dotnet` and `--output`. It verifies both build receipts, creates an isolated loopback chain, and uses the actual SDK for NeoNativeVerifier, SessionKeyVerifier, two-Session 2-of-2 and ordered Session/Native 2-of-3 combinations. The matrix includes every two-child quorum, three submitted proofs with only the first two selected, maximum serialized operation args and a maximum nonce channel. Its receipt includes signed preflight, exact persisted raw bytes, scoped signer/code-pin evidence, independent balance/nonce/spending readback, and rejection of a retained signed transaction after configuration changes. Keys enter the Node bridge only on stdin; temporary wallet files use mode 0600. A PASS applies only to the pinned source/runtime/artifacts in that receipt.
+
+Add `--signed-artifact-transport` to run that matrix through SDK export and the same portable artifact validator used by the browser. Every submitted transaction then also passes public wallet-signature verification, fresh exact signed preflight and exact raw receipt checks. The mode adds a guarded pending-policy cancellation and independently verifies that the pending record is removed while the account record and active policy remain unchanged.
+
+Protocol requirements and remaining activation gates are mapped in the [issue 242 conformance review](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md).

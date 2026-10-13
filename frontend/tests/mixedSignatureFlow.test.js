@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { CORE_HASH, executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
+import { EC } from '../src/config/errorCodes.js';
 
 import {
   appendSignatureEntries,
@@ -82,36 +84,26 @@ test('transaction draft export includes body, signatures, and share metadata', (
   assert.equal(exported.broadcast.mode, 'relay');
 });
 
-test('buildStagedTransactionBody wraps client calls through executeUnifiedByAddress on the AA contract', () => {
-  const body = buildStagedTransactionBody({
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-    account: {
-      accountIdHex: '56e5bbd0603bdf01699c047b2397ee0e',
-      accountAddressScriptHash: '13ef519c362973f9a34648a9eac5b71250b2a80a',
-    },
-    operationBody: {
-      kind: 'invoke',
-      targetContract: 'd2a4cff31913016155e38e474a2c06d08be276cf',
-      method: 'balanceOf',
-      args: [{ type: 'Hash160', value: '0x13ef519c362973f9a34648a9eac5b71250b2a80a' }],
-    },
-    signerAddress: 'NdzSignerAddress',
-  });
-
-  assert.equal(body.clientInvocation.scriptHash, '5be915aea3ce85e4752d522632f0a9520e377aaf');
-  assert.equal(body.clientInvocation.operation, 'executeUnifiedByAddress');
-  assert.deepEqual(body.clientInvocation.args, [
-    { type: 'Hash160', value: '0x13ef519c362973f9a34648a9eac5b71250b2a80a' },
-    { type: 'Hash160', value: '0xd2a4cff31913016155e38e474a2c06d08be276cf' },
-    { type: 'String', value: 'balanceOf' },
-    { type: 'Array', value: [{ type: 'Hash160', value: '0x13ef519c362973f9a34648a9eac5b71250b2a80a' }] },
-    { type: 'Array', value: [] },
-    { type: 'ByteArray', value: '0x' },
-    { type: 'Integer', value: '0' },
-    { type: 'Integer', value: '0' },
-    { type: 'Array', value: [] },
-  ]);
-  assert.deepEqual(body.clientInvocation.signers, [{ account: 'NdzSignerAddress', scopes: 1 }]);
+test('buildStagedTransactionBody refuses an account without a V3 id instead of wrapping through a V1/V2 envelope', () => {
+  // CU-209: this used to stage a V1/V2 invocation naming an entrypoint no deployed contract
+  // exports. The V3 guard now refuses the input that produced it.
+  assert.throws(
+    () => buildStagedTransactionBody({
+      aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+      account: {
+        accountIdHex: '56e5bbd0603bdf01699c047b2397ee0e',
+        accountAddressScriptHash: '13ef519c362973f9a34648a9eac5b71250b2a80a',
+      },
+      operationBody: {
+        kind: 'invoke',
+        targetContract: 'd2a4cff31913016155e38e474a2c06d08be276cf',
+        method: 'balanceOf',
+        args: [{ type: 'Hash160', value: '0x13ef519c362973f9a34648a9eac5b71250b2a80a' }],
+      },
+      signerAddress: 'NdzSignerAddress',
+    }),
+    (error) => error?.message === EC.v3AccountRequired,
+  );
 });
 
 test('buildStagedTransactionBody prefers executeUserOp when accountIdHash is present', () => {
@@ -133,8 +125,8 @@ test('buildStagedTransactionBody prefers executeUserOp when accountIdHash is pre
 
   assert.equal(body.clientInvocation.operation, 'executeUserOp');
   assert.equal(body.v3Invocation.operation, 'executeUserOp');
-  assert.equal(body.legacyInvocation.operation, 'executeUnifiedByAddress');
   assert.equal(body.accountIdHash, 'f951cd3eb5196dacde99b339c5dcca37ac38cc22');
+  assert.equal(Object.hasOwn(body, 'legacyInvocation'), false);
   const deadline = Number(body.v3Invocation.args[1].value[4].value);
   assert.ok(deadline >= before + 3_599_000, 'V3 fallback deadline should use Runtime.Time milliseconds');
   assert.ok(deadline <= Date.now() + 3_601_000, 'V3 fallback deadline should be one hour from now');
@@ -176,7 +168,7 @@ test('buildDraftApprovalTypedData binds the domain chainId to the active network
     draft_id: 'draft-1',
     share_slug: 'share-1',
     account: { accountIdHex: 'aa11', accountAddressScriptHash: 'bb22' },
-    transaction_body: { txHex: 'deadbeef', method: 'executeUnifiedByAddress' },
+    transaction_body: { txHex: 'deadbeef', method: 'transfer' },
     broadcast_mode: 'relay',
   };
 
@@ -193,7 +185,7 @@ test('buildDraftApprovalTypedData creates an EVM-friendly approval payload from 
       draft_id: 'draft-1',
       share_slug: 'share-1',
       account: { accountIdHex: 'aa11', accountAddressScriptHash: 'bb22' },
-      transaction_body: { txHex: 'deadbeef', method: 'executeUnifiedByAddress' },
+      transaction_body: { txHex: 'deadbeef', method: 'transfer' },
       signer_requirements: [{ id: 'evm:bob', kind: 'evm' }],
       broadcast_mode: 'relay',
     },
@@ -223,11 +215,7 @@ test('broadcast helpers route client broadcasts through the wallet and relay bro
     mode: 'client',
     signerAddress: 'NdzSignerAddress',
     transactionBody: {
-      clientInvocation: {
-        scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-        operation: 'executeUnifiedByAddress',
-        args: [{ type: 'String', value: 'ok' }],
-      },
+      clientInvocation: executeUserOpInvocation({ target: CORE_HASH, method: 'transfer', args: [] }),
     },
     walletService: wallet,
     relayEndpoint: '/api/relay-transaction',
@@ -248,9 +236,7 @@ test('broadcast helpers route client broadcasts through the wallet and relay bro
   assert.deepEqual(calls[0], {
     kind: 'invoke',
     input: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUnifiedByAddress',
-      args: [{ type: 'String', value: 'ok' }],
+      ...executeUserOpInvocation({ target: CORE_HASH, method: 'transfer', args: [] }),
       signers: [{ account: 'NdzSignerAddress', scopes: 1 }],
     },
   });
@@ -284,11 +270,7 @@ test('executeBroadcast relay submit can use meta invocation carried by collected
       signerId: 'evm:bob',
       kind: 'evm',
       metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUserOp',
-          args: [{ type: 'String', value: 'ok' }],
-        },
+        metaInvocation: executeUserOpInvocation(),
       },
     }],
     walletService: wallet,
@@ -300,11 +282,7 @@ test('executeBroadcast relay submit can use meta invocation carried by collected
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUserOp',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
   });
 });
 
@@ -330,13 +308,7 @@ test('buildRelayPayloadOptions exposes raw mode only when raw relay forwarding i
     transactionBody: { rawTransaction: '0xdeadbeef' },
     signatures: [{
       kind: 'evm',
-      metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUnifiedByAddress',
-          args: [{ type: 'String', value: 'ok' }],
-        },
-      },
+      metadata: { metaInvocation: executeUserOpInvocation() },
     }],
   });
   const disabled = buildRelayPayloadOptions({
@@ -344,13 +316,7 @@ test('buildRelayPayloadOptions exposes raw mode only when raw relay forwarding i
     transactionBody: { rawTransaction: '0xdeadbeef' },
     signatures: [{
       kind: 'evm',
-      metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUnifiedByAddress',
-          args: [{ type: 'String', value: 'ok' }],
-        },
-      },
+      metadata: { metaInvocation: executeUserOpInvocation() },
     }],
   });
 
@@ -369,13 +335,7 @@ test('buildRelayBroadcastRequest uses stored meta invocations when raw transacti
     signatures: [{
       signerId: 'evm:bob',
       kind: 'evm',
-      metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUnifiedByAddress',
-          args: [{ type: 'String', value: 'ok' }],
-        },
-      },
+      metadata: { metaInvocation: executeUserOpInvocation() },
     }],
   });
 
@@ -383,11 +343,7 @@ test('buildRelayBroadcastRequest uses stored meta invocations when raw transacti
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUnifiedByAddress',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
   });
 });
 
@@ -412,13 +368,7 @@ test('buildRelayBroadcastRequest honors explicit meta selection when raw and met
     signatures: [{
       signerId: 'evm:bob',
       kind: 'evm',
-      metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUnifiedByAddress',
-          args: [{ type: 'String', value: 'ok' }],
-        },
-      },
+      metadata: { metaInvocation: executeUserOpInvocation() },
     }],
   });
 
@@ -426,11 +376,7 @@ test('buildRelayBroadcastRequest honors explicit meta selection when raw and met
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUnifiedByAddress',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
   });
 });
 
@@ -451,11 +397,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
       signerId: 'evm:bob',
       kind: 'evm',
       metadata: {
-        metaInvocation: {
-          scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-          operation: 'executeUserOp',
-          args: [{ type: 'String', value: 'ok' }],
-        },
+        metaInvocation: executeUserOpInvocation(),
       },
     }],
   });
@@ -464,11 +406,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheus_network: 'testnet',
-    metaInvocation: {
-      scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-      operation: 'executeUserOp',
-      args: [{ type: 'String', value: 'ok' }],
-    },
+    metaInvocation: executeUserOpInvocation(),
     paymaster: {
       account_id: 'aa-test',
       zerc20Proof: {
@@ -491,4 +429,64 @@ test('wallet service exposes EVM connect and sign helpers', () => {
   assert.match(source, /signTypedDataWithEvm/);
   assert.match(source, /getAvailableWalletModes/);
   assert.match(source, /relayTransaction/);
+});
+
+// --- CU-06: a relay verdict of ok:false is not a submission ---------------------------------------------------
+// The route answers a refused broadcast (a simulated transfer that returned false, a VM fault in the preview)
+// with HTTP 200, ok:false and no txid. Reporting that as "Relay Submission Sent" is the silent no-op.
+
+function metaSignature() {
+  return [{
+    signerId: 'evm:bob',
+    kind: 'evm',
+    metadata: {
+      metaInvocation: executeUserOpInvocation(),
+    },
+  }];
+}
+
+const relaySubmit = (walletService) => executeBroadcast({
+  mode: 'relay',
+  relayPayloadMode: 'meta',
+  relayRawEnabled: false,
+  morpheusNetwork: 'testnet',
+  transactionBody: {},
+  signatures: metaSignature(),
+  walletService,
+  relayEndpoint: '/api/relay-transaction',
+});
+
+test('CU-06: executeBroadcast rejects a relay answer that says ok:false and carries the route reason', async () => {
+  const refusal = {
+    simulate: true,
+    ok: false,
+    code: 'relay_transfer_returned_false',
+    vmState: 'HALT',
+    operation: 'executeUserOp',
+    exception: 'A token transfer returned false, so no tokens moved; the nonce and the fee are still spent.',
+  };
+  await assert.rejects(
+    () => relaySubmit({ async relayTransaction() { return refusal; } }),
+    (error) => /transfer returned false/i.test(error.message),
+  );
+
+  const fault = { simulate: true, ok: false, code: 'relay_simulation_fault', vmState: 'FAULT', exception: 'Invalid sequence for channel' };
+  await assert.rejects(
+    () => relaySubmit({ async relayTransaction() { return fault; } }),
+    (error) => /Invalid sequence for channel/.test(error.message),
+  );
+
+  await assert.rejects(
+    () => relaySubmit({ async relayTransaction() { return { ok: false }; } }),
+    (error) => typeof error.message === 'string' && error.message.length > 0,
+    'a bare ok:false still fails, with a stable fallback message',
+  );
+});
+
+test('CU-06: executeBroadcast keeps returning successful relay bodies untouched', async () => {
+  const sent = { txid: '0xdef', systemFee: '88628280', networkFee: '1369520', invocation: { operation: 'executeUserOp' } };
+  assert.deepEqual(await relaySubmit({ async relayTransaction() { return sent; } }), sent);
+
+  const rawSent = { txid: '0xabc', result: { hash: '0xabc' } };
+  assert.deepEqual(await relaySubmit({ async relayTransaction() { return rawSent; } }), rawSent);
 });

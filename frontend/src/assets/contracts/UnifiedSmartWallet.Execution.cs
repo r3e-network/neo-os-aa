@@ -18,10 +18,22 @@ namespace AbstractAccount
         private const int MaxUserOperationMethodLength = 128;
         private const int MaxUserOperationSignatureLength = 1024;
 
+#if PLATFORM
         // The platform syscall interprets this value in datoshi. 1,000,000,000
         // datoshi is 10 GAS, the maximum resource budget for each verifier callback,
         // including nested verifier calls; NeoVM enforces the ancestor budget transitively.
         private const long VerifierGasLimit = 1_000_000_000;
+
+        // System.Contract.CallWithGasLimit is a platform syscall that no published
+        // Neo.SmartContract.Framework declares, so this contract declares it. The attribute
+        // emits a SYSCALL only a private Neo core can execute. Public builds exclude it.
+        private static class PlatformSyscalls
+        {
+            [Syscall("System.Contract.CallWithGasLimit")]
+            public static extern object CallWithGasLimit(
+                UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);
+        }
+#endif
 
         // ========================================================================
         // 3. Core Routing: Validation and Execution (aligned with 4337 Validate & Call)
@@ -49,6 +61,8 @@ namespace AbstractAccount
                 SetVerifierExecutionContext(accountId, state.Verifier);
             }
 
+            object[] executionArgs;
+
             try
             {
                 // [ValidateUserOp phase]
@@ -60,13 +74,22 @@ namespace AbstractAccount
                 // Step 2: Verify signature
                 if (state.Verifier != UInt160.Zero)
                 {
+                    UserOperation verificationOp = CloneUserOperation(op);
                     // Delegate to plugin for signature verification (e.g., ecrecover or TEE hardware)
-                    bool isValid = (bool)Contract.CallWithGasLimit(
+#if PLATFORM
+                    bool isValid = (bool)PlatformSyscalls.CallWithGasLimit(
                         state.Verifier,
                         "validateSignature",
                         CallFlags.ReadOnly,
                         VerifierGasLimit,
-                        new object[] { accountId, op });
+                        new object[] { accountId, verificationOp });
+#else
+                    bool isValid = (bool)Contract.Call(
+                        state.Verifier,
+                        "validateSignature",
+                        CallFlags.ReadOnly,
+                        new object[] { accountId, verificationOp });
+#endif
                     ExecutionEngine.Assert(isValid, "Verifier rejected signature");
                 }
                 else
@@ -95,17 +118,28 @@ namespace AbstractAccount
                 // Step 4: NOW consume nonce (all validations passed)
                 ConsumeNonce(accountId, op.Nonce);
 
+                // Contract.Call passes VM arrays by reference. Keep the operation that was
+                // authenticated separate from the arrays exposed to policy hooks: a hook is an
+                // extension point, and a malicious/buggy implementation must not be able to
+                // rewrite the signed transfer arguments before the target call executes.
+                executionArgs = CloneOperationArguments(op.Args);
+
                 // [Hook phase] pre-execution hook
                 if (state.HookId != UInt160.Zero)
                 {
                     SetHookExecutionContext(accountId, state.HookId);
                     try
                     {
+                        object[] hookParams = BuildHookOperationParams(op, executionArgs);
+                        ByteString hookSnapshot = StdLib.Serialize(hookParams);
                         Contract.Call(
                             state.HookId,
                             "preExecute",
                             CallFlags.All,
-                            new object[] { accountId, BuildHookOperationParams(op) });
+                            new object[] { accountId, hookParams });
+                        ExecutionEngine.Assert(
+                            StdLib.MemoryCompare(hookSnapshot, StdLib.Serialize(hookParams)) == 0,
+                            "Hook mutated authenticated operation");
                     }
                     catch
                     {
@@ -120,25 +154,38 @@ namespace AbstractAccount
                 try
                 {
                     // Dynamically call target contract
-                    object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, op.Args);
+                    object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, executionArgs);
 
                     // [Hook phase] post-execution hook
                     if (state.HookId != UInt160.Zero)
                     {
+                        object[] hookParams = BuildHookOperationParams(op, executionArgs);
+                        ByteString hookSnapshot = StdLib.Serialize(hookParams);
                         Contract.Call(
                             state.HookId,
                             "postExecute",
                             CallFlags.All,
-                            new object[] { accountId, BuildHookOperationParams(op), result });
+                            new object[] { accountId, hookParams, CloneCallbackValue(result)! });
+                        ExecutionEngine.Assert(
+                            StdLib.MemoryCompare(hookSnapshot, StdLib.Serialize(hookParams)) == 0,
+                            "Hook mutated authenticated operation");
                     }
                     if (state.Verifier != UInt160.Zero)
                     {
-                        Contract.CallWithGasLimit(
+#if PLATFORM
+                        PlatformSyscalls.CallWithGasLimit(
                             state.Verifier,
                             "postExecute",
                             CallFlags.All,
                             VerifierGasLimit,
-                            new object[] { accountId, op, result });
+                            new object[] { accountId, CloneUserOperation(op), CloneCallbackValue(result)! });
+#else
+                        Contract.Call(
+                            state.Verifier,
+                            "postExecute",
+                            CallFlags.All,
+                            new object[] { accountId, CloneUserOperation(op), CloneCallbackValue(result)! });
+#endif
                     }
 
                     OnUserOpExecuted(accountId, op.TargetContract, op.Method, op.Nonce);
@@ -217,28 +264,54 @@ namespace AbstractAccount
         /// hook refinement boundary explicit:
         /// <c>[TargetContract, Method, Args, Nonce, Deadline, Signature]</c>.
         /// </remarks>
-        private static object[] BuildHookOperationParams(UserOperation op)
+        private static object[] BuildHookOperationParams(UserOperation op, object[] args)
         {
             return new object[]
             {
                 op.TargetContract,
                 op.Method,
-                op.Args,
+                args,
                 op.Nonce,
                 op.Deadline,
                 op.Signature
             };
         }
 
+        private static object[] CloneOperationArguments(object[] args)
+        {
+            return (object[])StdLib.Deserialize(StdLib.Serialize(args));
+        }
+
+        private static UserOperation CloneUserOperation(UserOperation op)
+        {
+            return new UserOperation
+            {
+                TargetContract = op.TargetContract,
+                Method = op.Method,
+                Args = CloneOperationArguments(op.Args),
+                Nonce = op.Nonce,
+                Deadline = op.Deadline,
+                Signature = op.Signature
+            };
+        }
+
+        // Callback modules are extension points.  Pass a serialized copy of the
+        // target result so a post hook/verifier cannot rewrite the value returned
+        // to the caller or mutate an object later consumed by settlement logic.
+        private static object? CloneCallbackValue(object? value)
+        {
+            return value == null ? null : StdLib.Deserialize(StdLib.Serialize(value));
+        }
+
         // ========================================================================
         // 4. Replay Protection (ERC-4337 2D Nonce spec)
         // ========================================================================
 
-        // Canonical ERC-4337 2D nonce: the full nonce is split into a 192-bit channel (the
+        // Canonical ERC-4337 2D nonce: the full signed-VM nonce is split into a 191-bit channel (the
         // parallel lane) and a 64-bit sequence (the strictly incrementing cursor within that
         // lane). Every lane is independent and each starts at sequence 0, so a fresh, randomly
-        // chosen channel with sequence 0 yields one-shot ("salt") semantics for free without a
-        // separate code path. There is no value threshold: channel = nonce >> 64 is always the
+        // chosen channel with sequence 0 yields one-shot semantics without a separate code path.
+        // There is no value threshold: channel = nonce >> 64 is always the
         // lane, which makes every channel (including channel >= 1) reachable.
         private static bool IsNonceAcceptable(UInt160 accountId, BigInteger nonce)
         {
@@ -285,7 +358,7 @@ namespace AbstractAccount
         /// <summary>
         /// Enforces the canonical UserOperation ABI boundary before any external call.
         /// BigInteger is used by Neo's VM, but the AA wire format is deliberately bounded
-        /// to the unsigned uint256 domain for nonce and deadline.
+        /// to the non-negative signed-VM domain (`0 <= value < 2^255`) for nonce and deadline.
         /// </summary>
         private static void ValidateUserOperation(UserOperation op)
         {
@@ -319,7 +392,12 @@ namespace AbstractAccount
             byte[] encoded = value.ToByteArray();
             int length = encoded.Length;
             if (length > 0 && encoded[length - 1] == 0) length--;
-            return length <= maxBytes;
+            // NeoVM integers are signed. A value whose highest retained byte has
+            // its sign bit set would require one extra sign byte in canonical
+            // serialization, so it is outside the representable non-negative
+            // domain even when its magnitude fits the nominal byte width.
+            return length <= maxBytes
+                && (length < maxBytes || length == 0 || encoded[length - 1] < 0x80);
         }
     }
 }

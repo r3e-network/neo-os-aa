@@ -58,7 +58,7 @@ public class ExecuteUserOpRuntimeTests
             return accountId;
         }
 
-        public object?[] TransferArgs(UInt160 accountId) => new object?[] { accountId, Recipient, (BigInteger)1000, null };
+        public object?[] TransferArgs(UInt160 accountId) => new object?[] { Fx.CallUInt160(Wallet, "getProxyScriptHash", accountId), Recipient, (BigInteger)1000, null };
 
         public object[] TransferOp(UInt160 accountId, BigInteger nonce, BigInteger deadline, object? signature = null) =>
             RuntimeFixture.UserOp(Target, "transfer", TransferArgs(accountId), nonce, deadline, signature ?? Array.Empty<byte>());
@@ -70,16 +70,16 @@ public class ExecuteUserOpRuntimeTests
             Fx.CallInteger(Wallet, "getNonce", accountId, channel);
 
         /// <summary>
-        /// Deploys a SessionKeyVerifier bound to the mock AA core, registers a wallet account
+        /// Deploys a SessionKeyVerifier bound to the real AA core, registers a wallet account
         /// using it, and authorizes <paramref name="key"/> for transfer calls on the mock target.
         /// </summary>
         public UInt160 RegisterSessionKeyAccount(P256SessionKey key, out UInt160 verifier)
         {
-            verifier = Fx.Deploy("verifiers/SessionKeyVerifier", Core.ToArray());
+            verifier = Fx.Deploy("verifiers/SessionKeyVerifier", Wallet.ToArray());
             UInt160 accountId = RegisterAccount(verifier, BackupOwner, EscapeTimelockSeconds);
 
             BigInteger validUntil = Fx.Now() + 86_400_000; // 24h
-            Fx.CallVoid(Core, "forward", verifier, "setSessionKey", new object?[]
+            Fx.CallVoid(verifier, "setSessionKey", new object?[]
             {
                 accountId, key.CompressedPublicKey, Target, "transfer", validUntil, BigInteger.Zero, "runtime suite"
             });

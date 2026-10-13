@@ -216,6 +216,13 @@ export function getRuntimeConfig(env = import.meta.env ?? {}) {
       env.VITE_AA_N3INDEX_API_BASE_URL || env.VITE_N3INDEX_API_BASE_URL,
       DEFAULT_N3INDEX_API_BASE_URL
     ),
+    // AA wallet account discovery has its own explicit read API base URL. Unlike
+    // the shared key above it has no compiled-in public default, so a stack that
+    // sets nothing fails closed instead of silently listing accounts from the
+    // public production read API.
+    aaReadApiBaseUrl: resolveOptionalUrl(
+      env.VITE_AA_N3INDEX_API_BASE_URL || env.VITE_N3INDEX_API_BASE_URL
+    ),
     n3IndexNetwork: resolveOptionalNetwork(
       env.VITE_AA_N3INDEX_NETWORK || env.VITE_N3INDEX_NETWORK,
       networkDefaults.n3IndexNetwork

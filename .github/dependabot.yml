@@ -1,0 +1,18 @@
+# Dependabot coverage for every package ecosystem in this repository.
+# The npm trees live in frontend/ and sdk/js/; the .NET solution is at the root.
+# Without this file the repository's dependency graph produces no update PRs and
+# its alert inventory drifts stale (security review finding SR-19).
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "npm"
+    directory: "/sdk/js"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "daily"

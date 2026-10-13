@@ -10,8 +10,9 @@
 
 ## 关键执行入口
 
-- `executeUnifiedByAddress`：统一运行时的原生钱包客户端路径
-- `executeUnifiedByAddress`：统一运行时的 EVM 元交易 / 中继路径（旧包装器仍兼容）
+- `executeUserOp(accountId, op)`：原生钱包客户端路径；批量使用 `executeUserOps(accountId, ops)`
+- `executeUserOp`：EVM 元交易 / 中继路径
+- 旧包装器 `executeUnified` 与 `executeUnifiedByAddress` 已从 V3 中移除，不再兼容，也不存在于任何已部署 manifest 或合约源码中
 
 ## 协作草稿范围
 

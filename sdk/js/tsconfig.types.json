@@ -10,7 +10,6 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "types": [],
-    "baseUrl": ".",
     "paths": {
       "neo-abstract-account": ["./src/index.d.ts"]
     }

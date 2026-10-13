@@ -168,6 +168,72 @@ public class Fix_escape_Tests
     }
 
     [TestMethod]
+    [DataRow("MarkerOnlyModule", "Verifier V3 validation ABI missing")]
+    [DataRow("WrongLifecycleAbiModule", "Verifier V3 validation ABI missing")]
+    public void FinalizeEscape_RejectsInvalidReplacementWithoutChangingAccount(string artifact, string expectedError)
+    {
+        // Exercise both ABI overloads: the legacy two-argument path must not bypass validation.
+        foreach (bool withParams in new[] { false, true })
+        {
+            EscapeHarness h = new();
+            UInt160 invalidVerifier = h.Fx.Deploy(artifact);
+            byte[] oldKey = OldPubKey();
+            UInt160 accountId = h.RegisterAccount(oldKey);
+            h.SeedHookWhitelist(accountId, WhitelistTarget);
+            h.InitiateAndAdvancePastTimelock(accountId);
+            BigInteger triggeredAt = h.Fx.CallInteger(h.Wallet, "getEscapeTriggeredAt", accountId);
+
+            TestException fault = Assert.ThrowsExactly<TestException>(() =>
+            {
+                if (withParams)
+                    h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, invalidVerifier, NewPubKey());
+                else
+                    h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, invalidVerifier);
+            });
+            StringAssert.Contains(fault.Message, expectedError);
+            Assert.AreEqual(h.OldVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+            Assert.AreEqual(h.Hook, h.Fx.CallUInt160(h.Wallet, "getHook", accountId));
+            Assert.AreEqual(triggeredAt, h.Fx.CallInteger(h.Wallet, "getEscapeTriggeredAt", accountId));
+            CollectionAssert.AreEqual(oldKey, h.Fx.CallBytes(h.OldVerifier, "getPublicKey", accountId));
+            Assert.IsTrue(h.Fx.CallBoolean(h.Hook, "isWhitelisted", accountId, WhitelistTarget));
+        }
+    }
+
+    [TestMethod]
+    public void FinalizeEscape_ValidatesReplacementBeforeCallingFaultingOldPlugin()
+    {
+        EscapeHarness h = new();
+        UInt160 accountId = h.RegisterAccount(OldPubKey());
+        UInt160 faultingVerifier = h.Fx.Deploy("MockVerifierCore");
+        UInt160 invalidVerifier = h.Fx.Deploy("MarkerOnlyModule");
+        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, faultingVerifier, Array.Empty<byte>());
+        h.Fx.AdvanceTime(ConfigUpdateWindow);
+        h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId);
+        h.InitiateAndAdvancePastTimelock(accountId);
+
+        TestException fault = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, invalidVerifier));
+
+        StringAssert.Contains(fault.Message, "Verifier V3 validation ABI missing");
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+        Assert.AreEqual(faultingVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+    }
+
+    [TestMethod]
+    public void FinalizeEscape_ZeroVerifierRestoresBackupOwnerAuthorization()
+    {
+        EscapeHarness h = new();
+        UInt160 accountId = h.RegisterAccount(OldPubKey());
+        h.InitiateAndAdvancePastTimelock(accountId);
+
+        h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, UInt160.Zero);
+
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        Assert.AreEqual(BackupOwner, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", accountId));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+    }
+
+    [TestMethod]
     public void FinalizeEscape_WithoutInitiation_Faults()
     {
         EscapeHarness h = new();

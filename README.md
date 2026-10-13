@@ -1,18 +1,60 @@
-# NeoOS AA — Neo N3 Abstract Account (ERC-4337 equivalent)
+# NeoOS AA — Neo N3 Smart Accounts
 
 `neo-os-aa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Abstract Accounts on Neo N3.
 
-Current status note:
+The project keeps two implementation tracks for one smart-account protocol.
+`UnifiedSmartWalletV3` is the current user-contract delivery path for NeoOS;
+the protocol's native `AccountManagement` service is developed in parallel for
+the standard submission path. Start with the [implementation strategy](docs/AA-IMPLEMENTATION-STRATEGY.md)
+and [capability boundaries](docs/AA-SYSTEM-STATUS.md). For the native track,
+see the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
+[native SDK](docs/NATIVE_SDK.md), and [native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md).
+The service uses stable account identity, explicitly scoped
+authorization, bounded module callbacks, independent fee payment, and recovery
+that revokes old modules without calling them.
 
-- The current `main` branch runs `UnifiedSmartWalletV3`.
+The native track implements the unactivated ABI 2 draft associated with
+[proposal #243](https://github.com/neo-project/proposals/pull/243) and
+[discussion #242](https://github.com/neo-project/proposals/issues/242).
+Selecting a public RPC endpoint cannot enable it. The workspace verifies native
+activation and the exact protocol profile before enabling account actions.
+
+The deployed-contract track is usable on the published Neo N3 runtime after
+its own artifact, integration, and deployment readback gates. Its identity,
+wire format, callback resources, recovery and sponsorship guarantees remain
+profile-specific; passing native profile checks does not reclassify a V3
+deployment as native.
+
+The [usability follow-up](docs/reports/aa-native-usability-20261009.md) covers
+guarded policy cancellation, standard wallet threshold recovery, signed-file
+submission and receipt restoration, and measured module costs. The earlier
+[consistency follow-up](docs/reports/aa-consistency-iteration-20261009.md)
+retains its original SDK/relay and private-chain checkpoint. Both distinguish
+local implementation evidence from the remaining protocol and activation gates.
+
+Runtime and deployment boundaries:
+
+- This repository retains `UnifiedSmartWalletV3` compatibility for the public deployments listed below, alongside the native `AccountManagement` implementation.
 - V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
+- The public `v3` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
+- [System capability boundaries](docs/AA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
 - The canonical mainnet AA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `morpheus-aa.miniapp.neo` plus `morpheus-aa-alias.miniapp.neo`.
 - The canonical shared testnet AA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
+The two implementation versions live on this branch behind explicit directory
+entrypoints: [ordinary user-contract](implementations/ordinary/README.md) and
+[native AccountManagement profile](implementations/native/README.md). Their
+`profile.json` files map canonical source roots, compatibility paths, artifacts
+and profile-specific verification commands. Source stays in the existing
+build-compatible directories so current tooling and artifact checks address the
+same files.
+
 ## Architecture authority
 
-`neo-os-aa` is the sole authority for account abstraction: user operations, proxy
-verification, and recovery (`protocol-aa-core`). AA decides whether an actor authorized an
+In the NeoOS workspace ownership map, `neo-os-aa` owns account abstraction: user operations, proxy
+verification, and recovery (`protocol-aa-core`). Native consensus enforcement lives in the matching
+Neo core `AccountManagement` implementation; this repository supplies its profile, modules, SDK and UI.
+AA decides whether an actor authorized an
 operation and nothing more: it does not grant DID eligibility, hold network identity, or
 select signers, and it has no dependency on the DID registry. The operation-policy layer
 composes `AAAuthorization` with an independently verified `EligibilityProof` when a product
@@ -24,17 +66,17 @@ checked by the architecture source-coverage gate.
 Proposed v2 binding: in `neo-os-web/docs/workspace/neoos-target-architecture.v2.json` (status `PROPOSED`, validated by `npm run check:architecture:v2` in `neo-os-web`) this repository is v2 layer L1 (chain-protocol) and owns C03 account. The v1 binding above remains the enforced contract until the v2 adoption procedure completes.
 
 
-## Features
+## Public V3 features
 - **Deterministic V3 Accounts**: Each account is keyed by a 20-byte `accountId` and derives a stable Neo virtual address without deploying per-user wallet logic.
 - **Verifier Plugin Authorization**: Bind Web3Auth, TEE, WebAuthn, session keys, multisig, or other verifier plugins per account.
 - **Hook Plugin Policy Enforcement**: Attach optional hook plugins for daily limits, token restrictions, credential gates, and post-execution controls.
-- **Backup-Owner Escape Hatch**: Every account can define a native Neo backup owner plus timelocked verifier rotation.
+- **Backup-Owner Recovery**: Every account can define a native Neo backup owner plus timelocked verifier rotation. Finalization currently requires successful cleanup by the old plugins; see [recovery boundaries](docs/ACCOUNT_RECOVERY_AND_IDENTITY.md).
 - **Trustless AA Address Escrow Market**: Deterministic AA addresses can be listed, escrow-locked, purchased with GAS, and transferred atomically on-chain.
 - **Cross-Chain EVM Compatibility**: V3 supports secp256k1 / Keccak256 EIP-712 `UserOperation` signatures through the Web3Auth verifier path.
 - **On-Chain Paymaster (Sponsored Transactions)**: The `AAPaymaster` contract enables trustless gasless execution — sponsors deposit GAS, create per-account or global sponsorship policies, and relays are reimbursed automatically after successful `UserOp` execution. Supports per-op limits, daily budgets, total budgets, target/method restrictions, and expiry timestamps.
 - **Policy-Gated Execution**: New integrations should flow through `executeUserOp(accountId, op)` where nonce handling, verification, hooks, and target execution stay centralized.
 
-## App + Market Deployment
+## Public V3 App + Market Deployment
 
 The frontend now separates:
 
@@ -51,6 +93,8 @@ For local setup, start from `frontend/.env.example` and copy the values you need
 
 For on-chain sponsored transactions via the `AAPaymaster` contract, set `VITE_AA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the AA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `createSponsoredUserOpPayload` and `validatePaymasterOp` methods.
 
+Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/AA-PROXY-TRANSFERS.md).
+
 If you want relay submission to request Morpheus off-chain sponsorship before broadcasting, also configure the server-side paymaster bridge:
 
 - `MORPHEUS_PAYMASTER_TESTNET_ENDPOINT`
@@ -59,7 +103,7 @@ If you want relay submission to request Morpheus off-chain sponsorship before br
 - `MORPHEUS_PAYMASTER_MAINNET_API_TOKEN`
 - Optional debug only: `AA_RELAY_INCLUDE_RAW_ERRORS=1`
 
-The relay route now forwards optional paymaster metadata and can request Morpheus paymaster pre-authorization before broadcasting a relay-ready `executeUserOp` or `executeUnifiedByAddress` invocation. Failures are now phase-tagged as `preview`, `paymaster`, `relay`, or `response` so operator logs can separate Morpheus sponsorship errors from on-chain relay failures.
+The relay route now forwards optional paymaster metadata and can request Morpheus paymaster pre-authorization before broadcasting a relay-ready `executeUserOp` or `executeUserOps` invocation. Failures are now phase-tagged as `preview`, `paymaster`, `relay`, or `response` so operator logs can separate Morpheus sponsorship errors from on-chain relay failures.
 
 ### Validation Preview And Trust Boundaries
 
@@ -176,21 +220,35 @@ If you want the clearest end-to-end explanation, read these docs in order:
 
 ### Prerequisites
 - `.NET SDK 10`
-- `Node.js 22+`
+- `Node.js 22.12+`
+- the Neo compiler, pinned: `dotnet tool install -g neo.compiler.csharp --version 3.9.1`
+- access to nuget.org. The ordinary contract and test projects use published packages pinned
+  by `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
+  `node scripts/check_neo_platform_packages.mjs` checks the pins and
+  `docs/AA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. Public `v3`
+  verifier callbacks execute on the published TestEngine. Only the separate `PLATFORM` artifact
+  requires the private `System.Contract.CallWithGasLimit` extension; its budget guarantees must
+  not be attributed to the public build (`docs/NEO-PLATFORM-PACKAGES.md`).
+
+The [native VM CI lane](.github/workflows/native-profile.yml) separately builds an immutable
+Neo core commit with .NET `10.0.400`, verifies its locked dependency archives (including the
+pinned MyGet Neo.VM package), builds native modules twice, and executes the measured composite
+matrix. This is host-VM evidence; the [native SDK integration](docs/NATIVE_SDK.md#browser-and-validation-boundaries)
+is the separate full-node gate. Neither lane activates a public network.
 
 ### Install
 
 ```bash
-cd frontend && npm ci
-cd ../sdk/js && npm ci
+(cd frontend && npm ci)
+(cd sdk/js && npm ci)
 ```
 
 ### Test
 
 ```bash
 dotnet test neo-abstract-account.sln -c Release --nologo
-cd frontend && npm test
-cd sdk/js && npm test
+(cd frontend && npm test)
+(cd sdk/js && npm test)
 ```
 
 `./scripts/verify_repo.sh` is the preferred local verification entrypoint for this repository.
@@ -209,6 +267,13 @@ when requested, a missing tool fails the gate rather than producing a pass:
 ```bash
 ./scripts/verify_repo.sh --contracts-only --formal --neoexpress
 ```
+
+For `ordinary` or `all`, `--neoexpress` uses published NeoExpress for the public
+v3 source suite. Its eight deployed modules are linked to the rebuild certificate
+through exact artifact hashes and full RPC readback. It writes distinct
+`aa-ordinary-source-chain-*` and `aa-ordinary-runtime-provenance-*` receipts.
+The private PLATFORM full-module matrix and native-chain validators have
+separate entrypoints; this source suite does not establish public deployment.
 
 ### Morpheus Generated Config
 
@@ -283,27 +348,34 @@ cd frontend && npm run build
 
 ### V3 Plugin Matrix
 
-The current V3 verifier / hook matrix was revalidated on **Neo N3 testnet** on **March 13, 2026** with live deployments and adversarial negative cases.
+The V3 verifier / hook matrix is a **historical record**: it was run on **Neo N3 testnet** on
+**March 13, 2026** against a deployment set that is not the current canonical one, and it must not
+be read as the state of this repository's acceptance today.
 
 Canonical report:
 
 - `docs/PLUGIN_MATRIX.md`
 
-Verified on-chain in that matrix:
+What that run shows, stated precisely:
 
-- `Web3AuthVerifier`
-- `TEEVerifier`
-- `WebAuthnVerifier`
-- `SessionKeyVerifier`
-- `MultiSigVerifier`
-- `SubscriptionVerifier`
-- `WhitelistHook`
-- `DailyLimitHook`
-- `TokenRestrictedHook`
-- `MultiHook`
-- `NeoDIDCredentialHook`
+- every positive execution in the matrix targeted `MockTransferTarget`
+  (`contracts/mocks/MockTransferTarget.cs`), the repository's test-only target whose `transfer`
+  returns true without moving an asset and whose `balanceOf` is always 0 — the transactions are
+  real and the authorization path they exercise is real, but no value moved, and no live token or
+  third-party contract was involved;
+- the negative cases (the faults listed below) are the load-bearing half of the record;
+- the plugins it covers are `Web3AuthVerifier`, `TEEVerifier`, `WebAuthnVerifier`,
+  `SessionKeyVerifier`, `MultiSigVerifier`, `SubscriptionVerifier`, `WhitelistHook`,
+  `DailyLimitHook`, `TokenRestrictedHook`, `MultiHook` and `NeoDIDCredentialHook`.
 
-Security outcomes:
+The evidence this repository can reproduce today is the local-chain suite
+(`tests/localchain/README.md`). Its deployed variant runs the eight artifacts pinned by SHA-256 in
+`tests/localchain/expected-deployed.json` — `UnifiedSmartWalletV3`, `MockTransferTarget`,
+`WebAuthnVerifier`, `SessionKeyVerifier`, `AAPaymaster`, `WhitelistHook`, `DailyLimitHook` and
+`SocialRecoveryVerifier` — and it performs no public-chain readback. The remaining matrix plugins
+have no reproducible acceptance run on the current artifacts.
+
+Security outcomes recorded by the matrix's adversarial cases:
 
 - direct external plugin configuration attempts fault
 - typed-data tampering faults
@@ -313,7 +385,7 @@ Security outcomes:
 - whitelist bypass attempts fault
 - restricted-target access faults
 - credential-missing / revoked-credential access faults
-- NeoDID credential gating now checks the on-chain `NeoDIDRegistry` instead of local hook-issued flags
+- NeoDID credential gating checks the on-chain `NeoDIDRegistry` instead of local hook-issued flags
 
 Production note:
 
@@ -342,4 +414,4 @@ verbatim in
 
 The repository verification gate requires **0 high/critical production vulnerabilities** in both the frontend and JavaScript SDK.
 
-The frontend still carries a bounded upstream Web3Auth/Torus/MetaMask/Solana dependency chain for the active NeoDID/Web3Auth login flow. `scripts/check_frontend_audit_allowlist.mjs` permits only the reviewed low/moderate package families and fails when a new package appears, an allowed package exceeds its reviewed severity, or any finding rises to high/critical. The SDK runs a separate production-only audit so its smaller dependency surface cannot regress silently.
+The frontend still carries the upstream Web3Auth/Torus dependency chain for the active NeoDID/Web3Auth login flow. Both frontend audit modes accept only Elliptic advisory `GHSA-848j-6mx2-7j84` at most low severity, including findings propagated through its dependent packages. A new advisory on any package, any severity increase, and malformed or incomplete audit reports fail the gate. This remaining advisory has no patched Elliptic release; passing the gate does not mean zero vulnerabilities. See [the dependency security assessment](docs/FRONTEND_DEPENDENCY_SECURITY.md) for exposure and upgrade constraints. The SDK runs a separate production-only audit so its smaller dependency surface cannot regress silently.

@@ -32,6 +32,9 @@ namespace AbstractAccount.Verifiers
         public static bool SupportsV3() => true;
 
         [Safe]
+        public static bool SupportsComposition() => false;
+
+        [Safe]
         public static bool SupportsMessageSignatures() => false;
 
         [Safe]
@@ -70,6 +73,15 @@ namespace AbstractAccount.Verifiers
             byte[] key = Helper.Concat(Prefix_AccountPubKey, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             return data ?? (ByteString)"";
+        }
+
+        [Safe]
+        public static ByteString[] GetSignerDomains(UInt160 accountId)
+        {
+            ByteString publicKey = GetPublicKey(accountId);
+            ExecutionEngine.Assert(publicKey.Length == 33 || publicKey.Length == 65,
+                "No TEE pubkey configured");
+            return new ByteString[] { SignerDomain.Secp256r1(publicKey) };
         }
 
         public static void PostExecute(UInt160 accountId, UserOperation op, object result)

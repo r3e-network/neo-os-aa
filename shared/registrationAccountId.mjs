@@ -111,6 +111,25 @@ function requireDisplayHash160(value, fieldName) {
 }
 
 /**
+ * Requires verifier initialization bytes to be an even-length hexadecimal
+ * string.  `sanitizeHex` only removes a prefix and lowercases; passing its
+ * result directly to byte decoders would otherwise turn malformed pairs into
+ * zero or silently drop them, producing an account id that does not match the
+ * bytes sent to `registerAccount`/`updateVerifier`.
+ *
+ * @param {string} value - Candidate verifier parameters
+ * @returns {string} Sanitized even-length hexadecimal string
+ * @private
+ */
+function requireVerifierParamsHex(value) {
+  const sanitized = sanitizeHex(value || '');
+  if (!/^(?:[0-9a-f]{2})*$/i.test(sanitized)) {
+    throw new Error('Invalid verifier parameters hex');
+  }
+  return sanitized;
+}
+
+/**
  * Creates the registration account-id derivers with an injected hash160.
  *
  * @param {Object} options - Factory options
@@ -154,7 +173,7 @@ export function createRegistrationAccountIdDeriver({ hash160 } = {}) {
       verifier,
       hook,
       toUint32LittleEndianHex(escapeTimelock),
-      sanitizeHex(verifierParamsHex || ''),
+      requireVerifierParamsHex(verifierParamsHex),
     ].join('');
 
     return sanitizeHex(hash160(payloadHex));

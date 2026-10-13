@@ -14,6 +14,7 @@ namespace AbstractAccount
         private static readonly byte[] Prefix_PendingPlatformRegistrar = new byte[] { 0x18 };
         private static readonly byte[] Prefix_PlatformRegistrarTimelock = new byte[] { 0x19 };
         private static readonly byte[] Prefix_PlatformAccountBinding = new byte[] { 0x1E };
+        private static readonly byte[] Prefix_PendingPlatformOwnerRotation = new byte[] { 0x20 };
         // Reverse index for platform virtual-account witnesses.  The proxy hash
         // is the address that holds the account's assets and appears as the
         // witness/caller at platform contracts; accountId is the AA core's
@@ -24,6 +25,7 @@ namespace AbstractAccount
 
         public delegate void PlatformRegistrarProposalDelegate(UInt160 registrar, BigInteger availableAt);
         public delegate void PlatformAccountOwnerRotationDelegate(UInt160 accountId, UInt160 previousOwner, UInt160 newOwner);
+        public delegate void PlatformAccountOwnerRotationProposedDelegate(UInt160 accountId, UInt160 previousOwner, UInt160 newOwner, BigInteger availableAt);
 
         [DisplayName("PlatformRegistrarProposed")]
         public static event PlatformRegistrarProposalDelegate OnPlatformRegistrarProposed = null!;
@@ -36,6 +38,12 @@ namespace AbstractAccount
 
         [DisplayName("PlatformAccountOwnerRotated")]
         public static event PlatformAccountOwnerRotationDelegate OnPlatformAccountOwnerRotated = null!;
+
+        [DisplayName("PlatformOwnerRotationProposed")]
+        public static event PlatformAccountOwnerRotationProposedDelegate OnPlatformAccountOwnerRotationProposed = null!;
+
+        [DisplayName("PlatformOwnerRotationCancelled")]
+        public static event AccountOnlyDelegate OnPlatformAccountOwnerRotationCancelled = null!;
 
         [Safe]
         public static UInt160 ComputePlatformAccountId(ByteString appBinding, UInt160 backupOwner, uint escapeTimelock)
@@ -100,6 +108,15 @@ namespace AbstractAccount
 
         public static void RotatePlatformAccountOwner(UInt160 accountId, ByteString appBinding, UInt160 newBackupOwner)
         {
+            ProposePlatformAccountOwnerRotation(accountId, appBinding, newBackupOwner);
+        }
+
+        /// <summary>
+        /// Starts a delayed platform-account owner rotation. The legacy rotate ABI now
+        /// enters this proposal path as well; it never changes BackupOwner immediately.
+        /// </summary>
+        public static void ProposePlatformAccountOwnerRotation(UInt160 accountId, ByteString appBinding, UInt160 newBackupOwner)
+        {
             AssertPlatformRegistrar();
             ValidatePlatformAccountBinding(appBinding);
             ExecutionEngine.Assert(
@@ -118,12 +135,100 @@ namespace AbstractAccount
 
             UInt160 previousOwner = state.BackupOwner;
             ExecutionEngine.Assert(previousOwner != newBackupOwner, "Platform backup owner unchanged");
-            state.BackupOwner = newBackupOwner!;
+            byte[] pendingKey = Helper.Concat(Prefix_PendingPlatformOwnerRotation, (ByteString)accountId);
+            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, pendingKey) == null,
+                "Platform owner rotation already pending");
+            Storage.Put(Storage.CurrentContext, pendingKey, StdLib.Serialize(new PendingPlatformOwnerRotation
+            {
+                NewBackupOwner = newBackupOwner!,
+                InitiatedAt = Runtime.Time
+            }));
+            OnPlatformAccountOwnerRotationProposed(
+                accountId,
+                previousOwner,
+                newBackupOwner!,
+                Runtime.Time + MinUpgradeDelayMs);
+        }
+
+        /// <summary>
+        /// Applies a pending platform-account owner rotation after the seven-day delay.
+        /// The proposed new owner must witness the confirmation transaction.
+        /// </summary>
+        public static void ConfirmPlatformAccountOwnerRotation(UInt160 accountId, ByteString appBinding)
+        {
+            AssertPlatformRegistrar();
+            ValidatePlatformAccountBinding(appBinding);
+            byte[] bindingKey = Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId);
+            ByteString? storedBinding = Storage.Get(Storage.CurrentContext, bindingKey);
+            ExecutionEngine.Assert(storedBinding != null, "Platform account binding not found");
+            ExecutionEngine.Assert(StdLib.MemoryCompare(storedBinding!, appBinding!) == 0,
+                "Platform account binding mismatch");
+            AssertNoMarketEscrow(accountId);
+
+            byte[] pendingKey = Helper.Concat(Prefix_PendingPlatformOwnerRotation, (ByteString)accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, pendingKey);
+            ExecutionEngine.Assert(data != null, "No pending platform owner rotation");
+            PendingPlatformOwnerRotation pending = (PendingPlatformOwnerRotation)StdLib.Deserialize(data!);
+            ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + MinUpgradeDelayMs,
+                "Platform owner rotation timelock not expired");
+            ExecutionEngine.Assert(Runtime.CheckWitness(pending.NewBackupOwner),
+                "New platform owner witness required");
+
+            AccountState state = GetAccountState(accountId);
+            ExecutionEngine.Assert(state.EscapeTriggeredAt == 0, "Platform account escape active");
+            UInt160 previousOwner = state.BackupOwner;
+            ExecutionEngine.Assert(previousOwner != pending.NewBackupOwner, "Platform backup owner unchanged");
+            state.BackupOwner = pending.NewBackupOwner;
             Storage.Put(
                 Storage.CurrentContext,
                 Helper.Concat(Prefix_AccountState, (ByteString)accountId),
                 StdLib.Serialize(state));
-            OnPlatformAccountOwnerRotated(accountId, previousOwner, newBackupOwner!);
+            Storage.Delete(Storage.CurrentContext, pendingKey);
+            OnPlatformAccountOwnerRotated(accountId, previousOwner, pending.NewBackupOwner);
+        }
+
+        /// <summary> Cancels a pending rotation by the registrar or current owner. </summary>
+        public static void CancelPlatformAccountOwnerRotation(UInt160 accountId, ByteString appBinding)
+        {
+            ValidatePlatformAccountBinding(appBinding);
+            byte[] bindingKey = Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId);
+            ByteString? storedBinding = Storage.Get(Storage.CurrentContext, bindingKey);
+            ExecutionEngine.Assert(storedBinding != null, "Platform account binding not found");
+            ExecutionEngine.Assert(StdLib.MemoryCompare(storedBinding!, appBinding!) == 0,
+                "Platform account binding mismatch");
+            AccountState state = GetAccountState(accountId);
+            bool registrar = GetPlatformRegistrar() != UInt160.Zero
+                && Runtime.CallingScriptHash == GetPlatformRegistrar();
+            bool owner = state.BackupOwner != UInt160.Zero && Runtime.CheckWitness(state.BackupOwner);
+            ExecutionEngine.Assert(registrar || owner, "Unauthorized platform owner rotation cancellation");
+            byte[] pendingKey = Helper.Concat(Prefix_PendingPlatformOwnerRotation, (ByteString)accountId);
+            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, pendingKey) != null,
+                "No pending platform owner rotation");
+            Storage.Delete(Storage.CurrentContext, pendingKey);
+            OnPlatformAccountOwnerRotationCancelled(accountId);
+        }
+
+        [Safe]
+        public static object[]? GetPendingPlatformAccountOwnerRotation(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            byte[] pendingKey = Helper.Concat(Prefix_PendingPlatformOwnerRotation, (ByteString)accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, pendingKey);
+            if (data == null) return null;
+            PendingPlatformOwnerRotation pending = (PendingPlatformOwnerRotation)StdLib.Deserialize(data!);
+            return new object[]
+            {
+                pending.NewBackupOwner,
+                pending.InitiatedAt,
+                pending.InitiatedAt + MinUpgradeDelayMs
+            };
+        }
+
+        [Safe]
+        public static BigInteger GetPlatformAccountOwnerRotationAvailableAt(UInt160 accountId)
+        {
+            object[]? pending = GetPendingPlatformAccountOwnerRotation(accountId);
+            return pending == null ? 0 : (BigInteger)pending[2];
         }
 
         public static void ProposePlatformRegistrar(UInt160 registrar)

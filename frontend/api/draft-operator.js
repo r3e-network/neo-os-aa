@@ -3,6 +3,7 @@ import { DRAFT_METADATA_HISTORY_LIMITS } from '../src/features/operations/consta
 import {
   canonicalizeOperatorMutationPayload,
   importOperatorPublicKey,
+  operatorPublicKeysMatch,
   verifyOperatorMutationSignature,
 } from './operatorMutationHelpers.js';
 import { attachRequestId, beginDurableRequest, completeDurableRequest, failDurableRequest } from './requestDurability.js';
@@ -135,7 +136,7 @@ async function handleClaim({ supabase, shareSlug, accessSlug, publicKeyJwk }) {
   assertOperatorAccess(draft, accessSlug);
 
   const currentPublicKey = draft.operator_public_key || null;
-  if (currentPublicKey && JSON.stringify(currentPublicKey) !== JSON.stringify(publicKeyJwk || null)) {
+  if (currentPublicKey && !operatorPublicKeysMatch(currentPublicKey, publicKeyJwk)) {
     throw new Error('operator_key_already_claimed');
   }
 
@@ -266,12 +267,15 @@ export default async function handler(req, res) {
     req,
     routeName: 'draft_operator',
     payload: requestPayload,
+    replay: String(requestPayload.action || '').trim() !== 'claim',
     fingerprint: {
+      method: req.method,
       action: requestPayload.action || '',
       shareSlug: requestPayload.shareSlug || '',
       accessSlug: requestPayload.accessSlug || '',
       mutation: requestPayload.mutation || '',
       counter: requestPayload.counter ?? null,
+      signature: requestPayload.signature || '',
       payload: requestPayload.payload || null,
     },
   });

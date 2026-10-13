@@ -1,0 +1,67 @@
+{
+  "id": "native-account-management",
+  "version": 1,
+  "kind": "native-protocol-submission",
+  "status": "draft-unactivated",
+  "implementationVerified": false,
+  "description": "The native SmartAccount ABI 2 profile, modules, SDK and UI prepared for standard submission.",
+  "canonicalSourceRoots": [
+    "contracts/native",
+    "frontend/src/features/native",
+    "frontend/src/shared/nativeSmartAccount.mjs",
+    "frontend/src/shared/nativeSmartAccountClient.mjs",
+    "frontend/src/shared/nativeTransactionArtifact.mjs",
+    "frontend/src/shared/nativeWalletWitness.mjs",
+    "sdk/js/src/native",
+    "shared/nativeSmartAccount.mjs",
+    "shared/nativeSmartAccountClient.mjs",
+    "shared/nativeTransactionArtifact.mjs",
+    "shared/nativeWalletWitness.mjs"
+  ],
+  "excludedSourceRoots": [
+    "contracts/UnifiedSmartWallet.cs",
+    "contracts/verifiers",
+    "contracts/hooks",
+    "contracts/paymaster",
+    "contracts/market",
+    "frontend/src/features/studio",
+    "frontend/src/features/operations",
+    "sdk/js/src/v3"
+  ],
+  "compatibilityPaths": [
+    "contracts/native",
+    "frontend/src/features/native",
+    "frontend/src/shared",
+    "sdk/js/src/native",
+    "shared"
+  ],
+  "entrypoints": [
+    "contracts/native/profiles.json",
+    "frontend/src/features/native/NativeAccountWorkspace.vue",
+    "sdk/js/src/native/client.js",
+    "shared/nativeSmartAccountClient.mjs"
+  ],
+  "artifactRoots": [
+    "contracts/build",
+    "docs/reports"
+  ],
+  "verification": {
+    "profile": "native",
+    "commands": [
+      "./scripts/verify_repo.sh --profile native --contracts-only",
+      "cd frontend && npm run test:native:browser"
+    ]
+  },
+  "externalBoundaries": [
+    "neo/neo: the consensus AccountManagement service and native VM enforcement are maintained outside this repository",
+    "neo-project/proposals#243: ABI 2 proposal and review acceptance are external protocol gates",
+    "Hardfork activation, node integration, formal refinement and public-network readback remain required before native status can change"
+  ],
+  "openGates": [
+    "NATIVE-CROSS-PROXY-AUTHORITY",
+    "EXTERNAL-PROTOCOL-ACCEPTANCE",
+    "FORMAL-NEOVM-COMPILER-REFINEMENT",
+    "FORMAL-NATIVE-FEE-RESOURCE-REFINEMENT",
+    "PUBLIC-HARDFORK-ACTIVATION"
+  ]
+}

@@ -11,6 +11,8 @@ This document maps Ethereum ERC-4337 (Account Abstraction) and ERC-7579 (Modular
 > `docs/reports/aa-neoexpress-gas-cap-20260921.json`. Public activation and
 > deployment remain pending.
 
+<!-- docs-truth: no fence claims for solidity; reason: the document compares Neo with Ethereum, so every solidity block lists the Ethereum interface (IValidator, IPaymaster, the ECDSA helper), not a Neo entrypoint. -->
+
 ---
 
 ## 1. Core Concept Mapping
@@ -133,25 +135,22 @@ public-network activation claim.
 
 ### Neo N3 2D Nonce
 
-- **Sequential Mode (nonce < 1,000,000,000,000,000):**
+- **Canonical NeoVM signed domain (`0 <= nonce < 2^255`):**
   ```csharp
   BigInteger channel = nonce >> 64;
   BigInteger sequence = nonce & 0xFFFFFFFFFFFFFFFF;
   ```
-  - Identical to ERC-4337 semantics
-  - Used for: Standard operations
-
-- **Salt/UUID Mode (nonce >= 1,000,000,000,000,000):**
-  ```csharp
-  byte[] saltKey = Prefix_Nonce + accountId + nonce.ToByteArray();
-  ```
-  - Used for: High-frequency TEE/SessionKey concurrency
-  - Prevents collisions by storing used salts
-  - Similar to ERC-4337 proposals for "random nonce mode"
+  - The low 64 bits are the per-channel sequence; the remaining 191 bits select the channel.
+  - Every channel starts at sequence 0 and advances independently; replayed or gapped sequences are rejected.
+  - NeoVM's signed Integer representation means the upper half of a mathematical uint256 is not a valid operation value.
 
 **Mapping:**
-- Neo Sequential Mode ≈ ERC-4337 Sequential
-- Neo Salt Mode ≈ ERC-4337 EIP-4337 Random/Salted (proposed)
+- Neo bounded channel + sequence ≈ ERC-4337 sequential nonce lanes
+- Neo keeps one canonical nonce path and does not expose a separate UUID/salt mode
+
+The current ordinary source also bounds `getNonce` channel reads to `0 <= channel < 2^191`.
+An older deployed foundation artifact may accept an upper-half channel for a read until it is
+republished; those read-only values remain non-executable under the signed operation boundary.
 
 ---
 
@@ -256,9 +255,9 @@ public class SponsorshipPolicy {
 }
 
 // Core integration
-object result = ExecuteSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount);
+object result = executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount);
 // 1. Optional relay preflight via Paymaster.validatePaymasterOp()
-// 2. ExecuteUserOp() — full verification + execution
+// 2. executeUserOp() — full verification + execution
 // 3. Paymaster.settleReimbursement() — atomic policy enforcement + GAS to relay
 ```
 
@@ -266,7 +265,7 @@ object result = ExecuteSponsoredUserOp(accountId, op, paymaster, sponsor, reimbu
 - Per-account or global (`accountId = Zero`) sponsorship policies
 - Atomic settlement: policy validation + deposit deduction + relay reimbursement
 - Daily/total budget tracking with automatic 24-hour window reset
-- `ValidatePaymasterOp` available as `[Safe]` read-only for relay preflight
+- `validatePaymasterOp` available as `[Safe]` read-only for relay preflight
 
 ### Neo N3 Paymaster (Off-Chain — Morpheus)
 
@@ -296,11 +295,16 @@ object result = ExecuteSponsoredUserOp(accountId, op, paymaster, sponsor, reimbu
 ```mermaid
 stateDiagram-v2
     [*] --> Configured: BackupOwner set
-    Configured --> EscapeInitiated: InitiateEscape() called
+    Configured --> EscapeInitiated: initiateEscape(accountId) called
     EscapeInitiated --> [*]: Normal op cancels escape
-    EscapeInitiated --> EscapeFinalized: Timelock expires + FinalizeEscape()
+    EscapeInitiated --> EscapeFinalized: Timelock expires + finalizeEscape(accountId, newVerifier)
     EscapeFinalized --> [*]: Verifier reset to BackupOwner
 ```
+
+The two deployed entrypoints take the account id, and `finalizeEscape` also takes the verifier the
+account falls back to (`contracts/build/UnifiedSmartWalletV3.manifest.json`; implemented in
+`contracts/UnifiedSmartWallet.Escape.cs`, where the C# methods are spelled with a leading capital —
+that form names no exported method, which is why it is not code-formatted here).
 
 **Features:**
 - **Timelock:** Configurable 7-90 days
@@ -334,13 +338,13 @@ stateDiagram-v2
 
 | Concept | How to Adapt |
 | --- | --- |
-| **Deploying new account** | Use `RegisterAccount()` instead of deploying a proxy. Account address is deterministic. |
+| **Deploying new account** | Use `registerAccount()` instead of deploying a proxy. Account address is deterministic. |
 | **Sending UserOperation** | Call `executeUserOp(accountId, op)` instead of `handleUserOps()`. |
 | **Paymaster integration** | Use `AAPaymaster` contract (on-chain deposit/policy/settlement) or off-chain Morpheus endpoint. Call `executeSponsoredUserOp()` for on-chain, or implement off-chain auth for Morpheus. |
 | **Aggregator pattern** | Use `MultiHook` to combine policy modules. |
 | **Bundler integration** | Implement relay server that calls `simulateMetaInvocation()` then `relayMetaInvocation()`. |
 | **Signature schemes** | Use `Web3AuthVerifier` for EVM sigs, `WebAuthnVerifier` for passkeys. |
-| **Recovery** | Use `InitiateEscape()` / `FinalizeEscape()` for L1 backup. |
+| **Recovery** | Use `initiateEscape()` / `finalizeEscape()` for L1 backup. |
 
 ### Code Pattern: Ethereum AA → Neo AA
 
@@ -353,7 +357,7 @@ entryPoint.handleOps(ops, beneficiary);
 **Neo:**
 ```csharp
 UserOperation[] ops;
-object[] results = ExecuteUserOps(accountId, ops);
+object[] results = executeUserOps(accountId, ops);
 // Or via SDK/relay:
 relayMetaInvocation({ scriptHash: aaContract, operation: "executeUserOps", args: [accountId, ops] });
 ```

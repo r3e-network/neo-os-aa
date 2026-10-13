@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { Wallet, keccak256, toUtf8Bytes } from 'ethers';
 
 import {
-  buildExecuteUnifiedByAddressInvocation,
   buildExecuteUserOpInvocation,
   buildMetaTransactionTypedData,
   buildV3UserOperationTypedData,
@@ -119,33 +118,12 @@ test('fetchNonceForAddress reads the current meta-tx nonce for an address signer
   assert.equal(nonce, 3n);
 });
 
-test('buildExecuteUnifiedByAddressInvocation builds contract-aligned args for relay or export', () => {
-  const invocation = buildExecuteUnifiedByAddressInvocation({
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-    accountAddressScriptHash: '13ef519c362973f9a34648a9eac5b71250b2a80a',
-    evmPublicKeyHex: `04${'11'.repeat(64)}`,
-    targetContract: 'd2a4cff31913016155e38e474a2c06d08be276cf',
-    method: 'balanceOf',
-    methodArgs: [{ type: 'Hash160', value: '0x13ef519c362973f9a34648a9eac5b71250b2a80a' }],
-    argsHashHex: 'ab'.repeat(32),
-    nonce: 4n,
-    deadline: 1710001234,
-    signatureHex: '12'.repeat(64),
-  });
-
-  assert.equal(invocation.scriptHash, '5be915aea3ce85e4752d522632f0a9520e377aaf');
-  assert.equal(invocation.operation, 'executeUnifiedByAddress');
-  assert.deepEqual(invocation.args, [
-    { type: 'Hash160', value: '0x13ef519c362973f9a34648a9eac5b71250b2a80a' },
-    { type: 'Hash160', value: '0xd2a4cff31913016155e38e474a2c06d08be276cf' },
-    { type: 'String', value: 'balanceOf' },
-    { type: 'Array', value: [{ type: 'Hash160', value: '0x13ef519c362973f9a34648a9eac5b71250b2a80a' }] },
-    { type: 'Array', value: [{ type: 'ByteArray', value: `0x04${'11'.repeat(64)}` }] },
-    { type: 'ByteArray', value: `0x${'ab'.repeat(32)}` },
-    { type: 'Integer', value: '4' },
-    { type: 'Integer', value: '1710001234' },
-    { type: 'Array', value: [{ type: 'ByteArray', value: `0x${'12'.repeat(64)}` }] },
-  ]);
+test('the V1/V2 invocation builder is gone from the client transaction builders', async () => {
+  // CU-209: the deployed UnifiedSmartWalletV3 ABI exports four execute* entrypoints and neither
+  // V1/V2 name, so no builder for that envelope may exist here. The manifest-oracle gate lives in
+  // metaInvocationProducer.test.js.
+  const metaTx = await import('../src/features/operations/metaTx.js');
+  assert.equal(Object.hasOwn(metaTx, 'buildExecuteUnifiedByAddressInvocation'), false);
 });
 
 test('buildV3UserOperationTypedData matches the V3 verifier field layout', () => {

@@ -56,3 +56,17 @@ test('L3: the raw request id is preserved for logs and echo responses, not the k
   assert.equal(context.requestId, rawId, 'raw id stays available for echo/logging');
   assert.ok(!context.journalKey.includes(rawId), 'raw id does not appear in the Redis key');
 });
+
+test('live authorization reads can disable replay even with caller-provided idempotency keys', async () => {
+  const request = {
+    req: { headers: { 'idempotency-key': 'same-client-key' } },
+    routeName: 'draft_operator', payload: { action: 'claim' }, fingerprint: { action: 'claim', shareSlug: 'draft-one' },
+  };
+  const ordinary = await beginDurableRequest(request);
+  const fresh = await beginDurableRequest({ ...request, replay: false });
+  assert.notEqual(ordinary.context.responseKey, '');
+  assert.equal(fresh.context.responseKey, '');
+  assert.equal(fresh.context.lockKey, '');
+  assert.equal(fresh.context.idempotencyKey, '');
+  assert.ok(fresh.context.journalKey);
+});

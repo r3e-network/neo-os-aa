@@ -1,37 +1,46 @@
 # === NeoOS Standard .gitignore ===
+#
+# Directory patterns are deliberately unanchored (no leading "/") so they match
+# at every depth: frontend/, sdk/js/, contracts/ and tests/ each produce their
+# own dependency, build and tool-state directories. A root-anchored pattern
+# such as "/dist/" silently stops protecting sdk/js/dist/.
+# scripts/repo_hygiene.test.mjs pins the paths below; run it after any edit.
 
 # Tool State (NEVER commit)
-/.claude/
-/.codegraph/
-/.serena/
-/.planning/
-/.workbuddy/
-/.omx/
-/.worktrees/
-/graphify-out/
-/.vercel/
-/.turbo/
+.local/
+settings.local.json
+.serena/
+.planning/
+.workbuddy/
+.omx/
+.worktrees/
+graphify-out/
+.vercel
+.turbo/
+# CodeGraph writes a tracked, self-ignoring .codegraph/.gitignore. Ignore the
+# rest of every .codegraph/ directory without hiding that file.
+**/.codegraph/*
+!**/.codegraph/.gitignore
 
 # Build Outputs
-/target/
-/dist/
-/coverage/
-/.next/
-/test-results/
+target/
+dist/
+coverage/
+.next/
+test-results/
 *.neopkg
 *.wasm
 
-# .NET build outputs (unanchored to match at any depth)
+# .NET build outputs
 bin/
 obj/
 
 # Dependencies
-/node_modules/
 node_modules/
 
-# Environment
-.env
-.env.*
+# Environment: every variant (.env, .env.local, .envrc, .env-backup,
+# .env_prod, ...) at any depth, except checked-in examples.
+.env*
 !.env.example
 
 # Secrets
@@ -42,8 +51,8 @@ id_rsa*
 *.gpg
 
 # Editor/IDE
-/.vscode/
-/.idea/
+.vscode/
+.idea/
 *.swp
 *.swo
 *~

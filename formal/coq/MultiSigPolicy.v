@@ -1,4 +1,6 @@
-(* Independent threshold-policy model, manually related to MultiSigVerifier.cs.
+(* PUBLIC V3 / PLATFORM ONLY: ten-child threshold policy. Native ABI 2 uses
+   NativeCompositePhase.v and its bounded per-operation receipt instead.
+   Independent threshold-policy model, manually related to MultiSigVerifier.cs.
    IDs abstract nonzero contract hashes; approve abstracts normal true returns.
    A null signature, false return or catchable child failure maps to false.
    Distinct contract IDs do NOT imply distinct owners/keys/trust domains.
@@ -124,6 +126,50 @@ Proof.
   exact (proj1 Hin).
 Qed.
 
+(* Contract identifiers are not key identities.  The protocol therefore makes
+   signer-domain independence an explicit profile precondition rather than
+   inferring it from distinct child contract hashes.  This lemma proves the
+   exact conditional property used by an approved profile: filtering the
+   children that approved cannot introduce a duplicate signer domain when the
+   configured domain projection is already unique. *)
+Lemma nodup_map_filter :
+  forall (domain : nat -> nat) (approve : nat -> bool) (ids : list nat),
+    NoDup (map domain ids) ->
+    NoDup (map domain (filter approve ids)).
+Proof.
+  intros domain approve ids H.
+  induction ids as [|id rest IH].
+  - constructor.
+  - simpl in H.
+    inversion H as [|mapped mappedRest Hnotin Hrest].
+    destruct (approve id) as [|] eqn:Happroved.
+    + simpl. rewrite Happroved. simpl. constructor.
+      * intro Hin.
+        apply Hnotin.
+        apply in_map_iff in Hin.
+        destruct Hin as [child [Hdomain HinRest]].
+        apply in_map_iff.
+        exists child.
+        split.
+        exact Hdomain.
+        apply filter_In in HinRest.
+        exact (proj1 HinRest).
+      * apply IH. exact Hrest.
+    + simpl. rewrite Happroved. simpl. apply IH. exact Hrest.
+Qed.
+
+Theorem accepted_support_has_distinct_key_domains :
+  forall (ids : list nat) (threshold count : nat)
+    (approve : nat -> bool) (domain : nat -> nat),
+    accepts ids threshold count approve = true ->
+    NoDup (map domain ids) ->
+    NoDup (map domain (filter approve ids)).
+Proof.
+  intros ids threshold count approve domain Haccepted Hdomains.
+  apply nodup_map_filter.
+  exact Hdomains.
+Qed.
+
 Theorem acceptance_complete : forall (ids : list nat) (threshold count : nat) (approve : nat -> bool),
   config_valid ids threshold = true -> count = length ids ->
   threshold <= length (filter approve ids) ->
@@ -151,6 +197,8 @@ Print Assumptions supporters_are_approved_members.
 Print Assumptions accepted_has_support.
 Print Assumptions accepted_post_plan_is_unique_and_configured.
 Print Assumptions acceptance_complete.
+Print Assumptions nodup_map_filter.
+Print Assumptions accepted_support_has_distinct_key_domains.
 Print Assumptions valid_two_of_two.
 Print Assumptions duplicate_rejected.
 Print Assumptions no_approval_rejected.

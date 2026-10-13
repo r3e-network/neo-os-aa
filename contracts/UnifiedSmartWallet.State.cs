@@ -188,6 +188,48 @@ namespace AbstractAccount
             return Storage.Get(Storage.CurrentContext, key) != null;
         }
 
+        /// <summary>
+        /// Returns [newVerifier, verifierParams, initiatedAt, matureAt], or null.
+        /// The public array layout is independent of the pending storage object.
+        /// </summary>
+        [Safe]
+        public static object[]? GetPendingVerifierUpdate(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data == null) return null;
+            PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
+            return new object[]
+            {
+                pending.NewVerifier,
+                pending.VerifierParams ?? (ByteString)new byte[0],
+                pending.InitiatedAt,
+                pending.InitiatedAt + ConfigUpdateTimelockMs
+            };
+        }
+
+        /// <summary>
+        /// Returns [newHook, emptyBytes, initiatedAt, matureAt], or null.
+        /// Hooks never expose verifier parameters from the shared storage type.
+        /// </summary>
+        [Safe]
+        public static object[]? GetPendingHookUpdate(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data == null) return null;
+            PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
+            return new object[]
+            {
+                pending.NewHookId,
+                (ByteString)new byte[0],
+                pending.InitiatedAt,
+                pending.InitiatedAt + ConfigUpdateTimelockMs
+            };
+        }
+
         [Safe]
         public static BigInteger GetPendingVerifierUpdateTime(UInt160 accountId)
         {

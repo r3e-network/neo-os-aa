@@ -27,6 +27,10 @@ namespace AbstractAccount.Mocks
     {
         private static readonly byte[] Prefix_BackupOwner = new byte[] { 0x01 };
         private static readonly byte[] Prefix_BurnGas = new byte[] { 0x02 };
+        private static readonly byte[] Prefix_VerifierDependencies = new byte[] { 0x03 };
+        private static readonly byte[] Prefix_HookDependencies = new byte[] { 0x04 };
+        private static readonly byte[] Prefix_BurnPostGas = new byte[] { 0x05 };
+        private static readonly byte[] Prefix_LeafMode = new byte[] { 0x06 };
 
         // Test-only V3 surface used to model a plugin whose cleanup fails. The production AA
         // core must fail closed rather than silently transferring such a dirty shell.
@@ -34,19 +38,33 @@ namespace AbstractAccount.Mocks
         public static bool SupportsV3() => true;
 
         [Safe]
+        public static bool SupportsComposition()
+        {
+            ByteString? leaf = Storage.Get(Storage.CurrentContext, Prefix_LeafMode);
+            return leaf == null || leaf.Length == 0 || leaf[0] != 1;
+        }
+
+        [Safe]
+        public static ByteString[] GetSignerDomains(UInt160 accountId)
+        {
+            return new ByteString[] { (ByteString)new byte[] {
+                0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
+                0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30,
+                0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
+                0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40
+            } };
+        }
+
+        public static void SetLeafMode(bool enabled)
+        {
+            Storage.Put(Storage.CurrentContext, Prefix_LeafMode,
+                (ByteString)new byte[] { enabled ? (byte)1 : (byte)0 });
+        }
+
+        [Safe]
         public static bool ValidateSignature(UInt160 accountId, object op)
         {
-            ByteString? enabled = Storage.Get(Storage.CurrentContext, Prefix_BurnGas);
-            if (enabled != null && enabled.Length > 0 && enabled[0] == 1)
-            {
-                // Test-only adversarial verifier. The platform gas cap must stop
-                // this loop with the child-budget fault before it can consume an
-                // unbounded portion of the enclosing AA transaction.
-                ByteString digest = (ByteString)new byte[] { 0x01, 0x02, 0x03, 0x04 };
-                for (int i = 0; i < 2_000_000; i++)
-                    digest = CryptoLib.Sha256(digest);
-                return digest.Length > 0;
-            }
+            BurnIfEnabled(Prefix_BurnGas);
             return true;
         }
 
@@ -56,12 +74,32 @@ namespace AbstractAccount.Mocks
                 (ByteString)new byte[] { enabled ? (byte)1 : (byte)0 });
         }
 
+        public static void SetBurnPostGas(bool enabled)
+        {
+            Storage.Put(Storage.CurrentContext, Prefix_BurnPostGas,
+                (ByteString)new byte[] { enabled ? (byte)1 : (byte)0 });
+        }
+
         public static void PostExecute(UInt160 accountId, object op, object result)
         {
+            BurnIfEnabled(Prefix_BurnPostGas);
+        }
+
+        private static void BurnIfEnabled(byte[] prefix)
+        {
+            ByteString? enabled = Storage.Get(Storage.CurrentContext, prefix);
+            if (enabled == null || enabled.Length == 0 || enabled[0] != 1) return;
+
+            ByteString digest = (ByteString)new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            for (int i = 0; i < 2_000_000; i++)
+                digest = CryptoLib.Sha256(digest);
+            ExecutionEngine.Assert(digest.Length > 0, "unreachable");
         }
 
         public static void ClearAccount(UInt160 accountId)
         {
+            ByteString? leaf = Storage.Get(Storage.CurrentContext, Prefix_LeafMode);
+            if (leaf != null && leaf.Length > 0 && leaf[0] == 1) return;
             ExecutionEngine.Assert(false, "Mock plugin cleanup failure");
         }
 
@@ -104,6 +142,90 @@ namespace AbstractAccount.Mocks
 
         [Safe]
         public static bool CanExecuteHook(UInt160 accountId, UInt160 caller, UInt160 hook) => true;
+
+        // Test-only dependency registry used to exercise the same composite cleanup
+        // contract as UnifiedSmartWallet without deploying a full account fixture.
+        public static void SetVerifierDependencies(UInt160 accountId, UInt160[] children)
+        {
+            byte[] key = Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data != null)
+            {
+                UInt160[] previous = (UInt160[])StdLib.Deserialize(data!);
+                for (int i = 0; i < previous.Length; i++)
+                {
+                    bool retained = false;
+                    for (int j = 0; j < children.Length; j++)
+                    {
+                        if (previous[i] == children[j])
+                        {
+                            retained = true;
+                            break;
+                        }
+                    }
+                    if (!retained)
+                    {
+                        Contract.Call(previous[i], "clearAccount", CallFlags.All, new object[] { accountId });
+                    }
+                }
+            }
+            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
+        }
+
+        public static void ClearVerifierDependencies(UInt160 accountId)
+        {
+            byte[] key = Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data == null) return;
+
+            UInt160[] children = (UInt160[])StdLib.Deserialize(data!);
+            for (int i = 0; i < children.Length; i++)
+            {
+                Contract.Call(children[i], "clearAccount", CallFlags.All, new object[] { accountId });
+            }
+            Storage.Delete(Storage.CurrentContext, key);
+        }
+
+        public static void SetHookDependencies(UInt160 accountId, UInt160[] children)
+        {
+            byte[] key = Helper.Concat(Prefix_HookDependencies, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data != null)
+            {
+                UInt160[] previous = (UInt160[])StdLib.Deserialize(data!);
+                for (int i = 0; i < previous.Length; i++)
+                {
+                    bool retained = false;
+                    for (int j = 0; j < children.Length; j++)
+                    {
+                        if (previous[i] == children[j])
+                        {
+                            retained = true;
+                            break;
+                        }
+                    }
+                    if (!retained)
+                    {
+                        Contract.Call(previous[i], "clearAccount", CallFlags.All, new object[] { accountId });
+                    }
+                }
+            }
+            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
+        }
+
+        public static void ClearHookDependencies(UInt160 accountId)
+        {
+            byte[] key = Helper.Concat(Prefix_HookDependencies, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data == null) return;
+
+            UInt160[] children = (UInt160[])StdLib.Deserialize(data!);
+            for (int i = 0; i < children.Length; i++)
+            {
+                Contract.Call(children[i], "clearAccount", CallFlags.All, new object[] { accountId });
+            }
+            Storage.Delete(Storage.CurrentContext, key);
+        }
 
         public static void SetBackupOwner(UInt160 accountId, UInt160 owner)
         {

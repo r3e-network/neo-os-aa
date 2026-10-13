@@ -1,0 +1,235 @@
+{
+  "schema": "aa-combined-frontend-sdk-validation/v1",
+  "status": "CHECKPOINT_PASS_PENDING_NATIVE_PROFILE_FOLLOWUP",
+  "createdAtUtc": "2026-10-08T16:24:44.938833+00:00",
+  "head": "2fe0c55b509a3b43fd16a81997e398500594f4ca",
+  "scope": [
+    "frontend",
+    "sdk/js"
+  ],
+  "excluded": [
+    "core",
+    "contracts",
+    "formal",
+    "public networks"
+  ],
+  "tools": {
+    "node": "v24.4.1",
+    "npm": "11.15.0"
+  },
+  "requiredServicesRoot": "/Users/jinghuiliao/git/neo-os/neo-os-services",
+  "requiredServicesArtifacts": true,
+  "frontend": {
+    "unit": {
+      "tests": 596,
+      "passed": 596,
+      "failed": 0,
+      "skipped": 0
+    },
+    "browser": {
+      "suites": [
+        "built smoke",
+        "operator recovery",
+        "native workspace",
+        "real Web3Auth package"
+      ],
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "build": "PASS",
+    "auditProduction": {
+      "low": 19,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "policy": "accepted upstream baseline"
+    },
+    "auditAll": {
+      "low": 27,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "threshold": "moderate"
+    }
+  },
+  "sdk": {
+    "unit": {
+      "tests": 154,
+      "passed": 154,
+      "failed": 0,
+      "skipped": 0
+    },
+    "types": "PASS",
+    "installedPackage": {
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    },
+    "auditProductionTotal": 0,
+    "auditAllTotal": 0
+  },
+  "trackedFilesChangedDuringEachCommand": {
+    "frontend-npm-ci": [],
+    "sdk-npm-ci": [],
+    "frontend-full-gate": [],
+    "sdk-unit": [],
+    "sdk-types": [],
+    "sdk-package": [],
+    "sdk-audit-all": [],
+    "sdk-audit-prod": []
+  },
+  "importantFileSha256": {
+    "frontend/package-lock.json": "77afb6b43c99f73bb29b1b8aae3476d04c84ba4972396657ff1be99db97624f2",
+    "frontend/package.json": "3c2bc954a619db5fd9dedc63fbe4c02c3f651c0a4a1233e82f1ef0b2a727c998",
+    "frontend/src/features/native/NativeAccountWorkspace.vue": "97bc73f8f443a722e1e8c0672bb5c3d129cd37e43f4655e5270ea19498247a32",
+    "frontend/src/features/native/nativeWorkspace.js": "11a258fdf1fe27d779c3be0ed82a22d291d889869944cb51620c607cb63e7b0e",
+    "frontend/src/shared/nativeSmartAccount.mjs": "b53b885f26740df922836644fb1dcc6f53a29735f213b5419c33235d5348f1db",
+    "frontend/src/shared/nativeSmartAccountClient.mjs": "3867f8df7353da61b0dd9e22741bbb117e97b069f824d4d2ac5cdd06e648e8cb",
+    "frontend/tests/web3AuthPackage.browser.mjs": "de69d4be659a3c58b0da9121d80ff78a6ab57aeb0261482254ec5a0979b4a5a9",
+    "scripts/verify_repo.sh": "34600a95db924a0286ab9aa1d9ac15f854d1bccd2da52a3609e3ab7c635913ca",
+    "sdk/js/package-lock.json": "57184ac284465f8876800ed1e88aa08fb9280f8da8cf7473cdc4f00197267cb9",
+    "sdk/js/package.json": "8c863d3096a73277a6b5e024d36471157ecf5a3d89bc22a234f5725015810049",
+    "shared/nativeSmartAccount.mjs": "b53b885f26740df922836644fb1dcc6f53a29735f213b5419c33235d5348f1db",
+    "shared/nativeSmartAccountClient.mjs": "3867f8df7353da61b0dd9e22741bbb117e97b069f824d4d2ac5cdd06e648e8cb"
+  },
+  "allTrackedSourceManifest": {
+    "path": "/tmp/aa-native-combined-20261009/checkpoint-source-sha256.json",
+    "sha256": "11c2910d4a91deed1797a9e1a4c76fd1f473c3b69a0b7aefa8ce0d04f5f0aaa3",
+    "fileCount": 934
+  },
+  "steps": [
+    {
+      "name": "frontend-npm-ci",
+      "cwd": "/Users/jinghuiliao/git/neo-os/.worktrees/native-account-aa-convergence/frontend",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "environment": {},
+      "startedAt": "2026-10-08T16:19:47.927142+00:00",
+      "completedAt": "2026-10-08T16:20:02.095525+00:00",
+      "durationSeconds": 14.046,
+      "exitCode": 0,
+      "log": "/tmp/aa-native-combined-20261009/frontend-npm-ci.log",
+      "logSha256": "5fd74bfd8ec6f18672547d6e17cb9ddaeb96ebb03ec8cf0f37b018b197c284a6"
+    },
+    {
+      "name": "sdk-npm-ci",
+      "cwd": "/Users/jinghuiliao/git/neo-os/.worktrees/native-account-aa-convergence/sdk/js",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "environment": {},
+      "startedAt": "2026-10-08T16:19:47.927142+00:00",
+      "completedAt": "2026-10-08T16:19:49.535599+00:00",
+      "durationSeconds": 1.486,
+      "exitCode": 0,
+      "log": "/tmp/aa-native-combined-20261009/sdk-npm-ci.log",
+      "logSha256": "a84e58a08723fd1292f6b693ad97a8a0eab047b76ba75eadbfb7801ab6657d82"
+    },
+    {
+      "name": "frontend-full-gate",
+      "cwd": "/Users/jinghuiliao/git/neo-os/.worktrees/native-account-aa-convergence",
+      "command": [
+        "bash",
+        "scripts/verify_repo.sh",
+        "--frontend-only"
+      ],
+      "environment": {
+        "MORPHEUS_ORACLE_ROOT": "/Users/jinghuiliao/git/neo-os/neo-os-services",
+        "NEOOS_REQUIRE_SERVICES_ARTIFACTS": "1"
+      },
+      "startedAt": "2026-10-08T16:20:58.570277+00:00",
+      "completedAt": "2026-10-08T16:21:39.366189+00:00",
+      "durationSeconds": 40.66,
+      "exitCode": 0,
+      "log": "/tmp/aa-native-combined-20261009/frontend-full-gate.log",
+      "logSha256": "fd5c5cbf329074ddbcc4894d3c94c9cf9983373f8d545ba832e59abc4d181c40"
+    },
+    {
+      "name": "sdk-unit",
+      "cwd": "/Users/jinghuiliao/git/neo-os/.worktrees/native-account-aa-convergence/sdk/js",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "environment": {},
+      "startedAt": "2026-10-08T16:20:58.570066+00:00",
+      "completedAt": "2026-10-08T16:21:00.267312+00:00",
+      "durationSeconds": 1.561,
+      "exitCode": 0,
+      "log": "/tmp/aa-native-combined-20261009/sdk-unit.log",
+      "logSha256": "5de1a3c9a839ddf138e2dd360e3ab8c501416187d91975c691913d00ac51fa28"
+    },
+    {
+      "name": "sdk-types",
+      "cwd": "/Users/jinghuiliao/git/neo-os/.worktrees/native-account-aa-convergence/sdk/js",
+      "command": [
+        "npm",
+        "run",
+        "types:check"
+      ],
+      "environment": {},
+      "startedAt": "2026-10-08T16:21:52.647889+00:00",
+      "completedAt": "2026-10-08T16:21:53.980746+00:00",
+      "durationSeconds": 1.271,
+      "exitCode": 0,
+      "log": "/tmp/aa-native-combined-20261009/sdk-types.log",
+      "logSha256": "9362029f197d368c6dc71973378ca73086fc764ee385281ae574e996294870bc"
+    },
+    {
+      "name": "sdk-package",
+      "cwd": "/Users/jinghuiliao/git/neo-os/.worktrees/native-account-aa-convergence/sdk/js",
+      "command": [
+        "npm",
+        "run",
+        "test:package"
+      ],
+      "environment": {},
+      "startedAt": "2026-10-08T16:21:52.644241+00:00",
+      "completedAt": "2026-10-08T16:21:56.865303+00:00",
+      "durationSeconds": 4.155,
+      "exitCode": 0,
+      "log": "/tmp/aa-native-combined-20261009/sdk-package.log",
+      "logSha256": "30bd4a63f73bc117bb42057ed86cd2d4d8ca39009cac6441cc0e390636472664"
+    },
+    {
+      "name": "sdk-audit-all",
+      "cwd": "/Users/jinghuiliao/git/neo-os/.worktrees/native-account-aa-convergence/sdk/js",
+      "command": [
+        "npm",
+        "audit",
+        "--audit-level=moderate",
+        "--json"
+      ],
+      "environment": {},
+      "startedAt": "2026-10-08T16:21:52.644237+00:00",
+      "completedAt": "2026-10-08T16:21:54.520246+00:00",
+      "durationSeconds": 1.811,
+      "exitCode": 0,
+      "log": "/tmp/aa-native-combined-20261009/sdk-audit-all.log",
+      "logSha256": "04c2578156e79799340062a881eba4e0df6fe96fcbe29087a6dfe8c761aaeaf3"
+    },
+    {
+      "name": "sdk-audit-prod",
+      "cwd": "/Users/jinghuiliao/git/neo-os/.worktrees/native-account-aa-convergence/sdk/js",
+      "command": [
+        "npm",
+        "run",
+        "audit:prod"
+      ],
+      "environment": {},
+      "startedAt": "2026-10-08T16:21:52.644234+00:00",
+      "completedAt": "2026-10-08T16:21:54.043630+00:00",
+      "durationSeconds": 1.333,
+      "exitCode": 0,
+      "log": "/tmp/aa-native-combined-20261009/sdk-audit-prod.log",
+      "logSha256": "a6358aa817b404f74ad2acd25166ca8a97bd0ae6971aabaec4ba2df09e47d504"
+    }
+  ],
+  "boundary": "All requested checks passed at recorded source hashes. Draft owner subsequently reserved a production callback-method followup and possible profile update; do not reuse this checkpoint as validation of those later bytes."
+}

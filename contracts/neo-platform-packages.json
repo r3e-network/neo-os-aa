@@ -1,0 +1,111 @@
+{
+  "description": "Audited bytes of the Neo-owned packages behind the NeoSmartContractFrameworkVersion pin in Directory.Build.props (audit finding R-11 / N-DEP-1), and of the nccs compiler package the contracts are compiled with. Every entry is published on nuget.org, the only package source in nuget.config. sha512 is the NuGet content hash that packages.lock.json and project.assets.json record (for a signed package it excludes the signature, so it differs from a checksum of the downloaded file); sha256 is the checksum of the .nupkg as nuget.org served it, for manual cross-checks. scripts/check_neo_platform_packages.mjs restores the tests project in locked mode and fails when a restored Neo package has a different sha512, when a packages.lock.json disagrees, or when the installed nccs is a different package. Every other package is pinned by the packages.lock.json next to each project. To change a pin follow \"How to bump\" in docs/AA-REPRODUCIBLE-BUILD.md.",
+  "frameworkVersion": "3.10.1",
+  "compiler": {
+    "id": "Neo.Compiler.CSharp",
+    "version": "3.9.1",
+    "tool": "nccs",
+    "sha512": "mHlaVv/R3LfXJG7W0kUBQc6ioi7Nz8dhNRTesaaCmRw9oqLxj1WPZDFokweCBHd8ZgfwMnj24ZtMbxlJbSaALg==",
+    "sha256": "182c30a41f3b640086363b4d5fa2fb107cc7d17795df9d55a22b7bd646c543e0",
+    "size": 13012880,
+    "repositoryCommit": "5fa9566e5165ede2165a9be1f4a0120c17602697",
+    "availableOn": "nuget.org",
+    "install": "dotnet tool install -g neo.compiler.csharp --version 3.9.1"
+  },
+  "packages": [
+    {
+      "id": "Neo.SmartContract.Framework",
+      "version": "3.10.1",
+      "sha512": "5Pa/qy80dNgNH+T9Wfl4sfvdeFsdqj/Hbu9IN8idsE8DdeBXMs8iLaZJRBsTmOJmZCBhnFaniDw/GgXV0H/iQw==",
+      "sha256": "e59c42fef8b983ad5dd7644f06ebd431664d6dca92eacebfe1c1c6f7a6837cac",
+      "size": 170915,
+      "requiredBy": "every contract project (contracts/**/*.csproj), the NativeEpochProbe contract fixture and, through the project reference, the contract tests",
+      "repositoryCommit": "5c5fb79e3411a09e5cbfc59901edeadab5a0e60f",
+      "availableOn": "nuget.org"
+    },
+    {
+      "id": "Neo.SmartContract.Testing",
+      "version": "3.10.1",
+      "sha512": "dur8MIiwl8YCDDunlHkKJyCQunBuHltAbd67iNzWamzWnufy9X59Ig4kTshGnxp2DOd44geEsvym/N2dO++spg==",
+      "sha256": "cc2b1bf6413911bf1cb10c6f5c15c536edc8918cbb1f2fcc0e59f048c220a2f0",
+      "size": 102832,
+      "requiredBy": "tests/AbstractAccount.Contracts.Tests and tests/NativeEpochProbe",
+      "repositoryCommit": "37c03d3e7db8d125efb968a1f1da455f3d205b26",
+      "availableOn": "nuget.org"
+    },
+    {
+      "id": "Neo.Disassembler.CSharp",
+      "version": "3.10.1",
+      "sha512": "6BNxK5/wH1+9hz/k9Ir3iXbacGbcCCTMlQD1znpos4X3z7a+x1SGGHJoBjzxFcr2IbESq95/9nAPUy2hhIikaA==",
+      "sha256": "ffc97362ed880dfc060f9ad4850ccd49163a8a0821b87ce83584ccd0cfddfc8a",
+      "size": 23267,
+      "requiredBy": "Neo.SmartContract.Testing",
+      "repositoryCommit": "37c03d3e7db8d125efb968a1f1da455f3d205b26",
+      "availableOn": "nuget.org"
+    },
+    {
+      "id": "Neo",
+      "version": "3.10.1",
+      "sha512": "VflOS6baS9wmWnT7RFUUIYBCYrYy7Fp3p6Brv2fvNx3aZBIaXZwiwf3yuCjKbHoVt05/KCjNwoky6uh8ynppmw==",
+      "sha256": "a2bbd4f06b174644db949a536bcf11a10a56ba8bc93d9e1aae2f05a57945d45f",
+      "size": 392700,
+      "requiredBy": "Neo.SmartContract.Testing, Neo.Disassembler.CSharp",
+      "repositoryCommit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+      "availableOn": "nuget.org"
+    },
+    {
+      "id": "Neo.Extensions",
+      "version": "3.10.1",
+      "sha512": "qaNbDgONQmRxFlE9frHBqjGL+HSQ/GQ8GA/KvZcUEAJ3Oc0tykxjaXH09Z+a+3Zxi+NiEuCjVEKdF+HRv5lqFw==",
+      "sha256": "e766e290d48928019731e54c1703851393ec71705295afae49e3571041de72c3",
+      "size": 38949,
+      "requiredBy": "Neo, Neo.IO, Neo.Disassembler.CSharp",
+      "repositoryCommit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+      "availableOn": "nuget.org"
+    },
+    {
+      "id": "Neo.IO",
+      "version": "3.10.1",
+      "sha512": "j8ih1uz2Q8rmssfWFNaA86lk97CO/XD2CmlMH9mTCc50aorOy61ezQZnRs6+XhlBaJdjku/LHAwlBGmiTQSB8w==",
+      "sha256": "c3185afc51c5ddc7afe922fc3b22890e9cc14b13ac3b42eef6d7275abe1f4a3e",
+      "size": 31966,
+      "requiredBy": "Neo, Neo.Disassembler.CSharp",
+      "repositoryCommit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+      "availableOn": "nuget.org"
+    },
+    {
+      "id": "Neo.Json",
+      "version": "3.10.1",
+      "sha512": "aM+YR47pM3PoGsinQBuV4WO61SO9KnvMO197z/7gHmQVUpXYOpz8iYnywjIeiT0DaHF9kQ2UP2D6HnAX4FrNfw==",
+      "sha256": "44ae8c6f27b6f4c7b4eb4c2741c00320b76f865ac085b69674467fac3970a86b",
+      "size": 35565,
+      "requiredBy": "Neo, Neo.Disassembler.CSharp",
+      "repositoryCommit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+      "availableOn": "nuget.org"
+    },
+    {
+      "id": "Neo.VM",
+      "version": "3.10.1",
+      "sha512": "i6WO4aAA8tZWcbNLDg3PDCuznDzEuARlOPkI3xZ1a69nE1JeDg5DwuWYGdbHpMcXFH6LWrJ/OUK2KGug+2uq0g==",
+      "sha256": "4660fb4c196526a193169077eea81407e81e35b331a968c0ec7e73106c20e7da",
+      "size": 69535,
+      "requiredBy": "Neo",
+      "repositoryCommit": "004cd6070a940405818d9357638277dd44407e2e",
+      "availableOn": "nuget.org"
+    },
+    {
+      "id": "Neo.Cryptography.BLS12_381",
+      "version": "3.9.0",
+      "sha512": "/SE5BJndqRcbk4ri4p6dvttgg3uuQ8Wi5viGxx+Qhs4oRETXG7OM9M5hPQweGcwpErEqK8Qc1Nbx/K37qPxIpw==",
+      "sha256": "3a70642b049787759f89417d37f360fd3f3c627cf515dc394c6b352b4069a6ba",
+      "size": 73148,
+      "requiredBy": "Neo",
+      "repositoryCommit": "055f250413bb6a3d13c5a37c74e595f219056d29",
+      "availableOn": "nuget.org"
+    }
+  ],
+  "sourceRuntimeProbeProjects": [
+    "tests/NativeModuleProbe/NativeModuleProbe.csproj",
+    "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj"
+  ]
+}

@@ -3,8 +3,16 @@ import test from 'node:test';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { neon, invokePersisted } = require('./deploy-helpers.js');
+const { neon, invokePersisted, artifactPaths } = require('./deploy-helpers.js');
 const publicHash = '6d0656f6dd91469db1c90cc1e574380613f43738';
+
+test('public artifact selection cannot escape into the private profile', () => {
+  for (const name of ['../platform/UnifiedSmartWalletV3', '/tmp/other', 'verifiers/../../platform/Core', '', '..\\platform\\Core']) {
+    assert.throws(() => artifactPaths(name), /public artifact name/);
+  }
+  assert.match(artifactPaths('UnifiedSmartWalletV3').nef, /contracts\/bin\/v3\/UnifiedSmartWalletV3\.nef$/);
+  assert.match(artifactPaths('verifiers/WebAuthnVerifier').nef, /contracts\/bin\/v3\/verifiers\/WebAuthnVerifier\.nef$/);
+});
 
 function stubContract(t, methods) {
   const descriptor = Object.getOwnPropertyDescriptor(neon.experimental, 'SmartContract');

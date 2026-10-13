@@ -35,6 +35,17 @@ test('buildZkLoginProofHex encodes version provider nullifiers and signature', (
   assert.equal(proofHex.endsWith('44'.repeat(64)), true);
 });
 
+test('zkLogin provider bound is measured in UTF-8 bytes', () => {
+  assert.throws(
+    () => buildZkLoginVerifierParamsHex({
+      publicKey: `02${'11'.repeat(32)}`,
+      provider: 'é'.repeat(128),
+      masterNullifier: `0x${'22'.repeat(32)}`,
+    }),
+    /1 and 255 bytes/,
+  );
+});
+
 test('formatZkLoginTicket derives verifier params and proof blobs from Morpheus response fields', () => {
   const formatted = formatZkLoginTicket({
     provider: 'web3auth',

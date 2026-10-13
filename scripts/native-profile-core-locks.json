@@ -1,0 +1,536 @@
+{
+  "schema": "smartaccount-native-core-locks/v1",
+  "sdk": "10.0.400",
+  "locks": {
+    "src/Neo/packages.lock.json": {
+      "version": 1,
+      "dependencies": {
+        "net10.0": {
+          "Akka": {
+            "type": "Direct",
+            "requested": "[1.5.70, )",
+            "resolved": "1.5.70",
+            "contentHash": "N1SKJtaIy2S0JUUUPIC9h03TQeH5RDOJmbb2Dew4DvsqmI5wHK472ztqFBwzlw/wL2NQ4KHDXAqO7qKNVofPyA==",
+            "dependencies": {
+              "Akka.Analyzers": "0.3.3",
+              "Microsoft.Extensions.ObjectPool": "6.0.36",
+              "Newtonsoft.Json": "13.0.1",
+              "System.Configuration.ConfigurationManager": "6.0.1"
+            }
+          },
+          "BouncyCastle.Cryptography": {
+            "type": "Direct",
+            "requested": "[2.6.2, )",
+            "resolved": "2.6.2",
+            "contentHash": "7oWOcvnntmMKNzDLsdxAYqApt+AjpRpP2CShjMfIa3umZ42UQMvH0tl1qAliYPNYO6vTdcGMqnRrCPmsfzTI1w=="
+          },
+          "K4os.Compression.LZ4": {
+            "type": "Direct",
+            "requested": "[1.3.8, )",
+            "resolved": "1.3.8",
+            "contentHash": "LhwlPa7c1zs1OV2XadMtAWdImjLIsqFJPoRcIWAadSRn0Ri1DepK65UbWLPmt4riLqx2d40xjXRk0ogpqNtK7g=="
+          },
+          "Microsoft.Extensions.Configuration.Binder": {
+            "type": "Direct",
+            "requested": "[10.0.10, )",
+            "resolved": "10.0.10",
+            "contentHash": "GqmN2o1CkJvk7uWp+p4CwBYW0w/zfoEbvsiFDbO2G8l1Uz+mrDAbAcZiXhU2lufKPby1cjAUdd5GTWpebYOkOA==",
+            "dependencies": {
+              "Microsoft.Extensions.Configuration": "10.0.10",
+              "Microsoft.Extensions.Configuration.Abstractions": "10.0.10"
+            }
+          },
+          "Microsoft.Extensions.Configuration.Json": {
+            "type": "Direct",
+            "requested": "[10.0.10, )",
+            "resolved": "10.0.10",
+            "contentHash": "uvJ6sHwjgrkMEJOgiC76G0mcZGXerwyyWkwX34EOjCbxKG6TCtfAoqDKAMsCvEBf9HxjlGQEgqsSMOGCmGBf+A==",
+            "dependencies": {
+              "Microsoft.Extensions.Configuration": "10.0.10",
+              "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
+              "Microsoft.Extensions.Configuration.FileExtensions": "10.0.10",
+              "Microsoft.Extensions.FileProviders.Abstractions": "10.0.10"
+            }
+          },
+          "Microsoft.IdentityModel.Tokens": {
+            "type": "Direct",
+            "requested": "[8.21.0, )",
+            "resolved": "8.21.0",
+            "contentHash": "xFnFEl4VrhAJEbqtRrpgfAACgkm6NYo7cWYKYROH00N9/M5OYrRwTP0lHsginnLrqPrseLcSqAueQNRCyGNsdw==",
+            "dependencies": {
+              "Microsoft.Bcl.Cryptography": "10.0.2",
+              "Microsoft.Extensions.Logging.Abstractions": "8.0.0",
+              "Microsoft.IdentityModel.Logging": "8.21.0"
+            }
+          },
+          "Neo.Cryptography.BLS12_381": {
+            "type": "Direct",
+            "requested": "[3.9.0, )",
+            "resolved": "3.9.0",
+            "contentHash": "/SE5BJndqRcbk4ri4p6dvttgg3uuQ8Wi5viGxx+Qhs4oRETXG7OM9M5hPQweGcwpErEqK8Qc1Nbx/K37qPxIpw=="
+          },
+          "Neo.VM": {
+            "type": "Direct",
+            "requested": "[3.10.2-CI00384, )",
+            "resolved": "3.10.2-CI00384",
+            "contentHash": "PxBP9mt7G44H/eV+kq9Xbepy6qHOL13Mm0AHZDZcqQeJGYcODkRUmw6XlhBz3BIYUrxugGDkKNCjaKHFeKNVgQ==",
+            "dependencies": {
+              "System.IO.Hashing": "10.0.2"
+            }
+          },
+          "Akka.Analyzers": {
+            "type": "Transitive",
+            "resolved": "0.3.3",
+            "contentHash": "SaS6yojDwqmy8PFCML8hiXlnSOQpO7adzrosTLbDD9paVAJk4WufteGbPhbiXiu2m4JscNhSM5joFeR9IZpF8g=="
+          },
+          "Microsoft.Bcl.Cryptography": {
+            "type": "Transitive",
+            "resolved": "10.0.2",
+            "contentHash": "LG9Yll3B5aNpxv0+D47g6LiOiKBIlodhcHdQwcYzo8VeexFLGqx5ymetmA2aBRyo9cCcWsQWrFsdbsr8LvmWDw=="
+          },
+          "Microsoft.Extensions.Configuration": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "plJWK2zpWuuyxI8F8s2scx6Je7N1Ajjs6HvYUGKwRnDMWIVIz9FHwAkiT7ASgrvAOd10T0FPVlh9BzAJJME+jg==",
+            "dependencies": {
+              "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
+              "Microsoft.Extensions.Primitives": "10.0.10"
+            }
+          },
+          "Microsoft.Extensions.Configuration.Abstractions": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "5Vnd2I75DmZCVEjSynIdJ/0EGafgnLQwgR3t2C2/fkjx/nRG+cLwxLLdInoHeCEpkD5K4Ov/g9ZCRYrl4TRsaA==",
+            "dependencies": {
+              "Microsoft.Extensions.Primitives": "10.0.10"
+            }
+          },
+          "Microsoft.Extensions.Configuration.FileExtensions": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "ZOhZYwvbXGTgGVRwswIirofEMVHuWdxjdh0JeUZXwaF9cgcjXdz/t0ELtgaevw7ezTyv47yPNCgGreWtLkn3IQ==",
+            "dependencies": {
+              "Microsoft.Extensions.Configuration": "10.0.10",
+              "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
+              "Microsoft.Extensions.FileProviders.Abstractions": "10.0.10",
+              "Microsoft.Extensions.FileProviders.Physical": "10.0.10",
+              "Microsoft.Extensions.Primitives": "10.0.10"
+            }
+          },
+          "Microsoft.Extensions.DependencyInjection.Abstractions": {
+            "type": "Transitive",
+            "resolved": "8.0.0",
+            "contentHash": "cjWrLkJXK0rs4zofsK4bSdg+jhDLTaxrkXu4gS6Y7MAlCvRyNNgwY/lJi5RDlQOnSZweHqoyvgvbdvQsRIW+hg=="
+          },
+          "Microsoft.Extensions.FileProviders.Abstractions": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "c5zqFCY9DiIpMovLd7/d/CTiEtrMOuQ639dhv3PABtKQIKNQikSHwQt8+N679uii9q+B55lgK28Uv64FOwEu8w==",
+            "dependencies": {
+              "Microsoft.Extensions.Primitives": "10.0.10"
+            }
+          },
+          "Microsoft.Extensions.FileProviders.Physical": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "jhJAyo38kSrH3ARvWUk0h8itogVnQu2DCZuPo+s0Z+tXes0ugTxMPaHYzap85785eHQmPFqD9TYERqBbtGxn/w==",
+            "dependencies": {
+              "Microsoft.Extensions.FileProviders.Abstractions": "10.0.10",
+              "Microsoft.Extensions.FileSystemGlobbing": "10.0.10",
+              "Microsoft.Extensions.Primitives": "10.0.10"
+            }
+          },
+          "Microsoft.Extensions.FileSystemGlobbing": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "jSOCVxEwCd4Aq925kJVz1kSO1EpX2OHYKL04qVREXkDU7Ce3pVDdHPYm+fEy8y/th2kJf/DAstRHpJAqoNWP8w=="
+          },
+          "Microsoft.Extensions.Logging.Abstractions": {
+            "type": "Transitive",
+            "resolved": "8.0.0",
+            "contentHash": "arDBqTgFCyS0EvRV7O3MZturChstm50OJ0y9bDJvAcmEPJm0FFpFyjU/JLYyStNGGey081DvnQYlncNX5SJJGA==",
+            "dependencies": {
+              "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.0"
+            }
+          },
+          "Microsoft.Extensions.ObjectPool": {
+            "type": "Transitive",
+            "resolved": "6.0.36",
+            "contentHash": "WHwL2Src2pAiLGEmzq6htW+jeKIkrifT3Q6nZROY6EG8EbSGli//XpAh9WpITRsTda3VVUBegvc2QdBWyNn+zg=="
+          },
+          "Microsoft.Extensions.Primitives": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "5wu/GrYVd8mG2DVUw3vFJzF+O336TyTGg/Kmcgw9bfwYhCoFiV5lR5QeEmKecJyrW4W54nMfD3p3589E8a7czQ=="
+          },
+          "Microsoft.IdentityModel.Abstractions": {
+            "type": "Transitive",
+            "resolved": "8.21.0",
+            "contentHash": "XYgEmYpUvng0oYIagDJ+uebboQSnWtCV7q9zMyXlBw6ZqLLCHcmGUb7TpXvQ3HWY4OzbOCUQm2Ac0saPSnwqSw=="
+          },
+          "Microsoft.IdentityModel.Logging": {
+            "type": "Transitive",
+            "resolved": "8.21.0",
+            "contentHash": "LgIWUUX386xCbvjq2ex8iXGIu2raDWrrIQ4OyYZKaNWMhzvN8YOTbAYMFJC+iHmKnkNBM8g7mLak9KQodldH3g==",
+            "dependencies": {
+              "Microsoft.IdentityModel.Abstractions": "8.21.0"
+            }
+          },
+          "Microsoft.Win32.SystemEvents": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "hqTM5628jSsQiv+HGpiq3WKBl2c8v1KZfby2J6Pr7pEPlK9waPdgEO6b8A/+/xn/yZ9ulv8HuqK71ONy2tg67A=="
+          },
+          "Newtonsoft.Json": {
+            "type": "Transitive",
+            "resolved": "13.0.1",
+            "contentHash": "ppPFpBcvxdsfUonNcvITKqLl3bqxWbDCZIzDWHzjpdAHRFfZe0Dw9HmA0+za13IdyrgJwpkDTDA9fHaxOrt20A=="
+          },
+          "Serilog": {
+            "type": "Transitive",
+            "resolved": "4.4.0",
+            "contentHash": "ZC6Le3rr4TVJJjS4KsQAesxeF1EhW9qcZmmG7eP5Y2G3+gTGkJEUXkq4+tZNPtyp05I0wWOxnIjwtxFweJsObw=="
+          },
+          "Serilog.Sinks.Console": {
+            "type": "Transitive",
+            "resolved": "6.1.1",
+            "contentHash": "8jbqgjUyZlfCuSTaJk6lOca465OndqOz3KZP6Cryt/IqZYybyBu7GP0fE/AXBzrrQB3EBmQntBFAvMVz1COvAA==",
+            "dependencies": {
+              "Serilog": "4.0.0"
+            }
+          },
+          "Serilog.Sinks.File": {
+            "type": "Transitive",
+            "resolved": "7.0.0",
+            "contentHash": "fKL7mXv7qaiNBUC71ssvn/dU0k9t0o45+qm2XgKAlSt19xF+ijjxyA3R6HmCgfKEKwfcfkwWjayuQtRueZFkYw==",
+            "dependencies": {
+              "Serilog": "4.2.0"
+            }
+          },
+          "System.Configuration.ConfigurationManager": {
+            "type": "Transitive",
+            "resolved": "6.0.1",
+            "contentHash": "jXw9MlUu/kRfEU0WyTptAVueupqIeE3/rl0EZDMlf8pcvJnitQ8HeVEp69rZdaStXwTV72boi/Bhw8lOeO+U2w==",
+            "dependencies": {
+              "System.Security.Cryptography.ProtectedData": "6.0.0",
+              "System.Security.Permissions": "6.0.0"
+            }
+          },
+          "System.Drawing.Common": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "NfuoKUiP2nUWwKZN6twGqXioIe1zVD0RIj2t976A+czLHr2nY454RwwXs6JU9Htc6mwqL6Dn/nEL3dpVf2jOhg==",
+            "dependencies": {
+              "Microsoft.Win32.SystemEvents": "6.0.0"
+            }
+          },
+          "System.IO.Hashing": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "eE839zyWZD/UBZYzP2lu9fhHX6RWe63/jz3Jxf+JumzO/db+Vc2s7CMiDwxk9ti2NTUft2tdRx31Rw2OjKbecA=="
+          },
+          "System.Security.Cryptography.ProtectedData": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "rp1gMNEZpvx9vP0JW0oHLxlf8oSiQgtno77Y4PLUBjSiDYoD77Y8uXHr1Ea5XG4/pIKhqAdxZ8v8OTUtqo9PeQ=="
+          },
+          "System.Security.Permissions": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "T/uuc7AklkDoxmcJ7LGkyX1CcSviZuLCa4jg3PekfJ7SU0niF0IVTXwUiNVP9DSpzou2PpxJ+eNY2IfDM90ZCg==",
+            "dependencies": {
+              "System.Windows.Extensions": "6.0.0"
+            }
+          },
+          "System.Windows.Extensions": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "IXoJOXIqc39AIe+CIR7koBtRGMiCt/LPM3lI+PELtDIy9XdyeSrwXFdWV9dzJ2Awl0paLWUaknLxFQ5HpHZUog==",
+            "dependencies": {
+              "System.Drawing.Common": "6.0.0"
+            }
+          },
+          "neo.extensions": {
+            "type": "Project",
+            "dependencies": {
+              "Akka": "[1.5.70, )",
+              "Serilog": "[4.4.0, )",
+              "Serilog.Sinks.Console": "[6.1.1, )",
+              "Serilog.Sinks.File": "[7.0.0, )",
+              "System.IO.Hashing": "[10.0.10, )"
+            }
+          },
+          "neo.io": {
+            "type": "Project",
+            "dependencies": {
+              "Neo.Extensions": "[3.10.2, )"
+            }
+          },
+          "neo.json": {
+            "type": "Project"
+          }
+        }
+      }
+    },
+    "src/Neo.Extensions/packages.lock.json": {
+      "version": 1,
+      "dependencies": {
+        "net10.0": {
+          "Akka": {
+            "type": "Direct",
+            "requested": "[1.5.70, )",
+            "resolved": "1.5.70",
+            "contentHash": "N1SKJtaIy2S0JUUUPIC9h03TQeH5RDOJmbb2Dew4DvsqmI5wHK472ztqFBwzlw/wL2NQ4KHDXAqO7qKNVofPyA==",
+            "dependencies": {
+              "Akka.Analyzers": "0.3.3",
+              "Microsoft.Extensions.ObjectPool": "6.0.36",
+              "Newtonsoft.Json": "13.0.1",
+              "System.Configuration.ConfigurationManager": "6.0.1"
+            }
+          },
+          "Serilog": {
+            "type": "Direct",
+            "requested": "[4.4.0, )",
+            "resolved": "4.4.0",
+            "contentHash": "ZC6Le3rr4TVJJjS4KsQAesxeF1EhW9qcZmmG7eP5Y2G3+gTGkJEUXkq4+tZNPtyp05I0wWOxnIjwtxFweJsObw=="
+          },
+          "Serilog.Sinks.Console": {
+            "type": "Direct",
+            "requested": "[6.1.1, )",
+            "resolved": "6.1.1",
+            "contentHash": "8jbqgjUyZlfCuSTaJk6lOca465OndqOz3KZP6Cryt/IqZYybyBu7GP0fE/AXBzrrQB3EBmQntBFAvMVz1COvAA==",
+            "dependencies": {
+              "Serilog": "4.0.0"
+            }
+          },
+          "Serilog.Sinks.File": {
+            "type": "Direct",
+            "requested": "[7.0.0, )",
+            "resolved": "7.0.0",
+            "contentHash": "fKL7mXv7qaiNBUC71ssvn/dU0k9t0o45+qm2XgKAlSt19xF+ijjxyA3R6HmCgfKEKwfcfkwWjayuQtRueZFkYw==",
+            "dependencies": {
+              "Serilog": "4.2.0"
+            }
+          },
+          "System.IO.Hashing": {
+            "type": "Direct",
+            "requested": "[10.0.10, )",
+            "resolved": "10.0.10",
+            "contentHash": "eE839zyWZD/UBZYzP2lu9fhHX6RWe63/jz3Jxf+JumzO/db+Vc2s7CMiDwxk9ti2NTUft2tdRx31Rw2OjKbecA=="
+          },
+          "Akka.Analyzers": {
+            "type": "Transitive",
+            "resolved": "0.3.3",
+            "contentHash": "SaS6yojDwqmy8PFCML8hiXlnSOQpO7adzrosTLbDD9paVAJk4WufteGbPhbiXiu2m4JscNhSM5joFeR9IZpF8g=="
+          },
+          "Microsoft.Extensions.ObjectPool": {
+            "type": "Transitive",
+            "resolved": "6.0.36",
+            "contentHash": "WHwL2Src2pAiLGEmzq6htW+jeKIkrifT3Q6nZROY6EG8EbSGli//XpAh9WpITRsTda3VVUBegvc2QdBWyNn+zg=="
+          },
+          "Microsoft.Win32.SystemEvents": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "hqTM5628jSsQiv+HGpiq3WKBl2c8v1KZfby2J6Pr7pEPlK9waPdgEO6b8A/+/xn/yZ9ulv8HuqK71ONy2tg67A=="
+          },
+          "Newtonsoft.Json": {
+            "type": "Transitive",
+            "resolved": "13.0.1",
+            "contentHash": "ppPFpBcvxdsfUonNcvITKqLl3bqxWbDCZIzDWHzjpdAHRFfZe0Dw9HmA0+za13IdyrgJwpkDTDA9fHaxOrt20A=="
+          },
+          "System.Configuration.ConfigurationManager": {
+            "type": "Transitive",
+            "resolved": "6.0.1",
+            "contentHash": "jXw9MlUu/kRfEU0WyTptAVueupqIeE3/rl0EZDMlf8pcvJnitQ8HeVEp69rZdaStXwTV72boi/Bhw8lOeO+U2w==",
+            "dependencies": {
+              "System.Security.Cryptography.ProtectedData": "6.0.0",
+              "System.Security.Permissions": "6.0.0"
+            }
+          },
+          "System.Drawing.Common": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "NfuoKUiP2nUWwKZN6twGqXioIe1zVD0RIj2t976A+czLHr2nY454RwwXs6JU9Htc6mwqL6Dn/nEL3dpVf2jOhg==",
+            "dependencies": {
+              "Microsoft.Win32.SystemEvents": "6.0.0"
+            }
+          },
+          "System.Security.Cryptography.ProtectedData": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "rp1gMNEZpvx9vP0JW0oHLxlf8oSiQgtno77Y4PLUBjSiDYoD77Y8uXHr1Ea5XG4/pIKhqAdxZ8v8OTUtqo9PeQ=="
+          },
+          "System.Security.Permissions": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "T/uuc7AklkDoxmcJ7LGkyX1CcSviZuLCa4jg3PekfJ7SU0niF0IVTXwUiNVP9DSpzou2PpxJ+eNY2IfDM90ZCg==",
+            "dependencies": {
+              "System.Windows.Extensions": "6.0.0"
+            }
+          },
+          "System.Windows.Extensions": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "IXoJOXIqc39AIe+CIR7koBtRGMiCt/LPM3lI+PELtDIy9XdyeSrwXFdWV9dzJ2Awl0paLWUaknLxFQ5HpHZUog==",
+            "dependencies": {
+              "System.Drawing.Common": "6.0.0"
+            }
+          }
+        }
+      }
+    },
+    "src/Neo.IO/packages.lock.json": {
+      "version": 1,
+      "dependencies": {
+        "net10.0": {
+          "Akka": {
+            "type": "Transitive",
+            "resolved": "1.5.70",
+            "contentHash": "N1SKJtaIy2S0JUUUPIC9h03TQeH5RDOJmbb2Dew4DvsqmI5wHK472ztqFBwzlw/wL2NQ4KHDXAqO7qKNVofPyA==",
+            "dependencies": {
+              "Akka.Analyzers": "0.3.3",
+              "Microsoft.Extensions.ObjectPool": "6.0.36",
+              "Newtonsoft.Json": "13.0.1",
+              "System.Configuration.ConfigurationManager": "6.0.1"
+            }
+          },
+          "Akka.Analyzers": {
+            "type": "Transitive",
+            "resolved": "0.3.3",
+            "contentHash": "SaS6yojDwqmy8PFCML8hiXlnSOQpO7adzrosTLbDD9paVAJk4WufteGbPhbiXiu2m4JscNhSM5joFeR9IZpF8g=="
+          },
+          "Microsoft.Extensions.ObjectPool": {
+            "type": "Transitive",
+            "resolved": "6.0.36",
+            "contentHash": "WHwL2Src2pAiLGEmzq6htW+jeKIkrifT3Q6nZROY6EG8EbSGli//XpAh9WpITRsTda3VVUBegvc2QdBWyNn+zg=="
+          },
+          "Microsoft.Win32.SystemEvents": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "hqTM5628jSsQiv+HGpiq3WKBl2c8v1KZfby2J6Pr7pEPlK9waPdgEO6b8A/+/xn/yZ9ulv8HuqK71ONy2tg67A=="
+          },
+          "Newtonsoft.Json": {
+            "type": "Transitive",
+            "resolved": "13.0.1",
+            "contentHash": "ppPFpBcvxdsfUonNcvITKqLl3bqxWbDCZIzDWHzjpdAHRFfZe0Dw9HmA0+za13IdyrgJwpkDTDA9fHaxOrt20A=="
+          },
+          "Serilog": {
+            "type": "Transitive",
+            "resolved": "4.4.0",
+            "contentHash": "ZC6Le3rr4TVJJjS4KsQAesxeF1EhW9qcZmmG7eP5Y2G3+gTGkJEUXkq4+tZNPtyp05I0wWOxnIjwtxFweJsObw=="
+          },
+          "Serilog.Sinks.Console": {
+            "type": "Transitive",
+            "resolved": "6.1.1",
+            "contentHash": "8jbqgjUyZlfCuSTaJk6lOca465OndqOz3KZP6Cryt/IqZYybyBu7GP0fE/AXBzrrQB3EBmQntBFAvMVz1COvAA==",
+            "dependencies": {
+              "Serilog": "4.0.0"
+            }
+          },
+          "Serilog.Sinks.File": {
+            "type": "Transitive",
+            "resolved": "7.0.0",
+            "contentHash": "fKL7mXv7qaiNBUC71ssvn/dU0k9t0o45+qm2XgKAlSt19xF+ijjxyA3R6HmCgfKEKwfcfkwWjayuQtRueZFkYw==",
+            "dependencies": {
+              "Serilog": "4.2.0"
+            }
+          },
+          "System.Configuration.ConfigurationManager": {
+            "type": "Transitive",
+            "resolved": "6.0.1",
+            "contentHash": "jXw9MlUu/kRfEU0WyTptAVueupqIeE3/rl0EZDMlf8pcvJnitQ8HeVEp69rZdaStXwTV72boi/Bhw8lOeO+U2w==",
+            "dependencies": {
+              "System.Security.Cryptography.ProtectedData": "6.0.0",
+              "System.Security.Permissions": "6.0.0"
+            }
+          },
+          "System.Drawing.Common": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "NfuoKUiP2nUWwKZN6twGqXioIe1zVD0RIj2t976A+czLHr2nY454RwwXs6JU9Htc6mwqL6Dn/nEL3dpVf2jOhg==",
+            "dependencies": {
+              "Microsoft.Win32.SystemEvents": "6.0.0"
+            }
+          },
+          "System.IO.Hashing": {
+            "type": "Transitive",
+            "resolved": "10.0.10",
+            "contentHash": "eE839zyWZD/UBZYzP2lu9fhHX6RWe63/jz3Jxf+JumzO/db+Vc2s7CMiDwxk9ti2NTUft2tdRx31Rw2OjKbecA=="
+          },
+          "System.Security.Cryptography.ProtectedData": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "rp1gMNEZpvx9vP0JW0oHLxlf8oSiQgtno77Y4PLUBjSiDYoD77Y8uXHr1Ea5XG4/pIKhqAdxZ8v8OTUtqo9PeQ=="
+          },
+          "System.Security.Permissions": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "T/uuc7AklkDoxmcJ7LGkyX1CcSviZuLCa4jg3PekfJ7SU0niF0IVTXwUiNVP9DSpzou2PpxJ+eNY2IfDM90ZCg==",
+            "dependencies": {
+              "System.Windows.Extensions": "6.0.0"
+            }
+          },
+          "System.Windows.Extensions": {
+            "type": "Transitive",
+            "resolved": "6.0.0",
+            "contentHash": "IXoJOXIqc39AIe+CIR7koBtRGMiCt/LPM3lI+PELtDIy9XdyeSrwXFdWV9dzJ2Awl0paLWUaknLxFQ5HpHZUog==",
+            "dependencies": {
+              "System.Drawing.Common": "6.0.0"
+            }
+          },
+          "neo.extensions": {
+            "type": "Project",
+            "dependencies": {
+              "Akka": "[1.5.70, )",
+              "Serilog": "[4.4.0, )",
+              "Serilog.Sinks.Console": "[6.1.1, )",
+              "Serilog.Sinks.File": "[7.0.0, )",
+              "System.IO.Hashing": "[10.0.10, )"
+            }
+          }
+        }
+      }
+    },
+    "src/Neo.Json/packages.lock.json": {
+      "version": 1,
+      "dependencies": {
+        "net10.0": {}
+      }
+    }
+  },
+  "archiveSha256": {
+    "akka.analyzers/0.3.3": "14bc6c65f2814eaddbd77433dbbf263a0176fece6fd994bb114c0bb9e533bd88",
+    "akka/1.5.70": "7f91ea3b177bbf758b6504c39995b9d32751faec825840d30789285a4dd0e1d7",
+    "bouncycastle.cryptography/2.6.2": "623936fb1fd171579c706390390711282898cf2c759a5167852e5ab82208f8cb",
+    "k4os.compression.lz4/1.3.8": "3a64f72703b8aa99190cbed7aa216a642cb1c928fae2cf6dfa65dc3754fe2320",
+    "microsoft.bcl.cryptography/10.0.2": "f8e62d716b1dd6a65c11769d61e038b7afa9c800e0d403d00b1a4a52d3f4d363",
+    "microsoft.extensions.configuration.abstractions/10.0.10": "632deba4e226d5510f7584f219e1bb4bc6cd4fe001692262620b155957991ad5",
+    "microsoft.extensions.configuration.binder/10.0.10": "611f7beea7cdc739dae3958e5a58c51217b300df253ebfc47b0737581531da4b",
+    "microsoft.extensions.configuration.fileextensions/10.0.10": "40e8f085002ea22530c23e2848bb47aaa08bf26c805621b9e1eb7cc41afd1a11",
+    "microsoft.extensions.configuration.json/10.0.10": "9f03c48b4704b643a6f1780f421fc156e3e7f2a27c1e837c674898865c13b618",
+    "microsoft.extensions.configuration/10.0.10": "b45684c6e7cd18f15d513b30aa4891572452f794395c6e562c212847aa1a29f1",
+    "microsoft.extensions.dependencyinjection.abstractions/8.0.0": "ef92b31065a36d110b7332690a226e6fe96d35430c6f3e40ff529053ee5d80ff",
+    "microsoft.extensions.fileproviders.abstractions/10.0.10": "bb79d3099a6aaa7e872159b43b6e199a6cb23656e65239aaf000de28cbb82725",
+    "microsoft.extensions.fileproviders.physical/10.0.10": "d37465b722941572dbbccc08698cbb16f828c50488cfeb198511e5c1350357b6",
+    "microsoft.extensions.filesystemglobbing/10.0.10": "1e7df26071ef318b1e161a5053370e0afce1a047440529986b22bc7e2f599e9f",
+    "microsoft.extensions.logging.abstractions/8.0.0": "26675d8de83c5394be8814f046554054b7881f1738cabacd82a54c381ec48cce",
+    "microsoft.extensions.objectpool/6.0.36": "079750854612835191ec7d28dddff0ba24502c8f7d7372b4407fceb71dc251e5",
+    "microsoft.extensions.primitives/10.0.10": "a8e29bc5a9879776fe7dba4b42cdc08e781ae1ccf57b9d12cd0402ad7ca8f1c7",
+    "microsoft.identitymodel.abstractions/8.21.0": "61ccd00fad160f242962a65f9202bc9b8787eac564a722b9603a3bafcb58e3c0",
+    "microsoft.identitymodel.logging/8.21.0": "ffaea8d89006e0557fa3e0a9a52d8b74d718f8b7a4798622d84cc565cafca57a",
+    "microsoft.identitymodel.tokens/8.21.0": "def643ec28aa8f3a271be93041b43393de9e72b8672f160e218897e767df257d",
+    "microsoft.win32.systemevents/6.0.0": "37d11565b979c35567332c065f26955b34fd961f3889a277683e3c848064d730",
+    "neo.cryptography.bls12_381/3.9.0": "3a70642b049787759f89417d37f360fd3f3c627cf515dc394c6b352b4069a6ba",
+    "neo.vm/3.10.2-ci00384": "84bd08d291362cfaf85697f0fb14666719d3443f2f71c39c8de1b9184c20820e",
+    "newtonsoft.json/13.0.1": "2b6b52556e27e1b7913f33eedeb95568110c746bd64afff74357f1683878323a",
+    "serilog.sinks.console/6.1.1": "09f220e14b38912310027eab536aec01e136da0e8ca45899761a195b24a965e6",
+    "serilog.sinks.file/7.0.0": "2f165852850f9028c82156ab2629675e7a9088cac5349b68462966cd336d523a",
+    "serilog/4.4.0": "b4fe17d3a4e170354be975ed60885d272c67e2e2fd8cb2f4b370d13ba1cd424f",
+    "system.configuration.configurationmanager/6.0.1": "53fd07c9e90064ae726b654d7c60351deb90c890a1a1aa9ca08bf9ef12e9ccb4",
+    "system.drawing.common/6.0.0": "ffd11a01b11e3a310b452319688992d4ef059947bc8f85ae154c3554eacfc80a",
+    "system.io.hashing/10.0.10": "4cfce1349022d31fd7e4da18bbad8c6d12c1ec68150a7792a910db5776984343",
+    "system.security.cryptography.protecteddata/6.0.0": "5a2f48f4d6d99694035e04bb2a5d3a44817163ff7aef84bb84a898c3911a6d16",
+    "system.security.permissions/6.0.0": "fcc32fb4558637fbce41f8d774e85eb7582c9cc821ea58790c21e2995b27544b",
+    "system.windows.extensions/6.0.0": "37eaa0d44e850c9f40f4be74c2656ddf13d057c671946d71797805bb13bec9f3"
+  }
+}

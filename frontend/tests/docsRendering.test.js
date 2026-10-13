@@ -8,6 +8,7 @@ import {
   isBlockedNodeName,
   shouldStripAttribute,
 } from "../src/features/docs/rendering.js";
+import { MORPHEUS_PUBLIC_REGISTRY } from "../src/config/generatedMorpheusRegistry.js";
 
 const frontendRoot = fileURLToPath(new URL("..", import.meta.url));
 const read = (relativePath) =>
@@ -69,9 +70,14 @@ test("workflow doc explains the V3 execution path after proxy hardening", () => 
   assert.match(workflowDoc, /direct proxy-signed external/i);
 });
 
-test("sdk doc references the verified hardened testnet hash", () => {
+test("sdk doc references the canonical testnet AA core from the generated registry", () => {
   const sdkDoc = read("src/assets/docs/sdk-usage.md");
-  assert.match(sdkDoc, /0x5be915aea3ce85e4752d522632f0a9520e377aaf/i);
+  // The oracle is the generated Morpheus registry, not a literal copied into this test: the
+  // literal this assertion used to pin was the removed V1/V2 core (DS-CU-163 section 4.1 P5).
+  const testnetCore = MORPHEUS_PUBLIC_REGISTRY.testnet.contracts.aaCore;
+  assert.ok(testnetCore, "the generated registry publishes no testnet AA core");
+  assert.match(sdkDoc, new RegExp(testnetCore, "i"));
+  assert.doesNotMatch(sdkDoc, /0x5be915aea3ce85e4752d522632f0a9520e377aaf/i);
 });
 
 test("sdk paymaster docs track the current helper signatures", () => {
@@ -110,7 +116,11 @@ test("production docs describe validation preview, module lifecycle, and relay t
 
   assert.match(frontendArchitecture, /Module Lifecycle/i);
   assert.match(frontendArchitecture, /Validation Preview|relay preflight/i);
-  assert.match(frontendArchitecture, /compatibility-only/i);
+  // The removed V1/V2 wrapper must be presented as removed; the deployed-ABI check itself lives in
+  // docsTruth.test.js, which reads contracts/build. This assertion only keeps the doc from calling
+  // the removed wrapper a supported path (DS-CU-163 section 4.5 T2).
+  assert.doesNotMatch(frontendArchitecture, /compatibility-only/i);
+  assert.match(frontendArchitecture, /executeUserOp/);
 
   assert.match(securityAudit, /external third-party review/i);
   assert.match(securityAudit, /property-based|adversarial/i);
@@ -321,26 +331,13 @@ test("DocsView supports deep-linking to a specific doc entry through the query s
   assert.match(docsViewSource, /resolveDocKey/);
 });
 
-test("vite config defines manual chunk groups for heavy frontend dependencies", () => {
-  const viteConfigSource = read("vite.config.js");
-
-  assert.match(viteConfigSource, /manualChunks/);
-  assert.match(viteConfigSource, /supabase/);
-  assert.match(viteConfigSource, /jose/);
-  assert.match(viteConfigSource, /react-runtime/);
-  assert.match(viteConfigSource, /identity-runtime/);
-  assert.match(viteConfigSource, /walletconnect-runtime/);
-  assert.match(viteConfigSource, /@walletconnect/);
-  assert.match(viteConfigSource, /@toruslabs/);
-  assert.match(viteConfigSource, /deferredIdentityChunks/);
-  assert.match(viteConfigSource, /chunkSizeWarningLimit:\s*3500/);
-  assert.match(viteConfigSource, /INVALID_ANNOTATION/);
-  assert.match(viteConfigSource, /ox\/_esm\/core\/Base64\.js/);
-  // ethers, @web3auth, buffer are NOT in manualChunks (circular dep TDZ fix)
-  assert.doesNotMatch(viteConfigSource, /return 'ethers'/);
-  assert.doesNotMatch(viteConfigSource, /neon-core/);
-  assert.doesNotMatch(viteConfigSource, /return 'mermaid'/);
-  assert.doesNotMatch(viteConfigSource, /return 'cytoscape'/);
+test("frontend verifier checks the actual built identity dependency boundary", () => {
+  const frontendPackage = readFrontendPackage();
+  assert.equal(
+    frontendPackage.scripts["test:bundle:browser"],
+    "node --test tests/deferredIdentityBundle.browser.mjs",
+  );
+  assert.match(read("../scripts/verify_repo.sh"), /npm run test:bundle:browser/);
 });
 
 test("vite config polyfills browser crypto dependencies pulled by web3auth wallet connectors", () => {
@@ -446,11 +443,26 @@ test("studio governance and permissions panels expect accountId hashes instead o
   );
 });
 
-test("frontend package does not depend on Neon SDK bundles directly", () => {
+test("Neon is a declared server dependency and stays out of browser module imports", () => {
   const packageJson = readFrontendPackage();
 
   assert.equal(packageJson.dependencies["@cityofzion/neon-core"], undefined);
-  assert.equal(packageJson.dependencies["@cityofzion/neon-js"], undefined);
+  assert.equal(packageJson.dependencies["@cityofzion/neon-js"], "5.9.0");
+  const lock = JSON.parse(read("package-lock.json"));
+  for (const name of ["neon-js", "neon-api", "neon-core"]) {
+    const entries = Object.entries(lock.packages).filter(([key]) => key.endsWith(`/@cityofzion/${name}`));
+    assert.ok(entries.length > 0, `${name} is locked`);
+    for (const [, entry] of entries) {
+      assert.equal(entry.version, "5.9.0", `${name} stays on the validated release`);
+      assert.equal(Boolean(entry.dev), false, `${name} is a production dependency`);
+    }
+  }
+  for (const relativePath of fs.readdirSync(path.join(frontendRoot, "src"), { recursive: true })) {
+    if (!/\.(?:js|mjs|ts|vue)$/.test(relativePath)) continue;
+    assert.doesNotMatch(read(path.join("src", relativePath)),
+      /(?:from\s*|(?:import|require)\s*\(\s*)["']@cityofzion\/neon-(?:js|core)["']/,
+      `server-only dependency imported by ${relativePath}`);
+  }
 });
 
 test("HomeView keeps the first screen focused on AA operation entry", () => {

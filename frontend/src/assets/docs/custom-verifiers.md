@@ -49,16 +49,23 @@ Once your custom verifier contract is deployed to the Neo N3 network, you must b
 ```javascript
 const payload = {
   scriptHash: masterContractHash,
-  operation: 'setVerifierContractByAddress',
+  operation: 'updateVerifier',
   args: [
     sc.ContractParam.hash160(myAbstractAccountAddress),
-    sc.ContractParam.hash160(myCustomVerifierScriptHash)
+    sc.ContractParam.hash160(myCustomVerifierScriptHash),
+    sc.ContractParam.byteArray('0x')
   ]
 };
 
 // Sign and invoke using the Admin's wallet
 await walletService.invoke(payload);
 ```
+
+`updateVerifier(accountId, newVerifier, verifierParams)` is the deployed entrypoint
+(`contracts/UnifiedSmartWallet.Accounts.cs:249`, in every pinned
+`contracts/build/UnifiedSmartWalletV3.manifest.json`); the studio calls it the same way in
+`frontend/src/features/studio/useStudioController.js:498`. `verifierParams` is an empty `ByteArray`
+for a verifier that takes no configuration.
 
 To remove a custom verifier and fallback to the native role-based logic, simply update the verifier configuration with an empty hash (`0x0000000000000000000000000000000000000000`).
 

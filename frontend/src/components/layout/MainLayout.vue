@@ -347,10 +347,10 @@ const ConnectionControls = defineAsyncComponent(
 const runtimeNetwork = resolveRuntimeNetwork();
 const networkMatches = computed(() => matchesRequestedNetwork(route.query, runtimeNetwork));
 const networkLabelKey = computed(() =>
-  runtimeNetwork === "mainnet" ? "nav.networkMainnet" : "nav.networkTestnet",
+  route.name === "native-account" ? "nav.nativeNetwork" : runtimeNetwork === "mainnet" ? "nav.networkMainnet" : "nav.networkTestnet",
 );
 const networkLabelFallback = computed(() =>
-  runtimeNetwork === "mainnet" ? "Neo N3 Mainnet" : "Neo N3 Testnet",
+  route.name === "native-account" ? "Native endpoint · verify above" : runtimeNetwork === "mainnet" ? "Neo N3 Mainnet" : "Neo N3 Testnet",
 );
 
 const navLinks = [
@@ -363,6 +363,7 @@ const navLinks = [
   },
   { to: "/app", label: "nav.app", fallback: "Workspace" },
   { to: "/identity", label: "nav.identity", fallback: "Identity" },
+  { to: "/native", label: "nav.native", fallback: "Native" },
   { to: "/market", label: "nav.market", fallback: "Market" },
   { to: "/docs", label: "nav.docs", fallback: "Docs" },
 ];

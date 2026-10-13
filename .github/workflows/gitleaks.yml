@@ -1,0 +1,67 @@
+name: Gitleaks
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitleaks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Secret scan
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) && 'neoos-isolated-linux' || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6 (pinned to SHA, matching the other workflows in this workspace)
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pinned Gitleaks
+        shell: bash
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          set -euo pipefail
+          case "$(uname -s):$(uname -m)" in
+            Linux:x86_64) asset_arch="x64" ;;
+            Linux:aarch64|Linux:arm64) asset_arch="arm64" ;;
+            *) echo "unsupported runner platform: $(uname -s):$(uname -m)" >&2; exit 1 ;;
+          esac
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_${asset_arch}.tar.gz"
+          checksums="gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          release="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -fsSL --retry 3 --proto '=https' --proto-redir '=https' -o "${archive}" "${release}/${archive}"
+          curl -fsSL --retry 3 --proto '=https' --proto-redir '=https' -o "${checksums}" "${release}/${checksums}"
+          grep " ${archive}$" "${checksums}" | sha256sum --check --strict
+          bin_dir="${RUNNER_TEMP:-$PWD}/gitleaks-bin"
+          mkdir -p "${bin_dir}"
+          tar -xzf "${archive}" -C "${bin_dir}" gitleaks
+          chmod 0755 "${bin_dir}/gitleaks"
+          echo "${bin_dir}" >> "${GITHUB_PATH}"
+
+      - name: Scan commits introduced by this event
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          zero_sha="0000000000000000000000000000000000000000"
+          if [[ "${EVENT_NAME}" == "pull_request" && -n "${BASE_SHA}" ]]; then
+            range="${BASE_SHA}..${HEAD_SHA}"
+          elif [[ "${EVENT_NAME}" == "push" && -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "${zero_sha}" ]]; then
+            range="${BEFORE_SHA}..${HEAD_SHA}"
+          else
+            range="-1 ${HEAD_SHA}"
+          fi
+          gitleaks git --redact --no-banner --exit-code 1 --log-opts="${range}" .

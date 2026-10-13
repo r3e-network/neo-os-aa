@@ -1,0 +1,81 @@
+{
+  "id": "ordinary-user-contract",
+  "version": 1,
+  "kind": "deployed-contract",
+  "status": "go-pinned-public-artifact",
+  "protocolStatus": "source-checks-passed-conformance-open",
+  "protocolScope": "Source checks pass for the specified ordinary user-contract behavior. Full protocol conformance remains open because the public runtime lacks isolated callback budgets; candidate deployment and readback remain separate gates.",
+  "protocolEvidence": [
+    "docs/PROTOCOL_COMPLETENESS_AUDIT.md",
+    "docs/AA-SYSTEM-STATUS.md",
+    "docs/AA-FORMAL-VERIFICATION.md"
+  ],
+  "releaseBoundaries": [
+    "PUBLIC-CALLBACK-RESOURCE-ISOLATION",
+    "PINNED-ARTIFACT-UPGRADE-REVIEW",
+    "PUBLIC-DEPLOYMENT-READBACK"
+  ],
+  "implementationVerified": true,
+  "verificationScope": "The pinned public UnifiedSmartWalletV3 artifact and ordinary NeoOS integration are verified. A newer source candidate must pass a separate artifact and upgrade review before it can replace this public artifact.",
+  "description": "The Neo N3 user-contract implementation used by the current NeoOS AA integration.",
+  "canonicalSourceRoots": [
+    "contracts",
+    "frontend",
+    "sdk/js/src/v3",
+    "shared"
+  ],
+  "excludedSourceRoots": [
+    "contracts/native",
+    "frontend/src/features/native",
+    "frontend/src/shared/nativeSmartAccount.mjs",
+    "frontend/src/shared/nativeSmartAccountClient.mjs",
+    "frontend/src/shared/nativeTransactionArtifact.mjs",
+    "frontend/src/shared/nativeWalletWitness.mjs",
+    "sdk/js/src/native",
+    "shared/nativeSmartAccount.mjs",
+    "shared/nativeSmartAccountClient.mjs",
+    "shared/nativeTransactionArtifact.mjs",
+    "shared/nativeWalletWitness.mjs"
+  ],
+  "compatibilityPaths": [
+    "contracts",
+    "frontend",
+    "sdk/js/src/v3",
+    "shared"
+  ],
+  "entrypoints": [
+    "contracts/UnifiedSmartWallet.csproj",
+    "frontend",
+    "sdk/js"
+  ],
+  "artifactRoots": [
+    "contracts/build",
+    "contracts/bin/v3"
+  ],
+  "verifiedArtifact": {
+    "contractName": "UnifiedSmartWalletV3",
+    "path": "contracts/build/UnifiedSmartWalletV3.nef",
+    "manifestPath": "contracts/build/UnifiedSmartWalletV3.manifest.json",
+    "nefSha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+    "manifestSha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+    "publicReadbackEvidence": "docs/reports/mainnet-unified-smart-wallet-upgrade-20260915-evidence.json",
+    "network": "mainnet",
+    "coreHash": "0x0268a387913b250166ddec032b03332690a1ef78",
+    "independentRpcReadbacks": 2,
+    "abiMethodCount": 90
+  },
+  "currentSourceCandidate": {
+    "artifactRoot": "contracts/bin/v3",
+    "status": "source-ahead-of-pinned-public-artifact",
+    "abiMethodCount": 98,
+    "releaseGate": "required-before-public-upgrade"
+  },
+  "verification": {
+    "profile": "ordinary",
+    "commands": [
+      "./scripts/verify_repo.sh --profile ordinary",
+      "cd frontend && npm run test:ordinary:browser"
+    ]
+  },
+  "nativeBoundary": "This profile does not claim native AccountManagement consensus semantics or native-chain activation."
+}

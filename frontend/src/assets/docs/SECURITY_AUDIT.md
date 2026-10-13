@@ -247,25 +247,26 @@ The review used the following process:
 4. Analysis of cryptographic implementations and replay protection mechanisms
 5. Review of authorization, reentrancy, and gas DoS vectors
 
-> **Current-status boundary (2026-09-20):** The findings below are retained as
+> **Current-status boundary (2026-10-03):** The findings below are retained as
 > historical/pre-V3 audit material. They are not the current V3 remediation
 > ledger. Current V3 status is defined by `docs/SECURITY_MODEL.md`,
 > `docs/AA-FORMAL-VERIFICATION.md`, and the dated receipts in
-> `docs/reports/`. In particular, the current artifact still has no
-> non-bypassable verifier gas cap; the platform extension proposal is tracked
-> in `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`.
+> `docs/reports/`. The matching private-chain artifact now routes both verifier
+> and hook callbacks through the platform bounded-call syscall. Native
+> `AccountManagement` activation, public deployment parity, and independent
+> review remain separate gates.
 
 ---
 
 ## Critical Findings
 
-### 1. CRITICAL: No Verifier Gas Limit - DoS Vector
+### 1. CRITICAL (historical): No Verifier Gas Limit - DoS Vector
 
 **Severity:** Critical
 
 **Affected File:** `contracts/UnifiedSmartWallet.Execution.cs:42`
 
-**Issue:**
+**Historical issue:**
 The core contract calls `validateSignature` on verifiers without any gas limit:
 
 ```csharp
@@ -274,10 +275,10 @@ bool isValid = (bool)Contract.Call(state.Verifier, "validateSignature", CallFlag
 
 A malicious or buggy verifier plugin could consume excessive gas, causing legitimate user operations to fail due to gas exhaustion. This is a well-known DoS vector in ERC-4337 implementations.
 
-**Risk:**
+**Historical risk:**
 An attacker could deploy a malicious verifier that consumes gas during validation (e.g., infinite loops, expensive hash operations). When installed on an account, the account becomes unusable. While the backup owner escape hatch is available, it requires a 7-90 day timelock.
 
-**Mitigation Required:**
+**Historical mitigation required:**
 1. Add a dynamic gas limit for verifier calls based on a reasonable maximum (e.g., 50,000 gas)
 2. Use `CallFlags.States` or implement a gas metering wrapper
 3. Consider a verifier blacklist/registry for known malicious verifiers
@@ -452,31 +453,27 @@ ERC-4337 uses EIP-712 typed data encoding which prevents collision issues by inc
 
 ## Low Findings
 
-### 7. LOW: Nonce Salt Collision Probability
+### 7. LOW: Wider Read-Only Nonce Query Boundary
 
 **Severity:** Low
 
-**Affected File:** `contracts/UnifiedSmartWallet.Execution.cs:175-184`
+**Affected File:** `contracts/UnifiedSmartWallet.Execution.cs`
 
 **Issue:**
-Salt-mode nonces use a threshold of `1_000_000_000_000_000`:
+The executable `UserOperation` path accepts only the non-negative signed NeoVM Integer
+domain (`0 <= nonce < 2^255`), which gives each nonce a 191-bit channel and a 64-bit
+sequence. A historical public artifact may still allow a wider channel value through the
+read-only `getNonce` query. That value is not executable, but clients must not treat a
+successful query as proof that the channel can be submitted.
 
-```csharp
-BigInteger MAX_2D_NONCE = 1_000_000_000_000_000;
-```
-
-This creates ~1 quadrillion possible values. The probability of collision is negligible in practice (birthday problem with 1M operations = ~1 in 2 trillion), but not mathematically impossible.
-
-**Risk:**
-Extremely unlikely replay collision due to nonce reuse. The practical impact is negligible.
-
-**Mitigation Recommended:**
-Consider increasing to `2^64` (~18 quintillion) for cryptographic safety margin.
+**Mitigation:**
+The current source and native/client codecs reject channels at or above `2^191`; the
+pinned public artifact remains separately identified in `implementations/ordinary/profile.json`
+and requires an upgrade review before publication.
 
 **Ethereum Comparison:**
-ERC-4337 typically uses full 256-bit nonce space for random/salt modes.
-
----
+ERC-4337 exposes a 256-bit nonce encoding; Neo's executable boundary is narrowed by the
+signed VM Integer representation and is documented explicitly in the signing profile.
 
 ### 8. LOW: Rate Limiter Bypass via IP Rotation
 
@@ -564,7 +561,12 @@ Market escrow properly blocks normal execution via `AssertNoMarketEscrow()`.
 
 ---
 
-## Summary of Findings
+## Historical Summary of Findings
+
+The following table and issue list are retained for audit traceability only. They
+describe the pre-remediation snapshot and must not be read as the current V3
+closure status. The current ledger is maintained in `docs/SECURITY_MODEL.md`,
+`docs/AA-FORMAL-VERIFICATION.md`, and the dated private-chain receipts.
 
 | Severity | Count | Status |
 | --- | --- | --- |
@@ -574,7 +576,7 @@ Market escrow properly blocks normal execution via `AssertNoMarketEscrow()`.
 | Low | 3 | **Open** |
 | Positive | 5 | ✓ Verified |
 
-**Open Issues Requiring Fix:**
+**Historical Open Issues Requiring Fix:**
 1. VULN-001 (Critical): Verifier gas limit - DoS vector
 2. VULN-002 (High): Session key revocation race condition
 3. VULN-003 (High): Escape hatch bypass via market escrow
@@ -587,7 +589,7 @@ Market escrow properly blocks normal execution via `AssertNoMarketEscrow()`.
 
 ---
 
-## Recommended Next Steps
+## Historical Recommended Next Steps
 
 1. **Address Critical Findings:** Implement verifier gas limits and escape escrow protection before mainnet deployment
 2. **Plugin Developer Education:** Ensure all new plugin developers review `PLUGIN_DEVELOPER_GUIDE.md`

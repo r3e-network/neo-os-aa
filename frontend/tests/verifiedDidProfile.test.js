@@ -6,7 +6,7 @@ import { connectedDidProfile, hydrateConnectedDidProfileFromStorage, setConnecte
 const verified = { ok: true, profile: { did: 'web3auth:verified:user', provider: 'web3auth' }, claims: { sub: 'user' } };
 for (const result of ['header.payload.signature', { idToken: 'header.payload.signature' }]) {
   test(`uses server-verified identity with ${typeof result} SDK response`, async () => {
-    const profile = await authenticateVerifiedDid({ authenticateUser: async () => result }, async (token) => {
+    const profile = await authenticateVerifiedDid({ getIdentityToken: async () => result }, async (token) => {
       assert.equal(token, 'header.payload.signature');
       return verified;
     });
@@ -16,11 +16,11 @@ for (const result of ['header.payload.signature', { idToken: 'header.payload.sig
 }
 test('rejects absent or malformed tokens without calling verification', async () => {
   for (const result of [null, {}, { idToken: {} }, '', ' token ', 7]) {
-    await assert.rejects(authenticateVerifiedDid({ authenticateUser: async () => result }, () => assert.fail('must not verify')));
+    await assert.rejects(authenticateVerifiedDid({ getIdentityToken: async () => result }, () => assert.fail('must not verify')));
   }
 });
 test('rejects verification denial, malformed results and outages', async () => {
-  const client = { authenticateUser: async () => 'untrusted.payload.signature' };
+  const client = { getIdentityToken: async () => 'untrusted.payload.signature' };
   for (const result of [null, {}, { ...verified, ok: false }, { ...verified, claims: [] }, { ...verified, profile: { did: '', provider: 'web3auth' } }]) {
     await assert.rejects(authenticateVerifiedDid(client, async () => result), /did_verification_failed/);
   }
@@ -36,4 +36,9 @@ test('does not restore a forged localStorage profile as a connected identity', (
     assert.equal(connectedDidProfile.value, null);
     assert.equal(removed, true);
   } finally { globalThis.window = previous; setConnectedDidProfile(null); }
+});
+
+test('rejects the removed legacy API without bypassing server verification', async () => {
+  await assert.rejects(authenticateVerifiedDid({ authenticateUser: async () => ({ idToken: 'token' }) },
+    () => assert.fail('legacy API must not authenticate')), /did_authentication_unavailable/);
 });

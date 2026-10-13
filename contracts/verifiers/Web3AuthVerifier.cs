@@ -69,6 +69,9 @@ namespace AbstractAccount.Verifiers
         public static bool SupportsV3() => true;
 
         [Safe]
+        public static bool SupportsComposition() => false;
+
+        [Safe]
         public static bool SupportsMessageSignatures() => true;
 
         [Safe]
@@ -109,6 +112,17 @@ namespace AbstractAccount.Verifiers
             return data ?? (ByteString)"";
         }
 
+        /// <summary>
+        /// Returns the canonical configured signer domain for threshold composition.
+        /// </summary>
+        [Safe]
+        public static ByteString[] GetSignerDomains(UInt160 accountId)
+        {
+            ByteString publicKey = GetPublicKey(accountId);
+            ExecutionEngine.Assert(publicKey.Length == 65, "No pubkey configured");
+            return new ByteString[] { SignerDomain.Secp256k1(publicKey) };
+        }
+
         public static void PostExecute(UInt160 accountId, UserOperation op, object result)
         {
             VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
@@ -146,6 +160,29 @@ namespace AbstractAccount.Verifiers
                 signature,
                 NamedCurveHash.secp256k1Keccak256
             );
+        }
+
+        /// <summary>
+        /// Returns the exact EIP-712-style bytes that <see cref="ValidateSignature"/>
+        /// verifies. Clients MUST sign these bytes with secp256k1 and Keccak-256;
+        /// constructing a visually similar payload off-chain is not sufficient.
+        /// </summary>
+        [Safe]
+        public static ByteString GetPayload(UInt160 accountId, UInt160 targetContract, string method,
+            object[] args, BigInteger nonce, BigInteger deadline)
+        {
+            UserOperation op = new UserOperation
+            {
+                TargetContract = targetContract,
+                Method = method,
+                Args = args,
+                Nonce = nonce,
+                Deadline = deadline,
+                Signature = (ByteString)new byte[0],
+            };
+            byte[] structHash = BuildMetaTxStructHash(accountId, op);
+            byte[] domainSeparator = BuildDomainSeparator(Runtime.GetNetwork(), Runtime.ExecutingScriptHash);
+            return (ByteString)Helper.Concat(Helper.Concat(new byte[] { 0x19, 0x01 }, domainSeparator), structHash);
         }
 
         /// <summary>

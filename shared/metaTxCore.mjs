@@ -159,7 +159,13 @@ const CORE_ERRORS = {
     code: 'METATX_CORE_CONTRACT_REQUIRED',
     message: 'AA core contract is required for V3 payload binding',
   },
+  INTEGER_DOMAIN_INVALID: {
+    code: 'METATX_INTEGER_DOMAIN_INVALID',
+    message: 'Nonce and deadline must be non-negative NeoVM signed integers below 2^255',
+  },
 };
+
+const NEO_SIGNED_INTEGER_LIMIT = 1n << 255n;
 
 /**
  * Default error factory: a plain Error carrying a stable code and details.
@@ -209,6 +215,21 @@ export function createMetaTxBuilders({ keccak256, createError = defaultCreateErr
   function requireSignedFields({ nonce, deadline, argsHashHex }) {
     if (nonce == null) throw createError('NONCE_REQUIRED', {});
     if (deadline == null) throw createError('DEADLINE_REQUIRED', {});
+    for (const [field, value] of [['nonce', nonce], ['deadline', deadline]]) {
+      let integer;
+      try {
+        integer = BigInt(value);
+      } catch {
+        throw createError('INTEGER_DOMAIN_INVALID', { field, provided: value });
+      }
+      if (integer < 0n || integer >= NEO_SIGNED_INTEGER_LIMIT) {
+        throw createError('INTEGER_DOMAIN_INVALID', {
+          field,
+          provided: value,
+          hint: 'Expected 0 <= value < 2^255 for the NeoVM signed Integer domain',
+        });
+      }
+    }
     const sanitized = sanitizeHex(argsHashHex);
     if (sanitized.length !== 64) {
       throw createError('ARGS_HASH_INVALID', {

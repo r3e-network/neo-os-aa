@@ -113,4 +113,4 @@ sequenceDiagram
 
 ## 7. Historical Compatibility Note
 
-Legacy `executeUnifiedByAddress` payloads can still appear in old drafts or compatibility tooling, but they are not the primary V3 workflow. New integrations should target `executeUserOp`.
+Legacy `executeUnifiedByAddress` payloads can still appear in old drafts, but the wrapper was removed in the V3 rewrite: no deployed manifest and no contract source defines it, so a transaction naming it fails in its verify phase. New integrations should target `executeUserOp`.

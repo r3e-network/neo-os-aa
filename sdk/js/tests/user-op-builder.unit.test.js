@@ -50,6 +50,17 @@ test('buildEIP712 delegates to the shared V3 typed-data builder', () => {
   );
 });
 
+test('buildEIP712 rejects nonce/deadline outside the NeoVM signed domain', () => {
+  assert.throws(
+    () => v3Builder().setNonce(1n << 255n).buildEIP712(ARGS_HASH),
+    { code: 'ENC_002' },
+  );
+  assert.throws(
+    () => v3Builder().setDeadline(1n << 255n).buildEIP712(ARGS_HASH),
+    { code: 'ENC_002' },
+  );
+});
+
 test('buildLegacyEIP712 uses the explicit master contract as verifyingContract', () => {
   const builder = createUserOpBuilder()
     .setAccountAddressScriptHash('13ef519c362973f9a34648a9eac5b71250b2a80a')

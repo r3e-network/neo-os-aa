@@ -1,15 +1,27 @@
 import { EC } from '../../config/errorCodes.js';
+import { TRANSFER_RETURNED_FALSE_MESSAGE, findFailedTransferInInvocation } from '../../shared/transferOutcome.mjs';
 import { buildRelayBroadcastRequest } from './execution.js';
 
-export function buildRelayPreflightRequest({ relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, morpheusNetwork, transactionBody = {}, signatures = [] } = {}) {
+export function buildRelayPreflightRequest({ relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, morpheusNetwork, networkMagic, transactionBody = {}, signatures = [] } = {}) {
   return {
-    ...buildRelayBroadcastRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, transactionBody, signatures, morpheusNetwork }),
+    ...buildRelayBroadcastRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, transactionBody, signatures, morpheusNetwork, networkMagic }),
     simulate: true,
   };
 }
 
-export function normalizeRelayPreflightResult(payload = {}, payloadMode = 'best', t) {
+/**
+ * `metaInvocation` is the relay-ready meta invocation the check was sent for. With it, an `ok` answer for a token
+ * transfer whose simulated result is false is not believed: the relay may be an older one that only looks at the
+ * VM state, and a HALT that moves nothing still burns the nonce and the fee (recorded on the deployed core,
+ * AA-09 case 8). The route in this repository answers ok:false itself; this keeps every relay honest to the user.
+ */
+export function normalizeRelayPreflightResult(relayPayload = {}, payloadMode = 'best', t, { metaInvocation } = {}) {
   const fallbackT = typeof t === 'function' ? t : (_key, fb) => fb;
+  const failedTransfer = Boolean(relayPayload?.ok) && Boolean(metaInvocation)
+    && findFailedTransferInInvocation({ invocation: metaInvocation, stack: relayPayload?.stack }).length > 0;
+  const payload = failedTransfer
+    ? { ...relayPayload, ok: false, exception: TRANSFER_RETURNED_FALSE_MESSAGE }
+    : relayPayload;
   const stack = Array.isArray(payload?.stack) ? payload.stack : [];
   const validationPreview = payload?.validationPreview && typeof payload.validationPreview === 'object'
     ? payload.validationPreview
@@ -66,12 +78,12 @@ export function normalizeRelayPreflightResult(payload = {}, payloadMode = 'best'
   };
 }
 
-export async function runRelayPreflight({ walletService, relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, morpheusNetwork, transactionBody = {}, signatures = [], t } = {}) {
+export async function runRelayPreflight({ walletService, relayEndpoint = '', relayPayloadMode = 'best', relayRawEnabled = true, morpheusNetwork, networkMagic, transactionBody = {}, signatures = [], t } = {}) {
   if (!walletService) {
     throw new Error(EC.walletServiceMissing);
   }
 
-  const request = buildRelayPreflightRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, morpheusNetwork, transactionBody, signatures });
+  const request = buildRelayPreflightRequest({ relayEndpoint, relayPayloadMode, relayRawEnabled, morpheusNetwork, networkMagic, transactionBody, signatures });
   const response = await walletService.relayTransaction(request);
-  return normalizeRelayPreflightResult(response, relayPayloadMode, t);
+  return normalizeRelayPreflightResult(response, relayPayloadMode, t, { metaInvocation: request.metaInvocation });
 }

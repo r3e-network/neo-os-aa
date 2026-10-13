@@ -63,6 +63,9 @@ namespace AbstractAccount.Verifiers
         /// <returns>The byte array that should be signed by the verifying identity</returns>
         internal static byte[] BuildPayload(UInt160 accountId, UInt160 targetContract, string method, object[] args, BigInteger nonce, BigInteger deadline)
         {
+#if SMARTACCOUNT_NATIVE
+            return BuildNativePayload(accountId, targetContract, method, args, nonce, deadline, true);
+#else
             byte[] argsSerialized = (byte[])StdLib.Serialize(args);
             byte[] methodBytes = (byte[])StdLib.Serialize(method);
             return Helper.Concat(
@@ -84,7 +87,33 @@ namespace AbstractAccount.Verifiers
                 ),
                 Helper.Concat(ToUint256Word(nonce), ToUint256Word(deadline))
             );
+#endif
         }
+
+#if SMARTACCOUNT_NATIVE
+        // Only a phase-authorized validation callback may use this path. The native
+        // service has already validated the operation's canonical shape and bounds.
+        // Public getPayload retains that validation for independently supplied inputs.
+        internal static byte[] BuildValidationPayload(UInt160 accountId, UInt160 targetContract, string method, object[] args, BigInteger nonce, BigInteger deadline)
+        {
+            return BuildNativePayload(accountId, targetContract, method, args, nonce, deadline, false);
+        }
+
+        private static byte[] BuildNativePayload(UInt160 accountId, UInt160 targetContract, string method, object[] args, BigInteger nonce, BigInteger deadline, bool validateCanonical)
+        {
+            UInt160 core = VerifierAuthority.AuthorizedCore();
+            ExecutionEngine.Assert(core == NativeAuthority.Service, "Wrong native SmartAccount service");
+            object[] unsigned = new object[] { targetContract, method, args, nonce, deadline, (ByteString)new byte[0] };
+            ByteString domain = (ByteString)Contract.Call(core, "getAuthorizationDomain", CallFlags.ReadOnly, new object[] { accountId });
+            byte[] payload = Helper.Concat((byte[])domain, (byte[])StdLib.Serialize(unsigned));
+            if (validateCanonical)
+            {
+                ByteString digest = (ByteString)Contract.Call(core, "getOperationDigest", CallFlags.ReadOnly, new object[] { accountId, unsigned });
+                ExecutionEngine.Assert(CryptoLib.Sha256((ByteString)payload) == digest, "Native signing preimage mismatch");
+            }
+            return payload;
+        }
+#endif
 
         /// <summary>
         /// Converts a BigInteger to a 32-byte big-endian uint256 word.

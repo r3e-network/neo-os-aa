@@ -1,100 +1,98 @@
 # Repository Organization
 
-Repository: `neo-os-aa`
-
-Verification snapshot: 2026-09-27. Baseline HEAD: `4b87010707c49e51020f03eec6f2ea1d16e89dbc`.
-This document describes the tracked tree at that HEAD. Existing local untracked files are
-outside its ownership.
+Updated for the ordinary/native layout on 2026-10-13. The previous tracked
+[2026-09-27 organization snapshot](history/ORGANIZATION-20260927.md) is retained
+for provenance; the current layout and ownership rules are below.
 
 ## Purpose
 
-`neo-os-aa` owns the Neo N3 account-abstraction security boundary. Its tracked README
-describes UnifiedSmartWallet V3, verifier and hook plugins, the paymaster path, frontend
-workflows, and the JavaScript SDK. The approved organization standard assigns AA
-authorization to this repository as protocol component C03.
+neo-os-aa is the NeoOS account-abstraction repository. It contains the
+Neo N3 AA contracts, frontend tooling, and SDK surfaces for creating and using
+Abstract Accounts.
 
-## Authority Boundaries (OWNS/NEVER OWNS)
+## Authority Boundaries
 
-### OWNS
-
-- Account-abstraction contracts and their verifier, hook, recovery, market, and paymaster
-  modules under `contracts/`.
-- AA SDK and integration types under `sdk/` and `shared/`.
-- The AA frontend and its local persistence and migration integration under `frontend/`
-  and `supabase/`.
-- Formal verification inputs and checks under `formal/`, AA-specific scripts under
-  `scripts/`, and AA specifications, reports, and runbooks under `docs/`.
-
-### NEVER OWNS
-
-- Platform, application, or Oracle contract source; those belong to `neo-os-contracts`.
-- NeoDID identity and eligibility authority; the approved standard assigns that boundary
-  to `neo-os-did` (planned extraction where the repository is not present in this six-repo
-  scope).
-- Workspace registries or release/catalog writing, which belong to `neo-os-workspace` and
-  `neo-os-admin` respectively.
-- Service signer custody, network identity policy, or general service runtime, which belong
-  to `neo-os-services`.
-
-AA authorization may be composed with an eligibility proof supplied by another boundary;
-that composition does not transfer DID ownership to AA.
+- This repo OWNS: AA user operations, verifier and hook plugin bindings,
+  recovery policy, paymaster policy, AA contract behavior, and AA-specific
+  frontend and SDK integration.
+- This repo NEVER OWNS: DID eligibility or identity issuance, network identity
+  selection, signer custody, catalog publication, MiniApp product behavior, or
+  production deployment state.
 
 ## Directory Structure
 
-The tracked production and verification roots are:
+    implementations/ordinary/ user-contract delivery profile and entrypoint
+    implementations/native/   native ABI 2 submission profile and entrypoint
+    .github/                 CI workflows
+    contracts/               Neo N3 AA contract sources
+    formal/                  formal verification inputs and checks
+    frontend/                AA application and server routes
+    sdk/                     AA SDK surfaces
+    shared/                  shared AA types and helpers
+    supabase/                AA database migrations
+    tests/                   test suites
+    scripts/                 repository tooling
+    docs/                    project documentation
+    neo-abstract-account.sln .NET solution
+    README.md                public project and boundary documentation
 
-```text
-contracts/       UnifiedSmartWallet and AA modules, verifiers, hooks, recovery, market, paymaster
-frontend/        AA application and operator-facing routes
-sdk/             JavaScript/TypeScript AA SDK
-shared/          shared AA helpers and wire adapters
-formal/          formal verification sources and runners
-supabase/        AA application migration and test resources
-scripts/         build, validation, deployment helpers, and gates
-docs/            protocol, security, validation, reports, and runbooks
-tests/           repository-level tests
-```
-
-The exact tracked tree is defined by `git ls-tree -r HEAD`. In particular, `contracts/build/`
-contains tracked NEF and manifest fixtures used by AA verification, while local `bin/` and
-`obj/` output is not part of this documented source tree.
+`implementations/ordinary/` and `implementations/native/` are the two
+implementation entrypoints on the same branch. They intentionally point at
+the existing build-compatible source locations through `profile.json`; source
+files are not duplicated. The ordinary profile is the current user-contract
+delivery path. The native profile contains the native modules, SDK and UI
+profile prepared for standard submission, while the consensus
+`AccountManagement` service remains in the matching Neo core repository.
 
 ## File Organization Rules
 
-- Put AA contract source in the relevant `contracts/` security-boundary subdirectory.
-- Keep verifier and hook implementations next to their AA contract interfaces and preserve
-  their artifact and ABI provenance in the existing reports and build paths.
-- Keep frontend application code in `frontend/`, SDK code in `sdk/`, and shared protocol
-  helpers in `shared/`.
-- Keep formal obligations and source locks under `formal/`; keep runbooks and audit evidence
-  under `docs/` using the existing topic/report namespaces.
-- Keep database migrations in the existing `supabase/migrations/` domain path until a
-  separately reviewed domain migration plan changes it.
-- Do not add platform contract source, copied SDK implementations, untracked credentials,
-  or local build output. Do not perform directory moves in documentation work.
+- Keep contract sources and contract-specific checks under contracts/.
+- Use `implementations/ordinary/profile.json` and
+  `implementations/native/profile.json` to select the implementation profile;
+  do not infer profile identity from a deployment label or a shared artifact
+  directory.
+- Keep native-only modules and client code under the native roots listed by
+  `implementations/native/profile.json`; ordinary source must not import native
+  entrypoints as proof of native activation.
+- Keep frontend routes, UI, and frontend configuration under frontend/.
+- Keep AA client types and builders under sdk/ and shared/.
+- Keep formal evidence and verification inputs under formal/.
+- Keep database migrations under supabase/migrations/ and apply them only
+  through the repository's documented migration process.
+- Do not commit credentials, local environment files, build output, or
+  unrelated MiniGame content.
 
 ## Cross-Repository Dependencies
 
-- `neo-os-devpack` supplies versioned app-facing SDK packages; AA consumers should use a
-  reviewed package or pin rather than copying DevPack source.
-- `neo-os-contracts` is the approved owner of platform/app/Oracle contract source. AA may
-  consume platform artifacts and integration interfaces where the AA protocol requires them.
-- `neo-os-services` supplies service catalogs and runtime integration projections; the AA
-  README records generated Morpheus config as sourced from that repository.
-- `neo-os-workspace` is the approved future owner of registries and gates; current enforced
-  architecture references still live in `neo-os-web` until v2 adoption.
-- The local remotes are named `origin` and `rustforneo`; workspace policy designates
-  `origin` as r3e-network canonical and `rustforneo` as the CI mirror. Exact URLs are not
-  reproduced in this document.
+- neo-os-contracts owns platform/app/Oracle contract source, while this repository
+  owns AA contract source. AA consumes reviewed artifacts and interfaces.
+- neo-os-devpack supplies versioned SDK packages; consumers use reviewed pins
+  instead of copying its implementation.
+- neo-os-workspace and neo-os-admin own workspace registries and release/catalog
+  publication respectively; AA integration does not transfer these authorities.
+
+- neo-os-web owns the current architecture contract until the documented v2
+  adoption completes. neo-os-services is the source for the public Morpheus
+  registry, public runtime catalog, and confidential-envelope inputs that AA
+  synchronizes through `scripts/lib/morpheus-canonical-sync.mjs`.
+- neo-os-did owns DID identity and eligibility; AA may consume a verified
+  eligibility proof but does not make identity decisions.
+- neo-os-services supplies service-side integrations and generated registry
+  inputs where the repository contracts require them.
+- contracts/neo-platform-packages.json records the contract build's package
+  provenance. Package availability is a build-environment prerequisite; this
+  repository remains authoritative for AA contract sources and does not assign
+  contract authority to another repository.
 
 ## Maintenance Guidelines
 
-- Review AA changes against the boundary statements in `README.md`, the relevant protocol
-  document, and the exact artifact/source checks before describing a release as ready.
-- Keep deployed addresses, generated registries, and validation reports tied to their source
-  commit and network; a local build alone is not deployment evidence.
-- Preserve existing testnet/mainnet safety gates and keep signing material out of source,
-  logs, reports, and documentation.
-- Mark planned consolidation or extraction as planned until a tracked migration and its
-  dependent checks are actually completed.
-- Preserve unrelated working-tree changes and update only this file for organization work.
+1. Route new integrations through the centralized AA operation and validation
+   surfaces so authorization and execution remain distinct.
+2. Keep relay and paymaster paths as convenience or funding layers; they must
+   not replace on-chain authorization.
+3. Run the affected contract, frontend, formal, migration, and test checks
+   before committing.
+4. Review generated contract artifacts and deployment references for exact
+   source parity.
+5. Use conventional commits and keep production, chain, and cloud writes out of
+   repository validation.

@@ -290,7 +290,7 @@ export declare function toBytes20Word(hash160: Hash160): Uint8Array;
  */
 export declare function toAddressWord(hash160: Hash160): Uint8Array;
 
-/** Converts a non-negative integer to a 32-byte big-endian uint256 word. */
+/** Converts a NeoVM signed-domain integer (0 <= value < 2^255) to a 32-byte big-endian word. */
 export declare function toUint256Word(value: IntegerLike): Uint8Array;
 
 // ===========================================================================
@@ -315,6 +315,60 @@ export declare function decodeByteStringStackHex(
 
 /** Sanitizes a hex string: strips a leading `0x` and lower-cases it. */
 export declare function sanitizeHex(hex: unknown): string;
+
+// ===========================================================================
+// Token transfer results
+// ===========================================================================
+//
+// The account core hands the result of the call it executes back untouched and the transaction still HALTs when
+// that result is a refusal. A NEP-17 / NEP-11 `transfer` answers `false` when nothing moved; the account then
+// burns its nonce and the fee for nothing. These are the rules the relay route and the wallet apply (shared source:
+// shared/transferOutcome.mjs). Only a method named `transfer` and only a Boolean `false` count: `false` is the
+// normal result of other calls, and a result that is not a Boolean says nothing.
+
+/** Stable code of the verdict "a token transfer returned false". */
+export declare const TRANSFER_RETURNED_FALSE: 'transfer_returned_false';
+
+/** Human-readable text of that verdict. */
+export declare const TRANSFER_RETURNED_FALSE_MESSAGE: string;
+
+/** A relay-ready meta invocation as the wallet and the relay route carry it. */
+export interface MetaInvocation {
+  scriptHash?: Hash160;
+  operation?: string;
+  args?: ContractParameter[];
+}
+
+/**
+ * Positions of the transfer operations of a simulated invocation whose result is a Boolean false. `stack` is the
+ * stack the VM returned for it; `[0]` is the operation's result, or for a batch (`executeUserOps`) the array of
+ * one result per operation. Empty means nothing is wrong, or nothing can be judged.
+ */
+export declare function findFailedTransferInInvocation(options: {
+  invocation: MetaInvocation | null | undefined;
+  stack?: StackItem[] | null;
+}): number[];
+
+/**
+ * The same verdict for one `executions[]` entry of a `getapplicationlog` result: the operations are read from its
+ * `UserOpExecuted` notifications.
+ */
+export declare function findFailedTransferInExecution(execution: {
+  stack?: StackItem[] | null;
+  notifications?: Array<{ eventname?: string; state?: StackItem | null }> | null;
+} | null | undefined): number[];
+
+/**
+ * True for a `transfer` whose source is the account's own proxy address: the token checks that address as a
+ * witness, an owner or relay signature does not provide it, so the transfer returns false.
+ */
+export declare function isProxySourcedTransfer(operation: {
+  method: string;
+  /** Source hash, 40 hex characters, `0x` optional. */
+  from: string;
+  /** The account's proxy address, same form. */
+  proxy: string;
+}): boolean;
 
 // ===========================================================================
 // UserOperation
@@ -514,6 +568,10 @@ export interface SimulateUserOperationOptions {
 /**
  * Simulates a UserOperation against the contract preview. Pre-flight only:
  * it never verifies the signature (see {@link SimulationResult}).
+ *
+ * A token `transfer` whose source is the account's own proxy address is reported in `errors` (`OP_001`,
+ * {@link EC}`.OPERATION_PROXY_TRANSFER_REFUSED`) and `passed` is false: it would HALT with result false, move
+ * nothing and still spend the nonce and the fee.
  */
 export declare function simulateUserOperation(
   client: AbstractAccountClient,
@@ -916,3 +974,177 @@ export declare class AbstractAccountClient {
   /** @deprecated Removed in V3; always throws. */
   getAccountAddressesByManager(): Promise<never>;
 }
+
+/** Exact virtual account witness preimage; Hash160 inputs use display byte order. */
+export function createProxyVerificationScript(options: { coreHash: Hash160; accountId: Hash160 }): string;
+/** Build a restricted proxy signer and empty-invocation witness after reading the on-chain scope. */
+export function createProxyWitness(options: {
+  coreHash: Hash160; accountId: Hash160; targetContract: Hash160;
+  scopeTarget: Hash160; feePayer: Hash160; expectedProxyHash?: Hash160;
+}): {
+  signer: { account: string; scopes: 'WitnessRules'; rules: Array<{ action: 'Allow'; condition: {
+    type: 'Or'; expressions: Array<{ type: 'CalledByContract'; hash: string }>;
+  } }> };
+  witness: { invocationScript: string; verificationScript: string };
+};
+
+/** Thrown when the account has no verify-scope target: no proxy-witness transaction exists. */
+export declare const PROXY_SCOPE_TARGET_REQUIRED: string;
+
+/** The signer of the fee-paying wallet. Only custom scopes a wallet can express are accepted. */
+export type ProxyFeePayerScope = 'None' | 'CalledByEntry' | 'CustomContracts' | 'Global';
+
+export interface ProxySigner {
+  account: string;
+  scopes: 'WitnessRules';
+  rules: Array<{ action: 'Allow'; condition: {
+    type: 'Or'; expressions: Array<{ type: 'CalledByContract'; hash: string }>;
+  } }>;
+}
+
+export interface ProxyFeePayerSigner {
+  account: string;
+  scopes: ProxyFeePayerScope;
+  allowedContracts?: string[];
+}
+
+export interface ProxyWitness {
+  invocationScript: string;
+  verificationScript: string;
+}
+
+/**
+ * The complete proxy-witness account transaction. `script` is the shape-bound
+ * `executeUserOp`/`executeUserOps` call, `signers` is `[feePayer, proxy]` in that order, and
+ * `proxyWitness` is attached to the transaction after the fee payer has signed it.
+ */
+export interface ProxyWitnessTransaction {
+  readonly script: string;
+  readonly operation: 'executeUserOp' | 'executeUserOps';
+  readonly coreHash: string;
+  readonly accountId: string;
+  readonly scopeTarget: string;
+  readonly targetContract: string;
+  readonly proxyHash: string;
+  readonly proxySigner: ProxySigner;
+  readonly proxyWitness: ProxyWitness;
+  readonly feePayerSigner: ProxyFeePayerSigner;
+  readonly signers: readonly [ProxyFeePayerSigner, ProxySigner];
+  /** Alias of `proxyWitness`, for the transaction API's `addWitness`. */
+  readonly witness: ProxyWitness;
+}
+
+/**
+ * The one application call a proxy witness may authorize. Refuses every other entrypoint, a second
+ * call, another core or another account, so the emitted script is bound to its shape.
+ */
+export function buildExecuteUserOpScript(options: {
+  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation;
+}): string;
+
+/**
+ * Build the proxy-witness transaction. `scopeTarget` must be freshly read from the same core/RPC
+ * that submits the transaction; an absent or all-zero scope target is refused with
+ * `PROXY_SCOPE_TARGET_REQUIRED`. The proxy is never permitted to pay the enclosing fees.
+ */
+export function buildProxyWitnessTransaction(options: {
+  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation;
+  scopeTarget: Hash160 | null | undefined; expectedProxyHash?: Hash160;
+  feePayer: Hash160; feePayerScope?: ProxyFeePayerScope; feePayerAllowedContracts?: string[];
+}): ProxyWitnessTransaction;
+
+/**
+ * The browser-wallet signing path: the same transaction with the fee payer expressed in a custom
+ * scope (`CustomContracts` with an allowlist, or `Global`) that a wallet will accept. The proxy
+ * keeps its restricted WitnessRules and its witness is still attached by the dApp.
+ */
+export function buildProxyWalletSignRequest(options: {
+  transaction: ProxyWitnessTransaction;
+  scope?: ProxyFeePayerScope; allowedContracts?: string[];
+}): ProxyWitnessTransaction;
+
+/**
+ * Build the transaction from the account's on-chain scope state. `readState` is the only source of
+ * `scopeTarget` and `expectedProxyHash` and must read the same core/RPC that submits the
+ * transaction; neither value may be taken from request metadata. Injected so the relay, the wallet
+ * frontend and the local chain fixture all resolve this authority through one entry point.
+ */
+export function resolveProxyWitnessTransaction(options: {
+  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation; feePayer: Hash160;
+  readState: (request: { coreHash: string; accountId: string }) => Promise<{ scopeTarget?: Hash160 | null; expectedProxyHash?: Hash160 | null }>;
+  feePayerScope?: ProxyFeePayerScope; feePayerAllowedContracts?: string[];
+}): Promise<ProxyWitnessTransaction>;
+
+/** MultiSig config read from the bound verifier. configDigest pins order and threshold; no client claim of quorum. */
+export interface MultiSigContext {
+  readonly version: 1;
+  readonly networkMagic: string;
+  readonly coreContractHash: Hash160;
+  readonly accountIdHash: Hash160;
+  readonly verifierHash: Hash160;
+  readonly verifiers: readonly Hash160[];
+  readonly threshold: number;
+  readonly configDigest: string;
+}
+export interface MultiSigOperation {
+  coreContractHash: Hash160;
+  accountIdHash: Hash160;
+  networkMagic: string;
+  configDigest: string;
+  targetContract: Hash160;
+  method: string;
+  args: ContractParameter[];
+  argsHashHex: string;
+  nonce: string;
+  deadline: string;
+}
+export interface MultiSigChildProof {
+  childVerifierHash: Hash160;
+  kind: 'evm' | 'opaque';
+  operation: MultiSigOperation;
+  signatureHex: string;
+  typedData?: UserOperationTypedData;
+  signatureFullHex?: string;
+  signerAddress?: string;
+}
+export interface MultiSigBundle {
+  signatureHex: string;
+  invocation: ContractInvocationPayload;
+  context: MultiSigContext;
+  operation: MultiSigOperation;
+  slots: (string | null)[];
+  /** Signature simulation passed at read time; not transaction execution/finality. */
+  chainValidated: boolean;
+}
+export type MultiSigRead = (contract: Hash160, method: string, args: ContractParameter[]) => Promise<{ state: string; stack: unknown[]; exception?: string }>;
+export interface MultiSigBundleInput { context: MultiSigContext; operation: MultiSigOperation; childProofs: MultiSigChildProof[]; }
+export interface MultiSigPrepareInput {
+  context: MultiSigContext;
+  operation: { targetContract: Hash160; method: string; args: ContractParameter[]; deadline: IntegerLike; channel?: IntegerLike };
+}
+export interface MultiSigConfigurationInput { context: MultiSigContext; childVerifierHash: Hash160; method: 'setPublicKey' | 'setConfig'; args: ContractParameter[]; }
+export interface MultiSigPendingConfiguration { moduleHash: Hash160; callHash: string; initiatedAt: string; }
+export declare function serializeMultiSigSignatures(signatures: (string | null)[]): string;
+export declare function fetchMultiSigContext(input: { coreContractHash: Hash160; accountIdHash: Hash160; networkMagic: IntegerLike; expectedVerifierHash?: Hash160; read: MultiSigRead }): Promise<MultiSigContext>;
+export declare function prepareMultiSigOperation(input: MultiSigPrepareInput & { read: MultiSigRead }): Promise<MultiSigOperation>;
+export declare function buildMultiSigChildTypedData(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160 }): UserOperationTypedData;
+export declare function buildMultiSigBundle(input: MultiSigBundleInput): MultiSigBundle;
+export declare function validateMultiSigBundle(input: MultiSigBundleInput & { read: MultiSigRead; networkMagic: IntegerLike }): Promise<MultiSigBundle>;
+export declare function buildMultiSigChildConfigurationInvocation(input: MultiSigConfigurationInput): ContractInvocationPayload;
+export declare function readMultiSigPendingConfiguration(input: { context: MultiSigContext; read: MultiSigRead }): Promise<MultiSigPendingConfiguration>;
+export interface MultiSigClient {
+  fetchContext(input: { coreContractHash: Hash160; accountIdHash: Hash160; expectedVerifierHash?: Hash160 }): Promise<MultiSigContext>;
+  prepareOperation(input: MultiSigPrepareInput): Promise<MultiSigOperation>;
+  buildChildTypedData: typeof buildMultiSigChildTypedData;
+  fetchChildPayload(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160 }): Promise<{ childVerifierHash: Hash160; operation: MultiSigOperation; payloadHex: string }>;
+  buildBundle: typeof buildMultiSigBundle;
+  buildChildConfiguration: typeof buildMultiSigChildConfigurationInvocation;
+  readPendingConfiguration(input: { context: MultiSigContext }): Promise<MultiSigPendingConfiguration>;
+  validateBundle(input: MultiSigBundleInput): Promise<MultiSigBundle>;
+}
+export declare function createMultiSigClient(input: { rpcUrl?: string; rpcClient?: { getVersion(): Promise<{ protocol: { network: number } }>; send(method: string, params: unknown[]): ReturnType<MultiSigRead> }; signers?: unknown[] }): MultiSigClient;
+
+export declare function fetchMultiSigChildPayload(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160; read: MultiSigRead }): Promise<{ childVerifierHash: Hash160; operation: MultiSigOperation; payloadHex: string }>;
+
+// Native protocol profile is separate from deployed public V3.
+export * from './native';

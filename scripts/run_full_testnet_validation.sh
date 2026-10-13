@@ -46,8 +46,25 @@ done
 
 cd "$REPO_ROOT"
 
+local_status="PASS"
+local_output=""
+cleanup() {
+  if [[ -n "$local_output" ]]; then
+    rm -f "$local_output"
+  fi
+}
+trap cleanup EXIT
+
 if [[ $run_local -eq 1 ]]; then
-  bash "$SCRIPT_DIR/verify_repo.sh" --skip-contract-build --skip-e2e
+  local_output="$(mktemp)"
+  if bash "$SCRIPT_DIR/verify_repo.sh" --skip-contract-build --skip-e2e | tee "$local_output"; then
+    if grep -q 'status=PARTIAL' "$local_output"; then
+      local_status="PARTIAL"
+    fi
+  else
+    validation_status=$?
+    exit "$validation_status"
+  fi
 fi
 
 if [[ $run_live -eq 1 ]]; then
@@ -59,4 +76,8 @@ if [[ $run_live -eq 1 ]]; then
 fi
 
 echo ""
-echo "Full testnet validation completed successfully."
+if [[ "$local_status" == "PARTIAL" ]]; then
+  echo "Full testnet validation completed with PARTIAL local gates; inspect the gate status above."
+else
+  echo "Full testnet validation completed successfully."
+fi

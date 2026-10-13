@@ -29,6 +29,9 @@ namespace Neo.SmartContract.Examples
         public static bool SupportsV3() => true;
 
         [Safe]
+        public static bool SupportsComposition() => false;
+
+        [Safe]
         public static bool SupportsMessageSignatures() => false;
 
         /// <summary>

@@ -30,6 +30,9 @@ namespace AbstractAccount.Verifiers
         public static bool SupportsV3() => true;
 
         [Safe]
+        public static bool SupportsComposition() => false;
+
+        [Safe]
         public static bool SupportsMessageSignatures() => false;
 
         [Safe]
@@ -59,6 +62,15 @@ namespace AbstractAccount.Verifiers
             VerifierAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
             byte[] key = Helper.Concat(Prefix_AccountDKIM, (byte[])accountId);
             Storage.Put(Storage.CurrentContext, key, dkimHash);
+        }
+
+        [Safe]
+        public static ByteString[] GetSignerDomains(UInt160 accountId)
+        {
+            byte[] key = Helper.Concat(Prefix_AccountDKIM, (byte[])accountId);
+            ByteString? dkim = Storage.Get(Storage.CurrentContext, key);
+            ExecutionEngine.Assert(dkim != null && dkim.Length > 0, "No DKIM configured");
+            return new ByteString[] { SignerDomain.DkimRegistry(dkim!) };
         }
 
         public static void PostExecute(UInt160 accountId, UserOperation op, object result)

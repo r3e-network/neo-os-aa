@@ -84,9 +84,9 @@ public class Fix_DailyLimitHook_Tests
     {
         string source = ReadHook("DailyLimitHook.cs");
 
-        StringAssert.Contains(source, "MeterAllLimitedOutflows(accountId, directlyRecorded);",
+        StringAssert.Contains(source, "MeterAllLimitedOutflows(accountId, directToken, declaredAmount);",
             "PostExecute must meter the realized outflow of every configured-limit token");
-        StringAssert.Contains(source, "private static void MeterAllLimitedOutflows(UInt160 accountId, UInt160 directlyRecorded)",
+        StringAssert.Contains(source, "private static void MeterAllLimitedOutflows(UInt160 accountId, UInt160 directToken, BigInteger declaredAmount)",
             "an all-token delta-metering helper must exist");
 
         // Metering is driven by the configured-limit set and computed from the real balance delta.
@@ -95,10 +95,11 @@ public class Fix_DailyLimitHook_Tests
         StringAssert.Contains(source, "ExecutionEngine.Assert(newTotal <= config.MaxAmount, \"Daily limit exceeded\");",
             "exceeding the configured limit must revert the whole transaction (fail closed)");
 
-        // The directly-targeted transfer is still accounted exactly once (by declared amount),
-        // and excluded from the delta pass to avoid double counting.
-        StringAssert.Contains(source, "if (token == directlyRecorded) continue;",
-            "the directly-recorded token must be excluded from the delta pass to avoid double counting");
+        // A direct transfer is charged once at the greater of declared value and net outflow.
+        StringAssert.Contains(source, "if (token == directToken && declaredAmount > outflow) outflow = declaredAmount;",
+            "declared value must not hide a larger actual debit or double-count the same transfer");
+        Assert.IsFalse(source.Contains("if (token == directlyRecorded) continue;", StringComparison.Ordinal));
+
     }
 
     /// <summary>
@@ -121,5 +122,20 @@ public class Fix_DailyLimitHook_Tests
             "a dedicated transient balance-snapshot storage prefix must exist");
         StringAssert.Contains(source, "Storage.Delete(Storage.CurrentContext, snapKey);",
             "transient snapshots must be cleared after metering");
+    }
+
+    [TestMethod]
+    public void ConfigurationRejectsInvalidTokensAndBoundsSnapshotWork()
+    {
+        string daily = ReadHook("DailyLimitHook.cs");
+        StringAssert.Contains(daily, "Invalid limited token");
+        StringAssert.Contains(daily, "Negative daily limit");
+        StringAssert.Contains(daily, "MaxConfiguredTokens = 16");
+        StringAssert.Contains(daily, "Too many limited tokens");
+
+        string restricted = ReadHook("TokenRestrictedHook.cs");
+        StringAssert.Contains(restricted, "Invalid restricted token");
+        StringAssert.Contains(restricted, "MaxRestrictedTokens = 16");
+        StringAssert.Contains(restricted, "Too many restricted tokens");
     }
 }

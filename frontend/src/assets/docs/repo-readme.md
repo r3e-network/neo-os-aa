@@ -44,7 +44,7 @@ If you want relay submission to request Morpheus off-chain sponsorship before br
 - `MORPHEUS_PAYMASTER_MAINNET_API_TOKEN`
 - Optional debug only: `AA_RELAY_INCLUDE_RAW_ERRORS=1`
 
-The relay route now forwards optional paymaster metadata and can request Morpheus paymaster pre-authorization before broadcasting a relay-ready `executeUserOp` or `executeUnifiedByAddress` invocation. Failures are now phase-tagged as `preview`, `paymaster`, `relay`, or `response` so operator logs can separate Morpheus sponsorship errors from on-chain relay failures.
+The relay route now forwards optional paymaster metadata and can request Morpheus paymaster pre-authorization before broadcasting a relay-ready `executeUserOp` or `executeUserOps` invocation. Failures are now phase-tagged as `preview`, `paymaster`, `relay`, or `response` so operator logs can separate Morpheus sponsorship errors from on-chain relay failures.
 
 ### Validation Preview And Trust Boundaries
 
@@ -244,27 +244,34 @@ cd frontend && npm run build
 
 ### V3 Plugin Matrix
 
-The current V3 verifier / hook matrix was revalidated on **Neo N3 testnet** on **March 13, 2026** with live deployments and adversarial negative cases.
+The V3 verifier / hook matrix is a **historical record**: it was run on **Neo N3 testnet** on
+**March 13, 2026** against a deployment set that is not the current canonical one, and it must not
+be read as the state of this repository's acceptance today.
 
 Canonical report:
 
 - `docs/PLUGIN_MATRIX.md`
 
-Verified on-chain in that matrix:
+What that run shows, stated precisely:
 
-- `Web3AuthVerifier`
-- `TEEVerifier`
-- `WebAuthnVerifier`
-- `SessionKeyVerifier`
-- `MultiSigVerifier`
-- `SubscriptionVerifier`
-- `WhitelistHook`
-- `DailyLimitHook`
-- `TokenRestrictedHook`
-- `MultiHook`
-- `NeoDIDCredentialHook`
+- every positive execution in the matrix targeted `MockTransferTarget`
+  (`contracts/mocks/MockTransferTarget.cs`), the repository's test-only target whose `transfer`
+  returns true without moving an asset and whose `balanceOf` is always 0 — the transactions are
+  real and the authorization path they exercise is real, but no value moved, and no live token or
+  third-party contract was involved;
+- the negative cases (the faults listed below) are the load-bearing half of the record;
+- the plugins it covers are `Web3AuthVerifier`, `TEEVerifier`, `WebAuthnVerifier`,
+  `SessionKeyVerifier`, `MultiSigVerifier`, `SubscriptionVerifier`, `WhitelistHook`,
+  `DailyLimitHook`, `TokenRestrictedHook`, `MultiHook` and `NeoDIDCredentialHook`.
 
-Security outcomes:
+The evidence this repository can reproduce today is the local-chain suite
+(`tests/localchain/README.md`). Its deployed variant runs the eight artifacts pinned by SHA-256 in
+`tests/localchain/expected-deployed.json` — `UnifiedSmartWalletV3`, `MockTransferTarget`,
+`WebAuthnVerifier`, `SessionKeyVerifier`, `AAPaymaster`, `WhitelistHook`, `DailyLimitHook` and
+`SocialRecoveryVerifier` — and it performs no public-chain readback. The remaining matrix plugins
+have no reproducible acceptance run on the current artifacts.
+
+Security outcomes recorded by the matrix's adversarial cases:
 
 - direct external plugin configuration attempts fault
 - typed-data tampering faults
@@ -274,7 +281,7 @@ Security outcomes:
 - whitelist bypass attempts fault
 - restricted-target access faults
 - credential-missing / revoked-credential access faults
-- NeoDID credential gating now checks the on-chain `NeoDIDRegistry` instead of local hook-issued flags
+- NeoDID credential gating checks the on-chain `NeoDIDRegistry` instead of local hook-issued flags
 
 Production note:
 

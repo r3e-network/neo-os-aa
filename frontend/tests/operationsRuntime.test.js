@@ -32,6 +32,7 @@ test('getRuntimeConfig exposes Supabase and relay settings', () => {
     addressMarketHash: 'ae7afe3a85ab08bfd1d4907b35ae8b80c75b3a69',
     paymasterHash: 'a0defa2bc6d7a71ba1e237149287c8ca4ff46caf',
     n3IndexApiBaseUrl: 'https://api.n3index.dev',
+    aaReadApiBaseUrl: '',
     n3IndexNetwork: 'mainnet',
     neoNnsContractHash: '50ac1c37690cc2cfc594472833cf57505d5f46de',
     web3AuthClientId: '',

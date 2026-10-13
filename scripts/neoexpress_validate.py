@@ -4,7 +4,7 @@
 Creates a fresh single-node NeoExpress chain in a scratch directory, deploys every
 artifact under contracts/bin/v3 with the same deploy data the production tooling
 uses, drives the protocol through real transactions (native backup-owner path,
-escape hatch, hook callbacks, lifecycle-ABI pre-checks, session-key relay
+escape hatch, bounded hook callbacks, lifecycle-ABI pre-checks, session-key relay
 submission, paymaster settlement, recovery cleanup with credit refund, MultiSig
 and MultiHook child pre-checks, market escrow including the silent-market owner
 escape, subscription pulls), reads every deployed contract back over JSON-RPC
@@ -75,12 +75,55 @@ ESCAPE_TIMELOCK = 2_592_000          # 30 days, seconds
 DAY = 86_400
 FAR_DEADLINE = 4_102_444_800_000     # 2100-01-01 in ms
 GAS = 100_000_000
-VERIFIER_GAS_LIMIT_DATOSHI = 1_000_000_000  # 10 GAS per bounded verifier callback
-PRIVATE_EXECUTE_GAS_ENVELOPE = "200"       # NeoExpress-only transaction envelope
+# The deployed UnifiedSmartWalletV3 prototype uses this application-trigger
+# callback budget. It is intentionally kept separate from the native profile:
+# native verifier callbacks are specified at 100,000,000 datoshi and Neo's
+# Verification-trigger envelope is 150,000,000 datoshi.
+APPLICATION_CALLBACK_GAS_LIMIT_DATOSHI = 1_000_000_000
+MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI = 250_000_000
+NEO_MAX_VERIFICATION_GAS_DATOSHI = 150_000_000
+NATIVE_PROFILE_VERIFIER_BUDGET_DATOSHI = 100_000_000
+PRIVATE_EXECUTE_GAS_ENVELOPE = "200"       # NeoExpress-only execute transaction envelope
+PRIVATE_CORE_GAS_ENVELOPE = "10"           # NeoExpress-only lifecycle/discovery envelope
 
 
 class ValidationFailure(Exception):
     pass
+
+
+FAULT_ALIASES = {
+    # NeoExpress builds carrying the same bounded-call syscall have used both
+    # the public VM exception text and the older validator-facing wording.
+    # Treat only these exact equivalent messages as the same expected fault;
+    # all other text remains fail-closed.
+    "The bounded contract call gas limit has been exhausted.":
+        ("The bounded contract call gas limit has been exhausted.",
+         "Contract call gas limit exceeded."),
+}
+
+
+def fault_matches(expected, actual):
+    return any(alias in actual for alias in FAULT_ALIASES.get(expected, (expected,)))
+
+
+def validation_summary(chain):
+    """Keep persisted execution, preflight refusal and expected faults distinct."""
+    steps = [step for scenario in chain.scenarios for step in scenario["steps"]]
+    transactions = [step for step in steps if "txid" in step]
+    expected_faults = [step for step in steps
+                       if step.get("outcome") == "FAULT" and "expectedFault" in step]
+    return {
+        "artifactsDeployed": len(chain.deployments),
+        "scenarios": len(chain.scenarios),
+        "scenariosSkipped": sum("skipped" in scenario for scenario in chain.scenarios),
+        "transactionsPersisted": len(transactions),
+        "transactionsHalted": sum(step.get("outcome") == "HALT" for step in transactions),
+        "transactionsFaulted": sum(step.get("outcome") == "FAULT" for step in transactions),
+        "expectedFaults": len(expected_faults),
+        "expectedPreflightFaults": sum("txid" not in step for step in expected_faults),
+        "assertions": sum(len(scenario["assertions"]) for scenario in chain.scenarios),
+        "simulatedTimeAdvancedSeconds": chain.simulated_seconds,
+    }
 
 
 def H(value):
@@ -324,6 +367,8 @@ class Chain:
         self.invoke_counter = 0
         self.wallets = {}
         self.contracts = {}
+        # Local paths are kept in memory only, never serialized into receipts.
+        self.local_artifacts = {}
         self.timelocks = {}
         self.deployments = []
         self.scenarios = []
@@ -371,9 +416,9 @@ class Chain:
             self.nx("transfer", "5000", "GAS", "genesis", name)
         config = json.loads(self.file.read_text())
         # The custom Neo core used by this private validation adds the bounded
-        # verifier syscall at HF_Iara. Activate that hardfork from block zero;
+        # verifier syscall at HF_SmartAccountV1. Activate that hardfork from block zero;
         # this setting is local-chain-only and never touches a public network.
-        config.setdefault("settings", {})["protocol.Hardforks.HF_Iara"] = "0"
+        config.setdefault("settings", {})["protocol.Hardforks.HF_SmartAccountV1"] = "0"
         self.file.write_text(json.dumps(config, indent=2) + "\n")
         self.magic = config.get("magic")
         self.rpc_port = config["consensus-nodes"][0]["rpc-port"]
@@ -393,6 +438,7 @@ class Chain:
             if result["contract-name"] != name:
                 raise ValidationFailure(f"deployed name {result['contract-name']} != {name}")
             self.contracts[name] = result["contract-hash"]
+            self.local_artifacts[name] = nef
             if name == "UnifiedSmartWalletV3":
                 core = result["contract-hash"]
             self.deployments.append({
@@ -427,8 +473,10 @@ class Chain:
         """
         path = self.invoke_file(contract, operation, list(args))
         command = ["contract", "invoke", str(path), account, "-r", "-j"]
-        if operation in {"executeUserOp", "executeUserOps", "executeSponsoredUserOp"}:
-            command += ["-g", PRIVATE_EXECUTE_GAS_ENVELOPE]
+        if contract == "UnifiedSmartWalletV3":
+            command += ["-g", (PRIVATE_EXECUTE_GAS_ENVELOPE
+                                if operation in {"executeUserOp", "executeUserOps", "executeSponsoredUserOp"}
+                                else PRIVATE_CORE_GAS_ENVELOPE)]
         _, text = self.nx(*command)
         result = self.json_from(text)
         if result.get("state") != "HALT":
@@ -445,13 +493,15 @@ class Chain:
     def tx(self, step, contract, operation, args, account, scope=None, expect_fault=None):
         path = self.invoke_file(contract, operation, list(args))
         command = ["contract", "invoke", str(path), account, "-j"]
-        # The bounded verifier syscall rejects a child cap larger than the caller's
-        # remaining execution budget. Give real execute paths an explicit private-chain
-        # fee envelope so the test exercises the child cap itself rather than an
-        # underfunded outer transaction. This is NeoExpress-only and never funds a
-        # public-network transaction.
-        if operation in {"executeUserOp", "executeUserOps", "executeSponsoredUserOp"}:
-            command += ["-g", PRIVATE_EXECUTE_GAS_ENVELOPE]
+        # The bounded callback syscall rejects a child cap larger than the caller's
+        # remaining execution budget. Give every state-changing core transition an
+        # explicit private-chain fee envelope so lifecycle and execution tests exercise
+        # the child cap itself rather than an underfunded outer transaction. This is
+        # NeoExpress-only and never funds a public-network transaction.
+        if contract == "UnifiedSmartWalletV3":
+            command += ["-g", (PRIVATE_EXECUTE_GAS_ENVELOPE
+                                if operation in {"executeUserOp", "executeUserOps", "executeSponsoredUserOp"}
+                                else PRIVATE_CORE_GAS_ENVELOPE)]
         if scope:
             command += ["-w", scope]
         rc, text = self.nx(*command, check=False)
@@ -464,7 +514,7 @@ class Chain:
             record["exception"] = reason
             if expect_fault is None:
                 raise ValidationFailure(f"{step}: unexpected fault: {reason}")
-            if expect_fault not in reason:
+            if not fault_matches(expect_fault, reason):
                 raise ValidationFailure(f"{step}: expected fault containing {expect_fault!r}, got {reason!r}")
             record["expectedFault"] = expect_fault
         else:
@@ -519,6 +569,7 @@ class Chain:
     def scenario(self, name):
         self.current = {"name": name, "steps": [], "assertions": []}
         self.scenarios.append(self.current)
+        print(f"scenario {len(self.scenarios)}: {name}", file=sys.stderr, flush=True)
         return self.current
 
     # ---- protocol helpers --------------------------------------------------
@@ -562,6 +613,15 @@ class Chain:
         self.check(first["result"] is False, f"{step}: first call arms the timelock and returns false")
         self.fastfwd(DAY)
         return self.tx(step + " (execute)", "UnifiedSmartWalletV3", entry, [H(account), S(method), A(*args)],
+                       signer, expect_fault=expect_fault)
+
+    def two_phase_child(self, step, account, child, method, args, signer="owner", expect_fault=None):
+        """Provision a composite's leaf through the core-owned child configuration route."""
+        entry_args = [H(account), H(child), S(method), A(*args)]
+        first = self.tx(step + " (arm)", "UnifiedSmartWalletV3", "callVerifierChild", entry_args, signer)
+        self.check(first["result"] is False, f"{step}: first call arms the child timelock and returns false")
+        self.fastfwd(DAY)
+        return self.tx(step + " (execute)", "UnifiedSmartWalletV3", "callVerifierChild", entry_args,
                        signer, expect_fault=expect_fault)
 
     # ---- RPC readback -------------------------------------------------------
@@ -622,19 +682,27 @@ class Chain:
         raise ValidationFailure(f"wallet {name} not in chain file")
 
     def readback(self):
+        names = [deployment["contractName"] for deployment in self.deployments]
+        if len(names) != len(set(names)) or set(names) != set(self.local_artifacts):
+            raise ValidationFailure("deployed artifacts and local readback inputs do not match")
         self.start_node()
         try:
             block_count = self.rpc("getblockcount", [])
             rows = []
-            for name, relative, _ in ARTIFACTS:
-                nef = BIN / relative
-                manifest = json.loads(nef.with_name(nef.name.replace(".nef", ".manifest.json")).read_text())
+            for deployment in self.deployments:
+                name = deployment["contractName"]
+                nef = self.local_artifacts[name]
+                manifest_path = nef.with_name(nef.name.replace(".nef", ".manifest.json"))
+                if (hashlib.sha256(nef.read_bytes()).hexdigest() != deployment["localNefSha256"]
+                        or hashlib.sha256(manifest_path.read_bytes()).hexdigest() != deployment["localManifestSha256"]):
+                    raise ValidationFailure(f"local artifact changed after deployment: {name}")
+                manifest = json.loads(manifest_path.read_text())
                 local_script, local_checksum = nef_script(nef)
-                state = self.rpc("getcontractstate", [self.contracts[name]])
+                state = self.rpc("getcontractstate", [deployment["contractHash"]])
                 remote_script = base64.b64decode(state["nef"]["script"])
                 row = {
                     "contractName": name,
-                    "contractHash": self.contracts[name],
+                    "contractHash": deployment["contractHash"],
                     "nefScriptByteEquality": remote_script == local_script,
                     "nefChecksumEquality": int(state["nef"]["checksum"]) == local_checksum,
                     "manifestSemanticEquality": state["manifest"] == manifest,
@@ -735,6 +803,54 @@ def scenario_hook(c):
     c.check(c.nonce(account) == 1, "rejected pre-hook leaves the nonce unchanged")
 
 
+def scenario_hook_gas_cap(c):
+    c.scenario("bounded hook callback gas")
+    hook = c.contracts["MockTransferTarget"]
+    account, proxy = c.register("register adversarial hook", hook=hook)
+    # MockTransferTarget is deployed by the genesis account; only that account
+    # may arm its test-only burning callback.
+    c.tx("enable adversarial hook burn", "MockTransferTarget", "setBurnGas", [BOOL(True)], "genesis")
+    record = c.execute(
+        "hook callback exceeds its independent budget",
+        account,
+        c.transfer_op(hook, proxy, c.wallets["buyer"], 1, 0),
+        "owner",
+        expect_fault="The bounded contract call gas limit has been exhausted.")
+    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
+            "the NeoVM hook-budget fault is surfaced by the AA invocation")
+    c.check(c.nonce(account) == 0, "a hook budget fault rolls back nonce consumption")
+    c.tx("enable adversarial post-hook burn", "MockTransferTarget", "setBurnPostGas", [BOOL(True)], "genesis")
+    c.tx("disable adversarial pre-hook burn", "MockTransferTarget", "setBurnGas", [BOOL(False)], "genesis")
+    record = c.execute(
+        "post-hook callback exceeds its independent budget",
+        account,
+        c.transfer_op(hook, proxy, c.wallets["buyer"], 1, 0),
+        "owner",
+        expect_fault="The bounded contract call gas limit has been exhausted.")
+    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
+            "the NeoVM post-hook budget fault is surfaced by the AA invocation")
+    c.check(c.nonce(account) == 0, "a post-hook budget fault rolls back nonce consumption")
+
+    cleanup_account, _ = c.register("register account for bounded module cleanup", hook=hook)
+    c.tx("enable adversarial module cleanup burn", "MockTransferTarget", "setBurnClearGas", [BOOL(True)], "genesis")
+    c.tx("propose bounded hook cleanup", "UnifiedSmartWalletV3", "updateHook",
+         [H(cleanup_account), H(ZERO)], "owner")
+    c.fastfwd(DAY)
+    record = c.tx(
+        "module cleanup callback exceeds its independent budget",
+        "UnifiedSmartWalletV3",
+        "confirmHookUpdate",
+        [H(cleanup_account)],
+        "owner",
+        expect_fault="The bounded contract call gas limit has been exhausted.")
+    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
+            "the NeoVM maintenance-budget fault is surfaced by the hook transition")
+    c.check(c.hash_result("UnifiedSmartWalletV3", "getHook", H(cleanup_account)) == hook,
+            "maintenance-budget fault preserves the outgoing hook binding")
+    c.check(c.results("UnifiedSmartWalletV3", "hasPendingHookUpdate", H(cleanup_account)) is True,
+            "maintenance-budget fault preserves the pending hook transition")
+
+
 def scenario_abi_precheck(c):
     c.scenario("lifecycle ABI pre-check")
     c.register("verifier with marker only", verifier=c.contracts["MarkerOnlyModule"],
@@ -752,6 +868,83 @@ def scenario_abi_precheck(c):
         c.register(f"hook {name} passes the pre-check", hook=c.contracts[name])
 
 
+def scenario_profile_crypto(c, workdir):
+    """Exercise every shipped cryptographic profile that has a concrete local vector.
+
+    WebAuthn and TEE are deliberately named as bare P-256 payload verifiers by the
+    contracts; this scenario does not pretend to validate a browser ceremony or remote
+    attestation. ZkLogin is the shipped P-256 delegated-signer profile with provider and
+    nullifier binding. ZKEmail is intentionally disabled and must fail closed.
+    """
+    c.scenario("cryptographic verifier profile vectors")
+    target = c.contracts["MockTransferTarget"]
+    args = lambda proxy: A(H(proxy), H(c.wallets["buyer"]), I(1000), B(b""))
+
+    webauthn = c.contracts["WebAuthnVerifier"]
+    webauthn_key = P256Key(workdir, "neoexpress-webauthn")
+    account, proxy = c.register("register bare P-256 WebAuthn profile", verifier=webauthn,
+                                params=webauthn_key.compressed)
+    payload = c.results("WebAuthnVerifier", "getPayload", H(account), H(target), S("transfer"),
+                        args(proxy), I(0), I(FAR_DEADLINE))
+    c.execute("valid bare P-256 WebAuthn payload", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0,
+                            signature=webauthn_key.sign(payload)), "relay")
+    c.execute("retargeted bare P-256 WebAuthn payload", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1001, 1,
+                            signature=webauthn_key.sign(payload)), "relay",
+              expect_fault="Verifier rejected signature")
+    c.check(c.nonce(account) == 1, "retargeted P-256 signature leaves the nonce unchanged")
+
+    tee = c.contracts["TEEVerifier"]
+    tee_key = P256Key(workdir, "neoexpress-tee")
+    account, proxy = c.register("register TEE P-256 profile", verifier=tee,
+                                params=tee_key.compressed)
+    payload = c.results("TEEVerifier", "getPayload", H(account), H(target), S("transfer"),
+                        args(proxy), I(0), I(FAR_DEADLINE))
+    c.execute("valid TEE P-256 payload", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0,
+                            signature=tee_key.sign(payload)), "relay")
+    c.execute("foreign TEE P-256 signature", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 1,
+                            signature=webauthn_key.sign(payload)), "relay",
+              expect_fault="Verifier rejected signature")
+    c.check(c.nonce(account) == 1, "foreign TEE signature leaves the nonce unchanged")
+
+    zklogin = c.contracts["ZkLoginVerifier"]
+    account, proxy = c.register("register delegated ZkLogin profile", verifier=zklogin)
+    zk_key = P256Key(workdir, "neoexpress-zklogin")
+    provider = "google"
+    master = bytes([0x31]) * 32
+    action = bytes([0x41]) * 32
+    c.two_phase("configure delegated ZkLogin key", account, "verifier", "setConfig",
+                [H(account), B(zk_key.compressed), S(provider), B(master)])
+
+    def zk_proof(action_nullifier, signing_payload):
+        provider_bytes = provider.encode()
+        raw = bytes([1, len(provider_bytes)]) + provider_bytes + master + action_nullifier
+        return raw + zk_key.sign(signing_payload)
+
+    payload = c.results("ZkLoginVerifier", "getPayload", H(account), H(target), S("transfer"),
+                        args(proxy), I(0), I(FAR_DEADLINE), S(provider), B(master), B(action))
+    c.execute("valid delegated ZkLogin proof", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0,
+                            signature=zk_proof(action, payload)), "relay")
+    c.execute("replayed delegated ZkLogin payload", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 1,
+                            signature=zk_proof(bytes([0x42]) * 32, payload)), "relay",
+              expect_fault="Verifier rejected signature")
+    c.check(c.nonce(account) == 1, "replayed delegated proof leaves the nonce unchanged")
+
+    zk_email = c.contracts["ZKEmailVerifier"]
+    account, proxy = c.register("register disabled ZKEmail profile", verifier=zk_email)
+    c.two_phase("configure ZKEmail DKIM commitment", account, "verifier", "setDKIMRegistry",
+                [H(account), B(bytes([0x51]) * 32)])
+    c.execute("disabled ZKEmail proof fails closed", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0, signature=b"\x01"), "relay",
+              expect_fault="disabled pending real proof verification")
+    c.check(c.nonce(account) == 0, "disabled ZKEmail verifier cannot consume a nonce")
+
+
 def scenario_verifier_gas_cap(c):
     c.scenario("bounded verifier callback gas")
     verifier = c.contracts["MockVerifierCore"]
@@ -763,10 +956,21 @@ def scenario_verifier_gas_cap(c):
         account,
         c.transfer_op(target, proxy, c.wallets["buyer"], 1, 0),
         "owner",
-        expect_fault="Contract call gas limit exceeded")
-    c.check(record.get("expectedFault") == "Contract call gas limit exceeded",
+        expect_fault="The bounded contract call gas limit has been exhausted.")
+    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
             "the NeoVM child-budget fault is surfaced by the AA invocation")
     c.check(c.nonce(account) == 0, "a verifier budget fault rolls back nonce consumption")
+    c.tx("disable adversarial verifier burn", "MockVerifierCore", "setBurnGas", [BOOL(False)], "owner")
+    c.tx("enable adversarial verifier post burn", "MockVerifierCore", "setBurnPostGas", [BOOL(True)], "owner")
+    record = c.execute(
+        "verifier post callback exceeds its independent budget",
+        account,
+        c.transfer_op(target, proxy, c.wallets["buyer"], 1, 0),
+        "owner",
+        expect_fault="The bounded contract call gas limit has been exhausted.")
+    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
+            "the NeoVM verifier post-budget fault is surfaced by the AA invocation")
+    c.check(c.nonce(account) == 0, "a verifier post-budget fault rolls back nonce consumption")
 
 
 def scenario_session_key_and_paymaster(c, workdir):
@@ -852,14 +1056,40 @@ def scenario_recovery_cleanup(c, workdir):
             "owner received the credit refund net of the fees paid")
 
 
-def scenario_multisig(c):
+def scenario_multisig(c, workdir):
     c.scenario("MultiSig child pre-check")
     multisig = c.contracts["MultiSigVerifier"]
     account, _ = c.register("register account with MultiSigVerifier", verifier=multisig)
-    children = A(H(c.contracts["Web3AuthVerifier"]), H(c.contracts["TEEVerifier"]))
-    c.two_phase("setConfig 1-of-2", account, "verifier", "setConfig", [H(account), children, I(1)])
+    session_child = c.contracts["SessionKeyVerifier"]
+    webauthn_child = c.contracts["WebAuthnVerifier"]
+    target = c.contracts["MockTransferTarget"]
+    first_key = P256Key(workdir, "multisig-domain-first")
+    valid_until = c.now() + 20 * DAY * 1000
+    c.two_phase_child("provision SessionKey leaf", account, session_child, "setSessionKey",
+                      [H(account), B(first_key.compressed), H(target), S("transfer"), I(valid_until), I(0), S("multisig")])
+    c.two_phase_child("provision WebAuthn leaf with reused key", account, webauthn_child, "setPublicKey",
+                      [H(account), B(first_key.compressed)])
+    children = A(H(session_child), H(webauthn_child))
+    c.two_phase("setConfig with duplicate signer domain", account, "verifier",
+                "setConfig", [H(account), children, I(2)], expect_fault="Duplicate signer domain")
+
+    second_key = P256Key(workdir, "multisig-domain-second")
+    valid_until = c.now() + 20 * DAY * 1000
+    c.two_phase_child("rotate WebAuthn leaf to distinct key", account, webauthn_child, "setPublicKey",
+                      [H(account), B(second_key.compressed)])
+    c.two_phase("setConfig with independently committed domains", account, "verifier",
+                "setConfig", [H(account), children, I(2)])
     config = c.results("MultiSigVerifier", "getConfig", H(account))
-    c.check(len(config[0]) == 2 and config[1] == 1, "configuration stored")
+    c.check(len(config[0]) == 2 and config[1] == 2, "configuration stored")
+
+    # Change one configured leaf to reuse the other leaf's domain, then repeat the
+    # root configuration call. This is a private-chain revalidation of the same
+    # domain boundary that MultiSig applies immediately before signature checks.
+    c.two_phase_child("rotate SessionKey leaf into the WebAuthn domain", account, session_child, "setSessionKey",
+                      [H(account), B(second_key.compressed), H(target), S("transfer"), I(valid_until), I(0), S("collision")])
+    c.two_phase("revalidate duplicate signer domain", account, "verifier",
+                "setConfig", [H(account), children, I(2)], expect_fault="Duplicate signer domain")
+
     c.two_phase("setConfig with marker-only child", account, "verifier", "setConfig",
                 [H(account), A(H(c.contracts["MarkerOnlyModule"])), I(1)],
                 expect_fault="Child verifier validation ABI missing")
@@ -868,6 +1098,27 @@ def scenario_multisig(c):
     c.two_phase("setConfig with undeployed child", account, "verifier", "setConfig",
                 [H(account), A(H("0x1111111111111111111111111111111111111111")), I(1)],
                 expect_fault="Child verifier is not deployed")
+    child = c.contracts["MockVerifierCore"]
+    c.tx("mark test child as composite", "MockVerifierCore", "setLeafMode", [BOOL(False)], "owner")
+    c.two_phase("setConfig with composite child", account, "verifier", "setConfig",
+                [H(account), A(H(child)), I(1)],
+                expect_fault="Composite verifier cannot be a child")
+
+    c.tx("restore test child leaf mode", "MockVerifierCore", "setLeafMode", [BOOL(True)], "owner")
+
+    # The successful configuration above also exercises the core-owned
+    # dependency registry. Detaching the composite must invoke every registered
+    # leaf cleanup before removing the root binding; a fault in any child would
+    # abort this confirmation and leave the root installed.
+    c.tx("update MultiSig verifier to native fallback", "UnifiedSmartWalletV3", "updateVerifier",
+         [H(account), H(ZERO), B(b"")], "owner")
+    c.tx("confirm MultiSig cleanup before timelock", "UnifiedSmartWalletV3", "confirmVerifierUpdate",
+         [H(account)], "owner", expect_fault="Timelock not elapsed")
+    c.fastfwd(DAY)
+    c.tx("confirm MultiSig cleanup after timelock", "UnifiedSmartWalletV3", "confirmVerifierUpdate",
+         [H(account)], "owner")
+    c.check(c.hash_result("UnifiedSmartWalletV3", "getVerifier", H(account)) == ZERO,
+            "composite verifier detached only after child cleanup")
 
 
 def scenario_multihook(c):
@@ -982,6 +1233,7 @@ def scenario_did_action_ticket(c, workdir):
         raise ValidationFailure(f"deployed name {deployed['contract-name']} != NeoDIDRegistry")
     registry = deployed["contract-hash"]
     c.contracts["NeoDIDRegistry"] = registry
+    c.local_artifacts["NeoDIDRegistry"] = nef
     c.deployments.append({"contractName": "NeoDIDRegistry", "contractHash": registry,
                           "deploymentTransaction": deployed["tx-hash"], "deployData": None,
                           "localNefSha256": hashlib.sha256(nef.read_bytes()).hexdigest(),
@@ -1163,11 +1415,18 @@ def main():
                               "rpcHost": "127.0.0.1", "publicNetwork": False}
         receipt["privateValidation"] = {
             "platformSyscall": "System.Contract.CallWithGasLimit",
-            "activationHardfork": "HF_Iara",
+            "activationHardfork": "HF_SmartAccountV1",
             "activationBlock": 0,
-            "verifierGasLimitDatoshi": VERIFIER_GAS_LIMIT_DATOSHI,
-            "verifierGasLimitGas": VERIFIER_GAS_LIMIT_DATOSHI // GAS,
+            "applicationCallbackGasLimitDatoshi": APPLICATION_CALLBACK_GAS_LIMIT_DATOSHI,
+            "applicationCallbackGasLimitGas": APPLICATION_CALLBACK_GAS_LIMIT_DATOSHI // GAS,
+            "applicationHookGasLimitDatoshi": 250_000_000,
+            "applicationHookGasLimitGas": 250_000_000 / GAS,
+            "moduleMaintenanceGasLimitDatoshi": MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI,
+            "moduleMaintenanceGasLimitGas": MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI / GAS,
+            "neoMaxVerificationGasDatoshi": NEO_MAX_VERIFICATION_GAS_DATOSHI,
+            "nativeProfileVerifierBudgetDatoshi": NATIVE_PROFILE_VERIFIER_BUDGET_DATOSHI,
             "executeGasEnvelopeGas": int(PRIVATE_EXECUTE_GAS_ENVELOPE),
+            "maintenanceTransactionGasEnvelopeGas": int(PRIVATE_CORE_GAS_ENVELOPE),
             "scope": "private-chain-only; no public activation or broadcast",
         }
         chain.deploy_all()
@@ -1182,7 +1441,11 @@ def main():
         if not only_did:
             scenario_hook(chain)
         if not only_did:
+            scenario_hook_gas_cap(chain)
+        if not only_did:
             scenario_abi_precheck(chain)
+        if not only_did:
+            scenario_profile_crypto(chain, workdir)
         if not only_did:
             scenario_verifier_gas_cap(chain)
         if not only_did:
@@ -1190,7 +1453,7 @@ def main():
         if not only_did:
             scenario_recovery_cleanup(chain, workdir)
         if not only_did:
-            scenario_multisig(chain)
+            scenario_multisig(chain, workdir)
         if not only_did:
             scenario_multihook(chain)
         if not only_did:
@@ -1207,16 +1470,10 @@ def main():
     finally:
         chain.stop_node()
         receipt["scenarios"] = chain.scenarios
-        transactions = [s for sc in chain.scenarios for s in sc["steps"] if "txid" in s]
-        faults = [s for sc in chain.scenarios for s in sc["steps"] if s.get("outcome") == "FAULT"]
-        receipt["summary"] = {
-            "artifactsDeployed": len(chain.deployments),
-            "scenarios": len(chain.scenarios),
-            "transactionsHalted": len(transactions),
-            "expectedFaults": len(faults),
-            "assertions": sum(len(sc["assertions"]) for sc in chain.scenarios),
-            "simulatedTimeAdvancedSeconds": chain.simulated_seconds,
-        }
+        receipt["summary"] = validation_summary(chain)
+        receipt["releaseEvidenceEligible"] = (receipt["status"] == "PASS"
+                                             and "partialRun" not in receipt
+                                             and receipt["summary"]["scenariosSkipped"] == 0)
         receipt["parityBoundary"] = {
             "localNefToPrivateChainRpc": "byte-identical NEF script, checksum and semantically equal manifest for every artifact"
                                          if receipt["status"] == "PASS" else "not established",

@@ -23,6 +23,15 @@ export const EC = {
   walletNotConnected: 'EC_wallet_not_connected',
   invokeMultipleUnsupported: 'EC_invoke_multiple_unsupported',
   walletRequestFailed: 'EC_wallet_request_failed',
+  walletConnectRefused: 'EC_wallet_connect_refused',
+  walletConnectFailed: 'EC_wallet_connect_failed',
+  walletSignerConflict: 'EC_wallet_signer_conflict',
+  walletProxyWitnessUnsupported: 'EC_wallet_proxy_witness_unsupported',
+  walletScopeOwnerRequiresCustomScope: 'EC_wallet_scope_owner_requires_custom_scope',
+  walletScopeAllowlistIncomplete: 'EC_wallet_scope_allowlist_incomplete',
+  walletScopeAllowlistEmpty: 'EC_wallet_scope_allowlist_empty',
+  walletScopeAllowlistTooLarge: 'EC_wallet_scope_allowlist_too_large',
+  walletScopeUnsupported: 'EC_wallet_scope_unsupported',
 
   didEndpointMissing: 'EC_did_endpoint_missing',
   didRequestFailed: 'EC_did_request_failed',
@@ -91,6 +100,7 @@ export const EC = {
   noVerifierConfigured: 'EC_no_verifier_configured',
   noVerifierPlugin: 'EC_no_verifier_plugin',
   readOnlyDraftError: 'EC_read_only_draft_error',
+  presetProxyTransferRefused: 'EC_preset_proxy_transfer_refused',
 };
 
 /**
@@ -107,6 +117,12 @@ export function extractErrorCode(message) {
 }
 
 const EC_I18N_KEY = {
+  EC_operator_key_storage_unavailable: 'operatorBackup.storageUnavailable',
+  EC_operator_key_storage_corrupt: 'operatorBackup.storageCorrupt',
+  EC_operator_key_recovery_required: 'operatorBackup.recoveryRequired',
+  EC_operator_backup_invalid: 'operatorBackup.invalidBackup',
+  EC_operator_backup_wrong_draft: 'operatorBackup.wrongDraft',
+  EC_operator_backup_password_weak: 'operatorBackup.weakPassword',
   EC_draft_storage_unavailable: 'errors.draftStorageUnavailable',
   EC_draft_not_found: 'errors.draftNotFound',
   EC_collaborator_access_required: 'errors.collaboratorAccessRequired',
@@ -127,6 +143,15 @@ const EC_I18N_KEY = {
   EC_wallet_not_connected: 'errors.walletNotConnected',
   EC_invoke_multiple_unsupported: 'errors.invokeMultipleUnsupported',
   EC_wallet_request_failed: 'errors.walletRequestFailed',
+  EC_wallet_connect_refused: 'errors.walletConnectRefused',
+  EC_wallet_connect_failed: 'errors.walletConnectFailed',
+  EC_wallet_signer_conflict: 'errors.walletSignerConflict',
+  EC_wallet_proxy_witness_unsupported: 'errors.walletProxyWitnessUnsupported',
+  EC_wallet_scope_owner_requires_custom_scope: 'errors.walletScopeOwnerRequiresCustomScope',
+  EC_wallet_scope_allowlist_incomplete: 'errors.walletScopeAllowlistIncomplete',
+  EC_wallet_scope_allowlist_empty: 'errors.walletScopeAllowlistEmpty',
+  EC_wallet_scope_allowlist_too_large: 'errors.walletScopeAllowlistTooLarge',
+  EC_wallet_scope_unsupported: 'errors.walletScopeUnsupported',
   EC_did_endpoint_missing: 'errors.didEndpointMissing',
   EC_did_request_failed: 'errors.didRequestFailed',
   EC_morpheus_did_request_failed: 'errors.morpheusDidRequestFailed',
@@ -190,6 +215,7 @@ const EC_I18N_KEY = {
   EC_no_verifier_configured: 'operations.noVerifierConfigured',
   EC_no_verifier_plugin: 'sharedDraft.noVerifierPlugin',
   EC_read_only_draft_error: 'operations.readOnlyDraftError',
+  EC_preset_proxy_transfer_refused: 'operations.presetProxyTransferRefused',
 };
 
 /**
@@ -205,4 +231,45 @@ export function translateError(message, t) {
     return t(i18nKey, normalizedCode);
   }
   return code;
+}
+
+// Words a wallet uses when the user, not the software, ended the connection. Kept as a pattern
+// rather than a code because the wallet supplies the text.
+const REFUSAL_PATTERN = /reject|refus|deni|denied|declin|cancel|disapprov|user\s*(?:closed|aborted)/i;
+
+/**
+ * True when the failure was the wallet (or its user) turning the connection down, rather than the
+ * software failing to reach a wallet. The distinction decides which sentence the user sees.
+ */
+export function isConnectRefusal(error) {
+  if (error?.refused === true) return true;
+  const text = String(error?.message ?? error?.providerMessage ?? (typeof error === 'string' ? error : '')).trim();
+  return REFUSAL_PATTERN.test(text);
+}
+
+/**
+ * The sentence a Connect Wallet failure renders. Guarantees a non-empty string for every input:
+ * a missing message, a blank message or a thrown non-Error must still tell the user something.
+ *
+ * A refusal keeps the wallet's own words so the user recognises what they did; an error code is
+ * translated; anything else is shown as the provider wrote it.
+ */
+export function connectErrorMessage(error, t) {
+  const translate = typeof t === 'function' ? t : (_key, fallback = '') => fallback;
+  const fromMessage = typeof error === 'string' ? error : String(error?.message ?? '');
+  const code = extractErrorCode(fromMessage) || String(error?.code || '');
+  // The provider's own words are kept separately from the code, so classifying a failure never
+  // replaces what the wallet actually said.
+  const rawDetail = isErrorCode(fromMessage.trim()) ? '' : fromMessage.trim();
+  const detail = rawDetail || String(error?.providerMessage ?? error?.rpcDetail ?? '').trim();
+  if (isConnectRefusal(error) || (!isErrorCode(code) && REFUSAL_PATTERN.test(detail))) {
+    return detail
+      ? `${translate('errors.walletConnectRefused', 'Wallet refused the connection')}: ${detail}`
+      : translate('errors.walletConnectRefused', 'Wallet refused the connection');
+  }
+  if (isErrorCode(code) && EC_I18N_KEY[code]) {
+    return translate(EC_I18N_KEY[code], code);
+  }
+  if (detail) return detail;
+  return translate('errors.walletConnectFailed', 'Wallet connection failed.');
 }

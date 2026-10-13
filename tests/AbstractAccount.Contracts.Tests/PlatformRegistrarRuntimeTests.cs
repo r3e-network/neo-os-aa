@@ -2,6 +2,7 @@ using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.SmartContract.Testing.Exceptions;
+using VmArray = Neo.VM.Types.Array;
 
 namespace AbstractAccount.Contracts.Tests;
 
@@ -63,6 +64,27 @@ public class PlatformRegistrarRuntimeTests
             System.Text.Encoding.UTF8.GetBytes("wrong-binding"),
             RotatedOwner));
         fixture.CallVoid(registrar, "rotate", wallet, accountId, appBinding, RotatedOwner);
+        Assert.AreEqual(AppAdmin, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
+        VmArray pendingRotation = (VmArray)fixture.Call(wallet,
+            "getPendingPlatformAccountOwnerRotation", accountId);
+        Assert.AreEqual(Neo.VM.Types.StackItemType.ByteString, pendingRotation[0].Type);
+        Assert.AreEqual(RotatedOwner, new UInt160(pendingRotation[0].GetSpan().ToArray()));
+        Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
+            registrar,
+            "confirmRotate",
+            wallet,
+            accountId,
+            appBinding));
+        fixture.AdvanceTime(TimeSpan.FromDays(7));
+        fixture.SetSigners(AppAdmin);
+        Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
+            registrar,
+            "confirmRotate",
+            wallet,
+            accountId,
+            appBinding));
+        fixture.SetSigners(RotatedOwner);
+        fixture.CallVoid(registrar, "confirmRotate", wallet, accountId, appBinding);
         Assert.AreEqual(RotatedOwner, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
 
         fixture.SetSigners(Stranger);
@@ -84,6 +106,61 @@ public class PlatformRegistrarRuntimeTests
         fixture.SetSigners(RotatedOwner);
         fixture.CallVoid(wallet, "updateVerifier", accountId, verifier, Array.Empty<byte>());
         Assert.AreEqual(verifier, fixture.CallUInt160(wallet, "getVerifier", accountId));
+    }
+
+    [TestMethod]
+    public void CurrentOwnerCanCancelPendingPlatformOwnerRotation()
+    {
+        RuntimeFixture fixture = new();
+        UInt160 wallet = fixture.Deploy("UnifiedSmartWalletV3");
+        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:rotation-cancel");
+
+        fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
+        fixture.AdvanceTime(TimeSpan.FromDays(7));
+        fixture.CallVoid(wallet, "confirmPlatformRegistrar");
+        UInt160 accountId = fixture.CallUInt160(
+            registrar,
+            "register",
+            wallet,
+            appBinding,
+            AppAdmin,
+            EscapeTimelock);
+
+        fixture.CallVoid(registrar, "rotate", wallet, accountId, appBinding, RotatedOwner);
+        fixture.SetSigners(AppAdmin);
+        fixture.CallVoid(wallet, "cancelPlatformAccountOwnerRotation", accountId, appBinding);
+        Assert.AreEqual(Neo.VM.Types.StackItemType.Any,
+            fixture.Call(wallet, "getPendingPlatformAccountOwnerRotation", accountId).Type);
+        Assert.AreEqual(AppAdmin, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
+    }
+
+    [TestMethod]
+    public void EscapeFinalizationClearsPendingPlatformOwnerRotation()
+    {
+        RuntimeFixture fixture = new();
+        UInt160 wallet = fixture.Deploy("UnifiedSmartWalletV3");
+        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:rotation-escape");
+
+        fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
+        fixture.AdvanceTime(TimeSpan.FromDays(7));
+        fixture.CallVoid(wallet, "confirmPlatformRegistrar");
+        UInt160 accountId = fixture.CallUInt160(
+            registrar,
+            "register",
+            wallet,
+            appBinding,
+            AppAdmin,
+            EscapeTimelock);
+
+        fixture.CallVoid(registrar, "rotate", wallet, accountId, appBinding, RotatedOwner);
+        fixture.SetSigners(AppAdmin);
+        fixture.CallVoid(wallet, "initiateEscape", accountId);
+        fixture.AdvanceTime(TimeSpan.FromSeconds(EscapeTimelock));
+        fixture.CallVoid(wallet, "finalizeEscape", accountId, UInt160.Zero);
+        Assert.AreEqual(Neo.VM.Types.StackItemType.Any,
+            fixture.Call(wallet, "getPendingPlatformAccountOwnerRotation", accountId).Type);
     }
 
     [TestMethod]

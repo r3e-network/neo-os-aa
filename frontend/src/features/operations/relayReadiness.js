@@ -1,15 +1,4 @@
-function findMetaInvocation(signatures = [], transactionBody = {}) {
-  if (transactionBody?.metaInvocation) return transactionBody.metaInvocation;
-  if (Array.isArray(transactionBody?.metaInvocations) && transactionBody.metaInvocations.length > 0) {
-    return transactionBody.metaInvocations[0];
-  }
-  if (Array.isArray(transactionBody?.meta_invocations) && transactionBody.meta_invocations.length > 0) {
-    return transactionBody.meta_invocations[0];
-  }
-  return Array.isArray(signatures)
-    ? signatures.find((item) => item?.metadata?.metaInvocation)?.metadata?.metaInvocation || null
-    : null;
-}
+import { selectSignedInvocation } from './signedInvocation.js';
 
 export function evaluateRelayReadiness({ runtime = {}, transactionBody = {}, signatures = [], t } = {}) {
   if (!runtime?.relayEnabled) {
@@ -20,6 +9,17 @@ export function evaluateRelayReadiness({ runtime = {}, transactionBody = {}, sig
       payloadReady: false,
       label: t ? t('sharedDraft.relayBlocked', 'Relay Blocked') : 'Relay Blocked',
       detail: t ? t('sharedDraft.relayEndpointNotConfigured', 'Relay endpoint is not configured.') : 'Relay endpoint is not configured.',
+    };
+  }
+
+  let metaInvocation;
+  try {
+    metaInvocation = selectSignedInvocation({ transactionBody, signatures, morpheusNetwork: runtime.morpheusNetwork, networkMagic: runtime.networkMagic });
+  } catch (error) {
+    return {
+      level: 'blocked', mode: 'none', isReady: false, payloadReady: false,
+      label: t ? t('sharedDraft.relayBlocked', 'Relay Blocked') : 'Relay Blocked',
+      detail: error.message,
     };
   }
 
@@ -45,7 +45,6 @@ export function evaluateRelayReadiness({ runtime = {}, transactionBody = {}, sig
     };
   }
 
-  const metaInvocation = findMetaInvocation(signatures, transactionBody);
   if (metaInvocation) {
     if (runtime?.relayMetaEnabled) {
       return {

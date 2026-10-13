@@ -29,7 +29,7 @@ Created a custom struct hasher in the SDK that EXACTLY replicates the contract's
 2. **sdk/js/tests/v3_testnet_verify_refactor.js**
    - Updated Test 7 to perform full EIP-712 signing test
    - Now creates a UserOperation, computes args hash, builds signing payload, signs with EVM wallet, and verifies via contract
-   - Tests both `ValidateSignature` on verifier and `executeUserOp` on core contract
+   - Tests both `validateSignature` on verifier and `executeUserOp` on core contract
 
 3. **sdk/js/src/index.js**
    - Updated imports to use new metaTx functions

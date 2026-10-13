@@ -176,6 +176,7 @@ test('getRuntimeConfig prefers Vite overrides', () => {
     addressMarketHash: 'ae7afe3a85ab08bfd1d4907b35ae8b80c75b3a69',
     paymasterHash: 'a0defa2bc6d7a71ba1e237149287c8ca4ff46caf',
     n3IndexApiBaseUrl: DEFAULT_N3INDEX_API_BASE_URL,
+    aaReadApiBaseUrl: '',
     n3IndexNetwork: 'mainnet',
     neoNnsContractHash: '50ac1c37690cc2cfc594472833cf57505d5f46de',
     web3AuthClientId: '',

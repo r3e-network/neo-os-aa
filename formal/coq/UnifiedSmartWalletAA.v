@@ -22,8 +22,10 @@
   effects field is a ghost completed-operation count, NOT token balances or
   evidence that a business action succeeded. deadlineValid is a predicate,
   not a proof about time sources. Account existence and no market escrow are
-  preconditions of this projection. Callbacks must preserve the modelled core
-  configuration/nonces; callback noninterference is an unproved obligation.
+  preconditions of this projection. A missing hook or verifier has no callback
+  to reject the operation; installed callbacks must return normally. Callbacks
+  must preserve the modelled core configuration/nonces; callback noninterference
+  is an unproved obligation.
 *)
 From Coq Require Import PeanoNat Bool Lia.
 
@@ -52,12 +54,19 @@ Definition authorized (s : AAState) (op : UserOp) : bool :=
   let base := if verifierConfigured s then signatureValid op else ownerWitness op in
   if escapeActive s then base && ownerWitness op else base.
 
+Definition pre_callback_valid (s : AAState) (op : UserOp) : bool :=
+  if hookInstalled s then preHookValid op else true.
+
+Definition post_callback_valid (s : AAState) (op : UserOp) : bool :=
+  if hookInstalled s || verifierConfigured s then postHookValid op else true.
+
 Definition admissible (s : AAState) (op : UserOp) : bool :=
   negb (executing s) &&
   authorized s op &&
   Nat.eqb (opSequence op) (cursor s (opChannel op)) &&
   operationShapeValid op &&
-  deadlineValid op && preHookValid op && targetValid op && postHookValid op.
+  deadlineValid op && pre_callback_valid s op && targetValid op &&
+  post_callback_valid s op.
 
 Definition set_cursor (m : nat -> nat) (c n : nat) : nat -> nat :=
   fun k => if Nat.eqb k c then n else m k.
@@ -122,9 +131,9 @@ Lemma admissible_components :
     Nat.eqb (opSequence op) (cursor s (opChannel op)) = true /\
     operationShapeValid op = true /\
     deadlineValid op = true /\
-    preHookValid op = true /\
+    pre_callback_valid s op = true /\
     targetValid op = true /\
-    postHookValid op = true.
+    post_callback_valid s op = true.
 Proof.
   intros s op H.
   unfold admissible in H.
@@ -205,8 +214,9 @@ Proof.
   unfold execute, admissible.
   destruct (negb (executing s) && authorized s op &&
             Nat.eqb (opSequence op) (cursor s (opChannel op)) &&
-            operationShapeValid op && deadlineValid op && preHookValid op &&
-            targetValid op && postHookValid op) eqn:Ha.
+            operationShapeValid op && deadlineValid op &&
+            pre_callback_valid s op && targetValid op &&
+            post_callback_valid s op) eqn:Ha.
   - apply and_chain_components in Ha.
     assert (Hcursor : Nat.eqb (opSequence op) (cursor s (opChannel op)) = true).
     { exact (proj1 (proj2 (proj2 Ha))). }
@@ -340,6 +350,19 @@ Proof.
   exact (proj1 (proj2 (proj2 (proj2 Ha)))).
 Qed.
 
+Theorem AA_020_disabled_callbacks_do_not_gate_execution :
+  forall s op,
+    hookInstalled s = false ->
+    verifierConfigured s = false ->
+    pre_callback_valid s op = true /\ post_callback_valid s op = true.
+Proof.
+  intros s op Hhook Hverifier.
+  unfold pre_callback_valid, post_callback_valid.
+  rewrite Hhook, Hverifier.
+  simpl.
+  repeat split; reflexivity.
+Qed.
+
 Theorem AA_016_native_valid_operation_is_reachable :
   let s := mkAAState (fun _ => 0) false false false false 0 in
   let op := mkUserOp 0 0 true false true true true true true in
@@ -382,3 +405,4 @@ Print Assumptions AA_016_native_valid_operation_is_reachable.
 Print Assumptions AA_017_verifier_valid_operation_is_reachable.
 Print Assumptions AA_018_escape_owner_valid_operation_is_reachable.
 Print Assumptions AA_019_success_requires_operation_shape.
+Print Assumptions AA_020_disabled_callbacks_do_not_gate_execution.

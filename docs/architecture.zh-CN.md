@@ -89,7 +89,7 @@ Paymaster 不会授权执行 —— 它只在验证器和钩子已经批准操�
 2. Nonce 由核心钱包消费，而非验证器插件。
 3. 验证器插件不会绕过钩子或目标合约策略。
 4. 备份所有者恢复受时间锁保护。
-5. 新集成应使用 `executeUserOp`；旧版 `executeUnifiedByAddress` 仅用于兼容。
+5. 新集成应使用 `executeUserOp`；V1/V2 包装器 `executeUnified` 与 `executeUnifiedByAddress` 已移除，不存在于任何已部署 manifest 和合约源码中，因此命名它们的交易会在验证阶段失败。
 6. Paymaster 结算仅在由授权的 AA 核心合约调用时成功。
 7. Paymaster 存款扣除先于 GAS 转账给中继执行（检查-效果-交互模式）。
 

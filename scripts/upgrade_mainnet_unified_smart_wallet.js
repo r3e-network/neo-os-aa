@@ -73,7 +73,8 @@ function candidateArtifact() {
   const manifestPath = artifactPaths("UnifiedSmartWalletV3").manifest;
   const manifestText = fs.readFileSync(manifestPath, "utf8");
   const nefHex = nef.serialize();
-  const methods = new Set((manifest.abi?.methods || []).map((method) => method.name));
+  const abiMethods = manifest.abi?.methods || [];
+  const methods = new Set(abiMethods.map((method) => method.name));
   const missingMethods = REQUIRED_METHODS.filter((method) => !methods.has(method));
   if (missingMethods.length > 0) {
     throw new Error(`candidate artifact is missing required methods: ${missingMethods.join(", ")}`);
@@ -91,7 +92,9 @@ function candidateArtifact() {
     manifestSha256: sha256(Buffer.from(manifestText, "utf8")),
     script,
     nefChecksum: nef.checksum,
-    methodCount: methods.size,
+    // Keep the manifest ABI count (including any legacy duplicate entries) in
+    // reports so it remains comparable with profile and RPC readback evidence.
+    methodCount: abiMethods.length,
     methodNames: methods,
   };
 }

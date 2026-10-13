@@ -25,6 +25,15 @@ namespace AbstractAccount
         private static readonly byte[] Prefix_UpdateTimelock = new byte[] { 0xE8 };
         private static readonly BigInteger AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000;
 
+        internal static byte[] AccountKey(byte[] prefix, UInt160 accountId)
+        {
+#if SMARTACCOUNT_NATIVE
+            return NativeAuthority.AccountKey(prefix, accountId);
+#else
+            return Helper.Concat(prefix, (byte[])accountId);
+#endif
+        }
+
         internal static void Initialize(object data, bool update)
         {
             if (update) return;
@@ -137,6 +146,9 @@ namespace AbstractAccount
 
         internal static void ValidateConfigCaller(UInt160 accountId, UInt160 verifierContract)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(AuthorizedCore(), accountId, "verifier", "configuration");
+#else
             UInt160 core = AuthorizedCore();
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
             ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
@@ -147,10 +159,14 @@ namespace AbstractAccount
                 CallFlags.ReadOnly,
                 new object[] { accountId, verifierContract });
             ExecutionEngine.Assert(authorized, "Unauthorized");
+#endif
         }
 
         internal static void ValidateExecutionCaller(UInt160 accountId, UInt160 callerContract, UInt160 verifierContract)
         {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(AuthorizedCore(), accountId, "verifier", "postExecute");
+#else
             UInt160 core = AuthorizedCore();
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
 
@@ -160,6 +176,7 @@ namespace AbstractAccount
                 CallFlags.ReadOnly,
                 new object[] { accountId, callerContract, verifierContract });
             ExecutionEngine.Assert(authorized, "Unauthorized");
+#endif
         }
 
         internal static void RotateAdmin(UInt160 newAdmin)

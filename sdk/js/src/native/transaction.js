@@ -1,0 +1,512 @@
+const crypto = require("node:crypto");
+const { createVerifierWitnessTools } = require("./verifierWitness");
+const { validateNativeInvocationResult, parseNativeRpcFee, parseNativeRpcFees } = require("./client");
+const { createNativeWalletWitnessTools } = require("../../../../shared/nativeWalletWitness.mjs");
+const { createNativeTransactionArtifactTools, validateNativeSignedPreflight } = require("../../../../shared/nativeTransactionArtifact.mjs");
+const deepFreeze = (value) => {
+  if (value && typeof value === "object") {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
+};
+const fail = (message) => {
+  throw new Error(`Native transaction: ${message}`);
+};
+const hash = (bytes) => crypto.createHash("sha256").update(bytes).digest();
+const accountOf = (script) =>
+  Buffer.from(
+    crypto
+      .createHash("ripemd160")
+      .update(hash(Buffer.from(script, "hex")))
+      .digest(),
+  )
+    .reverse()
+    .toString("hex");
+function createNativeTransactionTools(c) {
+  const verifierWitness = createVerifierWitnessTools(c);
+  const walletWitness = createNativeWalletWitnessTools({ hash160: accountOf, verify });
+  const le = (value, size) => {
+    let n = BigInt(value);
+    const out = Buffer.alloc(size);
+    for (let i = 0; i < size; i++) {
+      out[i] = Number(n & 255n);
+      n >>= 8n;
+    }
+    if (n) fail("integer overflow");
+    return out;
+  };
+  const vi = (n) =>
+    n < 253
+      ? le(n, 1)
+      : n <= 65535
+        ? Buffer.concat([Buffer.from([253]), le(n, 2)])
+        : Buffer.concat([Buffer.from([254]), le(n, 4)]);
+  const vb = (hex) => {
+    const b = Buffer.from(c.hex(hex), "hex");
+    return Buffer.concat([vi(b.length), b]);
+  };
+  const h160 = (hex) => Buffer.from(c.hex(hex, 20), "hex").reverse();
+  const fee = (value, label) => c.unsigned(value, 63, label);
+  const signerBytes = (s) =>
+    Buffer.concat([
+      h160(s.account),
+      Buffer.from([
+        s.scopes === "None"
+          ? 0
+          : s.scopes === "CustomContracts"
+            ? 16
+            : fail("unsupported signer scope"),
+      ]),
+      ...(s.scopes === "CustomContracts"
+        ? [vi(s.allowedcontracts.length), ...s.allowedcontracts.map(h160)]
+        : []),
+    ]);
+  const unsigned = (tx) =>
+    Buffer.concat([
+      Buffer.from([0]),
+      le(tx.nonce, 4),
+      le(tx.systemFee, 8),
+      le(tx.networkFee, 8),
+      le(tx.validUntilBlock, 4),
+      vi(tx.signers.length),
+      ...tx.signers.map(signerBytes),
+      Buffer.from([0]),
+      vb(tx.script),
+    ]);
+  const raw = (tx, witnesses) =>
+    Buffer.concat([
+      unsigned(tx),
+      vi(witnesses.length),
+      ...witnesses.flatMap((w) => [vb(w.invocation), vb(w.verification)]),
+    ]);
+  function keySigner(input, requiredAuthorities, verifierScopes = []) {
+    if (!input || typeof input.sign !== "function")
+      fail("payer/authority signer must expose sign(signDataHex)");
+    const verification = c.hex(input.verificationScript);
+    const account = c.hex(input.account, 20);
+    const parsed = walletWitness.parse(verification, account);
+    const contracts = [
+      ...new Set([
+        ...(requiredAuthorities.has(account)
+          ? ["0xd9421d07adf206e9dc4be746a02e8e087fa61741"]
+          : []),
+        ...verifierScopes.map((h) => "0x" + h),
+      ]),
+    ];
+    if (contracts.length > 16)
+      fail("verifier witness scope exceeds protocol limit");
+    return deepFreeze({
+      account,
+      verification,
+      parsed,
+      sign: input.sign.bind(input),
+      descriptor: {
+        account: "0x" + account,
+        scopes: contracts.length ? "CustomContracts" : "None",
+        ...(contracts.length ? { allowedcontracts: contracts } : {}),
+      },
+    });
+  }
+  function verify(publicKey, signature, signData) {
+    const compressed = Buffer.from(publicKey, "hex");
+    const point = crypto.ECDH.convertKey(
+      compressed,
+      "prime256v1",
+      undefined,
+      undefined,
+      "uncompressed",
+    );
+    const spki = Buffer.concat([
+      Buffer.from(
+        "3059301306072a8648ce3d020106082a8648ce3d030107034200",
+        "hex",
+      ),
+      point,
+    ]);
+    return crypto.verify(
+      "sha256",
+      Buffer.from(signData, "hex"),
+      {
+        key: crypto.createPublicKey({ key: spki, format: "der", type: "spki" }),
+        dsaEncoding: "ieee-p1363",
+      },
+      Buffer.from(signature, "hex"),
+    );
+  }
+  const issued = new WeakSet(),
+    signedIssued = new WeakSet();
+  async function validateCancellationAuthority(client, plan, authority) {
+    if (authority === undefined) return;
+    const state = plan.accountState;
+    if (plan.method !== "cancelRecovery" || !state?.pendingRecovery)
+      fail("cancellation authority requires a pending cancelRecovery action");
+    if (authority === state.recoveryAddress && !/^0+$/.test(authority)) return;
+    if (authority !== state.custodyAddress) fail("invalid recovery cancellation authority");
+    const height = await client.rpc.send("getblockcount", []);
+    if (!Number.isSafeInteger(height) || height < 1 || height > 0xffffffff) fail("invalid block height");
+    const block = await client.rpc.send("getblockheader", [height - 1, true]);
+    if (!Number.isSafeInteger(block?.time) || block.time < 0) fail("invalid chain timestamp");
+    if (BigInt(block.time) >= c.unsigned(state.pendingRecovery.matureAt, 64, "recovery maturity"))
+      fail("custody cannot cancel recovery at or after maturity");
+  }
+  async function prepareNativeTransaction(
+    client,
+    plan,
+    {
+      feePayer,
+      authoritySigners = [],
+      cancellationAuthority,
+      verifierSigners = [],
+      systemFee,
+      maxSystemFee,
+      maxNetworkFee,
+      maxTotalFee,
+      validUntilBlock,
+      nonce,
+    } = {},
+  ) {
+    await client.revalidatePlan(plan);
+    const caps = {
+      system: fee(maxSystemFee, "system fee cap"),
+      network: fee(maxNetworkFee, "network fee cap"),
+      total: fee(maxTotalFee, "total fee cap"),
+    };
+    const required = new Set(plan.requiredAuthorities);
+    if (cancellationAuthority !== undefined && plan.authorityPolicy !== "recovery-or-custody-before-maturity")
+      fail("cancellationAuthority is only supported for cancelRecovery");
+    let selectedCancellation;
+    if (plan.authorityPolicy === "recovery-or-custody-before-maturity") {
+      const candidates = [feePayer, ...authoritySigners].map((s) => c.hex(s?.account, 20));
+      const state = plan.accountState;
+      selectedCancellation = cancellationAuthority !== undefined ? c.hex(cancellationAuthority, 20)
+        : candidates.includes(state.recoveryAddress) && !/^0+$/.test(state.recoveryAddress)
+          ? state.recoveryAddress : state.custodyAddress;
+      await validateCancellationAuthority(client, plan, selectedCancellation);
+      if (!candidates.includes(selectedCancellation)) fail("recovery cancellation needs the selected authority signer");
+      required.add(selectedCancellation);
+    }
+    const verifierAccounts = verifierSigners.map((s) => c.hex(s.account, 20));
+    if (new Set(verifierAccounts).size !== verifierAccounts.length)
+      fail("duplicate explicit verifier signer");
+    const verifierContext = await verifierWitness.read(
+      client,
+      plan,
+      verifierAccounts,
+    );
+    const allWallets = new Map();
+    for (const signer of [feePayer, ...authoritySigners, ...verifierSigners]) {
+      const account = c.hex(signer?.account, 20),
+        prior = allWallets.get(account);
+      if (
+        prior &&
+        c.hex(prior.verificationScript) !== c.hex(signer.verificationScript)
+      )
+        fail("conflicting wallet identity");
+      if (!prior) allWallets.set(account, signer);
+    }
+    const wallets = [...allWallets.values()].map((s) =>
+      keySigner(
+        s,
+        required,
+        verifierContext?.scopes[c.hex(s.account, 20)] ?? [],
+      ),
+    );
+    const identities = wallets.map((s) => s.account);
+    if (plan.kind === "execution" && identities.includes(plan.accountAddress))
+      fail("native proxy cannot be payer or wallet authority");
+    for (const authority of required)
+      if (!identities.includes(authority))
+        fail("missing required custody/recovery transaction signer");
+    const signers = [
+      wallets[0].descriptor,
+      ...(plan.kind === "execution" ? [plan.proxySigner] : []),
+      ...wallets.slice(1).map((s) => s.descriptor),
+    ];
+    if (signers.length > 16) fail("too many transaction signers");
+    const simulation = await client.simulate(plan, signers);
+    if (simulation.state !== "HALT")
+      fail(
+        `application preflight failed: ${simulation.exception ?? simulation.state}`,
+      );
+    if (validateNativeInvocationResult(plan, simulation.stack).length)
+      fail("a simulated token transfer did not return Boolean true");
+    const validatedFees = parseNativeRpcFees({
+      gasconsumed: simulation.gasConsumed,
+      minimumrequiredfee: simulation.minimumRequiredFee === null ? undefined : simulation.minimumRequiredFee,
+    });
+    const minimum = validatedFees.minimumRequiredFee === null
+      ? null : BigInt(validatedFees.minimumRequiredFee);
+    if (systemFee === undefined && minimum === null)
+      fail(
+        "node does not report minimumrequiredfee; supply an explicit system fee budget",
+      );
+    const system =
+      systemFee === undefined ? minimum : fee(systemFee, "system fee");
+    if (system < BigInt(validatedFees.gasConsumed))
+      fail("system fee is below actual simulated consumption");
+    if (minimum !== null && system < minimum)
+      fail("system fee is below bounded-call admission requirement");
+    if (system > caps.system) fail("system fee exceeds approved cap");
+    const height = await client.rpc.send("getblockcount", []);
+    if (!Number.isSafeInteger(height) || height <= 0)
+      fail("invalid block height");
+    const until =
+      validUntilBlock === undefined
+        ? height + 100
+        : Number(c.unsigned(validUntilBlock, 32, "valid until block"));
+    if (until <= height || until > height + 100)
+      fail("validity must be within the next 100 blocks");
+    const tx = {
+      nonce:
+        nonce === undefined
+          ? crypto.randomBytes(4).readUInt32LE()
+          : Number(c.unsigned(nonce, 32, "transaction nonce")),
+      systemFee: system.toString(),
+      networkFee: "0",
+      validUntilBlock: until,
+      script: c.hex(plan.script),
+      signers,
+    };
+    const walletPlaceholder = (w) => walletWitness.placeholder(w.parsed);
+    const placeholders = [
+      walletPlaceholder(wallets[0]),
+      ...(plan.kind === "execution" ? [plan.proxyWitness] : []),
+      ...wallets.slice(1).map(walletPlaceholder),
+    ];
+    const quote = await client.rpc.send("calculatenetworkfee", [
+      raw(tx, placeholders).toString("base64"),
+    ]);
+    const network = parseNativeRpcFee(quote?.networkfee, "network");
+    if (network > caps.network || network + system > caps.total)
+      fail("transaction fees exceed approved caps");
+    tx.networkFee = network.toString();
+    const unsignedHex = unsigned(tx).toString("hex"),
+      txHash = hash(Buffer.from(unsignedHex, "hex")),
+      signData = Buffer.concat([le(client.networkMagic, 4), txHash]).toString(
+        "hex",
+      );
+    const result = deepFreeze({
+      kind: "native-transaction",
+      plan,
+      transaction: Object.freeze({ ...tx, signers: Object.freeze(signers) }),
+      unsignedHex,
+      txid: "0x" + Buffer.from(txHash).reverse().toString("hex"),
+      signData,
+      systemFee: tx.systemFee,
+      networkFee: tx.networkFee,
+      systemFeeSource:
+        systemFee === undefined ? "minimumrequiredfee" : "explicit-budget",
+      verifierAccounts,
+      verifierContext,
+      ...(selectedCancellation === undefined ? {} : { cancellationAuthority: selectedCancellation }),
+      simulation,
+      wallets: Object.freeze(wallets),
+      placeholderWitnesses: Object.freeze(placeholders),
+    });
+    issued.add(result);
+    return result;
+  }
+  async function signNativeTransaction(client, prepared) {
+    if (!issued.has(prepared))
+      fail("transaction must be prepared by this SDK instance");
+    await client.revalidatePlan(prepared.plan);
+    await validateCancellationAuthority(client, prepared.plan, prepared.cancellationAuthority);
+    await verifierWitness.revalidate(client, prepared);
+    if (unsigned(prepared.transaction).toString("hex") !== prepared.unsignedHex)
+      fail("transaction changed after fee approval");
+    const signatures = [];
+    for (const wallet of prepared.wallets) {
+      signatures.push(await walletWitness.assemble(
+        wallet.parsed,
+        await wallet.sign(prepared.signData),
+        prepared.signData,
+      ));
+    }
+    const witnesses = [
+      signatures[0],
+      ...(prepared.plan.kind === "execution"
+        ? [prepared.plan.proxyWitness]
+        : []),
+      ...signatures.slice(1),
+    ];
+    await client.revalidatePlan(prepared.plan);
+    await validateCancellationAuthority(client, prepared.plan, prepared.cancellationAuthority);
+    await verifierWitness.revalidate(client, prepared);
+    if (unsigned(prepared.transaction).toString("hex") !== prepared.unsignedHex)
+      fail("transaction changed during signing");
+    const finalBytes = raw(prepared.transaction, witnesses);
+    const quote = await client.rpc.send("calculatenetworkfee", [
+      finalBytes.toString("base64"),
+    ]);
+    if (
+      parseNativeRpcFee(quote?.networkfee, "final network") > BigInt(prepared.networkFee)
+    )
+      fail("final witness network fee exceeds approved transaction");
+    const result = Object.freeze({
+      kind: "signed-native-transaction",
+      prepared,
+      txid: prepared.txid,
+      rawTransaction: finalBytes.toString("hex"),
+      witnesses: Object.freeze(witnesses.map((witness) => Object.freeze({ ...witness }))),
+    });
+    signedIssued.add(result);
+    return result;
+  }
+  async function preflightNativeTransaction(client, signed) {
+    if (!signedIssued.has(signed))
+      fail("signed transaction must be produced by this SDK instance");
+    await client.revalidatePlan(signed.prepared.plan);
+    await verifierWitness.revalidate(client, signed.prepared);
+    let result;
+    try {
+      result = await client.rpc.send("invoketransaction", [
+        Buffer.from(signed.rawTransaction, "hex").toString("base64"),
+      ]);
+    } catch (cause) {
+      const error = new Error(
+        `Native transaction: signed transaction preflight unavailable: ${cause?.message ?? cause}`,
+        { cause },
+      );
+      if (cause && typeof cause === "object") {
+        if (Object.hasOwn(cause, "code")) error.code = cause.code;
+        if (Object.hasOwn(cause, "data")) error.data = cause.data;
+      }
+      throw error;
+    }
+    return validateNativeSignedPreflight(c, {
+      txid: signed.txid,
+      networkMagic: client.networkMagic,
+      plan: signed.prepared.plan,
+      systemFee: signed.prepared.systemFee,
+      validUntilBlock: signed.prepared.transaction.validUntilBlock,
+    }, result);
+  }
+  function exportSignedTransaction(client, signed) {
+    if (!signedIssued.has(signed))
+      fail("signed transaction must be produced by this SDK instance");
+    const artifactTools = createNativeTransactionArtifactTools({
+      codec: c,
+      sha256: (hex) => hash(Buffer.from(hex, "hex")).toString("hex"),
+    });
+    return artifactTools.createArtifact({
+      networkMagic: client.networkMagic,
+      profile: client.profile,
+      transaction: signed.prepared.transaction,
+      witnesses: signed.witnesses,
+      unsignedHex: signed.prepared.unsignedHex,
+      txid: signed.txid,
+      signData: signed.prepared.signData,
+      rawTransaction: signed.rawTransaction,
+    });
+  }
+
+  const submissions = new WeakMap();
+  function broadcastNativeTransaction(client, signed) {
+    if (!signedIssued.has(signed))
+      return Promise.reject(
+        new Error(
+          "Native transaction: signed transaction must be produced by this SDK instance",
+        ),
+      );
+    let byId = submissions.get(client);
+    if (!byId) {
+      byId = new Map();
+      submissions.set(client, byId);
+    }
+    const key = signed.txid + ":" + signed.rawTransaction;
+    if (byId.has(key)) return byId.get(key);
+    let sendAttempted = false;
+    const promise = submitNativeTransaction(client, signed, () => {
+      sendAttempted = true;
+    }).catch((error) => {
+      error.txid = signed.txid;
+      error.submissionAttempted = sendAttempted;
+      if (!sendAttempted) byId.delete(key);
+      throw error;
+    });
+    byId.set(key, promise);
+    return promise;
+  }
+  async function submitNativeTransaction(client, signed, markSendAttempted) {
+    if (!signedIssued.has(signed))
+      fail("signed transaction must be produced by this SDK instance");
+    await preflightNativeTransaction(client, signed);
+    markSendAttempted();
+    const result = await client.rpc.send("sendrawtransaction", [
+      Buffer.from(signed.rawTransaction, "hex").toString("base64"),
+    ]);
+    if (result?.hash && String(result.hash).toLowerCase() !== signed.txid)
+      fail("RPC returned a different transaction id");
+    if (result !== true && !result?.hash)
+      fail("RPC did not confirm transaction submission");
+    return { txid: signed.txid, submitted: true, confirmed: false };
+  }
+  async function getNativeTransactionReceipt(client, signed) {
+    if (!signedIssued.has(signed))
+      fail("signed transaction must be produced by this SDK instance");
+    const tx = await client.rpc.send("getrawtransaction", [signed.txid, true]);
+    if (!tx?.blockhash) return { txid: signed.txid, confirmed: false };
+    if (String(tx.hash).toLowerCase() !== signed.txid)
+      fail("persisted transaction identity mismatch");
+    if (/^0+$/.test(c.hex(tx.blockhash, 32)))
+      fail("persisted transaction has a zero block hash");
+    if (
+      tx.confirmations !== undefined &&
+      (!Number.isSafeInteger(tx.confirmations) || tx.confirmations < 1)
+    )
+      fail("persisted transaction has invalid confirmations");
+    const [wire, log] = await Promise.all([
+      client.rpc.send("getrawtransaction", [signed.txid, false]),
+      client.rpc.send("getapplicationlog", [signed.txid]),
+    ]);
+    if (
+      typeof wire !== "string" ||
+      Buffer.from(wire, "base64").toString("hex") !== signed.rawTransaction
+    )
+      fail("persisted transaction bytes differ from signed transaction");
+    if (String(log?.txid).toLowerCase() !== signed.txid)
+      fail("application log transaction identity mismatch");
+    const executions = log.executions?.filter((x) => x.trigger === "Application");
+    if (!executions || executions.length !== 1)
+      fail("confirmed transaction must have one Application execution");
+    const execution = executions[0];
+    const failures = [];
+    if (execution.vmstate !== "HALT") {
+      failures.push(`Application state is ${execution.vmstate ?? "unknown"}`);
+    } else {
+      try {
+        for (const index of validateNativeInvocationResult(
+          signed.prepared.plan,
+          execution.stack,
+        ))
+          failures.push(`Token transfer ${index + 1} did not return Boolean true`);
+      } catch (error) {
+        failures.push(error.message);
+      }
+    }
+    return {
+      txid: signed.txid,
+      confirmed: true,
+      succeeded: failures.length === 0,
+      failures,
+      blockHash: tx.blockhash,
+      vmState: execution.vmstate,
+      exception: execution.exception ?? null,
+      stack: execution.stack ?? [],
+      notifications: execution.notifications ?? [],
+      gasConsumed: execution.gasconsumed ?? null,
+      systemFee: signed.prepared.systemFee,
+      networkFee: signed.prepared.networkFee,
+    };
+  }
+  return {
+    prepareNativeTransaction,
+    signNativeTransaction,
+    broadcastNativeTransaction,
+    getNativeTransactionReceipt,
+    preflightNativeTransaction,
+    exportSignedTransaction,
+  };
+}
+module.exports = { createNativeTransactionTools };

@@ -1,0 +1,129 @@
+{
+  "source": "Public development scalar 2 from Neo core tests/Neo.UnitTests/SmartContract/Native/UT_AccountManagement.Witness.cs; fixed offline test vector, never a user wallet. Tests only load these public signatures; no signing callbacks or private material are included.",
+  "recipe": null,
+  "review": {
+    "profile": {
+      "service": "d9421d07adf206e9dc4be746a02e8e087fa61741",
+      "networkMagic": 123,
+      "abiVersion": 2,
+      "identityVersion": 1,
+      "authorizationVersion": 2,
+      "profileParameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"
+    },
+    "plan": {
+      "kind": "execution",
+      "preparedOperations": [
+        {
+          "operation": {
+            "targetContract": "2222222222222222222222222222222222222222",
+            "method": "transfer",
+            "args": [],
+            "nonce": "0",
+            "deadline": "9999999999999",
+            "signature": ""
+          }
+        }
+      ],
+      "batch": false,
+      "accountId": "1111111111111111111111111111111111111111",
+      "accountAddress": "13b3c904ec9d8601e64f7715ee893f4f8301179c",
+      "script": "10100c0003ff9f724e1809000010c20c087472616e736665720c14222222222222222222222222222222222222222216c00c14111111111111111111111111111111111111111114c01f0c0d65786563757465557365724f700c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52",
+      "proxySigner": {
+        "account": "0x13b3c904ec9d8601e64f7715ee893f4f8301179c",
+        "scopes": "CustomContracts",
+        "allowedcontracts": [
+          "0x2222222222222222222222222222222222222222"
+        ]
+      },
+      "proxyWitness": {
+        "invocation": "",
+        "verification": "0c14111111111111111111111111111111111111111111c0150c067665726966790c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52"
+      },
+      "requiredAuthorities": [
+        "ff7386835e29638c95c55f4817a1bfc391b8180b"
+      ]
+    },
+    "submission": "native-sdk",
+    "feePayer": "ff7386835e29638c95c55f4817a1bfc391b8180b",
+    "requiredAuthorities": [
+      "ff7386835e29638c95c55f4817a1bfc391b8180b"
+    ],
+    "signers": [
+      {
+        "account": "0xff7386835e29638c95c55f4817a1bfc391b8180b",
+        "scopes": "CustomContracts",
+        "allowedcontracts": [
+          "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
+        ]
+      },
+      {
+        "account": "0x13b3c904ec9d8601e64f7715ee893f4f8301179c",
+        "scopes": "CustomContracts",
+        "allowedcontracts": [
+          "0x2222222222222222222222222222222222222222"
+        ]
+      }
+    ],
+    "simulation": {
+      "state": "HALT",
+      "minimumRequiredFee": "100000",
+      "gasConsumed": "10",
+      "stack": [
+        {
+          "type": "Boolean",
+          "value": true
+        }
+      ]
+    }
+  },
+  "artifact": {
+    "format": "neo-native-signed-transaction",
+    "version": 1,
+    "networkMagic": 123,
+    "profile": {
+      "service": "d9421d07adf206e9dc4be746a02e8e087fa61741",
+      "networkMagic": 123,
+      "abiVersion": 2,
+      "identityVersion": 1,
+      "authorizationVersion": 2,
+      "profileParameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"
+    },
+    "transaction": {
+      "nonce": 42,
+      "systemFee": "200000",
+      "networkFee": "50000",
+      "validUntilBlock": 50,
+      "script": "10100c0003ff9f724e1809000010c20c087472616e736665720c14222222222222222222222222222222222222222216c00c14111111111111111111111111111111111111111114c01f0c0d65786563757465557365724f700c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52",
+      "signers": [
+        {
+          "account": "0xff7386835e29638c95c55f4817a1bfc391b8180b",
+          "scopes": "CustomContracts",
+          "allowedcontracts": [
+            "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
+          ]
+        },
+        {
+          "account": "0x13b3c904ec9d8601e64f7715ee893f4f8301179c",
+          "scopes": "CustomContracts",
+          "allowedcontracts": [
+            "0x2222222222222222222222222222222222222222"
+          ]
+        }
+      ]
+    },
+    "witnesses": [
+      {
+        "invocation": "0c40a9574a9eaa8ed6894840404921c7e958e63cdf1381fa208590b6a5c9e753a8d47cf67c03ecf8b7327e44a031b07ec9cb873886982ad845be5efdf7f6e1ab4dc0",
+        "verification": "0c21037cf27b188d034f7e8a52380304b51ac3c08969e277f21b35a60b48fc476699784156e7b327"
+      },
+      {
+        "invocation": "",
+        "verification": "0c14111111111111111111111111111111111111111111c0150c067665726966790c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52"
+      }
+    ],
+    "unsignedHex": "002a000000400d03000000000050c300000000000032000000020b18b891c3bfa117485fc5958c63295e838673ff10014117a67f088e2ea046e74bdce906f2ad071d42d99c1701834f3f89ee15774fe601869dec04c9b31310012222222222222222222222222222222222222222007410100c0003ff9f724e1809000010c20c087472616e736665720c14222222222222222222222222222222222222222216c00c14111111111111111111111111111111111111111114c01f0c0d65786563757465557365724f700c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52",
+    "txid": "0xec4ee5ba177d746979420745df8747641b2cdabc1ce9e2ccbe3f95671ff2d63c",
+    "signData": "7b0000003cd6f21f67953fbecce2e91cbcda2c1b644787df4507427969747d17bae54eec",
+    "rawTransaction": "002a000000400d03000000000050c300000000000032000000020b18b891c3bfa117485fc5958c63295e838673ff10014117a67f088e2ea046e74bdce906f2ad071d42d99c1701834f3f89ee15774fe601869dec04c9b31310012222222222222222222222222222222222222222007410100c0003ff9f724e1809000010c20c087472616e736665720c14222222222222222222222222222222222222222216c00c14111111111111111111111111111111111111111114c01f0c0d65786563757465557365724f700c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b5202420c40a9574a9eaa8ed6894840404921c7e958e63cdf1381fa208590b6a5c9e753a8d47cf67c03ecf8b7327e44a031b07ec9cb873886982ad845be5efdf7f6e1ab4dc0280c21037cf27b188d034f7e8a52380304b51ac3c08969e277f21b35a60b48fc476699784156e7b327003c0c14111111111111111111111111111111111111111111c0150c067665726966790c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52"
+  }
+}

@@ -22,6 +22,7 @@ const CORE_ERROR_CODES = {
   DEADLINE_REQUIRED: EC.VALIDATION_DEADLINE_REQUIRED,
   ARGS_HASH_INVALID: EC.VALIDATION_ARGS_HASH_INVALID,
   CORE_CONTRACT_REQUIRED: EC.VALIDATION_OPTIONS_REQUIRED,
+  INTEGER_DOMAIN_INVALID: EC.ENCODING_UINT256_INVALID,
 };
 
 /**
@@ -103,11 +104,11 @@ function toAddressWord(hash160) {
 }
 
 /**
- * Converts a number to 32-byte big-endian uint256 word.
+ * Converts a NeoVM signed-domain integer to a 32-byte big-endian word.
  * Matches Web3AuthVerifier.ToUint256Word in contract.
  *
  * @param {number|string|bigint} value - The value to encode
- * @returns {Uint8Array} 32-byte big-endian uint256
+ * @returns {Uint8Array} 32-byte big-endian word for 0 <= value < 2^255
  * @private
  */
 function toUint256Word(value) {
@@ -116,6 +117,12 @@ function toUint256Word(value) {
     throw createError(EC.ENCODING_UINT256_INVALID, {
       provided: value,
       hint: 'Value must be non-negative',
+    });
+  }
+  if (bigintValue >= (1n << 255n)) {
+    throw createError(EC.ENCODING_UINT256_INVALID, {
+      provided: value,
+      hint: 'Value must be below 2^255 for the NeoVM signed Integer domain',
     });
   }
   const result = new Uint8Array(32);

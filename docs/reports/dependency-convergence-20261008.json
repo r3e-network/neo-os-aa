@@ -1,0 +1,56 @@
+{
+  "schema": "neoos-aa-dependency-convergence/v1",
+  "observedOn": "2026-10-08",
+  "scope": "Targeted existing-range PBKDF2 patch and Marked Highlight patch; no audit fix force, major upgrades or new overrides.",
+  "packages": {
+    "pbkdf2": {
+      "version": "3.1.7",
+      "registry": "https://registry.npmjs.org/pbkdf2/3.1.7",
+      "integrity": "sha512-nS4mvFgVwUrecPTRdpdseM2fwpdfnX0/HibA8DgBRQtihUAzHQYJFU2l+OlEtiXtpqkrMvCPDwyXMUnASDt6Qw=="
+    },
+    "marked-highlight": {
+      "version": "2.2.4",
+      "registry": "https://registry.npmjs.org/marked-highlight/2.2.4",
+      "integrity": "sha512-PZxisNMJDduSjc0q6uvjsnqqHCXc9s0eyzxDO9sB1eNGJnd/H1/Fu+z6g/liC1dfJdFW4SftMwMlLvsBhUPrqQ=="
+    }
+  },
+  "validation": {
+    "cleanInstall": "717 packages installed; scripts disabled",
+    "productionBuild": "PASS",
+    "docsTests": "29/29",
+    "pbkdf2BrowserNativeEquivalence": "12/12, SHA256/SHA512, ordinary and 4096-byte passwords, 1/2/2048 iterations",
+    "markedHighlightRender": "PASS: actual installed marked17/highlight code-block rendering",
+    "productionAudit": {
+      "status": "PASS_ACCEPTED_UPSTREAM_BASELINE",
+      "low": 19,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "fullAudit": {
+      "info": 0,
+      "low": 27,
+      "moderate": 2,
+      "high": 0,
+      "critical": 0,
+      "total": 29
+    },
+    "fullAuditSha256": "65e3a194a22066ecd93ad29d58dbf2883327c1e76da2283b85bd5f2ca1e1624c"
+  },
+  "remainingModerate": {
+    "packages": [
+      "@tailwindcss/typography",
+      "postcss-selector-parser"
+    ],
+    "advisory": "https://github.com/advisories/GHSA-rj75-hqrm-r3gf",
+    "path": "@tailwindcss/typography@0.5.19 -> postcss-selector-parser@6.0.10",
+    "boundary": "Development/build dependency; typography0.5.20 also pins6.0.10. Fixed parser7.1.6 requires a separately reviewed scoped major override or an upstream typography fix."
+  },
+  "deferredMajorUpgrades": [
+    "@web3auth/modal@11",
+    "vue-router@5",
+    "vite@8",
+    "marked@18",
+    "typescript@7"
+  ]
+}

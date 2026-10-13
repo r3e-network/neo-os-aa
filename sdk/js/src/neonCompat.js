@@ -509,7 +509,14 @@ class RPCClient {
       wrapped.details = { method };
       throw wrapped;
     }
-    if (payload.error) throw new Error(payload.error.message || `RPC error ${payload.error.code || ''}`.trim());
+    if (payload.error) {
+      const error = new Error(payload.error.message || `RPC error ${payload.error.code ?? ''}`.trim());
+      // Preserve the node's error identity and diagnostic payload. Submission
+      // callers must distinguish rejection from an uncertain transport failure.
+      error.code = payload.error.code;
+      if (Object.hasOwn(payload.error, 'data')) error.data = payload.error.data;
+      throw error;
+    }
     return payload.result;
   }
 

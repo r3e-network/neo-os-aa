@@ -18,6 +18,11 @@ const {
 // payload layout and byte-order conventions; also consumed by the frontend).
 const { createRegistrationAccountIdDeriver } = require('../../../shared/registrationAccountId.mjs');
 
+// Result rules for token transfers, shared with the relay route and the wallet (shared/transferOutcome.mjs).
+const transferOutcome = require('../../../shared/transferOutcome.mjs');
+const { normalizeRelayContractParameter, MAX_RELAY_PARAMETER_DEPTH } = require('../../../shared/relayContractParameter.mjs');
+const { toMultiSigRpcParameter } = require('../../../shared/multiSigCore.mjs');
+
 const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({
   hash160: (value) => sanitizeHex(u.hash160(value)),
 });
@@ -74,6 +79,108 @@ function decodeByteStringStackText(item) {
 
 // Stack-item decode helpers shared with the frontend via shared/metaTxCore.mjs.
 const { decodeStackBoolean, decodeHash160Stack, decodeValidationPreviewStack } = metaTxExports;
+
+// Both sponsored builders and the signing hash use the same typed byte boundary.
+//
+// The relay carries a contract parameter as a DTO and refuses anything it cannot name, so an
+// argument list has to be checked recursively before it is embedded: an unknown type, a kind the
+// relay does not carry, a non-null Any, an untyped nested value or an over-deep nesting would
+// otherwise be coerced into the untyped carrier the relay later refuses, or executed as different
+// arguments than the account signed. The walk below validates every node with the relay's own
+// normalizer (one source of truth for the kind and value rules) and, on the first refusal, names
+// the argument path that caused it.
+function argumentPath(segments) {
+  return segments.reduce((path, segment) => (/^[0-9]+$/.test(String(segment))
+    ? `${path}[${segment}]`
+    : `${path}.${segment}`), '');
+}
+
+// One path segment or several; the walk builds both an index and a Map-entry path.
+function extendPath(segments, segment) {
+  return segments.concat(Array.isArray(segment) ? segment : [segment]);
+}
+
+function walkRelayArgument(value, segments, depth) {
+  const path = `userOp.Args${argumentPath(segments)}`;
+  if (depth > MAX_RELAY_PARAMETER_DEPTH) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
+      hint: `${path}: Contract parameter: nesting exceeds maximum depth of ${MAX_RELAY_PARAMETER_DEPTH}`,
+    });
+  }
+  // A raw value is not a contract parameter at all: name it here rather than letting the array
+  // wrap it in the untyped carrier the relay refuses.
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: Contract parameter: typed contract parameter required` });
+  }
+  const recurse = (item, segment) => walkRelayArgument(item, extendPath(segments, segment), depth + 1);
+  // A container the relay refuses is refused with the path this walk reached, not with the path of the
+  // argument list: "Contract parameter: Array requires an array" alone tells a caller that something
+  // nested is malformed but not which node, while the sibling refusals above and below name it.
+  const atPath = (normalize) => {
+    try {
+      return normalize();
+    } catch (error) {
+      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: ${error.message}` });
+    }
+  };
+  if (value.type === 'Array' || value.type === 'Struct') {
+    if (!Array.isArray(value.value)) {
+      return atPath(() => normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
+    }
+    return { type: 'Array', value: value.value.map((item, index) => recurse(item, index)) };
+  }
+  if (value.type === 'Map') {
+    if (!Array.isArray(value.value)) {
+      return atPath(() => normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
+    }
+    // An entry that is not an entry is malformed at its own index; the key and value below keep the
+    // paths their own recursion gives them.
+    const entries = value.value.map((entry, index) => {
+      if (entry && typeof entry === 'object') return entry;
+      return atPath(() => normalizeRelayContractParameter({ type: 'Map', value: [entry] }, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
+    });
+    return { type: 'Map', value: entries.map((entry, index) => ({
+      key: recurse(entry.key, ['value', index, 'key']),
+      value: recurse(entry.value, ['value', index, 'value']),
+    })) };
+  }
+  try {
+    return normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true });
+  } catch (error) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: ${error.message}` });
+  }
+}
+
+function userOpArgsParameter(args, baseDepth = 0) {
+  if (args === undefined || args === null) args = [];
+  if (!Array.isArray(args)) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'userOp.Args must be an array' });
+  }
+  const items = args.map((item, index) => walkRelayArgument(item, [index], baseDepth + 1));
+  try {
+    return normalizeRelayContractParameter({ type: 'Array', value: items }, {
+      depth: baseDepth, byteEncoding: 'mixed', allowClasses: true,
+    });
+  } catch (error) {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `userOp.Args: ${error.message}` });
+  }
+}
+
+function sponsoredUserOpParameter(op, depth) {
+  try {
+    return normalizeRelayContractParameter({ type: 'Array', value: [
+      { type: 'Hash160', value: normalizeAddress(op.TargetContract) },
+      { type: 'String', value: op.Method },
+      userOpArgsParameter(op.Args, depth - 1),
+      { type: 'Integer', value: op.Nonce },
+      { type: 'Integer', value: op.Deadline },
+      { type: 'ByteArray', value: `0x${sanitizeHex(op.Signature || '')}` },
+    ] }, { depth: depth - 2 });
+  } catch (error) {
+    if (error.code === EC.VALIDATION_OPTIONS_REQUIRED.code) throw error;
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `userOp: ${error.message}` });
+  }
+}
 
 const DEFAULT_RPC_READ_RETRY_ATTEMPTS = 4;
 const DEFAULT_RPC_READ_RETRY_DELAY_MS = 250;
@@ -357,6 +464,7 @@ class AbstractAccountClient {
     } = options || {};
 
     validateHash160(verifierContractHash);
+    if (verifierParamsHex) validateHexString(verifierParamsHex);
 
     const resolvedAccountHash = accountScriptHash
       ? normalizeAddress(accountScriptHash)
@@ -460,12 +568,11 @@ class AbstractAccountClient {
    * @throws {Error} If computation fails or returns empty result
    */
   async computeArgsHash(args = []) {
-    const response = await this.invokeFunctionWithRetry(
-      this.masterContractHash,
-      'computeArgsHash',
-      [{ type: 'Array', value: args }],
-      []
-    );
+    const parameter = toMultiSigRpcParameter(userOpArgsParameter(args));
+    // Bypass neonCompat.fromJson: it supports fewer types and assumes hex bytes.
+    const response = await invokeRpcReadWithRetry(() => this.rpcClient.send('invokefunction', [
+      `0x${this.masterContractHash}`, 'computeArgsHash', [parameter], [],
+    ]));
 
     if (response?.state === 'FAULT') {
       const mappedError = mapRpcError({ message: response.exception });
@@ -1297,6 +1404,9 @@ class AbstractAccountClient {
   /**
    * Creates the payload for executing a sponsored UserOperation via Paymaster.
    * The relay (transaction sender) is reimbursed from the sponsor's deposit.
+   * Args accept typed DTOs or ContractParam instances. Plain ByteArray values
+   * must be 0x hex or unambiguous canonical base64; bare hex is rejected.
+   * The result is a relay DTO (hex ByteArray), not direct Neo RPC JSON.
    *
    * @param {Object} options - Sponsored operation options
    * @param {string} [options.accountScriptHash] - Account script hash (40 hex)
@@ -1342,16 +1452,7 @@ class AbstractAccountClient {
       operation: 'executeSponsoredUserOp',
       args: [
         sc.ContractParam.hash160(resolvedAccountHash),
-        sc.ContractParam.array(
-          sc.ContractParam.hash160(normalizeAddress(userOp.TargetContract)),
-          sc.ContractParam.string(userOp.Method),
-          { type: 'Array', value: userOp.Args || [] },
-          sc.ContractParam.integer(userOp.Nonce),
-          sc.ContractParam.integer(userOp.Deadline),
-          sc.ContractParam.byteArray(
-            u.HexString.fromHex(sanitizeHex(userOp.Signature || ''), true)
-          ),
-        ),
+        sponsoredUserOpParameter(userOp, 2),
         sc.ContractParam.hash160(normalizeAddress(paymasterHash)),
         sc.ContractParam.hash160(normalizeAddress(sponsorAddress)),
         sc.ContractParam.integer(reimbursementAmount),
@@ -1400,16 +1501,7 @@ class AbstractAccountClient {
       ? normalizeAddress(accountScriptHash)
       : normalizeAddress(accountAddress);
 
-    const opsArray = userOps.map(op => sc.ContractParam.array(
-      sc.ContractParam.hash160(normalizeAddress(op.TargetContract)),
-      sc.ContractParam.string(op.Method),
-      { type: 'Array', value: op.Args || [] },
-      sc.ContractParam.integer(op.Nonce),
-      sc.ContractParam.integer(op.Deadline),
-      sc.ContractParam.byteArray(
-        u.HexString.fromHex(sanitizeHex(op.Signature || ''), true)
-      ),
-    ));
+    const opsArray = userOps.map(op => sponsoredUserOpParameter(op, 3));
 
     return {
       scriptHash: this.masterContractHash,
@@ -1498,6 +1590,9 @@ class AbstractAccountClient {
 
 module.exports = {
   AbstractAccountClient,
+  ...require('./native'),
+  ...require('./proxyWitness'),
+  ...require('./multisig'),
   // Meta-tx exports
   buildMetaTransactionTypedData: metaTxExports.buildMetaTransactionTypedData,
   buildV3UserOperationTypedData: metaTxExports.buildV3UserOperationTypedData,
@@ -1509,6 +1604,12 @@ module.exports = {
   toAddressWord: metaTxExports.toAddressWord,
   toUint256Word: metaTxExports.toUint256Word,
   sanitizeHex: metaTxExports.sanitizeHex,
+  // Token transfer result rules (shared with the relay route and the wallet)
+  TRANSFER_RETURNED_FALSE: transferOutcome.TRANSFER_RETURNED_FALSE,
+  TRANSFER_RETURNED_FALSE_MESSAGE: transferOutcome.TRANSFER_RETURNED_FALSE_MESSAGE,
+  findFailedTransferInInvocation: transferOutcome.findFailedTransferInInvocation,
+  findFailedTransferInExecution: transferOutcome.findFailedTransferInExecution,
+  isProxySourcedTransfer: transferOutcome.isProxySourcedTransfer,
   // Export new modules
   EC,
   createError,

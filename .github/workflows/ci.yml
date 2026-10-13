@@ -30,7 +30,20 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             sdk/js/package-lock.json
-      - name: Install Neo compiler (nccs)
+      # Needs no packages, so it still runs when the gate below fails.
+      - name: Repository hygiene and package-pin tests
+        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/fuzz_continuous.test.mjs scripts/source_map_js_pin.test.mjs scripts/verify_repo.test.mjs
+      # Neo.SmartContract.Framework and Neo.SmartContract.Testing 3.10.1, the Neo packages they pull
+      # in and every other NuGet package are published on nuget.org, which nuget.config makes the
+      # only source. Directory.Build.props pins the framework and the packages.lock.json next to
+      # each project pins the rest; restore runs in locked mode, so a changed resolution or different
+      # package bytes fail here, within seconds, with the pinned versions named
+      # (docs/AA-REPRODUCIBLE-BUILD.md), instead of deep inside verify_repo.sh.
+      - name: Check pinned Neo platform packages (framework 3.10.1)
+        run: node scripts/check_neo_platform_packages.mjs
+      # The compiler is not a project dependency, so no lock file covers it. verify_repo.sh and
+      # contracts/compile.sh check that the installed nccs is this exact package.
+      - name: Install Neo compiler (nccs 3.9.1)
         run: dotnet tool install -g neo.compiler.csharp --version 3.9.1
       - name: Install frontend dependencies
         working-directory: frontend
@@ -41,18 +54,10 @@ jobs:
       - name: Install Playwright browser for frontend e2e
         working-directory: frontend
         run: npm run test:e2e:install
-      # KNOWN RED, tracked as audit finding N-DEP-1; do not silence it here.
-      #
-      # verify_repo.sh builds contracts/UnifiedSmartWallet.csproj, which
-      # resolves Neo.SmartContract.Framework at the version pinned in
-      # contracts/Directory.Build.props (3.10.2-CI00384). nuget.org publishes up
-      # to 3.10.1 and no configured feed carries that build, so restore fails
-      # NU1102 here and the job stops at this step. The pin is deliberate - the
-      # wallet emits System.Contract.CallWithGasLimit, which no released
-      # framework produces - so the fix is an upstream publish or a reviewed
-      # feed decision, not a downgrade and not a skip. Two related facts belong
-      # with that decision: this repository has no nuget.config, and the syscall
-      # exists in no released Neo core, so an artifact built from a vendored
-      # feed would still not be deployable to a public node.
-      - name: Verify repository
-        run: ./scripts/verify_repo.sh
+      # Uses local RPC/wallet fixtures and the dependencies installed above.
+      # This workflow has no path filter: UI, shared, SDK and test changes all run it.
+      - name: Verify native account browser fixtures
+        working-directory: frontend
+        run: npm run test:native:browser
+      - name: Verify ordinary contracts and clients
+        run: ./scripts/verify_repo.sh --profile ordinary

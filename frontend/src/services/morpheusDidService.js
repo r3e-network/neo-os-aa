@@ -8,6 +8,7 @@ import { encryptJsonWithMorpheusOracleKey } from '@/utils/morpheusEncryption';
 import { walletService, getAbstractAccountHash } from '@/services/walletService';
 import { buildZkLoginVerifierParamsHex, formatZkLoginTicket, normalizeZkLoginProvider } from '@/services/zkLoginVerifierService.js';
 import { connectedDidProfile } from '@/utils/did';
+import { createAccountIdentityReader } from './aaIdentityReadService.js';
 
 function trim(value) {
   return String(value || '').trim();
@@ -108,36 +109,7 @@ function buildNeoDidSubject(profile = getDidProfile()) {
   };
 }
 
-export async function fetchAccountIdByAddress({ rpcUrl, aaContractHash, accountAddressScriptHash } = {}) {
-  const result = await invokeReadFunction(rpcUrl, sanitizeHex(aaContractHash), 'getAccountIdByAddress', [
-    { type: 'Hash160', value: `0x${sanitizeHex(accountAddressScriptHash)}` },
-  ]);
-  if (result?.state === 'FAULT') {
-    const err = new Error(EC.rpcFault);
-    err.rpcDetail = result?.exception || null;
-    throw err;
-  }
-  const top = result?.stack?.[0];
-  if (!top || top.type !== 'ByteString' || !top.value) {
-    throw new Error(EC.accountSeedOrHashRequired);
-  }
-  return decodeBase64ToHex(top.value);
-}
-
-export async function fetchVerifierContractByAddress({ rpcUrl, aaContractHash, accountAddressScriptHash } = {}) {
-  const result = await invokeReadFunction(rpcUrl, sanitizeHex(aaContractHash), 'getVerifierContractByAddress', [
-    { type: 'Hash160', value: `0x${sanitizeHex(accountAddressScriptHash)}` },
-  ]);
-  if (result?.state === 'FAULT') {
-    const err = new Error(EC.rpcFault);
-    err.rpcDetail = result?.exception || null;
-    throw err;
-  }
-  const top = result?.stack?.[0];
-  const value = String(top?.value || '').trim();
-  if (!value) return '';
-  return sanitizeHex(value);
-}
+export const fetchAccountIdentity = createAccountIdentityReader(invokeReadFunction);
 
 async function readVerifierMethod({ rpcUrl, verifierHash, operation, args = [] } = {}) {
   const result = await invokeReadFunction(rpcUrl, sanitizeHex(verifierHash), operation, args);

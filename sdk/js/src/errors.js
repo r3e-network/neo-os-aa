@@ -132,6 +132,12 @@ const EC = {
     message: 'No verifier configured for validation',
   },
 
+  // === Operation Errors ===
+  OPERATION_PROXY_TRANSFER_REFUSED: {
+    code: 'OP_001',
+    message: 'A token transfer out of the account proxy address cannot be authorised by an owner or relay witness: the token checks the proxy address as a witness and answers false, and the nonce and the fee are still spent. It needs a proxy-witness transaction, which also requires the contract admin to set the account verify scope target',
+  },
+
   // === Module Errors ===
   MODULE_NOT_INSTALLED: {
     code: 'MODULE_001',
@@ -167,7 +173,7 @@ const EC = {
   },
   ENCODING_UINT256_INVALID: {
     code: 'ENC_002',
-    message: 'Uint256 encoding failed. Value must be non-negative',
+    message: 'NeoVM integer encoding failed. Value must satisfy 0 <= value < 2^255',
   },
   ENCODING_ARGS_HASH_INVALID: {
     code: 'ENC_003',

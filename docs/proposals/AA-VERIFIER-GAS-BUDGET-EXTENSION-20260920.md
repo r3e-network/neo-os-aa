@@ -1,7 +1,7 @@
 # AA Verifier Gas-Budget Extension
 
 **Status:** Draft platform-extension proposal; private integration validated, public activation pending
-**Date:** 2026-09-21
+**Date:** 2026-09-21; verification refresh: 2026-10-04
 **Scope:** NeoVM / DevPack capability required by the Neo N3 AA profile
 
 ## Abstract
@@ -21,7 +21,7 @@ allowing that verifier to consume the whole transaction budget.
 The implementation has been prototyped in isolated Neo core and DevPack
 worktrees and integrated into the current `neo-os-aa` artifact with
 `Neo.SmartContract.Framework` 3.10.2-CI00384. A matching private NeoExpress
-runtime activates `HF_Iara` at block 0 and reads the resulting artifacts back
+runtime activates `HF_SmartAccountV1` at block 0 and reads the resulting artifacts back
 over JSON-RPC. No public activation, deployment or broadcast is claimed.
 
 ## Motivation and threat model
@@ -134,7 +134,7 @@ The AA profile MUST publish:
 
 ## Activation and compatibility
 
-The prototype registers the syscall behind `Hardfork.HF_Iara`. Nodes that have
+The prototype registers the syscall behind `Hardfork.HF_SmartAccountV1`. Nodes that have
 not activated the hardfork MUST reject the syscall rather than silently
 executing an unbounded call. A contract compiled with the new syscall therefore
 requires an activation-aware deployment plan and MUST NOT be advertised as
@@ -155,6 +155,7 @@ The platform implementation MUST pass at least these vectors:
 
 - child exceeds its limit and faults;
 - ordinary nested `Contract.Call` remains bounded by the ancestor;
+- `CALLT` remains bounded by the ancestor;
 - nested bounded calls cannot escape the ancestor;
 - a child within its limit succeeds;
 - zero, negative, and transaction-budget-exceeding limits are rejected;
@@ -162,12 +163,13 @@ The platform implementation MUST pass at least these vectors:
 - target state and notifications roll back on budget exhaustion;
 - the syscall is unavailable before hardfork activation.
 
-The current isolated prototype passes all nine engine vectors listed in the
-current platform receipt, including child-state rollback, ancestor-budget
-inheritance, whitelist charging and pre-hardfork syscall rejection, plus the
-compiler emission smoke test. The integrated AA contract and private-chain
-readback also pass; public activation and target-node parity remain required
-before this proposal can be marked generally implemented.
+The current isolated prototype passes all fourteen focused bounded-call tests,
+including child-state rollback, ancestor-budget inheritance through ordinary
+calls, `CALLT`, `Runtime.LoadScript`, initialization and native callbacks,
+whitelist charging, post-Huyao `RET` attribution, and pre-hardfork syscall
+rejection, plus the compiler emission smoke test. The integrated AA contract
+and private-chain readback also pass; public activation and target-node parity
+remain required before this proposal can be marked generally implemented.
 
 ## Security and coverage boundary
 
@@ -181,19 +183,20 @@ Those remain separate AA and platform assurance obligations.
 | Gate | Result |
 | --- | --- |
 | Neo core prototype | Implemented in isolated worktree |
-| Neo core targeted vectors | 9/9 passed |
-| Neo core full unit suite | 1,435/1,435 passed |
+| Neo core targeted vectors | 14/14 passed |
+| Neo core full unit suite | 1,453/1,453 passed |
 | DevPack framework build | Passed |
 | DevPack compiler syscall smoke | Passed |
 | DevPack compiler unit suite on published core | 1,359/1,359 passed |
 | Published DevPack framework suite | Matching private package consumed; upstream publication remains pending |
-| Current AA source uses syscall | Yes; `Contract.CallWithGasLimit` with 1,000,000,000 datoshi |
+| Current AA source uses syscall | Yes; application-trigger prototype callback budget is 1,000,000,000 datoshi; the native profile separately specifies 100,000,000 datoshi |
 | Current AA artifact uses syscall | Yes; NEF contains the syscall hash `c45fbc51` |
-| AA contract tests | 292/292 passed |
-| Private NeoExpress with syscall-enabled AA | PASS; 25 artifacts, 12 scenarios, 73 halted transactions, 26 expected faults, 61 assertions, RPC readback parity |
+| AA contract tests | 322/322 passed with the sibling NeoDIDRegistry artifact; standalone checkout is 320/322 with 2 explicit cross-repository DID skips |
+| Private NeoExpress with syscall-enabled AA | PASS; 25 deployments, 14 scenarios, 106 HALT and 2 FAULT persisted transactions, 38 expected negative cases (36 preflight), 84 assertions, 25 complete RPC readbacks including DID manifest parity; cryptographic profile vectors include bare P-256 WebAuthn/TEE, delegated ZkLogin and fail-closed ZKEmail |
 | Public network activation/readback | Not performed |
 
-The private evidence mitigates VULN-001 for the matching local artifact. It is
+The current private receipt is
+`docs/reports/aa-neoexpress-validation-20261006.json`. The private evidence mitigates VULN-001 for the matching local artifact and also exercises the shipped composite leaf-cleanup boundary. It is
 not a production-security claim: public activation/deployment, target-node
 parity, cryptographic and witness semantics, complete NeoVM refinement,
 arbitrary plugin-cycle absence, and independent external audit remain open.

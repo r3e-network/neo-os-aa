@@ -88,7 +88,7 @@ sequenceDiagram
   Relay->>Chain: Submit wrapped invocation
 ```
 
-The key design choice is that the downstream target contract is **not** called directly by a raw proxy-signed transaction. Instead, execution routes through the canonical AA runtime entrypoint `executeUnifiedByAddress`, where the policy engine can enforce role checks, whitelists, blacklists, and transfer limits.
+The key design choice is that the downstream target contract is **not** called directly by a raw proxy-signed transaction. Instead, execution routes through `executeUserOp(accountId, op)` (or `executeUserOps(accountId, ops)` for a batch), where the policy engine can enforce verifier, hook and target checks. The V1/V2 wrapper entrypoints were removed and exist in no deployed manifest and no contract source.
 
 ## 6. Draft Collaboration Model
 
@@ -193,4 +193,4 @@ If you are learning the system for the first time, read these pages in order:
 
 ## Matrix Domain Access
 
-Users do not have to memorize raw `accountId` values. The frontend can register a `.matrix` domain during AA creation and later use that domain as a discovery input. The domain resolves to the controller wallet address, and the frontend then discovers linked AA addresses where that wallet is an admin or manager.
+Users do not have to memorize raw `accountId` values. The frontend can register a `.matrix` domain during AA creation and later resolve that domain to the controller wallet address. V3 has no admin or manager role query, so a domain does not by itself discover linked accounts: read them one at a time with `getAccountState(accountIdHash)`. The helper `discoverAccountsForMatrixDomain` (`frontend/src/services/matrixDomainService.js:87`) still names the removed V2 reads `getAccountAddressesByAdmin` / `getAccountAddressesByManager`, which no deployed manifest exports, and it has no caller in this repository (DS-CU-202 finding F2).

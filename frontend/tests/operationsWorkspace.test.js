@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
 
 import { createOperationsWorkspace } from '../src/features/operations/useOperationsWorkspace.js';
 import { buildRelayPayloadOptions } from '../src/features/operations/execution.js';
@@ -92,11 +93,7 @@ test('signing a persisted draft appends the signature without mutating the immut
   workspace.markPersisted({ draftId: 'draft-1', shareSlug: 'share-1' });
   assert.equal(workspace.isDraftImmutable.value, true);
 
-  const metaInvocation = {
-    scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
-    operation: 'executeUserOp',
-    args: [],
-  };
+  const metaInvocation = executeUserOpInvocation();
 
   // The signing flows skip setTransactionBody on persisted drafts and store
   // the invocation in the signature metadata instead — the relay path reads
@@ -104,7 +101,7 @@ test('signing a persisted draft appends the signature without mutating the immut
   workspace.appendSignature({
     signerId: 'evm:0xabc',
     kind: 'evm',
-    signatureHex: '12'.repeat(64),
+    signatureHex: '11'.repeat(64),
     metadata: { metaInvocation },
   });
 

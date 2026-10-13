@@ -166,3 +166,23 @@ test('RPCClient.send still returns results and maps JSON-RPC errors', async () =
     await closeServer(server);
   }
 });
+
+
+test('RPCClient.send preserves JSON-RPC code and structured data for submission classification', async () => {
+  const data = { reason: 'AlreadyExists', txid: '0x' + 'ab'.repeat(32), nested: { retryable: false } };
+  const { server, url } = await listen((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -501, message: 'Already exists', data } }));
+  });
+  try {
+    const client = new rpc.RPCClient(url);
+    await assert.rejects(() => client.send('sendrawtransaction', ['AA==']), (error) => {
+      assert.equal(error.message, 'Already exists');
+      assert.equal(error.code, -501);
+      assert.deepEqual(error.data, data);
+      return true;
+    });
+  } finally {
+    await closeServer(server);
+  }
+});

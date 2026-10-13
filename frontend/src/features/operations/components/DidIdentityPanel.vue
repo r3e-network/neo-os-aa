@@ -202,7 +202,7 @@
             t('operations.ariaRefreshChainState', 'Refresh chain state')
           "
           :class="{ 'btn-loading': busy === 'refreshState' }"
-          :disabled="busy === 'refreshState' || !props.accountAddressScriptHash"
+          :disabled="busy === 'refreshState' || !resolvedAccountId"
           @click="refreshVerifierStateAction"
         >
           {{
@@ -792,9 +792,8 @@ import { useClipboard } from "@/composables/useClipboard.js";
 import { useDidConnection } from "@/composables/useDidConnection.js";
 import {
   morpheusDidService,
-  fetchAccountIdByAddress,
+  fetchAccountIdentity,
   fetchAccountMaintenanceState,
-  fetchVerifierContractByAddress,
   fetchUnifiedVerifierState,
 } from "@/services/morpheusDidService.js";
 import { notificationService } from "@/services/notificationService.js";
@@ -1046,96 +1045,44 @@ function toExpiry(minutes) {
   return Date.now() + Math.max(Number(minutes) || 0, 1) * 60 * 1000;
 }
 
-async function refreshAccountId() {
-  if (props.accountIdPrefill) {
-    resolvedAccountId.value = sanitizeHex(props.accountIdPrefill);
-    return;
-  }
-  if (!props.accountAddressScriptHash) {
-    resolvedAccountId.value = "";
-    return;
-  }
+let accountContextRequestId = 0;
+let verifierStateRequestId = 0;
+async function refreshAccountContext() {
+  const requestId = ++accountContextRequestId;
+  // Invalidate all earlier reads before clearing context, including an in-flight
+  // verifier response from another core with the same account-ID prefill.
+  ++verifierStateRequestId;
+  resolvedAccountId.value = "";
+  recoveryVerifierHash.value = "";
+  proxyVerifierHash.value = "";
+  verifierState.value = null;
+  maintenanceState.value = null;
+  if (!props.accountIdPrefill && !props.accountAddressScriptHash) return;
   try {
-    resolvedAccountId.value = await fetchAccountIdByAddress({
+    const identity = await fetchAccountIdentity({
       rpcUrl: RUNTIME_CONFIG.rpcUrl,
       aaContractHash: props.aaContractHash || getAbstractAccountHash(),
+      accountIdHex: props.accountIdPrefill,
       accountAddressScriptHash: props.accountAddressScriptHash,
     });
+    if (requestId !== accountContextRequestId) return;
+    resolvedAccountId.value = identity.accountIdHex;
+    recoveryVerifierHash.value = prefillRecoveryVerifier.value || identity.verifierHash;
+    proxyVerifierHash.value = identity.verifierHash;
   } catch (error) {
+    if (requestId !== accountContextRequestId) return;
     if (import.meta.env.DEV)
       console.error(
-        "[DidIdentityPanel] refreshAccountId failed:",
+        "[DidIdentityPanel] refreshAccountContext failed:",
         error?.message,
       );
     toast.error(translateError(error?.message, t));
-    resolvedAccountId.value = "";
-  }
-}
-
-async function refreshBoundVerifier() {
-  try {
-    const bound = props.accountAddressScriptHash
-      ? await fetchVerifierContractByAddress({
-          rpcUrl: RUNTIME_CONFIG.rpcUrl,
-          aaContractHash: props.aaContractHash || getAbstractAccountHash(),
-          accountAddressScriptHash: props.accountAddressScriptHash,
-        })
-      : "";
-    const preferredRecoveryVerifier = prefillRecoveryVerifier.value || bound;
-    if (!recoveryVerifierHash.value && preferredRecoveryVerifier) {
-      recoveryVerifierHash.value = preferredRecoveryVerifier;
-    }
-    if (!proxyVerifierHash.value && bound) {
-      proxyVerifierHash.value = bound;
-    }
-    if (resolvedAccountId.value) {
-      maintenanceState.value = await fetchAccountMaintenanceState({
-        rpcUrl: RUNTIME_CONFIG.rpcUrl,
-        aaContractHash: props.aaContractHash || getAbstractAccountHash(),
-        accountIdHex: resolvedAccountId.value,
-      }).catch((err) => {
-        if (import.meta.env.DEV)
-          console.error(
-            "[DidIdentityPanel] fetchAccountMaintenanceState failed:",
-            err?.message,
-          );
-        return null;
-      });
-    }
-    if ((preferredRecoveryVerifier || bound) && resolvedAccountId.value) {
-      verifierState.value = await fetchUnifiedVerifierState({
-        rpcUrl: RUNTIME_CONFIG.rpcUrl,
-        verifierHash: preferredRecoveryVerifier || bound,
-        accountIdHex: resolvedAccountId.value,
-      }).catch((err) => {
-        if (import.meta.env.DEV)
-          console.error(
-            "[DidIdentityPanel] fetchUnifiedVerifierState failed:",
-            err?.message,
-          );
-        return null;
-      });
-    }
-  } catch (error) {
-    if (import.meta.env.DEV)
-      console.error(
-        "[DidIdentityPanel] refreshBoundVerifier failed:",
-        error?.message,
-      );
-    toast.error(translateError(error?.message, t));
-    recoveryVerifierHash.value = prefillRecoveryVerifier.value || "";
-    proxyVerifierHash.value = "";
-    verifierState.value = null;
-    maintenanceState.value = null;
   }
 }
 
 watch(
-  () => props.accountAddressScriptHash,
-  () => {
-    void refreshAccountId();
-    void refreshBoundVerifier();
-  },
+  () => [props.accountAddressScriptHash, props.accountIdPrefill, props.aaContractHash, RUNTIME_CONFIG.rpcUrl],
+  () => { void refreshAccountContext(); },
   { immediate: true },
 );
 
@@ -1164,68 +1111,51 @@ watch(
   { immediate: true },
 );
 
-let verifierStateRequestId = 0;
 watch(
   [resolvedAccountId, recoveryVerifierHash],
-  async ([accountId, verifier]) => {
-    if (!accountId) return;
-    const requestId = ++verifierStateRequestId;
-    try {
-      const maintenance = await fetchAccountMaintenanceState({
+  ([accountId, verifier]) => { void refreshVerifierState(accountId, verifier); },
+);
+
+async function refreshVerifierState(accountId, verifier) {
+  const requestId = ++verifierStateRequestId;
+  verifierState.value = null;
+  maintenanceState.value = null;
+  if (!accountId) return false;
+  try {
+    const [maintenance, state] = await Promise.all([
+      fetchAccountMaintenanceState({
         rpcUrl: RUNTIME_CONFIG.rpcUrl,
         aaContractHash: props.aaContractHash || getAbstractAccountHash(),
         accountIdHex: accountId,
-      });
-      if (requestId !== verifierStateRequestId) return;
-      maintenanceState.value = maintenance;
-      if (!verifier) {
-        verifierState.value = null;
-        return;
-      }
-      const state = await fetchUnifiedVerifierState({
+      }),
+      verifier ? fetchUnifiedVerifierState({
         rpcUrl: RUNTIME_CONFIG.rpcUrl,
         verifierHash: verifier,
         accountIdHex: accountId,
-      });
-      if (requestId !== verifierStateRequestId) return;
-      verifierState.value = state;
-    } catch (error) {
-      if (requestId !== verifierStateRequestId) return;
-      if (import.meta.env.DEV)
-        console.error(
-          "[DidIdentityPanel] fetchUnifiedVerifierState failed:",
-          error?.message,
-        );
-      toast.error(translateError(error?.message, t));
-      verifierState.value = null;
-      maintenanceState.value = null;
-    }
-  },
-);
+      }) : Promise.resolve(null),
+    ]);
+    if (requestId !== verifierStateRequestId) return false;
+    maintenanceState.value = maintenance;
+    verifierState.value = state;
+    return true;
+  } catch (error) {
+    if (requestId !== verifierStateRequestId) return false;
+    if (import.meta.env.DEV)
+      console.error("[DidIdentityPanel] refreshVerifierState failed:", error?.message);
+    toast.error(translateError(error?.message, t));
+    return false;
+  }
+}
 
 async function refreshVerifierStateAction() {
   busy.value = "refreshState";
   try {
-    if (resolvedAccountId.value) {
-      maintenanceState.value = await fetchAccountMaintenanceState({
-        rpcUrl: RUNTIME_CONFIG.rpcUrl,
-        aaContractHash: props.aaContractHash || getAbstractAccountHash(),
-        accountIdHex: resolvedAccountId.value,
-      });
-    }
-    if (
-      resolvedAccountId.value &&
-      (recoveryVerifierHash.value || proxyVerifierHash.value)
-    ) {
-      verifierState.value = await fetchUnifiedVerifierState({
-        rpcUrl: RUNTIME_CONFIG.rpcUrl,
-        verifierHash: recoveryVerifierHash.value || proxyVerifierHash.value,
-        accountIdHex: resolvedAccountId.value,
-      });
+    if (await refreshVerifierState(
+      resolvedAccountId.value,
+      recoveryVerifierHash.value || proxyVerifierHash.value,
+    )) {
       publishStatus(t("didPanel.refreshChainState", "Refresh Chain State"));
     }
-  } catch (err) {
-    toast.error(translateError(err?.message, t));
   } finally {
     busy.value = "";
   }

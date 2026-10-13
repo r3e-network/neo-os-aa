@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);SMARTACCOUNT_NATIVE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+    <Compile Include="NativeAuthority.cs" />
+    <Compile Include="../verifiers/VerifierAuthority.cs" />
+    <Compile Include="../verifiers/VerifierModels.cs" />
+    <Compile Include="../verifiers/SignerDomain.cs" />
+    <Compile Include="../verifiers/NeoNativeVerifier.cs" />
+  </ItemGroup>
+</Project>

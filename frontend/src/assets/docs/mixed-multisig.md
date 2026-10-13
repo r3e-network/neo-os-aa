@@ -2,9 +2,9 @@
 
 A single Abstract Account can aggregate native Neo witnesses and EVM EIP-712 signatures toward the same threshold.
 
-## Verified Mixed Flow
+## Mixed Flow
 
-On the hardened verified testnet deployment `0x5be915aea3ce85e4752d522632f0a9520e377aaf`, the live validator proved a mixed Neo-relayer + EVM-signer path where:
+On the V1/V2 hardened testnet deployment `0x5be915aea3ce85e4752d522632f0a9520e377aaf` (superseded; the canonical shared testnet AA core is now `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2` in `frontend/src/config/generatedMorpheusRegistry.js`), the validator of that time exercised a mixed Neo-relayer + EVM-signer path where:
 
 - the EVM signer authorizes an AA wrapper action with EIP-712 typed data
 - the Neo account relays and pays GAS for the transaction
@@ -27,10 +27,10 @@ Shared draft metadata stays intentionally bounded here as well: the frontend kee
 
 ## Execution Model
 
-Mixed signing does **not** bypass hardening. The combined authorization still has to execute through the canonical Abstract Account runtime entrypoints `executeUnified` or `executeUnifiedByAddress`. Direct proxy-signed external calls remain invalid.
+Mixed signing does **not** bypass hardening. The combined authorization still has to execute through the canonical V3 runtime entrypoint `executeUserOp` (or `executeUserOps` for a batch). The V1/V2 wrappers `executeUnified` and `executeUnifiedByAddress` were removed and appear in no deployed manifest and no contract source. Direct proxy-signed external calls remain invalid.
 
 ## Practical Example
 
-- **Signer A:** Ethereum wallet signs typed data for `setWhitelistByAddress` or another AA-managed action
+- **Signer A:** Ethereum wallet signs typed data for an AA-managed action routed through `executeUserOp`
 - **Signer B:** Neo wallet submits the outer transaction and attaches the native witness
 - **Contract:** counts valid authorization across both ecosystems, then enforces whitelist / blacklist / transfer policies before the target call

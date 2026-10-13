@@ -271,6 +271,28 @@ test('SDK registration helpers reject escape timelocks outside the contract regi
   );
 });
 
+test('SDK registration and verifier update helpers reject malformed verifier parameters', () => {
+  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  for (const verifierParamsHex of ['zz', '0x12zz', 'abc']) {
+    assert.throws(
+      () => client.createAccountPayload({
+        backupOwnerAddress: '0x4444444444444444444444444444444444444444',
+        verifierParamsHex,
+        escapeTimelock: 604800,
+      }),
+      /hex/i,
+    );
+    assert.throws(
+      () => client.createUpdateVerifierPayload({
+        accountScriptHash: '0x5555555555555555555555555555555555555555',
+        verifierContractHash: '0x6666666666666666666666666666666666666666',
+        verifierParamsHex,
+      }),
+      /hex/i,
+    );
+  }
+});
+
 test('testnet validators derive registration-bound account ids with the contract minimum escape timelock', () => {
   const smokeSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_smoke.js'), 'utf8');
   const marketEscrowSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_market_escrow.js'), 'utf8');
@@ -639,7 +661,9 @@ test('computeArgsHash uses invokefunction for array payloads', async () => {
     async invokeScript() {
       throw new Error('invokeScript should not be used for computeArgsHash');
     },
-    async invokeFunction(_scriptHash, operation) {
+    async send(method, [_scriptHash, operation, params]) {
+      assert.equal(method, 'invokefunction');
+      assert.deepEqual(params, [{ type: 'Array', value: [] }]);
       invokeFunctionCalled = true;
       assert.equal(operation, 'computeArgsHash');
       return {
@@ -1140,6 +1164,27 @@ test('contract-compatible signing recipe produces a recoverable 64-byte r||s sig
   assert.equal(signature.length, 128, 'contract asserts Signature.Length == 64 bytes (r||s)');
   assert.equal(ethers.recoverAddress(digest, sig), wallet.address,
     'raw digest signature must recover the signer');
+});
+
+test('contract-compatible signing rejects the NeoVM signed-integer upper half', () => {
+  const { buildContractCompatibleStructHash } = require('../src/metaTx');
+  const base = {
+    accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
+    coreContractHash: CORE_CONTRACT_HASH,
+    targetContract: '49c095ce04d38642e39155f5481615c58227a498',
+    method: 'transfer',
+    argsHash: 'aa'.repeat(32),
+    nonce: 0,
+    deadline: 1700000000000,
+  };
+  assert.throws(
+    () => buildContractCompatibleStructHash({ ...base, nonce: 1n << 255n }),
+    { code: 'ENC_002' },
+  );
+  assert.throws(
+    () => buildContractCompatibleStructHash({ ...base, deadline: 1n << 255n }),
+    { code: 'ENC_002' },
+  );
 });
 
 test('shipped signing example and metaTx JSDoc teach the contract-compatible recipe', () => {

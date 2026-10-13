@@ -38,80 +38,63 @@ This guide is a practical, user-first companion to `docs/HOW_IT_WORKS.md`.
 
 ### Finding accounts you control
 
-Use account discovery to find all accounts where you hold admin or manager roles:
+V3 has no admin, manager or threshold state and no reverse indices: that V1/V2 role model was
+removed. The removed `getAccountsByAdmin`/`getAccountsByManager` reads exist only as SDK stubs that
+throw `LEGACY_V3_REMOVED`, and no deployed manifest exports them. Read an account you know about
+with `getAccountState(accountHashOrAddress)`:
 
 **Via SDK:**
 ```javascript
 const client = new AbstractAccountClient(rpcUrl, masterContractHash);
 
-// Find all accounts where you're an admin
-const adminAccounts = await client.getAccountsByAdmin(yourAddress);
-
-// Find all accounts where you're a manager
-const managerAccounts = await client.getAccountsByManager(yourAddress);
-```
-
-**Via contract call:**
-```javascript
-// Direct RPC invocation
-const script = sc.createScript({
-  scriptHash: masterContractHash,
-  operation: 'getAccountsByAdmin',
-  args: [{ type: 'Hash160', value: addressScriptHash }]
-});
+const state = await client.getAccountState(accountIdHash);
 ```
 
 **Use cases:**
-- Portfolio management: view all accounts you control
-- Organizational oversight: discover accounts under your authority
-- Access audit: verify your role assignments across accounts
+- Portfolio management: read every account you hold the id or address for, one call each
+- Access audit: check the verifier, hook and backup owner the account actually has
 
 ## Batch Account Creation
 
 ### Creating multiple accounts efficiently
 
-Deploy multiple accounts with shared governance in a single transaction:
+`registerAccounts(accountIds, verifier, verifierParamsList, hookId, backupOwner, escapeTimelock)`
+registers several accounts in one transaction. Every account gets the same verifier, hook and backup
+owner; V3 has no shared admin/manager governance (that V1/V2 model was removed), and registration
+requires the witness of the `backupOwner` argument, not of the transaction sender.
 
 **Via SDK:**
 ```javascript
-// Prepare account IDs
-const accountIds = [
-  'team-wallet-dev',
-  'team-wallet-staging', 
-  'team-wallet-prod'
-];
+// One payload per account: the SDK has no batch payload builder
+const payload = client.createAccountPayload({
+  verifierContractHash,
+  verifierParamsHex,
+  hookContractHash,
+  backupOwnerAddress,
+  escapeTimelock: 7 * 24 * 60 * 60,
+});
 
-// Shared admin configuration
-const admins = [adminAddress1, adminAddress2];
-const adminThreshold = 2;
-
-// Optional manager configuration
-const managers = [managerAddress1];
-const managerThreshold = 1;
-
-// Create batch payload
-const payload = client.createAccountBatchPayload(
-  accountIds,
-  admins,
-  adminThreshold,
-  managers,
-  managerThreshold
-);
-
-// Sign and broadcast
-const txid = await walletService.sendTransaction(payload);
+// The same derivation the contract's computeRegistrationAccountId uses
+const accountId = client.deriveRegistrationAccountIdHash({
+  verifierContractHash,
+  verifierParamsHex,
+  hookContractHash,
+  backupOwnerAddress,
+  escapeTimelock: 7 * 24 * 60 * 60,
+});
+// Submit the account ids through registerAccounts(Array, Hash160, Array, Hash160, Hash160, Integer)
 ```
 
 **Key behaviors:**
-- Transaction sender automatically becomes default admin
-- All accounts share the same admin/manager configuration
-- Single transaction reduces gas costs
+- Registration requires the backup owner's witness (`contracts/UnifiedSmartWallet.Accounts.cs:75`)
+- Every account carries its own verifier, hook and backup owner; there is no shared governance state
+- Single transaction reduces fees
 - Atomic operation: all accounts created or none
 
 **Use cases:**
-- Team onboarding: create accounts for multiple team members
+- Team onboarding: register several accounts for team members with the same configuration
 - Project setup: deploy dev/staging/prod accounts together
-- Organizational structure: establish department accounts with shared governance
+- Service accounts: register a set of accounts one call at a time, atomically
 
 ## Recommended references
 
@@ -124,4 +107,4 @@ const txid = await walletService.sendTransaction(payload);
 
 ## Loading by `.matrix`
 
-If you remember your `.matrix` name more easily than an AA address, enter the domain in the load field. The frontend resolves the domain to the controlling wallet address and then looks up any bound AA addresses where that wallet is an admin or manager. If multiple AAs are found, you can choose the correct one from the returned list.
+If you remember your `.matrix` name more easily than an AA address, enter the domain in the load field. The frontend resolves the domain to the controlling wallet address. V3 has no admin or manager role query, so a domain does not by itself list bound AA accounts: read each one with `getAccountState(accountHashOrAddress)`. The helper `discoverAccountsForMatrixDomain` (`frontend/src/services/matrixDomainService.js:87`) still names the removed V2 reads `getAccountAddressesByAdmin` / `getAccountAddressesByManager`, which no deployed manifest exports, and it has no caller in this repository (DS-CU-202 finding F2).

@@ -29,29 +29,6 @@ cd sdk/js && npm test
 
 ## SDK API Reference
 
-### Account Discovery
-
-```javascript
-// Find accounts by admin role
-const accounts = await client.getAccountsByAdmin(address);
-
-// Find accounts by manager role  
-const accounts = await client.getAccountsByManager(address);
-```
-
-### Batch Account Creation
-
-```javascript
-// Create multiple accounts with shared governance
-const payload = client.createAccountBatchPayload(
-  accountIds,        // Array of account ID strings
-  admins,           // Array of admin addresses (optional)
-  adminThreshold,   // Required admin signatures
-  managers,         // Array of manager addresses (optional)
-  managerThreshold  // Required manager signatures
-);
-```
-
 ### Account Lifecycle
 
 ```javascript
@@ -74,29 +51,44 @@ const payload = client.createAccountPayload({
 const state = await client.getAccountState(accountIdHash);
 ```
 
-### Role Management
+`registerAccounts(Array, Hash160, Array, Hash160, Hash160, Integer)` on the deployed core
+registers several accounts in one transaction; the SDK has no batch payload builder, so build one
+`createAccountPayload` per account and submit them through that entrypoint.
 
-```javascript
-// Get admins
-const admins = await client.getAdmins(accountId);
-const threshold = await client.getAdminThreshold(accountId);
+### Removed V2 surfaces
 
-// Get managers
-const managers = await client.getManagers(accountId);
-const threshold = await client.getManagerThreshold(accountId);
-```
+The V1/V2 role model is gone. There is no admin, manager or threshold state on a V3 account, and
+the SDK keeps only removed stubs that throw `LEGACY_V3_REMOVED`:
+
+- `client.getAccountsByAdmin()`, `client.getAccountsByManager()` — removed in V3: no arguments,
+  always throws `LEGACY_V3_REMOVED`; use `getAccountState(accountIdHash)` per account.
+- `client.getAccountAddressesByAdmin()`, `client.getAccountAddressesByManager()` — removed in V3 for
+  the same reason.
+- `client.createAccountBatchPayload(...)`, `client.getAdmins(...)`,
+  `client.getAdminThreshold(...)`, `client.getManagers(...)` — removed names that never existed in
+  this SDK.
+- `client.getManagerThreshold(...)`, `client.executePayload(...)`,
+  `client.executeUnifiedByAddressPayload(...)` — removed names that never existed in this SDK;
+  the current builders are `createAccountPayload` and `UserOperationBuilder`.
 
 ### Execution
 
+V3 executes through `executeUserOp(accountId, op)` (or `executeUserOps(accountId, ops)` for a
+batch); the `executeUnified`/`executeUnifiedByAddress` wrappers were removed and exist in no
+deployed manifest and no contract source. Build the operation with the SDK's `UserOperationBuilder`
+and sign the typed data the V3 layout defines:
+
 ```javascript
-// Execute via account ID
-const payload = client.executePayload(accountId, targetContract, method, args);
+const { createUserOpBuilder, buildV3UserOperationTypedData } = require('./sdk/js/src');
 
-// Execute via account address
-const payload = client.executeUnifiedByAddressPayload(accountAddress, targetContract, method, args);
+const userOp = createUserOpBuilder()
+  .setAccountId(accountIdHash)
+  .setTarget(targetContract)
+  .setMethod('transfer')
+  .setArgs([{ type: 'Hash160', value: recipient }, { type: 'Integer', value: '100000000' }])
+  .build();
 
-// Execute meta-transaction
-const payload = client.executeUnifiedByAddressPayload(accountAddress, evmPublicKey, targetContract, method, args, argsHash, nonce, deadline, signature);
+const typedData = buildV3UserOperationTypedData(userOp);
 ```
 
 ### Sponsored Execution (Paymaster)
@@ -128,16 +120,19 @@ const batchPayload = client.createSponsoredBatchPayload({
 
 | Method | Access | Purpose |
 | --- | --- | --- |
-| `OnNEP17Payment` | GAS transfer | Accept sponsor deposits |
-| `WithdrawDeposit(amount)` | Sponsor witness | Withdraw excess GAS |
-| `SetPolicy(accountId, target, method, maxPerOp, dailyBudget, totalBudget, validUntil)` | Sponsor witness | Create/update sponsorship policy |
-| `RevokePolicy(accountId)` | Sponsor witness | Remove policy + clear counters |
-| `ValidatePaymasterOp(sponsor, accountId, target, method, amount)` | Safe (anyone) | Read-only preflight check |
-| `SettleReimbursement(sponsor, accountId, target, method, relay, amount)` | AA Core only | Atomic settlement after execution |
-| `GetSponsorDeposit(sponsor)` | Safe | Query deposit balance |
-| `GetPolicy(sponsor, accountId)` | Safe | Query policy details |
-| `GetDailySpent(sponsor, accountId)` | Safe | Query 24h spending |
-| `GetTotalSpent(sponsor, accountId)` | Safe | Query lifetime spending |
+| `onNEP17Payment` | GAS transfer | Accept sponsor deposits |
+| `withdrawDeposit(amount)` | Sponsor witness | Withdraw excess GAS |
+| `setPolicy(accountId, target, method, maxPerOp, dailyBudget, totalBudget, validUntil)` | Sponsor witness | Create/update sponsorship policy |
+| `revokePolicy(accountId)` | Sponsor witness | Remove policy + clear counters |
+| `validatePaymasterOp(sponsor, accountId, target, method, amount)` | Safe (anyone) | Read-only preflight check |
+| `settleReimbursement(sponsor, accountId, target, method, relay, amount)` | AA Core only | Atomic settlement after execution |
+| `getSponsorDeposit(sponsor)` | Safe | Query deposit balance |
+| `getPolicy(sponsor, accountId)` | Safe | Query policy details |
+| `getDailySpent(sponsor, accountId)` | Safe | Query 24h spending |
+| `getTotalSpent(sponsor, accountId)` | Safe | Query lifetime spending |
+
+The names above are the deployed manifest's, exactly as `contracts/build/AAPaymaster.manifest.json`
+spells them; Neo ABI names are case-sensitive.
 
 ## Canonical docs
 
