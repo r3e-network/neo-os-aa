@@ -129,6 +129,7 @@ class VerificationGateTests(unittest.TestCase):
         for model in ("coq/UnifiedSmartWalletAA.v", "tla/UnifiedSmartWalletAA.tla", "smt/aa_core.smt2"):
             self.assertNotIn("native", verify.MODEL_PROFILES[model])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeIntegerDomain.v"])
+        self.assertEqual(["native"], verify.MODEL_PROFILES["coq/PluginLifecycle.v"])
 
     def test_native_core_provenance_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -18,10 +18,11 @@ Colima daemon was unavailable; it remains a separate required environment gate.
 
 The ordinary public profile also retains two protocol-level NO-GO boundaries:
 public `v3` callbacks use standard `System.Contract.Call` without an isolated
-child budget, and platform-account backup-owner rotation is still immediate in
-the deployed ABI. Closing either requires an external Neo protocol/runtime
-change plus a new artifact, migration, and public readback; this repository
-does not relabel them as closed based on static tests.
+child budget, and the pinned public ABI still exposes immediate platform-account
+backup-owner rotation. The source candidate now contains a two-stage
+proposal/confirmation/cancellation path with a new-owner witness, but closing
+the public boundary requires an ABI migration, upgraded artifact, and public
+readback; this repository does not relabel it as closed based on static tests.
 
 ### ABI 2 convergence boundary
 
@@ -570,7 +571,7 @@ models under `verified/` for its own `verify.sh`.
 | `formal/coq/AbiManifestProjection.v` | Closed finite, order-independent ABI projection model requiring exact source/manifest coverage, unique `(name, arity)` dispatch keys, parameter/return/safe equality, and the generated initializer |
 | `formal/coq/SignerDomainSeparation.v` | Closed binding model requiring exact authorization domain and payload equality; it rejects cross-domain replay but does not prove private-key independence or primitive cryptographic soundness |
 | `formal/coq/SignerIndependence.v` | Closed finite countermodel showing that distinct public signer domains do not imply private-key independence; this is an explicit trust-boundary proof, not a key-generation proof |
-| `formal/coq/PluginLifecycle.v` | Closed finite countermodel showing that a lifecycle ABI does not imply complete cleanup of arbitrary future-plugin storage, plus a conditional theorem for a certified cleanup function |
+| `formal/coq/PluginLifecycle.v` | **Native profile only:** closed finite countermodel showing that a lifecycle ABI does not imply complete cleanup of arbitrary future-plugin storage, plus a conditional theorem for a certified cleanup function; ordinary V3 lifecycle claims remain runtime/artifact evidence |
 | `formal/tla/UnifiedSmartWalletAA.tla` (sibling: `verified/tla/`) | Finite state-machine exploration of Begin/success/failure/Tick transitions |
 | `formal/tla/UnifiedSmartWalletAA.cfg` | TLC bounds and safety invariants |
 | `formal/smt/aa_core.smt2` (sibling: `verified/smt/`) | Nonce arithmetic, cursor advancement, rollback equalities, reimbursement cap and budget arithmetic |
