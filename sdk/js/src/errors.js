@@ -173,7 +173,7 @@ const EC = {
   },
   ENCODING_UINT256_INVALID: {
     code: 'ENC_002',
-    message: 'Uint256 encoding failed. Value must be non-negative',
+    message: 'NeoVM integer encoding failed. Value must satisfy 0 <= value < 2^255',
   },
   ENCODING_ARGS_HASH_INVALID: {
     code: 'ENC_003',

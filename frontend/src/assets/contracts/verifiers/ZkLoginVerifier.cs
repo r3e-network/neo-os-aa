@@ -243,6 +243,10 @@ namespace AbstractAccount.Verifiers
             byte[] providerBytes = CopyBytes(raw, cursor, providerLength);
             cursor += providerLength;
 
+            // The config blob is a canonical wire envelope.  Accepting trailing bytes
+            // would create multiple encodings for the same signer/provider/nullifier
+            // tuple and let clients disagree about the bytes that were authorized.
+            ExecutionEngine.Assert(raw.Length == cursor + 32, "Invalid zklogin config length");
             byte[] masterNullifier = CopyBytes(raw, cursor, 32);
 
             ByteString signerPublicKey = (ByteString)pubKeyBytes;
@@ -307,7 +311,12 @@ namespace AbstractAccount.Verifiers
 
         private static void ValidateProvider(string provider)
         {
-            ExecutionEngine.Assert(!string.IsNullOrEmpty(provider), "Provider required");
+            ByteString encoded = (ByteString)(provider ?? string.Empty);
+            // Provider is encoded with a single-byte UTF-8 length prefix in both
+            // config/proof blobs and the signed payload.  Reject values that cannot
+            // be represented canonically instead of storing a config that always
+            // faults later during payload construction.
+            ExecutionEngine.Assert(encoded.Length > 0 && encoded.Length <= 255, "Provider must be 1-255 bytes");
         }
 
         private static void ValidateNullifier(ByteString value, string message)

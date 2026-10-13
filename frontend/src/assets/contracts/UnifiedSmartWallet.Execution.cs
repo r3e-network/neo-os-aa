@@ -165,7 +165,7 @@ namespace AbstractAccount
                             state.HookId,
                             "postExecute",
                             CallFlags.All,
-                            new object[] { accountId, hookParams, result });
+                            new object[] { accountId, hookParams, CloneCallbackValue(result)! });
                         ExecutionEngine.Assert(
                             StdLib.MemoryCompare(hookSnapshot, StdLib.Serialize(hookParams)) == 0,
                             "Hook mutated authenticated operation");
@@ -178,13 +178,13 @@ namespace AbstractAccount
                             "postExecute",
                             CallFlags.All,
                             VerifierGasLimit,
-                            new object[] { accountId, op, result });
+                            new object[] { accountId, CloneUserOperation(op), CloneCallbackValue(result)! });
 #else
                         Contract.Call(
                             state.Verifier,
                             "postExecute",
                             CallFlags.All,
-                            new object[] { accountId, op, result });
+                            new object[] { accountId, CloneUserOperation(op), CloneCallbackValue(result)! });
 #endif
                     }
 
@@ -293,6 +293,14 @@ namespace AbstractAccount
                 Deadline = op.Deadline,
                 Signature = op.Signature
             };
+        }
+
+        // Callback modules are extension points.  Pass a serialized copy of the
+        // target result so a post hook/verifier cannot rewrite the value returned
+        // to the caller or mutate an object later consumed by settlement logic.
+        private static object? CloneCallbackValue(object? value)
+        {
+            return value == null ? null : StdLib.Deserialize(StdLib.Serialize(value));
         }
 
         // ========================================================================

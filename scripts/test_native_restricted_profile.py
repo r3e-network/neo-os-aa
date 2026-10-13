@@ -9,7 +9,15 @@ ROOT=Path(__file__).resolve().parent.parent
 class NativeRestrictedProfileTests(unittest.TestCase):
     def test_profile_and_linked_sources_are_explicit(self):
         profiles=json.loads((ROOT/'contracts/native/profiles.json').read_text())
-        self.assertEqual({'project':'TokenRestrictedHook.Native.csproj','role':'hook','configurationMethods':['setRestrictedToken']},profiles['TokenRestrictedHook'])
+        self.assertEqual(
+            {
+                'project': 'TokenRestrictedHook.Native.csproj',
+                'role': 'hook',
+                'configurationMethods': ['setRestrictedToken'],
+                'compositeVerifier': False,
+            },
+            profiles['TokenRestrictedHook'],
+        )
         project=ET.parse(ROOT/'contracts/native/TokenRestrictedHook.Native.csproj')
         self.assertEqual({'NativeAuthority.cs','../hooks/HookAuthority.cs','../hooks/TokenRestrictedHook.cs'},
                          {v.attrib['Include'] for v in project.findall('.//Compile')})
@@ -21,7 +29,7 @@ class NativeRestrictedProfileTests(unittest.TestCase):
         self.assertIn('"getAccountAddress"',source)
         self.assertIn('"Missing restricted balance snapshot"',source)
         self.assertIn('value is BigInteger && (BigInteger)value >= 0',source)
-        self.assertIn('ClearPrefix(Helper.Concat(Prefix_RestrictedSnapshot, (byte[])accountId))',source)
+        self.assertIn('ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId))',source)
 
 
 if __name__=='__main__':unittest.main()

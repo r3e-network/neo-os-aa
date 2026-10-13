@@ -22,7 +22,7 @@ Three release gates remain explicit:
 | Gate | Status | Required closure evidence |
 |---|---|---|
 | Public verifier/hook callback resource isolation | **NO-GO** | Neo core syscall or equivalent hardfork capability, public activation, rebuilt NEF/manifest, and RPC/runtime evidence |
-| Platform-account backup-owner rotation | **NO-GO** | Accepted propose/confirm/cancel semantics with new-owner authorization, ABI migration, upgraded artifact and live readback |
+| Platform-account backup-owner rotation | **NO-GO** | The source candidate now has propose/confirm/cancel semantics with new-owner authorization; public closure still requires ABI migration, upgraded artifact and live readback |
 | Source candidate versus pinned public artifact | **UPGRADE REVIEW** | Fresh artifact certificate, compatibility review, deployment transaction and independent RPC readback |
 
 Static tests and the host formal model gate do not close these external or

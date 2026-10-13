@@ -5,11 +5,11 @@
 ### Current host gate (2026-10-13)
 
 The current repository source and model snapshot passes the host formal gate:
-**26 Coq modules, 247 rejected semantic mutations, 61,460 TLC distinct states,
-six SMT obligations and six controls**, with the native core roster checked at
-310 exact source files. The reproducible result is
-`formal/.runs/final-20261013/result.json` (SHA-256
-`689153647773f1760c403dcfac9bfa622d41062cbddcfc448e6476acaff55913`). The
+**26 Coq modules, 446 closed declarations, 247 rejected semantic mutations,
+61,460 TLC distinct states, six SMT obligations and six controls**, with the
+native core roster checked at 310 exact source files. The reproducible result is
+`formal/.runs/final-20261013-platform/result.json` (SHA-256
+`f1b0f876b9219bf4cab19f3da6beeaaed8ef50756564eb9e52b75389b7dcf887`). The
 formal model gate is **GO** for its declared abstractions. It deliberately
 retains `implementationVerified: false`: these models do not prove C# to NEF to
 NeoVM refinement, complete VM fee accounting, arbitrary plugin liveness, or

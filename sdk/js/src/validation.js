@@ -212,9 +212,9 @@ function validateAddressOrHash160(addressOrHash) {
 }
 
 /**
- * Validates nonce and deadline for EIP-712 payloads.
- * Note: This only validates that values are provided. The contract
- * validates deadline validity at execution time.
+ * Validates nonce and deadline presence for EIP-712 payloads.
+ * The shared typed-data builders perform the NeoVM signed-integer range check
+ * before producing a payload; this helper only handles required-field errors.
  *
  * @param {number|string} nonce - The nonce to validate
  * @param {number|string} deadline - The deadline to validate
@@ -230,9 +230,29 @@ function validateEIP712Fields(nonce, deadline) {
     throw createError(EC.VALIDATION_DEADLINE_REQUIRED);
   }
 
+  const limit = 1n << 255n;
+  let normalizedNonce;
+  let normalizedDeadline;
+  try {
+    normalizedNonce = BigInt(nonce);
+    normalizedDeadline = BigInt(deadline);
+  } catch {
+    throw createError(EC.ENCODING_UINT256_INVALID, {
+      provided: { nonce, deadline },
+      hint: 'Nonce and deadline must be integer values in the NeoVM signed domain',
+    });
+  }
+  if (normalizedNonce < 0n || normalizedNonce >= limit
+      || normalizedDeadline < 0n || normalizedDeadline >= limit) {
+    throw createError(EC.ENCODING_UINT256_INVALID, {
+      provided: { nonce, deadline },
+      hint: 'Expected 0 <= nonce, deadline < 2^255 for the NeoVM signed Integer domain',
+    });
+  }
+
   return {
-    nonce: BigInt(nonce).toString(),
-    deadline: BigInt(deadline).toString(),
+    nonce: normalizedNonce.toString(),
+    deadline: normalizedDeadline.toString(),
   };
 }
 

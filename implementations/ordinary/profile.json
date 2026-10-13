@@ -55,6 +55,7 @@
   "currentSourceCandidate": {
     "artifactRoot": "contracts/bin/v3",
     "status": "source-ahead-of-pinned-public-artifact",
+    "abiMethodCount": 98,
     "releaseGate": "required-before-public-upgrade"
   },
   "verification": {

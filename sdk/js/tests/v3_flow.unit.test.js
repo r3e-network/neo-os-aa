@@ -1166,6 +1166,27 @@ test('contract-compatible signing recipe produces a recoverable 64-byte r||s sig
     'raw digest signature must recover the signer');
 });
 
+test('contract-compatible signing rejects the NeoVM signed-integer upper half', () => {
+  const { buildContractCompatibleStructHash } = require('../src/metaTx');
+  const base = {
+    accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
+    coreContractHash: CORE_CONTRACT_HASH,
+    targetContract: '49c095ce04d38642e39155f5481615c58227a498',
+    method: 'transfer',
+    argsHash: 'aa'.repeat(32),
+    nonce: 0,
+    deadline: 1700000000000,
+  };
+  assert.throws(
+    () => buildContractCompatibleStructHash({ ...base, nonce: 1n << 255n }),
+    { code: 'ENC_002' },
+  );
+  assert.throws(
+    () => buildContractCompatibleStructHash({ ...base, deadline: 1n << 255n }),
+    { code: 'ENC_002' },
+  );
+});
+
 test('shipped signing example and metaTx JSDoc teach the contract-compatible recipe', () => {
   const exampleSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'contract-compatible-signing.example.js'), 'utf8');
   const metaTxSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'src', 'metaTx.js'), 'utf8');

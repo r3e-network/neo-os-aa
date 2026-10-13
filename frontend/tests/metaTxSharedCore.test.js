@@ -136,6 +136,16 @@ test('frontend builders carry the SDK validation guards', () => {
     { code: 'METATX_DEADLINE_REQUIRED' },
   );
   assert.throws(
+    () => buildV3UserOperationTypedData({ ...base, nonce: 1n << 255n }),
+    { code: 'METATX_INTEGER_DOMAIN_INVALID' },
+    'the frontend must reject the NeoVM signed-integer upper half before signing',
+  );
+  assert.throws(
+    () => sdkMetaTx.buildV3UserOperationTypedData({ ...base, deadline: 1n << 255n }),
+    { code: 'ENC_002' },
+    'the SDK must reject the same signed-integer upper half',
+  );
+  assert.throws(
     () => buildV3UserOperationTypedData({ ...base, coreContractHash: '' }),
     { code: 'METATX_CORE_CONTRACT_REQUIRED' },
     'an AA core hash is required to prevent cross-core signature replay',

@@ -134,6 +134,7 @@ namespace AbstractAccount
             // the prior (possibly compromised) configuration.
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingPlatformOwnerRotation, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookCall, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_MetadataUri, (byte[])accountId));

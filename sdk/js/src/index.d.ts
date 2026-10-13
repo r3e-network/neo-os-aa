@@ -290,7 +290,7 @@ export declare function toBytes20Word(hash160: Hash160): Uint8Array;
  */
 export declare function toAddressWord(hash160: Hash160): Uint8Array;
 
-/** Converts a non-negative integer to a 32-byte big-endian uint256 word. */
+/** Converts a NeoVM signed-domain integer (0 <= value < 2^255) to a 32-byte big-endian word. */
 export declare function toUint256Word(value: IntegerLike): Uint8Array;
 
 // ===========================================================================

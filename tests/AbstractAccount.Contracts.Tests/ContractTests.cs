@@ -301,6 +301,8 @@ public class ContractTests
         StringAssert.Contains(executionSource, "executionArgs = CloneOperationArguments(op.Args)");
         StringAssert.Contains(executionSource, "UserOperation verificationOp = CloneUserOperation(op);");
         StringAssert.Contains(executionSource, "private static UserOperation CloneUserOperation(UserOperation op)");
+        StringAssert.Contains(executionSource, "new object[] { accountId, CloneUserOperation(op), CloneCallbackValue(result)! }");
+        StringAssert.Contains(executionSource, "private static object? CloneCallbackValue(object? value)");
         StringAssert.Contains(executionSource, "op.TargetContract,");
         StringAssert.Contains(executionSource, "op.Method,");
         StringAssert.Contains(executionSource, "args,");
@@ -452,6 +454,29 @@ public class ContractTests
         Assert.IsFalse(source.Contains("RevokeCredential(", StringComparison.Ordinal));
         Assert.IsFalse(source.Contains("Prefix_VerifiedCredentials", StringComparison.Ordinal));
         Assert.IsFalse(source.Contains("Prefix_RequiredClaimValue", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ZkLoginConfigBlobRejectsTrailingBytes()
+    {
+        string source = ReadContractFile("verifiers/ZkLoginVerifier.cs");
+
+        // Configuration is a signed protocol envelope.  The parser must consume the
+        // entire byte string so two encodings cannot map to the same stored tuple.
+        StringAssert.Contains(source, "raw.Length == cursor + 32");
+        Assert.AreEqual(
+            1,
+            CountOccurrences(source, "raw.Length == cursor + 32"),
+            "ZkLogin config must have exactly one canonical end-of-input check");
+    }
+
+    [TestMethod]
+    public void ZkLoginProviderUsesTheOneByteWireLengthBound()
+    {
+        string source = ReadContractFile("verifiers/ZkLoginVerifier.cs");
+
+        StringAssert.Contains(source, "encoded.Length > 0 && encoded.Length <= 255");
+        StringAssert.Contains(source, "Provider must be 1-255 bytes");
     }
 
     [TestMethod]

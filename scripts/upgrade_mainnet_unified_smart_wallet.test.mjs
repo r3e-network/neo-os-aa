@@ -33,11 +33,10 @@ test("mainnet candidate removes the instant admin transfer surface", () => {
   const artifact = script.candidateArtifact();
   assert.equal(script.REMOVED_METHODS.includes("transferAdmin"), true);
   assert.equal(artifact.methodCount > 0, true);
-  // The public candidate remains the checked-in 92-method build. The ordinary
-  // source track compiles two additive pending-update reads locally, but those
-  // source-only methods are not a release artifact until their deployment review
-  // publishes a new manifest.
-  assert.equal(artifact.methodCount, 92);
+  // The ordinary source candidate is intentionally ahead of the pinned public
+  // 90-method artifact. Its 98-entry ABI is release-gated until deployment
+  // review publishes a new manifest and updates the digest pin.
+  assert.equal(artifact.methodCount, 98);
   const manifest = JSON.parse(artifact.manifestText);
   const childConfiguration = manifest.abi.methods.find((method) => method.name === 'callVerifierChild');
   assert.equal(childConfiguration.safe, false);

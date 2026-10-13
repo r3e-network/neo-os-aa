@@ -290,7 +290,9 @@ flowchart TD
 The core passes hook callbacks a single canonical operation tuple in both phases:
 `[TargetContract, Method, Args, Nonce, Deadline, Signature]`; the account id remains a separate
 callback argument. This prevents a hook from validating one operation representation and metering
-another. A real NeoVM regression vector confirms that `WhitelistHook` accepts the signed target,
+another. Post callbacks receive detached copies of the authenticated operation and target result,
+so a verifier or hook cannot rewrite the operation later used for the execution event or sponsored
+settlement. A real NeoVM regression vector confirms that `WhitelistHook` accepts the signed target,
 rejects an unlisted target before dispatch, and rolls back the nonce on rejection.
 
 ### Layer 4: Off-Chain Infrastructure
@@ -349,7 +351,8 @@ rejects an unlisted target before dispatch, and rolls back the nonce on rejectio
 | **VULN-003** | Medium | **Session Key Ordering** | A signed operation can execute before a later revocation transaction is ordered | Defined execution-order semantics; residual pre-inclusion operational risk |
 | **VULN-004** | Medium | **MultiSig Composition Boundary** | Empty, oversized, invalid-threshold, duplicate, self-referential, incomplete-child, and signer-domain-reuse configurations | Bounded Coq policy + 368 VM tests + private NeoExpress child manifest/domain preflight and revalidation; shipped-profile cryptographic vectors are covered, while private-key independence is not inferable from public keys and arbitrary future plugins remain a declared trust boundary |
 | **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Core-owned leaf dependency registries, manifest lifecycle preflight, and fail-closed cleanup for MultiSig/MultiHook; arbitrary-plugin storage/refinement coverage remains open |
-| **VULN-006** | Low | **Nonce Collision** | Executable nonces use 191-bit channel + 64-bit sequence within the non-negative signed NeoVM Integer range | Replay/sequence properties verified within the representable domain; the foundation query API still admits wider non-executable channels and is not native-profile conformance; public deployment is excluded |
+| **VULN-006** | Low | **Nonce Collision** | Executable nonces use 191-bit channel + 64-bit sequence within the non-negative signed NeoVM Integer range | Replay/sequence properties verified within the representable domain; the pinned public foundation artifact may still admit wider non-executable channel queries until the ordinary upgrade is republished; the current source rejects them and remains separate from native-profile conformance |
+| **VULN-007** | High | **Platform Owner Rotation** | The pinned public ABI lets the trusted platform registrar change `BackupOwner` immediately | Source candidate adds delayed proposal/confirmation/cancellation with a new-owner witness; public closure still requires ABI migration, rebuilt artifact and independent readback |
 
 **VULN-001 closure gate:** a transaction-wide gas limit or voluntary
 `Runtime.GasLeft`/`BurnGas` accounting is insufficient. The current private
@@ -453,7 +456,7 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 
 - **SHA256:** Used for payload hashing in most verifiers
 - **Keccak256:** Used for `Web3AuthVerifier` EIP-712 compatibility
-- **Nonce Storage:** Executable nonces have a 191-bit channel and 64-bit sequence. Native-profile keys reserve 24 bytes for the channel with the high bit clear; cursor `2^64` is an explicit exhaustion sentinel. The ordinary foundation uses its existing variable-width key encoding and still admits wider, non-executable channel queries.
+- **Nonce Storage:** Executable nonces have a 191-bit channel and 64-bit sequence. Native-profile keys reserve 24 bytes for the channel with the high bit clear; cursor `2^64` is an explicit exhaustion sentinel. The current ordinary source applies the signed-VM bound to channel reads; the pinned public foundation artifact may retain the wider legacy read boundary until republished.
 
 ### 7.3 Replay Protection Mechanisms
 
