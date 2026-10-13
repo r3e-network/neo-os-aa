@@ -1,0 +1,51 @@
+{
+  "status": "PASS",
+  "absentPaths": [
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa",
+    "/opt/homebrew/Cellar/dotnet",
+    "/repo/contracts/bin/v3/UnifiedSmartWalletV3.nef",
+    "/Users/jinghuiliao/.nuget",
+    "/Users/jinghuiliao/.dotnet"
+  ],
+  "dotnetOnPath": false,
+  "publicNumericSources": 13,
+  "actualBindDestinations": [
+    "/repo",
+    "/tmp/aa-pinned-neovm-numeric-004cd607",
+    "/output"
+  ],
+  "networkMode": "none",
+  "readonlyRootfs": true,
+  "exitCode": 0,
+  "command": [
+    "docker",
+    "--context",
+    "colima",
+    "run",
+    "--rm",
+    "--name",
+    "aa-refinement-portability-kop791wz",
+    "--pull",
+    "never",
+    "--network",
+    "none",
+    "--read-only",
+    "--tmpfs",
+    "/tmp:rw,nosuid,nodev,size=1g",
+    "--entrypoint",
+    "python3",
+    "--workdir",
+    "/repo",
+    "-e",
+    "PYTHONDONTWRITEBYTECODE=1",
+    "-v",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/.runs/refinement-integrated-docker-kop791wz/portable-test-repo:/repo:ro",
+    "-v",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/.runs/refinement-integrated-docker-kop791wz/pinned-numeric-source:/tmp/aa-pinned-neovm-numeric-004cd607:ro",
+    "-v",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/.runs/refinement-integrated-docker-kop791wz/outputs:/output:rw",
+    "sha256:49175ab91d07c3446004b93c667b581d34c1702b61cc1d937c8218f439b00941",
+    "-c",
+    "import json,pathlib,shutil,time; absent=[\"/Users/jinghuiliao/git/neo-os/neo-os-aa\",\"/opt/homebrew/Cellar/dotnet\",\"/repo/contracts/bin/v3/UnifiedSmartWalletV3.nef\",\"/Users/jinghuiliao/.nuget\",\"/Users/jinghuiliao/.dotnet\"]; assert all(not pathlib.Path(p).exists() for p in absent); assert shutil.which(\"dotnet\") is None; assert pathlib.Path(\"/repo/formal/refinement/test_method_proofs.py\").exists(); assert len(list(pathlib.Path(\"/tmp/aa-pinned-neovm-numeric-004cd607\").glob(\"*.cs\")))==13; print(json.dumps({\"status\":\"PASS\",\"absentPaths\":absent,\"dotnetOnPath\":False,\"publicNumericSources\":13}),flush=True); time.sleep(5)"
+  ]
+}

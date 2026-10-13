@@ -1,0 +1,111 @@
+{
+  "schema": "neoos-aa-complete-cap-method-runtime-checks/v1",
+  "sourceCommit": "7094408b419f5ba8ca75ead22dcba797cab549e6",
+  "ownedFilesSha256": {
+    "tests/AbstractAccount.Contracts.Tests/ImplementationRefinementMethodRuntimeTests.cs": "592e570bded4e8ce26a37f57dba42d2673d285f76602ffc197e4b8b9e435974d",
+    "docs/AA-METHOD-RUNTIME-REFINEMENT.md": "7777427b4b5fa136c9853dec69aef6283fc2c40754693644d41d92a4cfa99f3c"
+  },
+  "originalArithmeticTestsSha256Unchanged": "ad87b023934e8e2ffe287a4388ff85e42a4790d99e1500852a3f950b63550986",
+  "artifacts": {
+    "contracts/bin/v3/UnifiedSmartWalletV3.nef": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+    "contracts/bin/v3/UnifiedSmartWalletV3.manifest.json": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156"
+  },
+  "runtimes": {
+    "Neo.dll": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+    "Neo.VM.dll": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+    "Neo.SmartContract.Testing.dll": "21dcafa8bf1f3e4a4735343ad35fbefdae93a936a64cb84bb9fce7c43840d6e3",
+    "versions": "3.10.1",
+    "sourceCommits": {
+      "Neo": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+      "Neo.VM": "004cd6070a940405818d9357638277dd44407e2e",
+      "Neo.SmartContract.Testing": "37c03d3e7db8d125efb968a1f1da455f3d205b26"
+    }
+  },
+  "scope": {
+    "entryPc": 13557,
+    "retPc": 13764,
+    "mode": "real base ApplicationEngine.LoadContract with test-only private method descriptor; original initializer, full NEF, tokens and native implementations",
+    "staticSlot34": "asserted actual Type.Buffer, bytes21",
+    "persistentStore": "isolated in-memory test store; explicit HALT-only outer commit",
+    "exclusions": [
+      "original public entry/caller guards",
+      "consensus acceptance/signatures/sender funding",
+      "OnPersist fee burning",
+      "public chain/deployment",
+      "universal semantic proof"
+    ]
+  },
+  "red": {
+    "methodBeforeRunner": {
+      "failed": 31,
+      "passed": 0,
+      "log": "/private/tmp/aa-refinement-method-red.log"
+    },
+    "convertBeforeRunner": {
+      "failed": 2,
+      "passed": 0,
+      "log": "/private/tmp/aa-refinement-convert-red.log"
+    }
+  },
+  "focused38": {
+    "total": "38",
+    "executed": "38",
+    "passed": "38",
+    "failed": "0",
+    "error": "0",
+    "timeout": "0",
+    "aborted": "0",
+    "inconclusive": "0",
+    "passedButRunAborted": "0",
+    "notRunnable": "0",
+    "notExecuted": "0",
+    "disconnected": "0",
+    "warning": "0",
+    "completed": "0",
+    "inProgress": "0",
+    "pending": "0"
+  },
+  "cases": [
+    "ExplicitVmConvertIsDistinctFromImplicitHelperArithmetic (\"buffer\")",
+    "InjectedReservedCoercionsNormalizeToIntegerOnHeapUpdate (\"true\")",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"bytes\",True,7)",
+    "ExplicitVmConvertIsDistinctFromImplicitHelperArithmetic (\"null\")",
+    "LongMaxPaidCostIsReadAndFeeParserRejectsSignedLongSumOverflow",
+    "InjectedMalformedStorageFaultsWithoutCommittingReplacement (\"arrayShort\")",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"buffer\",False,0)",
+    "InjectedMalformedStorageFaultsWithoutCommittingReplacement (\"mapMissingReserved\")",
+    "InjectedMalformedStorageFaultsWithoutCommittingReplacement (\"badEncoding\")",
+    "InjectedMalformedStorageFaultsWithoutCommittingReplacement (\"nullReserved\")",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"paddedNegative\",False,0)",
+    "InjectedReservedCoercionsNormalizeToIntegerOnHeapUpdate (\"bytes\")",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"false\",False,0)",
+    "InsufficientHostGasDoesNotCommitAReservation",
+    "ExtraStoredArrayFieldIsPreservedAsAnOutOfInvariantProbe",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"paddedPositive\",True,7)",
+    "InjectedMalformedStorageFaultsWithoutCommittingReplacement (\"structShort\")",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"signed32Min\",False,0)",
+    "AbsentBudgetUsesOriginalInitializationAndPersistsBothFields",
+    "ExhaustedPaidFeeAbortsAndKeepsCommittedRecordBytes",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"integer\",True,7)",
+    "InjectedArrayStructAndMapFieldsExecuteWithoutClassShapeGuard (\"array\")",
+    "InjectedArrayStructAndMapFieldsExecuteWithoutClassShapeGuard (\"map\")",
+    "LaterParentAbortLeavesPendingWriteButNoOuterSnapshotCommit",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"oversizedBytes\",False,0)",
+    "ZeroFeeEstimationAccumulatesQuoteButOverflowDoesNotPersist",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"oversizedNegative\",False,0)",
+    "InjectedNegativeReservationShowsWhyReachableLedgerInvariantIsRequired",
+    "MismatchedHashRepairsMapWithMissingReservationKey",
+    "InjectedMalformedStorageFaultsWithoutCommittingReplacement (\"mapWrongKeys\")",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"true\",True,1)",
+    "ExistingSameTransactionSettlesOnlyTheRemainingPaidFee",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"null\",False,0)",
+    "ReadOnlyCallFlagsDenyTheRealStoragePutWithoutCommit",
+    "DifferentTransactionResetsMaximumPriorReservationBeforeArithmetic",
+    "RequestedTagsFollowActualGetIntegerCoercion (\"signed32Max\",True,10)",
+    "InjectedArrayStructAndMapFieldsExecuteWithoutClassShapeGuard (\"struct\")",
+    "InjectedMalformedStorageFaultsWithoutCommittingReplacement (\"nestedReserved\")"
+  ],
+  "log": "/private/tmp/aa-refinement-method-final.log",
+  "trx": "/private/tmp/aa-refinement-runtime-results/refinement-method-final.trx",
+  "command": "dotnet test tests/AbstractAccount.Contracts.Tests/AbstractAccount.Contracts.Tests.csproj --no-restore --filter 'FullyQualifiedName~ImplementationRefinementMethodRuntimeTests' --logger 'trx;LogFileName=refinement-method-final.trx' --results-directory /private/tmp/aa-refinement-runtime-results --verbosity minimal"
+}

@@ -2,7 +2,51 @@
 
 ## Status
 
-### Artifact-specific implementation refinement (2026-10-13)
+### Layered implementation refinement (2026-10-13)
+
+The [implementation gate](AA-IMPLEMENTATION-REFINEMENT.md) now requests four
+proof lanes by default: the original arithmetic region,
+[numeric coercions](AA-NUMERIC-REFINEMENT.md),
+[reservation arithmetic](AA-RESERVATION-REFINEMENT.md), and
+[complete reimbursement-helper reference refinement](AA-CAP-METHOD-REFINEMENT.md).
+The last lane uses a [typed source projection](AA-METHOD-SOURCE-REFINEMENT.md)
+and the [complete instruction inventory](AA-METHOD-REFINEMENT-INVENTORY.md).
+[Pinned-engine runtime checks](AA-METHOD-RUNTIME-REFINEMENT.md) provide separate,
+finite evidence, including storage and fault behavior. None of these lanes alone
+verifies the whole contract or public protocol activation.
+
+Run the default gate from the repository root with a new or empty output
+directory:
+
+```sh
+python3 formal/refinement/verify.py --timeout-seconds 1800 --output-dir /tmp/aa-refinement-evidence
+```
+
+The [fresh integrated report](reports/aa-method-refinement-20261013.md) and its
+per-lane receipts record the complete helper's ten universal results and two
+concrete examples, with 103 assumption-audited declarations including imported
+definitions and proofs. The historical arithmetic and protocol-model receipts
+below retain their original scopes and must not be summed to infer a larger
+implementation theorem. `--arithmetic-only` explicitly
+selects the historical local lane. `--allow-partial` only accepts a checked
+partial scope and leaves `implementationVerified: false`; neither option bypasses
+tool or proof failures.
+
+The complete helper's source theorem uses a declared Neo framework contract
+dialect: transaction hashes are immutable byte values compared by content,
+while mutable reservation records preserve heap aliases. This is not a theorem
+about arbitrary CLR reference identity. Compiler/framework correspondence,
+well-formed reachable storage, caller guards, actual native serialization,
+ApplicationEngine effects and resource faults remain separate obligations.
+See the [dialect and identity boundary](AA-IMPLEMENTATION-REFINEMENT.md#neo-contract-dialect-and-object-identity)
+before interpreting a reference theorem as implementation acceptance.
+
+**Full implementation refinement remains NO-GO.** No complete public entrypoint
+has been certified by these helper lanes. A successful partial default run still
+returns exit `2`, unless explicitly requested with `--allow-partial`, and retains
+the false implementation status.
+
+### Historical arithmetic-region certificate (2026-10-13)
 
 The separate [implementation refinement gate](AA-IMPLEMENTATION-REFINEMENT.md)
 now binds typed Roslyn operations, a byte-identical NCCS rebuild, the complete
@@ -23,9 +67,9 @@ separately checked by seven runtime tests, not proved equivalent for all states.
 is proved. Source/debug extraction, entry-state establishment and numeric tag
 coercions, storage/serialization, exceptions and transaction rollback, external
 calls/reentrancy, gas/resource faults and the ApplicationEngine correspondence
-remain open. The default fresh gate returns exit `2` and
-`implementationVerified: false`; `--allow-partial` preserves that false status
-while accepting only the explicitly scoped arithmetic region. The
+remain open for this historical certificate. Its arithmetic-only gate returns
+exit `2` and `implementationVerified: false`; `--allow-partial` preserves that
+false status while accepting only the explicitly scoped arithmetic region. The
 [dated refinement report](reports/aa-implementation-refinement-20261013.md)
 contains the exact artifacts, commands, controls and remaining method obligations.
 

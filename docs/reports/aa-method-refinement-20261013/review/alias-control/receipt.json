@@ -1,0 +1,24 @@
+{
+  "AliasDefinitions": {
+    "exitCode": 0,
+    "log": "/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-security-alias-control-qygyy3gu/AliasDefinitions.log"
+  },
+  "AliasReject": {
+    "exitCode": 1,
+    "log": "/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-security-alias-control-qygyy3gu/AliasReject.log"
+  },
+  "AliasCounterexample": {
+    "exitCode": 0,
+    "log": "/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-security-alias-control-qygyy3gu/AliasCounterexample.log"
+  },
+  "coqchkExitCode": 0,
+  "directory": "/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-security-alias-control-qygyy3gu",
+  "control": "SETITEM consumes stack but drops heap update; actual208 byte script unchanged",
+  "pass": true,
+  "inputs": {
+    "IntegerSemantics.v": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+    "CapArithmetic.v": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "CapMethodVm.v": "aa9486deee266d097c272540ff8a25511717b308053881e46a10868ed44bf571",
+    "CapMethodArtifact.v": "544a704cc938e44a9131c62b47fd905eb85af5f5fb7824a182ad7b6c92b391b0"
+  }
+}

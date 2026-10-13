@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "formal/refinement/verify.py",
+    "--timeout-seconds",
+    "1800",
+    "--output-dir",
+    "/tmp/aa-refinement-integrated-final-20261013"
+  ],
+  "exitCode": 2,
+  "meaning": "Partial proofs accepted; full implementation remains open",
+  "resultSha256": "e5345ac958f14286819367e1b27bce1c2cc3d6866096a52382cf9baafa4a804c"
+}

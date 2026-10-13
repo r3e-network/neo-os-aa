@@ -1,0 +1,3624 @@
+{
+  "implementationVerified": false,
+  "status": "PARTIAL-PROOF-FULL-REFINEMENT-OPEN",
+  "verifiedEntrypoints": [],
+  "unprovedEntrypoints": [
+    "computeRegistrationAccountId/5",
+    "registerAccount/6",
+    "registerAccounts/6",
+    "updateHook/2",
+    "confirmHookUpdate/1",
+    "updateVerifier/3",
+    "confirmVerifierUpdate/1",
+    "callVerifier/3",
+    "callHook/3",
+    "_deploy/2",
+    "proposeUpdate/2",
+    "cancelUpdate/0",
+    "update/2",
+    "confirmUpdate/2",
+    "getContractAdmin/0",
+    "proposeAdminTransfer/1",
+    "cancelAdminTransfer/0",
+    "confirmAdminTransfer/0",
+    "getPendingContractAdmin/0",
+    "getAdminTransferAvailableAt/0",
+    "isOwnerOnlyRecovery/1",
+    "finalizeEscapeToOwner/1",
+    "initiateEscape/1",
+    "finalizeEscape/2",
+    "finalizeEscape/3",
+    "executeUserOp/2",
+    "previewUserOpValidation/2",
+    "executeUserOps/2",
+    "isExecutionActive/1",
+    "enterMarketEscrow/3",
+    "cancelMarketEscrow/2",
+    "settleMarketEscrow/3",
+    "initiateMarketEscrowCancel/1",
+    "forceCancelMarketEscrow/1",
+    "hasMarketEscrowOwnerCancel/1",
+    "getMarketEscrowOwnerCancelTime/1",
+    "executeSponsoredUserOp/5",
+    "executeSponsoredUserOps/5",
+    "computePlatformAccountId/3",
+    "computeStablePlatformAccountId/2",
+    "registerPlatformAccount/4",
+    "registerStablePlatformAccount/4",
+    "rotatePlatformAccountOwner/3",
+    "proposePlatformAccountOwnerRotation/3",
+    "confirmPlatformAccountOwnerRotation/2",
+    "cancelPlatformAccountOwnerRotation/2",
+    "getPendingPlatformAccountOwnerRotation/1",
+    "getPlatformAccountOwnerRotationAvailableAt/1",
+    "proposePlatformRegistrar/1",
+    "confirmPlatformRegistrar/0",
+    "cancelPlatformRegistrar/0",
+    "getPlatformRegistrar/0",
+    "getAccountIdByProxy/1",
+    "getPendingPlatformRegistrar/0",
+    "getPlatformRegistrarAvailableAt/0",
+    "getProxyScriptHash/1",
+    "getAccountImplementationId/0",
+    "supportsExecutionMode/1",
+    "supportsModuleType/1",
+    "isModuleInstalled/3",
+    "isValidSignature/3",
+    "getVerifier/1",
+    "getHook/1",
+    "getBackupOwner/1",
+    "getEscapeTimelock/1",
+    "getEscapeTriggeredAt/1",
+    "getMarketEscrowContract/1",
+    "getMarketEscrowListingId/1",
+    "isMarketEscrowActive/1",
+    "isEscapeActive/1",
+    "getNonce/2",
+    "computeArgsHash/1",
+    "hasPendingVerifierUpdate/1",
+    "hasPendingHookUpdate/1",
+    "getPendingVerifierUpdate/1",
+    "getPendingHookUpdate/1",
+    "getPendingVerifierUpdateTime/1",
+    "getPendingHookUpdateTime/1",
+    "hasPendingVerifierCall/1",
+    "hasPendingHookCall/1",
+    "getPendingVerifierCallModule/1",
+    "getPendingHookCallModule/1",
+    "getPendingVerifierCallHash/1",
+    "getPendingHookCallHash/1",
+    "getPendingVerifierCallTime/1",
+    "getPendingHookCallTime/1",
+    "cancelVerifierUpdate/1",
+    "cancelHookUpdate/1",
+    "setMetadataUri/2",
+    "getMetadataUri/1",
+    "callVerifierChild/4",
+    "verify/1",
+    "getVerifyScopeTarget/1",
+    "setVerifyScopeTarget/2",
+    "setVerifyScopeTargets/2",
+    "canConfigureVerifier/2",
+    "canConfigureHook/2",
+    "canExecuteVerifier/3",
+    "canExecuteHook/3",
+    "_initialize/0"
+  ],
+  "regionProof": {
+    "schema": "neoos-aa-arithmetic-refinement-proof/v1",
+    "scope": "arithmetic-region",
+    "kernelChecked": true,
+    "fullImplementationVerified": false,
+    "sourceMethod": "M:AbstractAccount.UnifiedSmartWallet.CapReimbursementToActualCost(System.Numerics.BigInteger)",
+    "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+    "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+    "verifiedRegions": [
+      {
+        "start": 13667,
+        "endExclusive": 13689,
+        "instructionOffsets": [
+          13667,
+          13668,
+          13669,
+          13670,
+          13671,
+          13672,
+          13673,
+          13674,
+          13675,
+          13676,
+          13677,
+          13678,
+          13679,
+          13680,
+          13681,
+          13682,
+          13683,
+          13684,
+          13685,
+          13686,
+          13687,
+          13688
+        ],
+        "instructionHex": "11116bb99f74106b6a11ce9fba6c78a09e756d78b976",
+        "entryStack": "empty",
+        "outputLocal": 6
+      }
+    ],
+    "sourceIR": [
+      "binary",
+      "Min",
+      [
+        "input",
+        "Requested"
+      ],
+      [
+        "binary",
+        "Add",
+        [
+          "binary",
+          "Max",
+          [
+            "binary",
+            "Sub",
+            [
+              "input",
+              "Cost"
+            ],
+            [
+              "input",
+              "Reserved"
+            ]
+          ],
+          [
+            "constant",
+            0
+          ]
+        ],
+        [
+          "binary",
+          "Mul",
+          [
+            "binary",
+            "Sub",
+            [
+              "constant",
+              1
+            ],
+            [
+              "binary",
+              "Min",
+              [
+                "input",
+                "Cost"
+              ],
+              [
+                "constant",
+                1
+              ]
+            ]
+          ],
+          [
+            "input",
+            "Requested"
+          ]
+        ]
+      ]
+    ],
+    "sourceIRCoq": "(Apply Min (Read Requested) (Apply Add (Apply Max (Apply Sub (Read Cost) (Read Reserved)) (Constant (0))) (Apply Mul (Apply Sub (Constant (1)) (Apply Min (Read Cost) (Constant (1)))) (Read Requested))))",
+    "sourceDeclarations": [
+      {
+        "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+        "startLine": 66,
+        "startColumn": 24,
+        "endLine": 66,
+        "endColumn": 74,
+        "start": 3966,
+        "length": 50
+      },
+      {
+        "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+        "startLine": 67,
+        "startColumn": 24,
+        "endLine": 67,
+        "endColumn": 106,
+        "start": 4041,
+        "length": 82
+      },
+      {
+        "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+        "startLine": 68,
+        "startColumn": 24,
+        "endLine": 68,
+        "endColumn": 64,
+        "start": 4148,
+        "length": 40
+      }
+    ],
+    "modelSha256": {
+      "formal/refinement/coq/IntegerSemantics.v": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+      "formal/refinement/coq/CapArithmetic.v": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+      "formal/refinement/coq/ArithmeticVm.v": "1549b168162209f1aed06a8c88fae675e2dfdacd0ec13c39d2f76351cf01030f",
+      "formal/coq/OrdinarySponsorship.v": "fb31b137ca83bde9ecc8411fc817d52d091d3f23910afb37841440950070cf32"
+    },
+    "generatedProofSha256": {
+      "CapArtifact.v": "c1191e625a9a36f1b9ab6f76764bc2f205bd2a5b236a883529d12688c88f7ac3"
+    },
+    "proofRecipeSha256": "5571276cd570efe5fa8a9022b53821023c7ea895e1032a69a372749ff7b2b45a",
+    "proverSha256": "3c2bac75ebd3e40caa9e45fae6fa4471467879f6b7fa7d789dd28c8de537f30a",
+    "toolInputSha256": {
+      "formal/refinement/prove.py": "3c2bac75ebd3e40caa9e45fae6fa4471467879f6b7fa7d789dd28c8de537f30a",
+      "formal/refinement/proof_tactic.txt": "5571276cd570efe5fa8a9022b53821023c7ea895e1032a69a372749ff7b2b45a",
+      "formal/refinement/verify.py": "6922a07b53733c072149a118b4e718f3aec4cbc2141e90cad9afd96b9e0ebcec",
+      "formal/refinement/nef_decode.py": "a2044eadec06c0f65bf9fe303dd156b88f54106a76dc7f4afb302b4124e60848"
+    },
+    "closedDeclarations": [
+      "integer_limit_positive",
+      "integer_fitsb_spec",
+      "checked_integer_in_range",
+      "checked_integer_result_is_representable",
+      "integer_overflow_faults",
+      "signed_maximum_addition_faults",
+      "signed_minimum_subtraction_faults",
+      "nonnegative_integer_fits",
+      "cost_minimum",
+      "difference_fits",
+      "remaining_range",
+      "cap_intermediates_representable",
+      "cap_all_inputs_preserved",
+      "paid_charge_bounded",
+      "bytes_equal_sound",
+      "certificate_checker_sound",
+      "unsupported_opcode_faults",
+      "subtraction_obeys_stack_operand_order",
+      "binary_stack_underflow_faults",
+      "field_index_faults",
+      "OS_001_same_transaction_retains_spend",
+      "OS_002_new_transaction_starts_at_zero",
+      "OS_003_persisted_charge_is_within_remaining_fee",
+      "OS_004_charge_never_exceeds_request",
+      "OS_005_success_preserves_transaction_and_total_cap",
+      "OS_006_success_reserves_before_external_settlement",
+      "OS_007_multiple_calls_share_one_total_fee_cap",
+      "OS_008_exhausted_fee_rejects",
+      "OS_009_failed_reservation_preserves_ledger",
+      "OS_010_failed_settlement_rolls_back_ledger",
+      "OS_011_estimation_uses_requested_quote",
+      "OS_012_second_call_gets_only_remaining_fee",
+      "OS_013_third_call_at_cap_rejects",
+      "OS_014_estimation_is_not_a_persisted_fee_bound",
+      "OS_015_branch_free_cap_matches_abstract_charge",
+      "actual_semantics",
+      "actual_certificate_accepted",
+      "source_ir_refines_protocol"
+    ],
+    "toolVersion": "The Rocq Prover, version 9.2",
+    "kernelRecheck": "coqchk -silent",
+    "preconditions": [
+      "0 <= cost < 2^255",
+      "0 < requested < 2^255",
+      "0 <= reserved < 2^255",
+      "arg0=Integer(requested), local3=Integer(cost), local2=Array/Struct[hash,Integer(reserved)]",
+      "seven existing locals, empty evaluation stack at the arithmetic cutpoint",
+      "sufficient ApplicationEngine gas and stack/item resources; resource accounting external"
+    ],
+    "observations": [
+      "pc reaches exact end, stack empty, local6 equals generated source IR and existing protocol charge",
+      "arguments unchanged; locals0..3 unchanged; locals length remains seven"
+    ],
+    "referenceSemantics": "gas-erased straight-line Integer-typed opcode semantics with bounded Integer/stack/index faults",
+    "unproved": [
+      "caller establishes cutpoint/domain",
+      "source parsing/Roslyn extraction/debug mapping correctness",
+      "Neo.VM.dll implements reference opcode semantics",
+      "non-Integer numeric coercions and heap/reference identity",
+      "instruction gas/pricing and resource bounds",
+      "load/deserialize/transaction reset",
+      "assert settled>0",
+      "reserved+=settled/store/rollback",
+      "remaining entrypoints and external contracts"
+    ],
+    "outsideRegionCounterexample": "cost=0,reserved=2^255-1,requested=1: region succeeds; reservation ADD at pc13739 faults",
+    "tcb": [
+      "Coq kernel/toolchain",
+      "validated Roslyn typed-subtree projection and debug/local binding",
+      "NEF container/input binding parser",
+      "reference semantics to pinned NeoVM correspondence remains external"
+    ]
+  },
+  "openObligations": [
+    "SOURCE_FRONTEND_SEMANTIC_BINDING",
+    "ALL_ENTRYPOINTS_AND_REACHABLE_HELPERS",
+    "NEO_DIALECT_TO_COMPILER_CORRESPONDENCE",
+    "CALLER_STATIC_AND_LEDGER_INVARIANTS",
+    "HEAP_CONTEXTUAL_FRAME_AND_CALLER_COMPOSITION",
+    "STORAGE_AND_SERIALIZATION",
+    "EXCEPTIONS_AND_TRANSACTION_ROLLBACK",
+    "EXTERNAL_CALLS_AND_REENTRANCY",
+    "GAS_AND_RESOURCE_FAULTS",
+    "APPLICATION_ENGINE_REFINEMENT",
+    "PROTOCOL_MODEL_TO_IMPLEMENTATION_COMPOSITION"
+  ],
+  "supportingProofs": {
+    "numeric": {
+      "schema": "neoos-aa-numeric-coercion-proof/v1",
+      "scope": "numeric-coercions",
+      "kernelChecked": true,
+      "vmCorrespondenceProven": false,
+      "fullImplementationVerified": false,
+      "closedDeclarations": [
+        "integer_limit_positive",
+        "integer_fitsb_spec",
+        "checked_integer_in_range",
+        "checked_integer_result_is_representable",
+        "integer_overflow_faults",
+        "signed_maximum_addition_faults",
+        "signed_minimum_subtraction_faults",
+        "pow256_positive",
+        "pow256_monotone",
+        "valid_bytesb_spec",
+        "signed_le_unsigned_relation",
+        "signed_le_payload_range",
+        "maximum_payload_bound",
+        "byte_string_integer_range",
+        "byte_string_integer_accepts",
+        "oversized_byte_string_rejected",
+        "invalid_physical_byte_rejected",
+        "unsigned_le_append",
+        "last_append_single",
+        "signed_le_sign_extension",
+        "sign_extension_admitted_within_limit",
+        "get_integer_range",
+        "numeric_refines_integer",
+        "numeric_refines_unique",
+        "numeric_refines_bytes",
+        "buffer_get_integer_rejected",
+        "null_get_integer_rejected",
+        "unsupported_get_integer_rejected",
+        "null_convert_preserves_null",
+        "buffer_convert_integer",
+        "boolean_true_is_one",
+        "boolean_false_is_zero",
+        "empty_byte_string_is_zero",
+        "high_bit_byte_is_negative",
+        "noncanonical_minus_one_accepted",
+        "sign_byte_prevents_negative_128"
+      ],
+      "modelSha256": {
+        "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/IntegerSemantics.v": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+        "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/NumericCoercions.v": "2c9ec6bccb5930280bdbd99cada7704775211c0ec79662be49e94cb6408963fe"
+      },
+      "proverSha256": "294ad4ace96193eee520c04b40c0d851326128dfc19f6199eae4e8435cf07629",
+      "sourceCommit": "004cd6070a940405818d9357638277dd44407e2e",
+      "pinnedSource": {
+        "StackItem": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/StackItem.cs",
+          "sha256": "3f80a40ab7b98352a92788da018c1ff168a7251340b1410661f7bcbfeaadff95",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/StackItem.cs"
+        },
+        "ByteString": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/ByteString.cs",
+          "sha256": "1f06948358fcb638bffd14429a3d0ea50916da88c68c2de8933dea734aec0f52",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/ByteString.cs"
+        },
+        "Buffer": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Buffer.cs",
+          "sha256": "ca517919538c03e134c1c53b9ab6394ab0dab59738eab6352c15df97c43ea755",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Buffer.cs"
+        },
+        "Integer": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Integer.cs",
+          "sha256": "cb8c7bf8eed392c59b0bf59e281fd8c39b1fa0ef3894fa86e88fa3e0e90a137c",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Integer.cs"
+        },
+        "Boolean": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Boolean.cs",
+          "sha256": "5cdcf7547ff3b1320ce3accdb867164d044a71d984e48ff066dd6360f66045c9",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Boolean.cs"
+        },
+        "Null": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Null.cs",
+          "sha256": "359214cd37f9624d49131dd4b5a8596b5cf11023cf815248d7a803bf8d68c41a",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Null.cs"
+        },
+        "PrimitiveType": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/PrimitiveType.cs",
+          "sha256": "ba8e9cb00fbcedbe5ce67bb9b11e59e59c6cff9e676c08e17d611ca0469fae37",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/PrimitiveType.cs"
+        },
+        "Array": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Array.cs",
+          "sha256": "6a100285b620ed1fca6eac4ebd91abecab5ddfa6b84ab1d65feaf50e463d6cf4",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Array.cs"
+        },
+        "Struct": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Struct.cs",
+          "sha256": "12cb52e04fe9aba281798d1997ec347c6bea789f053e7dc4b8ec017fffdf8eba",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Struct.cs"
+        },
+        "Map": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Map.cs",
+          "sha256": "40b8c32f1982850904121089c953365836431c1c969091d655902849c15a7412",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Map.cs"
+        },
+        "CompoundType": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/CompoundType.cs",
+          "sha256": "045876c665f1c541856d2941862faf945bae327275593dc558f998c4da170f60",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/CompoundType.cs"
+        },
+        "Pointer": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Pointer.cs",
+          "sha256": "697b01626ed7615eb52445e465f188600c65afa7c83e8534935baf090dd2413c",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Pointer.cs"
+        },
+        "InteropInterface": {
+          "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/InteropInterface.cs",
+          "sha256": "8356efa9fea907b8d140f3d57858898d03e11aa01575e8708f56be4342bb9b94",
+          "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/InteropInterface.cs"
+        }
+      },
+      "toolVersion": "The Rocq Prover, version 9.2",
+      "toolSha256": {
+        "coqc": "19dbcdbbe260d839ddefd685d41afd02594120f1c2f23d4db77aa6bceb55aa45",
+        "coqchk": "680cd66bd8b42aceb0f78ae308bb410459891d5716f62276621001ba0fcc891e"
+      },
+      "preconditions": [
+        "Built-in NeoVM value tags, physical payload bytes in 0..255",
+        "NInteger denotes an admissible signed-256 Integer object; unrepresentable abstract constructors reject",
+        "ByteString GetInteger accepts at most 32 payload bytes; no canonical-encoding requirement"
+      ],
+      "unproved": [
+        "Neo.VM.dll / .NET BigInteger implements this reference decoding/coercion model",
+        "NumericValue projection to existing ArithmeticVm.Value or reference heap",
+        "Existing Integer-tag actual-region certificate is not widened by this standalone model",
+        "ABI/caller admission, resource/gas bounds, heap mutation and all remaining helper behavior"
+      ],
+      "publicNetworkWritesPerformed": false,
+      "semanticControls": {
+        "definitionsCompiled": true,
+        "rejected": [
+          "unsigned-sign",
+          "big-endian",
+          "oversized-33",
+          "boolean-inverted",
+          "buffer-coercion",
+          "null-zero",
+          "noncanonical-rejected",
+          "sign-extension-zero"
+        ],
+        "controls": {
+          "unsigned-sign": {
+            "definitionsCompiled": true,
+            "counterexampleRejected": true,
+            "fullProofRejected": true,
+            "definitionSha256": "9da9c8adfb8cfbf9d15506d95599fd63c0c8dd491152708ef431e2f10af55f84"
+          },
+          "big-endian": {
+            "definitionsCompiled": true,
+            "counterexampleRejected": true,
+            "fullProofRejected": true,
+            "definitionSha256": "a3c88cd948a5f87f1560921ec08f0ce437be37d749df023bf23e97d493be3431"
+          },
+          "oversized-33": {
+            "definitionsCompiled": true,
+            "counterexampleRejected": true,
+            "fullProofRejected": true,
+            "definitionSha256": "96fef465776327f4a5ae874135d51a9e7d09fdd54b9e888cb3bbff7bfa8fb143"
+          },
+          "boolean-inverted": {
+            "definitionsCompiled": true,
+            "counterexampleRejected": true,
+            "fullProofRejected": true,
+            "definitionSha256": "77f523df09cd08500d4618c2c648f430b24504cd70256285afb2d9f093f9282c"
+          },
+          "buffer-coercion": {
+            "definitionsCompiled": true,
+            "counterexampleRejected": true,
+            "fullProofRejected": true,
+            "definitionSha256": "9c5947e26752f9f554034b7b928d7131dfa08416d91c33e6e0472269054ef863"
+          },
+          "null-zero": {
+            "definitionsCompiled": true,
+            "counterexampleRejected": true,
+            "fullProofRejected": true,
+            "definitionSha256": "362319641d1a84705057ec14a1d0c47b93e0c82256d308dc6ceed0706bc3dff5"
+          },
+          "noncanonical-rejected": {
+            "definitionsCompiled": true,
+            "counterexampleRejected": true,
+            "fullProofRejected": true,
+            "definitionSha256": "d550afcea89fc64aa4ada74a9d6729e1f5386901fa5ea8c53cd941dccfde5416"
+          },
+          "sign-extension-zero": {
+            "definitionsCompiled": true,
+            "counterexampleRejected": true,
+            "fullProofRejected": true,
+            "definitionSha256": "b4387e531ca746cdfb9da64ff4d59c1f9b84e9f401459d803abc252be491de76"
+          }
+        },
+        "modelSha256": {
+          "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/IntegerSemantics.v": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+          "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/NumericCoercions.v": "2c9ec6bccb5930280bdbd99cada7704775211c0ec79662be49e94cb6408963fe"
+        }
+      }
+    },
+    "reservation": {
+      "schema": "neoos-aa-reservation-arithmetic-proof/v1",
+      "scope": "reservation-arithmetic",
+      "kernelChecked": true,
+      "kernelRecheck": "coqchk -silent",
+      "toolVersion": "The Rocq Prover, version 9.2",
+      "fullHelperVerified": false,
+      "suffixBytecodeVerified": false,
+      "fullImplementationVerified": false,
+      "closedDeclarations": [
+        "integer_limit_positive",
+        "integer_fitsb_spec",
+        "checked_integer_in_range",
+        "checked_integer_result_is_representable",
+        "integer_overflow_faults",
+        "signed_maximum_addition_faults",
+        "signed_minimum_subtraction_faults",
+        "nonnegative_integer_fits",
+        "cost_minimum",
+        "difference_fits",
+        "remaining_range",
+        "cap_intermediates_representable",
+        "cap_all_inputs_preserved",
+        "paid_charge_bounded",
+        "OS_001_same_transaction_retains_spend",
+        "OS_002_new_transaction_starts_at_zero",
+        "OS_003_persisted_charge_is_within_remaining_fee",
+        "OS_004_charge_never_exceeds_request",
+        "OS_005_success_preserves_transaction_and_total_cap",
+        "OS_006_success_reserves_before_external_settlement",
+        "OS_007_multiple_calls_share_one_total_fee_cap",
+        "OS_008_exhausted_fee_rejects",
+        "OS_009_failed_reservation_preserves_ledger",
+        "OS_010_failed_settlement_rolls_back_ledger",
+        "OS_011_estimation_uses_requested_quote",
+        "OS_012_second_call_gets_only_remaining_fee",
+        "OS_013_third_call_at_cap_rejects",
+        "OS_014_estimation_is_not_a_persisted_fee_bound",
+        "OS_015_branch_free_cap_matches_abstract_charge",
+        "checked_integer_none_iff",
+        "checked_update_success_iff",
+        "checked_update_nonpositive_fault",
+        "checked_update_overflow_fault",
+        "checked_update_fault_iff",
+        "paid_charge_formula",
+        "paid_charge_positive_iff",
+        "paid_updated_reservation_range",
+        "paid_reservation_success_iff_remaining",
+        "paid_reservation_result_bound",
+        "paid_exhaustion_faults",
+        "estimation_success_iff_representable",
+        "estimation_overflow_fault",
+        "estimation_success_result",
+        "estimation_overflow_protocol_disagrees",
+        "bounded_reserve_refines_protocol_when_sum_fits",
+        "bounded_reserve_success_refines_protocol",
+        "bounded_reserve_paid_agrees_protocol",
+        "failed_bounded_reservation_preserves_projection",
+        "same_transaction_iteration_agrees_protocol",
+        "same_transaction_iteration_preserves_fee_bound",
+        "maximum_estimation_reservation_overflows",
+        "fee_exhaustion_is_not_success",
+        "paid_three_reservations_exhaust_fee"
+      ],
+      "newClosedDeclarations": [
+        "checked_integer_none_iff",
+        "checked_update_success_iff",
+        "checked_update_nonpositive_fault",
+        "checked_update_overflow_fault",
+        "checked_update_fault_iff",
+        "paid_charge_formula",
+        "paid_charge_positive_iff",
+        "paid_updated_reservation_range",
+        "paid_reservation_success_iff_remaining",
+        "paid_reservation_result_bound",
+        "paid_exhaustion_faults",
+        "estimation_success_iff_representable",
+        "estimation_overflow_fault",
+        "estimation_success_result",
+        "estimation_overflow_protocol_disagrees",
+        "bounded_reserve_refines_protocol_when_sum_fits",
+        "bounded_reserve_success_refines_protocol",
+        "bounded_reserve_paid_agrees_protocol",
+        "failed_bounded_reservation_preserves_projection",
+        "same_transaction_iteration_agrees_protocol",
+        "same_transaction_iteration_preserves_fee_bound",
+        "maximum_estimation_reservation_overflows",
+        "fee_exhaustion_is_not_success",
+        "paid_three_reservations_exhaust_fee"
+      ],
+      "inputSha256": {
+        "formal/refinement/coq/IntegerSemantics.v": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+        "formal/refinement/coq/CapArithmetic.v": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+        "formal/coq/OrdinarySponsorship.v": "fb31b137ca83bde9ecc8411fc817d52d091d3f23910afb37841440950070cf32",
+        "formal/refinement/coq/ReservationArithmetic.v": "b8202b5240ebea5be2e4705eb41270fcffeba675943896f2571babbbba4dd57e",
+        "formal/refinement/reservation_proofs.py": "ecf239a8075f4e7b0a40c2be9cd83afd78c004d950caa0399cc652aa8fb6e9fe",
+        "formal/refinement/test_reservation_proofs.py": "779c1b67e7b5ad3e7bf8e8652ed5dd404162e754c5dd30f390c05e310eeeb37b"
+      },
+      "outputDirectory": "/private/tmp/aa-refinement-integrated-final-20261013/reservation-proofs",
+      "preconditions": [
+        "paid: 0<cost<2^255, 0<requested<2^255, 0<=reserved<=cost",
+        "estimation: cost=0, 0<requested<2^255, 0<=reserved<2^255",
+        "Integer-typed scalar inputs; same-transaction ledger invariant required for iteration"
+      ],
+      "conclusions": [
+        "positive paid reservation succeeds iff remaining fee is positive",
+        "paid success advances reserved within cost and signed Integer range",
+        "zero-fee estimation succeeds iff reserved+requested<2^255; otherwise checked ADD faults",
+        "successful representable reservations compose with original protocol reserve/reserve_many",
+        "zero-fee overflow disagrees with original unbounded protocol; no source/target same-fault claim"
+      ],
+      "unproved": [
+        "actual suffix control/heap/SETITEM bytecode certificate",
+        "source/target exception trace equivalence",
+        "caller/ledger/type invariant establishment",
+        "transaction-hash projection, deserialize/serialize, storage",
+        "transaction rollback, instruction GAS, reference VM/runtime correspondence",
+        "complete helper and public methods"
+      ]
+    },
+    "method": {
+      "scope": "complete-helper-reference-refinement",
+      "kernelChecked": true,
+      "referenceRefinementVerified": true,
+      "fullImplementationVerified": false,
+      "methodRange": [
+        13557,
+        13765
+      ],
+      "byteCount": 208,
+      "instructionCount": 96,
+      "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+      "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+      "methodSha256": "436a62d1137e8592a09e35a625962f3fba487b4127359c9bdb228c5fb144e98c",
+      "sourceProjectionSha256": "28a24f8e2ba8211b12b4dd0b1242b65d2c314510668a432af5e4ba696130f97e",
+      "sourceTreeSha256": "fc168913fd26dc9e8ad8e0d37aa5252c5f923146e8101350bfa04514fc19fd70",
+      "certificateSha256": "544a704cc938e44a9131c62b47fd905eb85af5f5fb7824a182ad7b6c92b391b0",
+      "modelSha256": {
+        "IntegerSemantics": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+        "CapArithmetic": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+        "CapMethodVm": "aa9486deee266d097c272540ff8a25511717b308053881e46a10868ed44bf571"
+      },
+      "toolInputSha256": {
+        "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/method_proofs.py": "21550846ca746762d1c9904a2bf0ee4bba864c860b2ae8c345f2103c6f10652c",
+        "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/method_source.py": "5982e89257e64ed33c7b35140ed7e12aa38209824e1c73c85a6c5afea68a7e57",
+        "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/nef_decode.py": "a2044eadec06c0f65bf9fe303dd156b88f54106a76dc7f4afb302b4124e60848",
+        "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/verify.py": "6922a07b53733c072149a118b4e718f3aec4cbc2141e90cad9afd96b9e0ebcec"
+      },
+      "inventorySha256": "61c3047f0e901601aa284b5197ef6815063b50c613a59f539fa547b4afc376b8",
+      "kernelDirectory": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu",
+      "coqchkLog": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu/coqchk.log",
+      "assumptionDeclarations": {
+        "IntegerSemantics": [
+          "integer_limit",
+          "integer_fits",
+          "integer_fitsb",
+          "checked_integer",
+          "BinaryOp",
+          "binary_value",
+          "checked_binary",
+          "integer_limit_positive",
+          "integer_fitsb_spec",
+          "checked_integer_in_range",
+          "checked_integer_result_is_representable",
+          "integer_overflow_faults",
+          "signed_maximum_addition_faults",
+          "signed_minimum_subtraction_faults"
+        ],
+        "CapArithmetic": [
+          "cap_domain",
+          "source_charge",
+          "option_bind",
+          "checked_cap",
+          "nonnegative_integer_fits",
+          "cost_minimum",
+          "difference_fits",
+          "remaining_range",
+          "cap_intermediates_representable",
+          "cap_all_inputs_preserved",
+          "paid_charge_bounded"
+        ],
+        "CapMethodVm": [
+          "Kind",
+          "Value",
+          "Object",
+          "Effect",
+          "State",
+          "change",
+          "with_stack",
+          "with_local",
+          "with_heap",
+          "with_effect",
+          "with_storage",
+          "allocate",
+          "bytes_eqb",
+          "bytes_eqb_refl",
+          "bytes_eqb_true",
+          "value_eqb",
+          "read_field",
+          "scalar",
+          "write_field",
+          "deserialize",
+          "serialize",
+          "get_storage",
+          "put_storage",
+          "Instruction",
+          "signed_byte",
+          "decode",
+          "Outcome",
+          "jump_target",
+          "vm_step",
+          "run_vm",
+          "run_vm_one_step",
+          "Expr",
+          "Stmt",
+          "bind",
+          "eval_expr",
+          "eval_args",
+          "run_source",
+          "run_source_one_step",
+          "Observation",
+          "observe",
+          "tx_object",
+          "initial_vm",
+          "initial_source",
+          "heap_update_preserves_alias_identity",
+          "native_serialize_reads_updated_fields",
+          "unsupported_instruction_faults",
+          "charge_expression",
+          "charge_expression_refines_charge",
+          "cap_updated_reservation_fits",
+          "method_error",
+          "classified",
+          "BudgetInput",
+          "stored_value",
+          "input_kind",
+          "effective_reserved",
+          "input_trace",
+          "valid_hash",
+          "valid_budget",
+          "legal_inputs",
+          "contract_observation",
+          "legal_cap_domain",
+          "legal_update_fits",
+          "classified_refines_contract"
+        ],
+        "CapMethodArtifact": [
+          "artifact",
+          "source",
+          "source_present_classified",
+          "source_absent_classified",
+          "vm_same_hash_classified",
+          "vm_different_hash_classified",
+          "vm_absent_classified",
+          "source_method_classified",
+          "vm_method_classified",
+          "complete_helper_reference_refinement",
+          "complete_helper_no_fault_or_timeout",
+          "complete_helper_paid_exhaustion_aborts",
+          "reviewed_statics",
+          "actual_nonempty_success",
+          "actual_zero_estimation_overflow_counterexample"
+        ]
+      },
+      "closedAssumptionCount": 103,
+      "assumptionsLog": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu/assumptions.log",
+      "theoremNames": [
+        "source_present_classified",
+        "source_absent_classified",
+        "vm_same_hash_classified",
+        "vm_different_hash_classified",
+        "vm_absent_classified",
+        "source_method_classified",
+        "vm_method_classified",
+        "complete_helper_reference_refinement",
+        "complete_helper_no_fault_or_timeout",
+        "complete_helper_paid_exhaustion_aborts",
+        "actual_nonempty_success",
+        "actual_zero_estimation_overflow_counterexample"
+      ],
+      "nativeTokenContracts": {
+        "3": {
+          "hash": "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0",
+          "method": "serialize",
+          "parametersCount": 1,
+          "hasReturnValue": true,
+          "callFlags": 15
+        },
+        "4": {
+          "hash": "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0",
+          "method": "deserialize",
+          "parametersCount": 1,
+          "hasReturnValue": true,
+          "callFlags": 15
+        }
+      },
+      "traceProjection": [
+        "Storage.Get",
+        "StdLib.Deserialize",
+        "StdLib.Serialize(snapshot)",
+        "Storage.Put(snapshot)"
+      ],
+      "pureStableNonfaultingGetters": [
+        "GetScriptContainer",
+        "GetContext"
+      ],
+      "sourceDialect": "Neo framework immutable-byte equality and ordered scalar record intrinsics; unbounded BigInteger",
+      "environmentContracts": {
+        "transactionFields": {
+          "Hash": 0,
+          "SystemFee": 4,
+          "NetworkFee": 5
+        },
+        "transactionProjection": "Named external Neo transaction intrinsic; framework layout is not exported repository source",
+        "referenceEquality": "Immutable ByteString/UInt256 byte-value equality and null tests in the Neo contract dialect, not CLR object identity",
+        "recordRepresentation": "Source class ordered fields mapped to Neo Array; well-formed deserialized Array/Struct is an explicit precondition",
+        "storageKey": "Source readonly byte array denotes EKey Buffer [33]; initialization-to-static-slot correspondence requires separate evidence",
+        "codec": "StdLib scalar-record serialize/deserialize effect contracts; no native implementation theorem",
+        "zeroUInt256": "Framework UInt256.Zero denotes 32 zero bytes"
+      },
+      "staticEntryInvariant": "Static slot 34 is Buffer[0x21]; _initialize is outside this theorem",
+      "excludedCorrespondence": [
+        "actual ApplicationEngine and resource/gas behavior",
+        "native binary codec",
+        "Roslyn/compiler/source frontend correctness",
+        "arbitrary CLR reference equality",
+        "caller reachability and typed persisted-storage invariant",
+        "all 100 public ABI entrypoints"
+      ],
+      "semanticControls": [
+        {
+          "name": "MinToMax",
+          "definitionsCompiled": true,
+          "certificateRejected": true,
+          "definitionsSha256": "b3efffbd8780aab07d8fbc0028aee2df0aab6a8d6ac6dbf150173e237f9ec530",
+          "log": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu/MutantMinToMax.log"
+        },
+        {
+          "name": "ReverseAssertBranch",
+          "definitionsCompiled": true,
+          "certificateRejected": true,
+          "definitionsSha256": "55e190651179dac009afb685c540fe8b8936f11b8acad59264bce33424a3082c",
+          "log": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu/MutantReverseAssertBranch.log"
+        },
+        {
+          "name": "DropReservationWrite",
+          "definitionsCompiled": true,
+          "certificateRejected": true,
+          "definitionsSha256": "272e7a8710e0d9dcd191a23e0c78b500c4f97db490d6874759ea7c6a0b7795ec",
+          "log": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu/MutantDropReservationWrite.log"
+        },
+        {
+          "name": "SourceReturnsZero",
+          "definitionsCompiled": true,
+          "certificateRejected": true,
+          "definitionsSha256": "85af7e20cb646bbe8c59a475a6086b99f770468ba86ec9abb84d1ed1e64509e6",
+          "log": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu/MutantSourceReturnsZero.log"
+        },
+        {
+          "name": "SourceInitialReservationOne",
+          "definitionsCompiled": true,
+          "certificateRejected": true,
+          "definitionsSha256": "f598e2f4dab512cdcd7b155493e91133abdb3b8c4ec51873c3be7f405be3cbb1",
+          "log": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu/MutantSourceInitialReservationOne.log"
+        },
+        {
+          "name": "SourceDropsAssert",
+          "definitionsCompiled": true,
+          "certificateRejected": true,
+          "definitionsSha256": "82c573428a5f44862a0c1b2c2c621c06e340faf0e0be0debafdd8daf7fbf177a",
+          "log": "/private/tmp/aa-refinement-integrated-final-20261013/method-proofs/cap-method-kernel-ev5y4aiu/MutantSourceDropsAssert.log"
+        }
+      ]
+    }
+  },
+  "helperInventory": {
+    "schema": "neoos-aa-complete-method-inventory/v1",
+    "status": "STRUCTURAL_INVENTORY_ONLY",
+    "methodId": "AbstractAccount.UnifiedSmartWallet.CapReimbursementToActualCost(System.Numerics.BigInteger)",
+    "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+    "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+    "methodBytesSha256": "436a62d1137e8592a09e35a625962f3fba487b4127359c9bdb228c5fb144e98c",
+    "start": 13557,
+    "endExclusive": 13765,
+    "byteCount": 208,
+    "instructionCount": 96,
+    "distinctOpcodeCount": 47,
+    "opcodeCounts": {
+      "ABORTMSG": 1,
+      "ADD": 3,
+      "CALLT": 2,
+      "DROP": 3,
+      "DUP": 3,
+      "EQUAL": 1,
+      "GT": 1,
+      "INITSLOT": 1,
+      "JMP": 2,
+      "JMPIF": 1,
+      "JMPIFNOT": 2,
+      "LDARG0": 2,
+      "LDLOC0": 2,
+      "LDLOC1": 2,
+      "LDLOC2": 6,
+      "LDLOC3": 2,
+      "LDLOC4": 1,
+      "LDLOC5": 1,
+      "LDLOC6": 3,
+      "LDSFLD": 2,
+      "MAX": 1,
+      "MIN": 2,
+      "MUL": 1,
+      "NOTEQUAL": 1,
+      "PACK": 1,
+      "PICKITEM": 6,
+      "PUSH0": 7,
+      "PUSH1": 6,
+      "PUSH2": 1,
+      "PUSH4": 1,
+      "PUSH5": 1,
+      "PUSHDATA1": 2,
+      "PUSHNULL": 1,
+      "RET": 1,
+      "ROT": 2,
+      "SETITEM": 3,
+      "STLOC0": 1,
+      "STLOC1": 1,
+      "STLOC2": 1,
+      "STLOC3": 1,
+      "STLOC4": 1,
+      "STLOC5": 1,
+      "STLOC6": 1,
+      "SUB": 2,
+      "SWAP": 1,
+      "SYSCALL": 7,
+      "TUCK": 1
+    },
+    "frame": {
+      "localCount": 7,
+      "argumentCount": 1
+    },
+    "instructions": [
+      {
+        "offset": 13557,
+        "opcode": 87,
+        "name": "INITSLOT",
+        "operandHex": "0701",
+        "size": 3,
+        "instructionHex": "570701",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13560
+          }
+        ],
+        "sourcePoints": []
+      },
+      {
+        "offset": 13560,
+        "opcode": 65,
+        "name": "SYSCALL",
+        "operandHex": "2d510830",
+        "size": 5,
+        "instructionHex": "412d510830",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13565
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 5,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Services/Runtime.cs",
+            "startLine": 51,
+            "startColumn": 14,
+            "endLine": 51,
+            "endColumn": 58
+          }
+        ]
+      },
+      {
+        "offset": 13565,
+        "opcode": 16,
+        "name": "PUSH0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "10",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13566
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 55,
+            "startColumn": 39,
+            "endLine": 55,
+            "endColumn": 63
+          }
+        ]
+      },
+      {
+        "offset": 13566,
+        "opcode": 206,
+        "name": "PICKITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "ce",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13567
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 55,
+            "startColumn": 39,
+            "endLine": 55,
+            "endColumn": 63
+          }
+        ]
+      },
+      {
+        "offset": 13567,
+        "opcode": 112,
+        "name": "STLOC0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "70",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13568
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 55,
+            "startColumn": 21,
+            "endLine": 55,
+            "endColumn": 63
+          }
+        ]
+      },
+      {
+        "offset": 13568,
+        "opcode": 95,
+        "name": "LDSFLD",
+        "operandHex": "22",
+        "size": 2,
+        "instructionHex": "5f22",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13570
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 56,
+            "startColumn": 68,
+            "endLine": 56,
+            "endColumn": 99
+          }
+        ]
+      },
+      {
+        "offset": 13570,
+        "opcode": 65,
+        "name": "SYSCALL",
+        "operandHex": "9bf667ce",
+        "size": 5,
+        "instructionHex": "419bf667ce",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13575
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 6,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Services/Storage.cs",
+            "startLine": 27,
+            "startColumn": 14,
+            "endLine": 27,
+            "endColumn": 50
+          }
+        ]
+      },
+      {
+        "offset": 13575,
+        "opcode": 65,
+        "name": "SYSCALL",
+        "operandHex": "925de831",
+        "size": 5,
+        "instructionHex": "41925de831",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13580
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 6,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Services/Storage.cs",
+            "startLine": 51,
+            "startColumn": 10,
+            "endLine": 51,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13580,
+        "opcode": 113,
+        "name": "STLOC1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "71",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13581
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 56,
+            "startColumn": 25,
+            "endLine": 56,
+            "endColumn": 100
+          }
+        ]
+      },
+      {
+        "offset": 13581,
+        "opcode": 105,
+        "name": "LDLOC1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "69",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13582
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 57,
+            "startColumn": 47,
+            "endLine": 57,
+            "endColumn": 51
+          }
+        ]
+      },
+      {
+        "offset": 13582,
+        "opcode": 11,
+        "name": "PUSHNULL",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "0b",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13583
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 57,
+            "startColumn": 55,
+            "endLine": 57,
+            "endColumn": 59
+          }
+        ]
+      },
+      {
+        "offset": 13583,
+        "opcode": 151,
+        "name": "EQUAL",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "97",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13584
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 57,
+            "startColumn": 47,
+            "endLine": 57,
+            "endColumn": 59
+          }
+        ]
+      },
+      {
+        "offset": 13584,
+        "opcode": 38,
+        "name": "JMPIFNOT",
+        "operandHex": "29",
+        "size": 2,
+        "instructionHex": "2629",
+        "edges": [
+          {
+            "kind": "branch",
+            "target": 13625
+          },
+          {
+            "kind": "fallthrough",
+            "target": 13586
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 57,
+            "startColumn": 47,
+            "endLine": 59,
+            "endColumn": 69
+          }
+        ]
+      },
+      {
+        "offset": 13586,
+        "opcode": 16,
+        "name": "PUSH0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "10",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13587
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 28,
+            "startColumn": 42,
+            "endLine": 28,
+            "endColumn": 43
+          }
+        ]
+      },
+      {
+        "offset": 13587,
+        "opcode": 12,
+        "name": "PUSHDATA1",
+        "operandHex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "size": 34,
+        "instructionHex": "0c200000000000000000000000000000000000000000000000000000000000000000",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13621
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 15,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/UInt256.cs",
+            "startLine": 20,
+            "startColumn": 46,
+            "endLine": 20,
+            "endColumn": 140
+          }
+        ]
+      },
+      {
+        "offset": 13621,
+        "opcode": 18,
+        "name": "PUSH2",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "12",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13622
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 58,
+            "startColumn": 19,
+            "endLine": 58,
+            "endColumn": 49
+          }
+        ]
+      },
+      {
+        "offset": 13622,
+        "opcode": 192,
+        "name": "PACK",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "c0",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13623
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 58,
+            "startColumn": 19,
+            "endLine": 58,
+            "endColumn": 49
+          }
+        ]
+      },
+      {
+        "offset": 13623,
+        "opcode": 34,
+        "name": "JMP",
+        "operandHex": "06",
+        "size": 2,
+        "instructionHex": "2206",
+        "edges": [
+          {
+            "kind": "branch",
+            "target": 13629
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 57,
+            "startColumn": 47,
+            "endLine": 59,
+            "endColumn": 69
+          }
+        ]
+      },
+      {
+        "offset": 13625,
+        "opcode": 105,
+        "name": "LDLOC1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "69",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13626
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 59,
+            "startColumn": 64,
+            "endLine": 59,
+            "endColumn": 68
+          }
+        ]
+      },
+      {
+        "offset": 13626,
+        "opcode": 55,
+        "name": "CALLT",
+        "operandHex": "0400",
+        "size": 3,
+        "instructionHex": "370400",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13629
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 7,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Native/StdLib.cs",
+            "startLine": 19,
+            "startColumn": 6,
+            "endLine": 19,
+            "endColumn": 60
+          }
+        ]
+      },
+      {
+        "offset": 13629,
+        "opcode": 114,
+        "name": "STLOC2",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "72",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13630
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 57,
+            "startColumn": 38,
+            "endLine": 59,
+            "endColumn": 69
+          }
+        ]
+      },
+      {
+        "offset": 13630,
+        "opcode": 106,
+        "name": "LDLOC2",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13631
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 60,
+            "startColumn": 17,
+            "endLine": 60,
+            "endColumn": 23
+          }
+        ]
+      },
+      {
+        "offset": 13631,
+        "opcode": 16,
+        "name": "PUSH0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "10",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13632
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 60,
+            "startColumn": 17,
+            "endLine": 60,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13632,
+        "opcode": 206,
+        "name": "PICKITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "ce",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13633
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 60,
+            "startColumn": 17,
+            "endLine": 60,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13633,
+        "opcode": 104,
+        "name": "LDLOC0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "68",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13634
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 60,
+            "startColumn": 43,
+            "endLine": 60,
+            "endColumn": 58
+          }
+        ]
+      },
+      {
+        "offset": 13634,
+        "opcode": 152,
+        "name": "NOTEQUAL",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "98",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13635
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 60,
+            "startColumn": 17,
+            "endLine": 60,
+            "endColumn": 58
+          }
+        ]
+      },
+      {
+        "offset": 13635,
+        "opcode": 38,
+        "name": "JMPIFNOT",
+        "operandHex": "10",
+        "size": 2,
+        "instructionHex": "2610",
+        "edges": [
+          {
+            "kind": "branch",
+            "target": 13651
+          },
+          {
+            "kind": "fallthrough",
+            "target": 13637
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 60,
+            "startColumn": 13,
+            "endLine": 64,
+            "endColumn": 14
+          }
+        ]
+      },
+      {
+        "offset": 13637,
+        "opcode": 104,
+        "name": "LDLOC0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "68",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13638
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 62,
+            "startColumn": 42,
+            "endLine": 62,
+            "endColumn": 57
+          }
+        ]
+      },
+      {
+        "offset": 13638,
+        "opcode": 74,
+        "name": "DUP",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "4a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13639
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 62,
+            "startColumn": 17,
+            "endLine": 62,
+            "endColumn": 57
+          }
+        ]
+      },
+      {
+        "offset": 13639,
+        "opcode": 106,
+        "name": "LDLOC2",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13640
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 62,
+            "startColumn": 17,
+            "endLine": 62,
+            "endColumn": 23
+          }
+        ]
+      },
+      {
+        "offset": 13640,
+        "opcode": 16,
+        "name": "PUSH0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "10",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13641
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 62,
+            "startColumn": 17,
+            "endLine": 62,
+            "endColumn": 57
+          }
+        ]
+      },
+      {
+        "offset": 13641,
+        "opcode": 81,
+        "name": "ROT",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "51",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13642
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 62,
+            "startColumn": 17,
+            "endLine": 62,
+            "endColumn": 57
+          }
+        ]
+      },
+      {
+        "offset": 13642,
+        "opcode": 208,
+        "name": "SETITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "d0",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13643
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 62,
+            "startColumn": 17,
+            "endLine": 62,
+            "endColumn": 57
+          }
+        ]
+      },
+      {
+        "offset": 13643,
+        "opcode": 69,
+        "name": "DROP",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "45",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13644
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 62,
+            "startColumn": 17,
+            "endLine": 62,
+            "endColumn": 57
+          }
+        ]
+      },
+      {
+        "offset": 13644,
+        "opcode": 16,
+        "name": "PUSH0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "10",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13645
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 63,
+            "startColumn": 35,
+            "endLine": 63,
+            "endColumn": 36
+          }
+        ]
+      },
+      {
+        "offset": 13645,
+        "opcode": 74,
+        "name": "DUP",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "4a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13646
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 63,
+            "startColumn": 17,
+            "endLine": 63,
+            "endColumn": 36
+          }
+        ]
+      },
+      {
+        "offset": 13646,
+        "opcode": 106,
+        "name": "LDLOC2",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13647
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 63,
+            "startColumn": 17,
+            "endLine": 63,
+            "endColumn": 23
+          }
+        ]
+      },
+      {
+        "offset": 13647,
+        "opcode": 17,
+        "name": "PUSH1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "11",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13648
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 63,
+            "startColumn": 17,
+            "endLine": 63,
+            "endColumn": 36
+          }
+        ]
+      },
+      {
+        "offset": 13648,
+        "opcode": 81,
+        "name": "ROT",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "51",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13649
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 63,
+            "startColumn": 17,
+            "endLine": 63,
+            "endColumn": 36
+          }
+        ]
+      },
+      {
+        "offset": 13649,
+        "opcode": 208,
+        "name": "SETITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "d0",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13650
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 63,
+            "startColumn": 17,
+            "endLine": 63,
+            "endColumn": 36
+          }
+        ]
+      },
+      {
+        "offset": 13650,
+        "opcode": 69,
+        "name": "DROP",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "45",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13651
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 63,
+            "startColumn": 17,
+            "endLine": 63,
+            "endColumn": 36
+          }
+        ]
+      },
+      {
+        "offset": 13651,
+        "opcode": 65,
+        "name": "SYSCALL",
+        "operandHex": "2d510830",
+        "size": 5,
+        "instructionHex": "412d510830",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13656
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 5,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Services/Runtime.cs",
+            "startLine": 51,
+            "startColumn": 14,
+            "endLine": 51,
+            "endColumn": 58
+          }
+        ]
+      },
+      {
+        "offset": 13656,
+        "opcode": 20,
+        "name": "PUSH4",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "14",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13657
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 65,
+            "startColumn": 49,
+            "endLine": 65,
+            "endColumn": 78
+          }
+        ]
+      },
+      {
+        "offset": 13657,
+        "opcode": 206,
+        "name": "PICKITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "ce",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13658
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 65,
+            "startColumn": 49,
+            "endLine": 65,
+            "endColumn": 78
+          }
+        ]
+      },
+      {
+        "offset": 13658,
+        "opcode": 65,
+        "name": "SYSCALL",
+        "operandHex": "2d510830",
+        "size": 5,
+        "instructionHex": "412d510830",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13663
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 5,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Services/Runtime.cs",
+            "startLine": 51,
+            "startColumn": 14,
+            "endLine": 51,
+            "endColumn": 58
+          }
+        ]
+      },
+      {
+        "offset": 13663,
+        "opcode": 21,
+        "name": "PUSH5",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "15",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13664
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 65,
+            "startColumn": 93,
+            "endLine": 65,
+            "endColumn": 123
+          }
+        ]
+      },
+      {
+        "offset": 13664,
+        "opcode": 206,
+        "name": "PICKITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "ce",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13665
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 65,
+            "startColumn": 93,
+            "endLine": 65,
+            "endColumn": 123
+          }
+        ]
+      },
+      {
+        "offset": 13665,
+        "opcode": 158,
+        "name": "ADD",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "9e",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13666
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 65,
+            "startColumn": 37,
+            "endLine": 65,
+            "endColumn": 123
+          }
+        ]
+      },
+      {
+        "offset": 13666,
+        "opcode": 115,
+        "name": "STLOC3",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "73",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13667
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 65,
+            "startColumn": 24,
+            "endLine": 65,
+            "endColumn": 123
+          }
+        ]
+      },
+      {
+        "offset": 13667,
+        "opcode": 17,
+        "name": "PUSH1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "11",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13668
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 66,
+            "startColumn": 41,
+            "endLine": 66,
+            "endColumn": 42
+          }
+        ]
+      },
+      {
+        "offset": 13668,
+        "opcode": 17,
+        "name": "PUSH1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "11",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13669
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 66,
+            "startColumn": 72,
+            "endLine": 66,
+            "endColumn": 73
+          }
+        ]
+      },
+      {
+        "offset": 13669,
+        "opcode": 107,
+        "name": "LDLOC3",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6b",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13670
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 66,
+            "startColumn": 60,
+            "endLine": 66,
+            "endColumn": 70
+          }
+        ]
+      },
+      {
+        "offset": 13670,
+        "opcode": 185,
+        "name": "MIN",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "b9",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13671
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 66,
+            "startColumn": 45,
+            "endLine": 66,
+            "endColumn": 74
+          }
+        ]
+      },
+      {
+        "offset": 13671,
+        "opcode": 159,
+        "name": "SUB",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "9f",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13672
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 66,
+            "startColumn": 41,
+            "endLine": 66,
+            "endColumn": 74
+          }
+        ]
+      },
+      {
+        "offset": 13672,
+        "opcode": 116,
+        "name": "STLOC4",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "74",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13673
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 66,
+            "startColumn": 24,
+            "endLine": 66,
+            "endColumn": 74
+          }
+        ]
+      },
+      {
+        "offset": 13673,
+        "opcode": 16,
+        "name": "PUSH0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "10",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13674
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 75,
+            "endLine": 67,
+            "endColumn": 76
+          }
+        ]
+      },
+      {
+        "offset": 13674,
+        "opcode": 107,
+        "name": "LDLOC3",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6b",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13675
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 45,
+            "endLine": 67,
+            "endColumn": 55
+          }
+        ]
+      },
+      {
+        "offset": 13675,
+        "opcode": 106,
+        "name": "LDLOC2",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13676
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 58,
+            "endLine": 67,
+            "endColumn": 64
+          }
+        ]
+      },
+      {
+        "offset": 13676,
+        "opcode": 17,
+        "name": "PUSH1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "11",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13677
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 58,
+            "endLine": 67,
+            "endColumn": 73
+          }
+        ]
+      },
+      {
+        "offset": 13677,
+        "opcode": 206,
+        "name": "PICKITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "ce",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13678
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 58,
+            "endLine": 67,
+            "endColumn": 73
+          }
+        ]
+      },
+      {
+        "offset": 13678,
+        "opcode": 159,
+        "name": "SUB",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "9f",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13679
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 45,
+            "endLine": 67,
+            "endColumn": 73
+          }
+        ]
+      },
+      {
+        "offset": 13679,
+        "opcode": 186,
+        "name": "MAX",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "ba",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13680
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 30,
+            "endLine": 67,
+            "endColumn": 77
+          }
+        ]
+      },
+      {
+        "offset": 13680,
+        "opcode": 108,
+        "name": "LDLOC4",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6c",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13681
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 80,
+            "endLine": 67,
+            "endColumn": 94
+          }
+        ]
+      },
+      {
+        "offset": 13681,
+        "opcode": 120,
+        "name": "LDARG0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "78",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13682
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 97,
+            "endLine": 67,
+            "endColumn": 106
+          }
+        ]
+      },
+      {
+        "offset": 13682,
+        "opcode": 160,
+        "name": "MUL",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "a0",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13683
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 80,
+            "endLine": 67,
+            "endColumn": 106
+          }
+        ]
+      },
+      {
+        "offset": 13683,
+        "opcode": 158,
+        "name": "ADD",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "9e",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13684
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 30,
+            "endLine": 67,
+            "endColumn": 106
+          }
+        ]
+      },
+      {
+        "offset": 13684,
+        "opcode": 117,
+        "name": "STLOC5",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "75",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13685
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 67,
+            "startColumn": 24,
+            "endLine": 67,
+            "endColumn": 106
+          }
+        ]
+      },
+      {
+        "offset": 13685,
+        "opcode": 109,
+        "name": "LDLOC5",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6d",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13686
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 68,
+            "startColumn": 60,
+            "endLine": 68,
+            "endColumn": 63
+          }
+        ]
+      },
+      {
+        "offset": 13686,
+        "opcode": 120,
+        "name": "LDARG0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "78",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13687
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 68,
+            "startColumn": 49,
+            "endLine": 68,
+            "endColumn": 58
+          }
+        ]
+      },
+      {
+        "offset": 13687,
+        "opcode": 185,
+        "name": "MIN",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "b9",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13688
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 68,
+            "startColumn": 34,
+            "endLine": 68,
+            "endColumn": 64
+          }
+        ]
+      },
+      {
+        "offset": 13688,
+        "opcode": 118,
+        "name": "STLOC6",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "76",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13689
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 68,
+            "startColumn": 24,
+            "endLine": 68,
+            "endColumn": 64
+          }
+        ]
+      },
+      {
+        "offset": 13689,
+        "opcode": 110,
+        "name": "LDLOC6",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6e",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13690
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 69,
+            "startColumn": 36,
+            "endLine": 69,
+            "endColumn": 43
+          }
+        ]
+      },
+      {
+        "offset": 13690,
+        "opcode": 16,
+        "name": "PUSH0",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "10",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13691
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 69,
+            "startColumn": 46,
+            "endLine": 69,
+            "endColumn": 47
+          }
+        ]
+      },
+      {
+        "offset": 13691,
+        "opcode": 183,
+        "name": "GT",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "b7",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13692
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 69,
+            "startColumn": 36,
+            "endLine": 69,
+            "endColumn": 47
+          }
+        ]
+      },
+      {
+        "offset": 13692,
+        "opcode": 36,
+        "name": "JMPIF",
+        "operandHex": "2a",
+        "size": 2,
+        "instructionHex": "242a",
+        "edges": [
+          {
+            "kind": "branch",
+            "target": 13734
+          },
+          {
+            "kind": "fallthrough",
+            "target": 13694
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 69,
+            "startColumn": 13,
+            "endLine": 69,
+            "endColumn": 89
+          }
+        ]
+      },
+      {
+        "offset": 13694,
+        "opcode": 12,
+        "name": "PUSHDATA1",
+        "operandHex": "5265696d62757273656d656e7420657863656564732061637475616c2067617320636f7374",
+        "size": 39,
+        "instructionHex": "0c255265696d62757273656d656e7420657863656564732061637475616c2067617320636f7374",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13733
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 69,
+            "startColumn": 49,
+            "endLine": 69,
+            "endColumn": 88
+          }
+        ]
+      },
+      {
+        "offset": 13733,
+        "opcode": 224,
+        "name": "ABORTMSG",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "e0",
+        "edges": [],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 69,
+            "startColumn": 13,
+            "endLine": 69,
+            "endColumn": 89
+          }
+        ]
+      },
+      {
+        "offset": 13734,
+        "opcode": 106,
+        "name": "LDLOC2",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13735
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 19
+          }
+        ]
+      },
+      {
+        "offset": 13735,
+        "opcode": 74,
+        "name": "DUP",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "4a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13736
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13736,
+        "opcode": 17,
+        "name": "PUSH1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "11",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13737
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13737,
+        "opcode": 206,
+        "name": "PICKITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "ce",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13738
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13738,
+        "opcode": 110,
+        "name": "LDLOC6",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6e",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13739
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 32,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13739,
+        "opcode": 158,
+        "name": "ADD",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "9e",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13740
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13740,
+        "opcode": 78,
+        "name": "TUCK",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "4e",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13741
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13741,
+        "opcode": 17,
+        "name": "PUSH1",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "11",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13742
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13742,
+        "opcode": 80,
+        "name": "SWAP",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "50",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13743
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13743,
+        "opcode": 208,
+        "name": "SETITEM",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "d0",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13744
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13744,
+        "opcode": 69,
+        "name": "DROP",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "45",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13745
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 70,
+            "startColumn": 13,
+            "endLine": 70,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13745,
+        "opcode": 106,
+        "name": "LDLOC2",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6a",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13746
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 71,
+            "startColumn": 99,
+            "endLine": 71,
+            "endColumn": 105
+          }
+        ]
+      },
+      {
+        "offset": 13746,
+        "opcode": 55,
+        "name": "CALLT",
+        "operandHex": "0300",
+        "size": 3,
+        "instructionHex": "370300",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13749
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 7,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Native/StdLib.cs",
+            "startLine": 19,
+            "startColumn": 6,
+            "endLine": 19,
+            "endColumn": 60
+          }
+        ]
+      },
+      {
+        "offset": 13749,
+        "opcode": 95,
+        "name": "LDSFLD",
+        "operandHex": "22",
+        "size": 2,
+        "instructionHex": "5f22",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13751
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 71,
+            "startColumn": 49,
+            "endLine": 71,
+            "endColumn": 80
+          }
+        ]
+      },
+      {
+        "offset": 13751,
+        "opcode": 65,
+        "name": "SYSCALL",
+        "operandHex": "9bf667ce",
+        "size": 5,
+        "instructionHex": "419bf667ce",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13756
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 6,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Services/Storage.cs",
+            "startLine": 27,
+            "startColumn": 14,
+            "endLine": 27,
+            "endColumn": 50
+          }
+        ]
+      },
+      {
+        "offset": 13756,
+        "opcode": 65,
+        "name": "SYSCALL",
+        "operandHex": "e63f1884",
+        "size": 5,
+        "instructionHex": "41e63f1884",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13761
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 6,
+            "document": "../../../../../../../Users/jinghuiliao/.nuget/packages/neo.smartcontract.framework/3.10.1/src/Services/Storage.cs",
+            "startLine": 91,
+            "startColumn": 10,
+            "endLine": 91,
+            "endColumn": 39
+          }
+        ]
+      },
+      {
+        "offset": 13761,
+        "opcode": 110,
+        "name": "LDLOC6",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "6e",
+        "edges": [
+          {
+            "kind": "fallthrough",
+            "target": 13762
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 72,
+            "startColumn": 20,
+            "endLine": 72,
+            "endColumn": 27
+          }
+        ]
+      },
+      {
+        "offset": 13762,
+        "opcode": 34,
+        "name": "JMP",
+        "operandHex": "02",
+        "size": 2,
+        "instructionHex": "2202",
+        "edges": [
+          {
+            "kind": "branch",
+            "target": 13764
+          }
+        ],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 72,
+            "startColumn": 13,
+            "endLine": 72,
+            "endColumn": 28
+          }
+        ]
+      },
+      {
+        "offset": 13764,
+        "opcode": 64,
+        "name": "RET",
+        "operandHex": "",
+        "size": 1,
+        "instructionHex": "40",
+        "edges": [],
+        "sourcePoints": [
+          {
+            "documentIndex": 17,
+            "document": "UnifiedSmartWallet.Paymaster.cs",
+            "startLine": 73,
+            "startColumn": 9,
+            "endLine": 73,
+            "endColumn": 10
+          }
+        ]
+      }
+    ],
+    "sourceLocations": [
+      {
+        "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+        "startLine": 53,
+        "startColumn": 9,
+        "endLine": 73,
+        "endColumn": 10,
+        "start": 3207,
+        "length": 1258
+      }
+    ],
+    "conditionalBranches": [
+      {
+        "offset": 13584,
+        "target": 13625
+      },
+      {
+        "offset": 13635,
+        "target": 13651
+      },
+      {
+        "offset": 13692,
+        "target": 13734
+      }
+    ],
+    "unconditionalBranches": [
+      {
+        "offset": 13623,
+        "target": 13629
+      },
+      {
+        "offset": 13762,
+        "target": 13764
+      }
+    ],
+    "internalCalls": [],
+    "unresolvedIndirectCalls": [],
+    "declaredExceptionHandlers": [],
+    "outgoingEdges": [],
+    "externalEffects": [
+      {
+        "offset": 13560,
+        "kind": "syscall",
+        "identifierHex": "2d510830",
+        "name": "System.Runtime.GetScriptContainer",
+        "classification": "pinned-handler-correspondence-open",
+        "handlerSemanticsProved": false
+      },
+      {
+        "offset": 13570,
+        "kind": "syscall",
+        "identifierHex": "9bf667ce",
+        "name": "System.Storage.GetContext",
+        "classification": "pinned-handler-correspondence-open",
+        "handlerSemanticsProved": false
+      },
+      {
+        "offset": 13575,
+        "kind": "syscall",
+        "identifierHex": "925de831",
+        "name": "System.Storage.Get",
+        "classification": "pinned-handler-correspondence-open",
+        "handlerSemanticsProved": false
+      },
+      {
+        "offset": 13626,
+        "kind": "native-call",
+        "tokenIndex": 4,
+        "token": {
+          "hash": "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0",
+          "method": "deserialize",
+          "parametersCount": 1,
+          "hasReturnValue": true,
+          "callFlags": 15
+        },
+        "classification": "pinned-stdlib-correspondence-open",
+        "handlerSemanticsProved": false
+      },
+      {
+        "offset": 13651,
+        "kind": "syscall",
+        "identifierHex": "2d510830",
+        "name": "System.Runtime.GetScriptContainer",
+        "classification": "pinned-handler-correspondence-open",
+        "handlerSemanticsProved": false
+      },
+      {
+        "offset": 13658,
+        "kind": "syscall",
+        "identifierHex": "2d510830",
+        "name": "System.Runtime.GetScriptContainer",
+        "classification": "pinned-handler-correspondence-open",
+        "handlerSemanticsProved": false
+      },
+      {
+        "offset": 13746,
+        "kind": "native-call",
+        "tokenIndex": 3,
+        "token": {
+          "hash": "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0",
+          "method": "serialize",
+          "parametersCount": 1,
+          "hasReturnValue": true,
+          "callFlags": 15
+        },
+        "classification": "pinned-stdlib-correspondence-open",
+        "handlerSemanticsProved": false
+      },
+      {
+        "offset": 13751,
+        "kind": "syscall",
+        "identifierHex": "9bf667ce",
+        "name": "System.Storage.GetContext",
+        "classification": "pinned-handler-correspondence-open",
+        "handlerSemanticsProved": false
+      },
+      {
+        "offset": 13756,
+        "kind": "syscall",
+        "identifierHex": "e63f1884",
+        "name": "System.Storage.Put",
+        "classification": "pinned-handler-correspondence-open",
+        "handlerSemanticsProved": false
+      }
+    ],
+    "normalReturns": [
+      13764
+    ],
+    "explicitFaultTerminals": [
+      13733
+    ],
+    "openExternalCorrespondence": true,
+    "neoCoreSourceCommit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+    "neoVmSourceCommit": "004cd6070a940405818d9357638277dd44407e2e",
+    "opcodeTableSha256": "a25bff81e4f742036d2f599ab8688369592786a1e0cc2f920a3bd45c4e1fa24b",
+    "wholeMethodVerified": false,
+    "implementationVerified": false,
+    "openObligations": [
+      "COMPILER_DEBUG_AND_SOURCE_MAPPING",
+      "ALL_OPCODE_SEMANTICS_AND_FAULTS",
+      "HANDLER_ENVIRONMENT_CORRESPONDENCE",
+      "GAS_AND_RESOURCE_BOUNDS",
+      "CALLER_STATE_AND_STATIC_INITIALIZATION",
+      "TRANSACTION_ROLLBACK_AND_COMPOSITION"
+    ]
+  },
+  "closedScopedObligations": [
+    "COMPLETE_CAP_HELPER_REFERENCE_BODY_UNDER_DECLARED_CONTRACTS"
+  ],
+  "schema": "neoos-aa-implementation-refinement/v1",
+  "inventory": {
+    "abiEntries": 100,
+    "instructions": 8813,
+    "scriptBytes": 25557,
+    "sourceMethods": 815,
+    "sourceMethodScope": "Compilation inventory including framework and non-target types; not target reachability",
+    "distinctOpcodes": 120,
+    "structuralEdges": 9430,
+    "nativeCallTokens": 7,
+    "boundInputs": 254
+  },
+  "inventorySha256": "0c3e1ffcc917d448408d0aafd6908b8ab1985c4afe923117a153586e1bd5962a",
+  "proofReceiptSha256": "0f411fb659d75180db98f1bcda5868b9cc5716dc6236ed50e951d23103d0a306",
+  "proofReceiptSha256ByLane": {
+    "arithmetic": "0f411fb659d75180db98f1bcda5868b9cc5716dc6236ed50e951d23103d0a306",
+    "numeric": "28a588ce1ed0dd5084a2a3fb06c94300a8b293a25741eee04f2e5948d04a8845",
+    "reservation": "c6629c99acd3c1cccde87e06bf55c191ae0a0620a89f2612738162c848ae71b3",
+    "method": "c92c56093aa4200b0891d8d3237e15b5c628618a3022c2145be04766f4e47fe8"
+  },
+  "proofSelection": "complete-helper-and-supporting-models",
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "toolInputSha256": {
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/method_source.py": "5982e89257e64ed33c7b35140ed7e12aa38209824e1c73c85a6c5afea68a7e57",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_reservation_proofs.py": "779c1b67e7b5ad3e7bf8e8652ed5dd404162e754c5dd30f390c05e310eeeb37b",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/method_proofs.py": "21550846ca746762d1c9904a2bf0ee4bba864c860b2ae8c345f2103c6f10652c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_method_proofs.py": "8e0b99c85d54790a564e831ce8fa78ca95e98f8061b4212da604e3a035f2629f",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/numeric_proofs.py": "294ad4ace96193eee520c04b40c0d851326128dfc19f6199eae4e8435cf07629",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_method_source.py": "6848f3091a8624d64a3e2abc87b8f6ef764ae02f4dad9dd4f25e53403fa61cfe",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py": "811a75e29df1d66f45c809345b956f8a80136ff040ed1f1a37ed8c47e1c27f51",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/nef_decode.py": "a2044eadec06c0f65bf9fe303dd156b88f54106a76dc7f4afb302b4124e60848",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/method_inventory.py": "86a6051292c4fc64c2a1fc4e740253fa4cb35e1ebbdbc06c9fee931a8aa49afe",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_proofs.py": "ec9d3d7f4ee7263ec581f3189ac73e93a6db67b5b0b1b97ec7d733c5aff7efa1",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_nef_decode.py": "9a4665602f3bfc635b726730f6e81f5454bae1d304ab04a1728ba549ea7e5cf6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_method_inventory.py": "b9ee39fb08af99098307455ccafb000abe8101808c5d20a739439f4834594cbe",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/proof_tactic.txt": "5571276cd570efe5fa8a9022b53821023c7ea895e1032a69a372749ff7b2b45a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/prove.py": "3c2bac75ebd3e40caa9e45fae6fa4471467879f6b7fa7d789dd28c8de537f30a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/verify.py": "6922a07b53733c072149a118b4e718f3aec4cbc2141e90cad9afd96b9e0ebcec",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/reservation_proofs.py": "ecf239a8075f4e7b0a40c2be9cd83afd78c004d950caa0399cc652aa8fb6e9fe",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_numeric_proofs.py": "18ef7ae6a66200b252ff9686df7541a217975d605f8dec66c18408417addafd8",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/fixtures/cap-method-source.json": "5db414da0fd72ee8652ff416db462c77df715b056f1009092b0eeaffc8910ae4",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/fixtures/cap-region.json": "2f07d29821aaf9e6ca5a58829cfe2d142042820d14f23cd6bedbf6e2a17b374c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/export/RefinementExport.csproj": "7ae8f18691813071e65d20211002e26dc7528ec5750ebb385af1aa355233e98b",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/export/test_export.py": "ac2f02a578d857590f3baa2d8684032dc58ca12ebfeb262533a93b67a0214533",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/export/Program.cs": "7306b57893a03222d4a99e6ff3427a3610d09d1760317453a5075ab4f5a01a10",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/IntegerSemantics.v": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/ArithmeticVm.v": "1549b168162209f1aed06a8c88fae675e2dfdacd0ec13c39d2f76351cf01030f",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/ReservationArithmetic.v": "b8202b5240ebea5be2e4705eb41270fcffeba675943896f2571babbbba4dd57e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/NumericCoercions.v": "2c9ec6bccb5930280bdbd99cada7704775211c0ec79662be49e94cb6408963fe",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/CapArithmetic.v": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/CapMethodVm.v": "aa9486deee266d097c272540ff8a25511717b308053881e46a10868ed44bf571",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/coq/OrdinarySponsorship.v": "fb31b137ca83bde9ecc8411fc817d52d091d3f23910afb37841440950070cf32"
+  },
+  "projectInputSha256": {
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/Directory.Build.props": "c003c09715a996e268136c35e7e8555f9bcb376cdebc40a250b07f73e86c6799",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/nuget.config": "d03316715c5c46428149533dbd994d81a9fcdf97c8981a05083113523db82797",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Accounts.cs": "a03dab3c8b1f9fb8b3fd7937deb539ceacd14b1a9383fcbcce351ea22d6e9627",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Admin.cs": "74fa83c1f5e39a3cc1661a71efa5b061e87374b8d7904b9d61e9662c39738f52",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Escape.cs": "9c9b4b574e5e879fb9175e84e5233a82371b93e6be79cb3a310c989cbb78130a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Events.cs": "361b616f6557bd8b845c2c790d32152653e0b09668ac4c2baeea302429fa8f2f",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Execution.cs": "e313f0c82e9b1c0d73a8ca73dac8c657d0297e9e1db43e5a5f81b411c046e5bc",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.MarketEscrow.cs": "1dbd226147a66d8a03f0b28b152e9dcd395231f68574ef8e6a6ef750ccf005df",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Models.cs": "bd3b2743cdb0adb5382d552c375d6b351b7b8765fd364945dbee5fbd781181f4",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs": "85cc25838737641c1884038b685343562aa9787b17ec73b2eb8e72dcb3b08543",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.PlatformRegistrar.cs": "c524c6db9682caa5e18b3e26f66ffc2430ddf733416af81a7212ecfeb6e9b098",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Proxy.cs": "46427b4d2046f03d29bd51130c902d2ef7e2239f97617e85c6e0d51d1bb123e6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.State.cs": "83d70a55943b3904587258e9fbed02953391c06e81b3477dbd5953d5928cd437",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.VerifierChildren.cs": "f0bfc1ff7835bf237e445bcb20a085ec52951388ba48a7477cf543f9389cd28f",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.VerifyContext.cs": "459f7631dd06d0b01698d7f6b390e81951da7f1fdcf7a2c55774306239ce8025",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.cs": "38c0a815c429233d53cd0b3ca8f0f9ff813401b06b401593e776820d6109aaa8",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.csproj": "701a59fc3ea905c7ee37f246759a7f3e558e30a57f6b515eb107f4c5e248f20e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/neo-platform-packages.json": "c58f09322b80cfe665f221f025cc6a1d60d0ba2030451c9c437f6a6687048f74",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/DailyLimitHook.cs": "b6e6850cfa59912053c5dc3a79d16f367875d22f1dc25d37faa8e48f41487d7a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/DailyLimitHook.csproj": "dc3e58ffcff6e72e3121ad970a20437958611badb3b7f54d7292db571852d18b",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/HookAuthority.cs": "971083370fa07a2cec32493a8566ab8246d478c9fa86da9b6338355b5996aca1",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/MultiHook.cs": "20a6b3a69b3fb14ba56539f48323342be87b7cf0b97f6526e83660f295680cf7",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/MultiHook.csproj": "07d13f326572c6c0004eb842760419cf551e1d169166d58917e89864958cba22",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/NeoDIDCredentialHook.cs": "b4c4ae5a8a6053fd92a37d5db6281c880143e266000cef15c2c7439a2aa87228",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/NeoDIDCredentialHook.csproj": "3729ca53d3d612c09bc14ad0eed3795ee1f748d970e0fd42b3e1d2086be8e6a4",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/TokenRestrictedHook.cs": "891a0c3104379298f09d9df7fdccaef1962989a833e5a3c9aa88327f756adcb2",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/TokenRestrictedHook.csproj": "a189e2d2c204b31581fb2c4bf4ece61cd760d5ba79666927b6340cda2b4bfbe8",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/WhitelistHook.cs": "27f43ccb43c29a37495d13da7e2a1e5d4119420a08cdf04a160059b9dea7b09f",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/WhitelistHook.csproj": "30d4c0fd1fe1bc140cca3b71926e4202eec8a9b42bf3f6b23d41177ff592eea2",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/packages.DailyLimitHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/packages.MultiHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/packages.NeoDIDCredentialHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/packages.TokenRestrictedHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/hooks/packages.WhitelistHook.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/market/AAAddressMarket.cs": "7f9b16f6fc1869bf1341b4c97049878a584b5bc7d5bc40fe1f37824af54b300a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/market/AAAddressMarket.csproj": "3917604e16f7a88c8c25bbd3c810609b49616cffb6968b86b83795c74d6ca310",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/market/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/MarkerOnlyModule.cs": "9d4b594b923c55c12b4de4a495469193fb584c3b77d4ffd47d6c9754ed1ba18e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/MarkerOnlyModule.csproj": "2eede6c9f6b04140b568ef5efc2d1107152620f96457c7afe0a3d0ab70d9dd90",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/MockTransferTarget.cs": "aa53c1fb0354d51efcb9acd6518a81635be6f07b5fd7e5f1158a9bec70e0cb3a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/MockTransferTarget.csproj": "c08a000c02eed60900d3d3c87cbf0e3d6cdcee953e47c31400cdfd1b6f9d177b",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/MockVerifierCore.cs": "25732d384dcebb423db7aefd2392bd0207f74e5de31ff9f72a9ea41e071371d5",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/MockVerifierCore.csproj": "d8e4363563ececd72ab5109f1747e44443406b497dca7bc4489558fabba9d03c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/PlatformRegistrarMock.cs": "861fc9df59ed5d39180da24b6a21157c9e54d06100d66194cf62b0814c7127fd",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/PlatformRegistrarMock.csproj": "32c7ede85254e723e71d1c63a67ffb6e75c362be2a79289f7fbbdc7d261b1b00",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/PolicyExecutionProbe.cs": "9b95099bc8f83a8ad45241084b584860654746d3b2c4d4ebdd8b3847e23dee9b",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/PolicyExecutionProbe.csproj": "e508a0da7e03fd07426927e674662af5a6229f4b37bf957aedda5cb4feab60a9",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/WrongHookLifecycleAbiModule.cs": "e45b45ad91e94818d3fdef0d3a98d4c6b8ebef5e6ee2f31cf6411e75fa37e0a9",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/WrongHookLifecycleAbiModule.csproj": "787cda3138cc4ed21c05a3aad7b0687e8b7f4722f9deb0bbfa879d3c9dea1055",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/WrongLifecycleAbiModule.cs": "de8444f2cc03889398bdb108f4ac625c7db469fd6417eeb0228a355968d6fa5f",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/WrongLifecycleAbiModule.csproj": "f97dd521b7dc2972dfc63d2c17312c2c6fe5bb5d85c10bb6cc0302261a6618e7",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/packages.MarkerOnlyModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/packages.MockTransferTarget.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/packages.MockVerifierCore.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/packages.PlatformRegistrarMock.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/packages.PolicyExecutionProbe.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/packages.WrongHookLifecycleAbiModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/mocks/packages.WrongLifecycleAbiModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/DailyLimitHook.Native.csproj": "e3766888d043e00a2217a90ccba604ec7f3ba3db92ed1c5ddc5c1fac49713f9d",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/MultiSigVerifier.Native.csproj": "030c194051033ef45a53a57813926fb87ef1af50212212503a62d64f8b5ddb53",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/NativeAuthority.cs": "78c74c0d4fec03d5c8d68a6ac7b2c289f9dc3468fe9cddbbf593e350cabd4f3d",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/NeoNativeVerifier.Native.csproj": "d864c9b85e229dfd3ee91a487fa20cfec8337f4d1d6499c955527dc4036635b9",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/SessionKeyVerifier.Native.csproj": "c2b3ad5b3a2a9592db788211899df533dd248eec36446153340a6c24dbb996c1",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/TokenRestrictedHook.Native.csproj": "746a44316721f7497a784e3baf1acf0947753e9e07734fe859148b7df8c8806e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/WhitelistHook.Native.csproj": "fe67014420dd66169afbf810c5ab80435beb47cb68ab317a0d700210e16f3745",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/packages.DailyLimitHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/packages.MultiSigVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/packages.NeoNativeVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/packages.SessionKeyVerifier.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/packages.TokenRestrictedHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/packages.WhitelistHook.Native.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/native/profiles.json": "461aca674b5062d0642d282b3a1c14766f03dfc80da9830f4c1c2f7fad8b985e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/paymaster/Paymaster.cs": "c04511d90eff0e97fabb94d17c38c80de4287186138dcdf01073ee2a16cada87",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/paymaster/Paymaster.csproj": "db4eb4f1980fcaf349d6ae42e081773bcb7d28187e3188275a263b2aeae7a89a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/paymaster/PaymasterAuthority.cs": "219433044b4636a109595f9209153e33c652237671baa485d48e64c47acc5b5c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/paymaster/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/MorpheusSocialRecoveryVerifier.Fixed.cs": "87a3d43c81a3fbfbb58b63b3c2986a0e74e614496b86788682a9aada10d50b0c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/MorpheusSocialRecoveryVerifier.Flows.cs": "1aa08ac5484bb237323c848c375c38b0be4957c8ca68d88381e15f50772fbe63",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/MorpheusSocialRecoveryVerifier.Lifecycle.cs": "a6af68e2b0f729f44534dd29372f88463c7b8a2d58c1120de34f31cb0105134d",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/MorpheusSocialRecoveryVerifier.Queries.cs": "cbb48267a4eec9477cb72e562a24ba1dbe22c74ed82d729fa02faf2c8a78a0cd",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/MorpheusSocialRecoveryVerifier.Storage.cs": "9c0c7083c40bfc95d4ae88eae3aaf6ef5d58f667c6f4c4d940c4f433ddd8acbe",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/MorpheusSocialRecoveryVerifier.V3.cs": "8491e0b58721f35c3f5ec5c3ae88abf6826edd730d1811883a0bfd6f7c1e4a43",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/MorpheusSocialRecoveryVerifier.Validation.cs": "747ef44e566aaeb81255fe1adddb994447014f9e9c9bfd2e4b4f7e645da3f859",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/MorpheusSocialRecoveryVerifier.csproj": "c29e9476630b2ff557d569f88588711fb7e43a604edabd460010c01991f947ba",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/recovery/packages.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/MultiSigVerifier.cs": "cd8b5c3189fbbb3b0088da9fa08a9469f61e3e40ac866dad1d24dcbca6930a77",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/MultiSigVerifier.csproj": "7ea0f896fc2348ef3e46c605f013144c91ec4a700d22ce9812106a5ed8bde1f0",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/NativeOperation.cs": "682e6a13c7aa7eeb6987bd32668439dde76fb6dd9b24746d724dccda5024254f",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/NeoNativeVerifier.cs": "e8bf031d41bb5bbd745e01d51b703aeb60f948f0177ab63a597623fac841763e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/NeoNativeVerifier.csproj": "9185028c3430fe35752a911d61f64ed6349e255256444c74455bc5c816518413",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/SessionKeyVerifier.cs": "76cb9a3763ca553ff23d3bb5d4f9b35f335db7b89badf7ec331b7758faf3991a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/SessionKeyVerifier.csproj": "73de60fcdcfe4ecd5052a7602122cb03ea24edf9ca27afb35e44c4a0b2dbf78a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/SignerDomain.cs": "107ab905f362fd661b9c24585a23a79a7ecf7bce1370c97bc0beb6d3ca4afaf6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/SubscriptionVerifier.cs": "200b15570eaff7e5bf39acd62a1d398106a6d977c5af08c57ea890862eec320c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/SubscriptionVerifier.csproj": "96edd5377eeee49ac71e0e61cab8adee9e38213d9ac61412cba1d66c1d95c9a0",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/TEEVerifier.cs": "ca04a531248408b6e55782ba8c343593622943450619c737fe01f805038fa1ed",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/TEEVerifier.csproj": "1ec0a38cec4389c49bfebb28ec480872b7de761fe42ccb65092a32477e36b75a",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/VerifierAuthority.cs": "b964e3e2886718075f9b30f74e3a26c70e7d3d77af9f63f2ba22e4a16626993e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/VerifierClock.cs": "e3e2fb7ef5eccf95cac5384bb7bb4e7341a774c31f49128174d722dd1adf4f2c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/VerifierModels.cs": "d4a562022946f427b96ca16b073ce8de45bd9bc920dec455d2c306b6d924c6b5",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/VerifierPayload.cs": "f2fc6713d49b49054dd9f2a833d8be93d40bd521ce03d8868391036706d78c80",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/Web3AuthVerifier.cs": "85b925f0fe55f3682cda07d8c1bbf6c345f6a6f04806a9b5a5f0626f9a03866e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/Web3AuthVerifier.csproj": "e461de1a2b38003918de3e721b757689fafa7aa4ff4282eb384585d41d26c3ac",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/WebAuthnVerifier.cs": "6299697159b3e4e5474797f6a5b6e098af5b8db43d3182bab8d9063b9378ad05",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/WebAuthnVerifier.csproj": "308a133cf9f231c2c246e9adbcd46bdad5120d1075dacb3b7f549175f6bbb2c3",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/ZKEmailVerifier.cs": "07bb130f48ce1b488a4811a92a090bbbaf3f4ae11775d3ae8c88a22871cf52c7",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/ZKEmailVerifier.csproj": "bf1476d311c3e1dd96477fc3f0777b73adf80c58f0baf2ac855bd5ddb3cba83d",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/ZkLoginVerifier.cs": "79abc38235f0ac2b81cd282144e42a2a45dc1ce11b9351c3806c4c860ee73a1c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/ZkLoginVerifier.csproj": "0d5e4b385849680ca922ca274e5ed2d226efcc0e4f5a8a804d9b33b4aedbbc8e",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.MultiSigVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.NeoNativeVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.SessionKeyVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.SubscriptionVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.TEEVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.Web3AuthVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.WebAuthnVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.ZKEmailVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/verifiers/packages.ZkLoginVerifier.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6"
+  },
+  "publicNetworkWritesPerformed": false,
+  "independentDecoder": {
+    "neoVmSourceCommit": "004cd6070a940405818d9357638277dd44407e2e",
+    "sourceSha256": {
+      "src/Neo.VM/OpCode.cs": "928f9602898b7abb4fc8894bf8fd3c510f05bb3906e5460743243a566dfec805",
+      "src/Neo.VM/Instruction.cs": "608b2602c5117109e44153d3166ad68604904b1e1f408a0b5652e69b5229f224",
+      "src/Neo.VM/Script.cs": "537e623d0407b221fe992f891ae81529774087da84cb67897c452a6388984de4",
+      "src/Neo.VM/JumpTable/JumpTable.Control.cs": "a0ac51ff220abbfcf8fb8c19bb0f2b8be4680169ba8ba33f6ededfc5e5e6a2ec",
+      "src/Neo.VM/ExecutionEngineLimits.cs": "b8353f47f18aec5093426b550a231c7ce1e2201e636e806f177ffcb9043374b4",
+      "src/Neo.VM/Types/StackItemType.cs": "5f84ba615857815350c46a93eb8c1400d548baa6138a2fa0e0a9242b77f28d16"
+    },
+    "opcodeTableSha256": "a25bff81e4f742036d2f599ab8688369592786a1e0cc2f920a3bd45c4e1fa24b",
+    "scope": "Independent structural decoding, not full instruction semantics proof"
+  },
+  "completeRefinementRequired": true
+}

@@ -1,0 +1,6 @@
+File "./ReservationArithmetic.v", line 5, characters 5-8:
+Warning: "From Coq" has been replaced by "From Stdlib".
+[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
+File "./ReservationArithmetic.v", line 172, characters 72-75:
+Error: Tactic failure:  Cannot find witness.
+

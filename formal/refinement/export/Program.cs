@@ -21,6 +21,18 @@ internal static class Program
     private const string CompilerPackageSha256 = "182c30a41f3b640086363b4d5fa2fb107cc7d17795df9d55a22b7bd646c543e0";
     private static readonly JsonSerializerOptions JsonOptions = new() { MaxDepth = 512 };
     private static readonly Dictionary<string, int> OperationCounts = new(StringComparer.Ordinal);
+    private static readonly HashSet<string> SymbolCollections = new(StringComparer.Ordinal)
+    {
+        "IFieldInitializerOperation.InitializedFields", "IBlockOperation.Locals", "ISymbolInitializerOperation.Locals"
+    };
+    private static readonly HashSet<string> OperationCollections = new(StringComparer.Ordinal)
+    {
+        "IBlockOperation.Operations", "IVariableDeclarationGroupOperation.Declarations",
+        "IVariableDeclarationOperation.Declarators", "IVariableDeclarationOperation.IgnoredDimensions",
+        "IVariableDeclaratorOperation.IgnoredArguments", "IInvocationOperation.Arguments",
+        "IPropertyReferenceOperation.Arguments", "IObjectCreationOperation.Arguments",
+        "IArrayCreationOperation.DimensionSizes", "IArrayInitializerOperation.ElementValues"
+    };
     private static string SourceRoot = "";
 
     private static int Main(string[] args)
@@ -306,6 +318,13 @@ internal static class Program
     {
         OperationCounts.Clear(); var methods = new List<object>(); var types = new List<object>(); var initializers = new List<object>();
         var trees = compilation.SyntaxTrees.GroupBy(t => t.FilePath).Select(g => g.First()).ToArray();
+        // Event initializers can bind compiler backing fields that GetMembers()
+        // exposes only as events. Include those actual bound field symbols so
+        // every InitializedFields ID/type has an attributable field inventory.
+        var initializedFields = trees.SelectMany(tree => tree.GetRoot().DescendantNodes().OfType<EqualsValueClauseSyntax>()
+                .Select(node => compilation.GetSemanticModel(tree).GetOperation(node)).OfType<IFieldInitializerOperation>()
+                .SelectMany(initializer => initializer.InitializedFields))
+            .Distinct<IFieldSymbol>(SymbolEqualityComparer.Default).ToArray();
         foreach (var tree in trees)
         {
             var model = compilation.GetSemanticModel(tree);
@@ -314,7 +333,10 @@ internal static class Program
                 if (model.GetDeclaredSymbol(node) is not INamedTypeSymbol symbol) continue;
                 types.Add(new { id = Id(symbol), displayName = TypeName(symbol), kind = symbol.TypeKind.ToString(),
                     baseType = TypeName(symbol.BaseType), isValueType = symbol.IsValueType, location = Location(node, scratch),
-                    fields = symbol.GetMembers().OfType<IFieldSymbol>().Select(f => new { id = Id(f), name = f.Name, type = TypeName(f.Type), isStatic = f.IsStatic, isReadOnly = f.IsReadOnly, constant = f.HasConstantValue ? Constant(f.ConstantValue) : null }),
+                    fields = symbol.GetMembers().OfType<IFieldSymbol>()
+                        .Concat(initializedFields.Where(field => SymbolEqualityComparer.Default.Equals(field.ContainingType, symbol)))
+                        .Distinct<IFieldSymbol>(SymbolEqualityComparer.Default)
+                        .Select(f => new { id = Id(f), name = f.Name, type = TypeName(f.Type), isStatic = f.IsStatic, isReadOnly = f.IsReadOnly, constant = f.HasConstantValue ? Constant(f.ConstantValue) : null }),
                     synthesizedMembers = symbol.GetMembers().Where(s => s.IsImplicitlyDeclared).Select(s => new { id = Id(s), kind = s.Kind.ToString(), issue = "Compiler-synthesized member has no separately exported source body" }) });
             }
             foreach (var node in tree.GetRoot().DescendantNodes().Where(n => n is BaseMethodDeclarationSyntax or AccessorDeclarationSyntax or LocalFunctionStatementSyntax))
@@ -374,13 +396,17 @@ internal static class Program
             case ICompoundAssignmentOperation a: details["operator"] = a.OperatorKind.ToString(); details["checked"] = a.IsChecked; details["operatorMethod"] = a.OperatorMethod is null ? null : Id(a.OperatorMethod); break;
         }
         var boundMetadata = new Dictionary<string, object?>();
+        var orderedChildren = op.ChildOperations.ToArray();
+        var semanticCollections = new Dictionary<string, object?>();
         var unexportedMetadata = new List<string>();
         foreach (var contract in op.GetType().GetInterfaces().Where(t => t.Namespace == "Microsoft.CodeAnalysis.Operations"))
             foreach (var property in contract.GetProperties())
             {
                 string key = contract.Name + "." + property.Name;
                 object? value = property.GetValue(op);
-                if (value is null || value is bool or string or int || value?.GetType().IsEnum == true)
+                if (TryExportSemanticCollection(key, value, orderedChildren, out var collection))
+                    semanticCollections[key] = collection;
+                else if (value is null || value is bool or string or int || value?.GetType().IsEnum == true)
                     boundMetadata[key] = value?.GetType().IsEnum == true ? value.ToString() : value;
                 else if (value is ISymbol symbol) boundMetadata[key] = new { id = Id(symbol), type = symbol is ITypeSymbol type ? TypeName(type) : null };
                 else if (value is CommonConversion conversion) boundMetadata[key] = Conversion(conversion);
@@ -389,9 +415,52 @@ internal static class Program
             }
         return new { kind, type = TypeName(op.Type), @implicit = op.IsImplicit,
             constant = op.ConstantValue.HasValue ? new { hasValue = true, value = Constant(op.ConstantValue.Value) } : null,
-            location = Location(op.Syntax, scratch), details, boundMetadata, unexportedMetadata,
-            children = op.ChildOperations.Select(child => ExportOperation(child, scratch)).ToArray(),
+            location = Location(op.Syntax, scratch), details, boundMetadata, semanticCollections, unexportedMetadata,
+            children = orderedChildren.Select(child => ExportOperation(child, scratch)).ToArray(),
             evaluationOrder = "Roslyn ChildOperations order; formal semantics still required" };
+    }
+    private static bool TryExportSemanticCollection(string key, object? value, IOperation[] children, out object? exported)
+    {
+        exported = null;
+        bool symbols = SymbolCollections.Contains(key);
+        if (!symbols && !OperationCollections.Contains(key)) return false;
+        if (value is not System.Collections.IEnumerable collection)
+            throw new InvalidDataException("Known semantic collection is not enumerable: " + key);
+        if (symbols)
+        {
+            var items = new List<object>();
+            foreach (object item in collection)
+            {
+                if (item is not ISymbol symbol || symbol is not (IFieldSymbol or ILocalSymbol))
+                    throw new InvalidDataException("Unsupported symbol in semantic collection: " + key);
+                items.Add(new { id = Id(symbol),
+                    type = symbol is IFieldSymbol field ? TypeName(field.Type) : TypeName(((ILocalSymbol)symbol).Type),
+                    kind = symbol.Kind.ToString(), name = symbol.Name, isStatic = symbol.IsStatic,
+                    isReadOnly = symbol is IFieldSymbol readonlyField && readonlyField.IsReadOnly });
+            }
+            exported = new { kind = "symbols", items, complete = true };
+        }
+        else
+        {
+            var indices = new List<int>();
+            foreach (object item in collection)
+            {
+                if (item is not IOperation operation)
+                    throw new InvalidDataException("Non-operation in semantic collection: " + key);
+                int match = -1;
+                for (int index = 0; index < children.Length; index++)
+                    if (ReferenceEquals(children[index], operation))
+                    {
+                        if (match != -1) throw new InvalidDataException("Ambiguous operation child in semantic collection: " + key);
+                        match = index;
+                    }
+                if (match == -1 || indices.Contains(match))
+                    throw new InvalidDataException("Missing or duplicate operation child in semantic collection: " + key);
+                indices.Add(match);
+            }
+            exported = new { kind = "operations", childIndices = indices, complete = true };
+        }
+        return true;
     }
     private static object Conversion(CommonConversion c) => new { c.Exists, c.IsIdentity, c.IsImplicit, c.IsNullable, c.IsNumeric, c.IsReference, c.IsUserDefined, method = c.MethodSymbol is null ? null : Id(c.MethodSymbol) };
 }

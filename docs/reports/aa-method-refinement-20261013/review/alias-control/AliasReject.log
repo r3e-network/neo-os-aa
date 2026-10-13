@@ -1,0 +1,330 @@
+File "./AliasReject.v", line 3, characters 19-30:
+Error: Unable to unify
+ "CapMethodVm.Returned
+    (CapMethodVm.VInt
+       (BinInt.Z.pos
+          (BinNums.xO
+             (BinNums.xO (BinNums.xI (BinNums.xI (BinNums.xI BinNums.xH)))))))
+    (CapMethodVm.VWire CapMethodVm.ArrayKind
+       (CapMethodVm.VBytes
+          (1
+           :: 1
+              :: 1
+                 :: 1
+                    :: 1
+                       :: 1
+                          :: 1
+                             :: 1
+                                :: 1
+                                   :: 1
+                                      :: 1
+                                         :: 1
+                                            :: 1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1 :: 
+                                               1 :: 1 :: 1 :: 1 :: nil)
+        :: CapMethodVm.VInt
+             (BinInt.Z.pos
+                (BinNums.xO
+                   (BinNums.xO
+                      (BinNums.xI (BinNums.xI (BinNums.xI BinNums.xH))))))
+           :: nil))
+    (CapMethodVm.ReadStorage CapMethodVm.VNull
+     :: CapMethodVm.Serialized
+          (CapMethodVm.VWire CapMethodVm.ArrayKind
+             (CapMethodVm.VBytes
+                (1
+                 :: 1
+                    :: 1
+                       :: 1
+                          :: 1
+                             :: 1
+                                :: 1
+                                   :: 1
+                                      :: 1
+                                         :: 1
+                                            :: 1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1 :: 
+                                               1 :: 1 :: 1 :: 1 :: nil)
+              :: CapMethodVm.VInt
+                   (BinInt.Z.pos
+                      (BinNums.xO
+                         (BinNums.xO
+                            (BinNums.xI (BinNums.xI (BinNums.xI BinNums.xH))))))
+                 :: nil))
+        :: CapMethodVm.WroteStorage
+             (CapMethodVm.VWire CapMethodVm.ArrayKind
+                (CapMethodVm.VBytes
+                   (1
+                    :: 1
+                       :: 1
+                          :: 1
+                             :: 1
+                                :: 1
+                                   :: 1
+                                      :: 1
+                                         :: 1
+                                            :: 1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1
+                                               :: 
+                                               1 :: 
+                                               1 :: 1 :: 1 :: 1 :: nil)
+                 :: CapMethodVm.VInt
+                      (BinInt.Z.pos
+                         (BinNums.xO
+                            (BinNums.xO
+                               (BinNums.xI
+                                  (BinNums.xI (BinNums.xI BinNums.xH))))))
+                    :: nil))
+           :: nil)"
+with
+ "CapMethodVm.Returned
+    (CapMethodVm.VInt
+       (BinInt.Z.pos
+          (BinNums.xO
+             (BinNums.xO (BinNums.xI (BinNums.xI (BinNums.xI BinNums.xH)))))))
+    (CapMethodVm.VWire CapMethodVm.ArrayKind
+       (CapMethodVm.VBytes
+          (0
+           :: 0
+              :: 0
+                 :: 0
+                    :: 0
+                       :: 0
+                          :: 0
+                             :: 0
+                                :: 0
+                                   :: 0
+                                      :: 0
+                                         :: 0
+                                            :: 0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0 :: 
+                                               0 :: 0 :: 0 :: 0 :: nil)
+        :: CapMethodVm.VInt BinNums.Z0 :: nil))
+    (CapMethodVm.ReadStorage CapMethodVm.VNull
+     :: CapMethodVm.Serialized
+          (CapMethodVm.VWire CapMethodVm.ArrayKind
+             (CapMethodVm.VBytes
+                (0
+                 :: 0
+                    :: 0
+                       :: 0
+                          :: 0
+                             :: 0
+                                :: 0
+                                   :: 0
+                                      :: 0
+                                         :: 0
+                                            :: 0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0 :: 
+                                               0 :: 0 :: 0 :: 0 :: nil)
+              :: CapMethodVm.VInt BinNums.Z0 :: nil))
+        :: CapMethodVm.WroteStorage
+             (CapMethodVm.VWire CapMethodVm.ArrayKind
+                (CapMethodVm.VBytes
+                   (0
+                    :: 0
+                       :: 0
+                          :: 0
+                             :: 0
+                                :: 0
+                                   :: 0
+                                      :: 0
+                                         :: 0
+                                            :: 0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0
+                                               :: 
+                                               0 :: 
+                                               0 :: 0 :: 0 :: 0 :: nil)
+                 :: CapMethodVm.VInt BinNums.Z0 :: nil))
+           :: nil)".
+

@@ -243,6 +243,64 @@ class BindingTests(unittest.TestCase):
         with self.assertRaises(gate.RefinementError):
             gate.coverage_report(self.inventory, {"scope": "whole-artifact", "kernelChecked": True})
 
+    def helper_receipts(self):
+        identity = {"nefSha256": self.inventory["nef"]["sha256"],
+                    "scriptSha256": self.inventory["nef"]["scriptSha256"],
+                    "methodBytesSha256": "a" * 64, "start": 100, "endExclusive": 108,
+                    "byteCount": 8, "instructionCount": 4}
+        common = {"kernelChecked": True, "fullImplementationVerified": False}
+        receipts = {
+            "method": {**common, "scope": "complete-helper-reference-refinement",
+                       "referenceRefinementVerified": True,
+                       "nefSha256": identity["nefSha256"], "scriptSha256": identity["scriptSha256"],
+                       "methodSha256": identity["methodBytesSha256"], "methodRange": [100, 108],
+                       "byteCount": 8, "instructionCount": 4, "sourceProjectionSha256": "b" * 64},
+            "numeric": {**common, "scope": "numeric-coercions"},
+            "reservation": {**common, "scope": "reservation-arithmetic"},
+        }
+        return identity, receipts
+
+    def test_complete_helper_reference_proof_keeps_every_abi_entry_open(self):
+        identity, receipts = self.helper_receipts()
+        report = gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+                                      supporting_proofs=receipts, helper_inventory=identity,
+                                     expected_source_projection_sha256="b" * 64)
+        self.assertFalse(report["implementationVerified"])
+        self.assertEqual(report["unprovedEntrypoints"], ["value/0"])
+        self.assertEqual(report["verifiedEntrypoints"], [])
+        self.assertEqual(report["supportingProofs"], receipts)
+        self.assertIn("CALLER_STATIC_AND_LEDGER_INVARIANTS", report["openObligations"])
+        self.assertIn("APPLICATION_ENGINE_REFINEMENT", report["openObligations"])
+
+    def test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method(self):
+        identity, original = self.helper_receipts()
+        mutations = [("scope", "whole-artifact"), ("kernelChecked", False),
+                     ("referenceRefinementVerified", False), ("fullImplementationVerified", True),
+                     ("nefSha256", "c" * 64), ("scriptSha256", "c" * 64),
+                     ("methodSha256", "c" * 64), ("methodRange", [101, 108]),
+                     ("byteCount", 7), ("instructionCount", 3), ("sourceProjectionSha256", ""),
+                     ("sourceProjectionSha256", "0" * 64)]
+        for field, value in mutations:
+            receipts = copy.deepcopy(original); receipts["method"][field] = value
+            with self.subTest(field=field), self.assertRaises(gate.RefinementError):
+                gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+                                     supporting_proofs=receipts, helper_inventory=identity,
+                                     expected_source_projection_sha256="b" * 64)
+
+    def test_missing_or_unchecked_supporting_lane_fails_closed(self):
+        identity, original = self.helper_receipts()
+        for key in original:
+            for failure in ("missing", "unchecked", "wrong-scope", "promoted"):
+                receipts = copy.deepcopy(original)
+                if failure == "missing": del receipts[key]
+                elif failure == "unchecked": receipts[key]["kernelChecked"] = False
+                elif failure == "wrong-scope": receipts[key]["scope"] = "complete-artifact"
+                else: receipts[key]["fullImplementationVerified"] = True
+                with self.subTest(key=key, failure=failure), self.assertRaises(gate.RefinementError):
+                    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+                                         supporting_proofs=receipts, helper_inventory=identity,
+                                     expected_source_projection_sha256="b" * 64)
+
     def test_duplicate_manifest_dispatch_rejected(self):
         self.inventory["manifest"]["methods"] *= 2
         self.manifest.write_text(json.dumps({"abi": {"methods": self.inventory["manifest"]["methods"]}}))

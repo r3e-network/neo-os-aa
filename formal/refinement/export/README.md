@@ -51,6 +51,42 @@ Schema `neoos-aa-refinement-inventory/v1` has these stable fields:
   document identities, assembly text and the reimbursement helper's located body.
 - `status: INVENTORY_ONLY` and `proofObligations`: no positive proof status.
 
+Operation nodes also contain an additive `semanticCollections` object keyed by
+the full Roslyn interface/property name. Known symbol collections use
+`{ "kind": "symbols", "items": [...], "complete": true }`; each item carries
+`id`, `type`, `kind`, `name`, `isStatic` and `isReadOnly`. Field and local types
+are their declared value types, not a null type merely because they are symbols.
+The item order is exactly the Roslyn collection order, including empty arrays.
+
+Known operation collections use
+`{ "kind": "operations", "childIndices": [0, 2], "complete": true }`.
+Each index refers to this node's existing `children` array, with collection order
+preserved. No operations are copied or recursively traversed a second time.
+An element without exactly one reference-identical direct child is an export
+error, rather than an omitted element or a guessed syntax correspondence.
+
+The exported collections are `IFieldInitializerOperation.InitializedFields`,
+`IBlockOperation.Locals` / `Operations`,
+`IVariableDeclarationGroupOperation.Declarations`,
+`IVariableDeclarationOperation.Declarators` / `IgnoredDimensions`,
+`IVariableDeclaratorOperation.IgnoredArguments`,
+`ISymbolInitializerOperation.Locals`, `IArrayCreationOperation.DimensionSizes`,
+`IArrayInitializerOperation.ElementValues`, and `Arguments` on invocation, property
+reference and object creation operations. Existing `details` and `boundMetadata`
+are unchanged. These known collections leave `unexportedMetadata`; every
+unrecognized collection/property remains there as an explicit obligation.
+
+In particular, a `FieldInitializer` now identifies the exact field or fields it
+initializes, including `Prefix_TransactionReimbursement` and its `byte[]` type.
+Consumers can check those IDs and types against `source.types[].fields`, and
+inspect source initializer order. This binding is source inventory only.
+Actual event backing fields mentioned by typed initializers are appended to the
+type's field inventory when Roslyn `GetMembers()` exposes only their events.
+The exporter records their actual symbols and does not infer storage slots.
+Synthesized class constructors still have no separately exported body, and the
+compiler's static-slot layout and actual initialization order remain proof
+obligations.
+
 The pinned compiler loader reads other source types in the contracts directory;
 `compilationScope` says so. The inventory does not claim that every such method
 is reachable from this NEF. Compiler debug records can also refer to framework

@@ -1,0 +1,158 @@
+Closed under the global context
+Closed under the global context
+File "./MutantMinToMax.v", line 96, characters 27-38:
+Error:
+In environment
+hash, old : list nat
+sf, nf, q, r : Z
+kind : Kind
+static_values : nat -> option Value
+Hstatic : static_values 34%nat = Some (VBuffer [33%nat])
+Hdom : cap_domain (sf + nf) q r
+Hsum : integer_fits
+         (r + Z.min q (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q))
+Heq : bytes_eqb old hash = true
+H1 : integer_fits (Z.min (sf + nf) 1)
+H2 : integer_fits (1 - Z.min (sf + nf) 1)
+H3 : integer_fits (sf + nf - r)
+H4 : integer_fits (Z.max (sf + nf - r) 0)
+H5 : integer_fits ((1 - Z.min (sf + nf) 1) * q)
+H6 : integer_fits (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q)
+H7 : integer_fits
+       (Z.min q (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q))
+Hcost : integer_fits (sf + nf)
+HL : 1 < integer_limit
+Hsmall : 8 < integer_limit
+Hpositive : (0 <?
+             Z.min q (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q)) =
+            true
+Unable to unify
+ "Returned
+    (VInt (Z.min q (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q)))
+    (VWire kind
+       [VBytes old;
+        VInt
+          (r + Z.min q (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q))])
+    [ReadStorage (VWire kind [VBytes old; VInt r]);
+     Deserialized (VWire kind [VBytes old; VInt r]);
+     Serialized
+       (VWire kind
+          [VBytes old;
+           VInt
+             (r +
+              Z.min q (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q))]);
+     WroteStorage
+       (VWire kind
+          [VBytes old;
+           VInt
+             (r +
+              Z.min q (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q))])]"
+with
+ "match
+    match
+      match
+        checked_integer
+          (Z.max (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q) q)
+      with
+      | Some value =>
+          Continue
+            {|
+              pc := 131;
+              stack := [VInt value];
+              arguments := [VInt q];
+              locals :=
+                [VBytes hash; VWire kind [VBytes old; VInt r]; 
+                 VRef 1; VInt (sf + nf); VInt (1 - Z.min (sf + nf) 1);
+                 VInt (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q);
+                 VNull];
+              heap :=
+                [{|
+                   object_kind := ArrayKind;
+                   fields :=
+                     [VBytes hash; VNull; VNull; VNull; 
+                      VInt sf; VInt nf; VNull; VNull]
+                 |};
+                 {| object_kind := kind; fields := [VBytes old; VInt r] |}];
+              storage := VWire kind [VBytes old; VInt r];
+              effects :=
+                [ReadStorage (VWire kind [VBytes old; VInt r]);
+                 Deserialized (VWire kind [VBytes old; VInt r])];
+              statics := static_values
+            |}
+      | None =>
+          Fault
+            {|
+              pc := 130;
+              stack :=
+                [VInt q;
+                 VInt (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q)];
+              arguments := [VInt q];
+              locals :=
+                [VBytes hash; VWire kind [VBytes old; VInt r]; 
+                 VRef 1; VInt (sf + nf); VInt (1 - Z.min (sf + nf) 1);
+                 VInt (Z.max (sf + nf - r) 0 + (1 - Z.min (sf + nf) 1) * q);
+                 VNull];
+              heap :=
+                [{|
+                   object_kind := ArrayKind;
+                   fields :=
+                     [VBytes hash; VNull; VNull; VNull; 
+                      VInt sf; VInt nf; VNull; VNull]
+                 |};
+                 {| object_kind := kind; fields := [VBytes old; VInt r] |}];
+              storage := VWire kind [VBytes old; VInt r];
+              effects :=
+                [ReadStorage (VWire kind [VBytes old; VInt r]);
+                 Deserialized (VWire kind [VBytes old; VInt r])];
+              statics := static_values
+            |}
+      end
+    with
+    | Continue next =>
+        run_vm 59
+          [87%nat; 7%nat; 1%nat; 65%nat; 45%nat; 81%nat; 8%nat; 48%nat;
+           16%nat; 206%nat; 112%nat; 95%nat; 34%nat; 65%nat; 155%nat;
+           246%nat; 103%nat; 206%nat; 65%nat; 146%nat; 93%nat; 232%nat;
+           49%nat; 113%nat; 105%nat; 11%nat; 151%nat; 38%nat; 41%nat; 16%nat;
+           12%nat; 32%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat;
+           0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat;
+           0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat;
+           0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 18%nat; 192%nat;
+           34%nat; 6%nat; 105%nat; 55%nat; 4%nat; 0%nat; 114%nat; 106%nat;
+           16%nat; 206%nat; 104%nat; 152%nat; 38%nat; 16%nat; 104%nat;
+           74%nat; 106%nat; 16%nat; 81%nat; 208%nat; 69%nat; 16%nat; 74%nat;
+           106%nat; 17%nat; 81%nat; 208%nat; 69%nat; 65%nat; 45%nat; 81%nat;
+           8%nat; 48%nat; 20%nat; 206%nat; 65%nat; 45%nat; 81%nat; 8%nat;
+           48%nat; 21%nat; 206%nat; 158%nat; 115%nat; 17%nat; 17%nat;
+           107%nat; 185%nat; 159%nat; 116%nat; 16%nat; 107%nat; 106%nat;
+           17%nat; 206%nat; 159%nat; 186%nat; 108%nat; 120%nat; 160%nat;
+           158%nat; 117%nat; 109%nat; 120%nat; 186%nat; 118%nat; 110%nat;
+           16%nat; 183%nat; 36%nat; 42%nat; 12%nat; 37%nat; 82%nat; 101%nat;
+           105%nat; 109%nat; 98%nat; 117%nat; 114%nat; 115%nat; 101%nat;
+           109%nat; 101%nat; 110%nat; 116%nat; 32%nat; 101%nat; 120%nat;
+           99%nat; 101%nat; 101%nat; 100%nat; 115%nat; 32%nat; 97%nat;
+           99%nat; 116%nat; 117%nat; 97%nat; 108%nat; 32%nat; 103%nat;
+           97%nat; 115%nat; 32%nat; 99%nat; 111%nat; 115%nat; 116%nat;
+           224%nat; 106%nat; 74%nat; 17%nat; 206%nat; 110%nat; 158%nat;
+           78%nat; 17%nat; 80%nat; 208%nat; 69%nat; 106%nat; 55%nat; 3%nat;
+           0%nat; 95%nat; 34%nat; 65%nat; 155%nat; 246%nat; 103%nat; 206%nat;
+           65%nat; 230%nat; 63%nat; 24%nat; 132%nat; 110%nat; 34%nat; 2%nat;
+           64%nat] next
+    | Halt v s0 => Halt v s0
+    | Aborted l s0 => Aborted l s0
+    | Fault s0 => Fault s0
+    | Timeout s0 => Timeout s0
+    end
+  with
+  | Halt value s =>
+      Returned value (let (_, _, _, _, _, storage, _, _) := s in storage)
+        (let (_, _, _, _, _, _, effects, _) := s in effects)
+  | Aborted message s =>
+      Rejected message (let (_, _, _, _, _, storage, _, _) := s in storage)
+        (let (_, _, _, _, _, _, effects, _) := s in effects)
+  | Fault s =>
+      Faulted (let (_, _, _, _, _, storage, _, _) := s in storage)
+        (let (_, _, _, _, _, _, effects, _) := s in effects)
+  | _ => Unfinished
+  end".
+

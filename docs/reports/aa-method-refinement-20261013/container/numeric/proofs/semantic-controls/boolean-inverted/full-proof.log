@@ -1,0 +1,3 @@
+File "./NumericCoercions.v", line 191, characters 7-18:
+Error: Unable to unify "Some 1" with "get_integer (NBoolean true)".
+

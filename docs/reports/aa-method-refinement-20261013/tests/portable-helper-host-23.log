@@ -1,0 +1,28 @@
+test_changed_hash_discards_large_previous_reservation (test_method_proofs.MethodProofTests) ... ok
+test_changed_transaction_resets_mutable_struct (test_method_proofs.MethodProofTests) ... ok
+test_complete_method_is_bound (test_method_proofs.MethodProofTests) ... ok
+test_debug_correspondence_flag_rejected (test_method_proofs.MethodProofTests) ... ok
+test_empty_storage_reserves_from_actual_fee (test_method_proofs.MethodProofTests) ... ok
+test_exhausted_budget_aborts_without_storage_put (test_method_proofs.MethodProofTests) ... ok
+test_exported_instruction_drift_rejected (test_method_proofs.MethodProofTests) ... ok
+test_failed_cli_overwrites_old_success_receipt (test_method_proofs.MethodProofTests) ... ok
+test_full_fixture_kernel_certificate_and_semantic_controls (test_method_proofs.MethodProofTests) ... ok
+test_heap_alias_mutation_is_serialized (test_method_proofs.MethodProofTests) ... ok
+test_malformed_storage_is_not_an_expected_result_oracle (test_method_proofs.MethodProofTests) ... ok
+test_matching_transaction_uses_shared_budget (test_method_proofs.MethodProofTests) ... ok
+test_min_to_max_control_has_observable_semantic_difference (test_method_proofs.MethodProofTests) ... ok
+test_missing_static_slot_faults (test_method_proofs.MethodProofTests) ... ok
+test_overreserved_paid_ledger_aborts (test_method_proofs.MethodProofTests) ... ok
+test_partial_helper_boundary_rejected (test_method_proofs.MethodProofTests) ... ok
+test_paths_cover_every_actual_instruction (test_method_proofs.MethodProofTests) ... ok
+test_safe_estimation_keeps_requested_quote (test_method_proofs.MethodProofTests) ... ok
+test_source_fixture_covers_full_statement_program (test_method_proofs.MethodProofTests) ... ok
+test_token_table_mismatch_rejected (test_method_proofs.MethodProofTests) ... ok
+test_wrong_static_slot_type_or_key_faults (test_method_proofs.MethodProofTests) ... ok
+test_zero_fee_update_overflow_faults_without_write (test_method_proofs.MethodProofTests) ... ok
+test_zero_hash_initialization_without_reset (test_method_proofs.MethodProofTests) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 355.453s
+
+OK

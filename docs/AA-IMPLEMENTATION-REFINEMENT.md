@@ -60,6 +60,62 @@ and its [research objectives](https://compcert.org/research.html). The concrete
 target is the pinned [NeoVM implementation](https://github.com/neo-project/neo-vm),
 not an unrelated stack-machine model with similar opcode names.
 
+## Layered proof lanes
+
+The reimbursement work separates the following evidence. A certificate in one
+row does not discharge the obligations in another; shared imported declarations
+must not be added together as if each receipt contained disjoint proofs.
+
+| Lane | Checked statement and boundary |
+| --- | --- |
+| Protocol models | `formal/verify.py` checks the declared ordinary/native abstractions. Its model receipts do not establish source-to-NEF refinement. |
+| Arithmetic region | `prove.py` binds the original charge instructions to signed-256 reference arithmetic and `OrdinarySponsorship.charge`. Its scope remains the local region. |
+| [Numeric coercions](AA-NUMERIC-REFINEMENT.md) | Models GetInteger decoding and its value relation, including Boolean and ByteString. This does not prove ABI admission or actual runtime correspondence. |
+| [Reservation arithmetic](AA-RESERVATION-REFINEMENT.md) | Adds positivity, representable reservation updates and protocol fee bounds. It records the zero-fee overflow disagreement with unbounded arithmetic. |
+| [Complete helper reference refinement](AA-CAP-METHOD-REFINEMENT.md) | Compares the complete typed-source projection with a byte-decoding reference VM for `CapReimbursementToActualCost`, under declared input and environment contracts. It does not certify ApplicationEngine or public entrypoints. |
+
+The [source projection](AA-METHOD-SOURCE-REFINEMENT.md) records which typed
+operations and semantic metadata are interpreted. The
+[method inventory](AA-METHOD-REFINEMENT-INVENTORY.md) accounts for all helper
+instructions and separate static initialization; structural coverage alone is
+not semantic proof. The [runtime checks](AA-METHOD-RUNTIME-REFINEMENT.md) execute
+the original helper in the pinned engine and distinguish valid inputs,
+malformed records, pending storage and enclosing transaction rollback. Those
+checks provide finite runtime evidence, independently of universal reference
+theorems.
+
+## Neo contract dialect and object identity
+
+The complete-helper source interpretation is a declared **Neo framework
+contract dialect**, not an interpreter for arbitrary CLR object execution.
+ByteString and UInt256 represent immutable byte values; hash equality in this
+interpretation compares their contents. Arrays/Structs that hold the mutable
+reservation record retain heap identity and aliases, so a write through a stack
+reference updates the object still held by a local. Serialization observes that
+object, while deserialization constructs a fresh object from stored contents.
+These are distinct identity rules, not one blanket value-copy rule.
+
+A CLR reference comparison between separately allocated objects does not
+automatically satisfy the byte-value equality contract. Exporting an operation's
+type or symbol also does not prove the compiler lowers it according to this
+dialect. Framework/compiler correspondence, repeated GetScriptContainer reads
+of the same transaction, static initialization and native codec behavior remain
+named obligations. A receipt must retain them rather than present its dialect
+theorem as preservation of general .NET behavior.
+
+The [reimbursement policy](SECURITY_MODEL.md) requires one reservation ceiling
+per transaction within each ordinary core. The helper reference theorem assumes
+a stable 32-byte transaction hash, nonnegative signed-64-bit fees and either no
+ledger or a well-formed two-field ledger with a 32-byte hash and nonnegative,
+representable reservation. A chain-level composition must establish that
+reachable persisted records satisfy this invariant and that equal hash bytes
+identify the same transaction across calls. The policy does not itself prove
+these codec and identity contracts. Malformed externally supplied storage must
+not be treated as an admitted reachable state or silently repaired by a proof
+oracle. The [native profile draft](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)
+sets `nativeSponsorship: false`; this ordinary reimbursement proof is not a
+native sponsorship standard or activation claim.
+
 ## Evidence and error behavior
 
 The refinement gate must distinguish input inventory, structural validation,
@@ -112,11 +168,31 @@ inventory, runs the proof kernel, and rechecks inputs after verification. The
 compilation input set is checked before export, after export and after proof;
 newly added source or build files fail the gate just as changed files do.
 Proof templates are included in the verification-tool input hashes.
-`inventory.json`, `proof.json`, tool logs and `result.json` are retained there.
+By default, the runner requests all four refinement proof lanes: arithmetic,
+numeric coercions, reservation arithmetic and complete-helper reference
+refinement. It retains `inventory.json`, `proof.json`, `numeric-proof.json`,
+`reservation-proof.json`, `method-proof.json`, `method-inventory.json`, tool logs
+and `result.json`. Each receipt has its own scope and exact input identities.
+The [dated integrated report](reports/aa-method-refinement-20261013.md) retains
+the fresh final receipt and its per-lane input identities. It records which
+lanes passed together; historical counts from separate runs cannot substitute
+for that evidence.
 
 Exit `0` means the requested scope passed; exit `1` means an input/tool/proof
-failure; exit `2` means a checked local region exists but complete implementation
-refinement is still open. `--allow-partial` explicitly requests only the current
-region and returns `0` on its success, while the report still records
+failure; exit `2` means the requested partial proofs passed but complete
+implementation refinement is still open. `--allow-partial` accepts that declared
+partial scope with exit `0`, while the report still records
 `implementationVerified: false` and all unproved public entrypoints. It must not
 be used as the complete-refinement release command.
+
+To reproduce only the earlier arithmetic-region scope, use a separate empty
+directory and opt in explicitly:
+
+```sh
+python3 formal/refinement/verify.py --arithmetic-only --allow-partial \
+  --output-dir /tmp/aa-refinement-arithmetic-evidence
+```
+
+This compatibility command omits the three newer proof lanes. It cannot stand
+in for the default gate. Missing tools, unsupported source operations or failed
+proofs fail closed in either mode; `--allow-partial` does not bypass them.

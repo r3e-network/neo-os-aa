@@ -1,0 +1,1 @@
+{"status": "PASS", "absentPaths": ["/Users/jinghuiliao/git/neo-os/neo-os-aa", "/opt/homebrew/Cellar/dotnet", "/repo/contracts/bin/v3/UnifiedSmartWalletV3.nef", "/Users/jinghuiliao/.nuget", "/Users/jinghuiliao/.dotnet"], "dotnetOnPath": false, "publicNumericSources": 13}

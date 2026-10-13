@@ -1,0 +1,197 @@
+..E.............................
+======================================================================
+ERROR: test_complete_helper_reference_proof_keeps_every_abi_entry_open (formal.refinement.test_verify.BindingTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 265, in test_complete_helper_reference_proof_keeps_every_abi_entry_open
+    report = gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='scope')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='kernelChecked')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='referenceRefinementVerified')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='fullImplementationVerified')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='nefSha256')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='scriptSha256')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='methodSha256')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='methodRange')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='byteCount')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='instructionCount')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method (formal.refinement.test_verify.BindingTests) (field='sourceProjectionSha256')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 284, in test_helper_proof_cannot_be_promoted_or_bound_to_a_different_method
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='method', failure='missing')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='method', failure='unchecked')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='method', failure='wrong-scope')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='method', failure='promoted')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='numeric', failure='missing')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='numeric', failure='unchecked')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='numeric', failure='wrong-scope')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='numeric', failure='promoted')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='reservation', failure='missing')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='reservation', failure='unchecked')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='reservation', failure='wrong-scope')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+======================================================================
+ERROR: test_missing_or_unchecked_supporting_lane_fails_closed (formal.refinement.test_verify.BindingTests) (key='reservation', failure='promoted')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/test_verify.py", line 297, in test_missing_or_unchecked_supporting_lane_fails_closed
+    gate.coverage_report(self.inventory, {"scope": "arithmetic-region", "kernelChecked": True},
+TypeError: coverage_report() got an unexpected keyword argument 'supporting_proofs'
+
+----------------------------------------------------------------------
+Ran 34 tests in 0.158s
+
+FAILED (errors=24)

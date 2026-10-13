@@ -1,0 +1,23 @@
+File "./unexpected_frame_write.v", line 27, characters 20-31:
+Error:
+In environment
+start : nat
+cost, requested, reserved : Z
+hash, data, old_flag, old_cap, old_settled : Value
+H : cap_domain cost requested reserved
+Hm : integer_fits (Z.min cost 1)
+Hf : integer_fits (1 - Z.min cost 1)
+Hd : integer_fits (cost - reserved)
+Hr : integer_fits (Z.max (cost - reserved) 0)
+Hq : integer_fits ((1 - Z.min cost 1) * requested)
+Hc : integer_fits
+       (Z.max (cost - reserved) 0 + (1 - Z.min cost 1) * requested)
+Hs : integer_fits
+       (Z.min requested
+          (Z.max (cost - reserved) 0 + (1 - Z.min cost 1) * requested))
+H0 : integer_fits 0
+H1 : integer_fits 1
+Unable to unify
+ "[hash; data; VStruct [hash; VInteger reserved]; VInteger cost]" with
+ "[VInteger 1; data; VStruct [hash; VInteger reserved]; VInteger cost]".
+

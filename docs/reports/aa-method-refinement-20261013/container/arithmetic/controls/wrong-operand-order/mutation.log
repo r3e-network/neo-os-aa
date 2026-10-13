@@ -1,0 +1,12 @@
+File "./ArithmeticVm.v", line 151, characters 7-18:
+Error: Unable to unify
+ "Some {| pc := 1; stack := [VInteger 3]; arguments := []; locals := [] |}"
+with
+ "vm_step (Binary Sub)
+    {|
+      pc := 0;
+      stack := [VInteger 2; VInteger 5];
+      arguments := [];
+      locals := []
+    |}".
+

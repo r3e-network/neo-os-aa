@@ -1,0 +1,202 @@
+{
+  "schema": "neoos-aa-numeric-coercion-proof/v1",
+  "scope": "numeric-coercions",
+  "kernelChecked": true,
+  "vmCorrespondenceProven": false,
+  "fullImplementationVerified": false,
+  "closedDeclarations": [
+    "integer_limit_positive",
+    "integer_fitsb_spec",
+    "checked_integer_in_range",
+    "checked_integer_result_is_representable",
+    "integer_overflow_faults",
+    "signed_maximum_addition_faults",
+    "signed_minimum_subtraction_faults",
+    "pow256_positive",
+    "pow256_monotone",
+    "valid_bytesb_spec",
+    "signed_le_unsigned_relation",
+    "signed_le_payload_range",
+    "maximum_payload_bound",
+    "byte_string_integer_range",
+    "byte_string_integer_accepts",
+    "oversized_byte_string_rejected",
+    "invalid_physical_byte_rejected",
+    "unsigned_le_append",
+    "last_append_single",
+    "signed_le_sign_extension",
+    "sign_extension_admitted_within_limit",
+    "get_integer_range",
+    "numeric_refines_integer",
+    "numeric_refines_unique",
+    "numeric_refines_bytes",
+    "buffer_get_integer_rejected",
+    "null_get_integer_rejected",
+    "unsupported_get_integer_rejected",
+    "null_convert_preserves_null",
+    "buffer_convert_integer",
+    "boolean_true_is_one",
+    "boolean_false_is_zero",
+    "empty_byte_string_is_zero",
+    "high_bit_byte_is_negative",
+    "noncanonical_minus_one_accepted",
+    "sign_byte_prevents_negative_128"
+  ],
+  "modelSha256": {
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/IntegerSemantics.v": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+    "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/NumericCoercions.v": "2c9ec6bccb5930280bdbd99cada7704775211c0ec79662be49e94cb6408963fe"
+  },
+  "proverSha256": "294ad4ace96193eee520c04b40c0d851326128dfc19f6199eae4e8435cf07629",
+  "sourceCommit": "004cd6070a940405818d9357638277dd44407e2e",
+  "pinnedSource": {
+    "StackItem": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/StackItem.cs",
+      "sha256": "3f80a40ab7b98352a92788da018c1ff168a7251340b1410661f7bcbfeaadff95",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/StackItem.cs"
+    },
+    "ByteString": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/ByteString.cs",
+      "sha256": "1f06948358fcb638bffd14429a3d0ea50916da88c68c2de8933dea734aec0f52",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/ByteString.cs"
+    },
+    "Buffer": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Buffer.cs",
+      "sha256": "ca517919538c03e134c1c53b9ab6394ab0dab59738eab6352c15df97c43ea755",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Buffer.cs"
+    },
+    "Integer": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Integer.cs",
+      "sha256": "cb8c7bf8eed392c59b0bf59e281fd8c39b1fa0ef3894fa86e88fa3e0e90a137c",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Integer.cs"
+    },
+    "Boolean": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Boolean.cs",
+      "sha256": "5cdcf7547ff3b1320ce3accdb867164d044a71d984e48ff066dd6360f66045c9",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Boolean.cs"
+    },
+    "Null": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Null.cs",
+      "sha256": "359214cd37f9624d49131dd4b5a8596b5cf11023cf815248d7a803bf8d68c41a",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Null.cs"
+    },
+    "PrimitiveType": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/PrimitiveType.cs",
+      "sha256": "ba8e9cb00fbcedbe5ce67bb9b11e59e59c6cff9e676c08e17d611ca0469fae37",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/PrimitiveType.cs"
+    },
+    "Array": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Array.cs",
+      "sha256": "6a100285b620ed1fca6eac4ebd91abecab5ddfa6b84ab1d65feaf50e463d6cf4",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Array.cs"
+    },
+    "Struct": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Struct.cs",
+      "sha256": "12cb52e04fe9aba281798d1997ec347c6bea789f053e7dc4b8ec017fffdf8eba",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Struct.cs"
+    },
+    "Map": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Map.cs",
+      "sha256": "40b8c32f1982850904121089c953365836431c1c969091d655902849c15a7412",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Map.cs"
+    },
+    "CompoundType": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/CompoundType.cs",
+      "sha256": "045876c665f1c541856d2941862faf945bae327275593dc558f998c4da170f60",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/CompoundType.cs"
+    },
+    "Pointer": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/Pointer.cs",
+      "sha256": "697b01626ed7615eb52445e465f188600c65afa7c83e8534935baf090dd2413c",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/Pointer.cs"
+    },
+    "InteropInterface": {
+      "path": "/private/var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/aa-pinned-neovm-numeric-004cd607/InteropInterface.cs",
+      "sha256": "8356efa9fea907b8d140f3d57858898d03e11aa01575e8708f56be4342bb9b94",
+      "url": "https://raw.githubusercontent.com/neo-project/neo-vm/004cd6070a940405818d9357638277dd44407e2e/src/Neo.VM/Types/InteropInterface.cs"
+    }
+  },
+  "toolVersion": "The Rocq Prover, version 9.2",
+  "toolSha256": {
+    "coqc": "19dbcdbbe260d839ddefd685d41afd02594120f1c2f23d4db77aa6bceb55aa45",
+    "coqchk": "680cd66bd8b42aceb0f78ae308bb410459891d5716f62276621001ba0fcc891e"
+  },
+  "preconditions": [
+    "Built-in NeoVM value tags, physical payload bytes in 0..255",
+    "NInteger denotes an admissible signed-256 Integer object; unrepresentable abstract constructors reject",
+    "ByteString GetInteger accepts at most 32 payload bytes; no canonical-encoding requirement"
+  ],
+  "unproved": [
+    "Neo.VM.dll / .NET BigInteger implements this reference decoding/coercion model",
+    "NumericValue projection to existing ArithmeticVm.Value or reference heap",
+    "Existing Integer-tag actual-region certificate is not widened by this standalone model",
+    "ABI/caller admission, resource/gas bounds, heap mutation and all remaining helper behavior"
+  ],
+  "publicNetworkWritesPerformed": false,
+  "semanticControls": {
+    "definitionsCompiled": true,
+    "rejected": [
+      "unsigned-sign",
+      "big-endian",
+      "oversized-33",
+      "boolean-inverted",
+      "buffer-coercion",
+      "null-zero",
+      "noncanonical-rejected",
+      "sign-extension-zero"
+    ],
+    "controls": {
+      "unsigned-sign": {
+        "definitionsCompiled": true,
+        "counterexampleRejected": true,
+        "fullProofRejected": true,
+        "definitionSha256": "9da9c8adfb8cfbf9d15506d95599fd63c0c8dd491152708ef431e2f10af55f84"
+      },
+      "big-endian": {
+        "definitionsCompiled": true,
+        "counterexampleRejected": true,
+        "fullProofRejected": true,
+        "definitionSha256": "a3c88cd948a5f87f1560921ec08f0ce437be37d749df023bf23e97d493be3431"
+      },
+      "oversized-33": {
+        "definitionsCompiled": true,
+        "counterexampleRejected": true,
+        "fullProofRejected": true,
+        "definitionSha256": "96fef465776327f4a5ae874135d51a9e7d09fdd54b9e888cb3bbff7bfa8fb143"
+      },
+      "boolean-inverted": {
+        "definitionsCompiled": true,
+        "counterexampleRejected": true,
+        "fullProofRejected": true,
+        "definitionSha256": "77f523df09cd08500d4618c2c648f430b24504cd70256285afb2d9f093f9282c"
+      },
+      "buffer-coercion": {
+        "definitionsCompiled": true,
+        "counterexampleRejected": true,
+        "fullProofRejected": true,
+        "definitionSha256": "9c5947e26752f9f554034b7b928d7131dfa08416d91c33e6e0472269054ef863"
+      },
+      "null-zero": {
+        "definitionsCompiled": true,
+        "counterexampleRejected": true,
+        "fullProofRejected": true,
+        "definitionSha256": "362319641d1a84705057ec14a1d0c47b93e0c82256d308dc6ceed0706bc3dff5"
+      },
+      "noncanonical-rejected": {
+        "definitionsCompiled": true,
+        "counterexampleRejected": true,
+        "fullProofRejected": true,
+        "definitionSha256": "d550afcea89fc64aa4ada74a9d6729e1f5386901fa5ea8c53cd941dccfde5416"
+      },
+      "sign-extension-zero": {
+        "definitionsCompiled": true,
+        "counterexampleRejected": true,
+        "fullProofRejected": true,
+        "definitionSha256": "b4387e531ca746cdfb9da64ff4d59c1f9b84e9f401459d803abc252be491de76"
+      }
+    },
+    "modelSha256": {
+      "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/IntegerSemantics.v": "954548eef44c8f29e77725ef8fdb0fb8faceae977f72415cea63d2a7b8d9f08c",
+      "/Users/jinghuiliao/git/neo-os/neo-os-aa/formal/refinement/coq/NumericCoercions.v": "2c9ec6bccb5930280bdbd99cada7704775211c0ec79662be49e94cb6408963fe"
+    }
+  }
+}
