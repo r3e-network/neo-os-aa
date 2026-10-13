@@ -233,6 +233,8 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("CPT_015_failed_dependency_replacement_is_atomic", model)
         self.assertIn("CPT_016_successful_dependency_replacement_has_no_removed_child", model)
         self.assertIn("CPT_017_composite_children_are_leaves", model)
+        self.assertIn("CPT_018_disabled_callbacks_omit_phases", model)
+        self.assertIn("CPT_019_configured_callbacks_match_full_trace", model)
 
     def test_authorization_evidence_model_is_registered(self):
         model = (verify.ROOT / "coq" / "AuthorizationEvidence.v").read_text()

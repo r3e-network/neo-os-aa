@@ -85,6 +85,21 @@ Definition callback_trace (authorized well_shaped pre_ok target_ok hook_post_ok 
   then [PreHook; TargetCall; PostHook; VerifierPost]
   else [].
 
+(* The concrete core only calls an installed hook or verifier.  Keep the
+   historical full trace above for the all-configured ordering theorem, and
+   expose the optional phases explicitly for ordinary profile correspondence. *)
+Definition configured_callback_trace
+    (hook verifier authorized well_shaped pre_ok target_ok hook_post_ok verifier_post_ok : bool)
+    : list Phase :=
+  if authorized && well_shaped && pre_ok && target_ok && hook_post_ok && verifier_post_ok
+  then [Validate]
+       ++ (if hook then [PreHook] else [])
+       ++ [TargetCall]
+       ++ (if hook then [PostHook] else [])
+       ++ (if verifier then [VerifierPost] else [])
+       ++ [Emit]
+  else [].
+
 Inductive Scope : Type :=
 | CalledByEntry
 | Custom
@@ -279,6 +294,16 @@ Proof.
   destruct E as [[[[[Ha Hs] Hp] Ht] Hhp] Hvp].
   repeat split; assumption.
 Qed.
+
+Theorem CPT_018_disabled_callbacks_omit_phases :
+  configured_callback_trace false false true true true true true true =
+    [Validate; TargetCall; Emit].
+Proof. reflexivity. Qed.
+
+Theorem CPT_019_configured_callbacks_match_full_trace :
+  configured_callback_trace true true true true true true true true =
+    success_trace true true true true true true.
+Proof. reflexivity. Qed.
 
 Theorem CPT_005_witness_scope_binds_called_by_entry :
   forall entry target allowed,
