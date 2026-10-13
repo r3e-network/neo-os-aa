@@ -3,7 +3,7 @@ import { useToast } from 'vue-toastification';
 import { connectedAccount } from '@/utils/wallet';
 import { walletService } from '@/services/walletService';
 import { useI18n } from '@/i18n';
-import { translateError } from '@/config/errorCodes.js';
+import { connectErrorMessage } from '@/config/errorCodes.js';
 
 // The session-expired toast must fire at most once per page load even though
 // several components mount this composable concurrently.
@@ -29,7 +29,9 @@ export function useWalletConnection() {
       const { address } = await walletService.connect();
       toast.success(`${t('nav.connect', 'Connect Wallet')}: ${address}`);
     } catch (err) {
-      toast.error(translateError(err?.message, t));
+      // Every failure renders a sentence: a refusal is named as one and keeps the wallet's words,
+      // and a thrown value with no message still produces text rather than an empty toast.
+      toast.error(connectErrorMessage(err, t));
       throw err;
     } finally {
       isConnecting.value = false;
@@ -61,7 +63,7 @@ export function useWalletConnection() {
       toast.success(`${t('operations.connectEvmWallet', 'Connect EVM Wallet')}: ${address}`);
       return { address };
     } catch (err) {
-      toast.error(translateError(err?.message, t));
+      toast.error(connectErrorMessage(err, t));
       throw err;
     } finally {
       isConnecting.value = false;

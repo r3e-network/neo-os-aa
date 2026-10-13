@@ -7,6 +7,7 @@ import { RUNTIME_CONFIG } from '../../config/runtimeConfig.js';
 import { selectSignedInvocation, isDeployedEntrypoint } from './signedInvocation.js';
 import { isProxySourcedTransfer } from '../../shared/transferOutcome.mjs';
 import { buildProxyWalletSignRequest, resolveProxyWitnessTransaction } from '../../shared/proxyWitness.mjs';
+import { resolveWalletSigningScope } from './walletSigningScope.js';
 import {
   computeArgsHash,
   buildExecuteUserOpInvocation as buildV3ExecuteUserOpInvocation,
@@ -246,6 +247,10 @@ async function readProxyScopeStateWith({ rpcUrl, coreHash, accountId, fetchImpl 
   return {
     expectedProxyHash: await read('getProxyScriptHash'),
     scopeTarget: await read('getVerifyScopeTarget'),
+    // Whether the owner is checked inside a verifier decides which scopes a wallet may be asked
+    // for. It is read from the same core in the same call as the scope state, so the decision and
+    // the transaction cannot disagree about the account.
+    verifierHash: await read('getVerifier'),
   };
 }
 
@@ -261,7 +266,7 @@ export async function buildClientProxyWitnessTransaction({
   invocation = null,
   feePayer = '',
   rpcUrl = RUNTIME_CONFIG.rpcUrl,
-  feePayerScope = 'CustomContracts',
+  feePayerScope,
   feePayerAllowedContracts = null,
   fetchImpl = globalThis.fetch,
 } = {}) {
@@ -271,19 +276,32 @@ export async function buildClientProxyWitnessTransaction({
   if (args[0]?.type !== 'Hash160') throw new Error(EC.clientInvocationMissing);
   const accountId = sanitizeHex(args[0].value);
   const coreHash = sanitizeHex(target.scriptHash);
+  // One chain read serves both the transaction and the scope decision: the resolver asks for the
+  // account state once and the same answer is reused below, so a verifier change between two
+  // reads cannot produce a request and a transaction that disagree.
+  let chainState = null;
   const built = await resolveProxyWitnessTransaction({
     coreHash,
     accountId,
     invocation: target,
     feePayer: sanitizeHex(feePayer),
     feePayerScope: 'CalledByEntry',
-    readState: (request) => readProxyScopeStateWith({ rpcUrl, coreHash, accountId: request.accountId, fetchImpl }),
+    readState: async (request) => {
+      chainState = await readProxyScopeStateWith({ rpcUrl, coreHash, accountId: request.accountId, fetchImpl });
+      return chainState;
+    },
+  });
+  // The script reaches the core (which calls the target), so both are inside the witness scope.
+  const decision = resolveWalletSigningScope({
+    verifierHash: chainState && chainState.verifierHash,
+    requestedScope: feePayerScope,
+    contractsCalled: [coreHash, built.targetContract],
+    allowedContracts: feePayerAllowedContracts || undefined,
   });
   return buildProxyWalletSignRequest({
     transaction: built,
-    scope: feePayerScope,
-    allowedContracts: feePayerAllowedContracts
-      || (feePayerScope === 'CustomContracts' ? [coreHash, built.targetContract] : undefined),
+    scope: decision.scope,
+    allowedContracts: decision.allowedContracts ? [...decision.allowedContracts] : undefined,
   });
 }
 
@@ -332,8 +350,13 @@ export function buildClientBroadcastRequest({
     invocation.script = proxyWitnessTransaction.script;
     invocation.signers = cloneImmutable([...proxyWitnessTransaction.signers]);
     invocation.proxyWitness = cloneImmutable(proxyWitnessTransaction.proxyWitness);
+    // What the wallet is asked for, in both spellings: the label this workspace uses and the bit
+    // mask the wallet signs against. Nothing here is taken from request metadata.
     invocation.walletSignRequest = cloneImmutable({
       scope: proxyWitnessTransaction.feePayerSigner.scopes,
+      allowedContracts: proxyWitnessTransaction.feePayerSigner.allowedContracts
+        ? cloneImmutable([...proxyWitnessTransaction.feePayerSigner.allowedContracts])
+        : undefined,
       signers: cloneImmutable([...proxyWitnessTransaction.signers]),
     });
   }
