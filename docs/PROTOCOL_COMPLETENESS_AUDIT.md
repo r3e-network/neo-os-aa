@@ -44,12 +44,12 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 | # | Requirement | Status | Notes |
 |---|---|---|---|
-| 1 | Plugin Lifecycle (install/update/remove) | ✓ | Complete with timelocks and events |
+| 1 | Plugin Lifecycle (install/update/remove) | ✓ | Source-verified timelocks/events; public artifact and arbitrary-plugin cleanup remain separate gates |
 | 2 | 2D Nonce Management (191-bit channel + 64-bit sequence) | ✓ Neo equivalent | Every accepted nonce is a signed NeoVM Integer in `0 <= nonce < 2^255`, split into an independent channel and sequence; the surrounding UserOperation and transport remain Neo-specific |
-| 3 | Escape Hatch Mechanism (timelock, cooldown, finalization) | ✓ | Production-grade L1 escape |
+| 3 | Escape Hatch Mechanism (timelock, cooldown, finalization) | ✓ | Source-verified ordinary semantics; deployment/refinement evidence is still required |
 | 4 | Storage Patterns (gas-efficient for Neo N3) | ✓ | Optimized prefix-key storage |
 | 5 | Account State Management (atomic) | ✓ | Atomic state updates |
-| 6 | Market Escrow (cancellation, expiry, dispute) | ✓ | Complete with edge cases |
+| 6 | Market Escrow (cancellation, expiry, dispute) | ✓ | Source-verified paths and tests; arbitrary-plugin cleanup and deployment remain bounded gates |
 | 7 | Verification Scripts Integration | ✓ | Native script model properly used |
 | 8 | Paymaster/Sponsor Flow | ✓ | Off-chain Morpheus integration |
 | 9 | Documentation Accuracy | ✓ | Docs accurately reflect implementation |
@@ -80,7 +80,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 - ERC-7579 timelock not specified → Neo enforces 7-day minimum
 - Neo is **more conservative** with 7-day hard minimum (vs no requirement)
 
-**Assessment:** ✓ Production-grade implementation
+**Assessment:** ✓ Source-verified lifecycle implementation; this does not certify every future plugin or the pinned public artifact
 
 ---
 
@@ -181,7 +181,7 @@ The deployed names carry the account id: `initiateEscape(accountId)` and
 - Struct serialization via `StdLib.Serialize()`
 - Concatenation via `Helper.Concat()` (optimized byte array ops)
 
-**Assessment:** ✓ Production-optimized for Neo N3
+**Assessment:** ✓ Source-reviewed Neo N3 storage layout; production gas efficiency still requires matching runtime evidence
 
 ---
 
@@ -219,7 +219,7 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 - Neo: **Similar approach** with execution lock
 - Neo: **Additional protection** via hook/verifier context isolation
 
-**Assessment:** ✓ Production-grade atomic state management
+**Assessment:** ✓ Source-verified atomic state transitions under Neo transaction rollback; deployment/refinement evidence remains separate
 
 ---
 
@@ -257,7 +257,7 @@ the deployment does not export, which is why it is not code-formatted here.
 - Neo: **Native advantage** with integrated escrow
 - Neo: **Cleaner** state management (complete state wipe)
 
-**Assessment:** ✓ Complete production-grade market escrow
+**Assessment:** ✓ Source-verified market escrow paths; arbitrary plugin cleanup and public deployment are separate gates
 
 ---
 
@@ -330,7 +330,7 @@ Response: { approved: boolean, reason?: string }
 
 **Security Note:** `SECURITY_MODEL.md` documents the off-chain authorization design. This is a **conscious architectural choice** for Neo ecosystem, not a vulnerability.
 
-**Assessment:** ✓ Production-grade off-chain paymaster integration
+**Assessment:** ✓ Source-verified off-chain paymaster adapter; production sponsorship still requires live policy, fee, and readback evidence
 
 ---
 
