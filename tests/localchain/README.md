@@ -224,3 +224,48 @@ variants. A source receipt stores raw transaction, witness, balance and nonce
 readback under `sourceProxyRelay`; `test_source_gate.py` mutates that evidence to
 ensure a txid or green assertion by itself cannot pass acceptance. See
 `docs/AA-PROXY-TRANSFERS.md` for the settlement authority boundary.
+
+## Callback-free recovery and shared sponsorship budget
+
+The current-source inventory additionally requires two source-only paths, using
+only the same eight compiled/deployed artifacts:
+
+- `SRC-08` registers a native-fallback account, funds AAPaymaster and creates its
+  scoped policy. It combines a single sponsored entrypoint and a sponsored batch
+  entrypoint into **one signed Neo transaction**. RPC pricing executes that exact
+  complete script. The first request consumes only part of the fee budget; the
+  second must receive the remaining transaction fee allowance. The receipt retains
+  the persisted transaction, both `Reimbursed` events and deposit/relay/nonce
+  readbacks. Their sum must equal the transaction's actual system plus network
+  fees, the sponsor debit must match, and the relay must make no profit. A fee
+  margin remains necessary; zero-fee RPC estimation is not persisted reimbursement.
+- `SRC-10` registers WebAuthnVerifier plus WhitelistHook, funds the derived proxy
+  and starts the escape. After a chain-time jump, the hook administrator confirms
+  an authorized-core change to the already-deployed MockTransferTarget. This makes
+  the old hook's `clearAccount` reject the ordinary core. Legacy escape must fail
+  and roll back its earlier verifier cleanup. A signed `finalizeEscapeToOwner`
+  transaction must then succeed without callbacks, retain the old verifier's
+  stored key, clear active module pointers, and expose permanent owner-only mode.
+  The backup owner subsequently executes and spends exactly one GAS from the same
+  proxy using its canonical witness. Recovery preserves identity and nonce history;
+  both plugin reinstallations and stranger execution must be refused.
+
+These paths intentionally run after the existing source relay tests, because
+changing WhitelistHook's core binding would otherwise affect those earlier cases.
+They do not deploy a new faulting mock or claim that detached plugin storage,
+plugin-held funds or external allowances have been erased.
+
+`expected-source.json` now requires **38 ordered successful checks**. The public
+syscall-absent profile expects **47 HALT transactions, six simulated FAULTs and
+four node refusals**; the diagnostic syscall-present profile expects **39, eight
+and one**, respectively. These are exact acceptance expectations, not a claim
+that a fresh-chain run has passed. Final validation must generate a new receipt
+from the frozen source candidate; older 19-check receipts are rejected.
+
+The fast source gate also mutates the new evidence: missing/changed transaction
+identities, mismatched maturity, intact old-hook authority, retained module
+pointers, nonce reset, missing signature or recovery event, failed asset movement,
+allowed reinstallation, duplicate fee repayment, altered deposit/relay accounting
+and changed estimated/persisted scripts must all fail closed. These dictionary
+mutations exercise the receipt oracle; they do not replace the signed private-chain
+transactions.

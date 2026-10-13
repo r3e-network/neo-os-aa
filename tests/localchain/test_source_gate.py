@@ -167,6 +167,53 @@ class DetectorTest(unittest.TestCase):
                     source_build.profile_of(path)
 
 
+def source_new_path_proofs(contracts):
+    """Independent minimal RPC observations for the new causal evidence mutation gates."""
+    core, verifier, hook, target, pm = [contracts[name] for name in
+        ("UnifiedSmartWalletV3", "WebAuthnVerifier", "WhitelistHook", "MockTransferTarget", "AAPaymaster")]
+    owner, relay, sponsor = ["0x" + digit * 40 for digit in ("a", "b", "c")]
+    account = "0x" + "d" * 40
+    proxy = "0x" + suite.v.hash160(suite.proxy_script_for(account, core))[::-1].hex()
+    witness = {"invocation": base64.b64encode(b"\x0c\x40" + b"s" * 64).decode(), "verification": "AQ=="}
+    before = {"proxy": proxy, "owner": owner, "verifier": verifier, "hook": hook, "mode": False,
+              "escape": "1000", "nonce": "7", "proxyGas": str(10 * suite.GAS), "buyerGas": "0"}
+    after = dict(before, verifier=suite.ZERO, hook=suite.ZERO, mode=True, escape="0")
+    owner_after = dict(after, nonce="8")
+    final = dict(owner_after, nonce="9", proxyGas=str(9 * suite.GAS), buyerGas=str(suite.GAS))
+    recovery = {"core": core, "accountId": account, "proxy": proxy, "owner": owner,
+                "verifier": verifier, "hook": hook, "reboundCore": target, "hookAuthorizedCore": target,
+                "escapeTimelockSeconds": 604800, "deadlineMs": "604801000", "matureAtMs": "604801001",
+                "before": before, "afterLegacy": dict(before), "afterRecovery": after,
+                "afterOwnerExecution": owner_after, "final": final,
+                "oldPublicKey": "02" + "11" * 32, "retainedPublicKey": "02" + "11" * 32,
+                "refusals": [{"outcome": "FAULT", "exception": marker} for marker in
+                    ("Timelock active", "Only backup owner can finalize", "Unauthorized caller",
+                     "Owner-only recovery is permanent", "Owner-only recovery is permanent", "Native witness failed")],
+                "transactions": []}
+    for kind in ("recovery", "owner", "proxy"):
+        signers = [{"account": owner}] + ([{"account": proxy}] if kind == "proxy" else [])
+        txid = "0x" + {"recovery": "12", "owner": "34", "proxy": "56"}[kind] * 32
+        recovery["transactions"].append({"kind": kind, "txid": txid,
+            "transaction": {"hash": txid, "signers": signers, "witnesses": [copy.deepcopy(witness) for _ in signers],
+                            "script": base64.b64encode(b"finalizeEscapeToOwner" if kind == "recovery" else b"executeUserOp").decode()},
+            "execution": {"vmstate": "HALT", "notifications": [{"contract": core, "eventname": "OwnerOnlyRecoveryFinalized"}] if kind == "recovery" else []}})
+    script = base64.b64encode(b"executeSponsoredUserOp\x45executeSponsoredUserOps").decode()
+    events = []
+    for amount in (50, 70):
+        fields = [{"type": "ByteString", "value": base64.b64encode(suite.v.hash_le(value)).decode()}
+                  for value in (sponsor, account, relay)]
+        events.append({"contract": pm, "eventname": "Reimbursed", "state": {"type": "Array", "value": fields + [{"type": "Integer", "value": str(amount)}]}})
+    cap = {"core": core, "accountId": account, "paymaster": pm, "sponsor": sponsor, "relay": relay, "owner": owner,
+           "before": {"deposit": "1000", "relay": "900", "nonce": "0"},
+           "after": {"deposit": "880", "relay": "900", "nonce": "2"},
+           "requests": ["50", "1000"], "amounts": ["50", "70"], "script": script, "estimate": {"state": "HALT"},
+           "txid": "0x" + "78" * 32,
+           "transaction": {"hash": "0x" + "78" * 32, "sysfee": "100", "netfee": "20", "script": script,
+                           "signers": [{"account": relay}, {"account": owner}], "witnesses": [witness, witness]},
+           "execution": {"vmstate": "HALT", "notifications": events}}
+    return recovery, cap
+
+
 class SourceReceiptGateTest(unittest.TestCase):
     def setUp(self):
         self.expected = json.loads(SOURCE_EXPECTED.read_text())
@@ -211,7 +258,44 @@ class SourceReceiptGateTest(unittest.TestCase):
             receipt["sourceProxyRelay"] = proxy_relay_proof()
             receipt["contracts"]["UnifiedSmartWalletV3"] = receipt["sourceProxyRelay"]["core"]
             receipt["sourceArtifactRuntime"]["readback"][0]["contractHash"] = receipt["sourceProxyRelay"]["core"]
+        receipt["sourceOwnerRecovery"], receipt["sourceSponsorshipCap"] = source_new_path_proofs(receipt["contracts"])
         return receipt
+
+    def test_new_path_proofs_reject_causal_drift(self):
+        mutations = {
+            "missing recovery": lambda r: r.pop("sourceOwnerRecovery"),
+            "missing cap": lambda r: r.pop("sourceSponsorshipCap"),
+            "legacy cleanup mutated nonce": lambda r: r["sourceOwnerRecovery"]["afterLegacy"].update(nonce="8"),
+            "unmatured recovery": lambda r: r["sourceOwnerRecovery"].update(matureAtMs="1000"),
+            "fake short recovery timer": lambda r: r["sourceOwnerRecovery"].update(escapeTimelockSeconds=1),
+            "hook still trusts original core": lambda r: r["sourceOwnerRecovery"].update(hookAuthorizedCore=r["sourceOwnerRecovery"]["core"]),
+            "unrelated recovery txid": lambda r: r["sourceOwnerRecovery"]["transactions"][0].update(txid="0x" + "ff" * 32),
+            "unrelated sponsorship txid": lambda r: r["sourceSponsorshipCap"].update(txid="0x" + "ff" * 32),
+            "mode is false": lambda r: r["sourceOwnerRecovery"]["afterRecovery"].update(mode=False),
+            "old module active": lambda r: r["sourceOwnerRecovery"]["final"].update(verifier=r["sourceOwnerRecovery"]["verifier"]),
+            "identity moved": lambda r: r["sourceOwnerRecovery"]["final"].update(proxy="0x" + "f" * 40),
+            "nonce reset": lambda r: r["sourceOwnerRecovery"]["afterRecovery"].update(nonce="0"),
+            "cleanup silently invoked": lambda r: r["sourceOwnerRecovery"].update(retainedPublicKey=""),
+            "no signature": lambda r: r["sourceOwnerRecovery"]["transactions"][0]["transaction"]["witnesses"][0].update(invocation=""),
+            "wrong recovery role": lambda r: r["sourceOwnerRecovery"]["transactions"][0]["transaction"]["signers"][0].update(account="0x" + "f" * 40),
+            "no mode event": lambda r: r["sourceOwnerRecovery"]["transactions"][0]["execution"].update(notifications=[]),
+            "reinstall not refused": lambda r: r["sourceOwnerRecovery"]["refusals"][3].update(outcome="HALT"),
+            "proxy debit wrong": lambda r: r["sourceOwnerRecovery"]["final"].update(proxyGas="1"),
+            "repeat full fee": lambda r: r["sourceSponsorshipCap"].update(amounts=["120", "120"]),
+            "wrong deposit debit": lambda r: r["sourceSponsorshipCap"]["after"].update(deposit="760"),
+            "relay profits": lambda r: r["sourceSponsorshipCap"]["after"].update(relay="1020"),
+            "nonce only once": lambda r: r["sourceSponsorshipCap"]["after"].update(nonce="1"),
+            "changed persisted script": lambda r: r["sourceSponsorshipCap"]["transaction"].update(script="AA=="),
+            "bad full script estimate": lambda r: r["sourceSponsorshipCap"]["estimate"].update(state="FAULT"),
+            "one reimbursement": lambda r: r["sourceSponsorshipCap"]["execution"]["notifications"].pop(),
+            "forged event amount": lambda r: r["sourceSponsorshipCap"]["execution"]["notifications"][1]["state"]["value"][3].update(value="120"),
+            "foreign paymaster": lambda r: r["sourceSponsorshipCap"].update(paymaster="0x" + "f" * 40),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                receipt = self.receipt(source_build.PROFILE_SYSCALL_ABSENT)
+                mutate(receipt)
+                self.assertTrue(suite.validate_source_receipt(receipt, self.expected), label)
 
     def test_source_artifact_readback_mutations_fail_closed(self):
         mutations = {

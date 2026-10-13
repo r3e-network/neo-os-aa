@@ -13,9 +13,9 @@
         "postExecute": 1
       },
       "totals": {
-        "checks": 19,
-        "executedTransactions": 26,
-        "simulatedFaults": 2,
+        "checks": 38,
+        "executedTransactions": 39,
+        "simulatedFaults": 8,
         "nodeRefusals": 1
       },
       "scenarios": [
@@ -62,6 +62,35 @@
           "checks": [
             "public-node relay proof is unavailable for the private-syscall profile"
           ]
+        },
+        {
+          "name": "SRC-08 current source sponsorship: shared transaction fee cap",
+          "checks": [
+            "the complete two-entrypoint sponsored script prices with a fee between its partial and total requests",
+            "one signed transaction HALTs both sponsored entrypoints and emits two reimbursements",
+            "the second reimbursement receives only the first invocation's unused transaction fee budget",
+            "aggregate reimbursement equals actual transaction fees and cannot repay them twice",
+            "sponsor debit equals actual fees and the relay is made whole without profit",
+            "single-plus-batch sponsorship advances the account nonce exactly twice",
+            "the signed persisted sponsored transaction uses the complete script that was estimated"
+          ]
+        },
+        {
+          "name": "SRC-10 current source recovery: permanent callback-free owner-only",
+          "checks": [
+            "recovery account has a verifier and hook before owner-only recovery",
+            "premature owner-only recovery faults and changes no account or asset state",
+            "chain maturity and old hook core mismatch are read back",
+            "ordinary cleanup failure rolls back verifier cleanup, pointers, nonce and assets",
+            "signed owner-only finalization HALTs and emits its recovery-mode event",
+            "mode query confirms permanent owner-only state with no active modules or escape",
+            "recovery preserves backup owner, account proxy, nonce and all observed assets",
+            "callback-free recovery leaves old verifier storage untouched instead of invoking cleanup",
+            "backup-owner witness executes without the detached verifier and hook",
+            "the recovered proxy witness transfers exactly one GAS and advances the original nonce cursor",
+            "permanent owner-only mode refuses both verifier and hook reinstallation without state changes",
+            "a stranger still cannot execute or advance the recovered account nonce"
+          ]
         }
       ]
     },
@@ -73,9 +102,9 @@
         "postExecute": 0
       },
       "totals": {
-        "checks": 19,
-        "executedTransactions": 34,
-        "simulatedFaults": 0,
+        "checks": 38,
+        "executedTransactions": 47,
+        "simulatedFaults": 6,
         "nodeRefusals": 4
       },
       "scenarios": [
@@ -121,6 +150,35 @@
             "source relay proof binds invalid-signature and fee refusals, direct transfer, nonce, owner and fee payer",
             "direct proxy transfer HALTed and sponsored relay transfer was refused",
             "all sponsored proxy envelopes are rejected by the node and leave assets, nonce and deposit unchanged"
+          ]
+        },
+        {
+          "name": "SRC-08 current source sponsorship: shared transaction fee cap",
+          "checks": [
+            "the complete two-entrypoint sponsored script prices with a fee between its partial and total requests",
+            "one signed transaction HALTs both sponsored entrypoints and emits two reimbursements",
+            "the second reimbursement receives only the first invocation's unused transaction fee budget",
+            "aggregate reimbursement equals actual transaction fees and cannot repay them twice",
+            "sponsor debit equals actual fees and the relay is made whole without profit",
+            "single-plus-batch sponsorship advances the account nonce exactly twice",
+            "the signed persisted sponsored transaction uses the complete script that was estimated"
+          ]
+        },
+        {
+          "name": "SRC-10 current source recovery: permanent callback-free owner-only",
+          "checks": [
+            "recovery account has a verifier and hook before owner-only recovery",
+            "premature owner-only recovery faults and changes no account or asset state",
+            "chain maturity and old hook core mismatch are read back",
+            "ordinary cleanup failure rolls back verifier cleanup, pointers, nonce and assets",
+            "signed owner-only finalization HALTs and emits its recovery-mode event",
+            "mode query confirms permanent owner-only state with no active modules or escape",
+            "recovery preserves backup owner, account proxy, nonce and all observed assets",
+            "callback-free recovery leaves old verifier storage untouched instead of invoking cleanup",
+            "backup-owner witness executes without the detached verifier and hook",
+            "the recovered proxy witness transfers exactly one GAS and advances the original nonce cursor",
+            "permanent owner-only mode refuses both verifier and hook reinstallation without state changes",
+            "a stranger still cannot execute or advance the recovered account nonce"
           ]
         }
       ]
