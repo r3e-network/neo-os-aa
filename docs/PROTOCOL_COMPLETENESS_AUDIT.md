@@ -2,12 +2,10 @@
 
 **Date:** 2026-09-13
 **Auditor:** NeoOS protocol remediation review
-**Status:** **GO for the declared Neo-native ordinary protocol scope; conditional for
-cross-implementation compatibility and release.** The protocol rules, encoding,
-authorization order, replay domain, lifecycle, rollback semantics, and documented
-capability limits are explicit and source-verified. Public resource isolation,
-artifact migration, deployment parity, and native AccountManagement activation are
-release or external gates; they are not silently included in this GO.
+**Status:** Conditional. Current source checks pass for the ordinary profile's
+specified behavior. Full protocol conformance and release remain blocked by the
+resource-isolation and deployment gates below. Passing the declared checks does
+not establish that the protocol has no remaining defects.
 
 > **Snapshot notice:** This is a 2026-09-13 compatibility snapshot. Its
 > historical finding list and recommendations are not the current remediation
@@ -15,11 +13,6 @@ release or external gates; they are not silently included in this GO.
 > unresolved boundaries, use `docs/SECURITY_MODEL.md`,
 > `docs/AA-FORMAL-VERIFICATION.md`, and the dated build receipt under
 > `docs/reports/`.
-
-The word **GO** in this document means that the ordinary protocol is internally
-defined for the capabilities it actually exposes. It does not mean that a newer
-source candidate is already deployed, that a public Neo runtime supplies a child
-callback budget, or that the native AccountManagement proposal has been accepted.
 
 ### Current ordinary-profile boundary (2026-10-13)
 
@@ -77,7 +70,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 **Features:**
 - **Installation:** `registerAccount()` sets initial verifier and hook
-- **Update with Timelock:** `updateVerifier()` and `updateHook()` create pending updates with 7-day (604,800s) ConfigUpdateTimelock
+- **Update with Timelock:** `updateVerifier()` and `updateHook()` replace an installed plugin through a 24-hour (86,400,000ms) ConfigUpdateTimelock; first installation into an empty slot is immediate
 - **Confirmation:** `confirmVerifierUpdate()` and `confirmHookUpdate()` allow completion after timelock
 - **Cancellation:** `cancelVerifierUpdate()` and `cancelHookUpdate()` allow immediate cancel
 - **Authorization:** All config changes require `BackupOwner` native witness
@@ -87,8 +80,8 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 **Comparison to ERC-7579:**
 - ERC-7579 `onInstall(bytes32)` → Neo's `registerAccount()` with direct call
 - ERC-7579 `onUninstall(bytes32)` → Neo's authorization-based removal
-- ERC-7579 timelock not specified → Neo enforces 7-day minimum
-- Neo is **more conservative** with 7-day hard minimum (vs no requirement)
+- ERC-7579 does not prescribe this waiting period; the ordinary core waits 24 hours for replacement of an installed plugin
+- Core artifact upgrades and platform-owner rotation use a separate seven-day delay; neither is the per-account plugin replacement timer
 
 **Assessment:** ✓ Source-verified lifecycle implementation; this does not certify every future plugin or the pinned public artifact
 
@@ -136,9 +129,9 @@ are republished; that read boundary does not make such a channel executable.
 stateDiagram-v2
     [*] --> Configured: BackupOwner set
     Configured --> EscapeInitiated: initiateEscape(accountId) called
-    EscapeInitiated --> [*]: Normal op cancels escape
+    EscapeInitiated --> Configured: Successful operation with BackupOwner witness cancels escape
     EscapeInitiated --> EscapeFinalized: Timelock expires + finalizeEscape(accountId, newVerifier)
-    EscapeFinalized --> [*]: Verifier reset to BackupOwner
+    EscapeFinalized --> Configured: Selected verifier installed or BackupOwner fallback
 ```
 
 The deployed names carry the account id: `initiateEscape(accountId)` and
@@ -147,10 +140,9 @@ The deployed names carry the account id: `initiateEscape(accountId)` and
 
 **Features:**
 - **Timelock:** Configurable 7-90 days (604,800-7,776,000 seconds)
-- **Cooldown:** 7-day minimum between escape initiation attempts
-- **Cancel-on-Use:** Any normal `executeUserOp()` cancels in-progress escape
-- **Activity Cancellation:** Backup owner can cancel active escape
-- **Finalization:** `finalizeEscape()` rotates to new verifier and clears state
+- **Cooldown:** One hour between initiation attempts while the cooldown marker is retained; successful finalization deletes that marker
+- **Activity Cancellation:** A successful `executeUserOp()` may cancel an active escape only with the current BackupOwner witness; verifier-only execution cannot cancel it
+- **Finalization:** `finalizeEscape()` installs a selected V3 verifier (with optional parameters), or zero for BackupOwner authorization, and removes the old hook; old plugin cleanup must succeed or the transaction rolls back
 - **Events:** `EscapeInitiated`, `EscapeFinalized`, `EscapeCancelled` emitted
 
 **Security Properties:**
@@ -161,10 +153,10 @@ The deployed names carry the account id: `initiateEscape(accountId)` and
 
 **Comparison to ERC-4337/7579:**
 - Ethereum AA: No native recovery specified (wallet-specific)
-- Neo: **More robust** L1 escape hatch
+- Neo: An explicit backup-owner escape path, whose liveness depends on the owner witness and successful plugin cleanup
 - Neo: **Advantage**: Works with virtual accounts (zero deployment cost)
 
-**Assessment:** ✓ Superior to Ethereum AA patterns
+**Assessment:** ✓ Source-verified recovery state machine; this is not an unconditional recovery or asset-access guarantee
 
 ---
 
@@ -221,8 +213,8 @@ public struct AccountState {
 ```csharp
 ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected");
 ```
-- Global execution lock across all operations
-- Fails immediately if any op is in-flight
+- Per-account execution lock
+- Rejects a nested execution of the same account while its operation is in flight
 
 **Comparison to ERC-4337:**
 - ERC-4337: Relies on EntryPoint immutable state + reentrancy guards
@@ -265,7 +257,7 @@ the deployment does not export, which is why it is not code-formatted here.
 **Comparison to ERC-4337:**
 - ERC-4337: No native market escrow specified
 - Neo: **Native advantage** with integrated escrow
-- Neo: **Cleaner** state management (complete state wipe)
+- Neo: Clears known configuration/pending markers and old plugin bindings; account identity and nonce replay history are retained
 
 **Assessment:** ✓ Source-verified market escrow paths; arbitrary plugin cleanup and public deployment are separate gates
 
@@ -318,29 +310,28 @@ ClearVerifyContext(accountId);
 
 ### 8. Paymaster/Sponsor Flow ✓
 
-**Implementation Location:** Off-chain Morpheus service
+**Implementation Locations:** `contracts/UnifiedSmartWallet.Paymaster.cs`, `contracts/paymaster/Paymaster.cs`, and the optional Morpheus authorization service
 
-**Authorization Flow:**
-```
-Relay Server → Paymaster API: POST /api/paymaster/authorize
-Response: { approved: boolean, reason?: string }
-```
+The relay pays the enclosing N3 transaction's system and network fees. For the
+on-chain sponsored path, the core checks that the selected paymaster is bound to
+it, executes the operation, then calls `settleReimbursement` in the same
+transaction. A settlement failure rolls back the account/target state, but a
+persisted failed transaction may still cost the relay fees.
 
 **Features:**
-- **Off-chain Authorization:** Paymaster decisions made externally
-- **Sponsorship:** Covers gas for approved UserOperations
-- **Rejection:** Can decline with explicit reason
-- **Network Isolation:** Testnet/Mainnet separation
+- **On-chain policy enforcement:** AAPaymaster checks sponsor authorization, target/method restrictions, expiry, per-operation/daily/total budgets and deposit balance during settlement
+- **Reimbursement cap:** The core caps reimbursement at the actual enclosing transaction fees; the zero-fee RPC estimation container has a separate pricing interpretation
+- **Sponsored batch:** Every operation must share the target and method used for the policy check
+- **Off-chain preflight:** Morpheus authorization and RPC simulation help a relay decide whether to submit; they do not replace on-chain settlement checks
+- **Public resource boundary:** Transaction fee ceilings and sponsor admission policy do not supply an isolated verifier/hook callback budget
 
-**Comparison to ERC-4337:**
-- ERC-4337: On-chain `validatePaymasterUserOp()` contract; that name is absent from the Neo ABI, where the on-chain paymaster validates through `validatePaymasterOp`
-- Neo: **Off-chain only** - simpler but less verifiable on-chain
-- Neo: **Advantage:** No per-op gas estimation overhead
-- Neo: **Trade-off:** Reduced on-chain transparency
+**Comparison to ERC-4337:** Neo exposes `validatePaymasterOp` and
+`settleReimbursement`, rather than Ethereum's EntryPoint/paymaster ABI or staking
+lifecycle. Both the on-chain sponsored path and direct relay fee sponsorship
+exist. A relay still needs simulation, explicit fee limits and a reviewed
+verifier/hook admission policy before funding transactions.
 
-**Security Note:** `SECURITY_MODEL.md` documents the off-chain authorization design. This is a **conscious architectural choice** for Neo ecosystem, not a vulnerability.
-
-**Assessment:** ✓ Source-verified off-chain paymaster adapter; production sponsorship still requires live policy, fee, and readback evidence
+**Assessment:** ✓ Source-verified on-chain settlement and off-chain adapter; production sponsorship still requires live policy, fee, artifact and readback evidence
 
 ---
 
@@ -412,16 +403,16 @@ Response: { approved: boolean, reason?: string }
 
 ### Areas Where Neo Exceeds ERC-4337
 
-1. **On-chain Paymaster Verification** - Neo uses off-chain only (reduced transparency)
+1. **Neo paymaster settlement** - On-chain sponsor policies and deposits coexist with optional off-chain pre-authorization; this is a Neo adapter, not EntryPoint compatibility
 2. **Per-Operation Gas Limits** - the matching private AA artifact now uses
    the non-bypassable platform bounded-call syscall; the native profile and
    public activation/deployment are still approval-gated and separately
    specified in `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`
-3. **Staking Sponsorships** - Off-chain model vs ERC-4337 on-chain staking
+3. **Sponsor funding model** - Neo uses GAS deposits and scoped policies; Ethereum paymaster staking is not implemented
 
 ### Areas Where ERC-4337 Exceeds Neo
 
-1. **Native Paymaster** - Built-in gas sponsorship vs off-chain service
+1. **Standard paymaster ABI** - Neo requires transport/policy translation and does not implement Ethereum EntryPoint staking
 2. **Standardized Aggregation** - No aggregator role needed for Neo
 3. **Per-Op Estimation** - ERC-4337 has preVerificationGas, Neo doesn't
 
@@ -484,9 +475,9 @@ Response: { approved: boolean, reason?: string }
    - Store `maxDailyGas` in `AccountState`
    - Enforce in `executeUserOp()` before execution
 
-7. **Implement On-chain Paymaster Option**
-   - Add a `validatePaymasterUserOp()`-style method to `PaymasterVerifier`; it is absent from the deployed manifest today, so this is a proposal, not a shipped ABI
-   - Allow on-chain paymaster sponsorship as alternative to off-chain
+7. **Validate Existing On-chain Sponsorship**
+   - Verify AAPaymaster policies, deposits, settlement and fee caps against the exact selected deployment
+   - Treat any Ethereum EntryPoint/paymaster adapter as a separate proposal and deployment gate
 
 ### Low Priority (Documentation)
 
@@ -494,9 +485,9 @@ Response: { approved: boolean, reason?: string }
    - Keep the signed NeoVM boundary (`0 <= nonce < 2^255`) and resulting 191-bit channel limit visible to SDK callers
    - Keep deployed-artifact read-boundary differences explicit until the next ordinary artifact publication
 
-9. **Add Paymaster Staking Guide**
-   - Document how to register as Morpheus paymaster
-   - Explain staking requirements and expected returns
+9. **Document Sponsor Funding and Admission**
+   - Explain GAS deposits, scoped sponsorship policy and relay reimbursement
+   - State that Ethereum paymaster staking and investment returns are not provided
 
 ---
 
@@ -504,9 +495,9 @@ Response: { approved: boolean, reason?: string }
 
 The Neo N3 Abstract Account protocol is production-oriented, with a clearly bounded Neo-native protocol and explicit compatibility adapters. It should be integrated as a Neo AA protocol. The ERC-1271 message adapter is now safe to consume because unsupported verifiers return the invalid magic value instead of falling back to a different signature domain.
 
-- **Zero-cost virtual accounts** enable frictionless onboarding
+- **Shared virtual accounts** avoid per-account contract deployment, while registration and execution still cost transaction fees
 - **Heterogeneous signatures** support multiple security models
-- **Native L1 escape** provides robust recovery
+- **Backup-owner escape** supplies delayed recovery subject to witness availability and plugin cleanup
 - **Integrated market escrow** enables secure account transfer
 
 The remaining Ethereum compatibility work is architectural rather than a method-name rename: a real ERC-4337 bridge would need a Neo EntryPoint-equivalent, UserOperation translation with domain separation, bundler/simulation endpoints, and an accountable paymaster policy. A real ERC-7579 bridge would need an executor/module ABI translation layer and lifecycle mapping. Those components must be deployed and tested as separate adapters before claiming ecosystem compatibility.
