@@ -20,7 +20,9 @@ export default defineConfig({
   define: {
     // Node.js globals needed by ethers v6, web3auth, and walletconnect
     "process.env": {},
-    "process.browser": true,
+    // Read browser at runtime from the injected process shim. Defining it as
+    // true makes Vite 6's CommonJS constant folding skip randomfill's WebCrypto
+    // branch, leaving its exports unbound in production browser bundles.
     "process.version": JSON.stringify(""),
     global: "globalThis",
   },

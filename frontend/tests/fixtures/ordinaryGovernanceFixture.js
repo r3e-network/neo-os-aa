@@ -33,6 +33,8 @@ export function createOrdinaryGovernanceFixture() {
     escapeTriggeredAt: 0,
     escapeActive: false,
     marketEscrow: false,
+    ownerOnlyRecoverySupported: false,
+    ownerOnlyRecovery: false,
     pendingVerifier: pending('verifier'),
     pendingHook: pending('hook'),
     metadataLogState: 'HALT',
@@ -49,7 +51,10 @@ export function createOrdinaryGovernanceFixture() {
       name: `getPending${role === 'verifier' ? 'Verifier' : 'Hook'}Update`,
       parameters: [{ name: 'accountId', type: 'Hash160' }],
       returntype: 'Any', safe: true,
-    })) } } };
+    })).concat(state.ownerOnlyRecoverySupported ? [
+      { name: 'finalizeEscapeToOwner', parameters: [{ name: 'accountId', type: 'Hash160' }], returntype: 'Void', safe: false },
+      { name: 'isOwnerOnlyRecovery', parameters: [{ name: 'accountId', type: 'Hash160' }], returntype: 'Boolean', safe: true },
+    ] : []) } } };
   }
   function pendingItem(value) {
     return value ? { type: 'Array', value: [hash(value.module), bytes(value.params), integer(value.initiatedAt), integer(value.matureAt)] } : none();
@@ -78,6 +83,7 @@ export function createOrdinaryGovernanceFixture() {
       getVerifier: () => hash(state.verifier), getHook: () => hash(state.hook), getBackupOwner: () => hash(state.backupOwner),
       getEscapeTimelock: () => integer(state.escapeTimelock), getEscapeTriggeredAt: () => integer(state.escapeTriggeredAt),
       isEscapeActive: () => boolean(state.escapeActive), isMarketEscrowActive: () => boolean(state.marketEscrow),
+      isOwnerOnlyRecovery: () => { assert.equal(state.ownerOnlyRecoverySupported, true); return boolean(state.ownerOnlyRecovery); },
       getPendingVerifierUpdate: () => pendingItem(state.pendingVerifier), getPendingHookUpdate: () => pendingItem(state.pendingHook),
       hasPendingVerifierUpdate: () => boolean(!!state.pendingVerifier), hasPendingHookUpdate: () => boolean(!!state.pendingHook),
       getPendingVerifierUpdateTime: () => integer(state.pendingVerifier?.matureAt || 0), getPendingHookUpdateTime: () => integer(state.pendingHook?.matureAt || 0),
@@ -97,6 +103,15 @@ export function createOrdinaryGovernanceFixture() {
     } else if (request.operation === 'initiateEscape') {
       state.escapeActive = true;
       state.escapeTriggeredAt = state.time;
+    } else if (request.operation === 'finalizeEscapeToOwner') {
+      assert.equal(state.ownerOnlyRecoverySupported, true);
+      state.ownerOnlyRecovery = true;
+      state.verifier = ordinaryZero;
+      state.hook = ordinaryZero;
+      state.escapeActive = false;
+      state.escapeTriggeredAt = 0;
+      state.pendingVerifier = null;
+      state.pendingHook = null;
     } else if (request.operation === 'finalizeEscape') {
       state.escapeActive = false;
       state.escapeTriggeredAt = 0;

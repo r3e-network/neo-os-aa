@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getAddressFromScriptHash } from '../src/utils/neo.js';
-import { validateRegistrationOwner, decodePendingUpdate, buildGovernanceAction, assertGovernanceReviewCurrent, readGovernanceSnapshot } from '../src/features/studio/governance.js';
+import { validateRegistrationOwner, decodePendingUpdate, buildGovernanceAction, assertGovernanceReviewCurrent, readGovernanceSnapshot, supportsOwnerOnlyRecovery } from '../src/features/studio/governance.js';
+import { createOrdinaryGovernanceFixture, ordinaryAccountId, ordinaryCore } from './fixtures/ordinaryGovernanceFixture.js';
 const owner = '11'.repeat(20), accountId = '22'.repeat(20), verifier = '33'.repeat(20), hook = '44'.repeat(20);
 const pending = { module: '55'.repeat(20), params: '03abcd', initiatedAt: 1000, matureAt: 86401000 };
 const base = () => ({ accountId, backupOwner: owner, verifier, hook, escapeTimelock: 604800, escapeTriggeredAt: 0, escapeActive: false, marketEscrow: false, chain: { height: 10, hash: 'aa'.repeat(32), time: pending.matureAt }, pendingVerifier: { exists: true, full: true, ...pending }, pendingHook: { exists: false, full: true } });
@@ -55,4 +56,55 @@ test('snapshot reading detects old ABI and refuses inconsistent block snapshots'
   assert.equal(reads.includes('getPendingVerifierUpdate'), false);
   let calls = 0;
   await assert.rejects(() => readGovernanceSnapshot({ accountId, read, readClock: async () => ({ ...clock, height: calls++ }) }), /block changed/);
+});
+
+test('owner-only recovery capability requires both unique deployed ABI descriptors', () => {
+  const methods = [
+    { name: 'finalizeEscapeToOwner', parameters: [{ type: 'Hash160' }], returntype: 'Void', safe: false },
+    { name: 'isOwnerOnlyRecovery', parameters: [{ type: 'Hash160' }], returntype: 'Boolean', safe: true },
+  ];
+  const state = (list) => ({ manifest: { abi: { methods: list } } });
+  assert.equal(supportsOwnerOnlyRecovery(state(methods)), true);
+  assert.equal(supportsOwnerOnlyRecovery(state([])), false);
+  assert.equal(supportsOwnerOnlyRecovery(state(methods.slice(0, 1))), false);
+  assert.equal(supportsOwnerOnlyRecovery(state([...methods, methods[0]])), false);
+  for (const patch of [{ safe: false }, { returntype: 'Any' }, { parameters: [{ type: 'ByteArray' }] }]) {
+    assert.equal(supportsOwnerOnlyRecovery(state([methods[0], { ...methods[1], ...patch }])), false);
+  }
+});
+
+test('permanent recovery binds deployed support, explicit acknowledgement, owner, chain maturity and escrow', () => {
+  const snapshot = { ...base(), ownerOnlyRecoverySupported: true, ownerOnlyRecovery: false, escapeActive: true, escapeTriggeredAt: 1000, chain: { time: 604801000 } };
+  const options = { irreversibleAcknowledged: true };
+  const review = buildGovernanceAction(snapshot, 'finalizeEscapeToOwner', options);
+  assert.deepEqual(review.args, [{ type: 'Hash160', value: accountId }]);
+  assert.throws(() => buildGovernanceAction(snapshot, 'finalizeEscapeToOwner'), /Acknowledge/);
+  assert.throws(() => buildGovernanceAction({ ...snapshot, ownerOnlyRecoverySupported: false }, 'finalizeEscapeToOwner', options), /deployment/);
+  assert.throws(() => buildGovernanceAction({ ...snapshot, escapeActive: false }, 'finalizeEscapeToOwner', options), /initiated/);
+  assert.throws(() => buildGovernanceAction({ ...snapshot, chain: { time: 604800999 } }, 'finalizeEscapeToOwner', options), /timelock/);
+  assert.throws(() => buildGovernanceAction({ ...snapshot, marketEscrow: true }, 'finalizeEscapeToOwner', options), /escrow/);
+  assert.throws(() => assertGovernanceReviewCurrent(review, snapshot, '77'.repeat(20)), /backup owner/);
+  assert.throws(() => assertGovernanceReviewCurrent(review, { ...snapshot, ownerOnlyRecovery: true }, owner), /changed/);
+});
+
+test('permanent owner mode blocks plugin reconfiguration and is read only when deployed support exists', async () => {
+  const fixture = createOrdinaryGovernanceFixture();
+  const actualRead = (method, args) => fixture.send('invokefunction', ['0x' + ordinaryCore, method, args]);
+  const readClock = async () => ({ height: fixture.state.height, hash: 'aa'.repeat(32), time: fixture.state.time });
+  const old = await readGovernanceSnapshot({ accountId: ordinaryAccountId, read: actualRead, readClock });
+  assert.equal(old.ownerOnlyRecoverySupported, false);
+  assert.equal(fixture.state.calls.some(({ params }) => params[1] === 'isOwnerOnlyRecovery'), false);
+  fixture.state.ownerOnlyRecoverySupported = true;
+  fixture.state.ownerOnlyRecovery = true;
+  fixture.state.verifier = '00'.repeat(20);
+  fixture.state.hook = '00'.repeat(20);
+  fixture.state.pendingVerifier = null;
+  fixture.state.pendingHook = null;
+  const snapshot = await readGovernanceSnapshot({ accountId: ordinaryAccountId, read: actualRead, readClock, ownerOnlyRecoverySupported: true });
+  assert.equal(snapshot.ownerOnlyRecovery, true);
+  for (const operation of ['updateVerifier', 'updateHook', 'initiateEscape', 'finalizeEscape', 'finalizeEscapeToOwner']) {
+    assert.throws(() => buildGovernanceAction(snapshot, operation, { module: verifier, mode: 'verifier', verifier, params: '02abcd', irreversibleAcknowledged: true }), /permanently/);
+  }
+  fixture.state.verifier = verifier;
+  await assert.rejects(() => readGovernanceSnapshot({ accountId: ordinaryAccountId, read: actualRead, readClock, ownerOnlyRecoverySupported: true }), /Invalid owner-only/);
 });

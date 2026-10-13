@@ -18,7 +18,7 @@
         >
           {{ modal.title }}
         </h3>
-        <p class="text-sm text-aa-muted mb-6">{{ modal.message }}</p>
+        <p class="text-sm text-aa-muted mb-6 whitespace-pre-line">{{ modal.message }}</p>
         <div class="flex gap-3 justify-end">
           <button class="btn-ghost" @click="$emit('close')">
             {{ t("studioPanels.cancel", "Cancel") }}

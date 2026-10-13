@@ -77,12 +77,17 @@
       </transition>
 
       <div v-if="manageSnapshot.loadedAt" class="space-y-3 text-sm">
+        <div v-if="manageSnapshot.ownerOnlyRecovery" role="status" class="rounded-lg border border-aa-warning p-4" data-testid="ordinary-owner-only-state">
+          <p>{{ t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.') }}</p>
+          <p class="mt-2">{{ t('ordinary.ownerOnlyOperations', 'The backup owner can directly authorize account operations. The account identity, asset address and nonce remain unchanged. This recovery does not transfer or refund balances, and cannot guarantee permissions in external contracts.') }}</p>
+          <router-link :to="{ path: '/app', query: { accountId: `0x${manageSnapshot.accountId}` } }" class="btn-secondary btn-sm mt-3">{{ t('studioPanels.openOperations', 'Open Operations') }}</router-link>
+        </div>
         <p data-testid="ordinary-chain-time">{{ t('ordinary.chainTime', 'Node block time at refresh') }}: {{ formatTime(manageSnapshot.chain.time) }} · #{{ manageSnapshot.chain.height }} · {{ String(manageSnapshot.chain.hash || '').slice(0, 10) }}…{{ String(manageSnapshot.chain.hash || '').slice(-8) }}</p>
         <p class="text-xs text-aa-muted">{{ t('ordinary.refreshHint', 'Use Load V3 State to refresh maturity. Your device clock does not advance the verified node state.') }}</p>
         <p v-if="!isGovernanceOwner" role="status" class="text-aa-warning">{{ t('ordinary.connectOwner', 'Connect the configured Neo backup owner.') }}</p>
         <p v-if="manageSnapshot.marketEscrow" class="text-aa-warning">{{ t('ordinary.escrow', 'This account is in market escrow. Plugin changes and recovery are unavailable.') }}</p>
         <p class="text-xs text-aa-muted">{{ t('ordinary.pendingRace', 'State is checked again before wallet signing. Another device can change the pending proposal before your transaction is included; these actions affect the pending update for that role at execution.') }}</p>
-        <p class="text-xs text-aa-muted">{{ t('ordinary.rotationDelay', 'Installing into an empty slot is immediate. Replacing an installed plugin requires a separate confirmation after 24 hours. The backup owner authorizes and pays; review the wallet fee.') }}</p>
+        <p v-if="!manageSnapshot.ownerOnlyRecovery" class="text-xs text-aa-muted">{{ t('ordinary.rotationDelay', 'Installing into an empty slot is immediate. Replacing an installed plugin requires a separate confirmation after 24 hours. The backup owner authorizes and pays; review the wallet fee.') }}</p>
       </div>
       <div v-if="manageSnapshot.loadedAt" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <PendingModuleUpdateCard role="verifier" :pending="manageSnapshot.pendingVerifier" :chain-time="manageSnapshot.chain.time" :can-confirm="canGovernanceAction('confirmVerifierUpdate')" :can-cancel="canGovernanceAction('cancelVerifierUpdate')" @confirm="confirmGovernanceChange('confirmVerifierUpdate')" @cancel="confirmGovernanceChange('cancelVerifierUpdate')" />
@@ -114,11 +119,11 @@
             {{ t("studioPanels.escapeHatch", "Escape Hatch") }}
           </h3>
           <div class="space-y-4">
-            <p class="text-xs text-aa-muted">{{ t('ordinary.escapeCleanup', 'Recovery removes the old hook, its configuration, old verifier configuration, pending plugin changes and calls, and the on-chain metadata URI. It does not transfer assets. Old plugins must successfully clear their configuration; a cleanup fault rolls back the recovery, and a mined failure may still cost fees.') }}</p>
+            <p v-if="!manageSnapshot.ownerOnlyRecovery" class="text-xs text-aa-muted">{{ t('ordinary.escapeCleanup', 'Recovery removes the old hook, its configuration, old verifier configuration, pending plugin changes and calls, and the on-chain metadata URI. It does not transfer assets. Old plugins must successfully clear their configuration; a cleanup fault rolls back the recovery, and a mined failure may still cost fees.') }}</p>
             <p class="text-xs text-aa-warning">{{ t('ordinary.escapeOwnerLoss', 'Keep a separate backup of the Neo backup owner. If its only key is lost, this recovery path cannot replace that witness.') }}</p>
             <p v-if="manageSnapshot.escapeActive" class="text-sm">{{ t('ordinary.escapeMatures', 'Recovery matures at') }}: {{ formatTime(manageSnapshot.escapeTriggeredAt + manageSnapshot.escapeTimelock * 1000) }}</p>
             <label class="block text-sm" for="governance-escape-mode">{{ t('ordinary.escapeMode', 'Authorization after recovery') }}
-              <select id="governance-escape-mode" v-model="manageForm.escapeMode" class="input-field mt-1">
+              <select id="governance-escape-mode" v-model="manageForm.escapeMode" :disabled="governanceBusy || manageSnapshot.ownerOnlyRecovery" class="input-field mt-1">
                 <option value="backup-owner">{{ t('ordinary.backupMode', 'Backup owner Neo witness') }}</option>
                 <option value="verifier">{{ t('ordinary.verifierMode', 'New verifier with initialization parameters') }}</option>
               </select>
@@ -189,6 +194,18 @@
                 )
               }}
             </p>
+            <div class="space-y-3 rounded-lg border border-aa-warning/40 p-4" data-testid="ordinary-owner-only-recovery">
+              <h4 class="font-semibold">{{ t('ordinary.ownerOnlyTitle', 'Permanent recovery without plugin cleanup') }}</h4>
+              <p class="text-xs text-aa-muted">{{ t('ordinary.ownerOnlyExplanation', 'If a broken verifier or hook prevents normal recovery, use the same matured recovery timer to permanently return authorization to the backup owner. This path calls no old or new plugin. It removes active plugin bindings, pending changes and the metadata URI.') }}</p>
+              <p class="text-xs text-aa-warning">{{ t('ordinary.ownerOnlyIrreversible', 'This is irreversible: this account can never install a verifier or hook again. Keep the backup owner key available; losing it can permanently lock the account.') }}</p>
+              <p class="text-xs text-aa-muted">{{ t('ordinary.ownerOnlyOperations', 'The backup owner can directly authorize account operations. The account identity, asset address and nonce remain unchanged. This recovery does not transfer or refund balances, and cannot guarantee permissions in external contracts.') }}</p>
+              <p v-if="!manageSnapshot.ownerOnlyRecoverySupported" role="status" class="text-xs text-aa-warning">{{ t('ordinary.ownerOnlyUnsupported', 'This deployment does not support permanent owner-only recovery. The required write method and safe mode query must both be present in its deployed ABI.') }}</p>
+              <label v-if="manageSnapshot.ownerOnlyRecoverySupported && !manageSnapshot.ownerOnlyRecovery" class="flex gap-2 text-xs" for="governance-owner-only-acknowledgement">
+                <input id="governance-owner-only-acknowledgement" type="checkbox" v-model="manageForm.escapeOwnerOnlyAcknowledged" :disabled="governanceBusy" />
+                {{ t('ordinary.ownerOnlyAcknowledgement', 'I understand this account will permanently use only the backup owner witness, and plugins can never be restored.') }}
+              </label>
+              <button type="button" class="btn-warning" :disabled="!manageForm.escapeOwnerOnlyAcknowledged || !canGovernanceAction('finalizeEscapeToOwner')" @click="confirmGovernanceChange('finalizeEscapeToOwner')">{{ t('ordinary.ownerOnlyFinalize', 'Finalize permanent owner-only recovery') }}</button>
+            </div>
           </div>
         </div>
       </div>
@@ -271,10 +288,12 @@ function confirmGovernanceChange(operation) {
       updateHook: t('studioPanels.updateHook', 'Update Hook'),
       initiateEscape: t('studioPanels.initiateEscape', 'Initiate Escape'),
       finalizeEscape: t('studioPanels.finalizeEscape', 'Finalize Escape'),
+      finalizeEscapeToOwner: t('ordinary.ownerOnlyFinalize', 'Finalize permanent owner-only recovery'),
     };
     let detail = t('ordinary.pendingRace', 'State is checked again before wallet signing. Another device can change the pending proposal before your transaction is included; these actions affect the pending update for that role at execution.');
     if (operation === 'initiateEscape') detail = t('studioPanels.confirmInitiateEscape', 'This starts the recovery countdown. The backup owner must explicitly finalize after the timelock; nothing changes automatically. Continue?');
     if (operation === 'finalizeEscape') detail = t('studioPanels.confirmFinalizeEscape', 'Replace the verifier, remove the hook, and clear pending plugin state and the metadata URI. Old plugin cleanup must succeed. Assets stay at the same address. Continue?');
+    if (operation === 'finalizeEscapeToOwner') detail = `${t('ordinary.ownerOnlyIrreversible', 'This is irreversible: this account can never install a verifier or hook again. Keep the backup owner key available; losing it can permanently lock the account.')}\n${t('ordinary.ownerOnlyExplanation', 'If a broken verifier or hook prevents normal recovery, use the same matured recovery timer to permanently return authorization to the backup owner. This path calls no old or new plugin. It removes active plugin bindings, pending changes and the metadata URI.')}\n${t('ordinary.ownerOnlyOperations', 'The backup owner can directly authorize account operations. The account identity, asset address and nonce remain unchanged. This recovery does not transfer or refund balances, and cannot guarantee permissions in external contracts.')}`;
     const displayHash160 = (value) => {
       const raw = String(value ?? '').trim();
       if (!raw) return '—';
@@ -298,7 +317,8 @@ function confirmGovernanceChange(operation) {
     } else if (operation === 'finalizeEscape' && review.options.mode === 'backup-owner') {
       target = `\n${t('ordinary.recoveryMode', 'Recovery mode')}: ${t('ordinary.backupMode', 'Backup owner Neo witness')}`;
     }
-    confirmModal.value = { title: labels[operation], confirmLabel: labels[operation], danger: operation === 'finalizeEscape' || operation.startsWith('cancel'), message: `${detail}\nAccountId: ${review.snapshot.accountId}${target}`, onConfirm: () => submitGovernanceAction(review) };
+    if (operation === 'finalizeEscapeToOwner') target = `\n${t('ordinary.connectOwner', 'Connect the configured Neo backup owner.')}: ${displayHash160(review.snapshot.backupOwner)}`;
+    confirmModal.value = { title: labels[operation], confirmLabel: labels[operation], danger: operation.startsWith('finalizeEscape') || operation.startsWith('cancel'), message: `${detail}\nAccountId: ${review.snapshot.accountId}${target}`, onConfirm: () => submitGovernanceAction(review) };
   } catch (error) { toast.error(error.message); }
 }
 const confirmInitiateEscape = () => confirmGovernanceChange('initiateEscape');

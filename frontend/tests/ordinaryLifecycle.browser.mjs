@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'vite';
+import { startOrdinaryBrowserServer } from './fixtures/ordinaryBrowserServer.mjs';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -20,23 +20,20 @@ const stage = process.env.ORDINARY_LIFECYCLE_EVIDENCE_STAGE || 'current';
 async function withWorkspace(name, run, setup = () => {}) {
   const fixture = createOrdinaryGovernanceFixture();
   setup(fixture);
-  const errors = [];
+  const errors = [], navigations = [], documentRequests = [];
   const env = { VITE_AA_RPC_URL: ordinaryRpcUrl, VITE_AA_HASH: ordinaryCore, VITE_AA_NETWORK_MAGIC: String(ordinaryMagic) };
   const previousEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   Object.assign(process.env, env);
   await mkdir(evidenceDir, { recursive: true });
-  const server = await createServer({
-    root, envFile: false,
-    server: { host: '127.0.0.1', port: 0, watch: { ignored: ['**/*'] } },
-    logLevel: 'error',
-  });
+  const server = await startOrdinaryBrowserServer(root);
   let browser, page;
   try {
-    await server.listen();
-    const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
+    const { origin } = server;
     browser = await chromium.launch({ headless: true });
     page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
     page.setDefaultTimeout(10000);
+    page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations.push(frame.url()); });
+    page.on('request', (request) => { if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests.push(request.url()); });
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
     await page.route('**/*', (route) => fixture.route(route, origin));
@@ -61,12 +58,15 @@ async function withWorkspace(name, run, setup = () => {}) {
       await writeFile(join(evidenceDir, `${stage}-${name}-${label}.txt`), await page.locator('body').innerText());
     } });
     assert.equal(await page.locator('vite-error-overlay').count(), 0);
+    assert.deepEqual(documentRequests, [`${origin}/app`], 'immutable built app must not reload during lifecycle actions; router history updates are allowed');
+    assert.equal(await page.locator('.app-error-boundary').count(), 0, 'Vue errors caught by the app boundary must fail the browser gate');
+    assert.equal(await page.locator('script[src="/@vite/client"]').count(), 0, 'fixture serves the built app without optimizer/HMR');
     assert.deepEqual(errors, [], 'no browser errors');
     assert.deepEqual(fixture.state.failures, [], 'every RPC is explicitly stubbed; raw broadcasts are forbidden');
     assert.deepEqual(fixture.state.unexpectedRequests, [], 'no external or unstubbed network request may escape the fixture');
   } finally {
     await writeFile(join(evidenceDir, `${stage}-${name}-requests.json`), JSON.stringify({
-      errors, rpc: fixture.state.calls, wallet: fixture.state.walletRequests,
+      errors, navigations, documentRequests, rpc: fixture.state.calls, wallet: fixture.state.walletRequests,
       failures: fixture.state.failures, blocked: fixture.state.unexpectedRequests,
     }, null, 2));
     await browser?.close();
@@ -148,8 +148,84 @@ test('ordinary deployments without full pending getters cannot confirm a hidden 
       assert.equal(await card.getByRole('button', { name: `Cancel ${role} update`, exact: true }).isDisabled(), false);
     }
     assert.equal(fixture.state.calls.some(({ params }) => ['getPendingVerifierUpdate', 'getPendingHookUpdate'].includes(params[1])), false);
+    const ownerOnly = page.getByTestId('ordinary-owner-only-recovery');
+    assert.match(await ownerOnly.innerText(), /This deployment does not support permanent owner-only recovery/);
+    assert.equal(await ownerOnly.getByRole('button', { name: 'Finalize permanent owner-only recovery', exact: true }).isDisabled(), true);
+    assert.equal(fixture.state.calls.some(({ params }) => params[1] === 'isOwnerOnlyRecovery'), false, 'older deployments are never probed with a phantom mode query');
     assert.equal(fixture.state.walletRequests.length, 0);
   }, (fixture) => { fixture.state.fullPendingRoles = []; });
+});
+
+test('permanent owner-only recovery requires maturity and irreversible acknowledgement, then blocks plugin configuration', { timeout: 90000 }, async () => {
+  await withWorkspace('owner-only', async ({ page, fixture, capture }) => {
+    await loadGovernance(page);
+    const card = page.getByTestId('ordinary-owner-only-recovery');
+    const finalize = card.getByRole('button', { name: 'Finalize permanent owner-only recovery', exact: true });
+    const acknowledge = page.locator('#governance-owner-only-acknowledgement');
+    assert.equal(await finalize.isDisabled(), true);
+    await acknowledge.check();
+    assert.equal(await finalize.isDisabled(), true, 'explicit acknowledgement cannot bypass the chain timelock');
+    fixture.state.time += 1;
+    await loadGovernance(page);
+    assert.equal(await acknowledge.isChecked(), false, 'a fresh snapshot needs a fresh irreversible acknowledgement');
+    await acknowledge.check();
+    await finalize.click();
+    const dialog = page.getByRole('dialog');
+    await dialog.waitFor();
+    assert.match(await dialog.innerText(), /irreversible.*can never install a verifier or hook again/s);
+    assert.match(await dialog.innerText(), /does not transfer or refund balances/);
+    assert.match(await dialog.innerText(), /cannot guarantee permissions in external contracts/);
+    assert.match(await dialog.innerText(), new RegExp(ordinaryOwner));
+    await confirmDialog(page, 'Finalize permanent owner-only recovery');
+    await waitForFixtureWallet(fixture, 1);
+    assertRequest(fixture.state.walletRequests[0], 'finalizeEscapeToOwner');
+    await waitForGovernanceIdle(page);
+    await loadGovernance(page);
+    await page.getByTestId('ordinary-owner-only-state').waitFor();
+    assert.match(await page.getByTestId('ordinary-owner-only-state').innerText(), /backup owner can directly authorize account operations/i);
+    assert.equal(await page.getByText(/Installing into an empty slot is immediate/).count(), 0, 'permanent mode must not suggest plugins can be reinstalled');
+    assert.equal(await page.locator('#governance-escape-mode').isDisabled(), true);
+    for (const label of ['Update verifier', 'Update hook', 'Initiate escape', 'Finalize escape']) {
+      assert.equal(await page.getByRole('button', { name: label, exact: true }).isDisabled(), true, label);
+    }
+    assert.equal(await finalize.isDisabled(), true, 'the permanent transition cannot be repeated');
+    await capture('permanent-mode');
+    await page.getByRole('tab', { name: 'Permissions & Limits', exact: true }).click();
+    for (const label of ['Call verifier', 'Call hook']) {
+      assert.equal(await page.getByRole('button', { name: label, exact: true }).isDisabled(), true, label);
+    }
+    assert.equal(fixture.state.walletRequests.length, 1);
+  }, (fixture) => {
+    fixture.state.ownerOnlyRecoverySupported = true;
+    fixture.state.escapeActive = true;
+    fixture.state.escapeTriggeredAt = fixture.matureAt - fixture.state.escapeTimelock * 1000;
+  });
+});
+
+test('permanent recovery rechecks on-chain mode after the irreversible review', { timeout: 90000 }, async () => {
+  await withWorkspace('owner-only-race', async ({ page, fixture }) => {
+    await loadGovernance(page);
+    await page.locator('#governance-owner-only-acknowledgement').check();
+    await page.getByRole('button', { name: 'Finalize permanent owner-only recovery', exact: true }).click();
+    await page.getByRole('dialog').waitFor();
+    fixture.state.ownerOnlyRecovery = true;
+    fixture.state.verifier = ordinaryZero;
+    fixture.state.hook = ordinaryZero;
+    fixture.state.pendingVerifier = null;
+    fixture.state.pendingHook = null;
+    fixture.state.escapeActive = false;
+    fixture.state.escapeTriggeredAt = 0;
+    await confirmDialog(page, 'Finalize permanent owner-only recovery');
+    await page.getByText(/Governance state changed\. Refresh and review again\./).last().waitFor();
+    assert.equal(fixture.state.walletRequests.length, 0, 'a finalized mode on another device must stop before wallet signing');
+    await loadGovernance(page);
+    await page.getByTestId('ordinary-owner-only-state').waitFor();
+  }, (fixture) => {
+    fixture.state.ownerOnlyRecoverySupported = true;
+    fixture.state.escapeActive = true;
+    fixture.state.time = fixture.matureAt;
+    fixture.state.escapeTriggeredAt = fixture.matureAt - fixture.state.escapeTimelock * 1000;
+  });
 });
 
 test('ordinary pending updates bind full state, chain maturity and actual wallet invocations', { timeout: 90000 }, async () => {

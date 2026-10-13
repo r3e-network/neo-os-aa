@@ -34,6 +34,7 @@ export function createManageFormState() {
     escapeNewVerifier: '',
     escapeVerifierParams: '',
     escapeAllowEmptyParams: false,
+    escapeOwnerOnlyAcknowledged: false,
   };
 }
 

@@ -12,6 +12,7 @@
       }}
     </p>
 
+    <p v-if="isOwnerOnlyPermissionsTarget" role="status" class="mb-5 text-sm text-aa-warning">{{ t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.') }}</p>
     <div class="space-y-8">
       <div class="rounded-lg border border-aa-border/60 bg-aa-panel/60 p-5">
         <div
@@ -384,6 +385,7 @@ const {
   permissionsForm,
   permissionsBusy,
   canManagePermissions,
+  isOwnerOnlyPermissionsTarget,
   autoLoadedAccounts,
   callVerifier,
   callHook,

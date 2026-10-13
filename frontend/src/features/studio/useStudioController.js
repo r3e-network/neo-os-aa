@@ -38,7 +38,7 @@ import {
 import { EC, translateError } from '../../config/errorCodes.js';
 import { TX_STATUS, waitForTransactionConfirmation } from './txConfirmation.js';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout.js';
-import { validateRegistrationOwner, supportedPendingRoles, readChainClock, readGovernanceSnapshot, buildGovernanceAction, assertGovernanceReviewCurrent } from './governance.js';
+import { validateRegistrationOwner, supportedPendingRoles, supportsOwnerOnlyRecovery, readChainClock, readGovernanceSnapshot, buildGovernanceAction, assertGovernanceReviewCurrent } from './governance.js';
 import { captureMetadataSaveIntent, metadataIntentMatchesCurrent, metadataMirrorPayload } from './metadataSave.js';
 
 export function useStudioController() {
@@ -105,7 +105,11 @@ export function useStudioController() {
     manageSnapshot.value = createManageSnapshotState();
     governanceOutcome.value = '';
   });
-  const canManagePermissions = computed(() => !!permissionsForm.value.accountAddress && walletConnected.value);
+  const isOwnerOnlyPermissionsTarget = computed(() => {
+    try { return manageSnapshot.value.ownerOnlyRecovery === true && normalizeAccountId(permissionsForm.value.accountAddress).toLowerCase() === manageSnapshot.value.accountId; }
+    catch (_) { return false; }
+  });
+  const canManagePermissions = computed(() => !!permissionsForm.value.accountAddress && walletConnected.value && !isOwnerOnlyPermissionsTarget.value);
 
   const validCreateAdmins = computed(() => {
     const owner = createForm.value.backupOwner;
@@ -400,6 +404,7 @@ export function useStudioController() {
       manageForm.value.escapeTimelock = String(snapshot.escapeTimelock);
       manageForm.value.escapeTriggeredAt = String(snapshot.escapeTriggeredAt);
       manageForm.value.escapeActive = snapshot.escapeActive;
+      manageForm.value.escapeOwnerOnlyAcknowledged = false;
       permissionsForm.value.accountAddress = manageForm.value.accountAddress;
       manageSnapshot.value = { ...snapshot, loadedAt: new Date().toLocaleString() };
 
@@ -517,10 +522,12 @@ export function useStudioController() {
       accountId, read: invokeReadOperation,
       readClock: () => readChainClock(governanceRpc),
       fullPendingRoles: supportedPendingRoles(state),
+      ownerOnlyRecoverySupported: supportsOwnerOnlyRecovery(state),
     });
   }
 
   function governanceOptions(operation) {
+    if (operation === 'finalizeEscapeToOwner') return { irreversibleAcknowledged: manageForm.value.escapeOwnerOnlyAcknowledged };
     if (operation === 'finalizeEscape') return {
       mode: manageForm.value.escapeMode,
       verifier: manageForm.value.escapeNewVerifier,
@@ -557,7 +564,8 @@ export function useStudioController() {
       assertGovernanceReviewCurrent(review, fresh, connectedAccount.value);
       const current = buildGovernanceAction(fresh, review.operation, governanceOptions(review.operation));
       if (JSON.stringify(current.args) !== JSON.stringify(review.args)) throw new Error(t('ordinary.requestChanged', 'Governance inputs changed. Review again.'));
-      const result = await invokeOperation(review.operation, review.operation, review.args, { waitForConfirmation: true });
+      const label = review.operation === 'finalizeEscapeToOwner' ? t('ordinary.ownerOnlyFinalize', 'Finalize permanent owner-only recovery') : review.operation;
+      const result = await invokeOperation(label, review.operation, review.args, { waitForConfirmation: true });
       if (result.status === TX_STATUS.CONFIRMED) {
         governanceOutcome.value = t('ordinary.confirmedRefresh', 'Confirmed on-chain. Refresh account state before the next action.');
         manageSnapshot.value = createManageSnapshotState();
@@ -719,6 +727,7 @@ export function useStudioController() {
     permissionsBusy.value.verifierCall = true;
     try {
       const accountIdHash = deriveAccountIdHash(normalizeAccountId(permissionsForm.value.accountAddress));
+      if ((await fetchGovernanceSnapshot(accountIdHash)).ownerOnlyRecovery) throw new Error(t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.'));
       await invokeOperation('Call verifier plugin', 'callVerifier', [
         { type: 'Hash160', value: accountIdHash },
         { type: 'String', value: permissionsForm.value.verifierMethod.trim() },
@@ -740,6 +749,7 @@ export function useStudioController() {
     permissionsBusy.value.hookCall = true;
     try {
       const accountIdHash = deriveAccountIdHash(normalizeAccountId(permissionsForm.value.accountAddress));
+      if ((await fetchGovernanceSnapshot(accountIdHash)).ownerOnlyRecovery) throw new Error(t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.'));
       await invokeOperation('Call hook plugin', 'callHook', [
         { type: 'Hash160', value: accountIdHash },
         { type: 'String', value: permissionsForm.value.hookMethod.trim() },
@@ -791,6 +801,7 @@ export function useStudioController() {
     submitGovernanceAction,
     canManageTarget,
     canManagePermissions,
+    isOwnerOnlyPermissionsTarget,
     validCreateAdmins,
     addRow,
     removeRow,

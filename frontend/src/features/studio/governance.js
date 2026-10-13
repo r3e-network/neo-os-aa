@@ -49,6 +49,15 @@ export function supportedPendingRoles(contractState) {
     method.name === `getPending${role === 'verifier' ? 'Verifier' : 'Hook'}Update`
     && method.safe === true && method.parameters?.length === 1 && method.parameters[0].type === 'Hash160'));
 }
+export function supportsOwnerOnlyRecovery(contractState) {
+  const methods = contractState?.manifest?.abi?.methods;
+  if (!Array.isArray(methods)) throw new Error('Cannot verify the ordinary contract ABI.');
+  return [['finalizeEscapeToOwner', 'Void', false], ['isOwnerOnlyRecovery', 'Boolean', true]].every(([name, returntype, safe]) => {
+    const matching = methods.filter((method) => method.name === name);
+    return matching.length === 1 && matching[0].returntype === returntype && matching[0].safe === safe
+      && matching[0].parameters?.length === 1 && matching[0].parameters[0].type === 'Hash160';
+  });
+}
 export async function readChainClock(send) {
   const count = await send('getblockcount', []);
   if (!Number.isSafeInteger(count) || count <= 0) throw new Error('Invalid node block count.');
@@ -56,7 +65,7 @@ export async function readChainClock(send) {
   if (!header || header.index !== count - 1 || !Number.isSafeInteger(header.time) || header.time <= 0 || !/^(0x)?[0-9a-fA-F]{64}$/.test(header.hash || '')) throw new Error('Invalid node block timestamp.');
   return { height: header.index, hash: header.hash.toLowerCase(), time: header.time };
 }
-export async function readGovernanceSnapshot({ accountId, read, readClock, fullPendingRoles = [] }) {
+export async function readGovernanceSnapshot({ accountId, read, readClock, fullPendingRoles = [], ownerOnlyRecoverySupported = false }) {
   accountId = normalizeHash(accountId);
   const before = await readClock();
   const readItem = async (method) => {
@@ -72,16 +81,18 @@ export async function readGovernanceSnapshot({ accountId, read, readClock, fullP
     if (present !== (matureAt > 0)) throw new Error('Inconsistent pending update. Refresh state.');
     return present ? { exists: true, full: false, matureAt } : { exists: false, full: false };
   };
-  const [verifier, hook, backupOwner, delay, triggered, active, escrow, pendingVerifier, pendingHook] = await Promise.all([
+  const [verifier, hook, backupOwner, delay, triggered, active, escrow, pendingVerifier, pendingHook, ownerOnlyRecovery] = await Promise.all([
     readItem('getVerifier').then(stackHash), readItem('getHook').then(stackHash), readItem('getBackupOwner').then(stackHash),
     readItem('getEscapeTimelock').then((item) => integer(item, 'escape timelock')),
     readItem('getEscapeTriggeredAt').then((item) => integer(item, 'escape initiation time')),
     readItem('isEscapeActive').then(boolean), readItem('isMarketEscrowActive').then(boolean), pending('verifier'), pending('hook'),
+    ownerOnlyRecoverySupported ? readItem('isOwnerOnlyRecovery').then(boolean) : false,
   ]);
   const chain = await readClock();
   if (before.height !== chain.height || before.hash !== chain.hash) throw new Error('Node block changed while reading. Refresh state.');
   if (backupOwner === ZERO || active !== (triggered > 0)) throw new Error('Invalid account recovery state.');
-  return { accountId, verifier, hook, backupOwner, escapeTimelock: delay, escapeTriggeredAt: triggered, escapeActive: active, marketEscrow: escrow, pendingVerifier, pendingHook, chain };
+  if (ownerOnlyRecovery && (verifier !== ZERO || hook !== ZERO)) throw new Error('Invalid owner-only recovery state.');
+  return { accountId, verifier, hook, backupOwner, escapeTimelock: delay, escapeTriggeredAt: triggered, escapeActive: active, marketEscrow: escrow, pendingVerifier, pendingHook, ownerOnlyRecoverySupported, ownerOnlyRecovery, chain };
 }
 function paramsHex(value, allowEmpty = true) {
   const hex = String(value || '').trim().replace(/^0x/i, '').toLowerCase();
@@ -95,6 +106,7 @@ function snapshotIdentity(snapshot) {
 export function buildGovernanceAction(snapshot, operation, options = {}) {
   if (!snapshot?.chain || !snapshot.accountId) throw new Error('Load current governance state first.');
   const args = [{ type: 'Hash160', value: snapshot.accountId }];
+  if (snapshot.ownerOnlyRecovery) throw new Error('This account permanently uses its backup owner witness. Plugin configuration and further recovery are unavailable.');
   const match = /^(confirm|cancel)(Verifier|Hook)Update$/.exec(operation);
   if (match) {
     const pending = snapshot[`pending${match[2]}`];
@@ -105,10 +117,13 @@ export function buildGovernanceAction(snapshot, operation, options = {}) {
     }
   } else if (operation === 'initiateEscape') {
     if (snapshot.escapeActive) throw new Error('Recovery is already active.');
-  } else if (operation === 'finalizeEscape') {
+  } else if (operation === 'finalizeEscape' || operation === 'finalizeEscapeToOwner') {
     if (!snapshot.escapeActive) throw new Error('Recovery has not been initiated.');
     if (snapshot.chain.time < snapshot.escapeTriggeredAt + snapshot.escapeTimelock * 1000) throw new Error('The recovery timelock is not mature. Refresh node state after the deadline.');
-    if (options.mode === 'backup-owner') args.push({ type: 'Hash160', value: ZERO }, { type: 'ByteArray', value: '0x' });
+    if (operation === 'finalizeEscapeToOwner') {
+      if (!snapshot.ownerOnlyRecoverySupported) throw new Error('This deployment does not support permanent owner-only recovery.');
+      if (options.irreversibleAcknowledged !== true) throw new Error('Acknowledge the irreversible owner-only recovery before continuing.');
+    } else if (options.mode === 'backup-owner') args.push({ type: 'Hash160', value: ZERO }, { type: 'ByteArray', value: '0x' });
     else if (options.mode === 'verifier') {
       const verifier = normalizeHash(options.verifier);
       if (verifier === ZERO) throw new Error('Choose backup-owner mode to remove the verifier.');

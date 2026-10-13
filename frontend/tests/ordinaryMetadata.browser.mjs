@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'vite';
+import { startOrdinaryBrowserServer } from './fixtures/ordinaryBrowserServer.mjs';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -32,17 +32,11 @@ async function withWorkspace(name, run, setup = () => {}) {
   const previousEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   Object.assign(process.env, env);
   await mkdir(evidenceDir, { recursive: true });
-  const server = await createServer({
-    root,
-    envFile: false,
-    server: { host: '127.0.0.1', port: 0, watch: { ignored: ['**/*'] } },
-    logLevel: 'error',
-  });
+  const server = await startOrdinaryBrowserServer(root);
   let browser;
   let page;
   try {
-    await server.listen();
-    const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
+    const { origin } = server;
     browser = await chromium.launch({ headless: true });
     page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
     page.setDefaultTimeout(10000);
@@ -76,6 +70,8 @@ async function withWorkspace(name, run, setup = () => {}) {
     await page.screenshot({ path: join(evidenceDir, `${name}.png`), fullPage: true });
     await writeFile(join(evidenceDir, `${name}.txt`), await page.locator('body').innerText());
     assert.equal(await page.locator('vite-error-overlay').count(), 0);
+    assert.equal(await page.locator('.app-error-boundary').count(), 0, 'Vue errors caught by the app boundary must fail the browser gate');
+    assert.equal(await page.locator('script[src="/@vite/client"]').count(), 0, 'fixture serves the built app without optimizer/HMR');
     assert.deepEqual(errors, [], 'no browser errors');
     assert.deepEqual(fixture.state.failures, [], 'all fixture RPC calls must be handled');
     assert.deepEqual(fixture.state.unexpectedRequests, [], 'no external or unstubbed request may escape');
