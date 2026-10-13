@@ -1,6 +1,8 @@
 using System.Numerics;
+using System.ComponentModel;
 using Neo;
 using Neo.SmartContract.Framework;
+using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
@@ -8,6 +10,97 @@ namespace AbstractAccount
 {
     public partial class UnifiedSmartWallet
     {
+        // Permanent per-account latch. Kept outside AccountState to preserve its
+        // deployed five-field serialization layout. No transition clears this key.
+        private static readonly byte[] Prefix_OwnerOnlyRecovery = new byte[] { 0x22 };
+
+        [DisplayName("OwnerOnlyRecoveryFinalized")]
+        public static event AccountOnlyDelegate OnOwnerOnlyRecoveryFinalized = null!;
+
+        [Safe]
+        public static bool IsOwnerOnlyRecovery(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            GetAccountState(accountId);
+            return HasOwnerOnlyRecovery(accountId);
+        }
+
+        private static bool HasOwnerOnlyRecovery(UInt160 accountId)
+        {
+            return Storage.Get(Storage.CurrentContext,
+                Helper.Concat(Prefix_OwnerOnlyRecovery, (byte[])accountId)) != null;
+        }
+
+        private static void AssertPluginInstallationAllowed(UInt160 accountId, UInt160 module)
+        {
+            ExecutionEngine.Assert(module == UInt160.Zero || !HasOwnerOnlyRecovery(accountId),
+                "Owner-only recovery is permanent");
+        }
+
+        private static void AssertPluginConfigurationAllowed(UInt160 accountId)
+        {
+            ExecutionEngine.Assert(!HasOwnerOnlyRecovery(accountId), "Owner-only recovery is permanent");
+        }
+
+        private static void AssertRecoveryIdle(UInt160 accountId)
+        {
+            // A callback must not detach an account while its outer invocation can
+            // still return and restore old authority or state. Check every context,
+            // even if a previous implementation did not set the execution lock.
+            ExecutionEngine.Assert(!IsExecutionActive(accountId)
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifyContext, (byte[])accountId)) == null
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifierConfigContext, (byte[])accountId)) == null
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_HookConfigContext, (byte[])accountId)) == null
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifierExecutionContext, (byte[])accountId)) == null
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_HookExecutionContext, (byte[])accountId)) == null,
+                "Recovery context active");
+        }
+
+        /// <summary>
+        /// Recovers to permanent backup-owner authorization without any plugin callback.
+        /// Old plugin data can remain, but this account can never install plugins again.
+        /// This does not erase plugin data, refund plugin-held funds or revoke external allowances.
+        /// </summary>
+        public static void FinalizeEscapeToOwner(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            AccountState state = GetAccountState(accountId);
+            AssertNoMarketEscrow(accountId);
+            AssertRecoveryIdle(accountId);
+            ExecutionEngine.Assert(!HasOwnerOnlyRecovery(accountId), "Already recovered to owner-only");
+            ExecutionEngine.Assert(state.EscapeTriggeredAt > 0, "Escape not initiated");
+            ExecutionEngine.Assert(Runtime.Time >= state.EscapeTriggeredAt + ((BigInteger)state.EscapeTimelock * 1000), "Timelock active");
+            ExecutionEngine.Assert(state.BackupOwner != UInt160.Zero && Runtime.CheckWitness(state.BackupOwner), "Only backup owner can finalize");
+
+            UInt160 oldVerifier = state.Verifier;
+            UInt160 oldHook = state.HookId;
+            Storage.Put(Storage.CurrentContext, Helper.Concat(Prefix_OwnerOnlyRecovery, (byte[])accountId), new byte[] { 1 });
+            state.Verifier = UInt160.Zero;
+            state.HookId = UInt160.Zero;
+            state.EscapeTriggeredAt = 0;
+            Storage.Put(Storage.CurrentContext, Helper.Concat(Prefix_AccountState, (byte[])accountId), StdLib.Serialize(state));
+
+            ClearVerifyContext(accountId);
+            ClearVerifierConfigContext(accountId);
+            ClearHookConfigContext(accountId);
+            ClearVerifierExecutionContext(accountId);
+            ClearHookExecutionContext(accountId);
+            ClearExecutionLock(accountId);
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingPlatformOwnerRotation, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookCall, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_EscapeLastInitiated, (byte[])accountId));
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_MetadataUri, (byte[])accountId));
+            ClearMarketEscrow(accountId);
+
+            if (oldVerifier != UInt160.Zero) OnModuleRemoved(accountId, ModuleTypeVerifier, oldVerifier);
+            if (oldHook != UInt160.Zero) OnModuleRemoved(accountId, ModuleTypeHook, oldHook);
+            OnEscapeFinalized(accountId, UInt160.Zero);
+            OnOwnerOnlyRecoveryFinalized(accountId);
+        }
+
         // ========================================================================
         // 6. L1 Escape Hatch (Native Fallback)
         // ========================================================================
@@ -59,6 +152,8 @@ namespace AbstractAccount
 
         public static void FinalizeEscape(UInt160 accountId, UInt160 newVerifier, ByteString verifierParams)
         {
+            AssertPluginInstallationAllowed(accountId, newVerifier);
+            AssertRecoveryIdle(accountId);
             AccountState state = GetAccountState(accountId);
             AssertNoMarketEscrow(accountId);
             ExecutionEngine.Assert(state.EscapeTriggeredAt > 0, "Escape not initiated");

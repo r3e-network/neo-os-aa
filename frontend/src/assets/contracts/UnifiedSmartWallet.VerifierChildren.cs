@@ -24,6 +24,7 @@ namespace AbstractAccount
         /// </summary>
         public static object CallVerifierChild(UInt160 accountId, UInt160 childVerifier, string method, object[] args)
         {
+            AssertPluginConfigurationAllowed(accountId);
             AssertBackupOwner(accountId);
             AssertNoMarketEscrow(accountId);
             ExecutionEngine.Assert(!IsExecutionActive(accountId), "Cannot configure child during execution");

@@ -345,6 +345,7 @@ namespace AbstractAccount
         [Safe]
         public static bool CanConfigureVerifier(UInt160 accountId, UInt160 verifierContract)
         {
+            if (HasOwnerOnlyRecovery(accountId)) return false;
             byte[] key = Helper.Concat(Prefix_VerifierConfigContext, (byte[])accountId);
             ByteString? expectedVerifier = Storage.Get(Storage.CurrentContext, key);
             return expectedVerifier != null
@@ -365,6 +366,7 @@ namespace AbstractAccount
         [Safe]
         public static bool CanConfigureHook(UInt160 accountId, UInt160 hookContract)
         {
+            if (HasOwnerOnlyRecovery(accountId)) return false;
             byte[] key = Helper.Concat(Prefix_HookConfigContext, (byte[])accountId);
             ByteString? expectedHook = Storage.Get(Storage.CurrentContext, key);
             return expectedHook != null
@@ -378,6 +380,7 @@ namespace AbstractAccount
         [Safe]
         public static bool CanExecuteVerifier(UInt160 accountId, UInt160 callerContract, UInt160 verifierContract)
         {
+            if (HasOwnerOnlyRecovery(accountId)) return false;
             byte[] key = Helper.Concat(Prefix_VerifierExecutionContext, (byte[])accountId);
             ByteString? expectedRoot = Storage.Get(Storage.CurrentContext, key);
             if (expectedRoot == null) return false;
@@ -407,6 +410,7 @@ namespace AbstractAccount
         [Safe]
         public static bool CanExecuteHook(UInt160 accountId, UInt160 callerContract, UInt160 hookContract)
         {
+            if (HasOwnerOnlyRecovery(accountId)) return false;
             byte[] key = Helper.Concat(Prefix_HookExecutionContext, (byte[])accountId);
             ByteString? expectedRoot = Storage.Get(Storage.CurrentContext, key);
             if (expectedRoot == null) return false;

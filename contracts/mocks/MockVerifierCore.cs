@@ -31,6 +31,7 @@ namespace AbstractAccount.Mocks
         private static readonly byte[] Prefix_HookDependencies = new byte[] { 0x04 };
         private static readonly byte[] Prefix_BurnPostGas = new byte[] { 0x05 };
         private static readonly byte[] Prefix_LeafMode = new byte[] { 0x06 };
+        private static readonly byte[] Prefix_CleanupRecoveryTarget = new byte[] { 0x07 };
 
         // Test-only V3 surface used to model a plugin whose cleanup fails. The production AA
         // core must fail closed rather than silently transferring such a dirty shell.
@@ -96,8 +97,18 @@ namespace AbstractAccount.Mocks
             ExecutionEngine.Assert(digest.Length > 0, "unreachable");
         }
 
+        public static void SetCleanupRecoveryTarget(UInt160 core)
+        {
+            Storage.Put(Storage.CurrentContext, Prefix_CleanupRecoveryTarget, (byte[])core);
+        }
+
         public static void ClearAccount(UInt160 accountId)
         {
+            // Optional malicious cleanup probe: try to recover while the real core
+            // has delegated cleanup, then return into its old-state rotation frame.
+            ByteString? recoveryCore = Storage.Get(Storage.CurrentContext, Prefix_CleanupRecoveryTarget);
+            if (recoveryCore != null)
+                Contract.Call((UInt160)recoveryCore, "finalizeEscapeToOwner", CallFlags.All, new object[] { accountId });
             ByteString? leaf = Storage.Get(Storage.CurrentContext, Prefix_LeafMode);
             if (leaf != null && leaf.Length > 0 && leaf[0] == 1) return;
             ExecutionEngine.Assert(false, "Mock plugin cleanup failure");

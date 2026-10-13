@@ -151,6 +151,7 @@ namespace AbstractAccount
         public static void UpdateHook(UInt160 accountId, UInt160 newHookId)
         {
             AssertBackupOwner(accountId);
+            AssertPluginInstallationAllowed(accountId, newHookId);
             AssertNoMarketEscrow(accountId);
             if (newHookId != UInt160.Zero)
             {
@@ -204,6 +205,7 @@ namespace AbstractAccount
             AccountState state = GetAccountState(accountId);
             UInt160 previousHook = state.HookId;
 
+            AssertPluginInstallationAllowed(accountId, pending.NewHookId);
             if (pending.NewHookId != UInt160.Zero)
             {
                 AssertV3Hook(pending.NewHookId);
@@ -249,6 +251,7 @@ namespace AbstractAccount
         public static void UpdateVerifier(UInt160 accountId, UInt160 newVerifier, ByteString verifierParams)
         {
             AssertBackupOwner(accountId);
+            AssertPluginInstallationAllowed(accountId, newVerifier);
             AssertNoMarketEscrow(accountId);
 
             AccountState state = GetAccountState(accountId);
@@ -314,6 +317,7 @@ namespace AbstractAccount
             PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
             ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + ConfigUpdateTimelockMs, "Timelock not elapsed");
 
+            AssertPluginInstallationAllowed(accountId, pending.NewVerifier);
             if (pending.NewVerifier != UInt160.Zero)
             {
                 AssertV3Verifier(pending.NewVerifier);
@@ -528,6 +532,7 @@ namespace AbstractAccount
         /// </summary>
         public static object CallVerifier(UInt160 accountId, string method, object[] args)
         {
+            AssertPluginConfigurationAllowed(accountId);
             ExecutionEngine.Assert(IsMethodAllowed(method, AllowedVerifierMethods), "Verifier method not allowed");
             AssertBackupOwner(accountId);
             AssertNoMarketEscrow(accountId);
@@ -557,6 +562,7 @@ namespace AbstractAccount
         /// </summary>
         public static object CallHook(UInt160 accountId, string method, object[] args)
         {
+            AssertPluginConfigurationAllowed(accountId);
             ExecutionEngine.Assert(IsMethodAllowed(method, AllowedHookMethods), "Hook method not allowed");
             AssertBackupOwner(accountId);
             AssertNoMarketEscrow(accountId);
