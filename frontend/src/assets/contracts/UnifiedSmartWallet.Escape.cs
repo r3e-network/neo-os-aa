@@ -106,7 +106,7 @@ namespace AbstractAccount
         // ========================================================================
 
         /// <summary>
-        /// Starts the backup-owner escape flow. Finalization requires working plugin cleanup.
+        /// Starts the backup-owner escape flow. Choose plugin cleanup or permanent owner-only finalization.
         /// </summary>
         public static void InitiateEscape(UInt160 accountId)
         {

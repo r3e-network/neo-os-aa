@@ -114,14 +114,19 @@
 ;        persisted transaction (actualCost > 0). A container with zero total fee
 ;        is an invokescript estimation, not a chain transaction, and is settled
 ;        at the request in the source; that branch is outside this obligation.
+;        Persisted calls share one transaction-wide already-reserved total.
 ; ---------------------------------------------------------------------------
 (echo "OBL:reimbursement-cannot-exceed-request-or-actual-cost")
 (push)
 (declare-const requested Int)
 (declare-const actualCost Int)
-(define-fun settled () Int (ite (< requested actualCost) requested actualCost))
+(declare-const alreadyReserved Int)
+(define-fun remaining () Int (- actualCost alreadyReserved))
+(define-fun settled () Int (ite (< requested remaining) requested remaining))
 (assert (> requested 0))
 (assert (> actualCost 0))
+(assert (>= alreadyReserved 0))
+(assert (<= alreadyReserved actualCost))
 (assert (not (and (<= settled requested) (<= settled actualCost))))
 (check-sat)
 (pop)
@@ -189,6 +194,32 @@
 (declare-const nextCursor Int)
 (assert (= nextCursor (mod (+ (- SEQUENCE_LIMIT 1) 1) SEQUENCE_LIMIT)))
 (assert (= nextCursor 0))
+(check-sat)
+(pop)
+
+; OBL 7: successive calls add their reservation before any external callback.
+; Caller/account/paymaster identities do not partition the enclosing fee cap.
+(echo "OBL:transaction-cumulative-reservations-stay-within-fee")
+(push)
+(declare-const actualCost Int)
+(declare-const spent Int)
+(declare-const requested Int)
+(define-fun remaining () Int (- actualCost spent))
+(define-fun charge () Int (ite (< requested remaining) requested remaining))
+(assert (> actualCost 0))
+(assert (and (>= spent 0) (<= spent actualCost) (> requested 0)))
+(assert (not (and (>= (+ spent charge) spent) (<= (+ spent charge) actualCost))))
+(check-sat)
+(pop)
+(echo "CTRL:per-call-fee-cap-does-not-bound-total")
+(push)
+(declare-const actualCost Int)
+(declare-const first Int)
+(declare-const second Int)
+(assert (= actualCost 5))
+(assert (= first 3))
+(assert (= second 3))
+(assert (and (<= first actualCost) (<= second actualCost) (> (+ first second) actualCost)))
 (check-sat)
 (pop)
 

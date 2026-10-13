@@ -15,6 +15,13 @@ import verify
 
 
 class VerificationGateTests(unittest.TestCase):
+    def test_duplicate_cross_model_mutation_names_have_distinct_evidence_paths(self):
+        labels = [verify.coq_mutation_label(module, mutation)
+                  for module, mutations in verify.COQ_MODULES.items() for mutation in mutations]
+        self.assertEqual(len(labels), len(set(labels)))
+        self.assertNotEqual(verify.coq_mutation_label('NativeAuthorityEpoch.v', 'recovery-retains-verifier'),
+                            verify.coq_mutation_label('OrdinaryRecovery.v', 'recovery-retains-verifier'))
+
     def test_current_ordinary_receipt_is_tracked_and_source_bound(self):
         receipt_path = verify.ROOT.parent / 'docs/reports/aa-formal-ordinary-go-20261013.json'
         self.assertTrue(receipt_path.exists())
@@ -166,11 +173,70 @@ class VerificationGateTests(unittest.TestCase):
             'OG_011_successful_confirmation_clears_pending_and_sets_owner',
             'OG_012_successful_proposal_records_pending_owner_and_time',
             'OG_013_successful_confirmation_requires_current_registrar',
-            'OG_014_successful_proposal_requires_no_escape_or_escrow'):
+            'OG_014_successful_proposal_requires_no_escape_or_escrow',
+            'OG_015_owner_witness_is_independent_of_caller',
+            'OG_016_owner_can_cancel_through_another_caller',
+            'OG_017_owner_authorization_requires_witness',
+            'OG_018_delay_is_seven_days_in_milliseconds'):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinaryGovernance.v'])
         self.assertIn('contracts/UnifiedSmartWallet.PlatformRegistrar.cs', verify.SOURCE_FILES)
-        self.assertEqual(11, len(verify.COQ_MODULES['OrdinaryGovernance.v']))
+        self.assertEqual(14, len(verify.COQ_MODULES['OrdinaryGovernance.v']))
+        for path in ('contracts/UnifiedSmartWallet.Admin.cs', 'contracts/UnifiedSmartWallet.MarketEscrow.cs'):
+            self.assertIn(path, verify.SOURCE_FILES)
+
+    def test_ordinary_governance_millisecond_and_cleanup_correspondence(self):
+        self.assertEqual(604800000, verify.check_ordinary_governance_correspondence()['delayMilliseconds'])
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ('formal/coq/OrdinaryGovernance.v', 'contracts/UnifiedSmartWallet.Admin.cs',
+                         'contracts/UnifiedSmartWallet.PlatformRegistrar.cs', 'contracts/UnifiedSmartWallet.Escape.cs',
+                         'contracts/UnifiedSmartWallet.MarketEscrow.cs'):
+                destination = root / name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(verify.ROOT.parent / name, destination)
+            verify.check_ordinary_governance_correspondence(root)
+            source = root / 'contracts/UnifiedSmartWallet.Admin.cs'
+            source.write_text(source.read_text().replace('7L * 24 * 60 * 60 * 1000', '6L * 24 * 60 * 60 * 1000'))
+            with self.assertRaisesRegex(ValueError, 'millisecond delay'):
+                verify.check_ordinary_governance_correspondence(root)
+
+    def test_ordinary_sponsorship_is_transaction_wide_and_scoped(self):
+        self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinarySponsorship.v'])
+        model = (verify.ROOT / 'coq/OrdinarySponsorship.v').read_text()
+        for name in ('OS_001_same_transaction_retains_spend', 'OS_002_new_transaction_starts_at_zero',
+                     'OS_005_success_preserves_transaction_and_total_cap',
+                     'OS_007_multiple_calls_share_one_total_fee_cap', 'OS_008_exhausted_fee_rejects',
+                     'OS_009_failed_reservation_preserves_ledger', 'OS_010_failed_settlement_rolls_back_ledger',
+                     'OS_014_estimation_is_not_a_persisted_fee_bound',
+                     'OS_015_branch_free_cap_matches_abstract_charge'):
+            self.assertIn(name, verify.coq_declarations(model))
+        self.assertEqual(10, len(verify.COQ_MODULES['OrdinarySponsorship.v']))
+
+    def test_ordinary_sponsorship_source_reserves_before_each_callback(self):
+        self.assertTrue(verify.check_ordinary_sponsorship_correspondence()['reservationBeforeCallbacks'])
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / 'contracts/UnifiedSmartWallet.Paymaster.cs'
+            target.parent.mkdir(parents=True)
+            source = (verify.ROOT.parent / 'contracts/UnifiedSmartWallet.Paymaster.cs').read_text()
+            target.write_text(source.replace('BigInteger.Max(actualCost - budget.Reserved, 0)', 'actualCost'))
+            with self.assertRaisesRegex(ValueError, 'reservation source guard'):
+                verify.check_ordinary_sponsorship_correspondence(root)
+
+    def test_ordinary_recovery_is_callback_free_and_irreversible(self):
+        self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinaryRecovery.v'])
+        model = (verify.ROOT / 'coq/OrdinaryRecovery.v').read_text()
+        for name in ('OR_001_recovery_does_not_depend_on_old_plugin',
+                     'OR_002_recovery_requires_authority_and_safe_boundary',
+                     'OR_003_success_detaches_all_authority', 'OR_004_success_preserves_identity_and_nonce',
+                     'OR_005_failed_recovery_preserves_entire_projection',
+                     'OR_006_latched_account_rejects_nonzero_roots',
+                     'OR_007_configuration_never_clears_latch',
+                     'OR_008_successful_latched_configuration_has_no_roots',
+                     'OR_009_broken_old_plugin_does_not_block_recovery'):
+            self.assertIn(name, verify.coq_declarations(model))
+        self.assertEqual(16, len(verify.COQ_MODULES['OrdinaryRecovery.v']))
 
     def test_native_core_provenance_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -4,31 +4,36 @@
   This is a scoped state-machine model of the source-candidate platform owner
   rotation path. Registrar identity, owner witness, account binding, time,
   escape and escrow status are abstract inputs; C# to NEF/NeoVM refinement,
-  storage serialization and public deployment are outside this model.
+  storage serialization and public deployment are outside this model. Owner
+  witness is checked independently of the caller; only registrar authorization
+  binds CallingScriptHash. Time values use milliseconds, matching the pinned
+  MinUpgradeDelayMs source constant. Correct binding and valid UInt160 values
+  are preconditions of this projection, not properties of natural-number IDs.
 *)
-From Coq Require Import Bool PeanoNat Lia.
+From Coq Require Import Bool PeanoNat ZArith Lia.
+Open Scope Z_scope.
 
 Record GovernanceState : Type := mkGovernanceState {
   registrar : nat;
   platform_owner : nat;
   pending_owner : option nat;
-  pending_at : nat;
+  pending_at : Z;
   escape_active : bool;
   escrow_active : bool
 }.
 
-Definition min_upgrade_delay : nat := 7.
+Definition min_upgrade_delay : Z := 604800000.
 
 Definition valid_owner (owner : nat) : bool := negb (Nat.eqb owner 0).
 Definition registrar_is_current (state : GovernanceState) (caller : nat) : bool :=
-  (0 <? registrar state) && Nat.eqb caller (registrar state).
+  (0 <? registrar state)%nat && Nat.eqb caller (registrar state).
 Definition owner_is_current (state : GovernanceState) (caller : nat) (witness : bool) : bool :=
-  witness && (0 <? platform_owner state) && Nat.eqb caller (platform_owner state).
+  witness && (0 <? platform_owner state)%nat.
 Definition pending_is_empty (state : GovernanceState) : bool :=
   match pending_owner state with None => true | Some _ => false end.
 
 Definition propose_owner_rotation
-    (state : GovernanceState) (caller new_owner now : nat) : option GovernanceState :=
+    (state : GovernanceState) (caller new_owner : nat) (now : Z) : option GovernanceState :=
   if registrar_is_current state caller && valid_owner new_owner &&
      pending_is_empty state && negb (Nat.eqb new_owner (platform_owner state)) &&
      negb (escape_active state) && negb (escrow_active state)
@@ -38,19 +43,19 @@ Definition propose_owner_rotation
   else None.
 
 Definition confirm_guard
-    (state : GovernanceState) (caller now pending : nat) (new_owner_witness : bool) : bool :=
+    (state : GovernanceState) (caller pending : nat) (now : Z) (new_owner_witness : bool) : bool :=
   registrar_is_current state caller &&
-  Nat.leb (pending_at state + min_upgrade_delay) now && new_owner_witness &&
+  Z.leb (pending_at state + min_upgrade_delay) now && new_owner_witness &&
   valid_owner pending && negb (Nat.eqb pending (platform_owner state)) &&
   negb (escape_active state) && negb (escrow_active state).
 
 Definition confirm_owner_rotation
-    (state : GovernanceState) (caller now : nat) (new_owner_witness : bool)
+    (state : GovernanceState) (caller : nat) (now : Z) (new_owner_witness : bool)
     : option GovernanceState :=
   match pending_owner state with
   | None => None
   | Some new_owner =>
-      if confirm_guard state caller now new_owner new_owner_witness
+      if confirm_guard state caller new_owner now new_owner_witness
       then Some (mkGovernanceState
         (registrar state) new_owner None 0
         (escape_active state) (escrow_active state))
@@ -73,14 +78,14 @@ Definition clear_pending_on_boundary (state : GovernanceState) : GovernanceState
     (escape_active state) (escrow_active state).
 
 Definition apply_proposal
-    (state : GovernanceState) (caller new_owner now : nat) : GovernanceState :=
+    (state : GovernanceState) (caller new_owner : nat) (now : Z) : GovernanceState :=
   match propose_owner_rotation state caller new_owner now with
   | Some next => next
   | None => state
   end.
 
 Definition apply_confirmation
-    (state : GovernanceState) (caller now : nat) (new_owner_witness : bool)
+    (state : GovernanceState) (caller : nat) (now : Z) (new_owner_witness : bool)
     : GovernanceState :=
   match confirm_owner_rotation state caller now new_owner_witness with
   | Some next => next
@@ -129,12 +134,12 @@ Theorem OG_003_confirm_requires_delay_and_new_owner_witness :
   forall state caller now witness next,
     confirm_owner_rotation state caller now witness = Some next ->
     pending_owner state <> None /\
-    Nat.leb (pending_at state + min_upgrade_delay) now = true /\
+    Z.leb (pending_at state + min_upgrade_delay) now = true /\
     witness = true.
 Proof.
   intros state caller now witness next.
   destruct (pending_owner state) as [pending|] eqn:Hp.
-  - destruct (confirm_guard state caller now pending witness) eqn:E.
+  - destruct (confirm_guard state caller pending now witness) eqn:E.
     + intro H.
       unfold confirm_guard in E.
       repeat rewrite andb_true_iff in E.
@@ -160,7 +165,7 @@ Qed.
 Theorem OG_004_confirm_before_delay_preserves_state :
   forall state caller now witness,
     pending_owner state <> None ->
-    Nat.leb (pending_at state + min_upgrade_delay) now = false ->
+    Z.leb (pending_at state + min_upgrade_delay) now = false ->
     confirm_owner_rotation state caller now witness = None.
 Proof.
   intros state caller now witness Hp Hdelay.
@@ -246,7 +251,7 @@ Proof.
   intros state caller now witness next pending Hp H.
   unfold confirm_owner_rotation in H.
   rewrite Hp in H.
-  destruct (confirm_guard state caller now pending witness) eqn:E.
+  destruct (confirm_guard state caller pending now witness) eqn:E.
   - injection H as Hnext.
     subst next.
     simpl.
@@ -280,7 +285,7 @@ Proof.
   intros state caller now witness next pending Hp H.
   unfold confirm_owner_rotation in H.
   rewrite Hp in H.
-  destruct (confirm_guard state caller now pending witness) eqn:E.
+  destruct (confirm_guard state caller pending now witness) eqn:E.
   - unfold confirm_guard in E.
     repeat rewrite andb_true_iff in E.
     destruct E as [E _].
@@ -324,3 +329,26 @@ Print Assumptions OG_011_successful_confirmation_clears_pending_and_sets_owner.
 Print Assumptions OG_012_successful_proposal_records_pending_owner_and_time.
 Print Assumptions OG_013_successful_confirmation_requires_current_registrar.
 Print Assumptions OG_014_successful_proposal_requires_no_escape_or_escrow.
+
+Theorem OG_015_owner_witness_is_independent_of_caller :
+  forall state first second witness,
+    owner_is_current state first witness = owner_is_current state second witness.
+Proof. reflexivity. Qed.
+
+Example OG_016_owner_can_cancel_through_another_caller :
+  cancel_owner_rotation (mkGovernanceState 1 2 (Some 3%nat) 0 false false) 4 true =
+    Some (mkGovernanceState 1 2 None 0 false false).
+Proof. reflexivity. Qed.
+
+Theorem OG_017_owner_authorization_requires_witness :
+  forall state caller, owner_is_current state caller false = false.
+Proof. reflexivity. Qed.
+
+Example OG_018_delay_is_seven_days_in_milliseconds :
+  min_upgrade_delay = 604800000.
+Proof. reflexivity. Qed.
+
+Print Assumptions OG_015_owner_witness_is_independent_of_caller.
+Print Assumptions OG_016_owner_can_cancel_through_another_caller.
+Print Assumptions OG_017_owner_authorization_requires_witness.
+Print Assumptions OG_018_delay_is_seven_days_in_milliseconds.

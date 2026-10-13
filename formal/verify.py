@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parent
 ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
              "coq/ProxyWitnessScript.v",
              "coq/OrdinaryGovernance.v",
+             "coq/OrdinarySponsorship.v",
+             "coq/OrdinaryRecovery.v",
              "coq/CallbackPluginTopology.v", "coq/VerifierGasBudget.v",
              "coq/AuthorizationEvidence.v", "coq/WitnessRuleSemantics.v",
              "coq/NeoVmCallSubset.v", "coq/AttestationProofBinding.v",
@@ -44,6 +46,8 @@ RUNTIME_PROFILES = {
 }
 PUBLIC_MODELS = {"coq/UnifiedSmartWalletAA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
                  "coq/OrdinaryGovernance.v",
+                 "coq/OrdinarySponsorship.v",
+                 "coq/OrdinaryRecovery.v",
                  "tla/UnifiedSmartWalletAA.tla", "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
 MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
                          ["v3", "platform"] if name in PUBLIC_MODELS else ["native"])
@@ -61,10 +65,13 @@ NATIVE_CORE_REQUIRED_FILES = {
 }
 
 SOURCE_FILES = {"contracts/compile.sh", "contracts/UnifiedSmartWallet.csproj",
+                "contracts/UnifiedSmartWallet.cs",
                 "contracts/UnifiedSmartWallet.VerifierChildren.cs",
                 "contracts/UnifiedSmartWallet.Execution.cs",
                 "contracts/UnifiedSmartWallet.Accounts.cs",
                 "contracts/UnifiedSmartWallet.PlatformRegistrar.cs",
+                "contracts/UnifiedSmartWallet.Admin.cs",
+                "contracts/UnifiedSmartWallet.MarketEscrow.cs",
                 "contracts/UnifiedSmartWallet.Internal.cs",
                 "contracts/UnifiedSmartWallet.Models.cs",
                 "contracts/UnifiedSmartWallet.State.cs",
@@ -212,14 +219,14 @@ ORDINARY_GOVERNANCE_COQ_MUTATIONS = {
         "     negb (escape_active state) && negb (escrow_active state)\n  then Some",
         "     negb (escape_active state) && true\n  then Some"),
     "confirmation-delay": (
-        "Nat.leb (pending_at state + min_upgrade_delay) now && new_owner_witness &&",
+        "Z.leb (pending_at state + min_upgrade_delay) now && new_owner_witness &&",
         "true && new_owner_witness &&"),
     "confirmation-witness": (
         "&& new_owner_witness &&\n  valid_owner pending &&",
         "&& true &&\n  valid_owner pending &&"),
     "confirmation-registrar-binding": (
-        "registrar_is_current state caller &&\n  Nat.leb",
-        "true &&\n  Nat.leb"),
+        "registrar_is_current state caller &&\n  Z.leb",
+        "true &&\n  Z.leb"),
     "cancellation-authorization": (
         "if registrar_is_current state caller || owner_is_current state caller owner_witness\n  then",
         "if true\n  then"),
@@ -232,6 +239,66 @@ ORDINARY_GOVERNANCE_COQ_MUTATIONS = {
     "proposal-failure-commits": (
         "| None => state\n  end.\n\nDefinition apply_confirmation",
         "| None => clear_pending_on_boundary state\n  end.\n\nDefinition apply_confirmation"),
+    "owner-witness-requires-caller-identity": (
+        "witness && (0 <? platform_owner state)%nat.",
+        "witness && (0 <? platform_owner state)%nat && Nat.eqb caller (platform_owner state)."),
+    "owner-witness-bypass": (
+        "witness && (0 <? platform_owner state)%nat.",
+        "true && (0 <? platform_owner state)%nat."),
+    "governance-delay-unit": (
+        "Definition min_upgrade_delay : Z := 604800000.",
+        "Definition min_upgrade_delay : Z := 7."),
+}
+ORDINARY_SPONSORSHIP_COQ_MUTATIONS = {
+    "sponsorship-resets-same-transaction-spend": (
+        "then ledger_spent before else 0.", "then 0 else 0."),
+    "sponsorship-retains-old-transaction-spend": (
+        "then ledger_spent before else 0.", "then ledger_spent before else ledger_spent before."),
+    "sponsorship-ignores-remaining-fee": (
+        "else Z.min requested (Z.max (cost - spent) 0).", "else requested."),
+    "sponsorship-overpays-request": (
+        "else Z.min requested (Z.max (cost - spent) 0).", "else Z.max (cost - spent) 0."),
+    "sponsorship-does-not-reserve": (
+        "then Some (mkLedger tx (spent + amount))", "then Some (mkLedger tx spent)"),
+    "sponsorship-zero-charge-accepted": (
+        "Z.leb 0 spent && Z.ltb 0 amount", "Z.leb 0 spent && true"),
+    "sponsorship-failed-reservation-commits": (
+        "Some next => next | None => before end.", "Some next => next | None => mkLedger tx 0 end."),
+    "sponsorship-failed-settlement-retains-reservation": (
+        "if settlement_ok then reserved else before.", "if settlement_ok then reserved else reserved."),
+    "sponsorship-quote-disabled": (
+        "if Z.eqb cost 0 then requested", "if Z.eqb cost 0 then 0"),
+    "sponsorship-list-skips-first-reservation": (
+        "Some next => reserve_many tx cost rest next", "Some next => reserve_many tx cost rest before"),
+}
+ORDINARY_RECOVERY_COQ_MUTATIONS = {
+    "recovery-trusts-old-plugin": (
+        "if mature && owner_witness && negb locked && negb escrow",
+        "if mature && owner_witness && negb locked && negb escrow && old_plugin_ok"),
+    "recovery-bypasses-maturity": (
+        "if mature && owner_witness && negb locked", "if true && owner_witness && negb locked"),
+    "recovery-bypasses-owner": (
+        "if mature && owner_witness && negb locked", "if mature && true && negb locked"),
+    "recovery-bypasses-lock": (
+        "owner_witness && negb locked && negb escrow", "owner_witness && true && negb escrow"),
+    "recovery-bypasses-escrow": (
+        "owner_witness && negb locked && negb escrow", "owner_witness && negb locked && true"),
+    "recovery-retains-verifier": ("true false false false false.", "true true false false false."),
+    "recovery-retains-hook": ("true false false false false.", "true false true false false."),
+    "recovery-retains-intents": ("true false false false false.", "true false false true false."),
+    "recovery-retains-contexts": ("true false false false false.", "true false false false true."),
+    "recovery-does-not-set-latch": ("true false false false false.", "false false false false false."),
+    "recovery-resets-nonce": (
+        "mkRecoveryState (account_identity before) (retained_nonce before)\n    true", "mkRecoveryState (account_identity before) 0\n    true"),
+    "recovery-changes-identity": (
+        "mkRecoveryState (account_identity before) (retained_nonce before)\n    true", "mkRecoveryState 0 (retained_nonce before)\n    true"),
+    "recovery-failure-detaches": ("Some next => next | None => before end.", "Some next => next | None => detached before end."),
+    "recovery-reopens-plugin-installation": (
+        "if owner_only before && (verifier || hook) then None", "if false then None"),
+    "recovery-configuration-clears-latch": (
+        "(owner_only before) verifier hook (pending_intents before)", "false verifier hook (pending_intents before)"),
+    "recovery-allows-latched-repeat": (
+        "&& negb escrow && negb (owner_only before)", "&& negb escrow && true"),
 }
 VERIFIER_GAS_BUDGET_COQ_MUTATIONS = {
     # These mutations remove the concrete budget obligations.  They must make
@@ -672,6 +739,8 @@ COQ_MODULES = {
     "NativeSessionPolicy.v": NATIVE_SESSION_COQ_MUTATIONS,
     "UnifiedSmartWalletAA.v": COQ_MUTATIONS,
     "OrdinaryGovernance.v": ORDINARY_GOVERNANCE_COQ_MUTATIONS,
+    "OrdinarySponsorship.v": ORDINARY_SPONSORSHIP_COQ_MUTATIONS,
+    "OrdinaryRecovery.v": ORDINARY_RECOVERY_COQ_MUTATIONS,
     "MultiSigPolicy.v": MULTISIG_COQ_MUTATIONS,
     "ProxyWitnessScript.v": PROXY_WITNESS_COQ_MUTATIONS,
     "CallbackPluginTopology.v": CALLBACK_PLUGIN_COQ_MUTATIONS,
@@ -768,6 +837,70 @@ def check_inventory(root=ROOT):
     for name, expected in lock["sources"].items():
         actual = hashlib.sha256((root.parent / name).read_bytes()).hexdigest()
         require(actual == expected, f"Source drift: {name}; review correspondence before updating pins")
+
+
+def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
+    """Narrow reviewed source guards, not a C#/VM refinement theorem."""
+    admin = (repo_root / "contracts/UnifiedSmartWallet.Admin.cs").read_text()
+    model = (repo_root / "formal/coq/OrdinaryGovernance.v").read_text()
+    factors = re.search(r"MinUpgradeDelayMs\s*=\s*(\d+)L\s*\*\s*(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*;", admin)
+    require(factors is not None, "Ordinary governance source delay expression changed")
+    source_delay = 1
+    for factor in factors.groups():
+        source_delay *= int(factor)
+    model_delay = re.search(r"Definition min_upgrade_delay : Z := (\d+)\.", model)
+    require(model_delay is not None and source_delay == int(model_delay.group(1)) == 604800000,
+            "Ordinary governance millisecond delay correspondence changed")
+    registrar = (repo_root / "contracts/UnifiedSmartWallet.PlatformRegistrar.cs").read_text()
+    require("bool owner = state.BackupOwner != UInt160.Zero && Runtime.CheckWitness(state.BackupOwner);" in registrar,
+            "Ordinary owner cancellation witness source guard changed")
+    for name in ("Escape", "MarketEscrow"):
+        source = (repo_root / f"contracts/UnifiedSmartWallet.{name}.cs").read_text()
+        require("Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingPlatformOwnerRotation, (byte[])accountId));" in source,
+                f"Ordinary pending rotation cleanup source guard missing: {name}")
+    return {"delayMilliseconds": source_delay, "ownerWitnessIndependentOfCaller": True,
+            "boundary": "Reviewed source fragments and arithmetic equality; binding, witness and VM refinement external"}
+
+
+def check_ordinary_sponsorship_correspondence(repo_root=ROOT.parent):
+    """Bind the cumulative model to selected reviewed source expressions/order."""
+    source = (repo_root / "contracts/UnifiedSmartWallet.Paymaster.cs").read_text()
+    for fragment in ("if (budget.TransactionHash != transactionHash)", "budget.Reserved = 0;",
+                     "BigInteger.Max(actualCost - budget.Reserved, 0) + estimationFlag * requested",
+                     "BigInteger settled = BigInteger.Min(requested, cap);", "budget.Reserved += settled;",
+                     "Storage.Put(Storage.CurrentContext, Prefix_TransactionReimbursement, StdLib.Serialize(budget));"):
+        require(fragment in source, "Ordinary sponsorship reservation source guard changed: " + fragment)
+    entries = re.split(r"public static object(?:\[\])? ExecuteSponsoredUserOps?\(", source)[1:]
+    require(len(entries) == 2, "Ordinary sponsorship entrypoint roster changed")
+    for entry in entries:
+        require(entry.index("CapReimbursementToActualCost(reimbursementAmount)") < entry.index("Contract.Call("),
+                "Ordinary sponsorship reservation must precede external discovery/execution")
+    return {"ledgerScope": "oneCoreOneTransactionAllAccountsSponsorsPaymasters",
+            "reservationBeforeCallbacks": True, "zeroFeeEstimationIsRealFeeProof": False,
+            "boundary": "Reviewed expression/order fragments; storage, tx identity, fees and VM rollback external"}
+
+
+def check_ordinary_recovery_correspondence(repo_root=ROOT.parent):
+    """Selected guards only; arbitrary storage/entrypoint refinement remains external."""
+    source = (repo_root / "contracts/UnifiedSmartWallet.Escape.cs").read_text()
+    begin = source.index("public static void FinalizeEscapeToOwner(")
+    end = source.index("public static void InitiateEscape(", begin)
+    recovery = source[begin:end]
+    require("Contract.Call(" not in recovery, "Owner-only recovery may not call old plugins")
+    for fragment in ("AssertNoMarketEscrow(accountId);", "AssertRecoveryIdle(accountId);",
+                     "Runtime.CheckWitness(state.BackupOwner)", "state.Verifier = UInt160.Zero;",
+                     "state.HookId = UInt160.Zero;", "Helper.Concat(Prefix_OwnerOnlyRecovery, (byte[])accountId), new byte[] { 1 }"):
+        require(fragment in recovery, "Ordinary callback-free recovery source guard changed: " + fragment)
+    require("module == UInt160.Zero || !HasOwnerOnlyRecovery(accountId)" in source,
+            "Ordinary irreversible installation latch source guard changed")
+    require("Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_OwnerOnlyRecovery" not in source,
+            "Ordinary recovery source may not remove permanent latch")
+    accounts = (repo_root / "contracts/UnifiedSmartWallet.Accounts.cs").read_text()
+    for argument in ("newHookId", "pending.NewHookId", "newVerifier", "pending.NewVerifier"):
+        require(f"AssertPluginInstallationAllowed(accountId, {argument});" in accounts,
+                "Ordinary module installation source guard missing: " + argument)
+    return {"callbackFree": True, "latch": "irreversibleOwnerOnlyNoEpoch",
+            "boundary": "Reviewed source guards; all-entrypoint/storage/nonce/witness/VM refinement external"}
 
 
 def multisig_config_valid(verifiers, threshold):
@@ -989,6 +1122,11 @@ def artifact_hashes():
     return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in sorted(ARTIFACTS)}
 
 
+def coq_mutation_label(module, name):
+    """Mutation names may repeat between models; directories/logs must not."""
+    return Path(module).stem + "-" + name
+
+
 def coq_declarations(source):
     # Strip nested comments for auditing declarations, not for proof compilation.
     clean = source
@@ -1128,6 +1266,9 @@ def main():
         check_inventory()
         source_lock = json.loads((ROOT / "source-lock.json").read_text())
         report["nativeCoreSourceSha256"] = check_native_core_sources(source_lock, args.native_core_root)
+        report["ordinaryGovernanceCorrespondence"] = check_ordinary_governance_correspondence()
+        report["ordinarySponsorshipCorrespondence"] = check_ordinary_sponsorship_correspondence()
+        report["ordinaryRecoveryCorrespondence"] = check_ordinary_recovery_correspondence()
         report["multisigBoundedModel"] = check_multisig_bounded()
         report["nativeCompositeBoundedModel"] = check_native_composite_bounded()
         coqc = executable("COQC", "coqc")
@@ -1165,7 +1306,8 @@ def main():
                 report["coqDeclarations"][module] = len(names)
                 for name, (old, new) in mutations.items():
                     mutant = replace_once(source, old, new)
-                    directory = work / ("coq-" + name)
+                    label = coq_mutation_label(module, name)
+                    directory = work / ("coq-" + label)
                     directory.mkdir()
                     (directory / module).write_text(mutant)
                     # First compile just the definitions: a malformed mutation is
@@ -1173,9 +1315,9 @@ def main():
                     prefix = re.split(r"^(?:Lemma|Theorem|Corollary|Proposition|Fact|Example|Remark) ",
                                       mutant, maxsplit=1, flags=re.M)[0]
                     (directory / "Definitions.v").write_text(prefix)
-                    rc, out = run([coqc, "-q", "Definitions.v"], directory, logs, name + "-definitions")
+                    rc, out = run([coqc, "-q", "Definitions.v"], directory, logs, label + "-definitions")
                     require(rc == 0, f"Invalid model mutation: {name}")
-                    rc, out = run([coqc, "-q", module], directory, logs, name + "-mutant")
+                    rc, out = run([coqc, "-q", module], directory, logs, label + "-mutant")
                     require(rc != 0 and "Error:" in out and "Syntax error" not in out,
                             f"Coq mutation escaped or failed without proof rejection: {name}")
                 report["coqMutationsRejected"][module] = list(mutations)

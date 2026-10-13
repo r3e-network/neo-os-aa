@@ -1,0 +1,57 @@
+{
+  "schema": "neoos-aa-formal-container-build/v1",
+  "status": "PASS_EXACT_REVIEWED_CACHE_INPUT",
+  "imageId": "sha256:49175ab91d07c3446004b93c667b581d34c1702b61cc1d937c8218f439b00941",
+  "platform": "linux/arm64",
+  "recipe": {
+    "dockerfile": "formal/Dockerfile",
+    "dockerfileSha256": "3efafc80f1e053d480678140b540232ca7597c724a4130df9d4fec94574385ab",
+    "repositoryPinUnchanged": true,
+    "wrapperUnchanged": true,
+    "buildArg": {
+      "TLA_JAR_URL": "http://192.168.5.2:62574/tla2tools.jar (temporary localhost single-file server; stopped)"
+    }
+  },
+  "tlaTool": {
+    "expectedSha256": "7beec0f04818732a62fa193731711a99aa4f11279499b2360a7d156c519ea78d",
+    "containerSha256": "7beec0f04818732a62fa193731711a99aa4f11279499b2360a7d156c519ea78d",
+    "source": "Existing reviewed cache /tmp/tla2tools.jar supplied by a temporary localhost single-file server",
+    "defaultMutableUrl": "https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar",
+    "defaultUrlObservedSha256": "c0d2f72abc30e92871bb16c56f6878612eccd936bf7ca5fa7e4e324200a0a5c4",
+    "defaultUrlAssetId": 635491991,
+    "defaultUrlAssetUpdatedAtUtc": "2026-10-13T01:18:00Z",
+    "defaultUrlBuildOutcome": "REJECTED_CHECKSUM_MISMATCH",
+    "defaultUrlRebuildVerified": false
+  },
+  "toolVersions": {
+    "java": "openjdk version \"21.0.12.1\" 2026-08-18",
+    "coq": "The Coq Proof Assistant, version 8.18.0",
+    "z3": "Z3 version 4.8.12 - 64 bit",
+    "tlc": "TLC2 Version 2026.10.06.014338 (rev: 94d0c50)"
+  },
+  "nativeCore": {
+    "commit": "838436649f3763b471db6cef39924d8f9bbc367a",
+    "exactLockedSourceFiles": 310,
+    "sourceSnapshotSha256": "ea103a834cb125da97087f36f3dd6cfa43d367b37faa3501778d5a77cd210cfc",
+    "mount": "read-only copy of exactly source-lock nativeCoreSources; no git metadata or environment files"
+  },
+  "proof": {
+    "receipt": "docs/reports/aa-formal-ordinary-closure-docker-20261013.json",
+    "sha256": "283e7517b9c113fb829f4735206da2c882e84be8065ffbeae09ed8259bc9289e",
+    "modelChecksPassed": true,
+    "implementationVerified": false,
+    "coqModules": 29,
+    "coqDeclarations": 490,
+    "coqMutationsRejected": 283,
+    "tlcMutationsRejected": 4,
+    "containerRegressionTestsPassed": 68
+  },
+  "startedServicesRestored": {
+    "Colima default": "stopped (original state)",
+    "temporary localhost JAR server": "stopped"
+  },
+  "boundary": "Verified container execution using exact reviewed cached TLA bytes. Current mutable GitHub URL fails the unchanged checksum gate; no default-URL rebuild or full implementation/refinement claim.",
+  "completedAtUtc": "2026-10-13T03:14:29.754021+00:00",
+  "servicesRestoredAtUtc": "2026-10-13T03:15:17.052122+00:00",
+  "publicChainNetworksTouched": false
+}

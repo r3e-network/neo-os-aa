@@ -2,17 +2,63 @@
 
 ## Status
 
-### Current host gate (2026-10-13)
+### Current source-candidate host closure (2026-10-13)
 
-The current repository source and model snapshot passes the host formal gate:
+The frozen ordinary source-candidate snapshot passes the host model gate:
+**29 Coq modules, 490 closed declarations, 287 rejected semantic mutations**
+(283 Coq and four TLA), **61,460 TLC distinct states**, and **seven SMT obligations
+with seven controls**. The gate checks 59 AA source inputs and 310 native-core
+source inputs before and after verification. The runner regression suite passes
+68 tests. The tracked receipt is
+[`aa-formal-ordinary-closure-20261013.json`](reports/aa-formal-ordinary-closure-20261013.json)
+(SHA-256 `7ad982a403b7c2b953c946f49ce42fe544be1b87fa3fbdd668078623070bc5b9`);
+it is byte-identical to
+`formal/.runs/ordinary-closure-final-r3-20261013/result.json`.
+The host used Rocq 9.2, Z3 5.1.0, OpenJDK 26.0.2.1, and the reviewed TLA jar
+with SHA-256 `7beec0f04818732a62fa193731711a99aa4f11279499b2360a7d156c519ea78d`.
+
+This closes **GO for the declared ordinary protocol abstractions and reviewed
+source-snapshot checks**: governance authorization and delay, cumulative
+transaction sponsorship reservations, and permanent owner-only recovery are
+included. `implementationVerified` remains **false**. Source-fragment checks
+and model proofs do not establish C# to NEF to NeoVM refinement, all-entrypoint
+storage semantics, cryptography, complete fee accounting, arbitrary plugin
+liveness, or public activation.
+
+The independent pinned-container gate also passes this same source/model
+snapshot with Coq 8.18.0, Z3 4.8.12 and OpenJDK 21.0.12.1, including all 68 runner
+regression tests. The container receipt is
+[`aa-formal-ordinary-closure-docker-20261013.json`](reports/aa-formal-ordinary-closure-docker-20261013.json)
+(SHA-256 `283e7517b9c113fb829f4735206da2c882e84be8065ffbeae09ed8259bc9289e`).
+Its source, native-core, model artifact, profile and proof-result maps equal the
+host receipt. It ran immutable image
+`sha256:49175ab91d07c3446004b93c667b581d34c1702b61cc1d937c8218f439b00941`
+with the same exact TLA jar pin. The image build used the reviewed cached
+`/tmp/tla2tools.jar` through the existing `TLA_JAR_URL` argument and a temporary
+localhost server, which was stopped after the build. The default GitHub release
+URL currently serves different bytes and fails the unchanged SHA-256 guard;
+this run does not claim a successful rebuild from that mutable URL. Neither the
+Dockerfile nor wrapper was modified to bypass the pin. The build-input and
+service-cleanup evidence is
+[`aa-formal-container-build-20261013.json`](reports/aa-formal-container-build-20261013.json)
+(SHA-256 `d17b6b6d61568bdad038adf19baa3615d7fce00f1fad9fa9de82cda1e9891a8c`).
+The first container attempt exposed a scratch
+path collision between identically named mutations in different models; the
+runner now namespaces evidence by module, and the complete rerun passes.
+Both environments report `modelChecksPassed: true` and
+`implementationVerified: false`.
+
+### Previous host snapshot (2026-10-13)
+
+The previous ordinary-governance source and model snapshot passed the host formal gate:
 **27 Coq modules, 460 closed declarations, 258 rejected semantic mutations,
 61,460 TLC distinct states, six SMT obligations and six controls**, with the
 native core roster checked at 310 exact source files. The tracked ordinary-governance
 receipt is [`aa-formal-ordinary-go-20261013.json`](reports/aa-formal-ordinary-go-20261013.json)
 (SHA-256 `a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21`).
 The verification run also wrote `formal/.runs/ordinary-go-20261013/result.json`;
-the tracked copy is the reviewable source-bound evidence for the current
-implementation source/model snapshot.
+the tracked copy retains the source/model identities validated at that checkpoint.
+It does not certify subsequent sponsorship or owner-only recovery changes.
 It ran with OpenJDK 26.0.2.1.
 The earlier receipt `formal/.runs/final-20261013-platform/result.json` (SHA-256
 `f1b0f876b9219bf4cab19f3da6beeaaed8ef50756564eb9e52b75389b7dcf887`) covers
@@ -30,7 +76,7 @@ child budget, and the pinned public ABI still exposes immediate platform-account
 backup-owner rotation. The source candidate now contains a two-stage
 proposal/confirmation/cancellation path with a new-owner witness, but closing
 the public boundary requires an ABI migration from the pinned 90-entry artifact
-to the reviewed 98-entry source candidate, an upgraded artifact, and public
+to the reviewed source-candidate ABI, an upgraded artifact, and public
 readback; this repository does not relabel it as closed based on static tests.
 
 The ordinary source candidate now has an explicit Coq governance model
@@ -39,6 +85,35 @@ pending proposals, seven-day confirmation delay, new-owner witness, escape and
 escrow exclusion, cancellation, boundary cleanup, and failed-transition
 atomicity. This is a bounded state-machine correspondence model; it does not
 prove storage serialization, C# to NEF/NeoVM refinement, or public deployment.
+
+The current governance model uses millisecond `Z` values and the exact
+604,800,000 ms delay. The runner recomputes the pinned C# delay expression and
+compares that value, and pins the escape and market settlement cleanup sources.
+Owner cancellation requires the current owner's witness independently of the
+calling script. Natural-number owner IDs abstract nonzero identities; valid
+UInt160 values and matching account bindings are preconditions of the projection.
+Governance failure proofs preserve the governance record, which does not model
+nonce storage. They do not prove current-owner consent to a registrar proposal.
+
+`OrdinarySponsorship.v` models one ledger per core and transaction shared across
+accounts, sponsors, paymasters, single calls, batches and nested execution.
+Reservations precede external callbacks; repeated successful reservations sum
+to at most the positive enclosing transaction fee. A theorem relates the
+abstract charge to the branch-free source expression. Zero-fee RPC estimation
+retains requested quotes and has no persisted-fee-bound claim. Transaction hash
+identity, fees, stored ledger integrity, enclosing-transaction rollback and actual
+token settlement remain implementation correspondence obligations.
+
+`OrdinaryRecovery.v` models the source candidate's callback-free recovery to an
+irreversible owner-only latch. It proves independence from old plugin outcomes,
+maturity/witness/lock/escrow guards, root/context/intent detachment, retained
+identity and nonce projections, rejection of repeated recovery, and rejection
+of nonzero root installation after recovery. It has no transition that reopens
+plugin authority and does not claim native authority-epoch semantics. Concrete
+storage cleanup, all-entrypoint enforcement and witness validity require the
+matching source review and VM tests. Irreversibility is scoped to this version's
+modeled transitions; administrative code upgrades and future protocol versions
+are outside that claim.
 
 ### ABI 2 convergence boundary
 
@@ -572,6 +647,9 @@ models under `verified/` for its own `verify.sh`.
 |---|---|
 | `formal/coq/UnifiedSmartWalletAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating, success-only state transitions, and the rule that an absent hook/verifier cannot fail a callback phase |
 | `formal/coq/MultiSigPolicy.v` | **Public V3/PLATFORM only:** bounded ten-child configuration, exact signature cardinality and threshold support; child identity is abstract |
+| `formal/coq/OrdinaryGovernance.v` | **Public V3/PLATFORM source candidate:** owner-witness cancellation independent of caller, exact millisecond delay, pending rotation and rollback; binding/identity validity is a precondition |
+| `formal/coq/OrdinarySponsorship.v` | **Public V3/PLATFORM source candidate:** transaction-wide cumulative reservation cap, request bound, zero-fee estimation control and failure rollback; no storage/fee/VM refinement |
+| `formal/coq/OrdinaryRecovery.v` | **Public V3/PLATFORM source candidate:** callback-free recovery and irreversible owner-only latch with projected identity/nonce retention; no storage or all-entrypoint refinement |
 | `formal/coq/NativeCompositePhase.v` | **Native ABI 2 only:** first-threshold selection, one-operation receipt ownership and discard, approved-child grants, all-active pins, and pre/post policy equality under bounds 3/2/2/3; no byte-copy, hash, crypto or gas-feasibility refinement |
 | `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected direct `executeUserOp`/`executeUserOps` call with its two-argument pack, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
 | `formal/coq/CallbackPluginTopology.v` | Closed abstract correspondence model for the six-field hook callback tuple, configured-vs-absent callback phases, success/callback ordering, CalledByEntry/Custom target binding, and fail-closed plugin cleanup/rotation; it is not a proof of NeoVM dispatch or arbitrary plugin storage |
@@ -1004,9 +1082,9 @@ The earlier lifecycle host snapshot is recorded in
 `docs/reports/aa-formal-gate-20261006-native-lifecycle.json`: 18 modules,
 223 closed declarations, 105 rejected semantic mutations, 61,460 distinct TLC
 states, six SMT obligations and six controls; the runner has 42 passing tests.
-The pinned container image is unavailable on the accessible daemon, so this
-snapshot has no current container PASS. Earlier successful container receipts
-remain historical and do not cover the new module.
+At that checkpoint the pinned container image was unavailable on the accessible
+daemon, so the dated snapshot had no container PASS. The current container
+receipt in Status includes this model; earlier receipts remain historical.
 
 `docs/reports/aa-neoexpress-native-state-20261006.json` records eight private
 state-initializer/serialization round trips. They used a node with no native
@@ -1025,11 +1103,12 @@ existing bounded-budget models cover ancestor accounting. It does not prove
 application-engine C# refinement, full scheduling, or complete native service
 behavior.
 
-The current native-dispatch host receipt is
+The dated native-dispatch host receipt is
 `docs/reports/aa-formal-gate-20261006-native-dispatch.json`: 19 modules,
 236 closed declarations, 112 rejected semantic mutations, 61,460 distinct TLC
-states and 43 passing runner tests. The pinned-container rerun remains
-unavailable; no older container PASS is promoted to this model snapshot.
+states and 43 passing runner tests. Its pinned-container rerun was unavailable
+at that checkpoint; the current container receipt in Status includes this
+model without promoting older evidence.
 
 `docs/reports/aa-neoexpress-native-activation-20261006.json` records a private
 Verification-trigger regression: the historical runtime accepted a bounded
