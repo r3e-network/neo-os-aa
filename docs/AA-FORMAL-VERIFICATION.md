@@ -553,7 +553,7 @@ models under `verified/` for its own `verify.sh`.
 
 | Artifact | Scope |
 |---|---|
-| `formal/coq/UnifiedSmartWalletAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating and success-only state transitions |
+| `formal/coq/UnifiedSmartWalletAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating, success-only state transitions, and the rule that an absent hook/verifier cannot fail a callback phase |
 | `formal/coq/MultiSigPolicy.v` | **Public V3/PLATFORM only:** bounded ten-child configuration, exact signature cardinality and threshold support; child identity is abstract |
 | `formal/coq/NativeCompositePhase.v` | **Native ABI 2 only:** first-threshold selection, one-operation receipt ownership and discard, approved-child grants, all-active pins, and pre/post policy equality under bounds 3/2/2/3; no byte-copy, hash, crypto or gas-feasibility refinement |
 | `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected direct `executeUserOp`/`executeUserOps` call with its two-argument pack, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
@@ -694,6 +694,13 @@ foundation artifact may still admit a wider, unsigned-192-bit query range until
 it is republished; that does not make those upper-half channels executable and
 is not native-profile conformance. The native codec rejects channels at or above
 `2^191`.
+
+The ordinary execution model scopes callback predicates to the configured
+modules: an absent hook or verifier has no callback phase that can reject the
+operation, while an installed module must return normally. This closes the
+previously implicit `hookInstalled` state in the abstract model. Callback
+noninterference, callback storage isolation and the correspondence from these
+predicates to concrete NeoVM faults remain separate runtime obligations.
 
 The AA core rejects negative and over-width values, while the VM itself limits
 an Integer to a signed 32-byte representation. Earlier documentation incorrectly

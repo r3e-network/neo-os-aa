@@ -219,6 +219,14 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("| VerifierPost", model)
         self.assertIn("PostHook; VerifierPost; Emit", model)
 
+    def test_ordinary_execution_scopes_optional_callbacks(self):
+        model = (verify.ROOT / "coq" / "UnifiedSmartWalletAA.v").read_text()
+        declarations = verify.coq_declarations(model)
+        self.assertIn("AA_020_disabled_callbacks_do_not_gate_execution", declarations)
+        self.assertIn("pre_callback_valid", model)
+        self.assertIn("post_callback_valid", model)
+        self.assertIn("hookInstalled s || verifierConfigured s", model)
+
     def test_callback_model_includes_dependency_registry_atomicity(self):
         model = (verify.ROOT / "coq" / "CallbackPluginTopology.v").read_text()
         self.assertIn("CPT_014_dependency_replacement_requires_cleanup", model)
