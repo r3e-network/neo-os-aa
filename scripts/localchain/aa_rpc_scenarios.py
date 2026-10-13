@@ -23,6 +23,18 @@ NAMES = ["deployer", "owner", "buyer", "merchant", "relay", "sponsor", "stranger
 # builder instead of the harness helpers (AA-11).
 NODE = os.environ.get("NODE") or shutil.which("node") or "node"
 
+SOURCE_RUNNER_FILES = (
+    "scripts/localchain/aa_rpc_scenarios.py", "scripts/localchain/source_build.py",
+    "scripts/localchain/rpcx.py", "scripts/localchain/source_proxy_relay_probe.mjs",
+    "scripts/neoexpress_validate.py", "tests/localchain/test_source_gate.py",
+    "tests/localchain/expected-source.json",
+)
+
+
+def source_runner_snapshot():
+    """Identity of the source-chain runner, its oracle and expectation inputs."""
+    return {name: hashlib.sha256((AA / name).read_bytes()).hexdigest() for name in SOURCE_RUNNER_FILES}
+
 TL = 604800  # 7 days: the minimum escape timelock
 
 
@@ -1301,6 +1313,7 @@ def run_source(workdir, port, receipt_path, source_dir=None):
     def attempt(name, fn, *a):
         _attempt(receipt, c, save, name, fn, *a)
     try:
+        runner_sources = source_runner_snapshot()
         if source_dir is None:
             source_dir = srcbuild.build_source_contracts(Path(workdir) / "source")
             receipt["builtFromSource"] = True
@@ -1313,6 +1326,13 @@ def run_source(workdir, port, receipt_path, source_dir=None):
         profile["sourceDir"] = str(source_dir)
         receipt["profile"] = profile["profile"]
         receipt["source"] = profile
+        artifacts = srcbuild.artifact_snapshot(source_dir)
+        receipt["sourceArtifactRuntime"] = {
+            "schema": "neoos-aa-ordinary-source-artifact-runtime/v1",
+            "publicNetwork": False, "scope": "8 deployed artifacts only",
+            "artifacts": artifacts, "readback": [],
+            "runnerSourceSha256": runner_sources,
+        }
         c, x = bring_up(c, "source", workdir, bin_dir=source_dir)
         x.source_profile = profile
         receipt["tool"] = v.ANSI.sub("", subprocess.run([c.neoxp, "--version"], capture_output=True, text=True, env=c.env).stdout).strip()
@@ -1323,6 +1343,30 @@ def run_source(workdir, port, receipt_path, source_dir=None):
         print("up in", round(time.time() - t0, 1), "s; contracts:", len(c.contracts), flush=True)
         for name, fn in SOURCE_SCENARIOS:
             attempt(name, fn, c, x)
+        for artifact in artifacts:
+            name = artifact["contractName"]
+            state = c.rpc("getcontractstate", [c.contracts[name]])
+            remote_nef = state["nef"]
+            remote_manifest = state["manifest"]
+            script = base64.b64decode(remote_nef["script"], validate=True)
+            script_hash = hashlib.sha256(script).hexdigest()
+            canonical_manifest = json.dumps(remote_manifest, sort_keys=True, separators=(",", ":"),
+                                            ensure_ascii=False, allow_nan=False).encode("utf-8")
+            row = {"contractName": name, "contractHash": c.contracts[name],
+                   "nef": {"script": remote_nef["script"], "checksum": remote_nef["checksum"]},
+                   "manifest": remote_manifest, "nefScriptSha256": script_hash,
+                   "nefChecksum": remote_nef["checksum"],
+                   "manifestCanonicalSha256": hashlib.sha256(canonical_manifest).hexdigest(),
+                   "nefScriptByteEquality": script == srcbuild.read_nef(source_dir / artifact["relativeNefPath"])["script"],
+                   "nefChecksumEquality": remote_nef["checksum"] == artifact["nefChecksum"],
+                   "manifestSemanticEquality": remote_manifest == artifact["manifest"]}
+            receipt["sourceArtifactRuntime"]["readback"].append(row)
+            if not (row["nefScriptByteEquality"] and row["nefChecksumEquality"] and row["manifestSemanticEquality"]):
+                raise Fail("current source artifact RPC readback mismatch: " + name)
+        if srcbuild.artifact_snapshot(source_dir) != artifacts:
+            raise Fail("current source artifacts changed during private-chain validation")
+        if source_runner_snapshot() != runner_sources:
+            raise Fail("source-chain runner or oracle changed during private-chain validation")
         receipt["sourceProxyRelay"] = getattr(x, "source_proxy_relay", None)
         receipt["status"] = "DONE"
     except Exception as e:
@@ -1453,6 +1497,7 @@ def validate_source_receipt(receipt, expected):
     if receipt["variant"] != expected["variant"]:
         failures.append("source variant")
     source = receipt.get("source") or {}
+    failures += validate_source_artifact_runtime(receipt)
     build = wanted["build"]
     if source.get("validateSignature") != build["validateSignature"]:
         failures.append("validateSignature call sites in the compiled core")
@@ -1476,6 +1521,70 @@ def validate_source_receipt(receipt, expected):
         receipt, wanted["scenarios"], totals,
         "transaction outcomes: %d executed, %d simulated faults, %d refusals"
         % (totals["executedTransactions"], totals["simulatedFaults"], totals["nodeRefusals"]))
+    return failures
+
+
+def validate_source_artifact_runtime(receipt):
+    """Recompute all eight RPC readbacks; declared equality alone is no evidence."""
+    failures = []
+    try:
+        evidence = receipt["sourceArtifactRuntime"]
+        if evidence["schema"] != "neoos-aa-ordinary-source-artifact-runtime/v1" or evidence["publicNetwork"] is not False:
+            return ["source artifact evidence schema and private network"]
+        if evidence["scope"] != "8 deployed artifacts only":
+            failures.append("source artifact evidence scope")
+        if evidence["runnerSourceSha256"] != source_runner_snapshot():
+            failures.append("source runner/oracle hashes match current inputs")
+        artifacts, readback = evidence["artifacts"], evidence["readback"]
+        names = set(srcbuild.REQUIRED_ARTIFACTS)
+        if (not isinstance(artifacts, list) or not isinstance(readback, list)
+                or len(artifacts) != len(names) or len(readback) != len(names)
+                or {row["contractName"] for row in artifacts} != names
+                or {row["contractName"] for row in readback} != names
+                or set(receipt["contracts"]) != names):
+            return ["source artifact evidence exact deployment and readback inventory"]
+        remote = {row["contractName"]: row for row in readback}
+        hex64 = lambda value: isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+        for artifact in artifacts:
+            name = artifact["contractName"]
+            row = remote[name]
+            if (artifact["relativeNefPath"] != name + ".nef"
+                    or artifact["relativeManifestPath"] != name + ".manifest.json"):
+                failures.append("source artifact path: " + name)
+            for field in ("nefSha256", "manifestSha256", "nefScriptSha256", "manifestCanonicalSha256"):
+                if not hex64(artifact[field]):
+                    failures.append("source artifact hash: " + name + "/" + field)
+            if name == "UnifiedSmartWalletV3" and artifact["nefSha256"] != receipt["source"]["coreSha256"]:
+                failures.append("source core artifact digest")
+            if row["contractHash"] != receipt["contracts"][name]:
+                failures.append("source RPC contract identity: " + name)
+            checksum = artifact["nefChecksum"]
+            if (type(checksum) is not int or not 0 <= checksum <= 0xffffffff
+                    or type(row["nefChecksum"]) is not int or type(row["nef"]["checksum"]) is not int
+                    or row["nefChecksum"] != checksum or row["nef"]["checksum"] != checksum):
+                failures.append("source RPC NEF checksum: " + name)
+            script = base64.b64decode(row["nef"]["script"], validate=True)
+            script_hash = hashlib.sha256(script).hexdigest()
+            if not script or script_hash != artifact["nefScriptSha256"] or row["nefScriptSha256"] != script_hash:
+                failures.append("source RPC NEF script: " + name)
+            local_manifest = artifact["manifest"]
+            remote_manifest = row["manifest"]
+            if (not isinstance(local_manifest, dict) or local_manifest.get("name") != name
+                    or local_manifest != remote_manifest):
+                failures.append("source RPC complete manifest: " + name)
+            for label, manifest, declared in (("local", local_manifest, artifact["manifestCanonicalSha256"]),
+                                              ("RPC", remote_manifest, row["manifestCanonicalSha256"])):
+                encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":"),
+                                     ensure_ascii=False, allow_nan=False).encode("utf-8")
+                if hashlib.sha256(encoded).hexdigest() != declared:
+                    failures.append("source " + label + " canonical manifest: " + name)
+            if row["manifestCanonicalSha256"] != artifact["manifestCanonicalSha256"]:
+                failures.append("source complete manifest type equality: " + name)
+            if any(row[field] is not True for field in
+                   ("nefScriptByteEquality", "nefChecksumEquality", "manifestSemanticEquality")):
+                failures.append("source RPC equality verdicts: " + name)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        failures.append("complete typed source artifact/runtime evidence")
     return failures
 
 

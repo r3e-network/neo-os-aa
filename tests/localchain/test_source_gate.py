@@ -179,6 +179,27 @@ class SourceReceiptGateTest(unittest.TestCase):
                               "gasBoundedSyscall": 2 if wanted["build"]["gasBounded"] == "present" else 0,
                               "coreSha256": "b" * 64},
                    "results": [], "records": []}
+        with tempfile.TemporaryDirectory() as output:
+            for name in source_build.REQUIRED_ARTIFACTS:
+                Path(output, name + ".nef").write_bytes(nef_bytes(b"\x11\x40"))
+                Path(output, name + ".manifest.json").write_text(json.dumps({"name": name, "abi": {"methods": []}}))
+            artifacts = source_build.artifact_snapshot(output)
+        receipt["source"]["coreSha256"] = artifacts[0]["nefSha256"]
+        receipt["contracts"] = {name: "0x" + format(index + 1, "040x")
+                                for index, name in enumerate(source_build.REQUIRED_ARTIFACTS)}
+        receipt["sourceArtifactRuntime"] = {
+            "schema": "neoos-aa-ordinary-source-artifact-runtime/v1", "publicNetwork": False,
+            "scope": "8 deployed artifacts only", "artifacts": artifacts,
+            "runnerSourceSha256": suite.source_runner_snapshot(),
+            "readback": [{"contractName": artifact["contractName"],
+                          "contractHash": receipt["contracts"][artifact["contractName"]],
+                          "nef": {"script": base64.b64encode(b"\x11\x40").decode(), "checksum": artifact["nefChecksum"]},
+                          "manifest": copy.deepcopy(artifact["manifest"]),
+                          "manifestCanonicalSha256": artifact["manifestCanonicalSha256"],
+                          "nefScriptSha256": artifact["nefScriptSha256"], "nefChecksum": artifact["nefChecksum"],
+                          "nefScriptByteEquality": True, "nefChecksumEquality": True,
+                          "manifestSemanticEquality": True} for artifact in artifacts],
+        }
         for scenario in wanted["scenarios"]:
             checks = [{"check": name, "ok": True} for name in scenario["checks"]]
             receipt["results"].append({"name": scenario["name"], "status": "PASS", "checks": checks})
@@ -188,8 +209,61 @@ class SourceReceiptGateTest(unittest.TestCase):
             receipt["records"].extend({"outcome": outcome} for _ in range(wanted["totals"][key]))
         if profile == source_build.PROFILE_SYSCALL_ABSENT:
             receipt["sourceProxyRelay"] = proxy_relay_proof()
-            receipt["contracts"] = {"UnifiedSmartWalletV3": receipt["sourceProxyRelay"]["core"]}
+            receipt["contracts"]["UnifiedSmartWalletV3"] = receipt["sourceProxyRelay"]["core"]
+            receipt["sourceArtifactRuntime"]["readback"][0]["contractHash"] = receipt["sourceProxyRelay"]["core"]
         return receipt
+
+    def test_source_artifact_readback_mutations_fail_closed(self):
+        mutations = {
+            "missing evidence": lambda r: r.pop("sourceArtifactRuntime"),
+            "wrong schema": lambda r: r["sourceArtifactRuntime"].update(schema="older"),
+            "public network": lambda r: r["sourceArtifactRuntime"].update(publicNetwork=True),
+            "expanded scope": lambda r: r["sourceArtifactRuntime"].update(scope="all modules verified"),
+            "missing runner hashes": lambda r: r["sourceArtifactRuntime"].pop("runnerSourceSha256"),
+            "changed runner hash": lambda r: r["sourceArtifactRuntime"]["runnerSourceSha256"].update({suite.SOURCE_RUNNER_FILES[0]: "0" * 64}),
+            "missing artifact": lambda r: r["sourceArtifactRuntime"]["artifacts"].pop(),
+            "duplicate artifact": lambda r: r["sourceArtifactRuntime"]["artifacts"].append(copy.deepcopy(r["sourceArtifactRuntime"]["artifacts"][0])),
+            "missing readback": lambda r: r["sourceArtifactRuntime"]["readback"].pop(),
+            "duplicate readback": lambda r: r["sourceArtifactRuntime"]["readback"].append(copy.deepcopy(r["sourceArtifactRuntime"]["readback"][0])),
+            "foreign deployment": lambda r: r["contracts"].update(Unknown="0x" + "ff" * 20),
+            "historical core substitute": lambda r: r["sourceArtifactRuntime"]["artifacts"][0].update(nefSha256=self.expected["deployedCore"]["sha256"]),
+            "wrong artifact path": lambda r: r["sourceArtifactRuntime"]["artifacts"][1].update(relativeNefPath="../build/MockTransferTarget.nef"),
+            "missing manifest hash": lambda r: r["sourceArtifactRuntime"]["artifacts"][1].pop("manifestSha256"),
+            "bad hash": lambda r: r["sourceArtifactRuntime"]["artifacts"][1].update(nefSha256="unknown"),
+            "changed RPC identity": lambda r: r["sourceArtifactRuntime"]["readback"][1].update(contractHash="0x" + "ff" * 20),
+            "changed RPC script": lambda r: r["sourceArtifactRuntime"]["readback"][1]["nef"].update(script=base64.b64encode(b"\x10\x40").decode()),
+            "invalid base64": lambda r: r["sourceArtifactRuntime"]["readback"][1]["nef"].update(script="!"),
+            "declared script drift": lambda r: r["sourceArtifactRuntime"]["readback"][1].update(nefScriptSha256="0" * 64),
+            "checksum drift": lambda r: r["sourceArtifactRuntime"]["readback"][1]["nef"].update(checksum=0),
+            "boolean checksum": lambda r: r["sourceArtifactRuntime"]["artifacts"][1].update(nefChecksum=True),
+            "changed RPC manifest": lambda r: r["sourceArtifactRuntime"]["readback"][1]["manifest"].update(permissions=["*"]),
+            "declared canonical drift": lambda r: r["sourceArtifactRuntime"]["readback"][1].update(manifestCanonicalSha256="0" * 64),
+            "nontrue parity": lambda r: r["sourceArtifactRuntime"]["readback"][1].update(manifestSemanticEquality=1),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(mutation=label):
+                receipt = self.receipt(source_build.PROFILE_SYSCALL_ABSENT)
+                mutate(receipt)
+                self.assertTrue(suite.validate_source_receipt(receipt, self.expected), label)
+
+    def test_source_snapshot_requires_fresh_named_nef_manifest_pairs(self):
+        with tempfile.TemporaryDirectory() as output:
+            for name in source_build.REQUIRED_ARTIFACTS:
+                Path(output, name + ".nef").write_bytes(nef_bytes(b"\x40"))
+                Path(output, name + ".manifest.json").write_text(json.dumps({"name": name}))
+            rows = source_build.artifact_snapshot(output)
+            self.assertEqual(list(source_build.REQUIRED_ARTIFACTS), [row["contractName"] for row in rows])
+            core = Path(output, "UnifiedSmartWalletV3.nef")
+            core.write_bytes(core.read_bytes()[:-1] + b"\x00")
+            with self.assertRaises(source_build.NefError):
+                source_build.artifact_snapshot(output)
+            core.write_bytes(nef_bytes(b"\x40"))
+            Path(output, "UnifiedSmartWalletV3.manifest.json").write_text('{"name":"HistoricalOther"}')
+            with self.assertRaises(source_build.BuildError):
+                source_build.artifact_snapshot(output)
+            Path(output, "UnifiedSmartWalletV3.manifest.json").unlink()
+            with self.assertRaises(source_build.BuildError):
+                source_build.artifact_snapshot(output)
 
     def test_both_profiles_are_declared(self):
         self.assertEqual({source_build.PROFILE_SYSCALL_PRESENT, source_build.PROFILE_SYSCALL_ABSENT},

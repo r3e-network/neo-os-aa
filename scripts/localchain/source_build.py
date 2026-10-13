@@ -226,6 +226,34 @@ def require_artifacts(directory):
     return directory
 
 
+def artifact_snapshot(directory):
+    """Pin the eight artifacts actually deployed by the source-chain suite.
+
+    Hash the complete NEF and manifest bytes separately from the NEF script and
+    parsed manifest used for RPC readback. No historical artifact is substituted.
+    """
+    directory = require_artifacts(directory)
+    rows = []
+    for name in REQUIRED_ARTIFACTS:
+        nef_path = directory / (name + ".nef")
+        manifest_path = directory / (name + ".manifest.json")
+        nef = read_nef(nef_path)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict) or manifest.get("name") != name:
+            raise BuildError("source manifest name mismatch: " + name)
+        canonical_manifest = json.dumps(manifest, sort_keys=True, separators=(",", ":"),
+                                        ensure_ascii=False, allow_nan=False).encode("utf-8")
+        rows.append({"contractName": name,
+                     "relativeNefPath": name + ".nef", "relativeManifestPath": name + ".manifest.json",
+                     "nefSha256": hashlib.sha256(nef_path.read_bytes()).hexdigest(),
+                     "manifestSha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                     "nefScriptSha256": hashlib.sha256(nef["script"]).hexdigest(),
+                     "nefChecksum": int.from_bytes(nef_path.read_bytes()[-4:], "little"),
+                     "manifestCanonicalSha256": hashlib.sha256(canonical_manifest).hexdigest(),
+                     "manifest": manifest})
+    return rows
+
+
 def build_source_contracts(out_dir, project=None, nccs=None, timeout=1800):
     """Compile the current checkout with the pinned compiler into out_dir."""
     project = Path(project or DEFAULT_PROJECT)

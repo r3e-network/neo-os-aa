@@ -148,6 +148,16 @@ Both halves live in `expected-source.json`; the build selects one, so the
 expectation flips with the profile without editing the suite. The receipt records
 the source core digest, the profile and the call sites, and the gate rejects a
 receipt whose profile, call sites or outcome counts disagree with the artifact.
+The source receipt additionally retains `sourceArtifactRuntime`: full NEF and
+manifest file digests for the eight deployed artifacts, the parsed local
+manifests, and the complete RPC script/checksum/manifest readback for each.
+The gate recomputes script and canonical manifest digests from retained RPC
+content, checks exact identities and inventory, and rejects missing, duplicate,
+malformed or mismatched evidence. Artifact bytes and the runner/oracle hashes
+must remain unchanged throughout the run. The outer rebuild certificate join
+binds these artifact digests to current contract inputs separately.
+This readback covers the eight artifacts deployed by this suite; it does not
+claim runtime coverage of all twenty-four release modules or public deployment.
 `SRC-03` covers the proxy-witness path with no verifier: it never reaches the
 gas-bounded syscall and must keep working in both profiles, which is what makes
 the DEC-AA-1 fault specific to the verifier callbacks. Expect approximately one

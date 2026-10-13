@@ -268,6 +268,13 @@ when requested, a missing tool fails the gate rather than producing a pass:
 ./scripts/verify_repo.sh --contracts-only --formal --neoexpress
 ```
 
+For `ordinary` or `all`, `--neoexpress` uses published NeoExpress for the public
+v3 source suite. Its eight deployed modules are linked to the rebuild certificate
+through exact artifact hashes and full RPC readback. It writes distinct
+`aa-ordinary-source-chain-*` and `aa-ordinary-runtime-provenance-*` receipts.
+The private PLATFORM full-module matrix and native-chain validators have
+separate entrypoints; this source suite does not establish public deployment.
+
 ### Morpheus Generated Config
 
 `frontend/src/config/generatedMorpheusRegistry.js`, `frontend/src/config/generatedMorpheusRuntimeCatalog.js` and

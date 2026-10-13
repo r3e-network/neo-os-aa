@@ -56,10 +56,23 @@ workflow has no path filter, so native UI, shared code, SDK and frontend test
 changes all select the browser gate without needing a native node.
 
 `--formal` explicitly adds the aggregate formal checks and their source-lock
-requirements. `--neoexpress` selects the existing compatibility deployment probe
-and is accepted for `ordinary` or `all`; native full-chain validation follows its
-separate documented runner. These optional checks keep their explicit NOT RUN
-messages when they are not selected.
+requirements. `--neoexpress` selects public v3 current-source acceptance on a
+disposable published NeoExpress chain and is accepted for `ordinary` or `all`.
+It first rebuilds both artifact profiles, then passes `contracts/bin/v3` to
+`tests/localchain/run.py --variant source`. `NEOOS_NEOXP` (else `NEOXP`, PATH, or
+the user tool directory) selects the published runner; no private hardfork is
+enabled by this path.
+
+`scripts/check-ordinary-runtime-provenance.mjs` joins the rebuild certificate to
+the current source snapshot and the eight deployed modules' exact NEF hashes,
+checksums, full manifests and RPC script readback. It reuses the source suite's
+existing acceptance oracle. This is a measured subset, not proof of the entire
+module catalog or public deployment. The separate
+`scripts/neoexpress_validate.py` and `verify-private-artifact-provenance.mjs`
+remain the private PLATFORM full-module matrix. That unselected matrix is
+reported as NOT RUN and does not add an ordinary gate. Native full-chain
+validation follows its separate documented runner. Optional selected checks
+keep their explicit NOT RUN messages when they are not selected.
 
 ## Reproduce
 

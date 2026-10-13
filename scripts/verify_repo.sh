@@ -39,16 +39,17 @@ Set NEOOS_NATIVE_EPOCH_RECEIPT to retain the native-module VM regression JSON at
 path; otherwise the native contract gate writes and prints a temporary receipt path. This test-only
 public-VM harness does not establish native-chain admission or recovery.
 
-Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) to also deploy every artifact to a
-fresh private NeoExpress chain, drive the protocol with real transactions, read every
-contract back over JSON-RPC and write a dated receipt under docs/reports/. It needs the
-neoxp tool (~/.dotnet/tools/neoxp, or NEOOS_NEOXP for a core-matched runner) and openssl;
-it never touches a public network.
+Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) for public v3 source acceptance on
+a fresh disposable chain using published NeoExpress. It rebuilds both artifact profiles,
+executes the eight-module source suite, joins its RPC readback to the build certificate,
+and writes dated receipts under docs/reports/. NEOOS_NEOXP (else NEOXP, PATH, or
+~/.dotnet/tools/neoxp) selects the published runner. Full-module PLATFORM provenance
+remains a separate NOT RUN gate; this command never touches a public network.
 
 Runs the selected profile gates:
 - ordinary contracts: public build + solution tests + deployment-tool tests + format verify
 - native contracts: profile/runner guards + native-module epoch VM regression
-- optional: aggregate formal checks with --formal; compatibility private chain with --neoexpress
+- optional: aggregate formal checks with --formal; public v3 source private chain with --neoexpress
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
 - sdk: unit tests + declaration types check + installed-package smoke test + production dependency audit
 EOF
@@ -107,7 +108,7 @@ if [[ "${NEOOS_REQUIRE_COMPLETE:-0}" == "1" ]]; then
   export NEOOS_REQUIRE_SERVICES_ARTIFACTS=1
 fi
 if [[ $run_ordinary -eq 0 && ( $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ) ]]; then
-  echo "--neoexpress selects the compatibility probe; choose ordinary/all or use the dedicated native-chain runner." >&2
+  echo "--neoexpress selects public v3 source acceptance; choose ordinary/all or use the dedicated native-chain runner." >&2
   exit 1
 fi
 
@@ -161,6 +162,7 @@ if [[ $run_contracts -eq 1 ]]; then
       scripts/deploy_latest_aa_verifiers.test.mjs \
       scripts/check_neo_platform_packages.test.mjs \
       scripts/check-artifact-reproducibility.test.mjs \
+      scripts/check-ordinary-runtime-provenance.test.mjs \
       scripts/fuzz_continuous.test.mjs \
       scripts/repo_hygiene.test.mjs \
       scripts/verify-private-artifact-provenance.test.mjs \
@@ -207,23 +209,29 @@ if [[ $run_contracts -eq 1 ]]; then
   # The private-chain validation is opt-in for the same reason: it needs the neoxp tool,
   # takes several minutes, and a missing tool must read as NOT RUN, never as a pass.
   if [[ $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ]]; then
-    echo "neoexpress gate: deploying every artifact to a fresh private chain and driving the protocol"
-    neoxp_tool="${NEOOS_NEOXP:-$HOME/.dotnet/tools/neoxp}"
+    echo "neoexpress gate: public v3 source acceptance on published NeoExpress (eight deployed modules)"
+    neoxp_tool="${NEOOS_NEOXP:-${NEOXP:-$(command -v neoxp || true)}}"
+    neoxp_tool="${neoxp_tool:-$HOME/.dotnet/tools/neoxp}"
     neoexpress_date="$(date -u +%Y%m%d)"
     repro_receipt="$ROOT_DIR/docs/reports/aa-artifact-reproducibility-$neoexpress_date.json"
-    neoexpress_receipt="$ROOT_DIR/docs/reports/aa-neoexpress-validation-$neoexpress_date.json"
-    provenance_receipt="$ROOT_DIR/docs/reports/aa-private-artifact-provenance-$neoexpress_date.json"
+    neoexpress_receipt="$ROOT_DIR/docs/reports/aa-ordinary-source-chain-$neoexpress_date.json"
+    provenance_receipt="$ROOT_DIR/docs/reports/aa-ordinary-runtime-provenance-$neoexpress_date.json"
+    mkdir -p "$ROOT_DIR/docs/reports"
+    # Invalidate previous receipts so a failed rerun cannot leave a current-looking PASS.
+    rm -f "$neoexpress_receipt" "$provenance_receipt"
     echo "reproducibility gate: rebuilding release artifacts and writing ${repro_receipt#$ROOT_DIR/}"
     node scripts/check-artifact-reproducibility.mjs --json > "$repro_receipt"
-    python3 scripts/neoexpress_validate.py --neoxp "$neoxp_tool" --output "$neoexpress_receipt"
-    echo "neoexpress gate: joining source/rebuild certificate to private-chain RPC readback"
-    node scripts/verify-private-artifact-provenance.mjs \
+    NEOXP="$neoxp_tool" python3 tests/localchain/run.py --variant source \
+      --source-dir "$ROOT_DIR/contracts/bin/v3" --receipt "$neoexpress_receipt"
+    echo "neoexpress gate: joining source/rebuild certificate to eight-module RPC readback"
+    node scripts/check-ordinary-runtime-provenance.mjs \
       --repro "$repro_receipt" \
       --receipt "$neoexpress_receipt" > "$provenance_receipt"
     echo "neoexpress gate: provenance receipt written to ${provenance_receipt#$ROOT_DIR/}"
+    echo "unselected PLATFORM matrix: NOT RUN - ordinary source acceptance covers eight deployed modules; full-module validation has a separate runner."
   else
     mark_not_run "neoexpress"
-    echo "neoexpress gate: NOT RUN - scripts/neoexpress_validate.py (private-chain deployment, transactions, RPC readback) was skipped."
+    echo "neoexpress gate: NOT RUN - tests/localchain/run.py --variant source (public v3 private-chain acceptance) was skipped."
     echo "neoexpress gate:   pass --neoexpress or set NEOOS_REQUIRE_NEOEXPRESS=1 to run it."
   fi
 fi

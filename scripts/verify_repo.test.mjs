@@ -8,13 +8,13 @@ import test from 'node:test';
 function dispatch(t, args = [], failMatch = '', envOverrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'account-verify-dispatch-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  for (const dir of ['scripts', 'contracts', 'frontend', 'sdk/js', 'commands']) {
+  for (const dir of ['scripts', 'contracts', 'frontend', 'sdk/js', 'commands', 'docs/reports']) {
     fs.mkdirSync(path.join(root, dir), { recursive: true });
   }
   fs.copyFileSync(new URL('./verify_repo.sh', import.meta.url), path.join(root, 'scripts/verify_repo.sh'));
   fs.writeFileSync(path.join(root, 'scripts/dotnet_env.sh'), 'export NCCS_BIN=/test/compiler\n');
   const trace = path.join(root, 'commands.log');
-  const stub = '#!/bin/bash\nprintf "%s %s\\n" "${0##*/}" "$*" >> "$VERIFY_TRACE"\nif [[ -n "$VERIFY_FAIL_MATCH" && "$*" == *"$VERIFY_FAIL_MATCH"* ]]; then exit 41; fi\n';
+  const stub = '#!/bin/bash\nprintf "%s %s\\n" "${0##*/}" "$*" >> "$VERIFY_TRACE"\nif [[ "$*" == *"tests/localchain/run.py"* ]]; then printf "selected-NEOXP %s\\n" "$NEOXP" >> "$VERIFY_TRACE"; fi\nif [[ -n "$VERIFY_FAIL_MATCH" && "$*" == *"$VERIFY_FAIL_MATCH"* ]]; then exit 41; fi\n';
   for (const command of ['node', 'python3', 'dotnet', 'npm']) {
     fs.writeFileSync(path.join(root, 'commands', command), stub, { mode: 0o755 });
   }
@@ -56,6 +56,40 @@ test('complete ordinary verification fails closed at the first unavailable gate'
   assert.equal(result.status, 2);
   assert.match(result.stderr, /required complete gate unavailable: cross-repo/);
   assert.doesNotMatch(result.trace, /dotnet test neo-abstract-account\.sln/);
+});
+
+test('ordinary NeoExpress selects public source acceptance and its bounded evidence join', (t) => {
+  const result = dispatch(t, ['--profile', 'ordinary', '--contracts-only', '--neoexpress'], '', { NEOOS_NEOXP: '/fixture/published-neoxp' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.trace, /check-artifact-reproducibility\.mjs --json/);
+  assert.match(result.trace, /python3 tests\/localchain\/run\.py --variant source --source-dir .*contracts\/bin\/v3 --receipt/);
+  assert.match(result.trace, /selected-NEOXP \/fixture\/published-neoxp/);
+  assert.match(result.trace, /check-ordinary-runtime-provenance\.mjs --repro .* --receipt/);
+  assert.doesNotMatch(result.trace, /python3 scripts\/neoexpress_validate\.py|node scripts\/verify-private-artifact-provenance\.mjs/);
+  assert.match(result.stdout, /eight deployed modules/);
+  assert.match(result.stdout, /unselected PLATFORM matrix: NOT RUN/);
+  assert.match(result.stdout, /notRun=cross-repo,formal\./);
+});
+
+test('source-chain and provenance failures stop before a success status', (t) => {
+  for (const command of ['tests/localchain/run.py', 'check-ordinary-runtime-provenance.mjs']) {
+    const result = dispatch(t, ['--contracts-only', '--neoexpress'], command);
+    assert.equal(result.status, 41);
+    assert.doesNotMatch(result.stdout, /status=PASS|status=PARTIAL/);
+    if (command === 'tests/localchain/run.py') assert.doesNotMatch(result.trace, /node scripts\/check-ordinary-runtime-provenance/);
+  }
+});
+
+test('all profile retains public source routing and the runner NEOXP fallback', (t) => {
+  const result = dispatch(t, ['--profile', 'all', '--contracts-only', '--neoexpress'], '', {
+    NEOOS_NEOXP: '', NEOXP: '/fixture/fallback-neoxp',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.trace, /native_epoch_probe.py/);
+  assert.match(result.trace, /tests\/localchain\/run.py --variant source/);
+  assert.match(result.trace, /selected-NEOXP \/fixture\/fallback-neoxp/);
+  assert.doesNotMatch(result.trace, /python3 scripts\/neoexpress_validate.py/);
+  assert.doesNotMatch(result.stdout, /notRun=[^\n]*full-module/);
 });
 
 test('native contract validation selects its required guards and epoch probe', (t) => {
