@@ -119,6 +119,14 @@ runner now namespaces evidence by module, and the complete rerun passes.
 Both environments report `modelChecksPassed: true` and
 `implementationVerified: false`.
 
+Each receipt is bound to its recorded source, model, profile and tool versions.
+The host and container receipts above have identical fields except for
+`toolVersions`; their different Java, Coq/Rocq and Z3 versions identify separate
+verification runs, not interchangeable receipt bytes. Matching declaration,
+mutation or state counts alone do not establish snapshot equality. Use the
+recorded input hashes and proof results when comparing runs, and retain each
+receipt's original tool versions.
+
 ### Previous host snapshot (2026-10-13)
 
 The previous ordinary-governance source and model snapshot passed the host formal gate:
@@ -134,12 +142,16 @@ It ran with OpenJDK 26.0.2.1.
 The earlier receipt `formal/.runs/final-20261013-platform/result.json` (SHA-256
 `f1b0f876b9219bf4cab19f3da6beeaaed8ef50756564eb9e52b75389b7dcf887`) covers
 the preceding model/source snapshot and ran with OpenJDK 17.0.20.1; retain it
-only as historical Java 17-equivalent evidence, not as the current source/model receipt. The
+only as evidence for that historical snapshot and toolchain. It does not
+certify the later source/model snapshots or their Java runtimes. The
 formal model gate is **GO** for its declared abstractions. It deliberately
 retains `implementationVerified: false`: these models do not prove C# to NEF to
 NeoVM refinement, complete VM fee accounting, arbitrary plugin liveness, or
-public deployment equivalence. The Docker gate was not run because the local
-Colima daemon was unavailable; it remains a separate required environment gate.
+public deployment equivalence. At this earlier checkpoint the Docker gate had
+not run because the local Colima daemon was unavailable. The later independent
+container run is recorded under Current source-candidate host closure above;
+it certifies that later pinned snapshot without retroactively changing this
+historical receipt.
 
 The ordinary public profile also retains two protocol-level NO-GO boundaries:
 public `v3` callbacks use standard `System.Contract.Call` without an isolated
