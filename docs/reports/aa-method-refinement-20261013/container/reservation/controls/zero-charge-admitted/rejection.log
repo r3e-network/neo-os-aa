@@ -1,8 +1,0 @@
-File "./ReservationArithmetic.v", line 48, characters 21-60:
-Error: Unable to apply lemma of type
- "forall z result : Z,
-  checked_integer z = Some result -> result = z /\ integer_fits result"
-on hypothesis of type
- "(if 0 <=? settled then checked_integer (reserved + settled) else None) =
-  Some next".
-

@@ -1,6 +1,0 @@
-File "./ReservationArithmetic.v", line 5, characters 5-8:
-Warning: "From Coq" has been replaced by "From Stdlib".
-[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
-File "./ReservationArithmetic.v", line 50, characters 4-5:
-Error: [Focus] Wrong bullet +: Current bullet + is not finished.
-

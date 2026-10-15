@@ -1,3 +1,0 @@
-File "./NumericCounterexample.v", line 5, characters 19-30:
-Error: Unable to unify "Some 1" with "Some 256".
-

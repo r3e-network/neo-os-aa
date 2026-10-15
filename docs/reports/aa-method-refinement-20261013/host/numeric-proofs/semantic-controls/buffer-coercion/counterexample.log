@@ -1,6 +1,0 @@
-File "./NumericCounterexample.v", line 1, characters 5-8:
-Warning: "From Coq" has been replaced by "From Stdlib".
-[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
-File "./NumericCounterexample.v", line 5, characters 19-30:
-Error: Unable to unify "None" with "Some 0".
-

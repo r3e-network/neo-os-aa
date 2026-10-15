@@ -1,1 +1,0 @@
-{"status": "PARTIAL-PROOF-FULL-REFINEMENT-OPEN", "implementationVerified": false, "abiEntries": 100, "unprovedEntrypoints": 100, "receipt": "/private/tmp/aa-implementation-refinement-final-20261013/result.json"}

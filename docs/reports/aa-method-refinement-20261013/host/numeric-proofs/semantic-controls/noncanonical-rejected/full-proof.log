@@ -1,6 +1,0 @@
-File "./NumericCoercions.v", line 5, characters 5-8:
-Warning: "From Coq" has been replaced by "From Stdlib".
-[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
-File "./NumericCoercions.v", line 97, characters 2-19:
-Error: Nothing to inject.
-

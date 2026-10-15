@@ -86,3 +86,4 @@ mainnet-aa-*-results.json
 *.aux
 *.out
 missfont.log
+docs/reports/

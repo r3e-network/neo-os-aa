@@ -1,3 +1,0 @@
-File "./NumericCoercions.v", line 168, characters 0-4:
-Error:  (in proof get_integer_range): Attempt to save an incomplete proof
-
