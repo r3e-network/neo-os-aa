@@ -277,11 +277,11 @@
                     type="button"
                     class="rounded-lg border px-3 py-2 text-left transition-colors duration-200"
                     :class="
-                      createForm.verifierPreset === preset.id
+                      selectedVerifierPreset?.id === preset.id
                         ? 'border-aa-orange bg-aa-orange/10'
                         : 'border-aa-border bg-aa-dark hover:border-aa-orange/60'
                     "
-                    :aria-pressed="createForm.verifierPreset === preset.id"
+                    :aria-pressed="selectedVerifierPreset?.id === preset.id"
                     @click="applyCreateVerifierPreset(preset)"
                   >
                     <span class="block text-xs font-semibold text-aa-text">{{
@@ -599,12 +599,19 @@ const {
   matrixCheckResult,
 } = studio;
 
-const selectedVerifierPreset = computed(
-  () =>
+const selectedVerifierPreset = computed(() => {
+  const address = String(createForm.value.verifierContract || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^0x/, "");
+  if (!address) return null;
+  return (
     (createVerifierPresets.value || []).find(
-      (preset) => preset.id === createForm.value.verifierPreset,
-    ) || null,
-);
+      (preset) =>
+        preset.verifierContract.toLowerCase().replace(/^0x/, "") === address,
+    ) || null
+  );
+});
 
 async function copyScript() {
   if (!computedScriptHex) return;

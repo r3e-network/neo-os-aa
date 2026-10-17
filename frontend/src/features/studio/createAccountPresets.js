@@ -102,7 +102,6 @@ export function applyCreateAccountVerifierPreset(form, preset, network, options 
       `Verifier preset ${presetId || '(none)'} is not published on ${network}`,
     );
   }
-  form.verifierPreset = published.id;
   form.verifierContract = published.verifierContract;
   if (published.paramsMode === 'none') form.verifierParams = '';
   else form.verifierParams = sanitizeHex(form.verifierParams || '');
@@ -110,12 +109,17 @@ export function applyCreateAccountVerifierPreset(form, preset, network, options 
 }
 
 /**
- * The registration params the selected preset permits. A `none` preset resolves
- * empty whatever the form still holds, so a stale value cannot fault in
- * registration; without a preset the raw field is used unchanged.
+ * The registration params the verifier address permits. The rule is selected by
+ * the address, not by the last preset clicked: editing the address away from a
+ * published preset returns the form to raw params. A published `none` preset
+ * resolves empty whatever the form still holds, so a stale value cannot fault in
+ * registration; without a matching published address the raw field is used.
  */
 export function resolveCreateAccountRegistrationParams(form, network, options = {}) {
-  const preset = findCreateAccountVerifierPreset(form?.verifierPreset, network, options);
+  const address = sanitizeHex(form?.verifierContract || '');
+  const preset = createAccountVerifierPresets(network, options).find(
+    (candidate) => sanitizeHex(candidate.verifierContract) === address,
+  );
   if (preset?.paramsMode === 'none') return '';
   return sanitizeHex(form?.verifierParams || '');
 }

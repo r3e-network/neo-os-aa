@@ -24,7 +24,6 @@ import { createCreateFormState } from '../src/features/studio/constants.js';
 import {
   applyCreateAccountVerifierPreset,
   createAccountVerifierPresets,
-  findCreateAccountVerifierPreset,
   planCreateAccount,
 } from '../src/features/studio/createAccountPresets.js';
 import { deriveRegistrationAccountIdHash } from '../src/utils/neo.js';
@@ -392,7 +391,6 @@ test('applying a published preset writes the registry address and clears params 
   form.verifierContract = `0x${'11'.repeat(20)}`;
   form.verifierParams = 'deadbeef';
   studio.applyCreateVerifierPreset('sessionKey');
-  assert.equal(form.verifierPreset, 'sessionKey');
   assert.equal(
     form.verifierContract,
     MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaSessionKeyVerifier,
@@ -413,13 +411,11 @@ test('a forged preset object cannot substitute an address the registry does not 
     MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaWeb3AuthVerifier,
     'the applied address came from the caller instead of the registry',
   );
-  assert.equal(form.verifierPreset, 'web3Auth');
 });
 
 test('an unpublished preset is refused and the form is not touched', () => {
   const form = {
     ...createCreateFormState(),
-    verifierPreset: 'web3Auth',
     verifierContract: MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaWeb3AuthVerifier,
     verifierParams: '02ab',
   };
@@ -502,6 +498,25 @@ test('a none preset feeds empty params to both the account id and the invocation
   assert.notEqual(keyedPlan.accountIdHash, plan.accountIdHash);
 });
 
+test('the params rule follows the verifier address, not the last clicked preset', () => {
+  const form = createFormWith();
+  applyCreateAccountVerifierPreset(form, 'sessionKey', NETWORK, { t: fallbackT });
+  // The user now replaces the guided address with their own verifier contract.
+  form.verifierContract = `0x${'33'.repeat(20)}`;
+  form.verifierParams = 'cafebabe';
+  const plan = planCreateAccount(form, NETWORK, { t: fallbackT });
+  assert.equal(
+    plan.invocation.args[2].value,
+    '0xcafebabe',
+    'the params rule of a preset the address no longer selects was still applied',
+  );
+  // Control: putting the published address back selects the preset's own rule.
+  form.verifierContract = MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaSessionKeyVerifier;
+  form.verifierParams = 'cafebabe';
+  const guided = planCreateAccount(form, NETWORK, { t: fallbackT });
+  assert.equal(guided.invocation.args[2].value, '0x');
+});
+
 // --- the rendered create flow, clicked ------------------------------------
 
 test('each rendered preset control applies its own registry address to the real create form', async () => {
@@ -518,10 +533,14 @@ test('each rendered preset control applies its own registry address to the real 
       );
       assert.ok(button, `no rendered preset control shows ${preset.verifierContract}`);
       await mounted.click(button);
-      assert.equal(studio.createForm.value.verifierPreset, preset.id);
       assert.equal(
         studio.createForm.value.verifierContract,
         MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts[preset.registryKey],
+      );
+      assert.equal(
+        button.props['aria-pressed'],
+        true,
+        'the clicked preset is not marked selected in the rendered row',
       );
       assert.equal(
         studio.createForm.value.verifierParams,
