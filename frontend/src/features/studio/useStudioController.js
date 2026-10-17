@@ -1,11 +1,17 @@
 import { computed, onMounted, ref, watch } from 'vue';
-import { MAX_REGISTRATION_ESCAPE_TIMELOCK_DAYS, MIN_REGISTRATION_ESCAPE_TIMELOCK_DAYS, createVerifyScript, deriveAccountIdHash, deriveRegistrationAccountIdHash, getAddressFromScriptHash, hash160, invokeReadFunction, reverseHex } from '@/utils/neo.js';
+import { MAX_REGISTRATION_ESCAPE_TIMELOCK_DAYS, MIN_REGISTRATION_ESCAPE_TIMELOCK_DAYS, createVerifyScript, deriveAccountIdHash, getAddressFromScriptHash, hash160, invokeReadFunction, reverseHex } from '@/utils/neo.js';
 import { useToast } from 'vue-toastification';
 import { connectedAccount } from '@/utils/wallet';
 import { connectedDidProfile } from '@/utils/did';
 import { walletService, getAbstractAccountHash } from '@/services/walletService';
 import { buildMatrixRegistrationInvocation, isMatrixDomain } from '@/services/matrixDomainService.js';
+import { RUNTIME_CONFIG } from '@/config/runtimeConfig.js';
 import { loadContractSourceFiles } from './contractSources';
+import {
+  applyCreateAccountVerifierPreset,
+  createAccountVerifierPresets,
+  planCreateAccount
+} from './createAccountPresets.js';
 import { useI18n } from '@/i18n';
 import { useClipboard } from '@/composables/useClipboard';
 import { fetchAccountMetadata, upsertAccountMetadata } from '@/services/accountMetadataService';
@@ -56,6 +62,7 @@ export function useStudioController() {
   const matrixCheckResult = ref(null);
 
   const createForm = ref(createCreateFormState());
+  const createVerifierPresets = computed(() => createAccountVerifierPresets(RUNTIME_CONFIG.morpheusNetwork, { t }));
   const manageForm = ref(createManageFormState());
   const permissionsForm = ref(createPermissionsFormState());
 
@@ -251,6 +258,10 @@ export function useStudioController() {
     });
   }
 
+  function applyCreateVerifierPreset(preset) {
+    applyCreateAccountVerifierPreset(createForm.value, preset, RUNTIME_CONFIG.morpheusNetwork, { t });
+  }
+
   async function computeAA() {
     const escapeTimelockDays = Number(createForm.value.escapeTimelockDays) || 0;
     if (!createForm.value.backupOwner || escapeTimelockDays < MIN_REGISTRATION_ESCAPE_TIMELOCK_DAYS || escapeTimelockDays > MAX_REGISTRATION_ESCAPE_TIMELOCK_DAYS) {
@@ -264,23 +275,10 @@ export function useStudioController() {
       const aaHash = getAbstractAccountHash();
       if (!aaHash) return;
 
-      const verifierHash = createForm.value.verifierContract.trim()
-        ? hash160Param(createForm.value.verifierContract)
-        : '0000000000000000000000000000000000000000';
-      const hookHash = createForm.value.hookContract.trim()
-        ? hash160Param(createForm.value.hookContract)
-        : '0000000000000000000000000000000000000000';
-      const verifierParamsHex = sanitizeHex(createForm.value.verifierParams || '');
-      const accountIdHash = deriveRegistrationAccountIdHash({
-        verifierContractHash: verifierHash,
-        verifierParamsHex,
-        hookContractHash: hookHash,
-        backupOwnerAddress: createForm.value.backupOwner,
-        escapeTimelock: Math.floor(escapeTimelockDays * 24 * 60 * 60),
-      });
-      const script = createVerifyScript(aaHash, accountIdHash);
+      const plan = planCreateAccount(createForm.value, RUNTIME_CONFIG.morpheusNetwork, { t });
+      const script = createVerifyScript(aaHash, plan.accountIdHash);
 
-      computedAccountIdHash.value = accountIdHash;
+      computedAccountIdHash.value = plan.accountIdHash;
       computedScriptHex.value = script;
       const scriptHash = reverseHex(hash160(script));
       computedAddress.value = getAddressFromScriptHash(scriptHash);
@@ -423,36 +421,10 @@ export function useStudioController() {
 
     isCreating.value = true;
     try {
-      const verifierHash = createForm.value.verifierContract.trim()
-        ? hash160Param(createForm.value.verifierContract)
-        : '0000000000000000000000000000000000000000';
-      const hookHash = createForm.value.hookContract.trim()
-        ? hash160Param(createForm.value.hookContract)
-        : '0000000000000000000000000000000000000000';
-      const backupOwnerHash = hash160Param(createForm.value.backupOwner);
-      const verifierParamsHex = sanitizeHex(createForm.value.verifierParams || '');
-      const escapeTimelockSeconds = Math.floor((Number(createForm.value.escapeTimelockDays) || 0) * 24 * 60 * 60);
-      const accountIdHash = deriveRegistrationAccountIdHash({
-        verifierContractHash: verifierHash,
-        verifierParamsHex,
-        hookContractHash: hookHash,
-        backupOwnerAddress: createForm.value.backupOwner,
-        escapeTimelock: escapeTimelockSeconds,
-      });
+      const plan = planCreateAccount(createForm.value, RUNTIME_CONFIG.morpheusNetwork, { t });
       const createInvocation = {
         scriptHash: getAbstractAccountHash(),
-        operation: 'registerAccount',
-        args: [
-          // Display-form account id: matches the on-chain
-          // ComputeRegistrationAccountId assert (the byte-reversed internal
-          // form would fault here under the standard Hash160 convention).
-          { type: 'Hash160', value: accountIdHash },
-          { type: 'Hash160', value: verifierHash },
-          { type: 'ByteArray', value: verifierParamsHex ? `0x${verifierParamsHex}` : '0x' },
-          { type: 'Hash160', value: hookHash },
-          { type: 'Hash160', value: backupOwnerHash },
-          { type: 'Integer', value: escapeTimelockSeconds }
-        ]
+        ...plan.invocation
       };
 
       const baseDomain = createForm.value.matrixDomain.replace(/\.matrix$/, '');
@@ -677,6 +649,8 @@ export function useStudioController() {
     activeFileIdx,
     recentTransactions,
     createForm,
+    createVerifierPresets,
+    applyCreateVerifierPreset,
     manageForm,
     permissionsForm,
     manageBusy,

@@ -406,9 +406,6 @@
                 :multisig-description="multisigDescription"
                 :summary-title="composerSummary.title"
                 :summary-detail="composerSummary.detail"
-                :batch-account-ids="batchAccountIds"
-                :batch-signers="batchSigners"
-                :batch-threshold="batchThreshold"
                 @update:preset="preset = $event"
                 @update:target-contract="targetContract = $event"
                 @update:method="method = $event"
@@ -423,9 +420,6 @@
                 @update:transfer-data="transferData = $event"
                 @update:multisig-title="multisigTitle = $event"
                 @update:multisig-description="multisigDescription = $event"
-                @update:batch-account-ids="batchAccountIds = $event"
-                @update:batch-signers="batchSigners = $event"
-                @update:batch-threshold="batchThreshold = $event"
                 @stage="stageOperation"
               />
             </div>
@@ -956,7 +950,6 @@ const presetOptions = computed(() =>
       invoke: "Generic Invoke",
       nep17Transfer: "NEP-17 Transfer",
       multisigDraft: "Multisig Draft",
-      batchCreate: "Batch Create",
     };
     const fallbackDescs = {
       invoke: "Compose any AA wrapper contract call manually.",
@@ -964,7 +957,6 @@ const presetOptions = computed(() =>
         "Build a token transfer payload with account and recipient hashes.",
       multisigDraft:
         "Prepare a shareable transaction draft for additional co-signers.",
-      batchCreate: "Deploy multiple abstract accounts in a single transaction.",
     };
     return {
       ...p,
@@ -992,9 +984,6 @@ const transferAmount = ref("");
 const transferData = ref("");
 const multisigTitle = ref("");
 const multisigDescription = ref("");
-const batchAccountIds = ref("[]");
-const batchSigners = ref("[]");
-const batchThreshold = ref("1");
 const rawTransaction = ref("");
 const notes = ref("");
 const signerId = ref("");
@@ -1178,11 +1167,6 @@ const presetBuild = computed(() =>
       title: multisigTitle.value,
       description: multisigDescription.value,
     },
-    batch: {
-      accountIds: batchAccountIds.value,
-      signers: batchSigners.value,
-      threshold: batchThreshold.value,
-    },
   }),
 );
 const draftCandidate = computed(() => presetBuild.value.operation);
@@ -1216,13 +1200,6 @@ function translateSummary(operation = {}) {
       detail:
         operation.metadata?.description ||
         `${operation.method || "method pending"} ${t("operations.presetSummaryMultisigDetail", "requires additional co-signers")}`,
-    };
-  }
-  if (operation.kind === "batchCreate") {
-    const count = operation.metadata?.accountCount || 0;
-    return {
-      title: t("operations.presetBatchLabel", "Batch Create"),
-      detail: `${t("operations.presetSummaryBatchDetail", "Deploy")} ${count} ${count === 1 ? t("operations.presetSummaryBatchAccounts", "account") : t("operations.presetSummaryBatchAccountsPlural", "accounts")} ${t("operations.presetSummaryBatchWith", "with shared governance")}`,
     };
   }
   return {

@@ -9,6 +9,8 @@ import {
   shouldStripAttribute,
 } from "../src/features/docs/rendering.js";
 import { MORPHEUS_PUBLIC_REGISTRY } from "../src/config/generatedMorpheusRegistry.js";
+import { planCreateAccount } from "../src/features/studio/createAccountPresets.js";
+import { createCreateFormState } from "../src/features/studio/constants.js";
 
 const frontendRoot = fileURLToPath(new URL("..", import.meta.url));
 const read = (relativePath) =>
@@ -399,7 +401,19 @@ test("studio account creation derives account id from the registration config", 
   const i18nSource = read("src/i18n/index.js");
   const zhSource = read("src/i18n/zh-CN.js");
 
-  assert.match(controllerSource, /deriveRegistrationAccountIdHash/);
+  // The id is derived from the registration config, not from a user-supplied
+  // seed: a changed verifier must derive a different id, and the submitted
+  // registerAccount invocation must carry that same id. This replaces a source
+  // regex that only named the derivation function.
+  const derivationForm = {
+    ...createCreateFormState(),
+    backupOwner: `0x${"ab".repeat(20)}`,
+  };
+  const firstPlan = planCreateAccount(derivationForm, "mainnet");
+  derivationForm.verifierContract = `0x${"cd".repeat(20)}`;
+  const secondPlan = planCreateAccount(derivationForm, "mainnet");
+  assert.notEqual(firstPlan.accountIdHash, secondPlan.accountIdHash);
+  assert.equal(secondPlan.invocation.args[0].value, secondPlan.accountIdHash);
   assert.doesNotMatch(
     controllerSource,
     /deriveAccountIdHash\(createForm\.value\.accountId\)/,

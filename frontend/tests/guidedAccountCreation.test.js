@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { createRenderer, nextTick } from 'vue';
+import { createRenderer, nextTick, ref } from 'vue';
 import { compileScript, compileTemplate, parse } from 'vue/compiler-sfc';
 import { createServer } from 'vite';
 
@@ -20,6 +20,14 @@ import { MORPHEUS_PUBLIC_REGISTRY } from '../src/config/generatedMorpheusRegistr
 import { EC } from '../src/config/errorCodes.js';
 import * as operationPresets from '../src/features/operations/presets.js';
 import * as matrixDomain from '../src/services/matrixDomainService.js';
+import { createCreateFormState } from '../src/features/studio/constants.js';
+import {
+  applyCreateAccountVerifierPreset,
+  createAccountVerifierPresets,
+  findCreateAccountVerifierPreset,
+  planCreateAccount,
+} from '../src/features/studio/createAccountPresets.js';
+import { deriveRegistrationAccountIdHash } from '../src/utils/neo.js';
 
 const FRONTEND_ROOT = path.resolve('.');
 const PANEL_FILE = path.resolve('src/features/studio/components/CreateAccountPanel.vue');
@@ -47,6 +55,15 @@ function manifestMethods(moduleName) {
 if (typeof globalThis.localStorage === 'undefined') {
   globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 }
+// v-model's directive reads document.activeElement during patch; the custom
+// renderer has no browser document, and none of the driven controls is focused.
+if (typeof globalThis.document === 'undefined') {
+  globalThis.document = { activeElement: null };
+}
+// v-model's directive compares getRootNode() against Document; the custom
+// renderer's nodes are not DOM nodes, so the check simply never matches.
+globalThis.Document ??= class Document {};
+globalThis.ShadowRoot ??= class ShadowRoot {};
 
 // The wallet and toast boundary is replaced so the real studio controller can be
 // loaded in Node; nothing under test lives in those modules.
@@ -145,6 +162,11 @@ function makeNode(tag) {
     value: '',
     addEventListener() {},
     removeEventListener() {},
+    getRootNode() {
+      const root = new globalThis.Document();
+      root.activeElement = null;
+      return root;
+    },
   };
 }
 
@@ -300,6 +322,235 @@ test('the live operation presets still build, so the refusal is not the only pat
   assert.equal(operation.kind, 'invoke');
   assert.equal(operation.method, 'getNonce');
   assert.equal(operation.targetContract, '5be915aea3ce85e4752d522632f0a9520e377aaf');
+});
+
+
+// --- the catalogue is the registry, not a wish list -----------------------
+
+const fallbackT = (_, fallback) => fallback;
+
+test('the catalogue is exactly the verifier modules the registry publishes on each network', () => {
+  for (const network of ['mainnet', 'testnet']) {
+    const presets = createAccountVerifierPresets(network, { t: fallbackT });
+    assert.deepEqual(
+      presets.map((preset) => preset.registryKey),
+      PUBLISHED_VERIFIER_KEYS,
+      `${network} preset keys are not the published verifier keys`,
+    );
+    for (const preset of presets) {
+      assert.equal(
+        preset.verifierContract,
+        MORPHEUS_PUBLIC_REGISTRY[network].contracts[preset.registryKey],
+        `${network} ${preset.id} does not carry the registry address`,
+      );
+    }
+  }
+});
+
+test('an unpublished, empty or malformed registry entry yields no preset (control: the same oracle lists the published three)', () => {
+  const registry = structuredClone(MORPHEUS_PUBLIC_REGISTRY);
+  delete registry.mainnet.contracts.aaSessionKeyVerifier;
+  registry.mainnet.contracts.aaWeb3AuthVerifier = '0xnot-a-hash';
+  const narrowed = createAccountVerifierPresets('mainnet', { registry, t: fallbackT });
+  assert.deepEqual(
+    narrowed.map((preset) => preset.registryKey),
+    ['aaSocialRecoveryVerifier'],
+    'the catalogue still offers a verifier the registry does not publish',
+  );
+  // Positive control: the same function lists all three from the unmodified
+  // registry, so the assertion above is about the registry content and not
+  // about a catalogue that is always short.
+  assert.equal(createAccountVerifierPresets('mainnet', { t: fallbackT }).length, 3);
+});
+
+test('each preset params mode is pinned to the shipped verifier ABI', () => {
+  const presets = createAccountVerifierPresets('mainnet', { t: fallbackT });
+  for (const preset of presets) {
+    const setPublicKey = manifestMethods(preset.module).find((method) => method.name === 'setPublicKey');
+    assert.equal(
+      preset.paramsMode === 'publicKey',
+      Boolean(setPublicKey),
+      `${preset.module} params mode disagrees with its shipped setPublicKey`,
+    );
+  }
+  // Paired controls: the instrument sees the method where it exists and its
+  // absence where it does not, and it reads the pushed parameter type.
+  const web3auth = manifestMethods('Web3AuthVerifier').find((method) => method.name === 'setPublicKey');
+  assert.deepEqual(web3auth.parameters.map((parameter) => parameter.type), ['Hash160', 'ByteArray']);
+  assert.equal(
+    manifestMethods('SessionKeyVerifier').some((method) => method.name === 'setPublicKey'),
+    false,
+    'SessionKeyVerifier unexpectedly exports setPublicKey; re-derive its params mode',
+  );
+});
+
+// --- applying a preset is decided by the registry and the ABI -------------
+
+test('applying a published preset writes the registry address and clears params a none preset cannot take', () => {
+  Object.assign(studio.createForm.value, createCreateFormState());
+  const form = studio.createForm.value;
+  form.verifierContract = `0x${'11'.repeat(20)}`;
+  form.verifierParams = 'deadbeef';
+  studio.applyCreateVerifierPreset('sessionKey');
+  assert.equal(form.verifierPreset, 'sessionKey');
+  assert.equal(
+    form.verifierContract,
+    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaSessionKeyVerifier,
+  );
+  assert.equal(form.verifierParams, '', 'a none preset left stale registration params in the form');
+});
+
+test('a forged preset object cannot substitute an address the registry does not publish', () => {
+  const form = { ...createCreateFormState() };
+  applyCreateAccountVerifierPreset(
+    form,
+    { id: 'web3Auth', verifierContract: `0x${'22'.repeat(20)}`, paramsMode: 'none' },
+    NETWORK,
+    { t: fallbackT },
+  );
+  assert.equal(
+    form.verifierContract,
+    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaWeb3AuthVerifier,
+    'the applied address came from the caller instead of the registry',
+  );
+  assert.equal(form.verifierPreset, 'web3Auth');
+});
+
+test('an unpublished preset is refused and the form is not touched', () => {
+  const form = {
+    ...createCreateFormState(),
+    verifierPreset: 'web3Auth',
+    verifierContract: MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaWeb3AuthVerifier,
+    verifierParams: '02ab',
+  };
+  const snapshot = structuredClone(form);
+  assert.throws(
+    () => applyCreateAccountVerifierPreset(form, { id: 'teeVerifier' }, NETWORK, { t: fallbackT }),
+    /is not published on mainnet/,
+  );
+  assert.deepEqual(form, snapshot, 'a refused preset mutated the create form');
+  assert.throws(
+    () => applyCreateAccountVerifierPreset(form, '', NETWORK, { t: fallbackT }),
+    /Verifier preset \(none\) is not published on mainnet/,
+  );
+  assert.deepEqual(form, snapshot);
+});
+
+// --- the invocation the create flow submits -------------------------------
+
+function createFormWith(backupOwnerSeed = 'ab') {
+  return {
+    ...createCreateFormState(),
+    backupOwner: `0x${backupOwnerSeed.repeat(20)}`,
+  };
+}
+
+test('the planned registerAccount invocation carries what the shipped ABI declares', () => {
+  const register = manifestMethods('UnifiedSmartWalletV3').find((method) => method.name === 'registerAccount');
+  assert.ok(register, 'the shipped V3 ABI has no registerAccount');
+  assert.equal(register.safe, false);
+
+  const form = createFormWith();
+  applyCreateAccountVerifierPreset(form, 'web3Auth', NETWORK, { t: fallbackT });
+  form.verifierParams = '0x02ab';
+  const plan = planCreateAccount(form, NETWORK, { t: fallbackT });
+
+  assert.equal(plan.invocation.operation, 'registerAccount');
+  assert.deepEqual(
+    plan.invocation.args.map((argument) => argument.type),
+    register.parameters.map((parameter) => parameter.type),
+    'the invocation argument types are not the shipped registerAccount parameter types',
+  );
+  assert.equal(plan.invocation.args[0].value, plan.accountIdHash);
+  assert.equal(plan.invocation.args[1].value, plan.verifierHash);
+  assert.equal(plan.invocation.args[2].value, '0x02ab');
+  assert.equal(plan.invocation.args[3].value, plan.hookHash);
+  assert.equal(plan.invocation.args[4].value, plan.backupOwnerHash);
+  assert.equal(plan.invocation.args[5].value, plan.escapeTimelockSeconds);
+  assert.equal(plan.escapeTimelockSeconds, 30 * 24 * 60 * 60);
+  assert.equal(
+    plan.verifierHash,
+    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaWeb3AuthVerifier.replace(/^0x/, ''),
+  );
+});
+
+test('a none preset feeds empty params to both the account id and the invocation', () => {
+  const form = createFormWith();
+  applyCreateAccountVerifierPreset(form, 'socialRecovery', NETWORK, { t: fallbackT });
+  form.verifierParams = 'deadbeef';
+  const plan = planCreateAccount(form, NETWORK, { t: fallbackT });
+  assert.equal(plan.verifierParamsHex, '');
+  assert.equal(plan.invocation.args[2].value, '0x');
+  assert.equal(
+    plan.accountIdHash,
+    deriveRegistrationAccountIdHash({
+      verifierContractHash: plan.verifierHash,
+      verifierParamsHex: '',
+      hookContractHash: plan.hookHash,
+      backupOwnerAddress: form.backupOwner,
+      escapeTimelock: plan.escapeTimelockSeconds,
+    }),
+    'the stale params reached the account id derivation',
+  );
+  // Control: the same stale params on a publicKey preset are carried and do
+  // change the derived id, so the assertion above is not true of every preset.
+  const keyed = createFormWith();
+  applyCreateAccountVerifierPreset(keyed, 'web3Auth', NETWORK, { t: fallbackT });
+  keyed.verifierParams = 'deadbeef';
+  const keyedPlan = planCreateAccount(keyed, NETWORK, { t: fallbackT });
+  assert.equal(keyedPlan.invocation.args[2].value, '0xdeadbeef');
+  assert.notEqual(keyedPlan.accountIdHash, plan.accountIdHash);
+});
+
+// --- the rendered create flow, clicked ------------------------------------
+
+test('each rendered preset control applies its own registry address to the real create form', async () => {
+  Object.assign(studio.createForm.value, createCreateFormState());
+  const mounted = await mountCreateAccountPanel(studio);
+  try {
+    const presets = studio.createVerifierPresets.value;
+    assert.equal(presets.length, 3);
+    for (const preset of presets) {
+      studio.createForm.value.verifierContract = '';
+      studio.createForm.value.verifierParams = 'deadbeef';
+      const button = mounted.buttons.find((candidate) =>
+        textOf(candidate).includes(preset.verifierContract),
+      );
+      assert.ok(button, `no rendered preset control shows ${preset.verifierContract}`);
+      await mounted.click(button);
+      assert.equal(studio.createForm.value.verifierPreset, preset.id);
+      assert.equal(
+        studio.createForm.value.verifierContract,
+        MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts[preset.registryKey],
+      );
+      assert.equal(
+        studio.createForm.value.verifierParams,
+        preset.paramsMode === 'none' ? '' : 'deadbeef',
+      );
+    }
+  } finally {
+    mounted.unmount();
+  }
+});
+
+test('the rendered choices come from the controller catalogue (control: an empty catalogue renders none of them)', async () => {
+  const emptyStudio = { ...studio, createVerifierPresets: ref([]) };
+  const mounted = await mountCreateAccountPanel(emptyStudio);
+  try {
+    for (const contract of publishedVerifierContracts) {
+      assert.equal(
+        mounted.text().includes(contract),
+        false,
+        `the panel still renders ${contract} with an empty catalogue, so the drive is not reading the catalogue`,
+      );
+    }
+    assert.ok(
+      mounted.text().includes('Create Abstract Account'),
+      'the control mount did not render the create panel, so its silence proves nothing',
+    );
+  } finally {
+    mounted.unmount();
+  }
 });
 
 test('the dead V2 account-discovery helper is gone from the matrix service', () => {

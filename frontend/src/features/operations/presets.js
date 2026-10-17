@@ -21,13 +21,10 @@ export const OPERATION_PRESETS = [
   },
 ];
 
-export const EXPERIMENTAL_OPERATION_PRESETS = [
-  {
-    id: 'batchCreate',
-    label: 'Batch Create',
-    description: 'Deploy multiple abstract accounts in a single transaction.',
-  },
-];
+// The only preset ids this builder may emit. A removed preset (`batchCreate`,
+// whose `create` entry no deployed manifest exported) is refused with its id
+// rather than silently falling through to a generic invoke.
+const LIVE_PRESET_IDS = new Set(OPERATION_PRESETS.map((preset) => preset.id));
 
 function parseJson(text, fallback) {
   const value = String(text || '').trim();
@@ -73,13 +70,6 @@ function toAnyArg(value) {
   };
 }
 
-function toArrayArg(items, itemType = 'String') {
-  return {
-    type: 'Array',
-    value: (items || []).map(item => ({ type: itemType, value: item })),
-  };
-}
-
 /**
  * A preset that cannot produce an operation which can do what it says. The message is the machine-readable
  * error code, like every EC error, so `translateError(error.message, t)` shows the translated reason; `details`
@@ -105,8 +95,11 @@ export function buildOperationFromPreset({
   invoke = {},
   transfer = {},
   multisig = {},
-  batch = {},
 } = {}) {
+  const normalizedPreset = String(preset || '').trim() || 'invoke';
+  if (!LIVE_PRESET_IDS.has(normalizedPreset)) {
+    throw new OperationPresetRefusedError(EC.presetUnknown, { preset: normalizedPreset });
+  }
   const normalizedTargetContract = sanitizeHex(invoke.targetContract || '');
   const normalizedMethod = String(invoke.method || '').trim();
   const normalizedArgs = parseJson(invoke.argsText || '[]', []);
@@ -154,27 +147,6 @@ export function buildOperationFromPreset({
         title: String(multisig.title || '').trim(),
         description: String(multisig.description || '').trim(),
         requiresAdditionalSigners: true,
-      },
-    };
-  }
-
-  if (preset === 'batchCreate') {
-    const accountIds = parseJson(batch.accountIds, []);
-    const signers = parseJson(batch.signers, []);
-    const threshold = Number(batch.threshold) || 1;
-    return {
-      kind: 'batchCreate',
-      targetContract: normalizedTargetContract,
-      method: normalizedMethod || 'create',
-      args: [
-        toArrayArg(accountIds),
-        toArrayArg(signers.map(s => normalizeHash160(s))),
-        toIntegerArg(threshold),
-      ],
-      metadata: {
-        accountCount: accountIds.length,
-        signerCount: signers.length,
-        threshold,
       },
     };
   }
