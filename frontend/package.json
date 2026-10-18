@@ -46,7 +46,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "@tailwindcss/forms": "^0.5.11",
     "@tailwindcss/typography": "^0.5.20",
-    "@vitejs/plugin-vue": "^5.2.1",
+    "@vitejs/plugin-vue": "^6.0.9",
     "autoprefixer": "^10.6.1",
     "marked-highlight": "2.2.4",
     "mermaid": "^11.16.0",
