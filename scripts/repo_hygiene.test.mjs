@@ -30,6 +30,62 @@ import { loadIgnoreRules } from "./lib/gitignore-rules.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// AA stays on GitHub-hosted runners, including default-branch pushes and manual
+// runs. Require a literal runner: visibility, event, ref, fork and repository
+// variables must never be able to redirect this public repository's scanner.
+function assertHostedGitleaks(workflow) {
+  const sections = workflow.split(/^jobs:\s*\n/m);
+  assert.equal(sections.length, 2, "Gitleaks must have one jobs mapping");
+  assert.deepEqual(
+    sections[1].match(/^ {2}\S[^\r\n]*$/gm),
+    ["  scan:"],
+    "new Gitleaks jobs need an explicit hosted-runner policy review",
+  );
+  assert.deepEqual(
+    workflow.match(/^\s*runs-on[^\r\n]*$/gm)?.map((line) => line.trim()),
+    ["runs-on: ubuntu-latest"],
+    "Gitleaks must use the fixed GitHub-hosted ubuntu-latest runner",
+  );
+  assert.match(sections[1], /^ {4}runs-on: ubuntu-latest$/m, "the runner belongs to scan");
+}
+
+test("Gitleaks stays hosted for every event and repository context", () => {
+  assertHostedGitleaks(fs.readFileSync(path.join(repoRoot, ".github/workflows/gitleaks.yml"), "utf8"));
+});
+
+test("the Gitleaks policy rejects conditional and self-hosted routing", async (t) => {
+  const workflow = fs.readFileSync(path.join(repoRoot, ".github/workflows/gitleaks.yml"), "utf8");
+  const hosted = workflow.replace(/^ {4}runs-on:[^\r\n]*$/m, "    runs-on: ubuntu-latest");
+  assertHostedGitleaks(hosted);
+  const routes = {
+    "isolated label": "neoos-isolated-linux",
+    "self-hosted label": "self-hosted",
+    "self-hosted labels array": "[self-hosted, linux, x64]",
+    "runner group": "\n      group: neoos-isolated-linux",
+    "manual dispatch": "${{ github.event_name == 'workflow_dispatch' && 'neoos-isolated-linux' || 'ubuntu-latest' }}",
+    "default branch push": "${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'neoos-isolated-linux' || 'ubuntu-latest' }}",
+    "public visibility": "${{ github.event.repository.private == false && 'neoos-isolated-linux' || 'ubuntu-latest' }}",
+    "private visibility": "${{ github.event.repository.private && 'neoos-isolated-linux' || 'ubuntu-latest' }}",
+    "same-repository PR": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-latest' }}",
+    "fork PR": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'self-hosted' || 'ubuntu-latest' }}",
+    "repository variable": "${{ vars.RUNNER || 'ubuntu-latest' }}",
+    "duplicate runner": "ubuntu-latest\n    runs-on: self-hosted",
+    "missing runner": "",
+  };
+  for (const [name, route] of Object.entries(routes)) {
+    await t.test(name, () => {
+      const mutant = hosted.replace("    runs-on: ubuntu-latest", `    runs-on: ${route}`);
+      assert.throws(() => assertHostedGitleaks(mutant), assert.AssertionError);
+    });
+  }
+  await t.test("additional reusable job", () => {
+    assert.throws(
+      () => assertHostedGitleaks(`${hosted}\n  other:\n    uses: ./.github/workflows/ci.yml\n`),
+      assert.AssertionError,
+    );
+  });
+});
+
 // Every entry stands for a class of file that must never be committed.
 const MUST_BE_IGNORED = [
   // Environment files: every variant, at any depth.
