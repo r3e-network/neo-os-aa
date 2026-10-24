@@ -89,6 +89,9 @@ test("morpheus did service can bind DIDs and invoke AA verifier requests", () =>
   assert.match(source, /fetchUnifiedVerifierState/);
   assert.match(source, /requestRecoveryTicket/);
   assert.match(source, /requestActionSession/);
+  assert.match(source, /const accountIdParam = toHash160Param\(accountIdHex\)/);
+  assert.doesNotMatch(source, /function toByteArrayParam|toByteArrayParam\(accountIdHex\)/);
+  assert.match(source, /toNeoInternalHex\(normalizeScriptHash\(accountIdRaw/);
   assert.doesNotMatch(source, /from ['"]@\/services\/didService['"]/);
   assert.match(source, /connectedDidProfile/);
   assert.match(proxy, /Unsupported Morpheus NeoDID action/);

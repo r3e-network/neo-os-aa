@@ -4,13 +4,19 @@ function hash160Bytes(value) {
   return Uint8Array.from(hex.match(/../g), (byte) => Number.parseInt(byte, 16));
 }
 
-export async function buildAaActionId({ network = 'neo_n3', aaContract, accountIdRaw, executor, sessionNonce = 0, expiresAt } = {}) {
+export function toNeoInternalHex(value) {
+  const hex = String(value || '').trim().replace(/^0x/i, '').toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(hex)) throw new Error('A 20-byte hash160 is required');
+  return `0x${hex.match(/../g).reverse().join('')}`;
+}
+
+export async function buildAaActionId({ network = 'neo_n3', aaContractInternal, accountIdRawInternal, executorInternal, sessionNonce = 0, expiresAt } = {}) {
   const encoder = new TextEncoder();
   const parts = [
     encoder.encode(String(network || 'neo_n3').trim() || 'neo_n3'),
-    hash160Bytes(aaContract),
-    hash160Bytes(accountIdRaw),
-    hash160Bytes(executor),
+    hash160Bytes(aaContractInternal),
+    hash160Bytes(accountIdRawInternal),
+    hash160Bytes(executorInternal),
     encoder.encode(String(sessionNonce ?? '0')),
     encoder.encode(String(expiresAt)),
   ];

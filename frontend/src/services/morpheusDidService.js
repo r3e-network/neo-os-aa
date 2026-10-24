@@ -8,8 +8,9 @@ import { encryptJsonWithMorpheusOracleKey } from '@/utils/morpheusEncryption';
 import { walletService, getAbstractAccountHash } from '@/services/walletService';
 import { buildZkLoginVerifierParamsHex, formatZkLoginTicket, normalizeZkLoginProvider } from '@/services/zkLoginVerifierService.js';
 import { connectedDidProfile } from '@/utils/did';
+import { decodeStackHash160 } from '@/features/studio/helpers';
 import { createAccountIdentityReader } from './aaIdentityReadService.js';
-import { buildAaActionId } from './aaTicketService.js';
+import { buildAaActionId, toNeoInternalHex } from './aaTicketService.js';
 
 function trim(value) {
   return String(value || '').trim();
@@ -18,13 +19,6 @@ function trim(value) {
 function toHash160Param(value) {
   return {
     type: 'Hash160',
-    value: `0x${sanitizeHex(value || '')}`,
-  };
-}
-
-function toByteArrayParam(value) {
-  return {
-    type: 'ByteArray',
     value: `0x${sanitizeHex(value || '')}`,
   };
 }
@@ -119,6 +113,9 @@ async function readVerifierMethod({ rpcUrl, verifierHash, operation, args = [] }
     err.rpcDetail = result?.exception || null;
     throw err;
   }
+  if (operation === 'getAAContract' || operation === 'getAccountAddress') {
+    return decodeStackHash160(result?.stack?.[0]);
+  }
   return decodeStackItem(result?.stack?.[0]);
 }
 
@@ -190,7 +187,7 @@ export async function fetchAccountMaintenanceState({ rpcUrl, aaContractHash, acc
 
 export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountIdHex } = {}) {
   const normalizedVerifier = sanitizeHex(verifierHash);
-  const accountIdParam = toByteArrayParam(accountIdHex);
+  const accountIdParam = toHash160Param(accountIdHex);
   const [
     owner,
     morpheusOracle,
@@ -365,15 +362,20 @@ class MorpheusDidService {
       email: profile?.email || undefined,
       phone: profile?.phone || undefined,
     });
+    const core = toNeoInternalHex(normalizeScriptHash(aaContract || getAbstractAccountHash()));
+    const recoveryVerifier = toNeoInternalHex(normalizeScriptHash(verifierContract));
+    const account = toNeoInternalHex(normalizeScriptHash(accountIdRaw || accountId));
+    const accountAddressInternal = accountAddress ? toNeoInternalHex(normalizeScriptHash(accountAddress)) : undefined;
+    const newOwnerInternal = toNeoInternalHex(normalizeScriptHash(newOwner));
     return callNeoDid('recovery-ticket', {
       ...subjectPatch,
       network: trim(network) || 'neo_n3',
-      aa_contract: `0x${sanitizeHex(aaContract || getAbstractAccountHash())}`,
-      verifier_contract: `0x${sanitizeHex(verifierContract)}`,
-      account_id_raw: `0x${sanitizeHex(accountIdRaw || accountId)}`,
+      aa_contract: core,
+      verifier_contract: recoveryVerifier,
+      account_id_raw: account,
       account_id: trim(accountIdText || accountId),
-      account_address: accountAddress ? `0x${normalizeScriptHash(accountAddress)}` : undefined,
-      new_owner: `0x${normalizeScriptHash(newOwner)}`,
+      account_address: accountAddressInternal,
+      new_owner: newOwnerInternal,
       recovery_nonce: String(recoveryNonce ?? '0'),
       expires_at: String(expiresAt),
     });
@@ -384,18 +386,18 @@ class MorpheusDidService {
     const subjectPatch = await buildEncryptedSubjectPatch({
       linked_accounts: profile?.linkedAccounts || [],
     });
-    const core = normalizeScriptHash(aaContract || getAbstractAccountHash());
-    const account = normalizeScriptHash(accountIdRaw);
-    const disposable = normalizeScriptHash(executor);
-    const actionId = await buildAaActionId({ network, aaContract: core, accountIdRaw: account, executor: disposable, sessionNonce, expiresAt });
+    const core = toNeoInternalHex(normalizeScriptHash(aaContract || getAbstractAccountHash()));
+    const account = toNeoInternalHex(normalizeScriptHash(accountIdRaw));
+    const disposable = toNeoInternalHex(normalizeScriptHash(executor));
+    const actionId = await buildAaActionId({ network, aaContractInternal: core, accountIdRawInternal: account, executorInternal: disposable, sessionNonce, expiresAt });
     return callNeoDid('action-ticket', {
       ...subjectPatch,
       network: trim(network) || 'neo_n3',
-      aa_contract: `0x${core}`,
-      verifier_contract: `0x${sanitizeHex(verifierContract)}`,
-      account_id_raw: `0x${account}`,
+      aa_contract: core,
+      verifier_contract: toNeoInternalHex(normalizeScriptHash(verifierContract)),
+      account_id_raw: account,
       account_id: trim(accountIdText || accountId),
-      disposable_account: `0x${disposable}`,
+      disposable_account: disposable,
       action_id: actionId,
       expires_at: String(expiresAt),
       session_nonce: String(sessionNonce),
@@ -448,7 +450,7 @@ class MorpheusDidService {
       phone: profile?.phone || undefined,
     });
     const params = [
-      toByteArrayParam(accountIdHex),
+      toHash160Param(accountIdHex),
       toStringParam(provider),
       toHash160Param(normalizeScriptHash(newOwner)),
       toStringParam(String(expiresAt)),
@@ -493,7 +495,7 @@ class MorpheusDidService {
       scriptHash: sanitizeHex(verifierHash),
       operation: 'requestActionSession',
       args: [
-        toByteArrayParam(accountIdHex),
+        toHash160Param(accountIdHex),
         toStringParam(provider),
         toHash160Param(normalizeScriptHash(executor)),
         toIntegerParam(expiresAt),
@@ -507,7 +509,7 @@ class MorpheusDidService {
       scriptHash: sanitizeHex(verifierHash),
       operation: 'finalizeRecovery',
       args: [
-        toByteArrayParam(accountIdHex),
+        toHash160Param(accountIdHex),
       ],
     });
   }
@@ -517,7 +519,7 @@ class MorpheusDidService {
       scriptHash: sanitizeHex(verifierHash),
       operation: 'cancelRecovery',
       args: [
-        toByteArrayParam(accountIdHex),
+        toHash160Param(accountIdHex),
       ],
     });
   }
@@ -527,7 +529,7 @@ class MorpheusDidService {
       scriptHash: sanitizeHex(verifierHash),
       operation: 'revokeActionSession',
       args: [
-        toByteArrayParam(accountIdHex),
+        toHash160Param(accountIdHex),
       ],
     });
   }
