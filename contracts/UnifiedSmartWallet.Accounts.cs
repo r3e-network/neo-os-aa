@@ -70,6 +70,7 @@ namespace AbstractAccount
         {
             ExecutionEngine.Assert(accountId != null && accountId != UInt160.Zero, "Account id required");
             ExecutionEngine.Assert(backupOwner != null && backupOwner != UInt160.Zero, "Backup owner required");
+            AssertAccountConfigurationIdle(accountId!);
             if (requireBackupOwnerWitness)
             {
                 ExecutionEngine.Assert(Runtime.CheckWitness(backupOwner!), "Backup owner witness required");
@@ -136,6 +137,8 @@ namespace AbstractAccount
             ByteString[] paramList = verifierParamsList!;
             ExecutionEngine.Assert(ids.Length > 0 && ids.Length <= 64, "Account batch size must be 1-64");
             ExecutionEngine.Assert(ids.Length == paramList.Length, "Account batch params mismatch");
+            ExecutionEngine.Assert(ids[0] != null && ids[0] != UInt160.Zero, "Account id required");
+            AssertAccountConfigurationIdle(ids[0]);
 
             for (int i = 0; i < ids.Length; i++)
             {

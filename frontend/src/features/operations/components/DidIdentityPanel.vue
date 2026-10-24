@@ -1041,6 +1041,19 @@ function normalizeHashOrAddress(value) {
   return sanitizeHex(raw);
 }
 
+function hasNonZeroHash160(value) {
+  try {
+    const normalized = normalizeHashOrAddress(value);
+    return /^[0-9a-f]{40}$/.test(normalized) && normalized !== "00".repeat(20);
+  } catch {
+    return false;
+  }
+}
+
+function hasRequiredText(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function toExpiry(minutes) {
   return Date.now() + Math.max(Number(minutes) || 0, 1) * 60 * 1000;
 }
@@ -1179,16 +1192,30 @@ watch(
   { immediate: true },
 );
 
-const canPreviewRecovery = computed(
+const hasPreviewContext = computed(() => {
+  const state = verifierState.value;
+  return Boolean(
+    state &&
+    hasRequiredText(state.network) &&
+    hasRequiredText(state.accountIdText) &&
+    hasNonZeroHash160(state.aaContract) &&
+    hasNonZeroHash160(state.accountAddress) &&
+    hasNonZeroHash160(resolvedAccountId.value),
+  );
+});
+const canInvokeRecovery = computed(
   () =>
     didConnected.value &&
     recoveryVerifierHash.value &&
     recoveryNewOwner.value &&
     resolvedAccountId.value,
 );
-const canInvokeRecovery = computed(() => canPreviewRecovery.value);
-const canPreviewProxy = computed(
-  () => didConnected.value && proxyExecutor.value,
+const canPreviewRecovery = computed(
+  () =>
+    canInvokeRecovery.value &&
+    hasPreviewContext.value &&
+    hasNonZeroHash160(recoveryVerifierHash.value) &&
+    hasNonZeroHash160(recoveryNewOwner.value),
 );
 const effectiveProxyVerifierHash = computed(
   () => proxyVerifierHash.value || recoveryVerifierHash.value,
@@ -1199,6 +1226,13 @@ const canInvokeProxy = computed(
     effectiveProxyVerifierHash.value &&
     proxyExecutor.value &&
     resolvedAccountId.value,
+);
+const canPreviewProxy = computed(
+  () =>
+    canInvokeProxy.value &&
+    hasPreviewContext.value &&
+    hasNonZeroHash160(effectiveProxyVerifierHash.value) &&
+    hasNonZeroHash160(proxyExecutor.value),
 );
 
 watch(
@@ -1326,11 +1360,11 @@ async function previewRecoveryAction() {
   busy.value = "previewRecovery";
   try {
     const response = await morpheusDidService.previewRecoveryTicket({
-      network: verifierState.value?.network || "neo_n3",
-      aaContract: verifierState.value?.aaContract || props.aaContractHash || getAbstractAccountHash(),
+      network: verifierState.value?.network,
+      aaContract: verifierState.value?.aaContract,
       verifierContract: recoveryVerifierHash.value,
       accountId: resolvedAccountId.value,
-      accountIdText: verifierState.value?.accountIdText || resolvedAccountId.value,
+      accountIdText: verifierState.value?.accountIdText,
       accountIdRaw: resolvedAccountId.value,
       accountAddress: verifierState.value?.accountAddress,
       newOwner: recoveryNewOwner.value,
@@ -1375,11 +1409,11 @@ async function previewProxyAction() {
   busy.value = "previewProxy";
   try {
     const response = await morpheusDidService.previewActionTicket({
-      network: verifierState.value?.network || "neo_n3",
-      aaContract: verifierState.value?.aaContract || props.aaContractHash || getAbstractAccountHash(),
+      network: verifierState.value?.network,
+      aaContract: verifierState.value?.aaContract,
       verifierContract: effectiveProxyVerifierHash.value,
       accountId: resolvedAccountId.value,
-      accountIdText: verifierState.value?.accountIdText || resolvedAccountId.value,
+      accountIdText: verifierState.value?.accountIdText,
       accountIdRaw: resolvedAccountId.value,
       executor: proxyExecutor.value,
       sessionNonce: verifierState.value?.sessionNonce || 0,

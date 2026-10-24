@@ -249,6 +249,12 @@ namespace AbstractAccount.Mocks
             return Contract.Call(target, method, CallFlags.All, args);
         }
 
+        public static object ForwardAfter(UInt160 firstTarget, string firstMethod, object[] firstArgs, UInt160 target, string method, object[] args)
+        {
+            Contract.Call(firstTarget, firstMethod, CallFlags.All, firstArgs);
+            return Contract.Call(target, method, CallFlags.All, args);
+        }
+
         /// <summary>
         /// Exposes the block time the VM is executing against so tests can compute billing periods exactly.
         /// </summary>

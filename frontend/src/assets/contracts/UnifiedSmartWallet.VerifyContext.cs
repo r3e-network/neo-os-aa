@@ -128,6 +128,7 @@ namespace AbstractAccount
         {
             ExecutionEngine.Assert(accountId != null && accountId != UInt160.Zero, "account id required");
             ExecutionEngine.Assert(targetContract != null && targetContract != UInt160.Zero, "target required");
+            AssertAccountConfigurationIdle(accountId!);
             byte[] key = Helper.Concat(Prefix_VerifyScopeTarget, (byte[])accountId!);
             Storage.Put(Storage.CurrentContext, key, (byte[])targetContract!);
             Storage.Delete(Storage.CurrentContext, Helper.Concat(LegacyStoragePrefix12, (byte[])accountId!));

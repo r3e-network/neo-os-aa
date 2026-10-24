@@ -105,6 +105,7 @@ namespace AbstractAccount
             ExecutionEngine.Assert(
                 newBackupOwner != null && newBackupOwner != UInt160.Zero && newBackupOwner.IsValid,
                 "Invalid platform backup owner");
+            AssertAccountConfigurationIdle(accountId!);
 
             byte[] bindingKey = Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId);
             ByteString? storedBinding = Storage.Get(Storage.CurrentContext, bindingKey);

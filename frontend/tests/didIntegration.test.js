@@ -91,7 +91,8 @@ test("morpheus did service can bind DIDs and invoke AA verifier requests", () =>
   assert.match(source, /requestActionSession/);
   assert.match(source, /const accountIdParam = toHash160Param\(accountIdHex\)/);
   assert.doesNotMatch(source, /function toByteArrayParam|toByteArrayParam\(accountIdHex\)/);
-  assert.match(source, /toNeoInternalHex\(normalizeScriptHash\(accountIdRaw/);
+  assert.match(source, /toRequiredNeoInternalHex\(accountIdRaw \?\? accountId, 'accountIdRaw'\)/);
+  assert.match(source, /toNeoInternalHex\(requireNonZeroHash160/);
   assert.doesNotMatch(source, /from ['"]@\/services\/didService['"]/);
   assert.match(source, /connectedDidProfile/);
   assert.match(proxy, /Unsupported Morpheus NeoDID action/);

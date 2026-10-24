@@ -18,8 +18,15 @@ const flush = async () => { await nextTick(); await new Promise((resolve) => set
 
 // Execute the component's actual setup and Vue watchers. DOM layout is outside
 // these tests; identity changes and out-of-order RPC responses are the boundary.
-function createPanel({ identityReader, maintenanceReader = async () => ({}), stateReader = async () => ({}) }) {
-  const props = reactive({ aaContractHash: core, accountIdPrefill: accountA, accountAddressScriptHash: '', neoWalletAddress: '', recoveryVerifierPrefill: '', recoveryNewOwnerPrefill: '', recoveryExpiryPrefill: '', autoPreviewRecovery: false });
+function createPanel({
+  identityReader,
+  maintenanceReader = async () => ({}),
+  stateReader = async () => ({}),
+  didService = {},
+  connected = false,
+  recoveryNewOwnerPrefill = '',
+}) {
+  const props = reactive({ aaContractHash: core, accountIdPrefill: accountA, accountAddressScriptHash: '', neoWalletAddress: '', recoveryVerifierPrefill: '', recoveryNewOwnerPrefill, recoveryExpiryPrefill: '', autoPreviewRecovery: false });
   const errors = [];
   const scope = effectScope();
   const bindings = {
@@ -27,8 +34,8 @@ function createPanel({ identityReader, maintenanceReader = async () => ({}), sta
     useI18n: () => ({ t: (key, fallback) => fallback || key }),
     useToast: () => ({ error: (message) => errors.push(message), success: () => {} }),
     useClipboard: () => ({ copiedKey: ref(''), markCopied: () => {}, copyText: async () => true }),
-    useDidConnection: () => ({ isConfigured: ref(false), isConnected: ref(false), didProfile: ref(null), connectDid: async () => {}, disconnectDid: () => {} }),
-    morpheusDidService: {}, notificationService: {},
+    useDidConnection: () => ({ isConfigured: ref(connected), isConnected: ref(connected), didProfile: ref(null), connectDid: async () => {}, disconnectDid: () => {} }),
+    morpheusDidService: didService, notificationService: {},
     fetchAccountIdentity: identityReader,
     fetchAccountMaintenanceState: maintenanceReader,
     fetchUnifiedVerifierState: stateReader,
@@ -42,7 +49,7 @@ function createPanel({ identityReader, maintenanceReader = async () => ({}), sta
   const source = sfc.match(/<script setup>([\s\S]*?)<\/script>/)[1]
     .replace(/^import\s+[\s\S]*?\s+from\s+["'][^"']+["'];\s*$/gm, '')
     .replaceAll('import.meta.env.DEV', 'false');
-  const setup = new Function(...Object.keys(bindings), `${source}\nreturn { resolvedAccountId, recoveryVerifierHash, proxyVerifierHash, verifierState, maintenanceState, refreshVerifierStateAction };`);
+  const setup = new Function(...Object.keys(bindings), `${source}\nreturn { resolvedAccountId, recoveryVerifierHash, recoveryNewOwner, proxyVerifierHash, proxyExecutor, verifierState, maintenanceState, canPreviewRecovery, canPreviewProxy, canInvokeRecovery, canInvokeProxy, previewRecoveryAction, previewProxyAction, refreshVerifierStateAction };`);
   return { props, errors, state: scope.run(() => setup(...Object.values(bindings))), stop: () => scope.stop() };
 }
 
@@ -108,5 +115,66 @@ test('manual refresh cannot restore state after account context is removed', asy
     assert.equal(panel.state.resolvedAccountId.value, '');
     assert.equal(panel.state.verifierState.value, null);
     assert.equal(panel.state.maintenanceState.value, null);
+  } finally { panel.stop(); }
+});
+
+test('recovery and action previews require valid text, network, core, and non-zero account address', async () => {
+  const recoveryCalls = [];
+  const actionCalls = [];
+  const accountAddress = '66'.repeat(20);
+  const newOwner = '77'.repeat(20);
+  const validState = {
+    network: 'neo3-testnet',
+    aaContract: core,
+    accountIdText: 'shared-account-text',
+    accountAddress,
+    recoveryNonce: '0',
+    sessionNonce: '0',
+  };
+  const panel = createPanel({
+    connected: true,
+    recoveryNewOwnerPrefill: newOwner,
+    identityReader: async () => ({ accountIdHex: accountA, verifierHash: verifierA }),
+    stateReader: async () => validState,
+    didService: {
+      previewRecoveryTicket: async (input) => { recoveryCalls.push(input); return { ok: true }; },
+      previewActionTicket: async (input) => { actionCalls.push(input); return { ok: true }; },
+    },
+  });
+  try {
+    await flush();
+    panel.state.proxyExecutor.value = '88'.repeat(20);
+    await flush();
+    assert.equal(panel.state.canPreviewRecovery.value, true);
+    assert.equal(panel.state.canPreviewProxy.value, true);
+
+    await panel.state.previewRecoveryAction();
+    await panel.state.previewProxyAction();
+    assert.equal(recoveryCalls.length, 1);
+    assert.equal(actionCalls.length, 1);
+    assert.equal(recoveryCalls[0].network, 'neo3-testnet');
+    assert.equal(recoveryCalls[0].accountIdText, 'shared-account-text');
+    assert.equal(recoveryCalls[0].accountIdRaw, accountA);
+    assert.equal(recoveryCalls[0].accountAddress, accountAddress);
+    assert.equal(actionCalls[0].network, 'neo3-testnet');
+    assert.equal(actionCalls[0].accountIdText, 'shared-account-text');
+    assert.equal(actionCalls[0].accountIdRaw, accountA);
+
+    for (const [field, value] of [
+      ['network', ''],
+      ['accountIdText', ''],
+      ['aaContract', '00'.repeat(20)],
+      ['accountAddress', undefined],
+      ['accountAddress', '00'.repeat(20)],
+    ]) {
+      panel.state.verifierState.value = { ...validState, [field]: value };
+      await flush();
+      assert.equal(panel.state.canPreviewRecovery.value, false, `${field} must disable recovery preview`);
+      assert.equal(panel.state.canPreviewProxy.value, false, `${field} must disable action preview`);
+      assert.ok(panel.state.canInvokeRecovery.value, 'preview context must not change the invoke-only guard');
+      assert.ok(panel.state.canInvokeProxy.value, 'preview context must not change the invoke-only guard');
+    }
+    assert.equal(recoveryCalls.length, 1);
+    assert.equal(actionCalls.length, 1);
   } finally { panel.stop(); }
 });
