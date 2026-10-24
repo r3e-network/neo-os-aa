@@ -18,6 +18,7 @@ namespace AbstractAccount
         public static void InitiateEscape(UInt160 accountId)
         {
             AccountState state = GetAccountState(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             ExecutionEngine.Assert(state.BackupOwner != UInt160.Zero, "No backup owner");
             ExecutionEngine.Assert(Runtime.CheckWitness(state.BackupOwner), "Only backup owner can initiate");
@@ -60,6 +61,7 @@ namespace AbstractAccount
         public static void FinalizeEscape(UInt160 accountId, UInt160 newVerifier, ByteString verifierParams)
         {
             AccountState state = GetAccountState(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             ExecutionEngine.Assert(state.EscapeTriggeredAt > 0, "Escape not initiated");
             ExecutionEngine.Assert(Runtime.Time >= state.EscapeTriggeredAt + ((BigInteger)state.EscapeTimelock * 1000), "Timelock active");

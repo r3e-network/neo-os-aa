@@ -15,6 +15,7 @@ namespace Neo.SmartContract.Examples
         private static ByteString ComputeRecoveryDigest(
             string network,
             UInt160 aaContract,
+            UInt160 accountId,
             UInt160 accountAddress,
             string accountIdText,
             UInt160 newOwner,
@@ -27,6 +28,7 @@ namespace Neo.SmartContract.Examples
             ByteString payload = (ByteString)RECOVERY_DOMAIN;
             payload = Helper.Concat(payload, EncodeSegment(network));
             payload = Helper.Concat(payload, (ByteString)(byte[])aaContract);
+            payload = Helper.Concat(payload, (ByteString)(byte[])accountId);
             payload = Helper.Concat(payload, (ByteString)(byte[])Runtime.ExecutingScriptHash);
             payload = Helper.Concat(payload, (ByteString)(byte[])accountAddress);
             payload = Helper.Concat(payload, EncodeSegment(accountIdText));
@@ -46,11 +48,12 @@ namespace Neo.SmartContract.Examples
             ulong expiresAt,
             ByteString actionNullifier)
         {
-            // Bind the domain, this verifier contract, the network and the target account so an
-            // action signature cannot be replayed across contracts, networks or accounts; bind
-            // expiresAt so it cannot be replayed past its intended lifetime.
+            // Bind the AA core, raw account id, verifier, network and action so a
+            // ticket cannot be replayed across cores, accounts or sessions.
             ByteString payload = (ByteString)ACTION_DOMAIN;
             payload = Helper.Concat(payload, EncodeSegment(GetNetwork(accountId)));
+            payload = Helper.Concat(payload, (ByteString)(byte[])GetAAContract(accountId));
+            payload = Helper.Concat(payload, (ByteString)(byte[])accountId);
             payload = Helper.Concat(payload, (ByteString)(byte[])Runtime.ExecutingScriptHash);
             payload = Helper.Concat(payload, EncodeSegment(GetAccountIdText(accountId)));
             payload = Helper.Concat(payload, (ByteString)(byte[])executor);

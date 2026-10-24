@@ -111,6 +111,17 @@ namespace AbstractAccount
             Storage.Delete(Storage.CurrentContext, key);
         }
 
+        private static void AssertAccountConfigurationIdle(UInt160 accountId)
+        {
+            ExecutionEngine.Assert(!IsExecutionActive(accountId)
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifyContext, (byte[])accountId)) == null
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifierConfigContext, (byte[])accountId)) == null
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_HookConfigContext, (byte[])accountId)) == null
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifierExecutionContext, (byte[])accountId)) == null
+                && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_HookExecutionContext, (byte[])accountId)) == null,
+                "Account configuration context active");
+        }
+
         private static void AssertBackupOwner(UInt160 accountId)
         {
             AccountState state = GetAccountState(accountId);

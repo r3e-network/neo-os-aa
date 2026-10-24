@@ -30,6 +30,25 @@ deployed manifest: this core exposes no such ABI. Changing
 the account, core, or account-ID prefill invalidates pending UI reads so a late
 response cannot restore an earlier account's recovery context.
 
+## Current ticket and execution-configuration boundaries
+
+Recovery and action signatures use the v2 domains. They bind the AA core and the
+raw 20-byte account ID in addition to the textual identity, account address,
+executor or new owner, action ID, expiry, and nullifiers. Direct ticket submission
+re-derives the action ID from the raw account, current nonce, executor or new
+owner, and expiry; it does not accept an unrelated action ID merely because the
+signature matches. The proxy address remains an address, not the raw account ID.
+Compact result encoding stays at v3, but tickets signed before raw-account binding
+are not accepted after the upgrade. The in-flight request window therefore needs
+an owner-approved deployment and migration, not a legacy-signature fallback.
+
+Account configuration calls reject reentry while execution, verification, or a
+verifier/hook configuration or execution context is active. This covers plugin
+rotation and configuration calls, metadata, escape, and market escrow, so an
+arbitrary target cannot reuse the outer operation's backup-owner witness to change
+account authority. Direct owner-authorized configuration outside those contexts
+remains available.
+
 ## A possible authority-epoch recovery design (proposal only)
 
 The current implementation already provides a useful boundary for assets at the

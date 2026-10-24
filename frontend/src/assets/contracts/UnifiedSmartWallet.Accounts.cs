@@ -151,6 +151,7 @@ namespace AbstractAccount
         public static void UpdateHook(UInt160 accountId, UInt160 newHookId)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             if (newHookId != UInt160.Zero)
             {
@@ -192,6 +193,7 @@ namespace AbstractAccount
         public static void ConfirmHookUpdate(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
             byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
@@ -249,6 +251,7 @@ namespace AbstractAccount
         public static void UpdateVerifier(UInt160 accountId, UInt160 newVerifier, ByteString verifierParams)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
             AccountState state = GetAccountState(accountId);
@@ -305,6 +308,7 @@ namespace AbstractAccount
         public static void ConfirmVerifierUpdate(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
             byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
@@ -530,6 +534,7 @@ namespace AbstractAccount
         {
             ExecutionEngine.Assert(IsMethodAllowed(method, AllowedVerifierMethods), "Verifier method not allowed");
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.Verifier != null && state.Verifier != UInt160.Zero, "Verifier not configured");
@@ -559,6 +564,7 @@ namespace AbstractAccount
         {
             ExecutionEngine.Assert(IsMethodAllowed(method, AllowedHookMethods), "Hook method not allowed");
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.HookId != null && state.HookId != UInt160.Zero, "Hook not configured");

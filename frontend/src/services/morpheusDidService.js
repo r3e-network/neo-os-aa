@@ -9,6 +9,7 @@ import { walletService, getAbstractAccountHash } from '@/services/walletService'
 import { buildZkLoginVerifierParamsHex, formatZkLoginTicket, normalizeZkLoginProvider } from '@/services/zkLoginVerifierService.js';
 import { connectedDidProfile } from '@/utils/did';
 import { createAccountIdentityReader } from './aaIdentityReadService.js';
+import { buildAaActionId } from './aaTicketService.js';
 
 function trim(value) {
   return String(value || '').trim();
@@ -193,6 +194,10 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
   const [
     owner,
     morpheusOracle,
+    network,
+    aaContract,
+    accountIdText,
+    accountAddress,
     recoveryNonce,
     sessionNonce,
     threshold,
@@ -202,6 +207,10 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
   ] = await Promise.all([
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getOwner', args: [accountIdParam] }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getMorpheusOracle', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getMorpheusOracle failed:', error?.message); return ''; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getNetwork', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getNetwork failed:', error?.message); return 'neo_n3'; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAAContract', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAAContract failed:', error?.message); return getAbstractAccountHash(); }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAccountIdText', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAccountIdText failed:', error?.message); return accountIdHex; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAccountAddress', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAccountAddress failed:', error?.message); return ''; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getRecoveryNonce', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getRecoveryNonce failed:', error?.message); return '0'; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getSessionNonce', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getSessionNonce failed:', error?.message); return '0'; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getThreshold', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getThreshold failed:', error?.message); return '0'; }),
@@ -214,6 +223,10 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
     verifierHash: `0x${normalizedVerifier}`,
     owner,
     morpheusOracle,
+    network,
+    aaContract,
+    accountIdText,
+    accountAddress,
     recoveryNonce,
     sessionNonce,
     threshold,
@@ -345,7 +358,7 @@ class MorpheusDidService {
     });
   }
 
-  async previewRecoveryTicket({ aaContract, verifierContract, accountId, newOwner, recoveryNonce, expiresAt } = {}) {
+  async previewRecoveryTicket({ network = 'neo_n3', aaContract, verifierContract, accountId, accountIdText, accountIdRaw, accountAddress, newOwner, recoveryNonce, expiresAt } = {}) {
     const profile = getDidProfile();
     const subjectPatch = await buildEncryptedSubjectPatch({
       linked_accounts: profile?.linkedAccounts || [],
@@ -354,25 +367,38 @@ class MorpheusDidService {
     });
     return callNeoDid('recovery-ticket', {
       ...subjectPatch,
-      network: 'neo_n3',
+      network: trim(network) || 'neo_n3',
       aa_contract: `0x${sanitizeHex(aaContract || getAbstractAccountHash())}`,
       verifier_contract: `0x${sanitizeHex(verifierContract)}`,
-      account_id: trim(accountId),
+      account_id_raw: `0x${sanitizeHex(accountIdRaw || accountId)}`,
+      account_id: trim(accountIdText || accountId),
+      account_address: accountAddress ? `0x${normalizeScriptHash(accountAddress)}` : undefined,
       new_owner: `0x${normalizeScriptHash(newOwner)}`,
       recovery_nonce: String(recoveryNonce ?? '0'),
       expires_at: String(expiresAt),
     });
   }
 
-  async previewActionTicket({ executor, actionId } = {}) {
+  async previewActionTicket({ aaContract, verifierContract, accountId, accountIdText, accountIdRaw, executor, sessionNonce = 0, expiresAt, network = 'neo_n3' } = {}) {
     const profile = getDidProfile();
     const subjectPatch = await buildEncryptedSubjectPatch({
       linked_accounts: profile?.linkedAccounts || [],
     });
+    const core = normalizeScriptHash(aaContract || getAbstractAccountHash());
+    const account = normalizeScriptHash(accountIdRaw);
+    const disposable = normalizeScriptHash(executor);
+    const actionId = await buildAaActionId({ network, aaContract: core, accountIdRaw: account, executor: disposable, sessionNonce, expiresAt });
     return callNeoDid('action-ticket', {
       ...subjectPatch,
-      disposable_account: `0x${normalizeScriptHash(executor)}`,
-      action_id: trim(actionId),
+      network: trim(network) || 'neo_n3',
+      aa_contract: `0x${core}`,
+      verifier_contract: `0x${sanitizeHex(verifierContract)}`,
+      account_id_raw: `0x${account}`,
+      account_id: trim(accountIdText || accountId),
+      disposable_account: `0x${disposable}`,
+      action_id: actionId,
+      expires_at: String(expiresAt),
+      session_nonce: String(sessionNonce),
       callback_encoding: 'neo_n3_action_v3',
     });
   }

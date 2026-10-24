@@ -25,11 +25,12 @@ namespace AbstractAccount
         public static object CallVerifierChild(UInt160 accountId, UInt160 childVerifier, string method, object[] args)
         {
             AssertBackupOwner(accountId);
-            AssertNoMarketEscrow(accountId);
             ExecutionEngine.Assert(!IsExecutionActive(accountId), "Cannot configure child during execution");
             ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext,
                 Helper.Concat(Prefix_VerifierConfigContext, (byte[])accountId)) == null,
                 "Verifier configuration already active");
+            AssertAccountConfigurationIdle(accountId);
+            AssertNoMarketEscrow(accountId);
 
             AccountState state = GetAccountState(accountId);
             UInt160 root = state.Verifier;

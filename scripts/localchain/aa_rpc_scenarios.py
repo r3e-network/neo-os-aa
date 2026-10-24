@@ -212,9 +212,21 @@ def arm_session_and_whitelist(c, x):
 def _recovery_digest(x, c, account, proxy, new_owner, nonce_text, expires_text, action_id, master, action_nf):
     seg = lambda t: bytes([len(t)]) + t.encode()
     recovery = c.contracts["SocialRecoveryVerifier"]
-    payload = b"neodid-recovery-v1" + seg("neo3-local") + v.hash_le(x.core) + v.hash_le(recovery) + v.hash_le(proxy) + seg(account) \
-        + v.hash_le(new_owner) + seg(nonce_text) + seg(expires_text) + seg(action_id) + master + action_nf
+    domain = b"neodid-recovery-v2" if x.variant == "source" else b"neodid-recovery-v1"
+    payload = domain + seg("neo3-local") + v.hash_le(x.core)
+    if x.variant == "source":
+        payload += v.hash_le(account)
+    payload += v.hash_le(recovery) + v.hash_le(proxy) + seg(account) + v.hash_le(new_owner) \
+        + seg(nonce_text) + seg(expires_text) + seg(action_id) + master + action_nf
     return hashlib.sha256(payload).digest()
+
+
+def _recovery_action_id(x, account, new_owner, nonce_text):
+    if x.variant != "source":
+        return "recover-1"
+    material = b"neo3-local" + b"\x1f" + v.hash_le(x.core) + b"\x1f" \
+        + v.hash_le(account) + b"\x1f" + v.hash_le(new_owner) + b"\x1f" + nonce_text.encode()
+    return "aa_recovery:" + hashlib.sha256(material).hexdigest()
 
 
 def sc_recovery_phase1(c, x):
@@ -236,8 +248,9 @@ def sc_recovery_phase1(c, x):
     expires = str(c.now_ms() + 30 * DAY * 1000)
     nf = bytes([0x41]) * 32
     new_owner = c.hashes["buyer"]
-    ticket = lambda sig, nfv=nf, master=x.factor, new=new_owner: [H(account), H(new), S("0"), S(expires), S("recover-1"), B(master), B(nfv), B(sig)]
-    good = x.morpheus.sign(_recovery_digest(x, c, account, proxy, new_owner, "0", expires, "recover-1", x.factor, nf))
+    action_id = _recovery_action_id(x, account, new_owner, "0")
+    ticket = lambda sig, nfv=nf, master=x.factor, new=new_owner: [H(account), H(new), S("0"), S(expires), S(action_id), B(master), B(nfv), B(sig)]
+    good = x.morpheus.sign(_recovery_digest(x, c, account, proxy, new_owner, "0", expires, action_id, x.factor, nf))
     c.send("ticket signed by a wrong key", [{"w": "relay"}], recovery, "submitRecoveryTicket", ticket(v.P256Key(x.workdir, "wrongkey").sign(b"x" * 32)), expect="FAULT", expect_text="Invalid Morpheus recovery signature")
     c.send("ticket for an unknown recovery factor", [{"w": "relay"}], recovery, "submitRecoveryTicket", ticket(good, master=bytes([9]) * 32), expect="FAULT", expect_text="Unknown recovery factor")
     rec = c.send("relay submits the Morpheus-signed recovery ticket", [{"w": "relay"}], recovery, "submitRecoveryTicket", ticket(good))

@@ -1326,11 +1326,15 @@ async function previewRecoveryAction() {
   busy.value = "previewRecovery";
   try {
     const response = await morpheusDidService.previewRecoveryTicket({
-      aaContract: props.aaContractHash || getAbstractAccountHash(),
+      network: verifierState.value?.network || "neo_n3",
+      aaContract: verifierState.value?.aaContract || props.aaContractHash || getAbstractAccountHash(),
       verifierContract: recoveryVerifierHash.value,
       accountId: resolvedAccountId.value,
+      accountIdText: verifierState.value?.accountIdText || resolvedAccountId.value,
+      accountIdRaw: resolvedAccountId.value,
+      accountAddress: verifierState.value?.accountAddress,
       newOwner: recoveryNewOwner.value,
-      recoveryNonce: 0,
+      recoveryNonce: verifierState.value?.recoveryNonce || 0,
       expiresAt: toExpiry(recoveryExpiryMinutes.value),
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1371,8 +1375,15 @@ async function previewProxyAction() {
   busy.value = "previewProxy";
   try {
     const response = await morpheusDidService.previewActionTicket({
+      network: verifierState.value?.network || "neo_n3",
+      aaContract: verifierState.value?.aaContract || props.aaContractHash || getAbstractAccountHash(),
+      verifierContract: effectiveProxyVerifierHash.value,
+      accountId: resolvedAccountId.value,
+      accountIdText: verifierState.value?.accountIdText || resolvedAccountId.value,
+      accountIdRaw: resolvedAccountId.value,
       executor: proxyExecutor.value,
-      actionId: `aa_proxy:${props.aaContractHash || getAbstractAccountHash()}:${resolvedAccountId.value || "unresolved"}:${normalizeHashOrAddress(proxyExecutor.value)}:${toExpiry(proxyExpiryMinutes.value)}`,
+      sessionNonce: verifierState.value?.sessionNonce || 0,
+      expiresAt: toExpiry(proxyExpiryMinutes.value),
     });
     resultJson.value = JSON.stringify(response, null, 2);
     publishStatus(t("didPanel.previewTicket", "Preview Ticket"));

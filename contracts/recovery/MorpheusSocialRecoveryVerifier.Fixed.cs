@@ -89,14 +89,16 @@ namespace Neo.SmartContract.Examples
         // matching the VerifierAuthority window used across the rest of the repo.
         private static readonly BigInteger AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000;
 
-        // ASCII("neodid-recovery-v1")
+        // ASCII("neodid-recovery-v2") and ASCII("neodid-action-v2").
+        // Compact result encoding remains v3; these signing domains are not
+        // backward-compatible with tickets issued before raw account binding.
         private static readonly byte[] RECOVERY_DOMAIN = new byte[]
         {
-            110, 101, 111, 100, 105, 100, 45, 114, 101, 99, 111, 118, 101, 114, 121, 45, 118, 49
+            110, 101, 111, 100, 105, 100, 45, 114, 101, 99, 111, 118, 101, 114, 121, 45, 118, 50
         };
         private static readonly byte[] ACTION_DOMAIN = new byte[]
         {
-            110, 101, 111, 100, 105, 100, 45, 97, 99, 116, 105, 111, 110, 45, 118, 49
+            110, 101, 111, 100, 105, 100, 45, 97, 99, 116, 105, 111, 110, 45, 118, 50
         };
 
         public class PendingRecovery

@@ -131,6 +131,55 @@ public class ExecuteUserOpRuntimeTests
     }
 
     [TestMethod]
+    [DataRow("updateVerifier")]
+    [DataRow("updateHook")]
+    [DataRow("setMetadataUri")]
+    [DataRow("initiateEscape")]
+    public void ExecuteUserOp_TargetCannotReenterAccountConfiguration(string method)
+    {
+        WalletHarness h = new();
+        UInt160 accountId = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+        UInt160 newModule = method == "updateHook"
+            ? h.Fx.Deploy("hooks/WhitelistHook", h.Wallet.ToArray())
+            : h.Core;
+        object?[] configArgs = method switch
+        {
+            "updateVerifier" => new object?[] { accountId, newModule, Array.Empty<byte>() },
+            "updateHook" => new object?[] { accountId, newModule },
+            "setMetadataUri" => new object?[] { accountId, "https://attacker.invalid" },
+            _ => new object?[] { accountId },
+        };
+        h.Fx.Engine.SetTransactionSigners(new Signer
+        {
+            Account = BackupOwner,
+            Scopes = WitnessScope.CustomContracts,
+            AllowedContracts = new[] { h.Wallet },
+        });
+        object[] op = RuntimeFixture.UserOp(h.Core, "forward",
+            new object?[] { h.Wallet, method, configArgs },
+            BigInteger.Zero, h.Fx.Now() + 60_000, Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() => h.ExecuteUserOp(accountId, op));
+        StringAssert.Contains(rejected.Message, "Account configuration context active");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0));
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getHook", accountId));
+        Assert.AreEqual(string.Empty, h.Fx.Call(h.Wallet, "getMetadataUri", accountId).GetString());
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", accountId));
+
+        h.Fx.CallVoid(h.Wallet, method, configArgs);
+        if (method == "updateVerifier")
+            Assert.AreEqual(newModule, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        else if (method == "updateHook")
+            Assert.AreEqual(newModule, h.Fx.CallUInt160(h.Wallet, "getHook", accountId));
+        else if (method == "setMetadataUri")
+            Assert.AreEqual("https://attacker.invalid", h.Fx.Call(h.Wallet, "getMetadataUri", accountId).GetString());
+        else
+            Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+    }
+
+    [TestMethod]
     public void ExecuteUserOp_WrongOwnerScopeDoesNotConsumeNonceOrLeaveAuthority()
     {
         WalletHarness h = new();

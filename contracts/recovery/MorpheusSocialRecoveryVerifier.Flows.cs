@@ -131,6 +131,7 @@ namespace Neo.SmartContract.Examples
                 + "\",\"network\":\"" + GetNetwork(accountId)
                 + "\",\"aa_contract\":\"" + HashToHex(GetAAContract(accountId))
                 + "\",\"verifier_contract\":\"" + HashToHex(Runtime.ExecutingScriptHash)
+                + "\",\"account_id_raw\":\"" + HashToHex(accountId)
                 + "\",\"account_address\":\"" + HashToHex(GetAccountAddress(accountId))
                 + "\",\"account_id\":\"" + GetAccountIdText(accountId)
                 + "\",\"new_owner\":\"" + HashToHex(newOwner)
@@ -182,8 +183,15 @@ namespace Neo.SmartContract.Examples
             string actionId = BuildActionId(accountId, executor, sessionNonce, expiresAt);
             string payloadJson =
                 "{\"provider\":\"" + provider
+                + "\",\"network\":\"" + GetNetwork(accountId)
+                + "\",\"aa_contract\":\"" + HashToHex(GetAAContract(accountId))
+                + "\",\"verifier_contract\":\"" + HashToHex(Runtime.ExecutingScriptHash)
+                + "\",\"account_id_raw\":\"" + HashToHex(accountId)
+                + "\",\"account_id\":\"" + GetAccountIdText(accountId)
                 + "\",\"disposable_account\":\"" + HashToHex(executor)
                 + "\",\"action_id\":\"" + actionId
+                + "\",\"expires_at\":\"" + expiresAt.ToString()
+                + "\",\"session_nonce\":\"" + sessionNonce.ToString()
                 + "\",\"encrypted_params\":\"" + encryptedParams
                 + "\",\"callback_encoding\":\"neo_n3_action_v3\"}";
 

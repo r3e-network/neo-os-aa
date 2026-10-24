@@ -200,6 +200,8 @@ namespace Neo.SmartContract.Examples
             BigInteger currentNonce = GetRecoveryNonce(accountId);
             BigInteger ticketNonce = ParsePositiveDecimal(recoveryNonceText, "recoveryNonce");
             ExecutionEngine.Assert(ticketNonce == currentNonce, "Invalid recovery nonce");
+            ExecutionEngine.Assert(actionId == BuildRecoveryActionId(accountId, newOwner, recoveryNonceText),
+                "Recovery action does not match the account");
 
             BigInteger expiresAt = ParsePositiveDecimal(expiresAtText, "expiresAt");
             ExecutionEngine.Assert(expiresAt >= Runtime.Time, "Recovery ticket expired");
@@ -228,6 +230,7 @@ namespace Neo.SmartContract.Examples
             ByteString digest = ComputeRecoveryDigest(
                 GetNetwork(accountId),
                 GetAAContract(accountId),
+                accountId,
                 GetAccountAddress(accountId),
                 GetAccountIdText(accountId),
                 newOwner,

@@ -276,6 +276,7 @@ namespace AbstractAccount
         public static void CancelVerifierUpdate(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             Storage.Delete(Storage.CurrentContext, key);
@@ -293,6 +294,7 @@ namespace AbstractAccount
         public static void CancelHookUpdate(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             Storage.Delete(Storage.CurrentContext, key);
@@ -310,6 +312,7 @@ namespace AbstractAccount
         public static void SetMetadataUri(UInt160 accountId, string metadataUri)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_MetadataUri, (byte[])accountId);
             if (metadataUri == null || metadataUri.Length == 0)
             {
