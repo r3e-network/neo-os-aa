@@ -363,9 +363,9 @@ test("frontend pins a non-vulnerable vite release in both manifest and lockfile"
   const packageLock = JSON.parse(read("package-lock.json"));
   const viteEntry = packageLock.packages?.["node_modules/vite"];
 
-  assert.equal(frontendPackage.devDependencies?.vite, "^6.4.3");
+  assert.equal(frontendPackage.devDependencies?.vite, "^6.4.4");
   assert.ok(viteEntry);
-  assert.match(viteEntry.version, /^6\.4\.[3-9]|^[7-9]\./);
+  assert.match(viteEntry.version, /^6\.4\.[4-9]|^[7-9]\./);
 });
 
 test("vite config aliases vm to a local browser shim instead of bundling vm-browserify", () => {

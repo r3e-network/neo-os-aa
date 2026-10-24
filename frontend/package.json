@@ -53,7 +53,7 @@
     "playwright": "^1.58.2",
     "postcss": "8.5.28",
     "tailwindcss": "^4.3.3",
-    "vite": "^6.4.3",
+    "vite": "^6.4.4",
     "vite-plugin-node-polyfills": "^0.28.0"
   },
   "overrides": {
@@ -62,7 +62,7 @@
       ".": "5.9.0",
       "lodash": "4.18.1"
     },
-    "dompurify": "3.4.16",
+    "dompurify": "3.4.17",
     "js-cookie": "3.0.8",
     "postcss": "8.5.28",
     "h3": {
@@ -88,7 +88,7 @@
         "picomatch": "4.0.4"
       }
     },
-    "stream-json": "3.6.0",
+    "stream-json": "3.7.0",
     "uuid": "11.1.1",
     "source-map-js": "1.2.2",
     "@tailwindcss/typography": {
