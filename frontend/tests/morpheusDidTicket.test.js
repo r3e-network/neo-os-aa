@@ -106,11 +106,9 @@ function didRequest(harness) {
   return JSON.parse(request.options.body);
 }
 
-test('recovery preview preserves explicit text and converts every display Hash160 to internal byte order', async () => {
+test('recovery preview uses only the raw account and converts display Hash160 fields to internal byte order', async () => {
   const harness = createService();
-  const input = { ...recoveryInput(), accountId: account };
-  delete input.accountIdRaw;
-  await harness.morpheusDidService.previewRecoveryTicket(input);
+  await harness.morpheusDidService.previewRecoveryTicket({ ...recoveryInput(), accountId: newOwner });
   const body = didRequest(harness);
   assert.equal(body.action, 'recovery-ticket');
   assert.equal(body.account_id, 'shared-account-text');
@@ -119,7 +117,7 @@ test('recovery preview preserves explicit text and converts every display Hash16
   assert.equal(body.verifier_contract, toNeoInternalHex(verifier));
   assert.equal(body.account_address, toNeoInternalHex(accountAddress));
   assert.equal(body.new_owner, toNeoInternalHex(newOwner));
-  assert.notEqual(body.account_address, undefined);
+  assert.equal(body.callback_encoding, 'neo_n3_recovery_v3');
   assert.equal(harness.signerCalls.length, 0);
   assert.equal(harness.defaultCoreReads(), 0);
 });
@@ -137,6 +135,35 @@ test('action preview forwards explicit text and internal Hash160 fields', async 
   assert.match(body.action_id, /^aa_proxy:[0-9a-f]{64}$/);
   assert.equal(harness.signerCalls.length, 0);
   assert.equal(harness.defaultCoreReads(), 0);
+});
+
+test('recovery preview marks opaque network labels with the host recovery v3 encoding', async () => {
+  for (const network of ['neo3-testnet', 'neo3-local']) {
+    const harness = createService();
+    await harness.morpheusDidService.previewRecoveryTicket({ ...recoveryInput(), network });
+    const body = didRequest(harness);
+    assert.equal(body.network, network);
+    assert.equal(body.callback_encoding, 'neo_n3_recovery_v3');
+  }
+});
+
+test('recovery and action previews reject a display accountId without raw account before external calls', async () => {
+  const cases = [
+    ['previewRecoveryTicket', recoveryInput()],
+    ['previewActionTicket', actionInput()],
+  ];
+  for (const [method, base] of cases) {
+    const harness = createService();
+    const input = { ...base, accountId: account };
+    delete input.accountIdRaw;
+    await assert.rejects(
+      harness.morpheusDidService[method](input),
+      /accountIdRaw must be a non-zero 20-byte Hash160/
+    );
+    assert.equal(harness.requests.length, 0);
+    assert.equal(harness.signerCalls.length, 0);
+    assert.equal(harness.defaultCoreReads(), 0);
+  }
 });
 
 test('recovery and action previews reject every missing required field before Oracle, NeoDID, or signer calls', async () => {

@@ -398,7 +398,7 @@ class MorpheusDidService {
     const accountText = requireText(accountIdText, 'accountIdText');
     const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
     const recoveryVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
-    const account = toRequiredNeoInternalHex(accountIdRaw ?? accountId, 'accountIdRaw');
+    const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');
     const accountAddressInternal = toRequiredNeoInternalHex(accountAddress, 'accountAddress');
     const newOwnerInternal = toRequiredNeoInternalHex(newOwner, 'newOwner');
     const profile = getDidProfile();
@@ -418,6 +418,7 @@ class MorpheusDidService {
       new_owner: newOwnerInternal,
       recovery_nonce: String(recoveryNonce ?? '0'),
       expires_at: String(expiresAt),
+      callback_encoding: 'neo_n3_recovery_v3',
     });
   }
 
@@ -426,7 +427,7 @@ class MorpheusDidService {
     const accountText = requireText(accountIdText, 'accountIdText');
     const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
     const actionVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
-    const account = toRequiredNeoInternalHex(accountIdRaw ?? accountId, 'accountIdRaw');
+    const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');
     const disposable = toRequiredNeoInternalHex(executor, 'executor');
     const actionId = await buildAaActionId({ network: networkText, aaContractInternal: core, accountIdRawInternal: account, executorInternal: disposable, sessionNonce, expiresAt });
     const profile = getDidProfile();

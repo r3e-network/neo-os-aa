@@ -149,6 +149,11 @@ namespace AbstractAccount
             ExitConfigurationContext();
         }
 
+        private static void AssertGlobalConfigurationIdle()
+        {
+            ExecutionEngine.Assert(GetConfigurationContextDepth() == 0, "Global configuration context active");
+        }
+
         private static void AssertAccountConfigurationIdle(UInt160 accountId)
         {
             ExecutionEngine.Assert(GetConfigurationContextDepth() == 0

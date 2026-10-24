@@ -223,4 +223,74 @@ public class PlatformRegistrarRuntimeTests
 
         StringAssert.Contains(exception.Message, "platform registrar not deployed");
     }
+
+    [TestMethod]
+    [DataRow("proposePlatformRegistrar")]
+    [DataRow("confirmPlatformRegistrar")]
+    [DataRow("cancelPlatformRegistrar")]
+    public void ExecuteUserOp_TargetCannotReenterPlatformRegistrarConfiguration(string method)
+    {
+        RuntimeFixture fixture = new();
+        fixture.SetSigners(AppAdmin);
+        UInt160 wallet = fixture.Deploy("UnifiedSmartWalletV3");
+        UInt160 target = fixture.Deploy("MockVerifierCore");
+        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 accountId = fixture.CallUInt160(
+            wallet,
+            "computeRegistrationAccountId",
+            UInt160.Zero,
+            Array.Empty<byte>(),
+            UInt160.Zero,
+            AppAdmin,
+            EscapeTimelock);
+        fixture.CallVoid(
+            wallet,
+            "registerAccount",
+            accountId,
+            UInt160.Zero,
+            Array.Empty<byte>(),
+            UInt160.Zero,
+            AppAdmin,
+            EscapeTimelock);
+
+        if (method != "proposePlatformRegistrar")
+        {
+            fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
+            if (method == "confirmPlatformRegistrar") fixture.AdvanceTime(TimeSpan.FromDays(7));
+        }
+
+        object?[] configArgs = method == "proposePlatformRegistrar"
+            ? new object?[] { registrar }
+            : Array.Empty<object>();
+        object[] op = RuntimeFixture.UserOp(
+            target,
+            "forward",
+            new object?[] { wallet, method, configArgs },
+            0,
+            fixture.Now() + 60_000,
+            Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() =>
+            fixture.CallVoid(wallet, "executeUserOp", accountId, op));
+        StringAssert.Contains(rejected.Message, "Global configuration context active");
+        Assert.AreEqual(System.Numerics.BigInteger.Zero, fixture.CallInteger(wallet, "getNonce", accountId, 0));
+        Assert.IsFalse(fixture.CallBoolean(wallet, "isExecutionActive", accountId));
+        Assert.AreEqual(UInt160.Zero, fixture.CallUInt160(wallet, "getPlatformRegistrar"));
+        Assert.AreEqual(
+            method == "proposePlatformRegistrar" ? UInt160.Zero : registrar,
+            fixture.CallUInt160(wallet, "getPendingPlatformRegistrar"));
+
+        fixture.CallVoid(wallet, method, configArgs);
+        if (method == "confirmPlatformRegistrar")
+        {
+            Assert.AreEqual(registrar, fixture.CallUInt160(wallet, "getPlatformRegistrar"));
+            Assert.AreEqual(UInt160.Zero, fixture.CallUInt160(wallet, "getPendingPlatformRegistrar"));
+        }
+        else
+        {
+            Assert.AreEqual(
+                method == "proposePlatformRegistrar" ? registrar : UInt160.Zero,
+                fixture.CallUInt160(wallet, "getPendingPlatformRegistrar"));
+        }
+    }
 }

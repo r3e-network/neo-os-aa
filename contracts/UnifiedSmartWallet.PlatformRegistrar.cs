@@ -31,7 +31,7 @@ namespace AbstractAccount
         [DisplayName("PlatformRegistrarChanged")]
         public static event AdminTransferConfirmedDelegate OnPlatformRegistrarChanged = null!;
 
-        [DisplayName("PlatformRegistrarProposalCancelled")]
+        [DisplayName("PlatformRegistrarProposalCancel")]
         public static event AccountOnlyDelegate OnPlatformRegistrarProposalCancelled = null!;
 
         [DisplayName("PlatformAccountOwnerRotated")]
@@ -130,6 +130,7 @@ namespace AbstractAccount
         public static void ProposePlatformRegistrar(UInt160 registrar)
         {
             ValidateAdmin();
+            AssertGlobalConfigurationIdle();
             ExecutionEngine.Assert(registrar != null && registrar != UInt160.Zero && registrar.IsValid, "Invalid platform registrar");
             ExecutionEngine.Assert(ContractManagement.GetContract(registrar!) != null, "platform registrar not deployed");
             ExecutionEngine.Assert(registrar != GetPlatformRegistrar(), "Platform registrar unchanged");
@@ -141,6 +142,7 @@ namespace AbstractAccount
         public static void ConfirmPlatformRegistrar()
         {
             ValidateAdmin();
+            AssertGlobalConfigurationIdle();
             ByteString? pending = Storage.Get(Storage.CurrentContext, Prefix_PendingPlatformRegistrar);
             ExecutionEngine.Assert(pending != null, "No pending platform registrar");
             ByteString? proposedAt = Storage.Get(Storage.CurrentContext, Prefix_PlatformRegistrarTimelock);
@@ -157,6 +159,7 @@ namespace AbstractAccount
         public static void CancelPlatformRegistrar()
         {
             ValidateAdmin();
+            AssertGlobalConfigurationIdle();
             Storage.Delete(Storage.CurrentContext, Prefix_PendingPlatformRegistrar);
             Storage.Delete(Storage.CurrentContext, Prefix_PlatformRegistrarTimelock);
             OnPlatformRegistrarProposalCancelled(GetPlatformRegistrar());
