@@ -33,8 +33,8 @@ Runtime and deployment boundaries:
 
 ## Architecture authority
 
-In the NeoOS workspace ownership map, `neo-os-aa` owns account abstraction: user operations, proxy
-verification, and recovery (`protocol-aa-core`). Native consensus enforcement lives in the matching
+In the NeoOS workspace ownership map, `neo-os-aa` is the sole authority for account abstraction:
+user operations, proxy verification, and recovery (`protocol-aa-core`). Native consensus enforcement lives in the matching
 Neo core `AccountManagement` implementation; this repository supplies its profile, modules, SDK and UI.
 AA decides whether an actor authorized an
 operation and nothing more: it does not grant DID eligibility, hold network identity, or
