@@ -7,7 +7,7 @@ bytes; its expectations follow the build profile read from the compiled core (DE
 source still emits System.Contract.CallWithGasLimit every verifier-signed operation must fault on a
 published node, and once the public build profile lands the same operations must execute.
 """
-import argparse, base64, datetime as dt, hashlib, json, os, shutil, subprocess, sys, time, traceback
+import argparse, base64, datetime as dt, hashlib, json, os, re, shutil, subprocess, sys, time, traceback
 import signal, socket, tempfile, random
 from collections import Counter
 from pathlib import Path
@@ -1039,6 +1039,33 @@ def sc_timelock_boundaries(c, x):
     return {"chainTimeMs": allowed7, "boundaries": x.timelock_boundaries}
 
 
+def _neo_wif(private_key_hex):
+    private_key = bytes.fromhex(private_key_hex)
+    if len(private_key) != 32:
+        raise ValueError("a Neo private key is exactly 32 bytes")
+    payload = b"\x80" + private_key + b"\x01"
+    checked = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    value = int.from_bytes(checked, "big")
+    encoded = ""
+    while value:
+        value, digit = divmod(value, 58)
+        encoded = alphabet[digit] + encoded
+    return "1" * (len(checked) - len(checked.lstrip(b"\0"))) + encoded
+
+
+def _redact_relay_stderr(stderr, private_key_hex):
+    redacted = str(stderr or "")
+    raw = str(private_key_hex or "")
+    if raw:
+        redacted = re.sub(re.escape(raw), "[redacted-relay-key]", redacted, flags=re.IGNORECASE)
+    try:
+        wif = _neo_wif(raw)
+    except ValueError:
+        return redacted
+    return redacted.replace(wif, "[redacted-relay-key]")
+
+
 def sc_relay_route(c, x):
     """AA-09 the AA frontend's real relay route against the local chain."""
     c.records.append({"scenario": "AA-09 gasless submission through the AA relay route (frontend/api/relay-transaction.js)"})
@@ -1072,12 +1099,14 @@ def sc_relay_route(c, x):
     fx = x.workdir / "relay-fixture.json"
     fx.write_text(json.dumps(fixture))
     env = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG") if k in os.environ}
-    env["RELAY_PRIVATE_KEY_HEX"] = c.keys["relay"].der.read_bytes()[7:39].hex()  # raw scalar of the throwaway dev key
+    relay_key_hex = c.keys["relay"].der.read_bytes()[7:39].hex()  # raw scalar of the throwaway dev key
+    env["RELAY_PRIVATE_KEY_HEX"] = relay_key_hex
     env["NODE_ENV"] = "development"
     done = subprocess.run([shutil.which("node") or "node", str(Path(__file__).with_name("relay_probe.mjs")), str(fx)], capture_output=True, text=True, env=env, timeout=180)
-    c.records.append({"relayProbeExit": done.returncode, "stderrTail": done.stderr[-500:]})
+    stderr_tail = _redact_relay_stderr(done.stderr, relay_key_hex)[-500:]
+    c.records.append({"relayProbeExit": done.returncode, "stderrTail": stderr_tail})
     if done.returncode != 0:
-        raise Fail(f"relay probe failed: {done.stderr[-300:]}")
+        raise Fail(f"relay probe failed: {stderr_tail[-300:]}")
     results = json.loads(done.stdout.strip().splitlines()[-1])
     c.records.append({"relayResults": results})
     by = {r["case"].split()[0]: r for r in results}
