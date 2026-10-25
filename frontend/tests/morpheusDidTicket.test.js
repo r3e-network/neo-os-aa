@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 
 import { EC } from '../src/config/errorCodes.js';
-import { buildAaActionId, toNeoInternalHex } from '../src/services/aaTicketService.js';
+import { buildAaActionId, requireAaSigningText, toNeoInternalHex } from '../src/services/aaTicketService.js';
 
 const core = '000102030405060708090a0b0c0d0e0f10111213';
 const account = '1415161718191a1b1c1d1e1f2021222324252627';
@@ -54,6 +55,7 @@ function createService({ invokeReadFunction = async () => { throw new Error('une
     decodeStackHash160,
     createAccountIdentityReader: () => async () => { throw new Error('not used'); },
     buildAaActionId,
+    requireAaSigningText,
     toNeoInternalHex,
   };
   const source = fs.readFileSync(new URL('../src/services/morpheusDidService.js', import.meta.url), 'utf8')
@@ -253,6 +255,76 @@ test('failed network, core, and account-text reads fail closed instead of fabric
     const input = { ...recoveryInput(), [field]: state[field] };
     await assert.rejects(harness.morpheusDidService.previewRecoveryTicket(input));
     assert.equal(harness.requests.length, 0);
+    assert.equal(harness.signerCalls.length, 0);
+    assert.equal(harness.defaultCoreReads(), 0);
+  }
+});
+
+function rawPreviewActionId(input) {
+  const fields = [
+    Buffer.from(input.network, 'utf8'),
+    ...[input.aaContract, input.accountIdRaw, input.executor].map((value) => Buffer.from(value.replace(/^0x/i, ''), 'hex').reverse()),
+    Buffer.from(String(input.sessionNonce ?? '0')),
+    Buffer.from(String(input.expiresAt)),
+  ];
+  const material = Buffer.concat(fields.flatMap((field, index) => index ? [Buffer.from([0x1f]), field] : [field]));
+  return `aa_proxy:${createHash('sha256').update(material).digest('hex')}`;
+}
+
+test('F3 preview witnesses preserve opaque stored network and accountIdText in both ticket types', async () => {
+  for (const [method, inputFactory] of [['previewRecoveryTicket', recoveryInput], ['previewActionTicket', actionInput]]) {
+    for (const [field, value] of [['network', ' neo3-testnet '], ['accountIdText', ' shared-account-text ']]) {
+      const harness = createService();
+      const input = { ...inputFactory(), [field]: value };
+      await harness.morpheusDidService[method](input);
+      const body = didRequest(harness);
+      assert.equal(body.network, input.network);
+      assert.equal(body.account_id, input.accountIdText);
+      if (method === 'previewActionTicket') assert.equal(body.action_id, rawPreviewActionId(input));
+      assert.equal(harness.signerCalls.length, 0);
+      assert.equal(harness.defaultCoreReads(), 0);
+    }
+  }
+});
+
+test('F3 previews preserve bounded UTF-8 text without Unicode or whitespace normalization', async () => {
+  const values = ['n', 'n'.repeat(255), ` ${'n'.repeat(253)} `, '界'.repeat(85), `${'😀'.repeat(63)}abc`, '\tneo3-testnet\n', ' é ', ' e\u0301 '];
+  for (const [method, inputFactory] of [['previewRecoveryTicket', recoveryInput], ['previewActionTicket', actionInput]]) {
+    for (const text of values) {
+      assert.ok(Buffer.byteLength(text) <= 255);
+      const harness = createService();
+      const input = { ...inputFactory(), network: text, accountIdText: text };
+      await harness.morpheusDidService[method](input);
+      const body = didRequest(harness);
+      assert.equal(Buffer.from(body.network).toString('hex'), Buffer.from(text).toString('hex'));
+      assert.equal(Buffer.from(body.account_id).toString('hex'), Buffer.from(text).toString('hex'));
+      if (method === 'previewActionTicket') assert.equal(body.action_id, rawPreviewActionId(input));
+      assert.equal(harness.signerCalls.length, 0);
+    }
+  }
+});
+
+test('F3 previews reject invalid signing text before Oracle NeoDID or signer calls', async () => {
+  const invalid = [undefined, null, '', ' ', '\t\n', false, 7, {}, [], 'n'.repeat(256), ` ${'n'.repeat(254)} `, '界'.repeat(86), '😀'.repeat(64)];
+  for (const [method, inputFactory] of [['previewRecoveryTicket', recoveryInput], ['previewActionTicket', actionInput]]) {
+    for (const field of ['network', 'accountIdText']) {
+      for (const value of invalid) {
+        const harness = createService();
+        await assert.rejects(harness.morpheusDidService[method]({ ...inputFactory(), [field]: value }), new RegExp(`${field} (is required|must be at most 255 UTF-8 bytes)`));
+        assert.equal(harness.requests.length, 0);
+        assert.equal(harness.signerCalls.length, 0);
+        assert.equal(harness.defaultCoreReads(), 0);
+      }
+    }
+  }
+});
+
+test('F3 generic UI format retains whitespace trimming outside signing context', async () => {
+  for (const [format, expected] of [[' json ', 'json'], ['\tjson\n', 'json'], ['   ', null]]) {
+    const harness = createService();
+    await harness.morpheusDidService.resolveDid({ format });
+    assert.equal(harness.requests.length, 1);
+    assert.equal(new URL(harness.requests[0].url).searchParams.get('format'), expected);
     assert.equal(harness.signerCalls.length, 0);
     assert.equal(harness.defaultCoreReads(), 0);
   }

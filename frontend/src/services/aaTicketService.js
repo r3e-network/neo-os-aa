@@ -1,3 +1,16 @@
+const MAX_AA_SIGNING_TEXT_BYTES = 255;
+
+export function requireAaSigningText(value, fieldName) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${fieldName} is required`);
+  }
+  if (new TextEncoder().encode(value).length > MAX_AA_SIGNING_TEXT_BYTES) {
+    throw new Error(`${fieldName} must be at most ${MAX_AA_SIGNING_TEXT_BYTES} UTF-8 bytes`);
+  }
+  // Stored identity text is opaque signing material; validation must not normalize it.
+  return value;
+}
+
 function hash160Bytes(value) {
   const hex = String(value || '').trim().replace(/^0x/i, '').toLowerCase();
   if (!/^[0-9a-f]{40}$/.test(hex)) throw new Error('A 20-byte hash160 is required');
@@ -13,7 +26,7 @@ export function toNeoInternalHex(value) {
 export async function buildAaActionId({ network = 'neo_n3', aaContractInternal, accountIdRawInternal, executorInternal, sessionNonce = 0, expiresAt } = {}) {
   const encoder = new TextEncoder();
   const parts = [
-    encoder.encode(String(network || 'neo_n3').trim() || 'neo_n3'),
+    encoder.encode(requireAaSigningText(network, 'network')),
     hash160Bytes(aaContractInternal),
     hash160Bytes(accountIdRawInternal),
     hash160Bytes(executorInternal),

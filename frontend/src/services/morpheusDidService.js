@@ -10,7 +10,7 @@ import { buildZkLoginVerifierParamsHex, formatZkLoginTicket, normalizeZkLoginPro
 import { connectedDidProfile } from '@/utils/did';
 import { decodeStackHash160 } from '@/features/studio/helpers';
 import { createAccountIdentityReader } from './aaIdentityReadService.js';
-import { buildAaActionId, toNeoInternalHex } from './aaTicketService.js';
+import { buildAaActionId, requireAaSigningText, toNeoInternalHex } from './aaTicketService.js';
 
 function trim(value) {
   return String(value || '').trim();
@@ -44,13 +44,6 @@ function normalizeScriptHash(value) {
     return sanitizeHex(getScriptHashFromAddress(raw));
   }
   return sanitizeHex(raw);
-}
-
-function requireText(value, fieldName) {
-  if (typeof value !== 'string' || !value.trim()) {
-    throw new Error(`${fieldName} is required`);
-  }
-  return value.trim();
 }
 
 function requireNonZeroHash160(value, fieldName) {
@@ -394,8 +387,8 @@ class MorpheusDidService {
   }
 
   async previewRecoveryTicket({ network, aaContract, verifierContract, accountId, accountIdText, accountIdRaw, accountAddress, newOwner, recoveryNonce, expiresAt } = {}) {
-    const networkText = requireText(network, 'network');
-    const accountText = requireText(accountIdText, 'accountIdText');
+    const networkText = requireAaSigningText(network, 'network');
+    const accountText = requireAaSigningText(accountIdText, 'accountIdText');
     const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
     const recoveryVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
     const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');
@@ -423,8 +416,8 @@ class MorpheusDidService {
   }
 
   async previewActionTicket({ aaContract, verifierContract, accountId, accountIdText, accountIdRaw, executor, sessionNonce = 0, expiresAt, network } = {}) {
-    const networkText = requireText(network, 'network');
-    const accountText = requireText(accountIdText, 'accountIdText');
+    const networkText = requireAaSigningText(network, 'network');
+    const accountText = requireAaSigningText(accountIdText, 'accountIdText');
     const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
     const actionVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
     const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');

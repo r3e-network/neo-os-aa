@@ -40,3 +40,47 @@ test('buildAaActionId rejects missing or non-hash160 account fields', async () =
   await assert.rejects(buildAaActionId({ ...vector, accountIdRawInternal: 'shared-text' }), /20-byte hash160/);
   await assert.rejects(buildAaActionId({ ...vector, aaContractInternal: undefined }), /20-byte hash160/);
 });
+
+function rawActionId(input) {
+  const fields = [
+    Buffer.from(input.network, 'utf8'),
+    Buffer.from(input.aaContractInternal.replace(/^0x/i, ''), 'hex'),
+    Buffer.from(input.accountIdRawInternal.replace(/^0x/i, ''), 'hex'),
+    Buffer.from(input.executorInternal.replace(/^0x/i, ''), 'hex'),
+    Buffer.from(String(input.sessionNonce ?? '0')),
+    Buffer.from(String(input.expiresAt)),
+  ];
+  const material = Buffer.concat(fields.flatMap((field, index) => index ? [Buffer.from([0x1f]), field] : [field]));
+  return `aa_proxy:${createHash('sha256').update(material).digest('hex')}`;
+}
+
+test('F3 action-ID witnesses preserve opaque stored network bytes', async () => {
+  const witness = {
+    aaContractInternal: '01'.repeat(20),
+    accountIdRawInternal: '23'.repeat(20),
+    executorInternal: '45'.repeat(20),
+    sessionNonce: '0',
+    expiresAt: '1800000000000',
+  };
+  for (const network of ['neo3-testnet', 'neo3-testnet ', ' neo3-testnet', ' neo3-testnet ', '\tneo3-testnet\n', ' e\u0301 ']) {
+    const input = { ...witness, network };
+    assert.equal(await buildAaActionId(input), rawActionId(input), JSON.stringify(network));
+  }
+});
+
+test('F3 action-ID accepts original 255-byte UTF-8 fields and retains the omitted-network default', async () => {
+  for (const network of ['n', 'n'.repeat(255), ` ${'n'.repeat(253)} `, '界'.repeat(85), `${'😀'.repeat(63)}abc`]) {
+    assert.ok(Buffer.byteLength(network) <= 255);
+    const input = { ...vector, network };
+    assert.equal(await buildAaActionId(input), rawActionId(input));
+  }
+  const { network, ...withoutNetwork } = vector;
+  assert.equal(await buildAaActionId(withoutNetwork), rawActionId({ ...vector, network: 'neo_n3' }));
+});
+
+test('F3 action-ID rejects blank nonstring and oversized network without a fallback identity', async () => {
+  const invalid = ['', ' ', '\t\n', null, false, 0, 7, {}, [], 'n'.repeat(256), ` ${'n'.repeat(254)} `, '界'.repeat(86), '😀'.repeat(64)];
+  for (const network of invalid) {
+    await assert.rejects(buildAaActionId({ ...vector, network }), /network (is required|must be at most 255 UTF-8 bytes)/, JSON.stringify(network));
+  }
+});
