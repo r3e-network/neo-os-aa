@@ -220,25 +220,30 @@ for (const [name, mutate] of Object.entries({
   });
 }
 
-test("provenance joins both-profile certificate to all public-module RPC readbacks", (t) => {
+test("provenance joins the private core and public modules to their exact RPC readbacks", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "aa-full-provenance-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
   const script = Buffer.from([0x40]); const nef = syntheticNef(script); const manifest = Buffer.from("{}");
+  const platformNef = syntheticNef(Buffer.from([0x41])); const platformManifest = Buffer.from('{"profile":"platform"}');
   const hashes = {}; const deployments = []; const contracts = [];
-  const writePair = (relative) => {
-    for (const [name, bytes] of [[relative, nef], [relative.replace(/\.nef$/, ".manifest.json"), manifest]]) {
+  const writePair = (relative, artifactNef = nef, artifactManifest = manifest) => {
+    for (const [name, bytes] of [[relative, artifactNef], [relative.replace(/\.nef$/, ".manifest.json"), artifactManifest]]) {
       fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
       fs.writeFileSync(path.join(root, name), bytes); hashes[name] = hash(bytes);
     }
   };
   for (const [contractName, relative] of Object.entries(LOCAL_ARTIFACTS)) {
+    const profile = contractName === "UnifiedSmartWalletV3" ? "platform" : "v3";
+    const artifactNef = profile === "platform" ? platformNef : nef;
+    const artifactManifest = profile === "platform" ? platformManifest : manifest;
     writePair(`v3/${relative}`);
-    deployments.push({ contractName, localNefSha256: hash(nef), localManifestSha256: hash(manifest) });
-    contracts.push({ contractName, nefScriptSha256: hash(script), nefChecksumEquality: true,
-      manifestSemanticEquality: true, nefScriptByteEquality: true });
+    deployments.push({ contractName, artifactProfile: profile,
+      localNefSha256: hash(artifactNef), localManifestSha256: hash(artifactManifest) });
+    contracts.push({ contractName, nefScriptSha256: hash(profile === "platform" ? Buffer.from([0x41]) : script),
+      nefChecksumEquality: true, manifestSemanticEquality: true, nefScriptByteEquality: true });
   }
-  writePair("platform/UnifiedSmartWalletV3.nef");
+  writePair("platform/UnifiedSmartWalletV3.nef", platformNef, platformManifest);
   const source = buildInputSnapshot();
   const repro = { release_matches_fresh_build: true, artifacts_compared: 50, drifted: [], missing: [],
     profiles: { v3: { artifacts_compared: 48, required_core_present: true, matches_fresh_build: true },
@@ -250,6 +255,13 @@ test("provenance joins both-profile certificate to all public-module RPC readbac
     privacy: { privateKeysIncluded: false }, deployments, rpcReadback: { contracts } };
   const result = verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") });
   assert.equal(result.status, "PASS"); assert.equal(result.releaseToPrivateChain.localArtifactsChecked, 24);
+  assert.equal(result.releaseToPrivateChain.rows[0].artifactProfile, "platform");
+  deployments[0].localNefSha256 = hash(nef);
+  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }), /private artifact provenance mismatch/);
+  deployments[0].localNefSha256 = hash(platformNef);
+  delete deployments[0].artifactProfile;
+  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }), /private artifact provenance mismatch/);
+  deployments[0].artifactProfile = "platform";
   receipt.rpcReadback.contracts[0].nefScriptSha256 = "0".repeat(64);
   assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }), /private artifact provenance mismatch/);
 });

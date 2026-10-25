@@ -47,6 +47,9 @@ test("NeoDID cross-repo gate resolves the services vendor artifact path", () => 
   );
   assert.ok(integrationTest.includes('"neo-os-services", "vendor", "neo-os-did", "contracts", "build"'));
   assert.equal(integrationTest.includes('"neo-os-services", "contracts", "build"'), false);
+  const validator = fs.readFileSync(path.join(repoRoot, "scripts", "neoexpress_validate.py"), "utf8");
+  assert.ok(validator.includes('"neo-os-services" / "vendor" / "neo-os-did" / "contracts" / "build"'));
+  assert.equal(validator.includes('"neo-os-services" / "contracts" / "build"'), false);
 });
 
 // AA stays on GitHub-hosted runners, including default-branch pushes and manual

@@ -208,7 +208,9 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
   const readback = Object.fromEntries(receipt.rpcReadback.contracts.map((row) => [row.contractName, row]));
   const rows = [];
   for (const [name, relative] of Object.entries(LOCAL_ARTIFACTS)) {
-    const nefPath = path.join(releaseRoot, relative);
+    const profile = name === "UnifiedSmartWalletV3" ? "platform" : "v3";
+    const artifactRoot = profile === "v3" ? releaseRoot : path.join(path.dirname(releaseRoot), profile);
+    const nefPath = path.join(artifactRoot, relative);
     const manifestPath = nefPath.replace(/\.nef$/, ".manifest.json");
     const nef = fs.readFileSync(nefPath);
     const manifest = fs.readFileSync(manifestPath);
@@ -218,6 +220,7 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
     if (!deployed || !chain) throw new Error(`receipt missing ${name}`);
     const row = {
       contractName: name,
+      artifactProfile: profile,
       artifact: relative,
       releaseNefSha256: sha256(nef),
       deploymentNefSha256: deployed.localNefSha256,
@@ -225,13 +228,14 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
       deploymentManifestSha256: deployed.localManifestSha256,
       releaseScriptSha256: sha256(script),
       rpcScriptSha256: chain.nefScriptSha256,
+      deploymentProfileMatch: deployed.artifactProfile === profile,
       nefFullHashMatch: sha256(nef) === deployed.localNefSha256,
       manifestFullHashMatch: sha256(manifest) === deployed.localManifestSha256,
       rpcScriptHashMatch: sha256(script) === chain.nefScriptSha256,
       rpcChecksumMatch: chain.nefChecksumEquality === true,
       rpcManifestSemanticMatch: chain.manifestSemanticEquality === true,
       rpcScriptByteMatch: chain.nefScriptByteEquality === true,
-      releaseCertificateHashMatch: repro.certificate.release_artifact_sha256?.[`v3/${relative}`] === sha256(nef),
+      releaseCertificateHashMatch: repro.certificate.release_artifact_sha256?.[`${profile}/${relative}`] === sha256(nef),
     };
     if (!Object.entries(row).filter(([key]) => key.endsWith("Match")).every(([, value]) => value === true)) {
       throw new Error(`private artifact provenance mismatch: ${name}`);

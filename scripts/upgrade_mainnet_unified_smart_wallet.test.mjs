@@ -33,12 +33,27 @@ test("mainnet candidate removes the instant admin transfer surface", () => {
   const artifact = script.candidateArtifact();
   assert.equal(script.REMOVED_METHODS.includes("transferAdmin"), true);
   assert.equal(artifact.methodCount > 0, true);
-  assert.equal(artifact.methodCount, 90);
+  // The reviewed pre-composite candidate exposed 90 methods; five lifecycle
+  // entrypoints are the only approved additions (baseline db544b2).
+  assert.equal(artifact.methodCount, 95);
   const manifest = JSON.parse(artifact.manifestText);
-  const childConfiguration = manifest.abi.methods.find((method) => method.name === 'callVerifierChild');
-  assert.equal(childConfiguration.safe, false);
-  assert.deepEqual(childConfiguration.parameters.map((parameter) => parameter.type),
-    ['Hash160', 'Hash160', 'String', 'Array']);
+  for (const name of ['callVerifierChild', 'callHookChild']) {
+    const childConfiguration = manifest.abi.methods.find((method) => method.name === name);
+    assert.equal(childConfiguration.safe, false);
+    assert.deepEqual(childConfiguration.parameters.map((parameter) => parameter.type),
+      ['Hash160', 'Hash160', 'String', 'Array']);
+  }
+  for (const [name, arity] of Object.entries({
+    setVerifierDependencies: 2,
+    clearVerifierDependencies: 1,
+    setHookDependencies: 2,
+    clearHookDependencies: 1,
+  })) {
+    const method = manifest.abi.methods.find((candidate) => candidate.name === name);
+    assert.equal(method.safe, false);
+    assert.equal(method.parameters.length, arity);
+    assert.equal(method.parameters[0].type, 'Hash160');
+  }
 });
 
 test("mainnet candidate contains the governed upgrade surface", () => {
