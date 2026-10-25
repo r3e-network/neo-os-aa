@@ -1,19 +1,24 @@
 using System;
 using System.Numerics;
+using System.Linq;
+using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
 using Neo.SmartContract.Testing.Exceptions;
+using Neo.SmartContract;
+using Neo.SmartContract.Manifest;
+using Neo.VM;
 
 namespace AbstractAccount.Contracts.Tests;
 
 /// <summary>
-/// Regression tests for the two related paymaster audit findings:
+/// Regression tests for paymaster audit findings:
 ///
 /// MEDIUM-a — <c>ExecuteSponsoredUserOp</c> forwarded a fully relay-controlled
 /// <c>reimbursementAmount</c> to the paymaster with no relation to the gas actually paid; within
-/// policy MaxPerOp the relay could always claim the maximum. The fix caps the settled amount to
-/// the enclosing transaction's <c>SystemFee + NetworkFee</c>.
+/// policy MaxPerOp the relay could always claim the maximum. The fix caps aggregate reimbursement
+/// to one transaction's actual cost, shared across sponsored calls, accounts and paymasters.
 ///
 /// MEDIUM-b — a global policy (accountId = Zero, sponsoring ANY account) with DailyBudget/TotalBudget
 /// left at 0 (= unlimited) let a relay drain the entire sponsor deposit at MaxPerOp per op with no
@@ -253,5 +258,226 @@ public class FixPaymasterTests
         BigInteger settled = depositBefore - h.Deposit();
         Assert.AreEqual(smallRequest, settled,
             "When the request is below the actual cost, the relay is reimbursed only what it asked for");
+    }
+
+    private static ContractParameter Parameter(object? value) => value switch
+    {
+        UInt160 hash => new(ContractParameterType.Hash160) { Value = hash },
+        BigInteger number => new(ContractParameterType.Integer) { Value = number },
+        string text => new(ContractParameterType.String) { Value = text },
+        byte[] bytes => new(ContractParameterType.ByteArray) { Value = bytes },
+        object?[] array => new(ContractParameterType.Array) { Value = array.Select(Parameter).ToList() },
+        null => new(ContractParameterType.Any),
+        _ => throw new NotSupportedException()
+    };
+
+    private static void AppendCall(ScriptBuilder script, UInt160 core, string method, params object?[] args)
+    {
+        script.EmitPush(Parameter(args));
+        script.EmitPush((BigInteger)(int)CallFlags.All);
+        script.EmitPush(method);
+        script.EmitPush(core.ToArray());
+        script.EmitSysCall(ApplicationEngine.System_Contract_Call.Hash);
+        script.Emit(OpCode.DROP);
+    }
+
+    private static void RunCombined(SponsoredHarness h, ScriptBuilder script)
+    {
+        h.Fx.Engine.Execute(new Script(script.ToArray()), 0, engine =>
+            typeof(ApplicationEngine).GetField("_feeAmount", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(engine, new BigInteger(long.MaxValue)));
+    }
+
+    [TestMethod]
+    public void SameTransaction_SingleOperationsShareOneActualCostBudget()
+    {
+        SponsoredHarness h = new(50 * OneGas);
+        h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
+        BigInteger before = h.Deposit(), relayBefore = h.RelayBalance();
+        BigInteger deadline = h.Fx.Now() + 3_600_000;
+        h.Fx.SetSigners(Relay, BackupOwner);
+        h.Fx.Engine.Transaction.SystemFee = 4 * OneGas;
+        h.Fx.Engine.Transaction.NetworkFee = OneGas;
+        using ScriptBuilder script = new();
+        AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+            h.TransferOp(0, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+        AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+            h.TransferOp(1, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+        script.EmitPush(true);
+        RunCombined(h, script);
+        Assert.AreEqual((BigInteger)(5 * OneGas), before - h.Deposit(), "Aggregate reimbursement must equal one transaction cost");
+        Assert.AreEqual((BigInteger)(5 * OneGas), h.RelayBalance() - relayBefore);
+        Assert.AreEqual((BigInteger)2, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
+    }
+
+    private static UInt160 RegisterSecondAccount(SponsoredHarness h)
+    {
+        const uint delay = EscapeTimelockSeconds + 1;
+        UInt160 account = h.Fx.CallUInt160(h.Wallet, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, BackupOwner, delay);
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(h.Wallet, "registerAccount", account, UInt160.Zero, Array.Empty<byte>(),
+            UInt160.Zero, BackupOwner, delay);
+        return account;
+    }
+
+    private static void SetFees(SponsoredHarness h, long system = 4 * OneGas, long network = OneGas)
+    {
+        h.Fx.SetSigners(Relay, BackupOwner);
+        h.Fx.Engine.Transaction.SystemFee = system;
+        h.Fx.Engine.Transaction.NetworkFee = network;
+    }
+
+    [TestMethod]
+    public void SameTransaction_SingleAndBatchShareOneBudget()
+    {
+        SponsoredHarness h = new(50 * OneGas);
+        h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
+        BigInteger before = h.Deposit(), deadline = h.Fx.Now() + 3_600_000;
+        SetFees(h);
+        using ScriptBuilder script = new();
+        AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+            h.TransferOp(0, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+        AppendCall(script, h.Wallet, "executeSponsoredUserOps", h.ExecAccount,
+            new object[] { h.TransferOp(1, deadline), h.TransferOp(2, deadline) },
+            h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+        script.EmitPush(true);
+        RunCombined(h, script);
+        Assert.AreEqual((BigInteger)(5 * OneGas), before - h.Deposit());
+        Assert.AreEqual((BigInteger)3, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
+    }
+
+    [TestMethod]
+    public void SameTransaction_DifferentAccountsAndPaymastersShareCoreBudget()
+    {
+        SponsoredHarness h = new(50 * OneGas);
+        h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
+        UInt160 second = RegisterSecondAccount(h);
+        h.Fx.SetSigners(Recipient);
+        UInt160 secondPaymaster = h.Fx.Deploy("AAPaymaster", h.Wallet.ToArray());
+        Assert.AreNotEqual(h.Paymaster, secondPaymaster);
+        h.Fx.SetSigners(Sponsor);
+        h.Fx.TransferGas(Sponsor, secondPaymaster, 50 * OneGas, null);
+        h.Fx.CallVoid(secondPaymaster, "setPolicy", second, UInt160.Zero, "",
+            (BigInteger)(50 * OneGas), (BigInteger)(50 * OneGas), (BigInteger)(50 * OneGas), BigInteger.Zero);
+        BigInteger relayBefore = h.RelayBalance(), deadline = h.Fx.Now() + 3_600_000;
+        SetFees(h);
+        using ScriptBuilder script = new();
+        AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+            h.TransferOp(0, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+        AppendCall(script, h.Wallet, "executeSponsoredUserOp", second,
+            h.TransferOp(0, deadline), secondPaymaster, Sponsor, (BigInteger)(3 * OneGas));
+        script.EmitPush(true);
+        RunCombined(h, script);
+        Assert.AreEqual((BigInteger)(5 * OneGas), h.RelayBalance() - relayBefore);
+        Assert.AreEqual((BigInteger)(47 * OneGas), h.Deposit());
+        Assert.AreEqual((BigInteger)(48 * OneGas), h.Fx.CallInteger(secondPaymaster, "getSponsorDeposit", Sponsor));
+    }
+
+    [TestMethod]
+    public void NewTransaction_ResetsTheSharedBudget()
+    {
+        SponsoredHarness h = new(50 * OneGas);
+        h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
+        BigInteger before = h.Deposit(), deadline = h.Fx.Now() + 3_600_000;
+        SetFees(h);
+        UInt256? previousHash = null;
+        for (int nonce = 0; nonce < 2; nonce++)
+        {
+            using ScriptBuilder script = new();
+            AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+                h.TransferOp(nonce, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+            script.EmitPush(true);
+            RunCombined(h, script);
+            UInt256 currentHash = h.Fx.Engine.Transaction.Hash;
+            if (previousHash is not null) Assert.AreNotEqual(previousHash, currentHash);
+            previousHash = currentHash;
+        }
+        Assert.AreEqual((BigInteger)(6 * OneGas), before - h.Deposit());
+    }
+
+    [TestMethod]
+    public void SameTransaction_ZeroFeeRpcEstimationPreservesConservativeRequests()
+    {
+        SponsoredHarness h = new(50 * OneGas);
+        h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
+        BigInteger before = h.Deposit(), deadline = h.Fx.Now() + 3_600_000;
+        SetFees(h, 0, 0);
+        using ScriptBuilder script = new();
+        for (int nonce = 0; nonce < 2; nonce++)
+            AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+                h.TransferOp(nonce, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+        script.EmitPush(true);
+        RunCombined(h, script);
+        Assert.AreEqual((BigInteger)(6 * OneGas), before - h.Deposit(),
+            "RPC estimation follows both settlements; this is not a zero-fee block transaction.");
+    }
+
+    [TestMethod]
+    public void SameTransaction_ExhaustedBudgetFaultRollsBackReservationAndAllEffects()
+    {
+        SponsoredHarness h = new(50 * OneGas);
+        h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
+        var state = (Neo.VM.Types.Array)h.Fx.Call(
+            UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", h.Wallet);
+        StorageKey key = new() { Id = (int)state[0].GetInteger(), Key = new byte[] { 0x21 } };
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(key));
+        BigInteger before = h.Deposit(), relayBefore = h.RelayBalance(), deadline = h.Fx.Now() + 3_600_000;
+        SetFees(h);
+        using ScriptBuilder script = new();
+        AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+            h.TransferOp(0, deadline), h.Paymaster, Sponsor, (BigInteger)(5 * OneGas));
+        AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+            h.TransferOp(1, deadline), h.Paymaster, Sponsor, BigInteger.One);
+        script.EmitPush(true);
+        var error = Assert.ThrowsExactly<TestException>(() => RunCombined(h, script));
+        StringAssert.Contains(error.Message, "Reimbursement exceeds actual gas cost");
+        Assert.AreEqual(before, h.Deposit());
+        Assert.AreEqual(relayBefore, h.RelayBalance());
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(key), "Failed invocation must not retain its reservation slot.");
+    }
+
+    [TestMethod]
+    public void NestedSponsoredExecution_ObservesOuterReservation()
+    {
+        SponsoredHarness h = new(50 * OneGas);
+        h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
+        UInt160 second = RegisterSecondAccount(h);
+        h.Fx.SetSigners(Sponsor);
+        h.Fx.CallVoid(h.Paymaster, "setPolicy", second, UInt160.Zero, "",
+            (BigInteger)(50 * OneGas), (BigInteger)(50 * OneGas), (BigInteger)(50 * OneGas), BigInteger.Zero);
+        BigInteger deadline = h.Fx.Now() + 3_600_000;
+        using ScriptBuilder callback = new();
+        AppendCall(callback, h.Wallet, "executeSponsoredUserOp", second,
+            h.TransferOp(0, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+        callback.EmitPush(true);
+        callback.Emit(OpCode.RET);
+        NefFile nef = new() { Compiler = "Sponsored nesting regression", Source = "", Tokens = [], Script = callback.ToArray() };
+        nef.CheckSum = NefFile.ComputeChecksum(nef);
+        ContractManifest manifest = new()
+        {
+            Name = "SponsoredNestedTarget",
+            Groups = [],
+            SupportedStandards = [],
+            Permissions = [ContractPermission.DefaultPermission],
+            Trusts = WildcardContainer<ContractPermissionDescriptor>.Create(),
+            Abi = new ContractAbi
+            {
+                Methods = [new ContractMethodDescriptor { Name = "run", Offset = 0,
+                    ReturnType = ContractParameterType.Boolean, Parameters = [], Safe = false }],
+                Events = []
+            }
+        };
+        UInt160 target = h.Fx.DeployArtifact(nef.ToArray(), manifest.ToJson().ToString());
+        BigInteger before = h.Deposit(), relayBefore = h.RelayBalance();
+        SetFees(h);
+        h.Fx.CallVoid(h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+            RuntimeFixture.UserOp(target, "run", Array.Empty<object?>(), 0, deadline, Array.Empty<byte>()),
+            h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+        Assert.AreEqual((BigInteger)(5 * OneGas), before - h.Deposit());
+        Assert.AreEqual((BigInteger)(5 * OneGas), h.RelayBalance() - relayBefore);
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Wallet, "getNonce", second, BigInteger.Zero));
     }
 }

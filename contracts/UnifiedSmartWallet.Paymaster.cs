@@ -1,6 +1,7 @@
 using System.Numerics;
 using Neo;
 using Neo.SmartContract.Framework;
+using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
 namespace AbstractAccount
@@ -17,9 +18,20 @@ namespace AbstractAccount
         // 3. Core executes the UserOp normally (verifier + hooks + target call)
         // 4. Core calls paymaster.settleReimbursement for atomic policy enforcement + relay reimbursement
 
+        // One bounded record shared across all accounts, sponsors and paymasters.
+        // Transactions execute serially; a different hash resets the prior transaction's budget.
+        private static readonly byte[] Prefix_TransactionReimbursement = new byte[] { 0x21 };
+
+        private class TransactionReimbursement
+        {
+            public UInt256 TransactionHash = UInt256.Zero;
+            public BigInteger Reserved = 0;
+        }
+
         /// <summary>
         /// Caps a relay-supplied reimbursement request to the actual gas cost the relay paid for the
-        /// enclosing transaction (system fee + network fee). This binds the sponsored reimbursement to
+        /// enclosing transaction (system fee + network fee), less every amount already reserved by
+        /// this core in that transaction. This binds the aggregate sponsored reimbursement to
         /// real cost so a relay cannot always claim its policy MaxPerOp regardless of the gas actually
         /// consumed (audit MEDIUM-a). The paymaster still enforces MaxPerOp / budgets / deposit backing.
         /// </summary>
@@ -31,17 +43,44 @@ namespace AbstractAccount
         /// that case would make sponsored operations impossible to price with standard wallet and
         /// relay tooling, so the estimation container is capped at the requested amount, the largest
         /// amount the chain could settle; every transaction that reaches a block is capped as before.
-        /// The cap is computed without a branch so an estimation and the persisted transaction execute
-        /// the same instruction sequence: an early return on the estimation path was measured to
-        /// under-estimate the system fee by the instructions it skipped, which made the persisted
-        /// transaction fault with "Insufficient GAS". <c>BigInteger.Min</c> compiles to the MIN opcode.
+        /// The fee-cap arithmetic does not return early for estimation. Loading or resetting the
+        /// transaction record still has state-dependent cost, so RPC estimates are not an exact
+        /// guarantee of persisted execution fees. Callers must retain their normal fee margin and
+        /// simulate the complete invocation script; estimation settles each requested amount.
+        /// A single bounded storage record avoids accumulating a permanent key per transaction.
+        /// Reservation precedes every external callback; application faults roll it back atomically.
         /// </remarks>
         private static BigInteger CapReimbursementToActualCost(BigInteger requested)
         {
+            UInt256 transactionHash = Runtime.Transaction.Hash;
+            ByteString? data = Storage.Get(Storage.CurrentContext, Prefix_TransactionReimbursement);
+            TransactionReimbursement budget = data == null
+                ? new TransactionReimbursement()
+                : (TransactionReimbursement)StdLib.Deserialize(data);
+            if (budget.TransactionHash != transactionHash)
+            {
+                budget.TransactionHash = transactionHash;
+                budget.Reserved = 0;
+            }
             BigInteger actualCost = (BigInteger)Runtime.Transaction.SystemFee + (BigInteger)Runtime.Transaction.NetworkFee;
             BigInteger estimationFlag = 1 - BigInteger.Min(actualCost, 1);
-            BigInteger cap = actualCost + estimationFlag * requested;
-            return BigInteger.Min(requested, cap);
+            BigInteger cap = BigInteger.Max(actualCost - budget.Reserved, 0) + estimationFlag * requested;
+            BigInteger settled = BigInteger.Min(requested, cap);
+            ExecutionEngine.Assert(settled > 0, "Reimbursement exceeds actual gas cost");
+            // The reservation is persisted and accumulated across the sponsored
+            // calls of one transaction, so the sum has to stay inside the VM
+            // integer domain. Letting the ADD fault would surface a CLR range
+            // error ("Integer size 33 bytes exceeds ...") rather than a contract
+            // rejection, so the headroom is checked explicitly here. A persisted
+            // transaction caps `settled` by the actual fee and cannot reach the
+            // limit; only the zero-fee estimation container can accumulate
+            // unbounded requests, and that is exactly the case rejected below.
+            BigInteger vmMax = ((BigInteger.One << 254) - 1) + (BigInteger.One << 254);
+            ExecutionEngine.Assert(budget.Reserved <= vmMax - settled,
+                "Reimbursement budget exceeds VM integer limit");
+            budget.Reserved += settled;
+            Storage.Put(Storage.CurrentContext, Prefix_TransactionReimbursement, StdLib.Serialize(budget));
+            return settled;
         }
 
         /// <summary>
@@ -68,15 +107,13 @@ namespace AbstractAccount
             ExecutionEngine.Assert(sponsor != null && sponsor != UInt160.Zero, "Sponsor required");
             ExecutionEngine.Assert(reimbursementAmount > 0, "Reimbursement amount required");
 
+            // Reserve before every external call, including paymaster discovery.
+            BigInteger settledAmount = CapReimbursementToActualCost(reimbursementAmount);
+
             // Verify the paymaster is trusted: its AuthorizedCore must point back to this contract.
             // Prevents arbitrary contracts from being passed as paymasters.
             UInt160 paymasterCore = (UInt160)Contract.Call(paymaster!, "authorizedCore", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(paymasterCore == Runtime.ExecutingScriptHash, "Paymaster not bound to this core");
-
-            // Bind the relay-requested reimbursement to the actual gas cost of this transaction
-            // (audit MEDIUM-a): the relay cannot be reimbursed for more than it actually paid.
-            BigInteger settledAmount = CapReimbursementToActualCost(reimbursementAmount);
-            ExecutionEngine.Assert(settledAmount > 0, "Reimbursement exceeds actual gas cost");
 
             // Execute the operation (full validation + execution + hooks)
             object result = ExecuteUserOp(accountId!, op);
@@ -117,10 +154,6 @@ namespace AbstractAccount
                 ValidateUserOperation(validatedOps[i]);
             }
 
-            // Verify the paymaster is trusted
-            UInt160 paymasterCore = (UInt160)Contract.Call(paymaster!, "authorizedCore", CallFlags.ReadOnly, new object[] { });
-            ExecutionEngine.Assert(paymasterCore == Runtime.ExecutingScriptHash, "Paymaster not bound to this core");
-
             // Enforce all ops share the same target/method (policy is checked against these)
             for (int i = 1; i < ops!.Length; i++)
             {
@@ -131,7 +164,10 @@ namespace AbstractAccount
             // Bind the relay-requested reimbursement to the actual gas cost of this transaction
             // (audit MEDIUM-a): a single batch reimbursement cannot exceed the gas actually paid.
             BigInteger settledAmount = CapReimbursementToActualCost(reimbursementAmount);
-            ExecutionEngine.Assert(settledAmount > 0, "Reimbursement exceeds actual gas cost");
+
+            // The shared transaction reservation is already visible to reentrant callbacks.
+            UInt160 paymasterCore = (UInt160)Contract.Call(paymaster!, "authorizedCore", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(paymasterCore == Runtime.ExecutingScriptHash, "Paymaster not bound to this core");
 
             // Execute all operations atomically
             object[] results = ExecuteUserOps(accountId!, ops);
