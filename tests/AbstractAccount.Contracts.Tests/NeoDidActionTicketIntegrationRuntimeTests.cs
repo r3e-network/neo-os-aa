@@ -188,22 +188,20 @@ public sealed class NeoDidActionTicketIntegrationRuntimeTests
     }
 
     /// <summary>
-    /// Locates the neo-os-services contract build output that holds the compiled
-    /// NeoDIDRegistry artifact, or returns null when it is not present.
+    /// Locates the pinned NeoDIDRegistry artifact supplied through the services
+    /// vendor tree, or returns null when it is not present.
     /// </summary>
     /// <remarks>
-    /// The artifact is produced by the private sibling repository neo-os-services
-    /// and is gitignored there, so it exists only in a workspace that checks out
-    /// both repositories side by side. A single-repository checkout (which is what
-    /// CI receives) has no sibling directory and therefore cannot run this
-    /// cross-contract integration proof.
+    /// neo-os-did supplies the artifact through the sibling services vendor tree,
+    /// which a standalone checkout may not provide. NEOOS_SERVICES_CONTRACT_BUILD
+    /// can name an equivalent reviewed artifact directory explicitly.
     /// </remarks>
     private static string? ResolveServicesBuildDirectory()
     {
         string configured = Environment.GetEnvironmentVariable(ServicesBuildEnvVar) ?? string.Empty;
         string serviceBuild = configured.Length > 0
             ? Path.GetFullPath(configured)
-            : Path.GetFullPath(Path.Combine(RepoRoot, "..", "neo-os-services", "contracts", "build"));
+            : Path.GetFullPath(Path.Combine(RepoRoot, "..", "neo-os-services", "vendor", "neo-os-did", "contracts", "build"));
 
         bool complete =
             File.Exists(Path.Combine(serviceBuild, "NeoDIDRegistry.nef")) &&
@@ -225,13 +223,12 @@ public sealed class NeoDidActionTicketIntegrationRuntimeTests
 
         string expected = Environment.GetEnvironmentVariable(ServicesBuildEnvVar) is { Length: > 0 } configured
             ? Path.GetFullPath(configured)
-            : Path.GetFullPath(Path.Combine(RepoRoot, "..", "neo-os-services", "contracts", "build"));
+            : Path.GetFullPath(Path.Combine(RepoRoot, "..", "neo-os-services", "vendor", "neo-os-did", "contracts", "build"));
 
         string reason =
             "SKIPPED (0 cross-contract assertions executed): NeoDIDRegistry.nef/.manifest.json not found in " +
-            expected + ". This proof deploys the compiled NeoDIDRegistry from the private sibling repository " +
-            "neo-os-services, whose contracts/build output is gitignored there and absent from a " +
-            "single-repository checkout. Point " + ServicesBuildEnvVar + " at a neo-os-services contract build " +
+            expected + ". This proof deploys the pinned NeoDIDRegistry supplied by neo-os-did through the " +
+            "sibling services vendor tree, which a standalone checkout may not provide. Point " + ServicesBuildEnvVar + " at a neo-os-services contract build " +
             "directory to run it, or set " + RequireServicesEnvVar + "=1 to make the missing artifact a failure.";
 
         if (Environment.GetEnvironmentVariable(RequireServicesEnvVar) == "1")

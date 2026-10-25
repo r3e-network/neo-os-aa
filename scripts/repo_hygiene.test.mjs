@@ -30,6 +30,25 @@ import { loadIgnoreRules } from "./lib/gitignore-rules.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+test("NeoDID cross-repo gate resolves the services vendor artifact path", () => {
+  const script = fs.readFileSync(path.join(repoRoot, "scripts", "verify_repo.sh"), "utf8");
+  assert.ok(
+    script.includes("${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/vendor/neo-os-did/contracts/build}"),
+    "verify_repo.sh must find the pinned NeoDIDRegistry artifact after the source moved",
+  );
+  assert.equal(
+    script.includes("$ROOT_DIR/../neo-os-services/contracts/build"),
+    false,
+    "the retired services contracts/build default must not return",
+  );
+  const integrationTest = fs.readFileSync(
+    path.join(repoRoot, "tests", "AbstractAccount.Contracts.Tests", "NeoDidActionTicketIntegrationRuntimeTests.cs"),
+    "utf8",
+  );
+  assert.ok(integrationTest.includes('"neo-os-services", "vendor", "neo-os-did", "contracts", "build"'));
+  assert.equal(integrationTest.includes('"neo-os-services", "contracts", "build"'), false);
+});
+
 // AA stays on GitHub-hosted runners, including default-branch pushes and manual
 // runs. Require a literal runner: visibility, event, ref, fork and repository
 // variables must never be able to redirect this public repository's scanner.

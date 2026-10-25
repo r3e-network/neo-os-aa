@@ -82,23 +82,23 @@ if [[ $run_contracts -eq 1 ]]; then
     dotnet build contracts/UnifiedSmartWallet.csproj -c Release -p:WarningsAsErrors=nullable -nologo
     bash contracts/compile.sh
   fi
-  # The NeoDIDRegistry cross-contract proof deploys a compiled artifact built by
-  # the private sibling repository neo-os-services, whose contracts/build output is
-  # gitignored there. CI checks out this repository on its own, so state the gate's
-  # reachability before the run instead of letting a bare "skipped" read as a pass.
-  services_build="${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/contracts/build}"
+  # The NeoDIDRegistry cross-contract proof deploys the pinned artifact supplied
+  # by neo-os-did through the sibling services vendor tree. CI checks out this
+  # repository on its own, so state the gate's reachability before the run instead
+  # of letting a bare "skipped" read as a pass.
+  services_build="${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/vendor/neo-os-did/contracts/build}"
   if [[ -f "$services_build/NeoDIDRegistry.nef" && -f "$services_build/NeoDIDRegistry.manifest.json" ]]; then
     export NEOOS_REQUIRE_SERVICES_ARTIFACTS=1
     echo "cross-repo gate: NeoDIDRegistry integration proof ENABLED (artifact dir: $services_build)"
   elif [[ "${NEOOS_REQUIRE_SERVICES_ARTIFACTS:-0}" == "1" ]]; then
     echo "cross-repo gate: REQUIRED NeoDIDRegistry artifact is missing: $services_build" >&2
-    echo "cross-repo gate: build neo-os-services contracts and set NEOOS_SERVICES_CONTRACT_BUILD, then retry." >&2
+    echo "cross-repo gate: provide neo-os-services/vendor/neo-os-did artifacts and set NEOOS_SERVICES_CONTRACT_BUILD, then retry." >&2
     exit 1
   else
     echo "cross-repo gate: NeoDIDRegistry integration proof NOT RUN - 0 cross-contract assertions executed."
     echo "cross-repo gate:   missing $services_build/NeoDIDRegistry.nef"
-    echo "cross-repo gate:   that artifact is built by the private sibling repository neo-os-services and is"
-    echo "cross-repo gate:   gitignored there, so a single-repository checkout cannot supply it."
+    echo "cross-repo gate:   that artifact is supplied by the sibling services pinned neo-os-did vendor tree,"
+    echo "cross-repo gate:   so a standalone checkout may not supply it."
     echo "cross-repo gate:   set NEOOS_SERVICES_CONTRACT_BUILD to a neo-os-services contract build directory to"
     echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
   fi
