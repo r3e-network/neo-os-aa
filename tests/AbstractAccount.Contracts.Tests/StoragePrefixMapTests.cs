@@ -41,15 +41,18 @@ public class StoragePrefixMapTests
         "UnifiedSmartWallet.cs",
         "UnifiedSmartWallet.Accounts.cs",
         "UnifiedSmartWallet.Admin.cs",
+        "UnifiedSmartWallet.Composite.cs",
         "UnifiedSmartWallet.Escape.cs",
         "UnifiedSmartWallet.Events.cs",
         "UnifiedSmartWallet.Execution.cs",
+        "UnifiedSmartWallet.HookChildren.cs",
         "UnifiedSmartWallet.Internal.cs",
         "UnifiedSmartWallet.MarketEscrow.cs",
         "UnifiedSmartWallet.Models.cs",
         "UnifiedSmartWallet.Paymaster.cs",
         "UnifiedSmartWallet.PlatformRegistrar.cs",
         "UnifiedSmartWallet.State.cs",
+        "UnifiedSmartWallet.VerifierChildren.cs",
         "UnifiedSmartWallet.VerifyContext.cs",
     };
 

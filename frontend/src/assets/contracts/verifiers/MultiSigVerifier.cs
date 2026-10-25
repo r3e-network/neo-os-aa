@@ -25,6 +25,7 @@ namespace AbstractAccount.Verifiers
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
+    [ContractPermission("*", "setVerifierDependencies", "clearVerifierDependencies")]
 #endif
     [ContractPermission("*", "postExecute")]
     [ContractPermission("*", "supportsV3")]
@@ -40,6 +41,8 @@ namespace AbstractAccount.Verifiers
         private const int MaxDomainsPerChild = 3;
 #else
         private const int MaxChildVerifiers = 10;
+        private const int MaxSignerDomains = 10;
+        private const int MaxDomainsPerChild = 10;
 #endif
 
         public static void _deploy(object data, bool update) => VerifierAuthority.Initialize(data, update);
@@ -110,11 +113,9 @@ namespace AbstractAccount.Verifiers
             MultiSigConfig config = new MultiSigConfig { Verifiers = verifiers, Threshold = threshold };
             byte[] key = VerifierAuthority.AccountKey(Prefix_Config, accountId);
             Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(config));
-#if SMARTACCOUNT_NATIVE
             UInt160 core = VerifierAuthority.AuthorizedCore();
             Contract.Call(core, "setVerifierDependencies", CallFlags.All,
                 new object[] { accountId, verifiers });
-#endif
         }
 
         private static void AssertChildVerifier(UInt160 verifier)
@@ -151,7 +152,6 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert(supported, "Child verifier does not implement V3 interface");
         }
 
-#if SMARTACCOUNT_NATIVE
         // The pinned compiler does not support `is object[]`; emit the exact VM
         // Array test explicitly so Struct cannot pass through a CLR-style cast.
         [OpCode(OpCode.ISTYPE, "0x40")]
@@ -161,7 +161,7 @@ namespace AbstractAccount.Verifiers
 
         private static object[] ReadSignerDomainSets(UInt160 accountId, UInt160[] verifiers)
         {
-            ExecutionEngine.Assert(verifiers.Length > 0 && verifiers.Length <= MaxChildVerifiers, "Invalid native verifier roster");
+            ExecutionEngine.Assert(verifiers.Length > 0 && verifiers.Length <= MaxChildVerifiers, "Invalid verifier roster");
             ByteString[] domains = new ByteString[MaxSignerDomains];
             object[] sets = new object[verifiers.Length];
             int count = 0;
@@ -177,7 +177,7 @@ namespace AbstractAccount.Verifiers
                 {
                     ExecutionEngine.Assert(returned[j] is ByteString && ((ByteString)returned[j]).Length == 32, "Invalid signer domain");
                     ByteString domain = (ByteString)returned[j];
-                    ExecutionEngine.Assert(count < MaxSignerDomains, "Native aggregate signer-domain limit exceeded");
+                    ExecutionEngine.Assert(count < MaxSignerDomains, "Aggregate signer-domain limit exceeded");
                     for (int k = 0; k < count; k++)
                         ExecutionEngine.Assert(!EqualBytes(domains[k], domain), "Duplicate signer domain");
                     // The commitment and duplicate check own their domain bytes.
@@ -205,6 +205,7 @@ namespace AbstractAccount.Verifiers
             return domains;
         }
 
+#if SMARTACCOUNT_NATIVE
         private static ByteString PolicyCommitment(UInt160 accountId, MultiSigConfig config)
         {
             ExecutionEngine.Assert(config.Threshold > 0 && config.Threshold <= MaxApprovedChildren
@@ -212,6 +213,7 @@ namespace AbstractAccount.Verifiers
             object[] domains = ReadSignerDomainSets(accountId, config.Verifiers);
             return CryptoLib.Sha256(StdLib.Serialize(new object[] { config.Threshold, config.Verifiers, domains }));
         }
+#endif
 
         private static bool EqualBytes(ByteString left, ByteString right)
         {
@@ -222,7 +224,6 @@ namespace AbstractAccount.Verifiers
             }
             return true;
         }
-#endif
 
         private static bool ExposesSafeMethod(ContractMethodDescriptor[] methods, string name,
             ContractParameterType returnType, params ContractParameterType[] parameterTypes)
@@ -387,9 +388,7 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert(data != null, "No MultiSig config");
 
             MultiSigConfig config = (MultiSigConfig)StdLib.Deserialize(data!);
-#if SMARTACCOUNT_NATIVE
             AssertSignerDomainSeparation(accountId, config.Verifiers);
-#endif
 
             // Expected that op.Signature is an array of sub-signatures matching the verifier order
 #if SMARTACCOUNT_NATIVE
@@ -444,9 +443,7 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert(data != null, "No MultiSig config");
 
             MultiSigConfig config = (MultiSigConfig)StdLib.Deserialize(data!);
-#if SMARTACCOUNT_NATIVE
             AssertSignerDomainSeparation(accountId, config.Verifiers);
-#endif
 #if SMARTACCOUNT_NATIVE
             object[] signatures = NativeSignatures(op.Signature);
 #else
@@ -509,10 +506,8 @@ namespace AbstractAccount.Verifiers
 #else
             VerifierAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
 #endif
-#if SMARTACCOUNT_NATIVE
             UInt160 core = VerifierAuthority.AuthorizedCore();
             Contract.Call(core, "clearVerifierDependencies", CallFlags.All, new object[] { accountId });
-#endif
             Storage.Delete(Storage.CurrentContext, VerifierAuthority.AccountKey(Prefix_Config, accountId));
         }
 

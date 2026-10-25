@@ -85,7 +85,7 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId, previousVerifier);
                 try
                 {
-                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -99,7 +99,7 @@ namespace AbstractAccount
                 SetHookConfigContext(accountId, previousHook);
                 try
                 {
-                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -119,7 +119,7 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId, newVerifier);
                 try
                 {
-                    Contract.Call(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
+                    CallModuleWithMaintenanceBudget(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
                 }
                 finally
                 {

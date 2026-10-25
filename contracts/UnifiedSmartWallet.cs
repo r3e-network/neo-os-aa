@@ -70,6 +70,10 @@ namespace AbstractAccount
         // 0x1E  Prefix_PlatformAccountBinding     PlatformRegistrar.cs      +acctId
         // 0x1F  Prefix_PlatformProxyAccount      PlatformRegistrar.cs      +acctId(proxy)
         // 0x20  Prefix_ConfigurationContextDepth Internal.cs               bare
+        // 0x21  Prefix_TransactionReimbursement  Paymaster.cs              bare
+        // 0x22  Prefix_VerifierDependencies      Composite.cs             +acctId
+        // 0x23  Prefix_HookDependencies          Composite.cs             +acctId
+        // 0x24  Prefix_DependencyMaintenance     Composite.cs             +acctId
         //
         // ACTIVE LAYOUT: every prefix byte is globally unique. StoragePrefixMapTests pins this map
         // against the source and rejects any future active prefix reuse.

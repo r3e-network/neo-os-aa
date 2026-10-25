@@ -187,6 +187,9 @@ namespace AbstractAccount.Hooks
             return (UInt160[])StdLib.Deserialize(data!);
         }
 
+        [Safe]
+        public static UInt160[] GetChildHookConfig(UInt160 accountId) => GetHooks(accountId);
+
         /// <summary>
         /// Forwards the pre-execution phase through each configured hook in order.
         /// </summary>

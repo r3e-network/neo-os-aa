@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
@@ -42,6 +44,8 @@ public class CompositeArgumentIsolationRuntimeTests
         post(script); script.Emit(OpCode.RET);
         Method("clearAccount", ContractParameterType.Void, false, ContractParameterType.Hash160);
         script.Emit(OpCode.DROP).Emit(OpCode.RET);
+        Method("getSignerDomains", ContractParameterType.Array, true, ContractParameterType.Hash160);
+        script.Emit(OpCode.DROP).EmitPush(SHA256.HashData(Encoding.UTF8.GetBytes(name))).EmitPush(1).Emit(OpCode.PACK).Emit(OpCode.RET);
         NefFile nef = new() { Compiler = "Composite aliasing test fixture", Source = "", Tokens = [], Script = script.ToArray() };
         nef.CheckSum = NefFile.ComputeChecksum(nef);
         ContractManifest manifest = new()

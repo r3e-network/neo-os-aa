@@ -7,6 +7,7 @@ using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
+using Neo.SmartContract.Testing.Exceptions;
 
 namespace AbstractAccount.Contracts.Tests;
 
@@ -37,7 +38,7 @@ public class MultiSigSdkVectorTests
         private readonly P256SessionKey firstKey = new();
         private readonly P256SessionKey secondKey = new();
 
-        public Harness(int threshold)
+        public Harness(int threshold, bool reuseSigner = false)
         {
             Core = Fx.Deploy("UnifiedSmartWalletV3");
             Target = Fx.Deploy("MockTransferTarget");
@@ -56,16 +57,17 @@ public class MultiSigSdkVectorTests
             Assert.IsFalse(Fx.CallBoolean(Core, "callVerifier", Account, "setConfig", configArgs));
             Fx.AdvanceTime(TimeSpan.FromHours(24));
             Fx.CallVoid(Core, "callVerifier", Account, "setConfig", configArgs);
+            byte[] secondPublicKey = reuseSigner ? firstKey.CompressedPublicKey : secondKey.CompressedPublicKey;
             // Each SessionKey child supports direct backup-owner configuration; no mock authority.
             Fx.CallVoid(first, "setSessionKey", Account, firstKey.CompressedPublicKey, Target, "transfer", Fx.Now() + 600000, 100, "first child");
-            Fx.CallVoid(second, "setSessionKey", Account, secondKey.CompressedPublicKey, Target, "transfer", Fx.Now() + 600000, 100, "second child");
+            Fx.CallVoid(second, "setSessionKey", Account, secondPublicKey, Target, "transfer", Fx.Now() + 600000, 100, "second child");
             UInt160 asset = Fx.CallUInt160(Core, "getProxyScriptHash", Account);
             Args = new object?[] { asset, Recipient, 25, null };
             Deadline = Fx.Now() + 600000;
             byte[] payload1 = Fx.CallBytes(first, "getPayload", Account, Target, "transfer", Args, 0, Deadline);
             byte[] payload2 = Fx.CallBytes(second, "getPayload", Account, Target, "transfer", Args, 0, Deadline);
             CollectionAssert.AreNotEqual(payload1, payload2, "The same operation must remain domain-separated by child verifier identity.");
-            Signatures = new[] { firstKey.Sign(payload1), secondKey.Sign(payload2) };
+            Signatures = new[] { firstKey.Sign(payload1), reuseSigner ? firstKey.Sign(payload2) : secondKey.Sign(payload2) };
         }
 
         public bool Validate(byte[] bundle) => Fx.CallBoolean(MultiSig, "validateSignature", Account,
@@ -94,6 +96,15 @@ public class MultiSigSdkVectorTests
         Assert.IsFalse(h.Validate(h.Bundle(h.Signatures[1], h.Signatures[0])), "Moving valid proofs into different child slots must fail.");
         Assert.IsFalse(h.Validate(h.Bundle(h.Signatures[0], h.Signatures[0])), "One child's proof cannot satisfy two independent keys.");
         Assert.IsFalse(h.Validate(h.Bundle(h.Signatures[0], null)), "One proof cannot meet a two-child threshold.");
+    }
+
+    [TestMethod]
+    public void JavaScriptBundle_ReusedSignerAcrossChildrenCannotMeetThreshold()
+    {
+        using Harness h = new(threshold: 2, reuseSigner: true);
+        TestException failure = Assert.ThrowsExactly<TestException>(() =>
+            h.Validate(h.Bundle(h.Signatures[0], h.Signatures[1])));
+        StringAssert.Contains(failure.Message, "Duplicate signer domain");
     }
 
     [TestMethod]

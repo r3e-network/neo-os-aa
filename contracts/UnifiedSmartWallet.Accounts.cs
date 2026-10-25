@@ -116,7 +116,7 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId!, verifier);
                 try
                 {
-                    Contract.Call(verifier, "setPublicKey", CallFlags.All, new object[] { accountId!, verifierParams });
+                    CallModuleWithMaintenanceBudget(verifier, "setPublicKey", CallFlags.All, new object[] { accountId!, verifierParams });
                 }
                 finally
                 {
@@ -221,7 +221,7 @@ namespace AbstractAccount
                 SetHookConfigContext(accountId, previousHook);
                 try
                 {
-                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -275,7 +275,7 @@ namespace AbstractAccount
                     SetVerifierConfigContext(accountId, newVerifier);
                     try
                     {
-                        Contract.Call(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
+                        CallModuleWithMaintenanceBudget(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
                     }
                     finally
                     {
@@ -336,7 +336,7 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId, previousVerifier);
                 try
                 {
-                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -353,7 +353,7 @@ namespace AbstractAccount
                 SetVerifierConfigContext(accountId, pending.NewVerifier);
                 try
                 {
-                    Contract.Call(pending.NewVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, pending.VerifierParams });
+                    CallModuleWithMaintenanceBudget(pending.NewVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, pending.VerifierParams });
                 }
                 finally
                 {
@@ -388,7 +388,7 @@ namespace AbstractAccount
                 ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any), "Verifier V3 post ABI missing");
             ExecutionEngine.Assert(ModuleExposesMethod(verifier, "clearAccount", ContractParameterType.Void,
                 ContractParameterType.Hash160), "Verifier V3 cleanup ABI missing");
-            bool supported = (bool)Contract.Call(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            bool supported = (bool)CallModuleWithMaintenanceBudget(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Verifier does not implement V3 interface");
         }
 
@@ -401,7 +401,7 @@ namespace AbstractAccount
                 ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any), "Hook V3 post ABI missing");
             ExecutionEngine.Assert(ModuleExposesMethod(hook, "clearAccount", ContractParameterType.Void,
                 ContractParameterType.Hash160), "Hook V3 cleanup ABI missing");
-            bool supported = (bool)Contract.Call(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            bool supported = (bool)CallModuleWithMaintenanceBudget(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Hook does not implement V3 interface");
         }
 
@@ -542,6 +542,7 @@ namespace AbstractAccount
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.Verifier != null && state.Verifier != UInt160.Zero, "Verifier not configured");
 
+            if (method == "setConfig") EnsureLegacyDependencies(accountId, state.Verifier!, true);
             byte[] pendingKey = Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId);
             if (!TryConfirmPendingModuleCall(pendingKey, state.Verifier!, method, args))
             {
@@ -551,7 +552,7 @@ namespace AbstractAccount
             SetVerifierConfigContext(accountId, state.Verifier!);
             try
             {
-                return Contract.Call(state.Verifier!, method, CallFlags.All, args);
+                return CallRootWithMaintenanceBudget(state.Verifier!, method, CallFlags.All, args);
             }
             finally
             {
@@ -572,6 +573,7 @@ namespace AbstractAccount
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.HookId != null && state.HookId != UInt160.Zero, "Hook not configured");
 
+            if (method == "setHooks") EnsureLegacyDependencies(accountId, state.HookId!, false);
             byte[] pendingKey = Helper.Concat(Prefix_PendingHookCall, (byte[])accountId);
             if (!TryConfirmPendingModuleCall(pendingKey, state.HookId!, method, args))
             {
@@ -581,7 +583,7 @@ namespace AbstractAccount
             SetHookConfigContext(accountId, state.HookId!);
             try
             {
-                return Contract.Call(state.HookId!, method, CallFlags.All, args);
+                return CallRootWithMaintenanceBudget(state.HookId!, method, CallFlags.All, args);
             }
             finally
             {

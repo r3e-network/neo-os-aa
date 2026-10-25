@@ -41,7 +41,7 @@ namespace AbstractAccount
                 ContractParameterType.Hash160), "Verifier child configuration ABI missing");
             AssertVerifierCoreBinding(root!);
 
-            VerifierChildConfiguration config = (VerifierChildConfiguration)Contract.Call(
+            VerifierChildConfiguration config = (VerifierChildConfiguration)CallModuleWithMaintenanceBudget(
                 root!, "getChildVerifierConfig", CallFlags.ReadOnly, new object[] { accountId });
             ExecutionEngine.Assert(config != null && config.Verifiers != null
                 && config.Verifiers.Length > 0 && config.Verifiers.Length <= 10,
@@ -80,7 +80,7 @@ namespace AbstractAccount
             SetVerifierConfigContext(accountId, childVerifier!);
             try
             {
-                return Contract.Call(childVerifier!, method, CallFlags.All, args);
+                return CallModuleWithMaintenanceBudget(childVerifier!, method, CallFlags.All, args);
             }
             finally
             {
@@ -92,22 +92,28 @@ namespace AbstractAccount
         {
             ExecutionEngine.Assert(ModuleExposesSafeMethod(verifier, "authorizedCore", ContractParameterType.Hash160),
                 "Verifier core binding ABI missing");
-            UInt160 core = (UInt160)Contract.Call(verifier, "authorizedCore", CallFlags.ReadOnly, new object[] { });
+            UInt160 core = (UInt160)CallModuleWithMaintenanceBudget(verifier, "authorizedCore", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(core == Runtime.ExecutingScriptHash, "Verifier bound to another core");
         }
 
         private static void AssertChildConfigurationCall(UInt160 accountId, UInt160 child, string method, object[] args)
         {
-            ExecutionEngine.Assert(method == "setPublicKey" || method == "setConfig",
+            ExecutionEngine.Assert(method == "setPublicKey" || method == "setConfig" || method == "setSessionKey",
                 "Child configuration method not allowed");
-            ExecutionEngine.Assert(args != null && args.Length == (method == "setPublicKey" ? 2 : 3),
+            int expectedArgs = method == "setPublicKey" ? 2 : method == "setConfig" ? 3 : 7;
+            ExecutionEngine.Assert(args != null && args.Length == expectedArgs,
                 "Invalid child configuration arguments");
             ExecutionEngine.Assert((UInt160)args![0] == accountId, "Child configuration account mismatch");
             bool validAbi = method == "setPublicKey"
                 ? ModuleExposesMethod(child, method, ContractParameterType.Void,
                     ContractParameterType.Hash160, ContractParameterType.ByteArray)
-                : ModuleExposesMethod(child, method, ContractParameterType.Void,
-                    ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Integer);
+                : method == "setConfig"
+                    ? ModuleExposesMethod(child, method, ContractParameterType.Void,
+                        ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Integer)
+                    : ModuleExposesMethod(child, method, ContractParameterType.Void,
+                        ContractParameterType.Hash160, ContractParameterType.ByteArray,
+                        ContractParameterType.Hash160, ContractParameterType.String,
+                        ContractParameterType.Integer, ContractParameterType.Integer, ContractParameterType.String);
             ExecutionEngine.Assert(validAbi, "Child configuration method ABI missing");
         }
     }

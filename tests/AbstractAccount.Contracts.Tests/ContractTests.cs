@@ -267,9 +267,9 @@ public class ContractTests
             executionSource,
             "UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);");
         Assert.AreEqual(
-            2,
+            4,
             CountOccurrences(executionSource, "PlatformSyscalls.CallWithGasLimit("),
-            "validateSignature and postExecute are the two verifier callbacks");
+            "Two verifier callbacks plus bounded leaf and composite-root maintenance entrypoints");
         Assert.IsFalse(
             executionSource.Contains("Contract.CallWithGasLimit(", StringComparison.Ordinal),
             "the framework-declared form does not exist in any published framework");

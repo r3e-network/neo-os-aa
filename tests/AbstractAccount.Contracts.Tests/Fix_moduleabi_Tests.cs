@@ -276,8 +276,8 @@ public class Fix_ModuleAbi_Tests
         fx.AdvanceTime(TimeSpan.FromDays(1));
         fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
 
-        // Public V3 rejects duplicate child identities; signer-domain uniqueness belongs
-        // to the native profile and is covered by that profile's state-machine suite.
+        // Root provisioning may precede leaf key configuration. Duplicate signer
+        // domains are rejected when validating or posting an execution instead.
         object[] invalidRootArgs = { account, new UInt160[] { child, child }, 2 };
         Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
         var failedRootProposedAt = fx.CallInteger(wallet, "getPendingVerifierCallTime", account);

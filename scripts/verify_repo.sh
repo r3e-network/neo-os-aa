@@ -31,11 +31,13 @@ Set NEOOS_NATIVE_EPOCH_RECEIPT to retain the native-module VM regression JSON at
 path; otherwise the contract gate writes and prints a temporary receipt path. This test-only
 public-VM harness does not establish native-chain admission or recovery.
 
-Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) to also deploy every artifact to a
-fresh private NeoExpress chain, drive the protocol with real transactions, read every
-contract back over JSON-RPC and write a dated receipt under docs/reports/. It needs the
-neoxp tool (~/.dotnet/tools/neoxp, or NEOOS_NEOXP for a core-matched runner) and openssl;
-it never touches a public network.
+Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) to also deploy the private PLATFORM
+core and every public v3 module to a fresh private NeoExpress chain, drive the protocol
+with real transactions, read every contract back over JSON-RPC and write a dated receipt
+under docs/reports/. This needs openssl and a runner that registers the private bounded-call
+syscall; set NEOOS_NEOXP to that core-matched runner. The default ~/.dotnet/tools/neoxp is
+attempted only for compatibility and an ordinary published runner fails closed. No public
+network is touched.
 
 Runs the full local validation gate:
 - contracts: build + nccs compile + solution tests + native-module VM regression + deployment-tool tests + format verify

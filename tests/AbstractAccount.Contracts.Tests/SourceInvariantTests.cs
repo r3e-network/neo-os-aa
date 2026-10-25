@@ -38,6 +38,8 @@ public class SourceInvariantTests
     private static string ReadCombined() => string.Join("\n\n", new[]
     {
         "UnifiedSmartWallet.Accounts.cs",
+        "UnifiedSmartWallet.Composite.cs",
+        "UnifiedSmartWallet.HookChildren.cs",
         "UnifiedSmartWallet.Execution.cs",
         "UnifiedSmartWallet.Internal.cs",
         "UnifiedSmartWallet.State.cs",
@@ -263,6 +265,28 @@ public class SourceInvariantTests
         StringAssert.Contains(executionSource, "Reentrant call rejected", "Reentrancy guard");
         StringAssert.Contains(executionSource, "SetExecutionLock(accountId)", "Lock set");
         StringAssert.Contains(executionSource, "ClearExecutionLock(accountId)", "Lock cleared in finally");
+    }
+
+    [TestMethod, Timeout(120_000)]
+    public void SourceInvariant_ModuleLifecycleCallbacksUseMaintenanceBudget()
+    {
+        var executionSource = Read("UnifiedSmartWallet.Execution.cs");
+        StringAssert.Contains(executionSource, "ModuleMaintenanceGasLimit = 250_000_000", "Module maintenance gas cap");
+        StringAssert.Contains(executionSource, "RootModuleMaintenanceGasLimit = 11 * ModuleMaintenanceGasLimit",
+            "The composite root budget includes its own call and at most ten leaf cleanups");
+        StringAssert.Contains(executionSource, "CallModuleWithMaintenanceBudget", "Shared bounded module entrypoint");
+        Assert.IsFalse(executionSource.Contains("Contract.Call(\n                            state.HookId", StringComparison.Ordinal),
+            "Hook callbacks must use the independent maintenance budget");
+
+        foreach (string name in new[] { "UnifiedSmartWallet.Accounts.cs", "UnifiedSmartWallet.Escape.cs", "UnifiedSmartWallet.VerifierChildren.cs" })
+        {
+            string source = Read(name);
+            Assert.IsFalse(source.Contains("Contract.Call(", StringComparison.Ordinal),
+                $"{name} must route every plugin lifecycle call through the independent maintenance budget");
+            StringAssert.Contains(source, "CallModuleWithMaintenanceBudget", $"{name} bounded module calls");
+            if (name != "UnifiedSmartWallet.VerifierChildren.cs")
+                StringAssert.Contains(source, "CallRootWithMaintenanceBudget", $"{name} bounded composite-root calls");
+        }
     }
 
     // ========================================================================

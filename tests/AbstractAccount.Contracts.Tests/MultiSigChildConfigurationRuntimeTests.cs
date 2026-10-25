@@ -24,20 +24,22 @@ public class MultiSigChildConfigurationRuntimeTests
         public UInt160 Root { get; }
         public UInt160 Web { get; }
         public UInt160 Native { get; }
+        public UInt160 Session { get; }
         public UInt160 Target { get; }
         public UInt160 Account { get; }
         public UInt160 Owner => Fx.Engine.ValidatorsAddress;
 
-        public Harness(bool foreignChildCore = false)
+        public Harness(bool foreignChildCore = false, bool includeSession = false)
         {
             Core = Fx.Deploy("UnifiedSmartWalletV3");
             Target = Fx.Deploy("MockTransferTarget");
             Root = Fx.Deploy("verifiers/MultiSigVerifier", Core.ToArray());
             Web = Fx.Deploy("verifiers/Web3AuthVerifier", Core.ToArray());
             Native = Fx.Deploy("verifiers/NeoNativeVerifier", (foreignChildCore ? Target : Core).ToArray());
+            Session = Fx.Deploy("verifiers/SessionKeyVerifier", Core.ToArray());
             Account = Fx.CallUInt160(Core, "computeRegistrationAccountId", Root, Array.Empty<byte>(), UInt160.Zero, Owner, 604800u);
             Fx.CallVoid(Core, "registerAccount", Account, Root, Array.Empty<byte>(), UInt160.Zero, Owner, 604800u);
-            SetTopology(new[] { Web, Native }, 1);
+            SetTopology(includeSession ? new[] { Web, Native, Session } : new[] { Web, Native }, 1);
         }
 
         public void SetTopology(UInt160[] children, int threshold)
@@ -103,6 +105,27 @@ public class MultiSigChildConfigurationRuntimeTests
         Console.WriteLine("Two-child MultiSig/native-approval executeUserOp fee (datoshi): "
             + (long)h.Fx.Engine.FeeConsumed);
         Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Core, "getNonce", h.Account, 0));
+    }
+
+    [TestMethod]
+    public void ChildConfiguration_SessionKeyUsesExactAbiAndTwoPhaseAuthority()
+    {
+        Harness h = new(includeSession: true);
+        UInt160 session = h.Session;
+        byte[] publicKey = (byte[])h.KeyArgs()[1];
+        object[] args = { h.Account, publicKey, h.Target, "transfer", h.Fx.Now() + 172800000, 0, "child session" };
+        TestException invalid = Assert.ThrowsExactly<TestException>(() =>
+            h.Stage(session, "setSessionKey", args.Take(6).ToArray()));
+        StringAssert.Contains(invalid.Message, "Invalid child configuration arguments");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "hasPendingVerifierCall", h.Account));
+
+        Assert.IsFalse(h.Stage(session, "setSessionKey", args));
+        h.Fx.AdvanceTime(Window);
+        h.Apply(session, "setSessionKey", args);
+        var stored = (Neo.VM.Types.Array)h.Fx.Call(session, "getSessionKey", h.Account);
+        CollectionAssert.AreEqual(publicKey, stored[0].GetSpan().ToArray());
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "hasPendingVerifierCall", h.Account));
+        h.AssertNoConfigContext();
     }
 
     [TestMethod]
@@ -177,6 +200,9 @@ public class MultiSigChildConfigurationRuntimeTests
         Assert.IsFalse(h.Stage(h.Native, "setConfig", h.NativeArgs()));
         h.Fx.AdvanceTime(Window);
         h.Apply(h.Native, "setConfig", h.NativeArgs());
+        Assert.IsFalse(h.Stage(h.Web, "setPublicKey", h.KeyArgs()));
+        h.Fx.AdvanceTime(Window);
+        h.Apply(h.Web, "setPublicKey", h.KeyArgs());
         byte[] bundle = h.Fx.StdLibSerialize(new object?[] { null, Array.Empty<byte>() });
         object[] op = RuntimeFixture.UserOp(h.Core, "callVerifierChild",
             new object?[] { h.Account, h.Web, "setPublicKey", h.KeyArgs() }, 0, h.Fx.Now() + 600000, bundle);
@@ -284,5 +310,99 @@ public class MultiSigChildConfigurationRuntimeTests
         h.Fx.CallVoid(h.Core, "confirmVerifierUpdate", h.Account);
         TestException unsupported = Assert.ThrowsExactly<TestException>(() => h.Stage(h.Web, "setPublicKey", h.KeyArgs()));
         StringAssert.Contains(unsupported.Message, "Verifier child configuration ABI missing");
+    }
+
+    [TestMethod]
+    public void CompositeDependencies_RejectCallersOtherThanInstalledRoot()
+    {
+        Harness h = new();
+        TestException denied = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallVoid(h.Core, "setVerifierDependencies", h.Account, new[] { h.Web }));
+        StringAssert.Contains(denied.Message, "Dependency caller is not installed root");
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.AccountStorageKey(h.Core, 0x24)));
+        h.AssertNoConfigContext();
+    }
+
+    [TestMethod]
+    public void CompositeDependencies_ReconfigureAndDetachClearLeafState()
+    {
+        Harness h = new();
+        object[] keyArgs = h.KeyArgs();
+        Assert.IsFalse(h.Stage(h.Web, "setPublicKey", keyArgs));
+        h.Fx.AdvanceTime(Window);
+        h.Apply(h.Web, "setPublicKey", keyArgs);
+        Assert.IsFalse(h.Stage(h.Native, "setConfig", h.NativeArgs()));
+        h.Fx.AdvanceTime(Window);
+        h.Apply(h.Native, "setConfig", h.NativeArgs());
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Native, "getThreshold", h.Account));
+
+        h.SetTopology(new[] { h.Native }, 1);
+        CollectionAssert.AreEqual(Array.Empty<byte>(), h.Fx.CallBytes(h.Web, "getPublicKey", h.Account));
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Native, "getThreshold", h.Account));
+        Assert.IsNotNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.AccountStorageKey(h.Core, 0x22)));
+        h.AssertNoConfigContext();
+
+        h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, UInt160.Zero, Array.Empty<byte>());
+        h.Fx.AdvanceTime(Window);
+        h.Fx.CallVoid(h.Core, "confirmVerifierUpdate", h.Account);
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Core, "getVerifier", h.Account));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Native, "getThreshold", h.Account));
+        Assert.IsTrue(h.Fx.Call(h.Native, "getConfig", h.Account).IsNull);
+        Assert.IsTrue(h.Fx.Call(h.Root, "getConfig", h.Account).IsNull);
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.AccountStorageKey(h.Core, 0x22)));
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.AccountStorageKey(h.Core, 0x24)));
+        h.AssertNoConfigContext();
+    }
+
+    [TestMethod]
+    public void CompositeDependencies_LegacyUnregisteredChildrenAreCleaned()
+    {
+        Harness h = new();
+        object[] keyArgs = h.KeyArgs();
+        Assert.IsFalse(h.Stage(h.Web, "setPublicKey", keyArgs));
+        h.Fx.AdvanceTime(Window);
+        h.Apply(h.Web, "setPublicKey", keyArgs);
+        Assert.IsFalse(h.Stage(h.Native, "setConfig", h.NativeArgs()));
+        h.Fx.AdvanceTime(Window);
+        h.Apply(h.Native, "setConfig", h.NativeArgs());
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Native, "getThreshold", h.Account));
+
+        h.Fx.Engine.Storage.Snapshot.Delete(h.AccountStorageKey(h.Core, 0x22));
+        h.SetTopology(new[] { h.Native }, 1);
+        CollectionAssert.AreEqual(Array.Empty<byte>(), h.Fx.CallBytes(h.Web, "getPublicKey", h.Account),
+            "A pre-registry account must enroll its old topology before removing a child.");
+
+        h.Fx.Engine.Storage.Snapshot.Delete(h.AccountStorageKey(h.Core, 0x22));
+        h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, UInt160.Zero, Array.Empty<byte>());
+        h.Fx.AdvanceTime(Window);
+        h.Fx.CallVoid(h.Core, "confirmVerifierUpdate", h.Account);
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Native, "getThreshold", h.Account));
+        Assert.IsTrue(h.Fx.Call(h.Root, "getConfig", h.Account).IsNull);
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.AccountStorageKey(h.Core, 0x22)));
+        h.AssertNoConfigContext();
+    }
+
+    [TestMethod]
+    public void CompositeDependencies_RejectAnotherAccountsExecutionContext()
+    {
+        Harness h = new();
+        UInt160 forwardingRoot = h.Fx.Deploy("MockVerifierCore");
+        UInt160 nativeAccount = h.Fx.CallUInt160(h.Core, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
+        UInt160 dependentAccount = h.Fx.CallUInt160(h.Core, "computeRegistrationAccountId",
+            forwardingRoot, Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
+        h.Fx.CallVoid(h.Core, "registerAccount", nativeAccount, UInt160.Zero,
+            Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
+        h.Fx.CallVoid(h.Core, "registerAccount", dependentAccount, forwardingRoot,
+            Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
+        object[] op = RuntimeFixture.UserOp(forwardingRoot, "forward",
+            new object?[] { h.Core, "setVerifierDependencies", new object?[] { dependentAccount, new[] { h.Web } } },
+            0, h.Fx.Now() + 600000, Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallVoid(h.Core, "executeUserOp", nativeAccount, op));
+        StringAssert.Contains(rejected.Message, "Cannot maintain dependencies during execution");
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Core, "getNonce", nativeAccount, 0));
+        Assert.AreEqual(forwardingRoot, h.Fx.CallUInt160(h.Core, "getVerifier", dependentAccount));
     }
 }

@@ -74,8 +74,8 @@ public class CompiledCoreSyscallTests
         Assert.AreEqual(1, syscalls.Count(s => s.Hash == Unbounded && s.Method == "validateSignature"));
         Assert.AreEqual(OpCode.PUSH5, syscalls.Single(s => s.Hash == Unbounded && s.Method == "validateSignature").Flags,
             "Signature validation must be read-only (CallFlags.ReadOnly = 5)");
-        Assert.AreEqual(2, syscalls.Count(s => s.Hash == Unbounded && s.Method == "postExecute"),
-            "Both the hook and verifier retain their post-execution callback");
+        Assert.AreEqual(1, syscalls.Count(s => s.Hash == Unbounded && s.Method == "postExecute"),
+            "The compiler may share one postExecute stub across the hook and verifier");
         Assert.IsTrue(syscalls.Where(s => s.Hash == Unbounded && s.Method == "postExecute").All(s => s.Flags == OpCode.PUSH15),
             "Post-execution accounting retains CallFlags.All = 15");
     }

@@ -59,6 +59,8 @@ NATIVE_CORE_REQUIRED_FILES = {
 }
 
 SOURCE_FILES = {"contracts/compile.sh", "contracts/UnifiedSmartWallet.csproj",
+                "contracts/UnifiedSmartWallet.Composite.cs",
+                "contracts/UnifiedSmartWallet.HookChildren.cs",
                 "contracts/UnifiedSmartWallet.VerifierChildren.cs",
                 "contracts/UnifiedSmartWallet.Execution.cs",
                 "contracts/UnifiedSmartWallet.Accounts.cs",

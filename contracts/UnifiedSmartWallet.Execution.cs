@@ -23,6 +23,9 @@ namespace AbstractAccount
         // datoshi is 10 GAS, the maximum resource budget for each verifier callback,
         // including nested verifier calls; NeoVM enforces the ancestor budget transitively.
         private const long VerifierGasLimit = 1_000_000_000;
+        private const long ModuleMaintenanceGasLimit = 250_000_000;
+        // A root and its maximum of ten separately bounded leaf cleanups share this parent envelope.
+        private const long RootModuleMaintenanceGasLimit = 11 * ModuleMaintenanceGasLimit;
 
         // System.Contract.CallWithGasLimit is a platform syscall that no published
         // Neo.SmartContract.Framework declares, so this contract declares it. The attribute
@@ -33,6 +36,20 @@ namespace AbstractAccount
             public static extern object CallWithGasLimit(
                 UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);
         }
+
+        private static object CallModuleWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            PlatformSyscalls.CallWithGasLimit(scriptHash, method, flags, ModuleMaintenanceGasLimit, args);
+        private static object CallRootWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            PlatformSyscalls.CallWithGasLimit(scriptHash, method, flags, RootModuleMaintenanceGasLimit, args);
+#else
+        private static object CallModuleWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            Contract.Call(scriptHash, method, flags, args);
+        private static object CallRootWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            Contract.Call(scriptHash, method, flags, args);
 #endif
 
         // ========================================================================
@@ -121,7 +138,7 @@ namespace AbstractAccount
                     SetHookExecutionContext(accountId, state.HookId);
                     try
                     {
-                        Contract.Call(
+                        CallModuleWithMaintenanceBudget(
                             state.HookId,
                             "preExecute",
                             CallFlags.All,
@@ -145,7 +162,7 @@ namespace AbstractAccount
                     // [Hook phase] post-execution hook
                     if (state.HookId != UInt160.Zero)
                     {
-                        Contract.Call(
+                        CallModuleWithMaintenanceBudget(
                             state.HookId,
                             "postExecute",
                             CallFlags.All,
