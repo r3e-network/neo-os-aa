@@ -9,6 +9,13 @@ export function clearLocalchainEnvironment() {
   }
 }
 
+export function requireRelayPrivateKeyHex(value = process.env.RELAY_PRIVATE_KEY_HEX) {
+  if (typeof value !== 'string' || !/^[0-9a-fA-F]{64}$/.test(value)) {
+    throw new Error('RELAY_PRIVATE_KEY_HEX must be exactly 64 hexadecimal characters');
+  }
+  return value;
+}
+
 export function assertLocalchainProbe(rpcUrl) {
   if (isProductionDeployment()) throw new Error('Localchain probe refused production context');
 

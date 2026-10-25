@@ -8,6 +8,7 @@ import { attachRequestId, beginDurableRequest, completeDurableRequest, failDurab
 import { checkRateLimit, resolveClientIp, resolveRateLimitFailure, sanitizeError } from './rateLimiter.js';
 import { resolveMorpheusOracleCvmId, resolveMorpheusPaymasterEndpoint, resolveMorpheusRuntimeToken, resolveNetwork } from './morpheus-base.js';
 import { apiFetch } from './outboundFetch.js';
+import { createNoRedirectRpcClient } from './rpcTransport.js';
 import { resolveProxyTransferWitness } from './proxyWitness.js';
 
 const RAW_TRANSACTION_PATTERN = /^(0x)?[0-9a-fA-F]+$/;
@@ -33,7 +34,7 @@ async function getNetworkMagic(rpcClient, rpc) {
 function loadRelayInvocationContext({ rpcUrl, relayWif }) {
   const sdkRequire = getSdkRequire();
   const { rpc, tx, wallet, sc, u } = sdkRequire('@cityofzion/neon-js');
-  const rpcClient = new rpc.RPCClient(rpcUrl);
+  const rpcClient = createNoRedirectRpcClient({ rpc, rpcUrl });
   const account = new wallet.Account(relayWif);
   return { rpc, tx, wallet, sc, u, rpcClient, account };
 }

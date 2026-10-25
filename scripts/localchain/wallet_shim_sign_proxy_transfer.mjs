@@ -178,6 +178,7 @@ function signDigest(key, magic, unsigned) {
 async function rpc(method, params) {
   const response = await fetch(request.rpcUrl, {
     method: 'POST',
+    redirect: 'error',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   });

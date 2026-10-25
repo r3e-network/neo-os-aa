@@ -54,6 +54,7 @@ test("n3index service builds network-specific status and summary endpoints", () 
   );
   assert.match(source, /fetchNetworkSummary/);
   assert.match(source, /fetchNetworkStatus/);
+  assert.match(source, /redirect:\s*"error"/);
   assert.match(
     source,
     /fetchNetworkSummary\(\{\s*baseUrl,\s*fetchImpl,\s*network:\s*["']testnet["'],?\s*\}\)/,

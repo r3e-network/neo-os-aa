@@ -1,10 +1,11 @@
 // Current-source-only private-chain relay acceptance. Never accepts a public RPC.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { assertLocalchainProbe, clearLocalchainEnvironment } from './probe_isolation.mjs';
+import { assertLocalchainProbe, clearLocalchainEnvironment, requireRelayPrivateKeyHex } from './probe_isolation.mjs';
 const fx = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 assertLocalchainProbe(fx.rpcUrl);
 clearLocalchainEnvironment();
+const relayPrivateKeyHex = requireRelayPrivateKeyHex();
 const require = createRequire(new URL('../../frontend/package.json', import.meta.url));
 const { wallet, rpc: neonRpc } = require('@cityofzion/neon-js');
 const feeCalculations = [];
@@ -14,7 +15,7 @@ neonRpc.RPCClient.prototype.calculateNetworkFee = async function (transaction) {
   feeCalculations.push({ fee: String(fee), size: transaction.size, tx: transaction.toJson() });
   return fee;
 };
-const account = new wallet.Account(process.env.RELAY_PRIVATE_KEY_HEX);
+const account = new wallet.Account(relayPrivateKeyHex);
 delete process.env.RELAY_PRIVATE_KEY_HEX;
 if (`0x${account.scriptHash}` !== fx.relay) throw new Error(`Relay key/address mismatch: ${account.scriptHash} vs ${fx.relay}`);
 Object.assign(process.env, { AA_RELAY_RPC_URL: fx.rpcUrl, AA_RELAY_WIF: account.WIF, AA_RELAY_ALLOWED_HASH: fx.core,
@@ -22,7 +23,7 @@ Object.assign(process.env, { AA_RELAY_RPC_URL: fx.rpcUrl, AA_RELAY_WIF: account.
   AA_RELAY_MAX_NETWORK_FEE: '3000000000', AA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000', AA_RELAY_MAX_TOTAL_FEE: '3000000000', AA_RELAY_INCLUDE_RAW_ERRORS: '1' });
 const { default: handler } = await import('../../frontend/api/relay-transaction.js');
 async function rpc(method, params) {
-  const reply = await fetch(fx.rpcUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }).then((r) => r.json());
+  const reply = await fetch(fx.rpcUrl, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }).then((r) => r.json());
   if (reply.error) throw new Error(reply.error.message);
   return reply.result;
 }
