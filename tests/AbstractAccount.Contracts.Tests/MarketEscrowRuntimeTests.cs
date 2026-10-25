@@ -2,6 +2,8 @@ using System;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
+using Neo.Extensions;
+using Neo.SmartContract;
 using Neo.SmartContract.Testing.Exceptions;
 
 namespace AbstractAccount.Contracts.Tests;
@@ -132,6 +134,133 @@ public class MarketEscrowRuntimeTests
 
         // And the buyer controls it through the native fallback path.
         h.ExecuteTransferOp(accountId, Buyer, nonce: 0);
+    }
+
+    [TestMethod]
+    [DataRow(true, false, false)]
+    [DataRow(false, true, false)]
+    [DataRow(true, true, false)]
+    [DataRow(true, false, true)]
+    [DataRow(false, true, true)]
+    [DataRow(true, true, true)]
+    public void MarketEscrow_SettleCompositeRoots_CleansLeavesAndTransfersShell(bool verifier, bool hook, bool legacy)
+    {
+        MarketHarness h = new();
+        UInt160 rootVerifier = verifier ? h.Fx.Deploy("verifiers/MultiSigVerifier", h.Wallet.ToArray()) : UInt160.Zero;
+        UInt160 rootHook = hook ? h.Fx.Deploy("hooks/MultiHook", h.Wallet.ToArray()) : UInt160.Zero;
+        UInt160 native = verifier ? h.Fx.Deploy("verifiers/NeoNativeVerifier", h.Wallet.ToArray()) : UInt160.Zero;
+        UInt160 whitelist = hook ? h.Fx.Deploy("hooks/WhitelistHook", h.Wallet.ToArray()) : UInt160.Zero;
+        UInt160 account = h.Fx.CallUInt160(h.Wallet, "computeRegistrationAccountId",
+            rootVerifier, Array.Empty<byte>(), rootHook, Seller, 604800u);
+        h.Fx.SetSigners(Seller);
+        h.Fx.CallVoid(h.Wallet, "registerAccount", account, rootVerifier, Array.Empty<byte>(), rootHook, Seller, 604800u);
+
+        void Configure(string entry, params object[] args)
+        {
+            Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, entry, args));
+            h.Fx.AdvanceTime(TimeSpan.FromHours(24));
+            h.Fx.CallVoid(h.Wallet, entry, args);
+        }
+        if (verifier)
+        {
+            Configure("callVerifier", account, "setConfig", new object[] { account, new[] { native }, 1 });
+            Configure("callVerifierChild", account, native, "setConfig", new object[] { account, new[] { Seller }, 1 });
+            Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(native, "getThreshold", account));
+        }
+        if (hook)
+        {
+            Configure("callHook", account, "setHooks", new object[] { account, new[] { whitelist } });
+            Configure("callHookChild", account, whitelist, "setWhitelist", new object[] { account, h.Target, true });
+            Assert.IsTrue(h.Fx.CallBoolean(whitelist, "isWhitelisted", account, h.Target));
+        }
+
+        var state = (Neo.VM.Types.Array)h.Fx.Call(UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", h.Wallet);
+        StorageKey Key(byte prefix) => new() { Id = (int)state[0].GetInteger(), Key = new[] { prefix }.Concat(account.ToArray()).ToArray() };
+        if (legacy)
+        {
+            h.Fx.Engine.Storage.Snapshot.Delete(Key(0x22));
+            h.Fx.Engine.Storage.Snapshot.Delete(Key(0x23));
+        }
+
+        BigInteger listing = h.CreateListing(account);
+        h.Fx.FundGasFromValidators(Buyer, Price * 2);
+        h.Fx.SetSigners(Buyer);
+        h.Fx.TransferGas(Buyer, h.Market, Price, listing);
+        BigInteger sellerBefore = h.Fx.GasBalanceOf(Seller);
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", account));
+        TestException stranger = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallVoid(h.Wallet, "settleMarketEscrow", account, listing, Buyer));
+        StringAssert.Contains(stranger.Message, "Only escrow market");
+        Assert.AreEqual(Price, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listing, Buyer));
+
+        h.Fx.CallVoid(h.Market, "settleListing", listing, Buyer, Buyer);
+
+        Assert.AreEqual(sellerBefore + Price, h.Fx.GasBalanceOf(Seller));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listing, Buyer));
+        Assert.AreEqual(Buyer, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", account));
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getVerifier", account));
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getHook", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", account));
+        if (verifier)
+        {
+            Assert.IsTrue(h.Fx.Call(rootVerifier, "getConfig", account).IsNull);
+            Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(native, "getThreshold", account));
+        }
+        if (hook)
+        {
+            Assert.AreEqual(0, ((Neo.VM.Types.Array)h.Fx.Call(rootHook, "getHooks", account)).Count);
+            Assert.IsFalse(h.Fx.CallBoolean(whitelist, "isWhitelisted", account, h.Target));
+        }
+        foreach (byte prefix in new byte[] { 0x04, 0x05, 0x22, 0x23, 0x24 })
+            Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(Key(prefix)), "No dependency or configuration authority may survive settlement.");
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(new StorageKey { Id = (int)state[0].GetInteger(), Key = new byte[] { 0x20 } }));
+        h.ExecuteTransferOp(account, Buyer, 0);
+    }
+
+    [TestMethod]
+    public void MarketEscrow_CompositeLeafCleanupFault_RollsBackEarlierCleanupAndPayment()
+    {
+        MarketHarness h = new();
+        UInt160 root = h.Fx.Deploy("verifiers/MultiSigVerifier", h.Wallet.ToArray());
+        UInt160 native = h.Fx.Deploy("verifiers/NeoNativeVerifier", h.Wallet.ToArray());
+        // The wrong core binding deliberately faults the second leaf cleanup, after the first leaf was cleared.
+        UInt160 foreign = h.Fx.Deploy("verifiers/Web3AuthVerifier", h.Target.ToArray());
+        UInt160 account = h.Fx.CallUInt160(h.Wallet, "computeRegistrationAccountId", root, Array.Empty<byte>(), UInt160.Zero, Seller, 604800u);
+        h.Fx.SetSigners(Seller);
+        h.Fx.CallVoid(h.Wallet, "registerAccount", account, root, Array.Empty<byte>(), UInt160.Zero, Seller, 604800u);
+        object[] topology = { account, new[] { native, foreign }, 1 };
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "callVerifier", account, "setConfig", topology));
+        h.Fx.AdvanceTime(TimeSpan.FromHours(24));
+        h.Fx.CallVoid(h.Wallet, "callVerifier", account, "setConfig", topology);
+        object[] config = { account, new[] { Seller }, 1 };
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "callVerifierChild", account, native, "setConfig", config));
+        h.Fx.AdvanceTime(TimeSpan.FromHours(24));
+        h.Fx.CallVoid(h.Wallet, "callVerifierChild", account, native, "setConfig", config);
+        BigInteger listing = h.CreateListing(account);
+        h.Fx.FundGasFromValidators(Buyer, Price * 2);
+        h.Fx.SetSigners(Buyer);
+        h.Fx.TransferGas(Buyer, h.Market, Price, listing);
+        BigInteger sellerBefore = h.Fx.GasBalanceOf(Seller), marketBefore = h.Fx.GasBalanceOf(h.Market);
+
+        TestException fault = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Market, "settleListing", listing, Buyer, Buyer));
+        StringAssert.Contains(fault.Message, "Unauthorized caller");
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(native, "getThreshold", account));
+        var restored = (Neo.VM.Types.Array)h.Fx.Call(root, "getConfig", account);
+        Assert.AreEqual(2, ((Neo.VM.Types.Array)restored[0]).Count);
+        Assert.AreEqual(root, h.Fx.CallUInt160(h.Wallet, "getVerifier", account));
+        Assert.AreEqual(Seller, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", account));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", account));
+        Assert.AreEqual(sellerBefore, h.Fx.GasBalanceOf(Seller));
+        Assert.AreEqual(marketBefore, h.Fx.GasBalanceOf(h.Market));
+        Assert.AreEqual(Price, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listing, Buyer));
+        var state = (Neo.VM.Types.Array)h.Fx.Call(UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", h.Wallet);
+        StorageKey Key(byte prefix) => new() { Id = (int)state[0].GetInteger(), Key = new[] { prefix }.Concat(account.ToArray()).ToArray() };
+        Assert.IsNotNull(h.Fx.Engine.Storage.Snapshot.TryGet(Key(0x22)), "Rollback must preserve the old dependency registry.");
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(Key(0x04)));
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(Key(0x24)));
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(new StorageKey { Id = (int)state[0].GetInteger(), Key = new byte[] { 0x20 } }));
+        h.Fx.CallVoid(h.Market, "refundPendingPayment", listing, Buyer);
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listing, Buyer));
     }
 
     [TestMethod]

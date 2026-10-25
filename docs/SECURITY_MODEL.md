@@ -380,6 +380,20 @@ An absent reviewed admission policy means arbitrary-module sponsorship is not re
 production. These operational controls reduce sponsor exposure without claiming the
 non-bypassable callback budget that only the private runtime supplies.
 
+**Composite lifecycle:** market settlement may clear dependencies while escrow remains
+active only under the exact installed-root configuration context for the same account
+and module kind, at global context depth one. Dependency replacement and unscoped root
+calls remain blocked by escrow. Cleanup faults roll back earlier leaf cleanup, seller
+payout and ownership changes. PLATFORM settlement uses the existing root maintenance
+budget; public v3 retains standard contract calls.
+MultiSig admits only children exposing a safe `supportsComposition` marker returning
+false and the safe signer-domain ABI. Domain values are read during execution so the
+owner can still publish a leaf roster before configuring its keys. Missing capability
+declarations and nested MultiSig instances are rejected. Already-stored unsupported
+nested rosters are not migrated by this admission fix; they remain fail-closed and
+require a separately reviewed recovery change. Dated artifact and private-chain reports
+do not attest source changes made after their recorded input snapshot.
+
 **Witness/callback evidence boundary:** the runtime suite now covers bounded proxy-script shape
 vectors (wrong account, arbitrary/non-data instructions, decoy/global signer, and fee-payer
 cases) and the shipped hook callback tuple, and the transaction-script shape parser itself has a

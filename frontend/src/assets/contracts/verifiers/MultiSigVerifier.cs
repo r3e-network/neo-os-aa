@@ -50,10 +50,8 @@ namespace AbstractAccount.Verifiers
         [Safe]
         public static bool SupportsV3() => true;
 
-#if SMARTACCOUNT_NATIVE
         [Safe]
         public static bool SupportsComposition() => true;
-#endif
 
         [Safe]
         public static bool SupportsMessageSignatures() => false;
@@ -126,9 +124,6 @@ namespace AbstractAccount.Verifiers
             ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
             ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsV3", ContractParameterType.Boolean), "Child verifier V3 marker missing");
 #if SMARTACCOUNT_NATIVE
-            ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsComposition", ContractParameterType.Boolean), "Child verifier composition marker missing");
-            bool composite = (bool)Contract.Call(verifier, "supportsComposition", CallFlags.ReadOnly, new object[] { });
-            ExecutionEngine.Assert(!composite, "Composite verifier cannot be a child");
             ExecutionEngine.Assert(ExposesMethod(methods, "validateSignature", ContractParameterType.Boolean,
                 ContractParameterType.Hash160, ContractParameterType.Array), "Child verifier validation ABI missing");
             ExecutionEngine.Assert(ExposesMethod(methods, "postExecute", ContractParameterType.Void,
@@ -143,10 +138,11 @@ namespace AbstractAccount.Verifiers
 #endif
             ExecutionEngine.Assert(ExposesMethod(methods, "clearAccount", ContractParameterType.Void,
                 ContractParameterType.Hash160), "Child verifier cleanup ABI missing");
-#if SMARTACCOUNT_NATIVE
+            ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsComposition", ContractParameterType.Boolean), "Child verifier composition marker missing");
+            bool composite = (bool)Contract.Call(verifier, "supportsComposition", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(!composite, "Composite verifier cannot be a child");
             ExecutionEngine.Assert(ExposesSafeMethod(methods, "getSignerDomains", ContractParameterType.Array,
                 ContractParameterType.Hash160), "Child signer-domain ABI missing");
-#endif
 
             bool supported = (bool)Contract.Call(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Child verifier does not implement V3 interface");

@@ -1,3 +1,4 @@
+using System.Numerics;
 using Neo;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Native;
@@ -30,7 +31,7 @@ namespace AbstractAccount
 
         private static void SetDependencies(UInt160 accountId, UInt160[] children, bool verifier)
         {
-            UInt160 root = ValidateDependencyCall(accountId, verifier);
+            UInt160 root = ValidateDependencyCall(accountId, verifier, false);
             ValidateDependencyChildren(children, root, verifier);
             byte[] lockKey = Helper.Concat(Prefix_DependencyMaintenance, (byte[])accountId);
             AcquireDependencyMaintenance(lockKey, accountId);
@@ -65,7 +66,7 @@ namespace AbstractAccount
 
         private static void ClearDependencies(UInt160 accountId, bool verifier)
         {
-            UInt160 root = ValidateDependencyCall(accountId, verifier);
+            UInt160 root = ValidateDependencyCall(accountId, verifier, true);
             byte[] lockKey = Helper.Concat(Prefix_DependencyMaintenance, (byte[])accountId);
             AcquireDependencyMaintenance(lockKey, accountId);
             try
@@ -123,26 +124,25 @@ namespace AbstractAccount
             return children;
         }
 
-        private static UInt160 ValidateDependencyCall(UInt160 accountId, bool verifier)
+        private static UInt160 ValidateDependencyCall(UInt160 accountId, bool verifier, bool clearing)
         {
             ValidateAccountId(accountId);
             ExecutionEngine.Assert(!IsExecutionActive(accountId)
                 && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifyContext, (byte[])accountId)) == null,
                 "Cannot maintain dependencies during execution");
-            AssertNoMarketEscrow(accountId);
             AccountState state = GetAccountState(accountId);
             UInt160 root = (verifier ? state.Verifier : state.HookId)!;
             ExecutionEngine.Assert(root != null && root != UInt160.Zero && Runtime.CallingScriptHash == root,
                 "Dependency caller is not installed root");
-            if (GetConfigurationContextDepth() != 0)
-            {
-                byte[] configKey = Helper.Concat(
-                    verifier ? Prefix_VerifierConfigContext : Prefix_HookConfigContext, (byte[])accountId);
-                ByteString? configuredRoot = Storage.Get(Storage.CurrentContext, configKey);
-                ExecutionEngine.Assert(GetConfigurationContextDepth() == 1
-                    && configuredRoot != null && (UInt160)configuredRoot! == root,
-                    "Cannot maintain dependencies during execution");
-            }
+            byte[] configKey = Helper.Concat(
+                verifier ? Prefix_VerifierConfigContext : Prefix_HookConfigContext, (byte[])accountId);
+            ByteString? configuredRoot = Storage.Get(Storage.CurrentContext, configKey);
+            BigInteger depth = GetConfigurationContextDepth();
+            bool rootContext = depth == 1 && configuredRoot != null && (UInt160)configuredRoot! == root;
+            ExecutionEngine.Assert(depth == 0 || rootContext, "Cannot maintain dependencies during execution");
+            // Only authenticated settlement establishes this exact root context while escrowed.
+            // It may clear dependencies, never replace them or delegate to another account/role.
+            if (!clearing || !rootContext) AssertNoMarketEscrow(accountId);
             return root!;
         }
 

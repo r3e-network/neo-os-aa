@@ -38,6 +38,8 @@ public class CompositeArgumentIsolationRuntimeTests
         }
         Method("supportsV3", ContractParameterType.Boolean, true);
         script.EmitPush(true).Emit(OpCode.RET);
+        Method("supportsComposition", ContractParameterType.Boolean, true);
+        script.EmitPush(false).Emit(OpCode.RET);
         Method("validateSignature", ContractParameterType.Boolean, true, ContractParameterType.Hash160, ContractParameterType.Any);
         validate(script); script.Emit(OpCode.RET);
         Method("postExecute", ContractParameterType.Void, false, ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any);

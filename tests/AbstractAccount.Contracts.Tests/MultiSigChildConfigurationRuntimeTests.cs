@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -383,7 +384,99 @@ public class MultiSigChildConfigurationRuntimeTests
     }
 
     [TestMethod]
-    public void CompositeDependencies_RejectAnotherAccountsExecutionContext()
+    [DataRow(0)]
+    [DataRow(1)]
+    [DataRow(2)]
+    [DataRow(3)]
+    public void CompositeDependencies_RejectUnsafeChildBeforeReplacingRoster(int kind)
+    {
+        Harness h = new();
+        h.Fx.SetSigners(Stranger);
+        UInt160 child;
+        if (kind == 0)
+        {
+            child = h.Fx.Deploy("verifiers/MultiSigVerifier", h.Core.ToArray());
+            Assert.AreNotEqual(h.Root, child, "A distinct composite must not pass the self-reference guard.");
+        }
+        else if (kind == 1)
+        {
+            // This composite advertises the signer-domain ABI, so that ABI alone cannot exclude it.
+            child = h.Fx.Deploy("MockVerifierCore");
+        }
+        else
+        {
+            string artifacts = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/v3"));
+            var manifest = Neo.SmartContract.Manifest.ContractManifest.Parse(File.ReadAllText(Path.Combine(artifacts, "MockVerifierCore.manifest.json")));
+            string omitted = kind == 2 ? "getSignerDomains" : "supportsComposition";
+            manifest.Name = "LeafWithout" + omitted;
+            manifest.Abi.Methods = manifest.Abi.Methods.Where(method => method.Name != omitted).ToArray();
+            child = h.Fx.DeployArtifact(File.ReadAllBytes(Path.Combine(artifacts, "MockVerifierCore.nef")), manifest.ToJson().ToString());
+            h.Fx.CallVoid(child, "setLeafMode", true);
+        }
+        h.Fx.SetSigners(h.Owner);
+        object[] args = { h.Account, new[] { child }, 1 };
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "callVerifier", h.Account, "setConfig", args));
+        byte[] proposal = h.Fx.CallBytes(h.Core, "getPendingVerifierCallHash", h.Account);
+        h.Fx.AdvanceTime(Window);
+
+        TestException? denied = null;
+        try
+        {
+            h.Fx.CallVoid(h.Core, "callVerifier", h.Account, "setConfig", args);
+        }
+        catch (TestException error)
+        {
+            denied = error;
+        }
+        if (denied == null && kind == 0)
+        {
+            // On the vulnerable artifact, admission succeeds and this real uninstall faults
+            // because the nested instance cannot authenticate as the account's installed root.
+            h.SetTopology(new[] { h.Native }, 1);
+        }
+        Assert.IsNotNull(denied, "Unsafe child admission must fail before the roster is replaced.");
+        StringAssert.Contains(denied.Message, kind <= 1 ? "Composite verifier cannot be a child"
+            : kind == 2 ? "Child signer-domain ABI missing" : "Child verifier composition marker missing");
+        var config = (Neo.VM.Types.Array)h.Fx.Call(h.Root, "getConfig", h.Account);
+        CollectionAssert.AreEqual(new[] { h.Web, h.Native }, ((Neo.VM.Types.Array)config[0]).Select(item => new UInt160(item.GetSpan())).ToArray());
+        CollectionAssert.AreEqual(proposal, h.Fx.CallBytes(h.Core, "getPendingVerifierCallHash", h.Account));
+        h.AssertNoConfigContext();
+
+        // A rejected topology must leave the accepted leaf roster removable through the real core.
+        h.SetTopology(new[] { h.Native }, 1);
+        h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, UInt160.Zero, Array.Empty<byte>());
+        h.Fx.AdvanceTime(Window);
+        h.Fx.CallVoid(h.Core, "confirmVerifierUpdate", h.Account);
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Core, "getVerifier", h.Account));
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.AccountStorageKey(h.Core, 0x22)));
+        h.AssertNoConfigContext();
+    }
+
+    [TestMethod]
+    [DataRow("setVerifierDependencies")]
+    [DataRow("clearVerifierDependencies")]
+    public void CompositeDependencies_EscrowRejectsUnscopedRootMaintenance(string method)
+    {
+        Harness h = new();
+        UInt160 root = h.Fx.Deploy("MockVerifierCore");
+        UInt160 account = h.Fx.CallUInt160(h.Core, "computeRegistrationAccountId",
+            root, Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
+        h.Fx.CallVoid(h.Core, "registerAccount", account, root, Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
+        UInt160 market = h.Fx.Deploy("AAAddressMarket");
+        h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        h.Fx.CallVoid(market, "createListing", h.Core, account, 100000000, "dependency guard", "");
+        object[] args = method == "setVerifierDependencies" ? new object[] { account, new[] { h.Native } } : new object[] { account };
+        TestException denied = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallVoid(root, "forward", h.Core, method, args));
+        StringAssert.Contains(denied.Message, "Account locked in market escrow");
+        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isMarketEscrowActive", account));
+        Assert.AreEqual(root, h.Fx.CallUInt160(h.Core, "getVerifier", account));
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void CompositeDependencies_RejectAnotherAccountsExecutionContext(bool clear)
     {
         Harness h = new();
         UInt160 forwardingRoot = h.Fx.Deploy("MockVerifierCore");
@@ -395,8 +488,9 @@ public class MultiSigChildConfigurationRuntimeTests
             Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
         h.Fx.CallVoid(h.Core, "registerAccount", dependentAccount, forwardingRoot,
             Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
+        object?[] dependencyArgs = clear ? new object?[] { dependentAccount } : new object?[] { dependentAccount, new[] { h.Web } };
         object[] op = RuntimeFixture.UserOp(forwardingRoot, "forward",
-            new object?[] { h.Core, "setVerifierDependencies", new object?[] { dependentAccount, new[] { h.Web } } },
+            new object?[] { h.Core, clear ? "clearVerifierDependencies" : "setVerifierDependencies", dependencyArgs },
             0, h.Fx.Now() + 600000, Array.Empty<byte>());
 
         TestException rejected = Assert.ThrowsExactly<TestException>(() =>
