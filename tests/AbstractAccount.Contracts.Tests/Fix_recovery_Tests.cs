@@ -27,7 +27,7 @@ namespace AbstractAccount.Contracts.Tests;
 /// Executed against the compiled contract under <c>contracts/bin/v3</c> through a real Neo VM.
 /// </summary>
 [TestClass]
-public class FixRecoveryTests
+public partial class FixRecoveryTests
 {
     private const string Network = "neo3-testnet";
 
@@ -181,12 +181,13 @@ public class FixRecoveryTests
         }
 
         public byte[] ComputeActionDigestV4(byte[] accountId, string text, UInt160 executor,
-            string actionId, ulong expiry, byte[] master, BigInteger epoch, byte[] nullifier)
+            string actionId, ulong expiry, byte[] master, BigInteger epoch, byte[] nullifier,
+            string? signingNetwork = null, UInt160? signingVerifier = null)
         {
             List<byte> bytes = new();
             bytes.AddRange(Encoding.ASCII.GetBytes("neodid-aa-action-v3"));
-            bytes.AddRange(Segment(Network)); bytes.AddRange(Core.ToArray()); bytes.AddRange(accountId);
-            bytes.AddRange(Verifier.ToArray()); bytes.AddRange(Segment(text)); bytes.AddRange(executor.ToArray());
+            bytes.AddRange(Segment(signingNetwork ?? Network)); bytes.AddRange(Core.ToArray()); bytes.AddRange(accountId);
+            bytes.AddRange((signingVerifier ?? Verifier).ToArray()); bytes.AddRange(Segment(text)); bytes.AddRange(executor.ToArray());
             bytes.AddRange(Segment(actionId)); bytes.AddRange(Segment(expiry.ToString()));
             bytes.AddRange(nullifier); bytes.AddRange(master); bytes.AddRange(Segment(epoch.ToString()));
             return SHA256.HashData(bytes.ToArray());
