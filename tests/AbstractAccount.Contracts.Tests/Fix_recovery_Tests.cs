@@ -109,7 +109,8 @@ public partial class FixRecoveryTests
                 UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", Verifier);
             Fx.Engine.Storage.Snapshot.Delete(new StorageKey
             {
-                Id = (int)state[0].GetInteger(), Key = new[] { prefix }.Concat(accountId).ToArray()
+                Id = (int)state[0].GetInteger(),
+                Key = new[] { prefix }.Concat(accountId).ToArray()
             });
         }
 
