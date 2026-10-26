@@ -32,15 +32,19 @@ response cannot restore an earlier account's recovery context.
 
 ## Current ticket and execution-configuration boundaries
 
-Recovery and action signatures use the v2 domains. They bind the AA core and the
-raw 20-byte account ID in addition to the textual identity, account address,
-executor or new owner, action ID, expiry, and nullifiers. Direct ticket submission
-re-derives the action ID from the raw account, current nonce, executor or new
-owner, and expiry; it does not accept an unrelated action ID merely because the
-signature matches. The proxy address remains an address, not the raw account ID.
-Compact result encoding stays at v3, but tickets signed before raw-account binding
-are not accepted after the upgrade. The in-flight request window therefore needs
-an owner-approved deployment and migration, not a legacy-signature fallback.
+Recovery signatures use the `neodid-recovery-v2` domain and compact-v3 encoding.
+New action requests use `neo_n3_action_v4`: compact action-v4 tickets signed
+under `neodid-aa-action-v3`, binding the enrolled master nullifier and current
+action-authorization epoch. Both paths bind the AA core and raw 20-byte account
+ID along with their ticket-specific context; the proxy address is not the raw
+account ID. Direct ticket submission re-derives the expected action ID instead
+of accepting an unrelated ID solely because its signature matches. Existing
+v3 action signatures are accepted only through the legacy manual route with
+current-owner and executor witnesses; old Oracle v3 action packets are rejected.
+Pre-v4 active sessions require explicit current-owner reauthorization or a new
+authorized session. See [action session migration](action-sessions-v4.md).
+Tickets issued before raw-account binding remain incompatible; deployment and
+in-flight request migration still require an owner-approved plan.
 
 Account configuration calls reject reentry while execution, verification, or a
 verifier/hook configuration or execution context is active. This covers plugin
@@ -63,9 +67,12 @@ in `VerifierAuthority.cs` and `HookAuthority.cs`.
 Those checks do not prove that detaching a module erases all of its authority:
 
 - Existing module configuration is keyed by account ID, without an installation
-  generation. `MultiSigVerifier.ClearAccount` and `MultiHook.ClearAccount` remove
-  their own topology only, leaving child storage intact. Reinstallation can make
-  retained configuration relevant again.
+  generation. `MultiSigVerifier.ClearAccount` and `MultiHook.ClearAccount` invoke
+  core dependency cleanup before deleting their own topology. The core calls each
+  supported leaf's cleanup from the registered roster or supported legacy-roster
+  fallback; a cleanup fault rolls back the operation. This does not establish
+  cleanup for unsupported legacy rosters. Reinstallation can still make
+  configuration retained by a module relevant again.
 - `SocialRecoveryVerifier.VerifyExecution`, `VerifyAdmin`, and the corresponding
   legacy meta-transaction methods read the plugin's own owner/session state.
   They do not require a current core execution context. External integrations
