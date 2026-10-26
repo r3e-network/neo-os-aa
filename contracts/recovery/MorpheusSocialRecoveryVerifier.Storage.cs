@@ -117,8 +117,16 @@ namespace Neo.SmartContract.Examples
             string actionId,
             ulong expiresAt,
             ByteString actionNullifier,
-            ByteString verificationSignature)
+            ByteString verificationSignature,
+            ByteString masterNullifier, BigInteger authorizationEpoch, bool legacy)
         {
+            if (legacy) AssertOwner(accountId);
+            else
+            {
+                ValidateFixedHash(masterNullifier, "masterNullifier");
+                ExecutionEngine.Assert(authorizationEpoch > 0 && authorizationEpoch == GetActionAuthorizationEpoch(accountId), "Stale action authorization epoch");
+                ExecutionEngine.Assert(IsAllowedActionIdentity(accountId, masterNullifier), "Action identity not enrolled");
+            }
             ValidateAddress(executor, "executor");
             ValidateShortText(actionId, "actionId");
             ValidateFixedHash(actionNullifier, "actionNullifier");
@@ -128,7 +136,9 @@ namespace Neo.SmartContract.Examples
             ExecutionEngine.Assert(actionId == BuildActionId(accountId, executor, GetSessionNonce(accountId), expiresAt),
                 "Action session does not match the account");
 
-            ByteString digest = ComputeActionDigest(accountId, executor, actionId, expiresAt, actionNullifier);
+            ByteString digest = legacy
+                ? ComputeActionDigest(accountId, executor, actionId, expiresAt, actionNullifier)
+                : ComputeActionDigestV4(accountId, executor, actionId, expiresAt, masterNullifier, authorizationEpoch, actionNullifier);
             bool validSignature = CryptoLib.VerifyWithECDsa(
                 digest,
                 GetMorpheusVerifier(accountId),
@@ -136,6 +146,10 @@ namespace Neo.SmartContract.Examples
                 NamedCurveHash.secp256r1SHA256);
             ExecutionEngine.Assert(validSignature, "Invalid Morpheus action signature");
 
+            // An upgraded pre-v4 account has no epoch key. Only a valid legacy
+            // signature plus the current owner's real witness may initialize it.
+            if (legacy && GetActionAuthorizationEpoch(accountId) == 0) AdvanceActionAuthorizationEpoch(accountId);
+            SaveActionSessionAuthorization(accountId, masterNullifier, GetActionAuthorizationEpoch(accountId), legacy, GetSessionNonce(accountId) + 1);
             MarkActionNullifierUsed(accountId, actionNullifier);
             SaveActiveSession(accountId, new ActiveSession
             {
@@ -168,16 +182,16 @@ namespace Neo.SmartContract.Examples
 
         private static CompactActionTicket DecodeCompactActionTicket(ByteString payload)
         {
-            string[] segments = SplitCompactPayload(payload, 3);
+            string[] segments = SplitCompactPayload(payload, 5);
             ExecutionEngine.Assert(segments[0] == COMPACT_ACTION_VERSION.ToString(), "Unsupported action ticket version");
-
-            ByteString actionNullifier = DecodeBase64Field(segments[1], FIXED_HASH_LENGTH, "actionNullifier");
-            ByteString signature = DecodeBase64Field(segments[2], FIXED_SIGNATURE_LENGTH, "signature");
-
+            BigInteger epoch = ParsePositiveDecimal(segments[2], "authorizationEpoch");
+            ExecutionEngine.Assert(epoch > 0 && segments[2] == epoch.ToString(), "Noncanonical action epoch");
             return new CompactActionTicket
             {
-                ActionNullifier = actionNullifier,
-                Signature = signature
+                MasterNullifier = DecodeBase64Field(segments[1], FIXED_HASH_LENGTH, "masterNullifier"),
+                AuthorizationEpoch = epoch,
+                ActionNullifier = DecodeBase64Field(segments[3], FIXED_HASH_LENGTH, "actionNullifier"),
+                Signature = DecodeBase64Field(segments[4], FIXED_SIGNATURE_LENGTH, "signature")
             };
         }
 

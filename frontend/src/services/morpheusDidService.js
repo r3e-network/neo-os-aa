@@ -147,6 +147,12 @@ async function readVerifierMethod({ rpcUrl, verifierHash, operation, args = [] }
   if (operation === 'getAAContract' || operation === 'getAccountAddress') {
     return decodeStackHash160(result?.stack?.[0]);
   }
+  if (operation === 'getActiveSession') {
+    const item = result?.stack?.[0];
+    const decoded = decodeStackItem(item);
+    if (Array.isArray(decoded) && item?.value?.[0]) decoded[0] = decodeStackHash160(item.value[0]);
+    return decoded;
+  }
   return decodeStackItem(result?.stack?.[0]);
 }
 
@@ -232,6 +238,9 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
     timelock,
     pendingRecovery,
     activeSession,
+    actionProtocolVersion,
+    actionAuthorizationEpoch,
+    actionSessionAuthorized,
   ] = await Promise.all([
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getOwner', args: [accountIdParam] }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getMorpheusOracle', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getMorpheusOracle failed:', error?.message); return ''; }),
@@ -245,6 +254,9 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getTimelock', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getTimelock failed:', error?.message); return '0'; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getPendingRecovery', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getPendingRecovery failed:', error?.message); return []; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActiveSession', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getActiveSession failed:', error?.message); return []; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActionProtocolVersion', args: [] }).catch(() => '0'),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActionAuthorizationEpoch', args: [accountIdParam] }).catch(() => '0'),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'isActionSessionAuthorized', args: [accountIdParam] }).catch(() => false),
   ]);
 
   return {
@@ -267,6 +279,9 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
       executableAt: pendingRecovery[4] || '0',
       active: Boolean(pendingRecovery[5]),
     } : null,
+    actionProtocolVersion,
+    actionAuthorizationEpoch,
+    actionSessionAuthorized: actionSessionAuthorized === true,
     activeSession: Array.isArray(activeSession) ? {
       executor: activeSession[0] || '',
       actionId: activeSession[1] || '',
@@ -415,13 +430,15 @@ class MorpheusDidService {
     });
   }
 
-  async previewActionTicket({ aaContract, verifierContract, accountId, accountIdText, accountIdRaw, executor, sessionNonce = 0, expiresAt, network } = {}) {
+  async previewActionTicket({ aaContract, verifierContract, accountId, accountIdText, accountIdRaw, executor, sessionNonce = 0, authorizationEpoch, expiresAt, network } = {}) {
     const networkText = requireAaSigningText(network, 'network');
     const accountText = requireAaSigningText(accountIdText, 'accountIdText');
     const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
     const actionVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
     const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');
     const disposable = toRequiredNeoInternalHex(executor, 'executor');
+    const epoch = String(authorizationEpoch ?? '');
+    if (!/^[1-9][0-9]*$/.test(epoch)) throw new Error('Current action authorization epoch required');
     const actionId = await buildAaActionId({ network: networkText, aaContractInternal: core, accountIdRawInternal: account, executorInternal: disposable, sessionNonce, expiresAt });
     const profile = getDidProfile();
     const subjectPatch = await buildEncryptedSubjectPatch({
@@ -438,7 +455,8 @@ class MorpheusDidService {
       action_id: actionId,
       expires_at: String(expiresAt),
       session_nonce: String(sessionNonce),
-      callback_encoding: 'neo_n3_action_v3',
+      authorization_epoch: epoch,
+      callback_encoding: 'neo_n3_action_v4',
     });
   }
 
@@ -538,6 +556,27 @@ class MorpheusDidService {
         toIntegerParam(expiresAt),
         toStringParam(subjectPatch.encrypted_params),
       ],
+    });
+  }
+
+  // Normal explicit user wallet actions. The contract checks its current
+  // owner witness; a DID login or a self-reported owner does not authorize them.
+  async setActionIdentity({ verifierHash, accountIdHex, masterNullifier, enabled } = {}) {
+    const master = sanitizeHex(masterNullifier);
+    if (!/^[0-9a-f]{64}$/.test(master) || typeof enabled !== 'boolean') throw new Error('Invalid action enrollment');
+    return walletService.invoke({
+      scriptHash: requireNonZeroHash160(verifierHash, 'verifierHash'), operation: 'setActionIdentity',
+      args: [toHash160Param(requireNonZeroHash160(accountIdHex, 'accountId')), { type: 'ByteArray', value: master }, { type: 'Boolean', value: enabled }],
+    });
+  }
+
+  async reauthorizeActiveActionSession({ verifierHash, accountIdHex, session } = {}) {
+    const nullifier = sanitizeHex(session?.actionNullifier);
+    if (!session?.active || !/^[0-9a-f]{64}$/.test(nullifier) || !session.actionId || !/^[0-9]+$/.test(String(session.expiresAt))) throw new Error('Invalid active session');
+    return walletService.invoke({
+      scriptHash: requireNonZeroHash160(verifierHash, 'verifierHash'), operation: 'reauthorizeActiveActionSession',
+      args: [toHash160Param(requireNonZeroHash160(accountIdHex, 'accountId')), toHash160Param(requireNonZeroHash160(session.executor, 'executor')),
+        toStringParam(session.actionId), toIntegerParam(session.expiresAt), { type: 'ByteArray', value: nullifier }],
     });
   }
 

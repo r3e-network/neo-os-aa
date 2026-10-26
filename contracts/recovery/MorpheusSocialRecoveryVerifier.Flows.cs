@@ -70,6 +70,7 @@ namespace Neo.SmartContract.Examples
 
             StoreConfig(accountId, accountIdText, network, owner, aaContract, accountAddress, morpheusOracle, masterNullifiers, threshold, timelock, morpheusVerifier);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_RECOVERY_NONCE, accountId), 0);
+            ResetActionAuthorization(accountId);
 
             OnRecoverySetup(accountId, owner, threshold, timelock, masterNullifiers.Length);
         }
@@ -97,6 +98,7 @@ namespace Neo.SmartContract.Examples
             Storage.Put(Storage.CurrentContext, Key(PREFIX_TIMELOCK, accountId), timelock);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_MORPHEUS_VERIFIER, accountId), (byte[])morpheusVerifier);
 
+            AdvanceActionAuthorizationEpoch(accountId);
             OnRecoveryConfigUpdated(accountId, threshold, timelock, masterNullifiers.Length);
         }
 
@@ -181,6 +183,8 @@ namespace Neo.SmartContract.Examples
 
             BigInteger sessionNonce = GetSessionNonce(accountId);
             string actionId = BuildActionId(accountId, executor, sessionNonce, expiresAt);
+            BigInteger authorizationEpoch = GetActionAuthorizationEpoch(accountId);
+            ExecutionEngine.Assert(authorizationEpoch > 0, "Action enrollment required");
             string payloadJson =
                 "{\"provider\":\"" + provider
                 + "\",\"network\":\"" + GetNetwork(accountId)
@@ -193,7 +197,8 @@ namespace Neo.SmartContract.Examples
                 + "\",\"expires_at\":\"" + expiresAt.ToString()
                 + "\",\"session_nonce\":\"" + sessionNonce.ToString()
                 + "\",\"encrypted_params\":\"" + encryptedParams
-                + "\",\"callback_encoding\":\"neo_n3_action_v3\"}";
+                + "\",\"authorization_epoch\":\"" + authorizationEpoch.ToString()
+                + "\",\"callback_encoding\":\"neo_n3_action_v4\"}";
 
             BigInteger requestId = (BigInteger)Contract.Call(
                 oracle,
@@ -204,6 +209,7 @@ namespace Neo.SmartContract.Examples
                 Runtime.ExecutingScriptHash,
                 "onOracleResult");
 
+            Storage.Put(Storage.CurrentContext, ActionRequestEpochKey(requestId), authorizationEpoch);
             SaveOracleActionRequest(requestId, new OracleActionRequest
             {
                 AccountId = accountId,

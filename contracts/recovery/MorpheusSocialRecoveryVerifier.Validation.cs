@@ -63,6 +63,30 @@ namespace Neo.SmartContract.Examples
             return CryptoLib.Sha256(payload);
         }
 
+        private static ByteString ComputeActionDigestV4(
+            UInt160 accountId,
+            UInt160 executor,
+            string actionId,
+            ulong expiresAt,
+            ByteString masterNullifier, BigInteger authorizationEpoch, ByteString actionNullifier)
+        {
+            // Bind the AA core, raw account id, verifier, network and action so a
+            // ticket cannot be replayed across cores, accounts or sessions.
+            ByteString payload = (ByteString)"neodid-aa-action-v3";
+            payload = Helper.Concat(payload, EncodeSegment(GetNetwork(accountId)));
+            payload = Helper.Concat(payload, (ByteString)(byte[])GetAAContract(accountId));
+            payload = Helper.Concat(payload, (ByteString)(byte[])accountId);
+            payload = Helper.Concat(payload, (ByteString)(byte[])Runtime.ExecutingScriptHash);
+            payload = Helper.Concat(payload, EncodeSegment(GetAccountIdText(accountId)));
+            payload = Helper.Concat(payload, (ByteString)(byte[])executor);
+            payload = Helper.Concat(payload, EncodeSegment(actionId));
+            payload = Helper.Concat(payload, EncodeSegment(expiresAt.ToString()));
+            payload = Helper.Concat(payload, actionNullifier);
+            payload = Helper.Concat(payload, masterNullifier);
+            payload = Helper.Concat(payload, EncodeSegment(authorizationEpoch.ToString()));
+            return CryptoLib.Sha256(payload);
+        }
+
         private static string BuildActionId(UInt160 accountId, UInt160 executor, BigInteger sessionNonce, ulong expiresAt)
         {
             ByteString material = (ByteString)GetNetwork(accountId);

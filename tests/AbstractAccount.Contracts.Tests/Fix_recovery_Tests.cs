@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Neo.SmartContract;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
@@ -87,7 +89,7 @@ public class FixRecoveryTests
             string accountIdText,
             UInt160 owner,
             byte[] verifierPubKey,
-            ulong timelock = MinRecoveryTimelockMs)
+            ulong timelock = MinRecoveryTimelockMs, UInt160? oracle = null)
         {
             byte[] accountId = RegisterAccount(owner);
             byte[] factor = Factor();
@@ -95,9 +97,33 @@ public class FixRecoveryTests
             Fx.SetSigners(owner);
             Fx.CallVoid(
                 Verifier, "setupRecovery",
-                accountId, accountIdText, Network, owner, Core, AccountAddress, Oracle,
+                accountId, accountIdText, Network, owner, Core, AccountAddress, oracle ?? Oracle,
                 new object?[] { factor }, (BigInteger)1, timelock, verifierPubKey);
             return accountId;
+        }
+
+        // Synthetic pre-v4 storage shape, not a claim of a historical deployment fixture.
+        public void DeleteNewActionStorage(byte[] accountId, byte prefix)
+        {
+            var state = (Neo.VM.Types.Array)Fx.Call(
+                UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", Verifier);
+            Fx.Engine.Storage.Snapshot.Delete(new StorageKey
+            {
+                Id = (int)state[0].GetInteger(), Key = new[] { prefix }.Concat(accountId).ToArray()
+            });
+        }
+
+        // Synthetic stored request for the callback boundary. This does not
+        // claim a real Oracle transport/request integration execution.
+        public void SeedActionOracleRequest(BigInteger requestId, byte[] accountId, UInt160 executor,
+            string actionId, ulong expiresAt, BigInteger epoch)
+        {
+            var state = (Neo.VM.Types.Array)Fx.Call(
+                UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", Verifier);
+            int id = (int)state[0].GetInteger();
+            byte[] serialized = Fx.CallBytes(Fx.StdLibHash, "serialize", (object)new object?[] { accountId, executor, actionId, expiresAt });
+            Fx.Engine.Storage.Snapshot.Add(new StorageKey { Id = id, Key = new byte[] { 0x12 }.Concat(requestId.ToByteArray()).ToArray() }, new StorageItem { Value = serialized });
+            Fx.Engine.Storage.Snapshot.Add(new StorageKey { Id = id, Key = new byte[] { 0x1D }.Concat(requestId.ToByteArray()).ToArray() }, new StorageItem { Value = epoch.ToByteArray() });
         }
 
         public string BuildActionId(byte[] accountId, UInt160 executor, ulong expiresAt)
@@ -111,7 +137,7 @@ public class FixRecoveryTests
             material.Add(0x1f);
             material.AddRange(executor.ToArray());
             material.Add(0x1f);
-            material.AddRange(Encoding.UTF8.GetBytes("0"));
+            material.AddRange(Encoding.UTF8.GetBytes(Fx.CallInteger(Verifier, "getSessionNonce", accountId).ToString()));
             material.Add(0x1f);
             material.AddRange(Encoding.UTF8.GetBytes(expiresAt.ToString()));
             return "aa_proxy:" + Hex(material);
@@ -152,6 +178,18 @@ public class FixRecoveryTests
             payload.AddRange(Segment(expiresAt.ToString()));
             payload.AddRange(actionNullifier);
             return SHA256.HashData(payload.ToArray());
+        }
+
+        public byte[] ComputeActionDigestV4(byte[] accountId, string text, UInt160 executor,
+            string actionId, ulong expiry, byte[] master, BigInteger epoch, byte[] nullifier)
+        {
+            List<byte> bytes = new();
+            bytes.AddRange(Encoding.ASCII.GetBytes("neodid-aa-action-v3"));
+            bytes.AddRange(Segment(Network)); bytes.AddRange(Core.ToArray()); bytes.AddRange(accountId);
+            bytes.AddRange(Verifier.ToArray()); bytes.AddRange(Segment(text)); bytes.AddRange(executor.ToArray());
+            bytes.AddRange(Segment(actionId)); bytes.AddRange(Segment(expiry.ToString()));
+            bytes.AddRange(nullifier); bytes.AddRange(master); bytes.AddRange(Segment(epoch.ToString()));
+            return SHA256.HashData(bytes.ToArray());
         }
 
         public byte[] ComputeRecoveryDigest(
@@ -312,7 +350,7 @@ public class FixRecoveryTests
         byte[] digestA = h.ComputeActionDigest(accountA, "acct-A", Executor, actionIdA, expiresAt, actionNullifier);
         byte[] signatureA = verifierKey.Sign(digestA);
 
-        h.Fx.SetSigners(Executor);
+        h.Fx.SetSigners(OwnerA, OwnerB, Executor);
         TestException replay = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(
                 h.Verifier, "submitActionTicket",
@@ -322,6 +360,7 @@ public class FixRecoveryTests
         h.Fx.CallVoid(
             h.Verifier, "submitActionTicket",
             accountA, Executor, actionIdA, expiresAt, actionNullifier, signatureA);
+        h.Fx.SetSigners(Executor);
         Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", accountA));
     }
 
@@ -340,7 +379,7 @@ public class FixRecoveryTests
         byte[] signature = verifierKey.Sign(
             h.ComputeActionDigest(accountA, "shared-account", Executor, actionIdA, expiresAt, actionNullifier));
 
-        h.Fx.SetSigners(Executor);
+        h.Fx.SetSigners(OwnerA, OwnerB, Executor);
         h.Fx.CallVoid(h.Verifier, "submitActionTicket",
             accountA, Executor, actionIdA, expiresAt, actionNullifier, signature);
         TestException replay = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(
@@ -397,7 +436,7 @@ public class FixRecoveryTests
             foreignRecoveryAction, factor, actionNullifier, recoverySignature));
         StringAssert.Contains(recovery.Message, "Recovery action does not match the account");
 
-        h.Fx.SetSigners(Executor);
+        h.Fx.SetSigners(OwnerA, OwnerB, Executor);
         TestException session = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(
             h.Verifier, "submitActionTicket", accountId, Executor, foreignSessionAction,
             actionExpiresAt, actionNullifier, actionSignature));
@@ -406,6 +445,205 @@ public class FixRecoveryTests
     }
 
     // ========================================================================
+    [TestMethod]
+    public void LegacyActionTicket_ExecutorOnlyMustNotActivate()
+    {
+        // This witness uses only pre-v4 APIs, so baseline failure must be an
+        // accepted unauthorized session, not a missing new method.
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        byte[] account = h.SetupAccount("legacy", OwnerA, key.CompressedPublicKey), nullifier = new byte[32];
+        ulong expiry = (ulong)(h.Fx.Now() + 600_000); string id = h.BuildActionId(account, Executor, expiry);
+        byte[] signature = key.Sign(h.ComputeActionDigest(account, "legacy", Executor, id, expiry, nullifier));
+        h.Fx.SetSigners(Executor);
+        Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "submitActionTicket", account, Executor, id, expiry, nullifier, signature));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionNullifierUsed", account, nullifier));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+    }
+
+    // DID-R1 v4 regressions: authored against the existing real contract harness.
+    // Not executed by the source-only author phase; freshly built NEFs are required.
+    [TestMethod]
+    public void ActionV4_RecoveryFactorAloneCannotActivateAndRollsBack()
+    {
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        byte[] account = h.SetupAccount("v4", OwnerA, key.CompressedPublicKey);
+        byte[] master = Factor(), nullifier = new byte[32];
+        BigInteger epoch = h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account);
+        ulong expiry = (ulong)(h.Fx.Now() + 600_000);
+        string id = h.BuildActionId(account, Executor, expiry);
+        byte[] signature = key.Sign(h.ComputeActionDigestV4(account, "v4", Executor, id, expiry, master, epoch, nullifier));
+        h.Fx.SetSigners(Executor);
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isAllowedMasterNullifier", account, master));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isAllowedActionIdentity", account, master));
+        TestException error = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "submitActionTicketV4",
+            account, Executor, id, expiry, master, epoch, nullifier, signature));
+        StringAssert.Contains(error.Message, "Action identity not enrolled");
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionNullifierUsed", account, nullifier));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+    }
+
+    [TestMethod]
+    public void ActionV4_ExplicitEnrollmentAllowsOwnerlessSessionAndRevocationInvalidates()
+    {
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        byte[] account = h.SetupAccount("v4", OwnerA, key.CompressedPublicKey), master = Factor(), nullifier = new byte[32];
+        h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, true);
+        BigInteger epoch = h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account);
+        ulong expiry = (ulong)(h.Fx.Now() + 600_000); string id = h.BuildActionId(account, Executor, expiry);
+        byte[] signature = key.Sign(h.ComputeActionDigestV4(account, "v4", Executor, id, expiry, master, epoch, nullifier));
+        h.Fx.SetSigners(Executor);
+        h.Fx.CallVoid(h.Verifier, "submitActionTicketV4", account, Executor, id, expiry, master, epoch, nullifier, signature);
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecutionMetaTx", account, new object?[] { Executor }));
+        h.Fx.SetSigners(OwnerA); h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, false);
+        Assert.IsTrue(h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account) > epoch);
+        h.Fx.SetSigners(Executor);
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecutionMetaTx", account, new object?[] { Executor }));
+        Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "submitActionTicketV4",
+            account, Executor, id, expiry, master, epoch, nullifier, signature));
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
+    }
+
+    [TestMethod]
+    public void ActionV4_EnrollmentNeedsCurrentOwnerAndDoesNotBlessLegacySessions()
+    {
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        byte[] account = h.SetupAccount("v4", OwnerA, key.CompressedPublicKey), master = Factor();
+        BigInteger epoch = h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account);
+        h.Fx.SetSigners(Attacker);
+        Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, true));
+        Assert.AreEqual(epoch, h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isAllowedActionIdentity", account, master));
+    }
+
+    [TestMethod]
+    public void ActionV4_LegacyDirectTicketRequiresRealOwnerWitness()
+    {
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        byte[] account = h.SetupAccount("legacy", OwnerA, key.CompressedPublicKey), nullifier = new byte[32];
+        h.DeleteNewActionStorage(account, 0x1A);
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account));
+        ulong expiry = (ulong)(h.Fx.Now() + 600_000); string id = h.BuildActionId(account, Executor, expiry);
+        byte[] signature = key.Sign(h.ComputeActionDigest(account, "legacy", Executor, id, expiry, nullifier));
+        h.Fx.SetSigners(Executor);
+        TestException error = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "submitActionTicket",
+            account, Executor, id, expiry, nullifier, signature));
+        StringAssert.Contains(error.Message, "Not owner");
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
+        h.Fx.SetSigners(OwnerA, Executor);
+        h.Fx.CallVoid(h.Verifier, "submitActionTicket", account, Executor, id, expiry, nullifier, signature);
+        h.Fx.SetSigners(Executor); Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.IsTrue(h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account) > 0);
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isAllowedActionIdentity", account, Factor()));
+    }
+
+    [TestMethod]
+    public void ActionV4_AddingAnotherIdentityPreservesGrantsButInvalidatesOldEpoch()
+    {
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        byte[] account = h.SetupAccount("v4", OwnerA, key.CompressedPublicKey), master = Factor(), second = new byte[32];
+        second[0] = 0x71;
+        h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, true);
+        BigInteger oldEpoch = h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account);
+        h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, second, true);
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isAllowedActionIdentity", account, master));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isAllowedActionIdentity", account, second));
+        byte[] nullifier = new byte[32]; ulong expiry = (ulong)(h.Fx.Now() + 600_000);
+        string id = h.BuildActionId(account, Executor, expiry);
+        byte[] signature = key.Sign(h.ComputeActionDigestV4(account, "v4", Executor, id, expiry, master, oldEpoch, nullifier));
+        h.Fx.SetSigners(Executor);
+        TestException error = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "submitActionTicketV4",
+            account, Executor, id, expiry, master, oldEpoch, nullifier, signature));
+        StringAssert.Contains(error.Message, "Stale action authorization epoch");
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
+    }
+
+    [TestMethod]
+    public void ActionV4_UnmarkedLegacySessionNeedsExactCurrentOwnerReauthorization()
+    {
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        byte[] account = h.SetupAccount("legacy", OwnerA, key.CompressedPublicKey), nullifier = new byte[32];
+        ulong expiry = (ulong)(h.Fx.Now() + 600_000); string id = h.BuildActionId(account, Executor, expiry);
+        byte[] signature = key.Sign(h.ComputeActionDigest(account, "legacy", Executor, id, expiry, nullifier));
+        h.Fx.SetSigners(OwnerA, Executor);
+        h.Fx.CallVoid(h.Verifier, "submitActionTicket", account, Executor, id, expiry, nullifier, signature);
+        h.DeleteNewActionStorage(account, 0x1A); h.DeleteNewActionStorage(account, 0x1C);
+        h.Fx.SetSigners(Executor);
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
+        h.Fx.SetSigners(Attacker);
+        Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "reauthorizeActiveActionSession", account, Executor, id, expiry, nullifier));
+        h.Fx.SetSigners(OwnerA);
+        Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "reauthorizeActiveActionSession", account, Attacker, id, expiry, nullifier));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account));
+        h.Fx.CallVoid(h.Verifier, "reauthorizeActiveActionSession", account, Executor, id, expiry, nullifier);
+        h.Fx.SetSigners(Executor); Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isAllowedActionIdentity", account, Factor()));
+    }
+
+    [TestMethod]
+    public void ActionV4_ExecutionAndAuthorizationGetterAgreeAtExactExpiry()
+    {
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        byte[] account = h.SetupAccount("legacy", OwnerA, key.CompressedPublicKey), nullifier = new byte[32];
+        ulong expiry = (ulong)(h.Fx.Now() + 1_000); string id = h.BuildActionId(account, Executor, expiry);
+        byte[] signature = key.Sign(h.ComputeActionDigest(account, "legacy", Executor, id, expiry, nullifier));
+        h.Fx.SetSigners(OwnerA, Executor);
+        h.Fx.CallVoid(h.Verifier, "submitActionTicket", account, Executor, id, expiry, nullifier, signature);
+        h.Fx.SetSigners(Executor); h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(999));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
+        h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(1));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecutionMetaTx", account, new object?[] { Executor }));
+    }
+
+    [TestMethod]
+    public void ActionV4_OracleCallbackRequiresCurrentGrantAndOriginalEpoch()
+    {
+        RecoveryHarness h = new(); using P256SessionKey key = new();
+        UInt160 oracle = h.Fx.Deploy("MockVerifierCore");
+        byte[] account = h.SetupAccount("oracle", OwnerA, key.CompressedPublicKey, oracle: oracle), master = Factor();
+        h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, true);
+        BigInteger epoch = h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account);
+        ulong expiry = (ulong)(h.Fx.Now() + 600_000);
+        string id = h.BuildActionId(account, Executor, expiry);
+        byte[] badMaster = new byte[32], badNullifier = new byte[32]; badMaster[0] = 0x7a; badNullifier[0] = 0x31;
+        byte[] badSignature = key.Sign(h.ComputeActionDigestV4(account, "oracle", Executor, id, expiry, badMaster, epoch, badNullifier));
+        h.SeedActionOracleRequest(1, account, Executor, id, expiry, epoch);
+        string Packet(byte[] factor, BigInteger generation, byte[] nullifier, byte[] signature) =>
+            "4|" + Convert.ToBase64String(factor) + "|" + generation + "|" + Convert.ToBase64String(nullifier) + "|" + Convert.ToBase64String(signature);
+        void Deliver(int request, string packet) => h.Fx.CallVoid(oracle, "forward", h.Verifier, "onOracleResult",
+            new object?[] { (BigInteger)request, "neodid_action_ticket", true, Encoding.UTF8.GetBytes(packet), "" });
+        h.Fx.SetSigners(Executor);
+        Assert.ThrowsExactly<TestException>(() => Deliver(1, Packet(badMaster, epoch, badNullifier, badSignature)));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionNullifierUsed", account, badNullifier));
+        // The failed callback rolls back deletion of request 1, which can then
+        // receive a valid response for the same exact request context.
+        byte[] goodNullifier = new byte[32]; goodNullifier[0] = 0x32;
+        byte[] signature = key.Sign(h.ComputeActionDigestV4(account, "oracle", Executor, id, expiry, master, epoch, goodNullifier));
+        Deliver(1, Packet(master, epoch, goodNullifier, signature));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        string nextId = h.BuildActionId(account, Executor, expiry);
+        byte[] nextNullifier = new byte[32]; nextNullifier[0] = 0x33;
+        byte[] staleSignature = key.Sign(h.ComputeActionDigestV4(account, "oracle", Executor, nextId, expiry, master, epoch, nextNullifier));
+        h.SeedActionOracleRequest(2, account, Executor, nextId, expiry, epoch);
+        h.Fx.SetSigners(OwnerA);
+        h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, false);
+        h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, true);
+        h.Fx.SetSigners(Executor);
+        Assert.ThrowsExactly<TestException>(() => Deliver(2, Packet(master, epoch, nextNullifier, staleSignature)));
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionNullifierUsed", account, nextNullifier));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+    }
+
     // Fix 3 — recovery timelock bounds (estate-standard 7–90 day window)
     // ========================================================================
 

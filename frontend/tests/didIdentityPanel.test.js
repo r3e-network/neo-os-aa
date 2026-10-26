@@ -54,7 +54,7 @@ function createPanel({
   const source = sfc.match(/<script setup>([\s\S]*?)<\/script>/)[1]
     .replace(/^import\s+[\s\S]*?\s+from\s+["'][^"']+["'];\s*$/gm, '')
     .replaceAll('import.meta.env.DEV', 'false');
-  const setup = new Function(...Object.keys(bindings), `${source}\nreturn { resolvedAccountId, recoveryVerifierHash, recoveryNewOwner, proxyVerifierHash, proxyExecutor, verifierState, proxyVerifierState: typeof proxyVerifierState === 'undefined' ? verifierState : proxyVerifierState, maintenanceState, canPreviewRecovery, canPreviewProxy, canInvokeRecovery, canInvokeProxy, previewRecoveryAction, previewProxyAction, refreshVerifierStateAction };`);
+  const setup = new Function(...Object.keys(bindings), `${source}\nreturn { resolvedAccountId, recoveryVerifierHash, recoveryNewOwner, proxyVerifierHash, proxyExecutor, verifierState, proxyVerifierState: typeof proxyVerifierState === 'undefined' ? verifierState : proxyVerifierState, maintenanceState, canPreviewRecovery, canPreviewProxy, canInvokeRecovery, canInvokeProxy, previewRecoveryAction, previewProxyAction, refreshVerifierStateAction, actionMasterNullifier, manageActionIdentity, reauthorizeActionSession };`);
   return { props, runtimeConfig, errors, state: scope.run(() => setup(...Object.values(bindings))), stop: () => scope.stop() };
 }
 
@@ -136,6 +136,7 @@ test('recovery and action previews require valid text, network, core, and non-ze
     accountAddress,
     recoveryNonce: '0',
     sessionNonce: '0',
+    actionProtocolVersion: '4', actionAuthorizationEpoch: '2',
   };
   const panel = createPanel({
     connected: true,
@@ -189,7 +190,7 @@ test('recovery and action previews require valid text, network, core, and non-ze
 const configuredState = (verifier, sessionNonce = '0', extra = {}) => ({
   verifierHash: `0x${verifier}`,
   network: 'neo3-testnet', aaContract: core, accountIdText: `account-${verifier.slice(0, 2)}`,
-  accountAddress: '66'.repeat(20), recoveryNonce: '0', sessionNonce, ...extra,
+  accountAddress: '66'.repeat(20), recoveryNonce: '0', sessionNonce, actionProtocolVersion: '4', actionAuthorizationEpoch: '2', ...extra,
 });
 
 test('proxy preview uses B context and nonce independently of recovery verifier A', async () => {
@@ -436,5 +437,26 @@ test('direct proxy preview rechecks plain runtime RPC provenance before service 
     assert.equal(reads.at(-1).rpcUrl, panel.runtimeConfig.rpcUrl);
     await panel.state.previewProxyAction();
     assert.equal(calls.length, 1);
+  } finally { panel.stop(); }
+});
+
+
+test('action enrollment and legacy reauthorization require explicit user handlers and fresh proxy provenance', async () => {
+  const calls = [];
+  const panel = createPanel({ connected: true,
+    identityReader: async () => ({ accountIdHex: accountA, verifierHash: verifierA }),
+    stateReader: async () => configuredState(verifierA, '0', { activeSession: { active: true, executor: '88'.repeat(20), actionId: 'aa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: '99'.repeat(32) } }),
+    didService: { setActionIdentity: async p => { calls.push(['enroll', p]); return {}; }, reauthorizeActiveActionSession: async p => { calls.push(['reauthorize', p]); return {}; } },
+  });
+  try {
+    await flush(); assert.equal(calls.length, 0);
+    panel.state.actionMasterNullifier.value = 'aa'.repeat(32);
+    await panel.state.manageActionIdentity(true);
+    assert.equal(calls[0][1].accountIdHex, accountA); assert.equal(calls[0][1].enabled, true);
+    await panel.state.reauthorizeActionSession();
+    assert.equal(calls[1][1].session.executor, '88'.repeat(20));
+    panel.props.aaContractHash = 'ff'.repeat(20);
+    await panel.state.manageActionIdentity(true);
+    assert.equal(calls.length, 2, 'plain stale context cannot submit an enrollment');
   } finally { panel.stop(); }
 });

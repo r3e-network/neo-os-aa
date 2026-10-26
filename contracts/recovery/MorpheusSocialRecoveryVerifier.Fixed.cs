@@ -12,7 +12,7 @@ namespace Neo.SmartContract.Examples
 {
     [ManifestExtra("Author", "R3E Network")]
     [ManifestExtra("Description", "Morpheus NeoDID-powered social recovery verifier for Neo Abstract Account")]
-    [ManifestExtra("Version", "2.0.0")]
+    [ManifestExtra("Version", "3.0.0")]
     // AA-03: least-privilege method-scoped grants replacing the former wildcard.
     // Call surface (verified by source sweep):
     //   1. ContractManagement.Update          — the 7-day-timelocked self-upgrade
@@ -83,7 +83,7 @@ namespace Neo.SmartContract.Examples
         private const int FIXED_HASH_LENGTH = 32;
         private const int FIXED_SIGNATURE_LENGTH = 64;
         private const int COMPACT_TICKET_VERSION = 3;
-        private const int COMPACT_ACTION_VERSION = 3;
+        private const int COMPACT_ACTION_VERSION = 4;
 
         // 7-day window shared by the timelocked upgrade (H5) and admin rotation (AA-04),
         // matching the VerifierAuthority window used across the rest of the repo.
@@ -146,6 +146,8 @@ namespace Neo.SmartContract.Examples
 
         private class CompactActionTicket
         {
+            public ByteString MasterNullifier = (ByteString)"";
+            public BigInteger AuthorizationEpoch;
             public ByteString ActionNullifier = (ByteString)"";
             public ByteString Signature = (ByteString)"";
         }

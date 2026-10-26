@@ -664,6 +664,20 @@
               :placeholder="t('operations.hexPlaceholder', '0x...')"
             />
           </label>
+          <div class="rounded-xl border border-aa-border p-3 space-y-2">
+            <p class="text-sm">Action identities require a separate owner-wallet enrollment. Recovery factors do not grant session access.</p>
+            <label for="did-panel-action-identity" class="block text-sm">Action master nullifier (32 bytes)</label>
+            <input id="did-panel-action-identity" v-model="actionMasterNullifier" class="input-field" :placeholder="zkloginMasterNullifier || '0x...'" />
+            <div class="flex gap-3">
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="manageActionIdentity(true)">Enroll action identity — owner signature</button>
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="manageActionIdentity(false)">Revoke action identity — owner signature</button>
+            </div>
+            <div v-if="proxyVerifierState?.activeSession?.active" class="text-sm">
+              <p v-if="!proxyVerifierState.actionSessionAuthorized">Stored session requires current-owner approval or a new session from an enrolled identity.</p>
+              <p>Stored executor: {{ proxyVerifierState.activeSession.executor }}; expiry: {{ proxyVerifierState.activeSession.expiresAt }}</p>
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="reauthorizeActionSession">Reauthorize this displayed session — owner signature</button>
+            </div>
+          </div>
           <label for="did-panel-proxy-executor" class="block text-sm">
             <span class="text-aa-muted">{{
               t("didPanel.executorAddress", "Executor Address / Script Hash")
@@ -928,6 +942,7 @@ const recoveryExpiryMinutes = ref(30);
 const proxyVerifierHash = ref("");
 const proxyExecutor = ref("");
 const proxyExpiryMinutes = ref(15);
+const actionMasterNullifier = ref("");
 const bindStatusLabel = computed(() =>
   didConnected.value
     ? t("didPanel.statusReady", "(ready)")
@@ -939,7 +954,7 @@ const recoveryStatusLabel = computed(() =>
     : t("didPanel.statusReady", "(ready)"),
 );
 const sessionStatusLabel = computed(() =>
-  verifierState.value?.activeSession?.active
+  proxyVerifierState.value?.activeSession?.active && proxyVerifierState.value?.actionSessionAuthorized
     ? t("didPanel.statusActive", "(active)")
     : t("didPanel.statusReady", "(ready)"),
 );
@@ -1299,12 +1314,16 @@ const canInvokeProxy = computed(
     didConnected.value &&
     effectiveProxyVerifierHash.value &&
     proxyExecutor.value &&
-    resolvedAccountId.value,
+    resolvedAccountId.value &&
+    Number(proxyVerifierState.value?.actionProtocolVersion) === 4 &&
+    /^[1-9][0-9]*$/.test(String(proxyVerifierState.value?.actionAuthorizationEpoch || "")),
 );
 const canPreviewProxy = computed(
   () =>
     canInvokeProxy.value &&
     hasProxyPreviewContext.value &&
+    Number(proxyVerifierState.value?.actionProtocolVersion) === 4 &&
+    /^[1-9][0-9]*$/.test(String(proxyVerifierState.value?.actionAuthorizationEpoch || "")) &&
     hasNonZeroHash160(effectiveProxyVerifierHash.value) &&
     hasNonZeroHash160(proxyExecutor.value),
 );
@@ -1497,6 +1516,7 @@ async function previewProxyAction() {
       accountIdRaw: resolvedAccountId.value,
       executor: proxyExecutor.value,
       sessionNonce: proxyVerifierState.value?.sessionNonce || 0,
+      authorizationEpoch: proxyVerifierState.value?.actionAuthorizationEpoch,
       expiresAt: toExpiry(proxyExpiryMinutes.value),
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1509,6 +1529,7 @@ async function previewProxyAction() {
 }
 
 async function invokeProxyAction() {
+  if (!canInvokeProxy.value || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
   busy.value = "invokeProxy";
   try {
     const response = await morpheusDidService.invokeProxySessionRequest({
@@ -1531,6 +1552,34 @@ async function invokeProxyAction() {
   } finally {
     busy.value = "";
   }
+}
+
+// Every management operation is an explicit owner-wallet transaction. The
+// read provenance guard is UX protection; current-owner witness is enforced on-chain.
+async function manageActionIdentity(enabled) {
+  if (Number(proxyVerifierState.value?.actionProtocolVersion) !== 4 || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
+  const masterNullifier = actionMasterNullifier.value || zkloginMasterNullifier.value;
+  if (!/^[0-9a-f]{64}$/i.test(sanitizeHex(masterNullifier))) return;
+  busy.value = "actionEnrollment";
+  try {
+    const response = await morpheusDidService.setActionIdentity({ verifierHash: effectiveProxyVerifierHash.value,
+      accountIdHex: resolvedAccountId.value, masterNullifier, enabled });
+    resultJson.value = JSON.stringify(response, null, 2);
+  } catch (err) { toast.error(translateError(err?.message, t)); }
+  finally { busy.value = ""; }
+}
+
+async function reauthorizeActionSession() {
+  if (Number(proxyVerifierState.value?.actionProtocolVersion) !== 4 || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
+  const session = proxyVerifierState.value?.activeSession;
+  if (!session?.active) return;
+  busy.value = "reauthorizeAction";
+  try {
+    const response = await morpheusDidService.reauthorizeActiveActionSession({ verifierHash: effectiveProxyVerifierHash.value,
+      accountIdHex: resolvedAccountId.value, session: { ...session } });
+    resultJson.value = JSON.stringify(response, null, 2);
+  } catch (err) { toast.error(translateError(err?.message, t)); }
+  finally { busy.value = ""; }
 }
 
 async function finalizeRecoveryAction() {

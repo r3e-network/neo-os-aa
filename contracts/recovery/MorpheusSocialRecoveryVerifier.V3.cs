@@ -71,6 +71,7 @@ namespace Neo.SmartContract.Examples
             AssertV3ConfigCaller(accountId);
 
             UInt160 previousOwner = GetOwner(accountId);
+            ResetActionAuthorization(accountId);
             BigInteger refundedCredit = 0;
             byte[] creditKey = Key(PREFIX_ORACLE_CREDIT, accountId);
             ByteString? creditData = Storage.Get(Storage.CurrentContext, creditKey);

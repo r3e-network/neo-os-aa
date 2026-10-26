@@ -97,6 +97,7 @@ function actionInput() {
     accountIdRaw: account,
     executor,
     sessionNonce: '0',
+    authorizationEpoch: '2',
     expiresAt: 1_800_000_000_000,
   };
 }
@@ -235,9 +236,9 @@ for (const size of [20, 32]) {
     assert.equal(state.aaContract, core);
     assert.equal(state.accountAddress, accountAddress);
     assert.ok(!state.accountIdText.startsWith('0x'));
-    assert.equal(calls.length, 12);
+    assert.equal(calls.length, 15);
     for (const call of calls) {
-      assert.deepEqual(call[3], [{ type: 'Hash160', value: `0x${account}` }]);
+      assert.deepEqual(call[3], call[2] === 'getActionProtocolVersion' ? [] : [{ type: 'Hash160', value: `0x${account}` }]);
     }
   });
 }
@@ -328,4 +329,82 @@ test('F3 generic UI format retains whitespace trimming outside signing context',
     assert.equal(harness.signerCalls.length, 0);
     assert.equal(harness.defaultCoreReads(), 0);
   }
+});
+
+
+test('action-v4 preview binds the epoch and never asks the owner wallet to sign', async () => {
+  const h = createService();
+  await h.morpheusDidService.previewActionTicket(actionInput());
+  const body = didRequest(h);
+  assert.equal(body.callback_encoding, 'neo_n3_action_v4');
+  assert.equal(body.authorization_epoch, '2');
+  assert.equal(h.signerCalls.length, 0);
+  const bad = createService();
+  await assert.rejects(bad.morpheusDidService.previewActionTicket({ ...actionInput(), authorizationEpoch: undefined }));
+  assert.equal(bad.signerCalls.length, 0); assert.equal(bad.requests.length, 0);
+});
+
+test('action enrollment is an explicit normal owner-wallet invocation, not a DID or posted-proof authorization', async () => {
+  const h = createService(), master = 'ab'.repeat(32);
+  assert.equal(h.signerCalls.length, 0);
+  await h.morpheusDidService.setActionIdentity({ verifierHash: verifier, accountIdHex: account, masterNullifier: `0x${master}`, enabled: true });
+  assert.equal(h.requests.length, 0); assert.equal(h.signerCalls.length, 1);
+  const [call] = h.signerCalls[0];
+  assert.equal(call.operation, 'setActionIdentity'); assert.equal(call.scriptHash, verifier);
+  assert.deepEqual(call.args[1], { type: 'ByteArray', value: master });
+  assert.deepEqual(call.args[2], { type: 'Boolean', value: true });
+  await assert.rejects(h.morpheusDidService.setActionIdentity({ verifierHash: verifier, accountIdHex: account, masterNullifier: master, enabled: 'true' }));
+  assert.equal(h.signerCalls.length, 1);
+});
+
+test('legacy session reauthorization signs the exact displayed executor/action/expiry/nullifier tuple', async () => {
+  const h = createService(), session = { active: true, executor, actionId: 'aa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: `0x${'cd'.repeat(32)}` };
+  await h.morpheusDidService.reauthorizeActiveActionSession({ verifierHash: verifier, accountIdHex: account, session });
+  const [call] = h.signerCalls[0];
+  assert.equal(call.operation, 'reauthorizeActiveActionSession');
+  assert.equal(call.args[1].value, `0x${executor}`); assert.equal(call.args[2].value, session.actionId);
+  assert.equal(call.args[3].value, session.expiresAt); assert.equal(call.args[4].value, 'cd'.repeat(32));
+});
+
+
+test('actual enrollment/reauthorization UI handlers are inert until explicit action and reject stale/legacy contexts', async () => {
+  const sfc = fs.readFileSync(new URL('../src/features/operations/components/DidIdentityPanel.vue', import.meta.url), 'utf8');
+  const extract = name => sfc.match(new RegExp(`async function ${name}\\([\\s\\S]*?^}`, 'm'))?.[0];
+  const calls = [], state = { actionProtocolVersion: '4', activeSession: { active: true, executor, actionId: 'aa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: 'cd'.repeat(32) } };
+  let fresh = true;
+  const bindings = {
+    proxyVerifierState: { value: state }, proxyVerifierStateContext: { value: {} }, effectiveProxyVerifierHash: { value: verifier },
+    resolvedAccountId: { value: account }, actionMasterNullifier: { value: 'ab'.repeat(32) }, zkloginMasterNullifier: { value: '' },
+    busy: { value: '' }, resultJson: { value: '' }, sanitizeHex: v => String(v || '').replace(/^0x/i, ''),
+    hasVerifierPreviewContext: () => fresh,
+    morpheusDidService: { setActionIdentity: async p => { calls.push(['enroll', p]); return {}; }, reauthorizeActiveActionSession: async p => { calls.push(['reauthorize', p]); return {}; } },
+    toast: { error: error => { throw new Error(error); } }, translateError: x => x, t: x => x,
+  };
+  const setup = new Function(...Object.keys(bindings), `${extract('manageActionIdentity')}\n${extract('reauthorizeActionSession')}\nreturn {manageActionIdentity, reauthorizeActionSession};`);
+  const ui = setup(...Object.values(bindings));
+  assert.equal(calls.length, 0);
+  fresh = false; await ui.manageActionIdentity(true); await ui.reauthorizeActionSession(); assert.equal(calls.length, 0);
+  fresh = true; state.actionProtocolVersion = '3'; await ui.manageActionIdentity(true); await ui.reauthorizeActionSession(); assert.equal(calls.length, 0);
+  state.actionProtocolVersion = '4'; await ui.manageActionIdentity(true); await ui.reauthorizeActionSession();
+  assert.equal(calls.length, 2); assert.equal(calls[0][1].accountIdHex, account); assert.equal(calls[0][1].enabled, true);
+  assert.deepEqual(calls[1][1].session, state.activeSession);
+});
+
+
+test('stored session executor is decoded as Hash160 while nullifier stays raw bytes for reauthorization', async () => {
+  const base = stateRpc([], { network: 'neo3-testnet', accountIdText: 'account' });
+  const h = createService({ invokeReadFunction: async (...args) => {
+    if (args[2] !== 'getActiveSession') return base(...args);
+    return { state: 'HALT', stack: [{ type: 'Struct', value: [
+      { type: 'ByteString', value: Buffer.from(executor, 'hex').reverse().toString('base64') },
+      { type: 'ByteString', value: Buffer.from('aa_proxy:' + 'ef'.repeat(32)).toString('base64') },
+      { type: 'ByteString', value: Buffer.alloc(32, 0xcd).toString('base64') },
+      { type: 'Integer', value: '1800000000000' }, { type: 'Boolean', value: true },
+    ] }] };
+  } });
+  const state = await h.fetchUnifiedVerifierState({ rpcUrl: 'http://rpc.test', verifierHash: verifier, accountIdHex: account });
+  assert.equal(state.activeSession.executor, executor);
+  assert.equal(state.activeSession.actionNullifier, `0x${'cd'.repeat(32)}`);
+  assert.equal(state.activeSession.actionId, 'aa_proxy:' + 'ef'.repeat(32));
+  assert.equal(h.signerCalls.length, 0);
 });
