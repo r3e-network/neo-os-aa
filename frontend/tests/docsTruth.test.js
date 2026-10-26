@@ -891,6 +891,15 @@ test('CU-202: the ratchet reads inline-code spans and declares the boundary it d
 // are compared by value, so reformatting or re-quoting the configuration is free.
 // ---------------------------------------------------------------------------------------------
 const GITLEAKS_CONFIG = '.gitleaks.toml';
+// These 37 historical findings are public source/build digests in one immutable
+// report commit. Pin the entire fingerprint file, never the report path or rule.
+const REVIEWED_GITLEAKS_IGNORE = {
+  path: '.gitleaksignore',
+  sha256: '2e665bb7444285dcddb0fe507bd3a9a4e852fc22a1b8ab773fa13f3473cc82c3',
+  commit: 'da74a6f1870f2749899e60b5ec1b1f22476c6bc4',
+  report: 'docs/reports/aa-artifact-reproducibility-20261025.json',
+  findings: 37,
+};
 // Every file name gitleaks resolves a configuration or an ignore set from, anywhere in the tree.
 const GITLEAKS_CONFIG_FILES = ['.gitleaks.toml', '.gitleaksignore'];
 // The keys the reviewed form of an allowance carries. Any other suppression key (`commits`,
@@ -1193,9 +1202,8 @@ const describeAllowlist = (block) => `${block.fields.has('paths') ? `paths ${JSO
   + `${block.fields.has('regexes') ? `, regexes ${JSON.stringify(block.fields.get('regexes'))}` : ', no regex'}`
   + `${block.fields.has('description') ? `, "${String(block.fields.get('description')).slice(0, 60)}"` : ''}`;
 
-// Every configuration or ignore file in the tree that is not the reviewed one. A nested
-// .gitleaks.toml is inert only while every scan is rooted at the repository; the guard refuses it
-// rather than depending on how a scan is invoked.
+// Return every carrier outside the primary config for validation. Only the exact
+// pinned root fingerprint file is also reviewed; nested configurations stay refused.
 function otherGitleaksFiles() {
   const found = [];
   (function walk(dir) {
@@ -1212,7 +1220,8 @@ function otherGitleaksFiles() {
 // The reported set. An empty array is the only accepting verdict; every entry names the carrier it
 // refuses and the line it sits on. Nothing here reports a boolean or an exit code, so a mutant can
 // only be killed by a violation that names it.
-function configurationViolations(text, files = otherGitleaksFiles()) {
+function configurationViolations(text, files = otherGitleaksFiles(),
+  ignoreText = exists(REVIEWED_GITLEAKS_IGNORE.path) ? read(REVIEWED_GITLEAKS_IGNORE.path) : '') {
   const problems = [];
   const add = (kind, detail) => problems.push(`${kind}: ${detail}`);
   if (!text.trim()) {
@@ -1261,7 +1270,9 @@ function configurationViolations(text, files = otherGitleaksFiles()) {
     add('missing-allowlist', `${GITLEAKS_CONFIG} does not carry the reviewed ${entry.id} allowance as reviewed; every suppression the scanner applies must be one the review triaged`);
   }
   for (const file of files) {
-    add('extra-configuration', `${file} is a gitleaks configuration or ignore file outside the reviewed ${GITLEAKS_CONFIG}`);
+    if (file === REVIEWED_GITLEAKS_IGNORE.path
+      && createHash('sha256').update(ignoreText).digest('hex') === REVIEWED_GITLEAKS_IGNORE.sha256) continue;
+    add('extra-configuration', `${file} is outside the reviewed configuration/fingerprint set or has unreviewed contents`);
   }
   return problems;
 }
@@ -1274,6 +1285,17 @@ const configurationProblems = () => configurationViolations(exists(GITLEAKS_CONF
 // boundary asserted. DS-CU-163 section 12.4 established the shape with planted secrets in a clone;
 // here it runs against the repository copy itself, for every entry rather than for one.
 test('CU-202: every reviewed allowance stays attached to the one value it triaged', () => {
+  const ignoreText = read(REVIEWED_GITLEAKS_IGNORE.path);
+  assert.equal(createHash('sha256').update(ignoreText).digest('hex'), REVIEWED_GITLEAKS_IGNORE.sha256,
+    'the historical ignore file must contain only the exact reviewed fingerprint bytes');
+  const fingerprints = ignoreText.trimEnd().split('\n');
+  assert.equal(fingerprints.length, REVIEWED_GITLEAKS_IGNORE.findings);
+  assert.equal(new Set(fingerprints).size, REVIEWED_GITLEAKS_IGNORE.findings);
+  for (const fingerprint of fingerprints) {
+    const prefix = `${REVIEWED_GITLEAKS_IGNORE.commit}:${REVIEWED_GITLEAKS_IGNORE.report}:generic-api-key:`;
+    assert.ok(fingerprint.startsWith(prefix) && /^\d+$/.test(fingerprint.slice(prefix.length)),
+      'every reviewed fingerprint must bind the exact historical commit, report, rule and line');
+  }
   assert.ok(reviewedAllowlists().length > 0, 'the reviewed allowance inventory must not be empty');
   for (const entry of reviewedAllowlists()) {
     const where = entry.id;
@@ -1372,7 +1394,10 @@ test('CU-202: every widening of the gitleaks configuration is refused by the sha
     { name: 'a rule-scoped allowance under a new rule', text: appended("\n[[rules]]\nid = \"mutant-rule\"\ndescription = \"mutant: rule scope\"\nregex = '''apiKey'''\n[[rules.allowlists]]\nregexes = ['''.*''']\n"), kinds: ['rule-override', 'rule-scoped-allowlist'], names: '[rules.allowlists]' },
     { name: 'a configuration reached through [extend] path', text: replaced('useDefault = true', 'path = "cu202-extra.toml"'), kinds: ['defaults-missing', 'extend-path'], names: '[extend] path' },
     { name: 'the default rules switched off', text: replaced('useDefault = true', 'useDefault = false'), kinds: ['defaults-disabled'], names: 'useDefault' },
-    { name: 'an .gitleaksignore file', text: base, files: ['.gitleaksignore'], kinds: ['extra-configuration'], names: '.gitleaksignore' },
+    { name: 'the exact reviewed historical ignore file', text: base, files: ['.gitleaksignore'], kinds: [] },
+    { name: 'an unreviewed .gitleaksignore entry', text: base, files: ['.gitleaksignore'], ignoreText: 'unreviewed\n', kinds: ['extra-configuration'], names: '.gitleaksignore' },
+    { name: 'an extra fingerprint beside the reviewed set', text: base, files: ['.gitleaksignore'], ignoreText: `${read(REVIEWED_GITLEAKS_IGNORE.path)}unreviewed\n`, kinds: ['extra-configuration'], names: '.gitleaksignore' },
+    { name: 'a nested ignore file with reviewed contents', text: base, files: ['frontend/.gitleaksignore'], kinds: ['extra-configuration'], names: 'frontend/.gitleaksignore' },
     { name: 'a nested configuration', text: base, files: ['frontend/.gitleaks.toml'], kinds: ['extra-configuration'], names: 'frontend/.gitleaks.toml' },
     { name: 'an unknown top-level key', text: replaced('minVersion = "v8.30.1"', 'minVersion = "v8.30.1"\nkeywords = ["mutant"]'), kinds: ['unreviewed-key'], names: 'keywords' },
     { name: 'an unknown table', text: appended("\n[[mutant-table]]\ndescription = \"mutant: unknown table\"\n"), kinds: ['unknown-table'], names: 'mutant-table' },
@@ -1384,7 +1409,7 @@ test('CU-202: every widening of the gitleaks configuration is refused by the sha
     { name: 'the reviewed block without its value regex', text: withoutSdkField('regexes'), kinds: ['missing-allowlist', 'unreviewed-allowlist'], names: 'no regex' },
   ];
   for (const shape of shapes) {
-    const problems = configurationViolations(shape.text, shape.files || []);
+    const problems = configurationViolations(shape.text, shape.files || [], shape.ignoreText);
     const kinds = violationKinds(problems);
     assert.deepEqual(kinds, [...shape.kinds].sort(), `${shape.name}: the configuration must be refused for the shapes it adds, and for nothing else:\n${problems.join('\n') || '(nothing reported)'}`);
     if (shape.names) {
@@ -1470,6 +1495,32 @@ test('CU-202: a planted secret survives the reviewed configuration, and the wide
     const problems = configurationViolations(widened, []);
     assert.equal(violationKinds(problems).includes('unreviewed-allowlist'), true,
       `the guard must refuse the configuration that silences the scan:\n${problems.join('\n') || '(nothing reported)'}`);
+
+    // Historical fingerprints cannot authorize a new credential in the same
+    // report path: its new commit produces a different finding identity.
+    write(GITLEAKS_CONFIG, reviewedConfig);
+    const historicalIgnore = read(REVIEWED_GITLEAKS_IGNORE.path);
+    write(REVIEWED_GITLEAKS_IGNORE.path, historicalIgnore);
+    write(REVIEWED_GITLEAKS_IGNORE.report, `${JSON.stringify({ apiKey: probeSecret })}\n`);
+    git('add', '-A');
+    git('commit', '--quiet', '-m', 'new report credential control');
+    const newCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: scratch, encoding: 'utf8' }).trim();
+    const newReport = path.join(scratch, 'new-report-credential.json');
+    try {
+      execFileSync('gitleaks', ['git', '--redact=100', '--no-banner', '--exit-code', '1',
+        `--log-opts=${plant}..${newCommit}`, '--report-format', 'json', `--report-path=${newReport}`, '.'],
+      { cwd: scratch, stdio: 'pipe' });
+    } catch { /* the new credential must still be reported */ }
+    assert.ok(fs.existsSync(newReport), 'the new-commit control must produce an actual scanner report');
+    const newFindings = JSON.parse(fs.readFileSync(newReport, 'utf8')).map((found) => ({
+      rule: found.RuleID, file: found.File, commit: found.Commit, fingerprint: found.Fingerprint,
+    }));
+    assert.deepEqual(newFindings.map(({ rule, file }) => `${rule} ${file}`),
+      [`generic-api-key ${REVIEWED_GITLEAKS_IGNORE.report}`],
+      'the historical ignore set must not hide a new credential in the same report path');
+    assert.equal(newFindings[0].commit, newCommit);
+    assert.ok(!historicalIgnore.split('\n').includes(newFindings[0].fingerprint),
+      'a new commit must not borrow a reviewed historical fingerprint');
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
