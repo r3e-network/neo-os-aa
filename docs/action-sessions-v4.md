@@ -14,8 +14,8 @@ buttons request normal owner-wallet transactions only when clicked. Recovery
 remains ownerless through its existing recovery-ticket, threshold and timelock
 path. Action membership neither counts as a recovery approval nor bypasses it.
 
-`getActionAuthorizationEpoch(accountId)` is a persistent, monotonically
-increasing integer. New enrollment/removal, revoke-all, session revoke, shared
+The source getter `SocialRecoveryVerifier.GetActionAuthorizationEpoch(accountId)`
+returns a persistent, monotonically increasing integer. New enrollment/removal, revoke-all, session revoke, shared
 trust-config changes, recovery finalization, cleanup and setup advance it.
 Cleanup deletes grants/session authorization but **retains** the epoch. An added
 identity does not remove other enrolled identities; it invalidates outstanding
