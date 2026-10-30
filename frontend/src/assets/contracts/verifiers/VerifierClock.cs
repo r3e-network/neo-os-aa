@@ -2,7 +2,7 @@ using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
-namespace AbstractAccount.Verifiers
+namespace SmartAccount.Verifiers
 {
     internal static class VerifierClock
     {

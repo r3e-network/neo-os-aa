@@ -46,7 +46,7 @@ test('ordinary is the default and never selects native package or runtime gates'
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.trace, /node scripts\/check_neo_platform_packages.mjs\n/);
   assert.match(result.trace, /compile-public/);
-  assert.match(result.trace, /dotnet test neo-abstract-account.sln/);
+  assert.match(result.trace, /dotnet test SmartAccount.sln/);
   assert.match(result.trace, /npm run test:ordinary:browser/);
   assert.match(result.trace, /npm run test:operator-recovery:browser/);
   assert.doesNotMatch(result.trace, /--include-native|native_epoch_probe|test_native_|test:native:browser/);
@@ -66,7 +66,7 @@ test('complete ordinary verification fails closed at the first unavailable gate'
   const result = dispatch(t, ['--contracts-only'], '', { NEOOS_REQUIRE_COMPLETE: '1' });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /required complete gate unavailable: cross-repo/);
-  assert.doesNotMatch(result.trace, /dotnet test neo-abstract-account\.sln/);
+  assert.doesNotMatch(result.trace, /dotnet test smart-account\.sln/);
 });
 
 test('ordinary NeoExpress selects public source acceptance and its bounded evidence join', (t) => {
@@ -129,7 +129,7 @@ test('native contract validation selects its required guards and epoch probe', (
   assert.match(result.trace, /validate-native-smartaccount-profile.py/);
   assert.match(result.trace, /test_native_profile_ci.py/);
   assert.match(result.trace, /native_epoch_probe.py --compiler \/test\/compiler/);
-  assert.doesNotMatch(result.trace, /compile-public|dotnet test neo-abstract-account.sln|npm /);
+  assert.doesNotMatch(result.trace, /compile-public|dotnet test SmartAccount.sln|npm /);
 });
 
 test('all combines both profiles and native probe failure stops the selected gate', (t) => {

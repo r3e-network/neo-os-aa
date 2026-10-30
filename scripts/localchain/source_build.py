@@ -23,7 +23,7 @@ import sys
 import tempfile
 
 AA = Path(__file__).resolve().parents[2]
-DEFAULT_PROJECT = AA / "contracts/UnifiedSmartWallet.csproj"
+DEFAULT_PROJECT = AA / "contracts/SmartAccount.csproj"
 
 GAS_BOUNDED_SYSCALL = "System.Contract.CallWithGasLimit"
 FAULT_MARKER = "The given key '1371299780' was not present in the dictionary."
@@ -32,7 +32,7 @@ PROFILE_SYSCALL_ABSENT = "platform-syscall-absent"
 
 # The eight artifacts the local-chain suite deploys, in the names the compiler writes.
 REQUIRED_ARTIFACTS = (
-    "UnifiedSmartWalletV3",
+    "SmartAccountV3",
     "MockTransferTarget",
     "WebAuthnVerifier",
     "SessionKeyVerifier",
@@ -286,7 +286,7 @@ def main():
         else:
             directory = build_source_contracts(args.out or Path(tempfile.mkdtemp(prefix="aa-source-")), args.project)
             built = True
-        report = profile_of(directory / "UnifiedSmartWalletV3.nef")
+        report = profile_of(directory / "SmartAccountV3.nef")
         report["out"] = str(directory)
         report["built"] = built
         print(json.dumps(report, indent=2))

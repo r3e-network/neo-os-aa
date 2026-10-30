@@ -44,7 +44,9 @@ def declarations(source):
 
 
 def command(arguments, work, log, positive=True):
-    result = subprocess.run(arguments, cwd=work, capture_output=True, text=True, timeout=120)
+    # 120s measured too tight on a loaded host; use the same 600s budget as
+    # method_proofs.py/numeric_proofs.py kernel commands.
+    result = subprocess.run(arguments, cwd=work, capture_output=True, text=True, timeout=600)
     output = result.stdout + result.stderr
     Path(log).write_text(output)
     if positive:

@@ -193,7 +193,7 @@ module tests cover Boolean true/false propagation, every listed non-Boolean type
 mutable results isolated between children and from the original, and unsupported
 or cyclic results rejected before any child post call with storage rolled back.
 Those ownership tests use a permissive test service in a public VM; they do not
-establish native service authorization.
+establish native contract authorization.
 
 The new raw samples, build and semantic receipts are retained as separate review
 artifacts. Earlier committed receipts remain historical evidence. Candidate NEFs

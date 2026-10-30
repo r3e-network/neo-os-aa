@@ -7,7 +7,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Verifiers
+namespace SmartAccount.Verifiers
 {
     /// <summary>
     /// Verifier for short-lived delegated session keys.
@@ -18,7 +18,7 @@ namespace AbstractAccount.Verifiers
     /// </remarks>
     [DisplayName("SessionKeyVerifier")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch", "getAuthorizationDomain", "getOperationDigest", "getAccountAddress", "canonicalP256PublicKey")]
+    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "hasModuleContext", "getAuthorityEpoch", "getAuthorizationDomain", "getOperationDigest", "getAccountAddress", "canonicalP256PublicKey")]
     [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canConfigureVerifier")]
@@ -130,7 +130,7 @@ namespace AbstractAccount.Verifiers
             // The native helper validates the complete curve point before returning
             // its compressed identity. The generic standard-account syscall alone
             // does not validate the y coordinate of an uncompressed encoding.
-            object normalized = Contract.Call(NativeAuthority.Service, "canonicalP256PublicKey",
+            object normalized = Contract.Call(NativeAuthority.SmartAccount, "canonicalP256PublicKey",
                 // The native profile marks this helper as a pure, account-free
                 // query and requires the exact None call flag. The ordinary
                 // contract build remains outside this conditional while the
@@ -418,7 +418,7 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert(op.Method == "transfer" && op.Args.Length == 4, "Capped session requires an exact transfer");
             object[] args = op.Args;
             ExecutionEngine.Assert(args[0] is ByteString && ((ByteString)args[0]).Length == 20, "Invalid transfer source");
-            UInt160 proxy = (UInt160)Contract.Call(NativeAuthority.Service, "getAccountAddress", CallFlags.ReadOnly, new object[] { accountId });
+            UInt160 proxy = (UInt160)Contract.Call(NativeAuthority.SmartAccount, "getAccountAddress", CallFlags.ReadOnly, new object[] { accountId });
             ExecutionEngine.Assert((UInt160)args[0] == proxy, "Transfer source is not the account address");
             ExecutionEngine.Assert(args[1] is ByteString && ((ByteString)args[1]).Length == 20 && (UInt160)args[1] != UInt160.Zero, "Invalid transfer recipient");
             ExecutionEngine.Assert(args[2] is BigInteger && (BigInteger)args[2] >= 0, "Invalid transfer amount");

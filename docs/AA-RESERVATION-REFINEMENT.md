@@ -23,13 +23,24 @@ the representable-success result into an unproved source/target fault claim.
 ## Intended statement
 
 Extend the existing charge-region proof with the reservation's positive-charge
-guard and signed 256-bit addition. The reviewed ordinary NEF contains the charge
-region at `[13667,13689)` and the following guard/update suffix at
-`[13689,13746)`. The suffix compares local6 with zero, branches from 13692 to
-13734 on success, otherwise executes `ABORTMSG` at 13733. The success path reads
-budget field1, adds local6 at 13739, and updates that shared record with
-`SETITEM` at 13743. The endpoint loads the record onto the evaluation stack;
-serialization and storage follow and are not part of this suffix.
+guard, its VM-integer headroom guard and signed 256-bit addition. The reviewed
+ordinary NEF contains the charge region at `[13667,13689)` and the following
+guard/update suffix at `[13689,13818)`. The suffix compares local6 with zero,
+branches from 13692 to 13734 on success, otherwise executes `ABORTMSG` at 13733.
+The success path first materialises `vmMax = 2^254 - 1 + 2^254` into local7 at
+13747, then compares budget field1 with `vmMax - local6` at 13754 and aborts at
+13806 when that remaining headroom would be exceeded. Past the guard it reads
+budget field1 at 13810, adds local6 at 13812, and updates that shared record with
+`SETITEM` at 13816 followed by `DROP` at 13817. The endpoint loads the record onto
+the evaluation stack at 13818; serialization from 13819 and storage follow and are
+not part of this suffix.
+
+The headroom guard is a source-level assertion about the *remaining* budget, not a
+checked-add. It aborts with `Reimbursement budget exceeds VM integer limit` when
+`budget[1] > vmMax - local6`, so for admitted inputs the `ADD` at 13812 cannot
+leave the VM signed range; the arithmetic layer below still models the case where
+the guard is absent, which is why the estimation-overflow tolerance was narrowed
+rather than deleted.
 
 The first theorem layer will execute the guard and checked addition over
 Integer-typed values. Its results distinguish a successful new reserved amount
@@ -45,10 +56,12 @@ Iterating successful same-transaction reservations preserves this bound.
 
 For zero-fee RPC estimation, assume representable nonnegative reserved and a
 representable positive request. The quote equals the request. The reservation
-succeeds exactly when `reserved + requested < 2^255`; otherwise the real checked
-addition faults. There is no positive-fee cap in this estimation case. In
-particular, `reserved = 2^255-1` and `requested = 1` succeeds in the old charge
-region and faults in this subsequent addition.
+succeeds exactly when `reserved + requested < 2^255`; otherwise the unchecked
+addition would fault. In particular, `reserved = 2^255-1` and `requested = 1`
+succeeds in the old charge region and is now rejected by the headroom guard at
+13806, before the `ADD` at 13812 executes. The arithmetic layer keeps the
+unguarded checked-add result as the case that this guard rules out; it does not
+claim the target faults there.
 
 This is target Integer behavior. CLR `BigInteger` addition and the imported
 abstract `reserve` are unbounded; they admit that mathematical sum. A separate

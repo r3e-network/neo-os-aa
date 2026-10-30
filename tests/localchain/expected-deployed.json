@@ -8,11 +8,11 @@
   },
   "artifacts": [
     {
-      "path": "contracts/build/UnifiedSmartWalletV3.nef",
+      "path": "contracts/build/SmartAccountV3.nef",
       "sha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b"
     },
     {
-      "path": "contracts/build/UnifiedSmartWalletV3.manifest.json",
+      "path": "contracts/build/SmartAccountV3.manifest.json",
       "sha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4"
     },
     {

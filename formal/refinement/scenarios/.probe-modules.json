@@ -1,0 +1,36 @@
+{
+ "schema": "aa-abi-scenario-input/v1",
+ "name": "probe-modules",
+ "contractAddress": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2",
+ "blockTimestamp": 1700000000000,
+ "defaultSigner": "0x1111111111111111111111111111111111111111",
+ "deploySigner": "0x1111111111111111111111111111111111111111",
+ "modules": [
+  {
+   "name": "verifierA",
+   "nef": "../plugins/MultiSigVerifier.nef",
+   "manifest": "../plugins/MultiSigVerifier.manifest.json",
+   "signer": "0x7777777777777777777777777777777777777777"
+  },
+  {
+   "name": "verifierB",
+   "nef": "../plugins/MultiSigVerifier.nef",
+   "manifest": "../plugins/MultiSigVerifier.manifest.json",
+   "signer": "0x7777777777777777777777777777777777777778"
+  },
+  {
+   "name": "hookA",
+   "nef": "../plugins/MultiHook.nef",
+   "manifest": "../plugins/MultiHook.manifest.json",
+   "signer": "0x8888888888888888888888888888888888888888"
+  }
+ ],
+ "steps": [
+  {
+   "id": "noop",
+   "method": "getAccountImplementationId",
+   "args": [],
+   "expect": "HALT"
+  }
+ ]
+}

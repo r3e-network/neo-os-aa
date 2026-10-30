@@ -39,6 +39,28 @@ class CanonicalIdentityDocumentTests(unittest.TestCase):
             with self.subTest(rule=before):
                 self.assertNotEqual(self.check(before, after).returncode, 0)
 
+    def test_authority_admission_cannot_omit_proxy_or_recipient_checks(self):
+        for before, after in (
+            ("Current and pending custody or recovery authorities MUST NOT be registered\nnative SmartAccount proxies.",
+             "Pending recovery authorities MAY be registered native SmartAccount proxies."),
+            ("Every account-state read and\nwrite MUST validate all current and pending non-zero authority addresses",
+             "Only account creation MUST validate the current custody address"),
+            ("admission MUST require a witness for every address in\n`Authorities(next) - Authorities(prior)`",
+             "admission MAY ignore a newly introduced recovery recipient"),
+            ("`recoveryAddress`, `pendingRecovery.newCustodyAddress` and\n`pendingRecoveryAddr.recoveryAddress`",
+             "`recoveryAddress` alone"),
+            ("require the custody address and every non-zero recovery address to witness the transaction",
+             "require only the custody address to witness the transaction"),
+            ("zero represents absent recovery and requires no witness",
+             "zero MUST supply an admission witness"),
+            ("They MUST NOT\nrequire a fresh recipient witness merely to move that address into its current\nslot.",
+             "They MUST require a fresh recipient witness at activation."),
+            ("The SmartAccount native contract MUST NOT reserve an authority address in a reverse index or prevent\nits independent account registration because another account nominated it.",
+             "The service MUST reserve every unconsenting recovery nomination."),
+        ):
+            with self.subTest(rule=before):
+                self.assertNotEqual(self.check(before, after).returncode, 0)
+
     def test_current_profile_passes(self):
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)

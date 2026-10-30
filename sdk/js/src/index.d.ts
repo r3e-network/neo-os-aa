@@ -574,7 +574,7 @@ export interface SimulateUserOperationOptions {
  * nothing and still spend the nonce and the fee.
  */
 export declare function simulateUserOperation(
-  client: AbstractAccountClient,
+  client: SmartAccountClient,
   options: SimulateUserOperationOptions,
 ): Promise<SimulationResult>;
 
@@ -599,7 +599,7 @@ export interface PreFlightCheckResult {
 
 /** Runs a comprehensive pre-flight check suite for an account/operation. */
 export declare function preFlightCheck(
-  client: AbstractAccountClient,
+  client: SmartAccountClient,
   options: PreFlightCheckOptions,
 ): Promise<PreFlightCheckResult>;
 
@@ -643,7 +643,7 @@ export interface VirtualAccount {
   address: NeoAddress;
 }
 
-/** Options for {@link AbstractAccountClient.deriveRegistrationAccountIdHash}. */
+/** Options for {@link SmartAccountClient.deriveRegistrationAccountIdHash}. */
 export interface RegistrationAccountIdOptions {
   verifierContractHash?: Hash160;
   verifierParamsHex?: string;
@@ -653,7 +653,7 @@ export interface RegistrationAccountIdOptions {
   escapeTimelock?: number;
 }
 
-/** Options for {@link AbstractAccountClient.createAccountPayload}. */
+/** Options for {@link SmartAccountClient.createAccountPayload}. */
 export interface CreateAccountPayloadOptions {
   verifierContractHash?: Hash160;
   verifierParamsHex?: string;
@@ -684,24 +684,24 @@ export type OwnerOnlyRecoveryStatus =
   | { supported: false; ownerOnlyRecovery: null }
   | { supported: true; ownerOnlyRecovery: boolean };
 
-/** Options for {@link AbstractAccountClient.createUpdateVerifierPayload}. */
+/** Options for {@link SmartAccountClient.createUpdateVerifierPayload}. */
 export interface UpdateVerifierPayloadOptions extends AccountScopedOptions {
   verifierContractHash: Hash160;
   verifierParamsHex?: string;
 }
 
-/** Options for {@link AbstractAccountClient.createUpdateHookPayload}. */
+/** Options for {@link SmartAccountClient.createUpdateHookPayload}. */
 export interface UpdateHookPayloadOptions extends AccountScopedOptions {
   /** New hook contract hash; empty removes the hook. */
   hookContractHash?: Hash160;
 }
 
-/** Options for {@link AbstractAccountClient.createSetMetadataUriPayload}. */
+/** Options for {@link SmartAccountClient.createSetMetadataUriPayload}. */
 export interface SetMetadataUriPayloadOptions extends AccountScopedOptions {
   metadataUri?: string;
 }
 
-/** Options for {@link AbstractAccountClient.createEIP712Payload}. */
+/** Options for {@link SmartAccountClient.createEIP712Payload}. */
 export interface CreateEIP712PayloadOptions {
   chainId: IntegerLike;
   /** V3 account id hash (40 hex chars). */
@@ -722,7 +722,7 @@ export interface CreateEIP712PayloadOptions {
   deadline: IntegerLike;
 }
 
-/** Options for {@link AbstractAccountClient.getUserOpValidationPreview}. */
+/** Options for {@link SmartAccountClient.getUserOpValidationPreview}. */
 export interface UserOpValidationPreviewOptions {
   accountIdHash?: Hash160;
   accountAddress?: Hash160 | NeoAddress;
@@ -773,7 +773,7 @@ export interface PendingModuleCall {
   callHash: string;
 }
 
-/** Options for {@link AbstractAccountClient.createSponsoredUserOpPayload}. */
+/** Options for {@link SmartAccountClient.createSponsoredUserOpPayload}. */
 export interface SponsoredUserOpPayloadOptions extends AccountScopedOptions {
   userOp: UserOperation;
   paymasterHash: Hash160;
@@ -782,7 +782,7 @@ export interface SponsoredUserOpPayloadOptions extends AccountScopedOptions {
   reimbursementAmount: IntegerLike;
 }
 
-/** Options for {@link AbstractAccountClient.createSponsoredBatchPayload}. */
+/** Options for {@link SmartAccountClient.createSponsoredBatchPayload}. */
 export interface SponsoredBatchPayloadOptions extends AccountScopedOptions {
   userOps: UserOperation[];
   paymasterHash: Hash160;
@@ -791,7 +791,7 @@ export interface SponsoredBatchPayloadOptions extends AccountScopedOptions {
   reimbursementAmount: IntegerLike;
 }
 
-/** Options for {@link AbstractAccountClient.validatePaymasterOp}. */
+/** Options for {@link SmartAccountClient.validatePaymasterOp}. */
 export interface ValidatePaymasterOpOptions {
   paymasterHash: Hash160;
   sponsorAddress: Hash160 | NeoAddress;
@@ -808,7 +808,7 @@ export interface ValidatePaymasterOpOptions {
  * generation, read-only contract queries, and paymaster/sponsored-operation
  * helpers.
  */
-export declare class AbstractAccountClient {
+export declare class SmartAccountClient {
   /** The configured master contract hash (40 hex chars). */
   masterContractHash: Hash160;
   /** The underlying neon-js RPC client. */

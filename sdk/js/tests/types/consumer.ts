@@ -7,7 +7,7 @@
  * package.json is exercised the same way a downstream consumer would.
  */
 import {
-  AbstractAccountClient,
+  SmartAccountClient,
   UserOperationBuilder,
   createUserOpBuilder,
   simulateUserOperation,
@@ -29,7 +29,7 @@ import {
   findFailedTransferInInvocation,
   findFailedTransferInExecution,
   isProxySourcedTransfer,
-} from 'neo-abstract-account';
+} from 'smart-account';
 import type {
   UserOperation,
   UserOperationTypedData,
@@ -39,7 +39,7 @@ import type {
   SimulationResult,
   ContractInvocationPayload,
   SdkError,
-} from 'neo-abstract-account';
+} from 'smart-account';
 
 const ACCOUNT_ID = 'f951cd3eb5196dacde99b339c5dcca37ac38cc22';
 const VERIFIER = 'b4107cb2cb4bace0ebe15bc4842890734abe133a';
@@ -51,7 +51,7 @@ const SPONSOR = 'NXV6kqVqp4Qh3Dx8a9z2sCq8sQ4QZbZ4q';
 const ARGS_HASH = 'ab'.repeat(32);
 
 // --- Client construction ---------------------------------------------------
-const client = new AbstractAccountClient('https://rpc.example.com', MASTER);
+const client = new SmartAccountClient('https://rpc.example.com', MASTER);
 
 // --- UserOperationBuilder fluent API ---------------------------------------
 const builder: UserOperationBuilder = createUserOpBuilder()
@@ -253,7 +253,7 @@ const transferVerdictMessage: string = TRANSFER_RETURNED_FALSE_MESSAGE;
 void [failedPositions, failedInLog, fromProxy, transferVerdictCode, transferVerdictMessage];
 
 // Native ABI 2 exports resolve in both a source checkout and real npm package.
-import { NativeSmartAccountClient, nativeCodec, createNativeCodec, NATIVE_ABI_VERSION, NATIVE_PROFILE_PARAMETER_DIGEST, type NativeValue } from 'neo-abstract-account';
+import { NativeSmartAccountClient, nativeCodec, createNativeCodec, NATIVE_ABI_VERSION, NATIVE_PROFILE_PARAMETER_DIGEST, type NativeValue } from 'smart-account';
 const nativeClient = new NativeSmartAccountClient({ rpcUrl: 'http://127.0.0.1:10332', networkMagic: 12345 });
 const nativeIdentity = nativeClient.deriveIdentity({ custodyAddress: '22'.repeat(20), salt: '33'.repeat(32) });
 const nativeArgs: NativeValue[] = [nativeCodec.hashValue(nativeIdentity.accountAddress), {type:'Struct',value:[{type:'Boolean',value:true}]}];

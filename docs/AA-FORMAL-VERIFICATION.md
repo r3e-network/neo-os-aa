@@ -2,6 +2,61 @@
 
 ## Status
 
+### Current private validation refresh (2026-10-30)
+
+The current SmartAccount/native-core source snapshot passes the pinned Docker
+formal gate. The receipt at
+`formal/.runs/docker-20261030-authority/result.json` records 29 Coq modules,
+554 closed declarations, 311 rejected Coq mutations, four rejected TLC
+mutations, 315 semantic mutations in total, 61,460 TLC distinct states, and
+7/7 SMT obligations. The formal runner regression suite independently passes
+72/72 tests on the current worktree. The .NET contract suite independently
+passes 508/508 tests, with no failures or skips.
+
+The gate reports `modelChecksPassed: true` and
+`implementationVerified: false`. Its scope is the reviewed abstract protocol
+and native-state models; it does not claim a complete C# to NEF to NeoVM
+refinement, full NeoVM/ApplicationEngine semantics, cryptographic soundness,
+complete WitnessRule decoding/evaluation, or arbitrary-plugin liveness.
+
+The current source-built NeoExpress authority validation is recorded under
+`docs/reports/smartaccount-native-source-runtime-20261030-authority/`. Its
+aggregate receipt and all five matrix receipts report `PASS`: native service
+lifecycle, signed proxy and atomic rollback, configuration-root mutation,
+authority recovery, and activation-boundary validation. The runtime file map
+matched before and after the matrices, all owned nodes stopped, and
+`publicNetworksTouched` is `false`. The aggregate deliberately reports
+`fullProtocolConformanceVerified: false`; these are bounded private-chain
+checks, not a claim that every possible plugin, proof system, or production
+deployment is covered.
+
+The same source-built runtime has now been exercised against the extended
+native matrix recorded in
+`docs/reports/smartaccount-native-extended-matrix-20261030-authority/index.json`.
+The receipt reports `PASS` for MultiSig composition, DailyLimit accounting,
+SessionKey execution, session scope admission, and TokenRestrictedHook policy;
+the six packaged native profiles also pass the profile packaging check. These
+receipts are bound to the current source-built runner and module-build receipt,
+report `publicNetworksTouched: false`, and retain the same bounded scope:
+shipped scenarios and persisted private-chain readback only. They do not prove
+cryptographic soundness, arbitrary-plugin liveness, full NeoVM/compiler
+refinement, or public deployment parity.
+
+The current native authority-admission profile remains ABI 2. The source-built
+module receipt is
+`docs/reports/smartaccount-native-module-build-20261030-authority.json`, and
+the successful source-built runner receipt is
+`docs/reports/smartaccount-native-runner-build-20261030-authority2.json`.
+The earlier failed runner receipt is retained as failure evidence and must not
+be used as current provenance.
+
+The remaining boundary is explicit: ordinary public v3 still calls verifiers
+through `System.Contract.Call` without an independent child gas cap. Public
+deployment and public artifact parity are outside this private-only run. The
+formal and runtime evidence also retain the cryptography, complete WitnessRule
+and NeoVM, compiler/refinement, key independence, and arbitrary-plugin cleanup
+boundaries described below. No public network was used by this refresh.
+
 ### Layered implementation refinement (2026-10-13)
 
 The [implementation gate](AA-IMPLEMENTATION-REFINEMENT.md) now requests four
@@ -73,9 +128,9 @@ false status while accepting only the explicitly scoped arithmetic region. The
 [dated refinement report](reports/aa-implementation-refinement-20261013.md)
 contains the exact artifacts, commands, controls and remaining method obligations.
 
-### Current source-candidate host closure (2026-10-13)
+### Historical source-candidate host closure (2026-10-13)
 
-The frozen ordinary source-candidate snapshot passes the host model gate:
+The frozen ordinary source-candidate snapshot passed the host model gate:
 **29 Coq modules, 490 closed declarations, 287 rejected semantic mutations**
 (283 Coq and four TLA), **61,460 TLC distinct states**, and **seven SMT obligations
 with seven controls**. The gate checks 59 AA source inputs and 310 native-core
@@ -110,7 +165,7 @@ localhost server, which was stopped after the build. The default GitHub release
 URL currently serves different bytes and fails the unchanged SHA-256 guard;
 this run does not claim a successful rebuild from that mutable URL. Neither the
 Dockerfile nor wrapper was modified to bypass the pin. The build-input and
-service-cleanup evidence is
+native-contract cleanup evidence is
 [`aa-formal-container-build-20261013.json`](reports/aa-formal-container-build-20261013.json)
 (SHA-256 `d17b6b6d61568bdad038adf19baa3615d7fce00f1fad9fa9de82cda1e9891a8c`).
 The first container attempt exposed a scratch
@@ -200,7 +255,7 @@ are outside that claim.
 
 ### ABI 2 convergence boundary
 
-The active native target is AccountManagement ABI 2, with identity derivation
+The active native target is SmartAccount ABI 2, with identity derivation
 version 1, authorization/account-record version 2, and separate authority epoch
 and configuration nonce. Native recovery revokes old module generations without
 external cleanup. The six native modules use epoch-scoped state. Ordinary public
@@ -289,7 +344,7 @@ passed **52/52**. The historical receipt is
 `docs/reports/aa-formal-gate-native-multisig-20261008.json`.
 That gate pinned 23 source files, including the exact native module authority
 guard, selected module profiles and session clock/payload adapters. The entry lemmas require
-both the fixed service identity and an authenticated phase grant; a matching
+both the fixed native contract identity and an authenticated phase grant; a matching
 positive control excludes an always-reject implementation. Source pins remain
 manual correspondence checks, not a compiler or callback refinement proof.
 
@@ -327,16 +382,24 @@ the historical ABI 1 key-reuse risk. ABI 2 changes the authorization domain on
 configuration and recovery; `NativeAuthorityEpoch.v` models rejection of those
 stale signatures. Neither abstraction alone proves their VM composition.
 
-`docs/reports/aa-native-session-scope-validation-20261007.json` records two new
-private chains, each with 44 persisted matrix transactions (27 HALT, 17 expected
+The historical ABI 1 evidence was recorded as
+`docs/reports/aa-native-session-scope-validation-20261007.json`: two private
+chains, each with 44 persisted matrix transactions (27 HALT, 17 expected
 FAULT), five witness-admission rejections and two registrations. Exact raw
 storage and all grant-event fields are compared. A zero-cap false GAS transfer
 completes and consumes nonce without spending; a target FAULT rolls back. A
 wildcard grant permits read methods and a whole-balance GAS transfer but still
 rejects another target. The same retained signature bytes reject while the key
 is replaced or revoked, then succeed after explicit regrant; an already consumed
-nonce still rejects. These are measured current-protocol semantics, not a fix
-for permanent revocation. No production contract or native artifact changed.
+nonce still rejects. These observations apply only to that historical ABI 1
+source/artifact/receipt set, not the current ABI 2 protocol. The referenced raw
+receipt is absent from the current checkout; its exact source and artifact
+identity must be recovered before replaying or reusing those observations.
+For ABI 2, `NativeAuthorityEpoch.v` separately models stale-signature rejection
+after configuration or recovery changes the authorization domain. That model
+does not replace current runtime signature evidence or rebind the historical
+receipt to current artifacts. No production contract or native artifact changed
+in the historical validation.
 
 `NativeDailyPolicy.v` has twenty-four declarations and fifteen mutations for fixed
 window anchoring/expiry, capped positive net-outflow accounting, Boolean-false
@@ -435,7 +498,7 @@ Each rejected transaction discards the injected mode write, nonce change and
 transient hook snapshot. A subsequent valid execution succeeds. Four direct
 callback/configuration calls without a phase grant reject, as do four
 host-injected malformed callback Arrays. These injections test defensive paths;
-they do not assert that the native service emits malformed operations.
+they do not assert that the native contract emits malformed operations.
 
 Current coverage of the entire 1,076-instruction production NEF is **900 attempted
 instructions (83.64%)** and **124 of 182 completed conditional edges (68.13%)**,
@@ -462,25 +525,21 @@ These are stated abstract obligations, not complete NeoVM or C#-to-NEF
 refinement. Remaining non-public proof boundaries are recorded in
 `docs/reports/aa-open-formal-boundaries-20261007.json`.
 
-The current native integration worktree now registers actual AccountManagement,
-including lifecycle, delayed module configuration, dependency cleanup, bounded
-callbacks, exact proxy Verification and target-frame witness enforcement. The
-recorded source-built node suite passes 1,702/1,702 tests. The native-host C#
-coverage threshold is met for the files enumerated below, not for every native
-plugin's C#/NEF paths. The restricted-token pass rechecked all 313 core source pins
-and the 104 runtime files but did not rerun that separate node suite. The full
-persisted plugin scenario matrix and semantic refinement remain open.
-The new service-hash witness restriction has a reproduced failing test and an
-activation-gated fix. The private native-service receipt is
-`docs/reports/aa-neoexpress-native-service-after-configuration-20261006.json`; it is bounded persisted
+An earlier native integration worktree reported a registered SmartAccount
+implementation, including lifecycle, delayed module configuration, dependency
+cleanup, bounded callbacks, exact proxy Verification and target-frame witness
+enforcement. Those results belong to that historical source/artifact snapshot
+and are not current native-contract readback. The native-contract receipt from
+that snapshot is
+`docs/reports/aa-neoexpress-native-contract-after-configuration-20261006.json`; it is bounded persisted
 lifecycle evidence, not complete native conformance. Source/artifact hashes and
 current node-suite results are recorded by the native integration worktree's
 `docs/reports/smartaccount-native-source-runtime-validation-20261006.json`. Older
-component-only receipts remain historical evidence, not current service status.
+component-only receipts remain historical evidence, not current native-contract status.
 The signed proxy receipt `docs/reports/aa-neoexpress-native-proxy-20261006.json`
 adds six persisted transactions (two expected FAULTs) and three admission
 rejections with exact witness/script and asset-balance readback. Native raw-call
-bridge coverage is 100% line/branch; service entry/execution coverage is also
+bridge coverage is 100% line/branch; native-contract entry/execution coverage is also
 100% line/branch and module management is 100% line, 98.46% branch. All ten new
 native/component files and instrumented added engine lines meet the 90% gate.
 This does not prove all adversarial paths or full protocol conformance.
@@ -495,7 +554,7 @@ replay compile eleven projects from 611 source files and 50 external package
 archives; all 104 runtime files match byte-for-byte. See
 `docs/reports/aa-neoexpress-source-build-final-20261006.json` and
 `docs/reports/aa-neoexpress-source-build-replay-20261006.json`. The exact rebuilt
-core/VM assemblies also pass all 1,702 node tests. The service, signed proxy,
+core/VM assemblies also pass all 1,702 node tests. The native contract, signed proxy,
 configuration, recovery and four current activation cases pass again against
 the same runtime, with complete runtime-file verification before/after each
 matrix: `docs/reports/aa-neoexpress-source-runtime-final-20261006/summary.json`.
@@ -544,8 +603,9 @@ dispatch obligations use the dedicated native models instead. No scope label est
 The native source correspondence includes a separately supplied core checkout.
 `--native-core-root` (or `NEOOS_NATIVE_CORE_SOURCE`) is mandatory for a complete
 gate. Its reviewed source roster and hashes are checked before and after proofs;
-missing files, extra files, changed bytes or absent provenance reject. The public
-UnifiedSmartWallet source is never used as a substitute for AccountManagement.
+missing files, extra files, changed bytes or absent provenance reject. The ordinary
+SmartAccount contract source is never used as a substitute for the native
+SmartAccount core source.
 `NativeAuthorityEpoch.v` checks separate bounded counters, callback-free recovery,
 revoked roots/dependencies/pending intents, unchanged identity/nonces/frozen state,
 abstract generation isolation and stale-domain rejection. The four-argument
@@ -637,7 +697,12 @@ dispatch keys `(name, arity)` must be unique on both sides. Every expected
 method must occur and every manifest method must be expected. Equal cardinality
 alone cannot establish this: a duplicate method can replace a missing method.
 
-`AbiManifestProjection.v` models this order-independent finite check. Runtime
+`AbiManifestProjection.v` models this method-order-independent finite check.
+Its descriptors contain ordered parameter-type lists, and explicit arities must
+equal those lists' lengths. Kernel-checked negative controls reject retyping,
+parameter reordering, inconsistent arities and nonempty initializer parameters.
+Type identifiers are abstract; their correspondence to concrete C# and manifest
+types remains an external obligation. Runtime
 regressions must reject missing, extra, duplicate, retyped, and reflagged
 methods while accepting reordered descriptors. Offsets are independently
 checked against the strict NEF decoder. The check has quadratic list-matching
@@ -645,13 +710,25 @@ cost for the finite ABI roster; it changes neither on-chain behavior nor the
 artifact format and needs no deployment or migration. Its proofs concern ABI
 correspondence only, not the behavior of compiled instructions.
 
-The registered `NeoVmContinuationSemantics.v` model now rejects oversized
-callback limits instead of truncating them, treats `_initialize` as a per-load
-context, preserves the caller budget and continuation through `LoadScript`,
-models CALLT/RET return addresses, applies the hardfork gate fail-closed, and
-rolls back storage without refunding consumed gas. These are bounded semantic
+The registered `NeoVmContinuationSemantics.v` model rejects zero and oversized
+callback limits and charges the current budget and every ancestor atomically.
+Bounded returns restore the already-debited parent; ordinary CALL, CALLT and
+`LoadScript` frames share the same budget chain. The parent-100/child-10/charge-3
+regression returns with 97 and admits a subsequent sibling budget of 20.
+The model treats `_initialize` as a per-load context, models saved return
+addresses, applies the hardfork gate fail-closed, and rolls back storage without
+refunding consumed gas. Explicit charges abstract away opcode prices,
+transaction fees and runtime scheduling. These are bounded semantic
 obligations; they do not constitute a complete NeoVM/ApplicationEngine or
 compiler-refinement proof.
+
+The SMT nonce model checks equality with the entire executable nonce domain,
+and its positive control uses that same acceptance predicate at zero and
+`2^255 - 1`. Executable regression mutations cover reject-all, missing boundary
+values and out-of-domain admission; independent SAT examples that never call
+the acceptance predicate are insufficient evidence of nonempty acceptance.
+These corrected models supersede the corresponding model bytes in the
+historical 2026-10-13 receipt; that receipt is not evidence for these revisions.
 
 The runtime suite additionally differentially checks a fixed 1,032-case corpus of
 finite witness-condition trees against the fault-aware reference relation across
@@ -728,7 +805,7 @@ models under `verified/` for its own `verify.sh`.
 
 | Artifact | Scope |
 |---|---|
-| `formal/coq/UnifiedSmartWalletAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating, success-only state transitions, and the rule that an absent hook/verifier cannot fail a callback phase |
+| `formal/coq/SmartAccountAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating, success-only state transitions, and the rule that an absent hook/verifier cannot fail a callback phase |
 | `formal/coq/MultiSigPolicy.v` | **Public V3/PLATFORM only:** bounded ten-child configuration, exact signature cardinality and threshold support; child identity is abstract |
 | `formal/coq/OrdinaryGovernance.v` | **Public V3/PLATFORM source candidate:** owner-witness cancellation independent of caller, exact millisecond delay, pending rotation and rollback; binding/identity validity is a precondition |
 | `formal/coq/OrdinarySponsorship.v` | **Public V3/PLATFORM source candidate:** transaction-wide cumulative reservation cap, request bound, zero-fee estimation control and failure rollback; no storage/fee/VM refinement |
@@ -749,14 +826,42 @@ models under `verified/` for its own `verify.sh`.
 | `formal/coq/SignerDomainSeparation.v` | Closed binding model requiring exact authorization domain and payload equality; it rejects cross-domain replay but does not prove private-key independence or primitive cryptographic soundness |
 | `formal/coq/SignerIndependence.v` | Closed finite countermodel showing that distinct public signer domains do not imply private-key independence; this is an explicit trust-boundary proof, not a key-generation proof |
 | `formal/coq/PluginLifecycle.v` | **Native profile only:** closed finite countermodel showing that a lifecycle ABI does not imply complete cleanup of arbitrary future-plugin storage, plus a conditional theorem for a certified cleanup function; ordinary V3 lifecycle claims remain runtime/artifact evidence |
-| `formal/tla/UnifiedSmartWalletAA.tla` (sibling: `verified/tla/`) | Finite state-machine exploration of Begin/success/failure/Tick transitions |
-| `formal/tla/UnifiedSmartWalletAA.cfg` | TLC bounds and safety invariants |
+| `formal/tla/SmartAccountAA.tla` (sibling: `verified/tla/`) | Finite state-machine exploration of Begin/success/failure/Tick transitions |
+| `formal/tla/SmartAccountAA.cfg` | TLC bounds and safety invariants |
 | `formal/smt/aa_core.smt2` (sibling: `verified/smt/`) | Nonce arithmetic, cursor advancement, rollback equalities, reimbursement cap and budget arithmetic |
 | sibling `reports/aa-formal-20260918/README.md` | Human-readable result and boundary report |
 | `formal/verify.py` | AA-local fail-closed runner with source pins and semantic mutations |
 | `formal/Dockerfile`, `formal/verify-in-docker.sh` | Pinned Ubuntu 24.04 environment (Coq 8.18, Z3, OpenJDK, TLA+ tools jar pinned by SHA-256) so an independent reviewer runs the identical gate without a host toolchain |
 | `formal/test_verify.py` | Runner/parser fail-closed regression tests |
 | `formal/source-lock.json` | Reviewed source snapshot hashes; not a proof attestation |
+
+### Source-pin refresh after the rename and the headroom assertion
+
+`formal/source-lock.json` pins 59 source files. Thirty-five of those pins were
+stale against the working tree and `formal/verify.py` failed closed at
+`Source drift: Directory.Build.props` before running any Coq or TLC lane. The
+pins were refreshed only after classifying every one of the 35:
+
+- **31 files are rename-only.** Replacing `AbstractAccount` /
+  `UnifiedSmartWallet` / `abstract-account` with `SmartAccount` /
+  `smart-account` in the previously pinned content reproduces the current file
+  byte for byte, so the correspondence statements are unchanged.
+- **`contracts/SmartAccount.Paymaster.cs`** gains the 73-byte VM-integer
+  headroom assertion (`vmMax` plus `budget.Reserved <= vmMax - settled`). That
+  assertion is inside the helper the complete-context certificate models; the
+  refinement lanes prove the guard succeeds on the legal domain
+  (`legal_update_fits`, `vm_leb_margin_of_fits`), so the pinned correspondence
+  still holds for the new text.
+- **`contracts/SmartAccount.State.cs`** changes only the
+  `AccountImplementationId` string constant, no executable logic.
+- **`formal/verify.py` and `scripts/verify_repo.sh`** carry the same rename plus
+  mutation-table entries for the renamed models; the diff adds and removes no
+  `require(...)` call, so no gate assertion was relaxed.
+
+This refresh re-attests the manual correspondence snapshot against the reviewed
+bytes. It discharges no open obligation and changes no proof: the public,
+runtime, gas and ABI-refinement boundaries listed above remain open, and
+`implementationVerified` stays false.
 
 ### Witness-condition depth correspondence
 
@@ -801,7 +906,7 @@ artifact only; no public activation or deployment was performed. The current
 receipts are `docs/reports/aa-platform-gas-cap-20260921.json` and
 `docs/reports/aa-neoexpress-gas-cap-20260921.json`.
 
-Native ABI 2 separately fixes verifier callbacks at 100,000,000 datoshi and hook/maintenance callbacks at 250,000,000 datoshi on the source-built AccountManagement runtime. The bounded gas model uses abstract budget parameters; it does not establish complete VM fee accounting.
+Native ABI 2 separately fixes verifier callbacks at 100,000,000 datoshi and hook/maintenance callbacks at 250,000,000 datoshi on the source-built SmartAccount runtime. The bounded gas model uses abstract budget parameters; it does not establish complete VM fee accounting.
 
 The models do not prove cryptography, the concrete witness-rule parser or
 `ApplicationEngine` implementation, full Neo VM semantics, or C#-to-NEF callback refinement, session lifecycle,
@@ -836,7 +941,7 @@ The cleanup model proves fail-closed state transitions, not recovery availabilit
 The 2026-10-08 source validates the replacement verifier before these callbacks, but
 does not introduce emergency detach or guarantee progress past a malicious old module.
 `CallVerifierChild` and its explicit `getChildVerifierConfig` capability are absent from the
-deployed core manifest (`contracts/build/UnifiedSmartWalletV3.manifest.json`) although they are
+deployed core manifest (`contracts/build/SmartAccountV3.manifest.json`) although they are
 recorded in the source snapshot and tested in NeoVM; both are outside the current abstract models.
 Those models do not prove the child configuration ABI, core/topology binding,
 pending-call serialization or timelock enforcement for this new route. The project file
@@ -904,7 +1009,7 @@ Five fresh private NeoExpress `StdLib.deserialize` simulations confirm the
 signed representation boundary and the representable exhaustion sentinel;
 their receipt is `docs/reports/aa-neoexpress-native-integer-domain-20261006.json`.
 They are RPC simulations, not persisted SmartAccount operations or evidence
-that native `AccountManagement` exists.
+that native `SmartAccount` exists.
 
 The native envelope component parses only bounded inert initializers, validates
 every operation, and requires byte-for-byte canonical re-encoding with the
@@ -917,7 +1022,7 @@ NeoExpress serialization. Three semantically equivalent but noncanonical
 initializers execute successfully in NeoExpress and are separately rejected by
 the node parser tests. The private receipt is
 `docs/reports/aa-neoexpress-native-envelope-20261006.json`. These are bounded
-runtime checks, not a mechanized parser/VM refinement or native service test.
+runtime checks, not a mechanized parser/VM refinement or native contract test.
 
 The concrete runtime boundary now has additional bounded evidence: the proxy witness suite
 rejects wrong-account calls and non-data instructions around the single-core-call shape, and a
@@ -1124,7 +1229,7 @@ rebuild receipt fails closed rather than being silently attached to a new source
 tree.
 
 The artifact-structure regression gate in
-`tests/AbstractAccount.Contracts.Tests/AAArtifactStructureRuntimeTests.cs`
+`tests/SmartAccount.Contracts.Tests/AAArtifactStructureRuntimeTests.cs`
 loads all **38** NEF/manifest pairs
 with Neo's strict `Script` decoder. ABI entry points must be unique by method
 name and parameter count, matching Neo's dispatch key (not by parameter or
@@ -1152,6 +1257,16 @@ The prior **272/272** NeoExpress receipt remains at
 
 ### Native lifecycle authority model
 
+`NativeLifecycle.v` additionally projects authority admission over the four
+current/pending custody and recovery slots. Every nonzero next-state authority
+must be outside the registered-proxy set; addresses absent from the prior
+accepted set require a witness. Pending promotion preserves prior consent,
+whereas removal followed by reintroduction requires consent again. Future-proxy
+rejection is conditional on that address failing actual witness verification;
+witness soundness, hash separation, storage provenance and the shared native
+read/save implementation remain external correspondence obligations. Stateless
+`SmartAccountState` transformations alone do not enforce this runtime guard.
+
 `NativeLifecycle.v` checks the authority guards and configuration-nonce invalidation used by
 native account-record transitions: Active-only configuration, exclusion of
 configuration during pending custody recovery, strict custody-cancellation
@@ -1159,7 +1274,7 @@ maturity, joint unfreeze authorization, and clearing every pending intent on
 a checked epoch increment. It models addresses, witnesses and storage as
 abstract facts. It does not prove `CheckWitness`, serialization, callback
 cleanup, ledger rollback, or correspondence between the C# component and the
-model. Native service integration and private-chain activation remain required.
+model. SmartAccount native-contract integration and private-chain activation remain required.
 
 The earlier lifecycle host snapshot is recorded in
 `docs/reports/aa-formal-gate-20261006-native-lifecycle.json`: 18 modules,
@@ -1171,7 +1286,7 @@ receipt in Status includes this model; earlier receipts remain historical.
 
 `docs/reports/aa-neoexpress-native-state-20261006.json` records eight private
 state-initializer/serialization round trips. They used a node with no native
-AccountManagement contract and persisted no application transactions; this
+SmartAccount contract and persisted no application transactions; this
 is state-codec compatibility evidence, not lifecycle execution evidence.
 
 ### Native callback dispatch boundaries
@@ -1183,7 +1298,7 @@ instruction's whitelist policy. It addresses a concrete runtime regression:
 a future activation key is not equivalent to activation when no persisting
 block exists. The fee model assumes an already computed nonnegative fee; the
 existing bounded-budget models cover ancestor accounting. It does not prove
-application-engine C# refinement, full scheduling, or complete native service
+application-engine C# refinement, full scheduling, or complete native contract
 behavior.
 
 The dated native-dispatch host receipt is
@@ -1198,7 +1313,7 @@ Verification-trigger regression: the historical runtime accepted a bounded
 syscall despite a future activation height, while the corrected runtime rejects
 it. Missing activation rejects it and explicit activation permits it. A small
 ordinary diagnostic contract was deployed and its script/manifest read back;
-this is not activation of native AccountManagement or a chain invocation of the
+this is not activation of native SmartAccount or a chain invocation of the
 new internal native-dispatch helper.
 
 #### Reproducing the private activation regression
@@ -1222,20 +1337,25 @@ The validator deploys an ordinary diagnostic contract, checks its NEF script,
 checksum and manifest readback, and runs actual RPC Verification and Application
 simulations for omitted, future and active configuration. It also observes a
 live nonzero activation boundary using ledger reads on both sides of each
-Verification request. Samples spanning a block change are discarded; both
+Application request. The boundary probe compares the Application execution
+height, which is the next block after the latest persisted ledger index,
+because the
+`invokecontractverify` RPC has no persisting-block argument and cannot select
+the block context required to prove a nonzero hardfork height. Samples spanning
+a block change are discarded; both execution heights
 `height - 1` and `height` must be observed. A timeout is a failure, not evidence
 of rejection. The default timeout accommodates fifteen-second blocks because
 the running protocol's block policy may override the runner's one-second hint.
 The resulting receipt is tagged `evidenceKind: "syscall-smoke"` with
 `nativeActivationClaim: false`; it is evidence for the bounded-call syscall
-gate only, not for native `AccountManagement` activation or lifecycle
+gate only, not for native `SmartAccount` activation or lifecycle
 conformance.
 
 A previous PASS is invalidated before starting any chain, so interruption cannot
 leave stale success evidence. Receipts distinguish persisted diagnostic deployments from simulations and
 record runtime hashes without wallet material or absolute local paths. Failures
 leave a non-PASS receipt and owned nodes are stopped in `finally` blocks. Neither
-this validator nor its probe registers AccountManagement, validates its full
+this validator nor its probe registers SmartAccount, validates its full
 lifecycle, or establishes a compiler-refinement theorem.
 
 ### Native invocation authority boundaries
@@ -1244,7 +1364,7 @@ lifecycle, or establishes a compiler-refinement theorem.
 admission, direct-child delegation, target/module separation, revocation and
 the requirement to retain the original witness checks. It treats frame tokens,
 deployment and caller facts as abstract inputs. Its eighteen declarations and
-thirteen semantic mutations also cover activated service-hash witness rejection,
+thirteen semantic mutations also cover activated native-contract-hash witness rejection,
 legacy behavior before activation, and proxy witness conjunction. They do not
 prove how ApplicationEngine supplies the abstract facts. The separate native
 integration now enforces these boundaries in the runtime; this is not a

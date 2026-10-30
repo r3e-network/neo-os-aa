@@ -24,7 +24,7 @@ function buildPayloadDigest(draftRecord = {}) {
 
 function buildVerifyingContract(draftRecord = {}) {
   const seed = keccak256(toUtf8Bytes(
-    draftRecord.share_slug || draftRecord.draft_id || 'neo-abstract-account-workspace'
+    draftRecord.share_slug || draftRecord.draft_id || 'smart-account-workspace'
   ));
   return getAddress(`0x${seed.slice(-40)}`);
 }

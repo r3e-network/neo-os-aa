@@ -1,6 +1,6 @@
 # Core Architecture
 
-This page describes the active `main`-branch architecture for `UnifiedSmartWalletV3`.
+This page describes the active `main`-branch architecture for `SmartAccountV3`.
 
 ## 1. Component Map
 
@@ -11,7 +11,7 @@ flowchart LR
   Drafts[Local Store / Supabase Drafts]
   Relay[Optional Relay]
   Wallets[Neo Wallet / EVM Wallet / Web3Auth]
-  Core[UnifiedSmartWalletV3]
+  Core[SmartAccountV3]
   Verifier[Verifier Plugin]
   Hook[Hook Plugin]
   Paymaster[AAPaymaster]
@@ -164,7 +164,7 @@ The relay trust boundary is explicit:
 
 | File | Responsibility |
 | --- | --- |
-| `contracts/UnifiedSmartWallet.cs` | V3 core account state, nonce handling, `verify`, `executeUserOp`, hook/verifier config, backup-owner escape |
+| `contracts/SmartAccount.cs` | V3 core account state, nonce handling, `verify`, `executeUserOp`, hook/verifier config, backup-owner escape |
 | `contracts/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` verification for secp256k1/Web3Auth flows |
 | `contracts/verifiers/TEEVerifier.cs` | TEE-signed authorization |
 | `contracts/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn authorization |

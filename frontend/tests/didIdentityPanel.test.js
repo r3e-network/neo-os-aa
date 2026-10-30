@@ -32,7 +32,7 @@ function createPanel({ identityReader, maintenanceReader = async () => ({}), sta
     fetchAccountIdentity: identityReader,
     fetchAccountMaintenanceState: maintenanceReader,
     fetchUnifiedVerifierState: stateReader,
-    getAbstractAccountHash: () => core,
+    getSmartAccountHash: () => core,
     getScriptHashFromAddress: () => { throw new Error('not an address'); },
     sanitizeHex: (value) => String(value || '').replace(/^0x/i, '').toLowerCase(),
     RUNTIME_CONFIG: { rpcUrl: 'http://127.0.0.1:10332' },

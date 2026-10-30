@@ -83,7 +83,7 @@ test('faults and malformed UInt160 results cannot become an account context', as
 });
 
 test('identity resolver names and signatures match the checked-in core ABI', () => {
-  const manifest = JSON.parse(fs.readFileSync(new URL('../../contracts/build/UnifiedSmartWalletV3.manifest.json', import.meta.url)));
+  const manifest = JSON.parse(fs.readFileSync(new URL('../../contracts/build/SmartAccountV3.manifest.json', import.meta.url)));
   for (const name of ['getAccountIdByProxy', 'getProxyScriptHash', 'getVerifier']) {
     const method = manifest.abi.methods.find((entry) => entry.name === name);
     assert.ok(method, `${name} exists`);

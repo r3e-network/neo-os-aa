@@ -1,6 +1,6 @@
 # Neo N3 Abstract Account Architecture
 
-The active `main` branch is a **policy-gated** V3 architecture centered on `UnifiedSmartWalletV3`.
+The active `main` branch is a **policy-gated** V3 architecture centered on `SmartAccountV3`.
 
 ## 1. Component Map
 
@@ -11,7 +11,7 @@ flowchart LR
   Wallets[Neo Wallet / EVM Wallet / Web3Auth]
   Drafts[Local Store / Supabase]
   Relay[Optional Relay]
-  Core[UnifiedSmartWalletV3]
+  Core[SmartAccountV3]
   Verifier[Verifier Plugin]
   Hook[Hook Plugin]
   Paymaster[AAPaymaster]
@@ -93,7 +93,7 @@ The V3 core is intentionally small: authorization is delegated to verifier plugi
 
 | File | Responsibility |
 | --- | --- |
-| `contracts/UnifiedSmartWallet.cs` | Core V3 account state, `verify`, `executeUserOp`, nonce handling, backup-owner escape, hook/verifier config |
+| `contracts/SmartAccount.cs` | Core V3 account state, `verify`, `executeUserOp`, nonce handling, backup-owner escape, hook/verifier config |
 | `contracts/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` verification |
 | `contracts/verifiers/TEEVerifier.cs` | TEE-signed authorization |
 | `contracts/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn authorization |

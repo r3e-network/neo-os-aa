@@ -8,7 +8,7 @@ export { ALLOWED_RELAY_META_OPERATIONS };
 
 // The relay signs and pays for a meta invocation from the operator WIF, so it accepts only the
 // execution surface the deployed Abstract Account core actually exports. The generated list is
-// derived from contracts/build/UnifiedSmartWalletV3.manifest.json by
+// derived from contracts/build/SmartAccountV3.manifest.json by
 // scripts/generate-relay-operations.mjs; it is not hand-maintained, so it cannot name an entrypoint
 // the deployment does not have. CU-203: it used to name `executeUnified` and
 // `executeUnifiedByAddress`, which no deployed manifest and no contract source defines, so such a

@@ -1,0 +1,30 @@
+{
+ "schema": "aa-abi-scenario-input/v1",
+ "name": "probe-hook-addresses",
+ "contractAddress": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2",
+ "blockTimestamp": 1700000000000,
+ "defaultSigner": "0x1111111111111111111111111111111111111111",
+ "deploySigner": "0x1111111111111111111111111111111111111111",
+ "modules": [
+  {
+   "name": "hookA",
+   "nef": "../plugins/NeoDIDCredentialHook.nef",
+   "manifest": "../plugins/NeoDIDCredentialHook.manifest.json",
+   "signer": "0x8888888888888888888888888888888888888888"
+  },
+  {
+   "name": "hookB",
+   "nef": "../plugins/MultiHook.nef",
+   "manifest": "../plugins/MultiHook.manifest.json",
+   "signer": "0x8888888888888888888888888888888888888889"
+  }
+ ],
+ "steps": [
+  {
+   "id": "noop",
+   "method": "getAccountImplementationId",
+   "args": [],
+   "expect": "HALT"
+  }
+ ]
+}

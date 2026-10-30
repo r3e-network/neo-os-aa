@@ -13,7 +13,7 @@ const { resolveLocalPaymasterHandlerPath } = localPaymasterHandlerHelpers;
 const { rpc, sc, wallet, experimental, tx, u, CONST } = require("@cityofzion/neon-js");
 const { ethers } = require("ethers");
 const { buildV3UserOperationTypedData, sanitizeHex } = require("../src/metaTx");
-const { AbstractAccountClient } = require("../src/index");
+const { SmartAccountClient } = require("../src/index");
 const { resolveTestnetRpcUrl } = require("./testnet-rpc.js");
 
 const relayModule = await import("../../../frontend/api/relay-transaction.js");
@@ -336,7 +336,7 @@ async function main() {
   const rpcClient = new rpc.RPCClient(RPC_URL);
   const version = await rpcClient.getVersion();
   const networkMagic = Number(version.protocol.network);
-  const aaClient = new AbstractAccountClient(RPC_URL, CORE_HASH);
+  const aaClient = new SmartAccountClient(RPC_URL, CORE_HASH);
   const deriveBootstrapAccountId = ({ verifierContractHash = "", verifierParamsHex = "" } = {}) => aaClient.deriveRegistrationAccountIdHash({
     verifierContractHash,
     verifierParamsHex,

@@ -89,7 +89,7 @@ internal static class ProbeTests
             {
                 if (target != hook || method != "preExecute") return;
                 var original = (Neo.VM.Types.Array)arguments[1];
-                Require(original.Count == 6, "Native service must supply the canonical six-field operation.");
+                Require(original.Count == 6, "The SmartAccount native contract must supply the canonical six-field operation.");
                 var replacement = new Neo.VM.Types.Array(original.Take(kind == "short-array" ? 5 : 6));
                 if (kind != "short-array") replacement[0] = kind switch
                 {
@@ -177,7 +177,7 @@ internal static class ProbeTests
         Call("core-mismatch", "confirmAuthorizedCore", [ProbeHarness.Core], "Pending core mismatch");
         Call("core-confirm", "confirmAuthorizedCore", [next]);
         Require(new UInt160(h.Call("read-next-authority", hook, "authorizedCore", []).GetSpan()) == next, "Authority change not persisted.");
-        Call("wrong-service-phase", "clearAccount", [next], "Wrong native SmartAccount service");
+        Call("wrong-service-phase", "clearAccount", [next], "Wrong native SmartAccount contract");
         Call("core-restore-proposal", "proposeAuthorizedCore", [ProbeHarness.Core]);
         Call("core-cancel", "cancelAuthorizedCoreChange", []);
         Call("core-after-cancel", "confirmAuthorizedCore", [ProbeHarness.Core], "No pending core change");

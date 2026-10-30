@@ -1,6 +1,6 @@
 # Abstract Account Workflow Lifecycle
 
-This page describes the active V3 workflow built around `UnifiedSmartWalletV3` and `executeUserOp(accountId, op)`.
+This page describes the active V3 workflow built around `SmartAccountV3` and `executeUserOp(accountId, op)`.
 
 Direct proxy-signed external calls are intentionally rejected after hardening. The supported V3 execution path is the core wallet's `executeUserOp`.
 
@@ -70,7 +70,7 @@ sequenceDiagram
 sequenceDiagram
     actor User as Backup Owner / Plugin-Authorized User
     participant Wallet as Neo Wallet
-    participant Core as UnifiedSmartWalletV3
+    participant Core as SmartAccountV3
     participant Target as Target Contract
 
     User->>Wallet: Approve executeUserOp(accountId, op)
@@ -90,7 +90,7 @@ sequenceDiagram
     actor EVM as EVM Wallet / Web3Auth
     participant Browser as Frontend
     participant Relay as Relay
-    participant Core as UnifiedSmartWalletV3
+    participant Core as SmartAccountV3
     participant Verifier as Web3AuthVerifier
 
     Browser->>Core: Read verifier + nonce + argsHash

@@ -60,6 +60,39 @@ class NativeProfileV2Tests(unittest.TestCase):
             p.write_text(json.dumps(data))
         self.assertNotEqual(self.check(mutate).returncode, 0)
 
+    def test_authority_admission_cannot_be_removed_or_weakened_with_a_new_hash(self):
+        mutations = (
+            (None, None),
+            ("recipientConsent", "initiatorOnly"),
+            ("registeredNativeProxies", "rejectCurrentOnly"),
+            ("authoritySlots", ["custodyAddress", "recoveryAddress"]),
+            ("introducedAddresses", "Authorities(next)"),
+            ("priorState", "callerSupplied"),
+            ("zeroAuthority", "requiresWitness"),
+            ("pendingPromotion", "freshRecipientWitness"),
+            ("removedAddressRenomination", "reuseHistoricalConsent"),
+            ("authorityReservation", "reverseIndex"),
+            ("version", True),
+        )
+        for field, value in mutations:
+            def mutate(root):
+                path = root / PARAMETERS; data = json.loads(path.read_text())
+                old = json.dumps(data, sort_keys=True, separators=(",", ":"))
+                old_hash = hashlib.sha256(b"NeoSmartAccount/Profile\x02" + old.encode()).hexdigest()
+                if field is None:
+                    del data["authorityAdmission"]
+                else:
+                    data["authorityAdmission"][field] = value
+                new = json.dumps(data, sort_keys=True, separators=(",", ":"))
+                new_hash = hashlib.sha256(b"NeoSmartAccount/Profile\x02" + new.encode()).hexdigest()
+                path.write_text(json.dumps(data))
+                doc = root / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md"
+                doc.write_text(doc.read_text().replace(old, new).replace(old_hash, new_hash))
+                path = root / VECTORS; vectors = json.loads(path.read_text())
+                vectors["profileParameterDigest"] = new_hash; path.write_text(json.dumps(vectors))
+            with self.subTest(field=field):
+                self.assertNotEqual(self.check(mutate).returncode, 0)
+
     def test_composite_receipt_contract_cannot_be_weakened(self):
         for old, replacement in (
             ("validateCompositeSignature(accountId: Hash160, op: Array) -> Array",

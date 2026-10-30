@@ -4,7 +4,7 @@ const {
   NativeSmartAccountClient,
   nativeCodec: c,
   NATIVE_PROFILE_PARAMETER_DIGEST: D,
-  NATIVE_ACCOUNT_SERVICE: CORE,
+  NATIVE_SMART_ACCOUNT_CONTRACT: CORE,
 } = require("../src/native");
 const {
   NATIVE_REQUIRED_ABI,
@@ -48,7 +48,7 @@ function fixture() {
     config = 11,
     nonce = 0n;
   const manifest = {
-    name: "AccountManagement",
+    name: "SmartAccount",
     extra: { smartAccount: { abiVersion: 2, profileParameterDigest: D } },
     abi: {
       methods: Object.entries(NATIVE_REQUIRED_ABI).map(
@@ -408,7 +408,7 @@ test("native registration uses identityVersion1 and five exact arguments", () =>
       c.hashValue(recovery),
     ]),
   );
-  assert.deepEqual(plan.requiredAuthorities, [custody]);
+  assert.deepEqual(plan.requiredAuthorities, [custody, recovery]);
   assert.throws(
     () =>
       f.client.buildRegistration({
@@ -418,6 +418,24 @@ test("native registration uses identityVersion1 and five exact arguments", () =>
       }),
     /independent/,
   );
+});
+test("authority admission requires recipient consent and keeps zero and mature activation permissionless", async () => {
+  const f = fixture(), recipient = "66".repeat(20), zero = "00".repeat(20);
+  assert.deepEqual(f.client.buildRegistration({ custodyAddress: custody, salt: "77".repeat(32) }).requiredAuthorities, [custody]);
+  for (const [action, address, authorities] of [
+    ["proposeRecoveryAddress", recipient, [custody, recipient]],
+    ["proposeRecoveryAddress", zero, [custody]],
+    ["proposeRecovery", recipient, [recovery, recipient]],
+    ["activateRecoveryAddress", undefined, []],
+    ["executeRecovery", undefined, []],
+  ]) assert.deepEqual((await f.client.buildAction({ accountId: h, action, address })).requiredAuthorities, authorities);
+});
+test("retained pending authority is not treated as a new admission", async () => {
+  const f = fixture(), recipient = "66".repeat(20), record = state();
+  record.value[12] = A([H(recipient), I(1), I(604800001), I(11)]);
+  f.setRecord(record);
+  assert.deepEqual((await f.client.buildAction({ accountId: h, action: "proposeRecovery", address: recipient })).requiredAuthorities, [recovery]);
+  assert.deepEqual((await f.client.buildAction({ accountId: h, action: "executeRecovery" })).requiredAuthorities, []);
 });
 test("lifecycle plans distinguish custody, guardian, joint and permissionless recovery", async () => {
   const f = fixture();
@@ -1131,4 +1149,52 @@ test("RPC fees accept zero, exact Int64 maximum and absent minimum without inven
   assert.deepEqual(parseNativeRpcFees({gasconsumed:"10"}),{gasConsumed:"10",minimumRequiredFee:null});
   assert.throws(()=>parseNativeRpcFees({gasconsumed:"10"},true),/minimumrequiredfee/);
   assert.throws(()=>parseNativeRpcFees({minimumrequiredfee:"10"}),/gasconsumed/);
+});
+
+test("current discovery rejects the pre-consent profile fingerprint", async () => {
+  const f = fixture();
+  f.manifest.extra.smartAccount.profileParameterDigest = "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4";
+  await assert.rejects(f.client.discover(), /profile parameter digest/);
+});
+
+test("concurrent initial reads share attestation only while discovery is in flight", async () => {
+  const f = fixture();
+  await Promise.all([f.client.getAccount(h), f.client.getNonce(h)]);
+  assert.equal(f.calls.filter(call => call.method === "getversion").length, 1);
+  assert.equal(f.calls.filter(call => call.method === "getcontractstate").length, 1);
+  await f.client.discover();
+  assert.equal(f.calls.filter(call => call.method === "getversion").length, 2);
+  f.setMagic(999);
+  await assert.rejects(f.client.discover(), /network magic/);
+  f.setMagic(12345);
+  await f.client.discover();
+});
+
+function admissionFixture(configurationMethods = ["setLimit"]) {
+  const f = fixture(), send = f.client.rpc.send;
+  f.client.rpc.send = (method, params) => method === "getcontractstate" && params[0] === "0x" + verifier
+    ? {manifest:{extra:{smartAccount:{abiVersion:2,profileDigest:D,compositeVerifier:false,configurationMethods}},abi:{methods:[{name:"setLimit",safe:false,parameters:[{type:"Hash160"},{type:"Integer"}]}]}}}
+    : send(method, params);
+  f.add("supportsComposition",[],{type:"Boolean",value:false},verifier);
+  f.add("getPendingModuleCall",[c.hashValue(h),c.stringValue("verifier")],N);
+  return f;
+}
+test("configuration rejects the entire malformed capability declaration", async () => {
+  for (const capabilities of [["setLimit", "setLimit"], ["setLimit", 42], ["setLimit", "validateSignature"], ["setLimit", "_internal"]]) {
+    const f = admissionFixture(capabilities);
+    await assert.rejects(f.client.buildModuleCall({accountId:h,role:"verifier",method:"setLimit",args:[{type:"Integer",value:"7"}]}), /configuration capability/);
+  }
+});
+test("configuration argument values are snapshotted before the first RPC", async () => {
+  const f=admissionFixture(), args=[{type:"Integer",value:"7"}];
+  const pending=f.client.buildModuleCall({accountId:h,role:"verifier",method:"setLimit",args});
+  args[0].value="9";
+  const plan=await pending;
+  assert.equal(plan.script,c.dynamicCall(CORE,"callVerifier",[c.hashValue(h),c.stringValue("setLimit"),{type:"Array",value:[{type:"Integer",value:"7"}]}]));
+});
+test("operation argument values are snapshotted before the first RPC", async () => {
+  const f=fixture(), args=[{type:"Integer",value:"7"}];
+  const pending=prepare(f,{args});
+  args[0].value="9";
+  assert.deepEqual((await pending).operation.args,[{type:"Integer",value:"7"}]);
 });

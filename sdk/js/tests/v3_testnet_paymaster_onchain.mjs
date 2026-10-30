@@ -217,7 +217,7 @@ async function main() {
   // ── 1. Deploy Contracts ───────────────────────────────────────────
   logSection('1. Deploy AA Core + Web3AuthVerifier + AAPaymaster');
 
-  const core = await deployContract(rpcClient, account, networkMagic, 'UnifiedSmartWalletV3', `${tag}-core`);
+  const core = await deployContract(rpcClient, account, networkMagic, 'SmartAccountV3', `${tag}-core`);
   console.log(`  Core: ${core.hash}`);
 
   const verifier = await deployContract(rpcClient, account, networkMagic, 'Web3AuthVerifier', `${tag}-v`);
@@ -235,8 +235,8 @@ async function main() {
 
   results.deployments = { core: core.hash, verifier: verifier.hash, paymaster: paymaster.hash };
 
-  const { AbstractAccountClient } = await import('../src/index.js');
-  const aaClient = new AbstractAccountClient(RPC_URL, core.hash);
+  const { SmartAccountClient } = await import('../src/index.js');
+  const aaClient = new SmartAccountClient(RPC_URL, core.hash);
 
   // ── 2. Register Account with Web3Auth Verifier ────────────────────
   logSection('2. Register Account with Web3Auth Verifier');

@@ -49,9 +49,9 @@ function fixture(t) {
       nefScriptByteEquality: true, nefChecksumEquality: true, manifestSemanticEquality: true });
   }
   for (const suffix of ['nef', 'manifest.json']) {
-    const bytes = fs.readFileSync(path.join(releaseRoot, `UnifiedSmartWalletV3.${suffix}`));
-    write(`contracts/bin/platform/UnifiedSmartWalletV3.${suffix}`, bytes);
-    hashes[`platform/UnifiedSmartWalletV3.${suffix}`] = sha256(bytes);
+    const bytes = fs.readFileSync(path.join(releaseRoot, `SmartAccountV3.${suffix}`));
+    write(`contracts/bin/platform/SmartAccountV3.${suffix}`, bytes);
+    hashes[`platform/SmartAccountV3.${suffix}`] = sha256(bytes);
   }
   receipt.source.coreSha256 = sha256(nef);
   receipt.sourceArtifactRuntime = { ...receipt.sourceArtifactRuntime,
@@ -76,7 +76,7 @@ test('joins rebuild, source inputs and exactly the source suite deployment/readb
 test('source changes, build drift, wrong profile and incomplete scenario evidence fail closed', (t) => {
   const changes = [
     (f) => fs.appendFileSync(path.join(f.repoRoot, 'contracts/Core.cs'), 'drift'),
-    (f) => fs.appendFileSync(path.join(f.releaseRoot, 'UnifiedSmartWalletV3.nef'), 'drift'),
+    (f) => fs.appendFileSync(path.join(f.releaseRoot, 'SmartAccountV3.nef'), 'drift'),
     (f) => { f.receipt.profile = 'platform-syscall-present'; },
     (f) => { f.receipt.source.coreSha256 = 'a'.repeat(64); },
     (f) => { f.receipt.results.pop(); },

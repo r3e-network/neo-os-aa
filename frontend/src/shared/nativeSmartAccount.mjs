@@ -1,6 +1,6 @@
-/** Exact native AccountManagement ABI 2 codec. No public V3/RPC type coercion. */
-export const NATIVE_ACCOUNT_SERVICE =
-  "d9421d07adf206e9dc4be746a02e8e087fa61741";
+/** Exact native SmartAccount ABI 2 codec. No public V3/RPC type coercion. */
+export const NATIVE_SMART_ACCOUNT_CONTRACT =
+  "398dc3f0227d7efac5533ed5ce9937390c158084";
 export const NATIVE_ABI_VERSION = 2;
 const U64 = 1n << 64n;
 const I255 = 1n << 255n;
@@ -233,13 +233,13 @@ export function createNativeCodec({ sha256, hash160 }) {
   const sha = (value) => nativeHex(sha256(value), 32),
     hash = (value) => nativeHex(hash160(value), 20);
   const verificationScript = (accountId) =>
-    dynamicCall(NATIVE_ACCOUNT_SERVICE, "verify", [hashValue(accountId)], 5);
+    dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, "verify", [hashValue(accountId)], 5);
   const authorizationDomain = (context) =>
     join(
       strictText("NeoSmartAccount/UserOperation"),
       "02",
       le(unsigned(context.networkMagic, 32, "network magic"), 4),
-      reverse(NATIVE_ACCOUNT_SERVICE),
+      reverse(NATIVE_SMART_ACCOUNT_CONTRACT),
       reverse(nativeHex(context.accountId, 20)),
       le(unsigned(context.authorityEpoch, 64, "authority epoch"), 8),
       le(unsigned(context.configurationNonce, 64, "configuration nonce"), 8),
@@ -271,7 +271,7 @@ export function createNativeCodec({ sha256, hash160 }) {
     accountAddress: (accountId) => reverse(hash(verificationScript(accountId))),
     deriveIdentity: ({ networkMagic, custodyAddress, salt }) => {
       const custody = nativeHex(custodyAddress, 20);
-      if (/^0+$/.test(custody) || custody === NATIVE_ACCOUNT_SERVICE)
+      if (/^0+$/.test(custody) || custody === NATIVE_SMART_ACCOUNT_CONTRACT)
         fail("invalid custody");
       const accountId = reverse(
         hash(
@@ -279,7 +279,7 @@ export function createNativeCodec({ sha256, hash160 }) {
             strictText("NeoSmartAccount"),
             "01",
             le(unsigned(networkMagic, 32, "network magic"), 4),
-            reverse(NATIVE_ACCOUNT_SERVICE),
+            reverse(NATIVE_SMART_ACCOUNT_CONTRACT),
             reverse(custody),
             nativeHex(salt, 32),
           ),
@@ -327,7 +327,7 @@ export function createNativeCodec({ sha256, hash160 }) {
         fail("execution context account mismatch");
       const ops = operations.map((op) => operationValue(op));
       return dynamicCall(
-        NATIVE_ACCOUNT_SERVICE,
+        NATIVE_SMART_ACCOUNT_CONTRACT,
         batch ? "executeUserOps" : "executeUserOp",
         [
           hashValue(accountId),

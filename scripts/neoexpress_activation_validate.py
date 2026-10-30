@@ -45,8 +45,12 @@ def bounded_script(limit):
             hashlib.sha256(b"System.Contract.CallWithGasLimit").digest()[:4])
 
 
+def application_probe():
+    return bounded_script(PROBE_BUDGET) + b"\x45\x08\x40"  # DROP, PUSHT, RET
+
+
 def probe():
-    script = bounded_script(PROBE_BUDGET) + b"\x45\x08\x40"  # DROP, PUSHT, RET
+    script = application_probe()
     body = (b"NEF3" + b"Native activation probe".ljust(64, b"\x00") +
             bytes(5) + varint(len(script)) + script)
     nef = body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4]
@@ -74,20 +78,47 @@ def check_verification(result, expected):
 
 
 def sample_boundary(chain, contract, activation, timeout, clock=time.monotonic, sleep=time.sleep):
-    require(2 <= activation < 2**32 and timeout > 0, "Invalid activation boundary or timeout")
+    """Observe the Application-trigger activation boundary.
+
+    ``invokecontractverify`` cannot select a persisting block.  Its result is
+    therefore unsuitable for proving a nonzero hardfork height: the RPC may
+    evaluate the Verification trigger without the block context that gates
+    the syscall.  The Application simulation is evaluated against the current
+    ledger snapshot and is the correct boundary probe.  ``contract`` remains
+    part of the helper signature because the deployment/readback check and
+    callers identify the same probe contract, although the bounded syscall is
+    executed directly by the script below.
+    """
+    # invokescript evaluates ApplicationEngine.Run against the next block's
+    # dummy persisting block, so a live chain must expose both execution
+    # heights activation - 1 and activation.  A freshly created chain starts
+    # at ledger index 1, making height 2 unobservable on the inactive side.
+    require(3 <= activation < 2**32 and timeout > 0, "Invalid activation boundary or timeout")
     samples = {}
     deadline = clock() + timeout
     while clock() < deadline:
         before = chain.rpc("getblockcount", []) - 1
-        result = chain.rpc("invokecontractverify", [contract, []])
+        result = chain.rpc("invokescript", [base64.b64encode(application_probe()).decode()])
         after = chain.rpc("getblockcount", []) - 1
         if before == after:
-            check_verification(result, "HALT" if before >= activation else "FAULT")
-            samples[before] = {"ledgerIndex": before, "verificationState": result["state"],
-                               "gasConsumedDatoshi": result["gasconsumed"]}
+            execution_index = before + 1
+            expected = "HALT" if execution_index >= activation else "FAULT"
+            require(result.get("state") == expected,
+                    f"Unexpected Application state at execution index {execution_index} "
+                    f"(ledger index {before}): "
+                    f"got {result.get('state')!r}, expected {expected!r}")
+            if expected == "HALT":
+                stack = result.get("stack", [])
+                require(len(stack) == 1 and stack[0].get("type") == "Boolean" and
+                        stack[0].get("value") is True,
+                        "Application did not return exactly Boolean true: "
+                        f"stack={[(item.get('type'), item.get('value')) for item in stack]}")
+            samples[execution_index] = {"ledgerIndex": before, "executionIndex": execution_index,
+                               "applicationState": result["state"],
+                               "applicationGasConsumedDatoshi": result.get("gasconsumed")}
             if activation - 1 in samples and activation in samples:
                 return list(samples.values())
-            require(before <= activation, "Missed exact activation boundary")
+            require(execution_index <= activation, "Missed exact activation boundary")
         sleep(0.1)
     raise ValidationFailure("Timed out before observing both sides of the activation boundary")
 
@@ -133,23 +164,35 @@ def run_case(label, runner, height, expected, boundary_timeout=None):
             version = chain.rpc("getversion", [])
             require(version["protocol"]["network"] == chain.magic, "Wrong private network")
             natives = chain.rpc("getnativecontracts", [])
-            native_present = any(c["manifest"]["name"] == "AccountManagement" for c in natives)
+            native_present = any(c["manifest"]["name"] == "SmartAccount" for c in natives)
             contract = deployed["contract-hash"]
             check_readback(chain.rpc("getcontractstate", [contract]), script, nef, manifest)
             case = {"name": label, "activationHeight": height, "networkMagic": chain.magic,
                     "nodeVersion": version["useragent"], "deploymentTransaction": deployed["tx-hash"],
                     "contractHash": contract, "readbackScriptAndManifestMatched": True,
-                    "readbackChecksumMatched": True, "nativeAccountManagementPresent": native_present}
+                    "readbackChecksumMatched": True, "nativeSmartAccountPresent": native_present}
             if boundary_timeout is not None:
                 case["samples"] = sample_boundary(chain, contract, height, boundary_timeout)
                 case["pollTimeoutSeconds"] = boundary_timeout
             else:
-                verification = chain.rpc("invokecontractverify", [contract, []])
-                check_verification(verification, expected)
-                application = chain.rpc("invokescript", [base64.b64encode(bounded_script(PROBE_BUDGET)).decode()])
-                require(application["state"] == ("HALT" if height == 0 else "FAULT"), "Unexpected Application state")
-                case.update(verificationState=verification["state"], applicationState=application["state"],
-                            verificationGasConsumedDatoshi=verification["gasconsumed"])
+                application = chain.rpc("invokescript", [base64.b64encode(application_probe()).decode()])
+                # invokecontractverify has no persisting-block argument. On a
+                # future activation height it cannot establish the hardfork
+                # boundary and may report HALT even though Application
+                # correctly rejects the syscall. Use the Application trigger
+                # for the future-height negative control; retain both trigger
+                # checks for disabled and active configurations.
+                if height == 2**32 - 1:
+                    require(application["state"] == expected, "Future activation was not rejected by Application")
+                    case.update(verificationState=None, applicationState=application["state"],
+                                verificationContext="omitted: invokecontractverify has no persisting block context",
+                                applicationGasConsumedDatoshi=application.get("gasconsumed"))
+                else:
+                    verification = chain.rpc("invokecontractverify", [contract, []])
+                    check_verification(verification, expected)
+                    require(application["state"] == ("HALT" if height == 0 else "FAULT"), "Unexpected Application state")
+                    case.update(verificationState=verification["state"], applicationState=application["state"],
+                                verificationGasConsumedDatoshi=verification.get("gasconsumed"))
                 if height == 0:
                     exhausted = chain.rpc("invokescript", [base64.b64encode(bounded_script(1)).decode()])
                     require(exhausted["state"] == "FAULT" and "bounded contract call gas limit" in exhausted.get("exception", ""),
@@ -164,11 +207,11 @@ def run_case(label, runner, height, expected, boundary_timeout=None):
 def validate(runtime, historical_runtime, dotnet, output, boundary_height=8, timeout=180):
     report = {
         "schema": "smartaccount-private-activation-regression/v2", "status": "RUNNING",
-        "scope": "Ordinary diagnostic probe for System.Contract.CallWithGasLimit activation boundary and budget exhaustion; syscall smoke only, not native AccountManagement activation, conformance, or native internal helper invocation.",
+        "scope": "Ordinary diagnostic probe for System.Contract.CallWithGasLimit activation boundary and budget exhaustion; syscall smoke only, not native SmartAccount activation, conformance, or native internal helper invocation.",
         "evidenceKind": "syscall-smoke",
         "testedCapability": "System.Contract.CallWithGasLimit",
         "nativeActivationClaim": False,
-        "publicNetworksTouched": False, "nativeAccountManagementVerified": False, "cases": [],
+        "publicNetworksTouched": False, "nativeSmartAccountVerified": False, "cases": [],
         "runtimeMode": "Direct execution of the selected local NeoExpress assembly; supplied runtime may be an isolated assembly overlay, not a reproducible runner rebuild.",
         "sourceSha256": {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
                          for name in ("neoexpress_activation_validate.py", "neoexpress_validate.py")},

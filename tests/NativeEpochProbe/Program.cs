@@ -1,6 +1,6 @@
 using System.Numerics;
 using System.Text.Json;
-using AbstractAccount.Contracts.Tests;
+using SmartAccount.Contracts.Tests;
 using Neo;
 using Neo.Extensions;
 using Neo.IO;
@@ -15,14 +15,14 @@ using Neo.VM.Types;
 using Ctx = Neo.VM.ExecutionContext;
 
 // These tests execute compiler-produced production modules in a real public
-// NeoVM with a deliberately permissive test service ABI. They prove the module
+// NeoVM with a deliberately permissive test-only SmartAccount ABI fixture. They prove the module
 // key transition, not native recovery authorization or private-chain admission.
 if (args.Length == 0 || args.Skip(1).Any(arg => arg is not "--result-isolation-only" and not "--require-boolean-fast-path"))
     throw new ArgumentException("Pass the artifact directory and optional result-isolation flags.");
 string artifacts = Path.GetFullPath(args[0]);
 bool resultIsolationOnly = args.Contains("--result-isolation-only");
 bool requireBooleanFastPath = args.Contains("--require-boolean-fast-path");
-UInt160 service = UInt160.Parse("0xd9421d07adf206e9dc4be746a02e8e087fa61741");
+UInt160 contract = UInt160.Parse("0x398dc3f0227d7efac5533ed5ce9937390c158084");
 UInt160 account = UInt160.Parse("0x1111111111111111111111111111111111111111");
 UInt160 other = UInt160.Parse("0x2222222222222222222222222222222222222222");
 UInt160 signer = UInt160.Parse("0x3333333333333333333333333333333333333333");
@@ -37,24 +37,24 @@ void Require(bool value, string message)
 
 UInt160 Deploy(RuntimeFixture fx, string name) => fx.DeployArtifact(
     File.ReadAllBytes(Path.Combine(artifacts, name + ".nef")),
-    File.ReadAllText(Path.Combine(artifacts, name + ".manifest.json")), service.ToArray());
+    File.ReadAllText(Path.Combine(artifacts, name + ".manifest.json")), contract.ToArray());
 
 RuntimeFixture Create()
 {
     RuntimeFixture fx = new();
-    Require(NativeContract.ContractManagement.GetContract(fx.Engine.Storage.Snapshot, service) is null,
-        "The test must use a public runtime without a real native service at the fixture address.");
+    Require(NativeContract.ContractManagement.GetContract(fx.Engine.Storage.Snapshot, contract) is null,
+        "The test must use a public runtime without a real native contract at the fixture address.");
     var state = new ContractState
     {
-        Id = 1_000_001, Hash = service,
+        Id = 1_000_001, Hash = contract,
         Nef = NefFile.Parse(File.ReadAllBytes(Path.Combine(artifacts, "NativeEpochCore.nef")), true),
         Manifest = ContractManifest.Parse(File.ReadAllText(Path.Combine(artifacts, "NativeEpochCore.manifest.json")))
     };
     fx.Engine.Storage.Snapshot.Add(new StorageKey
     {
-        Id = NativeContract.ContractManagement.Id, Key = new byte[] { 8 }.Concat(service.ToArray()).ToArray()
+        Id = NativeContract.ContractManagement.Id, Key = new byte[] { 8 }.Concat(contract.ToArray()).ToArray()
     }, new StorageItem(state));
-    Require(fx.CallInteger(service, "getAuthorityEpoch", account) == 0, "fixture epoch zero");
+    Require(fx.CallInteger(contract, "getAuthorityEpoch", account) == 0, "fixture epoch zero");
     return fx;
 }
 
@@ -142,8 +142,8 @@ foreach (string profile in new[] { "NeoNativeVerifier", "SessionKeyVerifier", "M
             Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0, 6)) is not null,
                 "Native session last-used timestamp must be atomically initialized at 06");
         }
-        fx.CallVoid(service, "setEpoch", account, 1);
-        Require(fx.CallInteger(service, "getAuthorityEpoch", account) == 1, "fixture epoch did not advance");
+        fx.CallVoid(contract, "setEpoch", account, 1);
+        Require(fx.CallInteger(contract, "getAuthorityEpoch", account) == 1, "fixture epoch did not advance");
         Require(!IsLive(account), "old configured policy resurrected in authority epoch 1");
         Require(IsLive(other), "epoch change crossed account boundary");
         Require(fx.Engine.Storage.Snapshot.TryGet(Key(account, 0)) is not null, "epoch zero storage must remain isolated, not implicitly erased");
@@ -174,11 +174,11 @@ Run("epoch-wire-type-range-and-LE64", () =>
     UInt160 module = Deploy(fx, "NeoNativeVerifier");
     foreach (object epoch in new object[] { -1, BigInteger.One << 64, true, new byte[] { 1 } })
     {
-        fx.CallVoid(service, "setEpoch", account, epoch);
+        fx.CallVoid(contract, "setEpoch", account, epoch);
         try { fx.CallInteger(module, "getThreshold", account); throw new InvalidOperationException("invalid epoch accepted: " + epoch); }
         catch (TestException error) { Require(error.Message.Contains("authority epoch", StringComparison.OrdinalIgnoreCase), "wrong epoch rejection: " + error.Message); }
     }
-    fx.CallVoid(service, "setEpoch", account, (BigInteger)ulong.MaxValue);
+    fx.CallVoid(contract, "setEpoch", account, (BigInteger)ulong.MaxValue);
     fx.CallVoid(module, "setConfig", account, new[] { signer }, 1);
     int id = NativeContract.ContractManagement.GetContract(fx.Engine.Storage.Snapshot, module)!.Id;
     var key = new StorageKey { Id = id, Key = new byte[] { 0xA2, 1 }.Concat(account.ToArray()).Concat(Enumerable.Repeat((byte)255, 8)).ToArray() };
@@ -254,7 +254,7 @@ void CheckResult(ScriptBuilder script) => script.Emit(OpCode.LDARG2).EmitPush(0)
 object[] CompositeOperation(RuntimeFixture fx, int children) => RuntimeFixture.UserOp(fx.StdLibHash, "serialize",
     new object?[] { new object[] { 7 } }, 0, 9999999999999L,
     fx.StdLibSerialize(Enumerable.Range(0, children).Select(_ => (object)System.Array.Empty<byte>()).ToArray()));
-StackItem CompositePost(RuntimeFixture fx, UInt160 root, object[] op) => fx.Call(service, "callPostAndReturn", root, account, op, new object[] { new object[] { 7 } });
+StackItem CompositePost(RuntimeFixture fx, UInt160 root, object[] op) => fx.Call(contract, "callPostAndReturn", root, account, op, new object[] { new object[] { 7 } });
 void RequireOriginalResult(StackItem item) => Require(item is Neo.VM.Types.Array result && result[0] is Neo.VM.Types.Array nested && nested[0].GetInteger() == 7,
     "child mutation escaped into the original target result");
 
@@ -308,7 +308,7 @@ Run("multisig-rejects-unserializable-Interop-result", () =>
     RuntimeFixture fx = Create(); UInt160 root = Deploy(fx, "MultiSigVerifier");
     UInt160 child = Leaf(fx, 1, Approve, NoPost);
     fx.CallVoid(root, "setConfig", account, new[] { child }, 1);
-    try { fx.CallVoid(service, "callPostWithIterator", root, account, CompositeOperation(fx, 1)); throw new InvalidOperationException("Interop result crossed the ownership boundary"); }
+    try { fx.CallVoid(contract, "callPostWithIterator", root, account, CompositeOperation(fx, 1)); throw new InvalidOperationException("Interop result crossed the ownership boundary"); }
     catch (TestException error) { Require(error.ToString().Contains("serialize", StringComparison.OrdinalIgnoreCase) || error.ToString().Contains("Interop", StringComparison.OrdinalIgnoreCase), "wrong Interop rejection: " + error); }
 });
 
@@ -452,14 +452,14 @@ foreach (string kind in new[] { "true", "false", "null", "integer", "integer-zer
         entry.EmitPush(kind == "interop");
         EmitResult(entry, kind == "interop" ? "null" : kind);
         PushValue(entry, operation); entry.EmitPush(account).EmitPush(root).EmitPush(5).Emit(OpCode.PACK);
-        entry.EmitPush(CallFlags.All).EmitPush("callPostProbe").EmitPush(service).EmitSysCall(ApplicationEngine.System_Contract_Call.Hash);
+        entry.EmitPush(CallFlags.All).EmitPush("callPostProbe").EmitPush(contract).EmitSysCall(ApplicationEngine.System_Contract_Call.Hash);
         var working = fx.Engine.Storage.Snapshot.CloneCache();
-        var trace = new ResultPathTrace(root, first, second, service);
+        var trace = new ResultPathTrace(root, first, second, contract);
         using var engine = ApplicationEngine.Create(TriggerType.Application, fx.Engine.Transaction, working,
             block, fx.Engine.ProtocolSettings, gas: 10_000_000_000, diagnostic: trace);
         engine.LoadScript(entry.ToArray());
         VMState state = engine.Execute();
-        int fixtureId = NativeContract.ContractManagement.GetContract(working, service)!.Id;
+        int fixtureId = NativeContract.ContractManagement.GetContract(working, contract)!.Id;
         var marker = new StorageKey { Id = fixtureId, Key = new byte[] { 0xfe } };
         Require(trace.FixtureWriteObserved, "The fixture write did not execute before the result callback");
         Require(before.OrderBy(pair => pair.Key).SequenceEqual(SnapshotBytes(fx.Engine.Storage.Snapshot).OrderBy(pair => pair.Key)),
@@ -505,7 +505,7 @@ foreach (string kind in new[] { "true", "false", "null", "integer", "integer-zer
 }
 
 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { status = failures == 0 ? "PASS" : "FAIL", publicNetworksTouched = false,
-    evidence = "Real public NeoVM executes production module NEFs against a test-only epoch service ABI; no native recovery/admission claim.",
+    evidence = "Real public NeoVM executes production module NEFs against a test-only SmartAccount ABI fixture; no native recovery/admission claim.",
     resultIsolationOnly, requireBooleanFastPath, resultPaths, cases }, new JsonSerializerOptions { WriteIndented = true }));
 return failures == 0 ? 0 : 1;
 

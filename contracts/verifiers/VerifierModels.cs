@@ -2,7 +2,7 @@ using System.Numerics;
 using Neo;
 using Neo.SmartContract.Framework;
 
-namespace AbstractAccount.Verifiers
+namespace SmartAccount.Verifiers
 {
     public class UserOperation
     {

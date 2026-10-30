@@ -16,7 +16,8 @@ from pathlib import Path
 from neoexpress_validate import (Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO,
     hash_le, hash160, decode, serialize_unsigned, serialize_witnesses, aa_proxy_rules, varint)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
-from neoexpress_native_service_validate import CORE, check_native, persist, transaction_system_fee, check_account_record
+from neoexpress_native_service_validate import (CORE, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
+    check_native, persist, transaction_system_fee, check_account_record)
 
 GAS_TOKEN = "0xd2a4cff31913016155e38e474a2c06d08be276cf"
 GAS = 100_000_000
@@ -147,7 +148,7 @@ class ProxyTransactions:
         require(record[1] == hash_le(self.account), "Proxy authority record identity mismatch")
         script = application_script(self.account, payload, batch, authority_epoch=record[13], configuration_nonce=record[8])
         if noncanonical: script += b"\x21"  # NOP changes the exact canonical envelope.
-        sysfee, netfee = transaction_system_fee(self.chain, script, signers), 2 * GAS
+        sysfee, netfee = transaction_system_fee(self.chain, script, signers, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI), 2 * GAS
         height = self.chain.rpc("getblockcount", [])
         unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee, height + 50, signers, script)
         digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()

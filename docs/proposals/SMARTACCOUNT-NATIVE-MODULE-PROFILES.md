@@ -2,7 +2,7 @@
 
 ## Compatibility boundary
 
-The deployed-contract profile and the native AccountManagement profile are
+The deployed-contract profile and the native SmartAccount profile are
 distinct build targets. Current native artifacts require `native-v2` and
 `extra.smartAccount.abiVersion = 2`; ABI 1 artifacts are incompatible. Identity
 derivation remains version 1. Every account-owned module key is
@@ -21,9 +21,9 @@ requires exact `Array` arguments and authenticated `hasModuleContext` phases.
 Existing hook authority queries also target the deployed-contract profile.
 Passing legacy deployment tests does not establish native compatibility.
 
-Native builds MUST NOT relax the service ABI, emulate a custody witness, use a
+Native builds MUST NOT relax the native contract ABI, emulate a custody witness, use a
 hash-only caller shortcut, or fall back to legacy authorization. The native
-service identity is fixed by the native profile. Configuration, cleanup,
+native contract identity is fixed by the native profile. Configuration, cleanup,
 validation, preExecute and postExecute each require their own exact account,
 module role and invocation-phase grant. Independent module administration never
 substitutes for this account-scoped grant.
@@ -63,16 +63,20 @@ TokenRestrictedHook and MultiSigVerifier. The first three profile requirements
 are defined below; the composite profile and its ephemeral approval-receipt
 callbacks are defined in `docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md`.
 
-The descriptor is the native admission boundary and currently contains exactly
-six ABI 2 artifacts: NeoNativeVerifier, WhitelistHook, SessionKeyVerifier,
+The repository's native build descriptor currently contains exactly six
+supported ABI 2 artifacts: NeoNativeVerifier, WhitelistHook, SessionKeyVerifier,
 DailyLimitHook, TokenRestrictedHook and MultiSigVerifier. MultiSigVerifier is
 the only composite profile implemented by the native build. `MultiHook` remains
 an ordinary-contract composition module: it has no native project, descriptor
 entry, packaged ABI 2 artifact or native conformance receipt. Its ordinary
 `supportsComposition()` marker and legacy build artifact do not make it a native
-module, and native admission must reject it until a separate native
-implementation, descriptor entry, packaging tests and private-chain validation
-are completed.
+module: the ordinary artifact fails the native ABI and profile checks. The build
+descriptor is not a consensus allowlist of artifact hashes. The core may admit
+another native implementation that satisfies its complete interface, metadata,
+code-identity and discovery rules, including its supported hook-composition
+interface; that does not establish the module's behavior or resource sufficiency.
+Adding a repository-supported native MultiHook requires a separate native
+implementation, descriptor entry, packaging tests and private-chain validation.
 
 ## Artifact construction and security
 
@@ -104,7 +108,7 @@ branch is an error, not an accepted native artifact.
 
 ## Required validation
 
-First reproduce rejection of the existing verifier ABI on the native service.
+First reproduce rejection of the existing verifier ABI on the native contract.
 Then deploy the actual native artifacts on a disposable NeoExpress chain and
 read their NEF and packaged manifests back. Test registration, delayed account
 configuration, actual threshold signatures, missing/wrong witnesses, allowlist
@@ -121,9 +125,10 @@ profile, arbitrary-plugin proof or compiler refinement.
 
 ## Formal correspondence boundary
 
-`NativeInvocation.v` models the exact service-identity check and the required
-authenticated invocation grant as a conjunction. Wrong configured service or
-missing grant rejects; the matching service with a grant remains reachable.
+`NativeInvocation.v` models the exact SmartAccount native-contract identity check
+and the required authenticated invocation grant as a conjunction. A wrong
+configured native contract or missing grant rejects; the matching native contract
+with a grant remains reachable.
 The existing frame, phase, role and account theorems apply to the abstract grant
 predicate. The shared authority sources and all six selected module sources are pinned by
 the formal gate after review. Pins detect source drift; they do not prove C#
@@ -139,7 +144,7 @@ configuration capabilities are `setSessionKey` and `clearSessionKey`.
 The P-256 signing input is the native authorization-domain byte sequence followed
 by `StdLib.Serialize` of the canonical operation with an empty signature field.
 `getPayload` returns this preimage, not its digest. Its single SHA-256 hash must
-equal `AccountManagement.getOperationDigest`; CryptoLib's secp256r1SHA256 verifier
+equal `SmartAccount.getOperationDigest`; CryptoLib's secp256r1SHA256 verifier
 hashes the preimage exactly once. Feeding the already-hashed digest to an API that
 hashes internally is not this profile. Signatures are fixed-width 64-byte `r || s`;
 JSON encoding, legacy verifier-specific payloads and DER signatures are rejected.
@@ -181,7 +186,7 @@ payload queries and signed operations must prove equality. This removes no
 signature verification or phase/account/epoch check.
 
 Session expiry uses the persisting block timestamp in Application and the latest
-persisted ledger block timestamp in Verification, matching the native service.
+persisted ledger block timestamp in Verification, matching the native contract.
 `System.Runtime.GetTime` is not available in an actual witness Verification
 engine without a persisting block. A direct use there rejects otherwise valid
 proxy witnesses. The time source is selected by the trigger, never by the caller.
@@ -242,7 +247,7 @@ The lifecycle abstraction additionally distinguishes key replacement (preserved
 spending, refreshed rotation timestamp), ordinary revocation (cleared key and
 spending, retained timestamp), and account cleanup (no retained timestamp).
 Cooldown rejection and the zero-amount cap boundary require separate proofs
-and mutation controls. The native service's delayed configuration remains an
+and mutation controls. The native contract's delayed configuration remains an
 additional gate, not a replacement for the module's cooldown rule.
 
 ### Uncapped scope and key reuse
@@ -369,7 +374,7 @@ token honesty or immediate recovery from an arbitrarily configured policy.
 
 TokenRestrictedHook admits only `setRestrictedToken` as an account configuration
 capability. Configuration, pre-execution, post-execution and cleanup require
-their distinct native grants and the fixed native service identity. Its asset
+their distinct native grants and the fixed native contract identity. Its asset
 address is the registered proxy, not the account identifier. Nonzero valid
 Hash160 token identities are required; removal does not call the token.
 

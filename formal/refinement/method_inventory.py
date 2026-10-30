@@ -16,7 +16,7 @@ import re
 
 
 ROOT = Path(__file__).resolve().parent
-METHOD = "AbstractAccount.UnifiedSmartWallet.CapReimbursementToActualCost(System.Numerics.BigInteger)"
+METHOD = "SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
 NEO_CORE_COMMIT = "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d"
 STDLIB_HASH = "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0"
 SYSCALLS = {
@@ -209,8 +209,8 @@ def main():
         source_before = binding.project_snapshot(root)
         require(all(inventory.get("inputs", {}).get(path) == digest for path, digest in source_before.items()),
                 "source membership/content missing from inventory")
-        nef = args.nef or root / "contracts/bin/v3/UnifiedSmartWalletV3.nef"
-        manifest = args.manifest or root / "contracts/bin/v3/UnifiedSmartWalletV3.manifest.json"
+        nef = args.nef or root / "contracts/bin/v3/SmartAccountV3.nef"
+        manifest = args.manifest or root / "contracts/bin/v3/SmartAccountV3.manifest.json"
         binding.validate_inventory(inventory, nef, manifest, root)
         report = build_method_inventory(inventory)
         if args.certificate:

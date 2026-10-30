@@ -3,7 +3,7 @@ using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
 using System.ComponentModel;
 
-namespace AbstractAccount.Mocks
+namespace SmartAccount.Mocks
 {
     /// <summary>
     /// Deliberately incomplete V3 module used to prove that the wallet checks the

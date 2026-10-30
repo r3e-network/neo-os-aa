@@ -10,7 +10,7 @@ its design is `neo-os/claudedocs/NEOOS-TARGET-ARCHITECTURE-V2-20260921.md`.
 
 | Component | Plane | Published interfaces |
 | --- | --- | --- |
-| `protocol-aa-core` | protocol plane | interfaces: UnifiedSmartWalletV3, UserOperation, AAAuthorization |
+| `protocol-aa-core` | protocol plane | interfaces: SmartAccountV3, UserOperation, AAAuthorization |
 
 ## v2 binding (proposed)
 
@@ -18,7 +18,7 @@ Repository layer: `L1` (chain-protocol).
 
 | Component | Layer | Ownership |
 | --- | --- | --- |
-| `C03` account | L1 | owns: UnifiedSmartWallet core, verifiers, hooks, paymaster… | must not own: did-eligibility, network-identity, signer-selection |
+| `C03` account | L1 | owns: SmartAccount core, verifiers, hooks, paymaster… | must not own: did-eligibility, network-identity, signer-selection |
 
 ### Declared moves out of this repository
 

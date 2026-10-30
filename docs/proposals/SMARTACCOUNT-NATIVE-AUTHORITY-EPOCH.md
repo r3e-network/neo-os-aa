@@ -1,6 +1,6 @@
 # Native ABI 2 module authority epochs
 
-Native recovery ends the previous authority generation. The service advances
+Native recovery ends the previous authority generation. The SmartAccount native contract advances
 `AuthorityEpoch`, detaches verifier and hook roots and their dependencies, and
 does not depend on a callback to the old modules. Identity, asset address, nonce
 channels and frozen state remain unchanged. A recovered owner must configure
@@ -17,7 +17,7 @@ The profiles are NeoNativeVerifier, SessionKeyVerifier, MultiSigVerifier,
 WhitelistHook, DailyLimitHook and TokenRestrictedHook. Their account getters,
 configuration, validation, post-execution, cleanup, signer-domain reads and
 prefix enumeration use the same key constructor. Every key construction reads
-the current epoch from the fixed native service's safe
+the current epoch from the fixed native contract's safe
 `getAuthorityEpoch(accountId)` method; it accepts only an unsigned 64-bit Integer.
 Missing accounts, missing ABI support and malformed epochs fail closed. There
 is no fallback to an old key or a cached epoch. Global module administration and
@@ -72,7 +72,7 @@ python3 scripts/native_epoch_probe.py --compiler "$NCCS_BIN" --output /tmp/nativ
 ```
 
 This compiles the actual six native modules into a temporary tree and executes
-them in the published NeoVM. A test-only service at the fixed native address
+them in the published NeoVM. A test-only SmartAccount ABI fixture at the fixed native address
 provides permissive callback grants and an explicit epoch setter. It establishes
 module storage isolation and composite object ownership, not native recovery
 authorization, native admission, callback gas sufficiency or chain persistence.

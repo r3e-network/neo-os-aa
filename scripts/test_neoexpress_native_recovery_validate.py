@@ -1,7 +1,5 @@
 """Strict signer construction and state-transition evidence checks."""
 import copy
-import base64
-import hashlib
 import unittest
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
@@ -10,13 +8,6 @@ from neoexpress_validate import ValidationFailure
 
 
 class NativeRecoveryTests(unittest.TestCase):
-    def signed_preflight(self,raw,account,proxy=False):
-        witnesses=[(recovery.push_bytes(bytes(64)),b'\x40')]
-        if proxy:witnesses.append((b'',recovery.verification_script(account)))
-        unsigned=base64.b64decode(raw)[:-len(recovery.serialize_witnesses(witnesses))]
-        return {'hash':'0x'+hashlib.sha256(unsigned).digest()[::-1].hex(),'network':123,
-                'verification':'Succeed','state':'HALT','relayed':False,'mempoolChecked':False,'minimumrequiredfee':'1000'}
-
     def test_retained_transaction_is_submitted_byte_identically_without_resigning(self):
         account='0x'+'11'*20
         record=[2,bytes.fromhex('11'*20),bytes(20),bytes(20),None,None,None,0,11,None,None,None,None,7]
@@ -24,13 +15,14 @@ class NativeRecoveryTests(unittest.TestCase):
         def rpc(method,args):
             if method=='invokescript':return {'state':'HALT','gasconsumed':'12','minimumrequiredfee':'1000'}
             if method=='getblockcount':return 100
-            if method=='invoketransaction':return self.signed_preflight(args[0],account)
             if method=='sendrawtransaction':raise ValueError('captured raw')
             self.fail('Unexpected RPC '+method)
         chain=SimpleNamespace(magic=123,rpc=Mock(side_effect=rpc))
         driver=recovery.RecoveryTransactions(chain,account,{'executions':[]})
         driver.state=Mock(return_value=(record,1))
         held=driver.send('held','executeUserOp',[recovery.operation(1)],[key],prepare_only=True)
+        self.assertEqual('invokescript', held['preflightBeforeAuthorityChange']['method'])
+        self.assertTrue(held['preflightBeforeAuthorityChange']['signatureAdmissionDeferredToSendRawTransaction'])
         self.assertEqual(1,key.sign.call_count)
         driver.state.return_value=(copy.deepcopy(record),1)
         driver.state.return_value[0][8]=12
@@ -48,7 +40,6 @@ class NativeRecoveryTests(unittest.TestCase):
         def rpc(method,args):
             if method=='invokescript':return {'state':'HALT','gasconsumed':'12','minimumrequiredfee':'1000'}
             if method=='getblockcount':return 100
-            if method=='invoketransaction':return self.signed_preflight(args[0],account,proxy=True)
             if method=='sendrawtransaction':raise ValidationFailure('rpc sendrawtransaction: Inventory verification failed - Invalid')
             if method=='getrawmempool':return []
             if method=='getrawtransaction':raise ValidationFailure('rpc getrawtransaction: Unknown transaction')

@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Operations;
 using Neo.Compiler;
@@ -40,6 +41,29 @@ internal static class Program
         try
         {
             var options = ParseArguments(args);
+            // A second mode: dump the lexer's own view of a directory of C#.
+            // The projection lanes read the same files with one regular
+            // expression, and this is the authority that decides whether they
+            // read the same characters. Lexing only: it says nothing about
+            // meaning, binding or the compiler's output.
+            if (options.TryGetValue("token-dump", out var tokenDump))
+                return DumpTokens(tokenDump);
+            // A third mode: what a real ApplicationEngine does with the pinned
+            // artifact. It is about the deployed bytes and the dispatch path, not
+            // about the source text or the compiler's output.
+            if (options.TryGetValue("abi-dispatch", out var dispatchDump))
+                return AbiDispatch.Dump(dispatchDump,
+                    Path.GetFullPath(Required(options, "nef")),
+                    Path.GetFullPath(Required(options, "manifest")));
+            // A fourth mode: the same engine, driven by a reviewed sequence of
+            // calls with real arguments over established state. Dispatch answers
+            // "did the name resolve"; this answers "what did the body do with the
+            // values it was given", for exactly the steps the scenario declares.
+            if (options.TryGetValue("abi-scenario", out var scenarioDump))
+                return AbiScenario.Dump(scenarioDump,
+                    Path.GetFullPath(Required(options, "scenario")),
+                    Path.GetFullPath(Required(options, "nef")),
+                    Path.GetFullPath(Required(options, "manifest")));
             SourceRoot = Path.GetFullPath(Required(options, "source-root"));
             string project = Path.GetFullPath(Required(options, "project"));
             string nefPath = Path.GetFullPath(Required(options, "nef"));
@@ -167,13 +191,50 @@ internal static class Program
         }
     }
 
+    // The C# lexer's view of a directory tree: the token texts, with all trivia
+    // (whitespace, comments, directives and disabled regions) dropped, joined
+    // with no separator. This is what the lanes' front end is measured against.
+    private static int DumpTokens(string destination)
+    {
+        var rows = new List<object>();
+        string root = Path.GetDirectoryName(Path.GetFullPath(destination))
+            ?? throw new ArgumentException("--token-dump needs a file path");
+        foreach (string directory in Directory.EnumerateDirectories(root, "source", SearchOption.AllDirectories)
+                     .Append(root).OrderBy(p => p, StringComparer.Ordinal))
+            foreach (string path in Directory.EnumerateFiles(directory, "*.cs", SearchOption.TopDirectoryOnly)
+                         .OrderBy(p => p, StringComparer.Ordinal))
+            {
+                string text = File.ReadAllText(path);
+                var builder = new System.Text.StringBuilder();
+                int count = 0;
+                foreach (var token in SyntaxFactory.ParseTokens(text))
+                {
+                    if (token.IsKind(SyntaxKind.EndOfFileToken)) continue;
+                    builder.Append(token.Text);
+                    count++;
+                }
+                string joined = builder.ToString();
+                rows.Add(new
+                {
+                    file = Path.GetFileName(path),
+                    directory = Path.GetFileName(directory),
+                    tokens = count,
+                    joinedLength = joined.Length,
+                    joinedSha256 = Hash(System.Text.Encoding.UTF8.GetBytes(joined)),
+                    joined
+                });
+            }
+        File.WriteAllText(destination, JsonSerializer.Serialize(rows, JsonOptions));
+        return 0;
+    }
+
     private static Dictionary<string, string> ParseArguments(string[] args)
     {
         var result = new Dictionary<string, string>();
         for (int i = 0; i < args.Length; i += 2)
             if (i + 1 >= args.Length || !args[i].StartsWith("--") || !result.TryAdd(args[i][2..], args[i + 1]))
-                throw new ArgumentException("Use --source-root ROOT --project CSPROJ --nef NEF --manifest MANIFEST [--compiler-tool-dir DIR]");
-        if (result.Keys.Except(new[] { "source-root", "project", "nef", "manifest", "compiler-tool-dir" }).Any())
+                throw new ArgumentException("Use --source-root ROOT --project CSPROJ --nef NEF --manifest MANIFEST [--compiler-tool-dir DIR], or --token-dump FILE");
+        if (result.Keys.Except(new[] { "source-root", "project", "nef", "manifest", "compiler-tool-dir", "token-dump", "abi-dispatch", "abi-scenario", "scenario" }).Any())
             throw new ArgumentException("Unknown argument");
         return result;
     }

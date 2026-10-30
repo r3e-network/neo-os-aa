@@ -15,7 +15,7 @@ import {
 } from '../src/utils/neo.js';
 
 const require = createRequire(import.meta.url);
-const { AbstractAccountClient } = require('../../sdk/js/src/index.js');
+const { SmartAccountClient } = require('../../sdk/js/src/index.js');
 
 test('reverseHex reverses byte order', () => {
   assert.equal(reverseHex('0123456789abcdef'), 'efcdab8967452301');
@@ -68,7 +68,7 @@ test('registration account id chain hex is the byte-reversed display form', () =
 });
 
 test('frontend and SDK derive byte-identical registration account ids', () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   assert.equal(
     deriveRegistrationAccountIdHash(REGISTRATION_VECTOR),
     client.deriveRegistrationAccountIdHash(REGISTRATION_VECTOR)
@@ -124,7 +124,7 @@ test('frontend and SDK derive one canonical virtual account address', () => {
   const expectedScript = '0c14efcdab8967452301efcdab8967452301efcdab8911c01f0c067665726966790c1467452301efcdab8967452301efcdab896745230141627d5b52';
   const expectedScriptHash = 'f2afddbbdae6b710f0c2cdebb8b734e40d4d4fda';
   const expectedAddress = 'NfpHVWDgSaedTHuk183urAp9FDBS4i4VYB';
-  const client = new AbstractAccountClient('https://example.invalid', coreHash);
+  const client = new SmartAccountClient('https://example.invalid', coreHash);
   const account = client.deriveVirtualAccount(accountId);
 
   assert.equal(createVerifyScript(coreHash, accountId), expectedScript);

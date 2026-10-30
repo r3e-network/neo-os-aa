@@ -5,7 +5,7 @@ using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Services;
 
-namespace AbstractAccount.Tests.Fixtures
+namespace SmartAccount.Tests.Fixtures
 {
     [DisplayName("RestrictedOutflowRouter")]
     [ContractPermission("*", "moveFromRouter")]

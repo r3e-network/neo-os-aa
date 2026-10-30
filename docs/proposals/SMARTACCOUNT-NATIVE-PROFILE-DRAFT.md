@@ -10,7 +10,7 @@
 ## 1. Scope
 
 This document defines a native Neo N3 profile for the SmartAccount protocol
-foundation. It specifies the native service identity, activation boundary,
+foundation. It specifies the native contract identity, activation boundary,
 account identity, verification-script address, account state, module lifecycle,
 UserOperation authorization, resource accounting, governance, and migration.
 
@@ -35,8 +35,8 @@ does not reverse the byte order a second time.
 
 | Parameter | Value |
 |---|---|
-| Native service name | `AccountManagement` |
-| Native service hash | `GetContractHash(UInt160.Zero, 0, "AccountManagement")` |
+| Native contract name | `SmartAccount` |
+| Native contract hash | `GetContractHash(UInt160.Zero, 0, "SmartAccount")` |
 | Profile version | `2` |
 | Identity derivation version | `1` (unchanged) |
 | Authorization version | `2` |
@@ -102,33 +102,49 @@ For version 2, `CanonicalProfileParameterJsonUtf8` is exactly the following
 byte sequence:
 
 ```text
-{"abiVersion":2,"accountRecordVersion":2,"argumentCountMax":64,"argumentDepthMax":8,"argumentSizeMax":4096,"authorityEpochWidthBits":64,"authorizationDomainSuffix":["authorityEpochLE64","configurationNonceLE64"],"authorizationVersion":2,"batchMax":32,"childConfiguration":true,"compositeReceipt":{"fields":["BooleanTrue","OrderedApprovedHash160Array","PolicyCommitmentByteString32"],"lifetime":"oneApplicationOperation","policyCommitment":"SHA256(NeoBinarySerialize([threshold,orderedChildren,orderedChildSignerDomains]))","postSignatureRevalidation":false,"selection":"firstThresholdValidChildren","verificationReceiptReused":false,"version":1},"compositeVerifierCallbacks":{"postExecute":{"name":"postExecuteComposite","parameters":["Hash160","Array","Any","Array"],"returnType":"Void","safe":false},"validation":{"name":"validateCompositeSignature","parameters":["Hash160","Array"],"returnType":"Array","safe":false}},"compositeVerifierMaxApprovedChildren":2,"compositeVerifierMaxChildren":3,"compositeVerifierMaxSignerDomains":3,"compositeVerifierMaxThreshold":2,"configurationNonceWidthBits":64,"custodyRecoveryDelayMs":604800000,"executionArgumentOrder":["accountId","operationOrBatch","expectedAuthorityEpoch","expectedConfigurationNonce"],"executionCounterCommitments":["authorityEpoch","configurationNonce"],"hookBudgetDatoshi":250000000,"identityVersion":1,"maintenanceBudgetDatoshi":250000000,"methodBytesMax":128,"moduleChangeDelayMs":86400000,"moduleCompositeVerifierMarkerRequired":true,"moduleProfileDigestRequired":true,"nativeP256Canonicalization":{"accountRegistrationRequired":false,"algorithm":"compressedDecodeThenExactUncompressedRoundTrip","argumentStackType":"ByteString","cpuFeeUnits":32768,"name":"canonicalP256PublicKey","ownedResult":true,"parameters":["ByteArray"],"requiredCallFlags":"None","returnType":"ByteArray","safe":true},"nativeP256SignerDomain":{"canonicalSigner":"CreateStandardAccount(compressedSecp256r1PublicKey)","domainsPerKey":1,"scheme":"NativeScript"},"nativeSessionMetadataStorage":{"atomicWithSessionConfiguration":true,"deletedWithSession":true,"legacyFallback":false,"metadataRecordFields":3,"namespace":"authorityEpoch","policyPrefix":"06","readFresh":true,"sessionConfigurationInitialValue":0,"storedMetadataLastUsedAt":0,"valueType":"CanonicalUInt64NeoInteger"},"nativeSessionPublicKey":{"acceptedEncodingBytes":[33,65],"invalidPoint":"rejectAtomically","normalization":"secp256r1DecodeThenCompress","normalizationServiceMethod":"canonicalP256PublicKey","storedEncodingBytes":33},"nativeSessionSignerDomainStorage":{"atomicWithSessionConfiguration":true,"deletedWithSession":true,"legacyFallback":false,"namespace":"authorityEpoch","policyPrefix":"05","readFresh":true,"sessionRecordFields":5,"valueBytes":32},"nativeSponsorship":false,"nativeWitnessSignerDomainStorage":{"atomicWithConfiguration":true,"configurationRecordFields":2,"deletedWithAccountCleanup":true,"encoding":"orderedPackedByteString32","legacyFallback":false,"maxDomains":10,"namespace":"authorityEpoch","policyPrefix":"03","readFresh":true},"profileVersion":2,"recoveryRevokesModules":true,"serviceName":"AccountManagement","signatureBytesMax":1024,"verifierBudgetDatoshi":100000000}
+{"abiVersion":2,"accountRecordVersion":2,"argumentCountMax":64,"argumentDepthMax":8,"argumentSizeMax":4096,"authorityAdmission":{"absentPriorAuthorities":"emptySet","authorityReservation":"none","authoritySlots":["custodyAddress","recoveryAddress","pendingRecovery.newCustodyAddress","pendingRecoveryAddr.recoveryAddress"],"introducedAddresses":"Authorities(next)-Authorities(prior)","pendingPromotion":"noAdditionalRecipientWitness","priorState":"validStoredRecordImmediatelyBeforeTransition","recipientConsent":"witnessEveryIntroducedNonzeroAddress","registeredNativeProxies":"rejectCurrentAndPendingOnReadAndWrite","removedAddressRenomination":"freshRecipientWitness","retainedAddressReuse":"noAdditionalRecipientWitness","transitionInitiatorWitnesses":"unchanged","version":1,"zeroAuthority":"excluded"},"authorityEpochWidthBits":64,"authorizationDomainSuffix":["authorityEpochLE64","configurationNonceLE64"],"authorizationVersion":2,"batchMax":32,"childConfiguration":true,"compositeReceipt":{"fields":["BooleanTrue","OrderedApprovedHash160Array","PolicyCommitmentByteString32"],"lifetime":"oneApplicationOperation","policyCommitment":"SHA256(NeoBinarySerialize([threshold,orderedChildren,orderedChildSignerDomains]))","postSignatureRevalidation":false,"selection":"firstThresholdValidChildren","verificationReceiptReused":false,"version":1},"compositeVerifierCallbacks":{"postExecute":{"name":"postExecuteComposite","parameters":["Hash160","Array","Any","Array"],"returnType":"Void","safe":false},"validation":{"name":"validateCompositeSignature","parameters":["Hash160","Array"],"returnType":"Array","safe":false}},"compositeVerifierMaxApprovedChildren":2,"compositeVerifierMaxChildren":3,"compositeVerifierMaxSignerDomains":3,"compositeVerifierMaxThreshold":2,"configurationNonceWidthBits":64,"contractName":"SmartAccount","custodyRecoveryDelayMs":604800000,"executionArgumentOrder":["accountId","operationOrBatch","expectedAuthorityEpoch","expectedConfigurationNonce"],"executionCounterCommitments":["authorityEpoch","configurationNonce"],"hookBudgetDatoshi":250000000,"identityVersion":1,"maintenanceBudgetDatoshi":250000000,"methodBytesMax":128,"moduleChangeDelayMs":86400000,"moduleCompositeVerifierMarkerRequired":true,"moduleProfileDigestRequired":true,"nativeP256Canonicalization":{"accountRegistrationRequired":false,"algorithm":"compressedDecodeThenExactUncompressedRoundTrip","argumentStackType":"ByteString","cpuFeeUnits":32768,"name":"canonicalP256PublicKey","ownedResult":true,"parameters":["ByteArray"],"requiredCallFlags":"None","returnType":"ByteArray","safe":true},"nativeP256SignerDomain":{"canonicalSigner":"CreateStandardAccount(compressedSecp256r1PublicKey)","domainsPerKey":1,"scheme":"NativeScript"},"nativeSessionMetadataStorage":{"atomicWithSessionConfiguration":true,"deletedWithSession":true,"legacyFallback":false,"metadataRecordFields":3,"namespace":"authorityEpoch","policyPrefix":"06","readFresh":true,"sessionConfigurationInitialValue":0,"storedMetadataLastUsedAt":0,"valueType":"CanonicalUInt64NeoInteger"},"nativeSessionPublicKey":{"acceptedEncodingBytes":[33,65],"invalidPoint":"rejectAtomically","normalization":"secp256r1DecodeThenCompress","normalizationServiceMethod":"canonicalP256PublicKey","storedEncodingBytes":33},"nativeSessionSignerDomainStorage":{"atomicWithSessionConfiguration":true,"deletedWithSession":true,"legacyFallback":false,"namespace":"authorityEpoch","policyPrefix":"05","readFresh":true,"sessionRecordFields":5,"valueBytes":32},"nativeSponsorship":false,"nativeWitnessSignerDomainStorage":{"atomicWithConfiguration":true,"configurationRecordFields":2,"deletedWithAccountCleanup":true,"encoding":"orderedPackedByteString32","legacyFallback":false,"maxDomains":10,"namespace":"authorityEpoch","policyPrefix":"03","readFresh":true},"profileVersion":2,"recoveryRevokesModules":true,"signatureBytesMax":1024,"verifierBudgetDatoshi":100000000}
 ```
 
 The resulting version-2 digest is:
 
 ```text
-4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4
+ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a
 ```
+
+This local revision of the unactivated ABI 2 draft binds the complete authority
+admission policy in `authorityAdmission`: the current and pending authority set,
+registered-proxy rejection on reads and writes, and consent for its non-zero
+set difference at each transition. Its policy version is `1`; it does not change
+identity derivation, operation encoding, the four execution arguments or resource
+budgets. Discovery MUST require this exact new parameter digest. An older ABI 2
+runtime with the same method list and the prior digest does not identify this
+revision and MUST NOT be accepted as its implementation.
+
+Modules bearing an older digest require fresh packaging, code-identity review
+and deployed-byte readback before use with this revision. Earlier reports and
+receipts retain their original digest as historical evidence; they MUST NOT be
+rewritten or presented as validation of the new digest. This fingerprint binds
+declared semantics, not their correctness: exact source, witness execution and
+runtime correspondence evidence remain separate requirements.
 
 ## 4. Native identity and activation
 
-### 4.1 Service identity
+### 4.1 SmartAccount native-contract identity
 
-The service name is exactly `AccountManagement`. Its native hash is the hash
+The contract name is exactly `SmartAccount`. Its native hash is the hash
 produced by Neo's standard native-contract identity function:
 
 ```text
-GetContractHash(UInt160.Zero, 0, "AccountManagement")
+GetContractHash(UInt160.Zero, 0, "SmartAccount")
 ```
 
-The service MUST publish the following native manifest metadata:
+The  native contract MUST publish the following native manifest metadata:
 
 ```json
 {
   "smartAccount": {
     "abiVersion": 2,
-    "profileParameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"
+    "profileParameterDigest": "ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a"
   }
 }
 ```
@@ -136,11 +152,11 @@ The service MUST publish the following native manifest metadata:
 The ABI version is part of the protocol identity and MUST NOT be inferred from
 a method list.
 
-The service hash identifies a permissionless protocol dispatcher, not an account
-owner or asset-holding principal. From activation, `CheckWitness(AccountManagement.Hash)`
+The contract hash identifies a permissionless protocol dispatcher, not an account
+owner or asset-holding principal. From activation, `CheckWitness(SmartAccount.Hash)`
 MUST return false, including in a directly dispatched target and regardless of
 transaction signer scopes. The legacy immediate-caller witness shortcut MUST NOT
-authorize this service hash. This restriction MUST NOT apply before activation.
+authorize this contract hash. This restriction MUST NOT apply before activation.
 
 ### 4.2 Activation
 
@@ -150,21 +166,21 @@ distinct hardfork entry; an existing hardfork MUST NOT be repurposed.
 
 Each network MUST configure an explicit activation height. A missing activation
 entry means **disabled**, not genesis activation. Nodes MUST reject a native
-SmartAccount call before activation and MUST NOT create the service state at
+SmartAccount call before activation and MUST NOT create SmartAccount state at
 genesis as a side effect of loading an unconfigured protocol setting.
 
 At the activation block the node MUST:
 
-1. create the native `AccountManagement` contract state;
+1. create the native `SmartAccount` contract state;
 2. initialize the profile version and fixed parameter digest;
 3. emit the normal native-contract deployment notification;
 4. make the version-2 ABI available from that block onward.
 
-Before activation, `AccountManagement` has no callable version-2 ABI. Existing
+Before activation, `SmartAccount` has no callable version-2 ABI. Existing
 ordinary contracts and existing verification scripts MUST retain their current
 behavior.
 
-The native service has no ordinary-contract deployment sender, NEF update
+The native contract has no ordinary-contract deployment sender, NEF update
 method, administrator, or runtime code-upgrade path. Code and ABI changes
 require a later protocol activation with an explicit migration routine.
 
@@ -205,7 +221,7 @@ PUSH 1
 PACK
 PUSH ReadOnly
 PUSH "verify"
-PUSH AccountManagement.Hash
+PUSH SmartAccount.Hash
 SYSCALL System.Contract.Call
 ```
 
@@ -214,7 +230,7 @@ Boolean value on the stack. It MUST conform to the statically parseable
 contract-call shape in #218. The static call has:
 
 ```text
-verifierContract = AccountManagement.Hash
+verifierContract = SmartAccount.Hash
 method           = "verify"
 callFlags        = ReadOnly (0x05)
 argumentCount    = 1
@@ -222,7 +238,7 @@ arguments        = [accountId]
 ```
 
 The address is the script hash of these bytes. Changing any byte, including the
-account identifier, call flags, method, or native service hash, creates a new
+account identifier, call flags, method, or native contract hash, creates a new
 address. Such a change MUST be treated as an address and asset migration, not
 as an in-place account upgrade.
 
@@ -239,7 +255,7 @@ the following semantic values and no additional instructions:
 
 ```text
 System.Contract.Call(
-    AccountManagement.Hash,
+    SmartAccount.Hash,
     "executeUserOp" or "executeUserOps",
     All,
     accountId,
@@ -249,7 +265,7 @@ System.Contract.Call(
 )
 ```
 
-The script parser MUST require the native service hash, method, call flags,
+The script parser MUST require the native contract hash, method, call flags,
 argument count of four, account identifier, both current authority counters, and canonical operation bytes to match.
 Both expected counters MUST be exact UInt64 Integers and MUST equal the current
 stored authorityEpoch and configurationNonce in both Verification and Application.
@@ -266,7 +282,7 @@ call builder for the following values, with no prefix or suffix:
 
 ```text
 EmitDynamicCall(
-    AccountManagement.Hash,
+    SmartAccount.Hash,
     "executeUserOp" or "executeUserOps",
     CallFlags.All,
     [accountId, op or ops, expectedAuthorityEpoch, expectedConfigurationNonce]
@@ -343,7 +359,7 @@ be treated as proof.
 A successful Verification-trigger bridge is not an unrestricted application
 witness. For a registered SmartAccount asset address, application witness
 acceptance MUST additionally require an active target grant for that account
-and the exact target invocation established by AccountManagement after operation
+and the exact target invocation established by SmartAccount after operation
 authorization. The normal Neo signer and WitnessRule checks still apply; the
 grant cannot manufacture a missing witness or expand its declared scope.
 
@@ -352,12 +368,12 @@ same target contract MUST NOT bypass this extra restriction. The target's
 initialization and internal VM calls belong to its invocation; fresh
 cross-contract invocations and arbitrary descendants do not. Verifier, hook,
 configuration and cleanup phases carry no asset-witness grant. The native
-service and application witness evaluator MUST enforce this jointly; a public
+SmartAccount native contract and application witness evaluator MUST enforce this jointly; a public
 Boolean query that callers can choose to ignore is not an equivalent control.
 
 ## 6. Canonical account state
 
-The native service stores one canonical record for each `accountId`:
+The native contract stores one canonical record for each `accountId`:
 
 ```text
 AccountState {
@@ -427,7 +443,7 @@ serializer is applied to this Array without a map or textual JSON layer.
 Missing fields, additional fields, wrong types, and non-canonical encodings
 MUST fault closed.
 
-The service stores the next sequence independently for each nonce channel. A
+The SmartAccount native contract stores the next sequence independently for each nonce channel. A
 nonce key is `(accountId, channel)` where `channel = nonce >> 64`; the stored
 value is the next `sequence` or the exhaustion sentinel `2^64`. The canonical
 storage key is the one-byte field prefix `0x20`, followed by the 20-byte
@@ -447,6 +463,52 @@ be rejected, even when both values individually fit UInt64. Pure authorization
 domain encoders may encode any UInt64 pair for conformance vectors; such vectors
 do not imply that the pair is a valid stored account state.
 
+### Authority admission
+
+Current and pending custody or recovery authorities MUST NOT be registered
+native SmartAccount proxies. This restriction is additional to the own-proxy,
+native-contract and role-separation checks below. Every account-state read and
+write MUST validate all current and pending non-zero authority addresses against
+the registered-proxy lookup. A malformed stored authority MUST fault closed;
+neither a delayed activation nor a different configuration route may bypass it.
+Ordinary wallet, CHECKMULTISIG and deployed-contract authorities remain supported
+when their native witness check succeeds in the actual invocation context.
+
+Let `Authorities(state)` be the set of non-zero addresses in `custodyAddress`,
+`recoveryAddress`, `pendingRecovery.newCustodyAddress` and
+`pendingRecoveryAddr.recoveryAddress`; absent pending records contribute nothing.
+An absent prior account has the empty authority set. Before storing a transition,
+admission MUST require a witness for every address in
+`Authorities(next) - Authorities(prior)`, in addition to the transition's existing
+initiator witnesses. Here `prior` is the valid stored record immediately before
+the transition, and `next` is the complete proposed record. Duplicate addresses
+are checked once; zero represents absent recovery and requires no witness.
+
+Consequently, creation requires custody and every non-zero recovery recipient
+to consent. Recovery-address nomination and custody-recovery nomination require
+the proposed recipient's witness when that address is newly introduced. An
+unchanged recipient already present in the current or pending authority set does
+not need to witness again; replacing or cancelling an intent removes any consent
+that is no longer represented in the stored record. Renominating such a removed
+address requires fresh consent. This admission rule does not shorten any delay,
+authorize a different transition initiator or permit an otherwise invalid role.
+
+Mature activation and custody-recovery execution remain permissionless because
+their destination was already admitted in the pending record. They MUST NOT
+require a fresh recipient witness merely to move that address into its current
+slot. Cancellation and removal introduce no authority; their existing initiator
+witness requirements still apply.
+
+The SmartAccount native contract MUST NOT reserve an authority address in a reverse index or prevent
+its independent account registration because another account nominated it.
+A precomputed unregistered native proxy cannot pass its canonical transaction
+verification because the account does not yet exist. Admission consent therefore
+prevents recording such a future proxy through a valid native-proxy witness;
+registered proxies are rejected independently. Failed nomination MUST leave no
+authority reservation, account-state change or notification. These rules preserve
+target-frame witness isolation and the single-account canonical envelope; neither
+mechanism is relaxed to make nested proxy authorities work.
+
 ### 7.1 Creation
 
 `registerAccount(custodyAddress, salt, verifier, hook, recoveryAddress)` MUST:
@@ -456,7 +518,7 @@ do not imply that the pair is a valid stored account state.
 - require a 32-byte salt;
 - require a zero recovery address or a recovery address different from custody;
 - require that custody and recovery addresses MUST NOT equal the account-address proxy;
-- require the custody address to witness the transaction;
+- require the custody address and every non-zero recovery address to witness the transaction;
 - compute the account identifier and proxy address internally;
 - validate the verifier and hook ABI before storing them;
 - reject duplicate identifiers;
@@ -507,7 +569,9 @@ hook. Neither operation changes the account address or nonce state.
 The recovery address is optional. When configured, it is a separate authority
 from custody. The recovery address may propose a new custody address. The
 proposal becomes executable only after the fixed custody-recovery delay and
-only if its configuration nonce is still current.
+only if its configuration nonce is still current. A newly introduced recipient
+must also supply the admission witness defined above; the recovery authority
+cannot nominate an unconsenting new custody address.
 
 A proposed new custody address MUST be non-zero and MUST differ from both the
 current custody address, the configured recovery address, and the account-address
@@ -519,7 +583,7 @@ stored current or pending authorities. Zero denotes the absence of recovery only
 it is never a custody authority.
 
 The current custody may cancel a pending custody recovery only strictly before
-its execution time (`now < executeAt`). At equality this right has expired. After the delay, anyone may submit `executeRecovery`; the native service
+its execution time (`now < executeAt`). At equality this right has expired. After the delay, anyone may submit `executeRecovery`; the native contract
 does not require the old custody to cooperate. The recovery address may cancel
 its own pending proposal. A stale or already cancelled proposal MUST fault.
 
@@ -558,8 +622,8 @@ and clear all pending intents so that proposals cannot cross a status transition
 ### 7.5 Authority generations and recovery isolation
 
 Every native module MUST namespace all account-owned persistent state by the
-account identifier and the current `authorityEpoch`, obtained from the native
-service. The native module key encoding MUST be
+account identifier and the current `authorityEpoch`, obtained from the
+SmartAccount native contract. The native module key encoding MUST be
 `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`, with a
 one-byte policy prefix, a 20-byte account identifier and an unsigned 64-bit
 little-endian epoch. The distinct `0xA2` version tag prevents confusion with
@@ -589,7 +653,7 @@ record requires a separately activated, deterministic migration routine; there
 is no implicit interpretation of a 13-field record as ABI 2.
 
 Every module manifest MUST additionally declare `extra.smartAccount.profileDigest`
-as exactly 64 lowercase hexadecimal characters equal to the service's
+as exactly 64 lowercase hexadecimal characters equal to the native contract's
 `profileParameterDigest`, and `extra.smartAccount.compositeVerifier` as an exact
 JSON Boolean. The latter is `true` only for a verifier using the composite receipt
 callbacks; verifier `supportsComposition()` MUST return the same value. Hooks
@@ -627,7 +691,7 @@ verifier children, represented by exact 20-byte ByteStrings. The policy
 commitment MUST be an exact 32-byte ByteString. The fixed profile bounds apply
 to child count, approved count, threshold and aggregate signer domains.
 
-`AccountManagement` MUST strictly parse and copy the result before any target
+`SmartAccount` MUST strictly parse and copy the result before any target
 call. The receipt is owned by one Application operation; it MUST NOT be stored
 in contract storage, accepted from transaction arguments, shared with another
 operation, or carried from Verification into Application. Verification parses
@@ -702,7 +766,7 @@ it MUST decompress the supplied X coordinate and Y parity, then compare the full
 uncompressed point encoding with the original bytes before returning an owned
 33-byte compressed encoding. Checking length or parity alone is insufficient.
 The native SessionKey module MUST invoke this helper before configuration writes
-and explicitly declare its service-method permission in the manifest. The helper
+and explicitly declare its native-contract method permission in the manifest. The helper
 has no storage writes, notifications, module grants or external callbacks.
 
 Native session last-use time is stored separately under policy prefix `0x06`
@@ -768,7 +832,7 @@ descriptor entry, packaged ABI 2 identity, authority/epoch implementation and
 private-chain conformance evidence. Arbitrary recursive composition is not part
 of this profile.
 
-When a composite is bound, `AccountManagement` MUST validate every child as a
+When a composite is bound, `SmartAccount` MUST validate every child as a
 deployed module with the exact lifecycle ABI above, require a `false`
 `supportsComposition()` result, reject zero, duplicate, and self identities,
 and enforce the fixed verifier composition limits and a maximum of 8 hook children.
@@ -817,16 +881,24 @@ operation and roll back the root binding, dependency registry, and all child
 state changes. A final removal MUST clear the root registry after all child
 cleanup succeeds.
 
+For replacement, after the old root and child cleanup callbacks finish and
+before committing the new binding, the core MUST revalidate the replacement's
+current code identity, ABI, profile metadata, blocking policy and read-only
+composition discovery against its proposed binding. A missing, changed,
+blocked or newly incompatible replacement MUST fault and roll back the entire
+transition, including cleanup writes and notifications. Validation performed
+before external cleanup callbacks is not sufficient for this commit boundary.
+
 Verifier validation MUST be read-only. Hook and verifier post-execution calls
 may write only through their normal application permissions.
 
-The native service MUST reject a module that is missing, blocked, has the wrong
-ABI types, or is not a deployed contract. The native service MUST reject a
+The native contract MUST reject a module that is missing, blocked, has the wrong
+ABI types, or is not a deployed contract. The native contract MUST reject a
 module if its current code identity differs from the stored binding.
-Native contracts, including `AccountManagement` itself, MUST NOT be installed as
+Native contracts, including `SmartAccount` itself, MUST NOT be installed as
 verifiers or hooks in version 2.
 
-The native service MUST call `validateSignature` or `validateCompositeSignature`
+The native contract MUST call `validateSignature` or `validateCompositeSignature`
 with `ReadOnly`, and MUST call the verifier's `postExecute` or
 `postExecuteComposite`, every hook callback, and the target method with
 `All`. The fixed flags are not operation fields and cannot be weakened or
@@ -866,7 +938,7 @@ Reference: [RFC 8785, JSON Canonicalization Scheme](https://www.rfc-editor.org/r
 
 ### 8.1 Authenticated invocation contexts
 
-The native service MUST expose the safe query:
+The native contract MUST expose the safe query:
 
 ```text
 hasModuleContext(accountId: Hash160, moduleType: String, module: Hash160,
@@ -883,7 +955,7 @@ Unknown phase/type strings or absence of a matching context return false.
 
 `hasModuleContext` MUST authenticate the actual querying module, account, role,
 phase and current invocation; supplying an allowed module hash is insufficient.
-The service grants a direct context only to the specific callback it schedules.
+The SmartAccount native contract grants a direct context only to the specific callback it schedules.
 Initialization and internal VM calls share that grant, but a new cross-contract
 call to the same script hash does not. For validation, preExecute and
 postExecute only, a composite may delegate the current phase to a validated,
@@ -994,7 +1066,7 @@ executing it.
 
 ### 8.3 Authoritative composition registry
 
-The native service exposes these Application methods:
+The native contract exposes these Application methods:
 
 ```text
 setVerifierDependencies(accountId: Hash160, children: Array) -> Void
@@ -1044,12 +1116,15 @@ getModuleDependencies(accountId: Hash160, moduleType: String) -> Array
 It returns `[rootBindingOrNull, cleanupBindings, activeChildHashes]`. Each binding
 is `[Hash160 bytes, codeHash bytes]`. Empty roles return `[Null, [], []]`.
 The registry belongs to the native core, never to plugin-provided storage.
-A composite's claimed profile name does not establish honest behavior. Only the
-conforming, independently reviewed `MultiSigVerifier` implementation currently
-admitted by the native descriptor may be treated as a native ABI 2 composite.
-The ordinary `MultiHook` implementation remains outside native admission until
-the separate native profile work and evidence described above are complete.
-Arbitrary module behavior remains a trust boundary.
+A composite's claimed profile name does not establish honest behavior. The
+repository currently builds and packages only `MultiSigVerifier` as a supported
+native composite. That build descriptor is not a consensus allowlist of artifact
+hashes. The core separately checks the supported composite interface, exact
+profile metadata, code identity and runtime discovery rules. Another native
+implementation satisfying those rules still needs its own behavior and resource
+review; admission alone does not make it a supported repository artifact. The
+ordinary `MultiHook` artifact lacks that native ABI/profile and remains
+incompatible. Arbitrary module behavior remains a trust boundary.
 
 The native MultiSig module profile uses the core-owned transient receipt for
 post-execution approval selection. The historical leaf
@@ -1072,7 +1147,7 @@ serialization and rollback; no client may infer authorization from storage keys.
 
 ## 9. UserOperation authorization and execution
 
-The native service implements the foundation's exact six-field UserOperation:
+The native contract implements the foundation's exact six-field UserOperation:
 
 ```text
 [targetContract, method, args, nonce, deadline, signature]
@@ -1170,7 +1245,7 @@ freeze state, and notifications. Transaction fees are not refunded.
 ### 9.1 Native-witness fallback
 
 When `verifier` is zero, authorization uses the stored custody witness. The
-operation's signature field MUST be an empty byte string. The native service
+operation's signature field MUST be an empty byte string. The native contract
 MUST call `CheckWitnessInternal(custodyAddress)` and MUST NOT accept a supplied
 signer list as proof.
 
@@ -1212,7 +1287,7 @@ domain MUST NOT change accountId, verification-script bytes or asset address.
 
 Time values are integer milliseconds from a deterministic chain context, never
 from a wallet, relayer or node's wall clock. When an execution has a persisting
-block, the account service uses that block's timestamp. Otherwise it uses the
+block, the SmartAccount native contract uses that block's timestamp. Otherwise it uses the
 timestamp of the header identified by `Ledger.CurrentHash` in the execution's
 snapshot. A missing persisted header MUST fault; zero or local time is not a
 fallback.
@@ -1278,7 +1353,7 @@ consensus rule or ordinary-contract implementation.
 
 ## 10. Resource and fee accounting
 
-The native service MUST use the platform bounded-call capability for every
+The native contract MUST use the platform bounded-call capability for every
 external verifier and hook callback:
 
 ```text
@@ -1372,7 +1447,7 @@ external payer under ordinary Neo rules.
 
 ## 11. Governance and upgrades
 
-The native service has no runtime administrator. Its code, ABI, native hash,
+The native contract has no runtime administrator. Its code, ABI, native hash,
 and hardfork activation are consensus-governed. Existing committee policy
 mechanisms may block a contract according to the general Neo protocol, but
 there is no SmartAccount-specific committee bypass for account custody,
@@ -1407,7 +1482,7 @@ an import mapping, its own specification MUST define the registry and event,
 require both the legacy account and new custody witnesses, bind the legacy core,
 account identifier and asset address, reject duplicate imports, and preserve the
 one-way immutable mapping to the newly derived native account identifier. Those
-requirements do not add an ABI 2 service method or establish implemented adapter
+requirements do not add an ABI 2 native-contract method or establish implemented adapter
 behavior. The existing legacy witness rules may constrain which composition is
 possible; an adapter requires separate implementation and conformance evidence.
 
@@ -1547,12 +1622,12 @@ this section. The following identity vector is normative:
 
 ```text
 networkMagic = 0x12345678
-coreHash     = d9421d07adf206e9dc4be746a02e8e087fa61741
+coreHash     = 398dc3f0227d7efac5533ed5ce9937390c158084
 custody      = 202122232425262728292a2b2c2d2e2f30313233
 salt         = 404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f
 
-accountId    = 0x3e25330008563c55fe2853e07868b36ca00020ac
-accountAddress = 0x7829f40af6380c00110932c9551ece0916fdcad1
+accountId    = 0x2168f4b52e13e1400a4cc93228f4c302d122b4b7
+accountAddress = 0x09e1715bc1e2860a9b45dd44f6e394c228bb69d6
 ```
 
 The corresponding test suite MUST additionally cover:
@@ -1610,4 +1685,4 @@ that proof for migration testing on a network that does have prior state. Any
 optional adapter needs its own reviewed specification and evidence before use.
 
 Until these public-activation gates pass, this document remains a design profile
-and MUST NOT be presented as an activated Neo native SmartAccount service.
+and MUST NOT be presented as an activated Neo native SmartAccount contract.

@@ -11,7 +11,7 @@ namespace Neo.SmartContract.Examples
     public partial class SocialRecoveryVerifier
     {
         /// <summary>
-        /// ABI-compatible operation shape used by UnifiedSmartWalletV3 verifier plugins.
+        /// ABI-compatible operation shape used by SmartAccountV3 verifier plugins.
         /// The recovery verifier authorizes the transaction witness rather than this payload's
         /// signature bytes, but it must still accept the canonical operation structure.
         /// </summary>

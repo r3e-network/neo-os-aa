@@ -1,7 +1,7 @@
 # Complete reimbursement helper runtime checks
 
 These tests execute the original private `CapReimbursementToActualCost` method in
-the reviewed ordinary NEF, from PC 13557 through RET at PC 13764. They extend the
+the reviewed ordinary NEF, from PC 13557 through RET at PC 13837. They extend the
 22-instruction arithmetic checks with transaction fields, initial storage, default
 record construction, transaction-hash reset, actual native deserialize/serialize,
 assertion, heap update and Storage.Put. They are concrete runtime correspondence
@@ -18,8 +18,19 @@ there is no source surrogate, copied arithmetic script or replacement native
 codec. This private-method seam does not prove the two public entrypoint guards
 or their complete caller paths.
 
-NEF SHA256: `083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a`.
-Manifest SHA256: `e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156`.
+NEF SHA256: `4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`.
+Manifest SHA256: `f7203fd84f6d132119df839a13249d73e4fe67644ca7a2e1c4ad6b9a1f6b21ed`.
+Script SHA256: `cd1ef3375d65844e896fab0b69191640e10328ae188993da3c65fa0cfe53366d`.
+Every offset in this file is inside `[13557,13838)`, the helper's current
+281-byte, 116-instruction interval. The artifact rename left the helper at
+`[13557,13765)` and moved only bodies at or after `getAccountImplementationId` at
+17906; the later VM-range margin guard then grew the helper by 73 bytes and one
+local, so every helper offset at or after 13734 moves by +73 while the certified
+arithmetic region `[13667,13689)` stays byte-identical. Older revisions pinned NEF
+`083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a` /
+manifest `e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156`,
+whose script was 10 bytes longer than the rename build and 83 bytes shorter than
+this one.
 The runtime packages remain Neo/Neo.VM/Neo.SmartContract.Testing 3.10.1, locked by
 the existing project. Relevant source commits are Neo
 `d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d`, VM
@@ -68,8 +79,12 @@ but transaction fees burned by OnPersist are outside application rollback.
 
 Malformed data, nonpositive settlement, arithmetic overflow, read-only call flags
 and insufficient execution GAS must fault without committing the new budget.
-The estimation case additionally needs a representable aggregate reservation;
-`reserved+requested >= 2^255` faults at the original ADD PC 13739. No universal
+The estimation case additionally needs a representable aggregate reservation; the
+guard at 13757 compares `reserved <= (2^255-1) - settled` and rejects a violation
+with its own ABORTMSG at 13806, so `reserved+settled >= 2^255` is a contract
+rejection rather than a CLR integer-size exception escaping the ADD at 13812.
+The 73-byte guard exists precisely because the accumulator ADD would otherwise
+overflow outside the certified arithmetic region. No universal
 zero-estimation completion guarantee is claimed.
 
 ## Acceptance and maintenance

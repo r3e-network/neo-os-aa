@@ -33,7 +33,7 @@ Abstract Accounts.
     tests/                   test suites
     scripts/                 repository tooling
     docs/                    project documentation
-    neo-abstract-account.sln .NET solution
+    SmartAccount.sln .NET solution
     README.md                public project and boundary documentation
 
 `implementations/ordinary/` and `implementations/native/` are the two
@@ -42,7 +42,7 @@ the existing build-compatible source locations through `profile.json`; source
 files are not duplicated. The ordinary profile is the current user-contract
 delivery path. The native profile contains the native modules, SDK and UI
 profile prepared for standard submission, while the consensus
-`AccountManagement` service remains in the matching Neo core repository.
+`SmartAccount` service remains in the matching Neo core repository.
 
 ## File Organization Rules
 

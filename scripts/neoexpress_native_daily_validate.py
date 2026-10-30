@@ -10,7 +10,7 @@ import socket
 import subprocess
 import tempfile
 
-from neoexpress_validate import Chain, RawKey, H, B, I, S, A, ZERO, hash_le, decode
+from neoexpress_validate import Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO, hash_le, decode
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
 from neoexpress_native_service_validate import CORE, check_native, persist, module_storage_key
 from neoexpress_native_proxy_validate import GAS, GAS_TOKEN, DEADLINE, proxy_address, transfer
@@ -23,7 +23,7 @@ DAY = 86400000
 
 
 def storage_prefix(chain, contract, prefix):
-    """Read the pinned runtime's exclusive base64 key cursor; numeric-index RPC is rejected."""
+    """Read standard index or exclusive-key findstorage pagination fail-closed."""
     require(type(prefix) is bytes,'Storage enumeration prefix must be bytes')
     def decoded(value):
         require(type(value) is str,'Storage enumeration requires base64 strings')
@@ -31,24 +31,51 @@ def storage_prefix(chain, contract, prefix):
         except ValueError:require(False,'Invalid storage enumeration base64')
         require(base64.b64encode(raw).decode()==value,'Noncanonical storage enumeration base64')
         return raw
-    found={};cursor='';cursor_bytes=b''
+    found={}; cursor=''; cursor_bytes=b''; last_key=None; mode=None
     for _ in range(64):
-        page=chain.rpc('findstorage',[contract,base64.b64encode(prefix).decode(),cursor])
+        try:
+            page=chain.rpc('findstorage',[contract,base64.b64encode(prefix).decode(),cursor])
+        except ValidationFailure:
+            # The standard Neo RPC accepts an integer start index.  Older
+            # private runners use an empty/key cursor instead.  Retry only the
+            # first request with index zero; all subsequent failures propagate.
+            if mode is not None or cursor != '': raise
+            mode='index'; cursor=0
+            page=chain.rpc('findstorage',[contract,base64.b64encode(prefix).decode(),cursor])
         require(type(page) is dict,'Invalid storage enumeration response')
         rows=page.get('results');next_cursor=page.get('next');truncated=page.get('truncated')
-        require(type(rows) is list and type(next_cursor) is str and type(truncated) is bool,
+        require(type(rows) is list and type(truncated) is bool,
                 'Invalid storage enumeration shape')
-        next_bytes=decoded(next_cursor);previous=cursor_bytes if cursor else None
+        if mode is None:
+            require((type(next_cursor) is str) or (type(next_cursor) is int and not isinstance(next_cursor, bool)),
+                    'Invalid storage enumeration cursor')
+            mode='key' if type(next_cursor) is str else 'index'
+            if mode == 'index' and type(cursor) is str:
+                cursor=0
+        if mode == 'index':
+            require(type(next_cursor) is int and not isinstance(next_cursor, bool),
+                    'Invalid storage enumeration index')
+            start=cursor
+            require(type(start) is int and next_cursor == start + len(rows),
+                    'Storage index pagination does not advance by page length')
+        else:
+            require(type(next_cursor) is str, 'Invalid storage enumeration cursor')
+            next_bytes=decoded(next_cursor)
         for row in rows:
             require(type(row) is dict,'Invalid storage enumeration row')
             key=row.get('key');value=row.get('value');key_bytes=decoded(key)
             require(key_bytes.startswith(prefix) and key not in found,'Foreign or duplicate storage key')
-            require(previous is None or key_bytes>previous,'Storage keys did not advance past the exclusive cursor')
-            decoded(value);found[key]=value;previous=key_bytes
-        require(next_cursor==(rows[-1]['key'] if rows else cursor),'Storage next cursor differs from the last returned key')
-        require(not truncated or rows and next_bytes>cursor_bytes,'Truncated storage pagination did not advance')
+            require(last_key is None or key_bytes>last_key,'Storage keys did not advance past the cursor')
+            decoded(value);found[key]=value
+            last_key=key_bytes
+        if mode == 'key':
+            require(next_cursor==(rows[-1]['key'] if rows else cursor),'Storage next cursor differs from the last returned key')
+            require(not truncated or rows and next_bytes>cursor_bytes,'Truncated storage pagination did not advance')
+        else:
+            require(not truncated or next_cursor>start,'Truncated storage index did not advance')
         if not truncated:return found
-        cursor,cursor_bytes=next_cursor,next_bytes
+        if mode == 'key': cursor,cursor_bytes=next_cursor,next_bytes
+        else: cursor=next_cursor
     raise ValueError('Storage enumeration exceeded the diagnostic page bound')
 
 

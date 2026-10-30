@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
-import { DEFAULT_ABSTRACT_ACCOUNT_HASH, DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET, resolveAbstractAccountHash, resolveOptionalBoolean } from '../src/config/runtimeConfig.js';
+import { DEFAULT_ABSTRACT_ACCOUNT_HASH, DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET, resolveSmartAccountHash, resolveOptionalBoolean } from '../src/config/runtimeConfig.js';
 import { sanitizeHex } from '../src/utils/hex.js';
 import { TRANSFER_RETURNED_FALSE_MESSAGE, findFailedTransferInInvocation } from '../src/shared/transferOutcome.mjs';
 import { convertContractParamFromJson, normalizeRelayPayload, resolveRelayMetaInvocationRefusal, sanitizeMetaInvocationForRelay } from './relayHelpers.js';
@@ -232,7 +232,7 @@ function resolveAllowedAaContractHash(network) {
   // L2: the relay allowlist is a server security boundary — it gates which contract the
   // operator WIF will fund invocations against. Only server env or the compiled canonical
   // default may set it; the VITE_* client-build fallbacks are deliberately removed.
-  return resolveAbstractAccountHash(
+  return resolveSmartAccountHash(
     resolveRelayEnv(network, 'ALLOWED_HASH')
       || defaultHash,
     defaultHash,

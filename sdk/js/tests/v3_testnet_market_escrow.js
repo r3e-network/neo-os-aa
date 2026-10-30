@@ -7,7 +7,7 @@ const { rpc, sc, wallet, experimental, tx, u, CONST } = require('@cityofzion/neo
 const { ethers } = require('ethers');
 
 const { extractDeployedContractHash } = require('../src/deployLog');
-const { AbstractAccountClient } = require('../src/index');
+const { SmartAccountClient } = require('../src/index');
 const { sanitizeHex } = require('../src/metaTx');
 const { resolveTestnetRpcUrl } = require('./testnet-rpc');
 
@@ -247,14 +247,14 @@ async function main() {
     buyer: { address: buyer.address, scriptHash: normalizeHash(buyer.scriptHash) },
   }, null, 2));
 
-  const core = await deployContract(client, seller, networkMagic, 'UnifiedSmartWalletV3', `${deploymentTag}-core`);
+  const core = await deployContract(client, seller, networkMagic, 'SmartAccountV3', `${deploymentTag}-core`);
   const market = await deployContract(client, seller, networkMagic, 'AAAddressMarket', `${deploymentTag}-market`);
   const teeVerifier = await deployContract(client, seller, networkMagic, 'TEEVerifier', `${deploymentTag}-tee`);
   const whitelistHook = await deployContract(client, seller, networkMagic, 'WhitelistHook', `${deploymentTag}-whitelist`);
   await authorizeVerifier(client, core.hash, teeVerifier.hash, seller, networkMagic);
   await authorizeHook(client, core.hash, whitelistHook.hash, seller, networkMagic);
 
-  const aaClient = new AbstractAccountClient(RPC_URL, core.hash);
+  const aaClient = new SmartAccountClient(RPC_URL, core.hash);
   const accountId = aaClient.deriveRegistrationAccountIdHash({
     verifierContractHash: teeVerifier.hash,
     verifierParamsHex: sanitizeHex(seller.publicKey),

@@ -1,8 +1,8 @@
 # SDK package contract
 
-`neo-abstract-account` must work after installing its npm tarball into a project
+`smart-account` must work after installing its npm tarball into a project
 outside this repository with production dependencies only. The supported public
-entrypoint remains `neo-abstract-account`, available through CommonJS `require`
+entrypoint remains `smart-account`, available through CommonJS `require`
 and ESM named/default imports, with TypeScript declarations resolved by package name.
 Internal source paths are not public exports.
 
@@ -44,8 +44,8 @@ failed installation is a failed gate. No blockchain writes occur.
 For downstream consumers:
 
 ```js
-const { AbstractAccountClient } = require('neo-abstract-account');
-const client = new AbstractAccountClient('http://127.0.0.1:10332', '11'.repeat(20));
+const { SmartAccountClient } = require('smart-account');
+const client = new SmartAccountClient('http://127.0.0.1:10332', '11'.repeat(20));
 const accountId = client.deriveRegistrationAccountIdHash({
   backupOwnerAddress: '22'.repeat(20),
 });
@@ -59,7 +59,7 @@ local package usability, not npm publication or deployed-contract compatibility.
 
 ## Ordinary owner-only recovery
 
-`AbstractAccountClient.getOwnerOnlyRecoveryStatus(accountId)` checks the deployed
+`SmartAccountClient.getOwnerOnlyRecoveryStatus(accountId)` checks the deployed
 core's exact recovery ABI before reading permanent mode. It returns
 `{ supported: false, ownerOnlyRecovery: null }` for an old or incompatible ABI;
 with matching support it returns a strict Boolean mode. RPC faults and malformed

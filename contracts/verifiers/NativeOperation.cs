@@ -2,9 +2,9 @@ using System.Numerics;
 using Neo;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Services;
-using AbstractAccount.Verifiers;
+using SmartAccount.Verifiers;
 
-namespace AbstractAccount
+namespace SmartAccount
 {
     internal static class NativeOperation
     {

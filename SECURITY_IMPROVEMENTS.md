@@ -1,9 +1,9 @@
 # Security & Production Readiness Improvements — Historical Note (2026-03-09)
 
 > **Historical document.** This note records a hardening slice implemented on
-> 2026-03-09 against the pre-V3 contract tree. The `contracts/AbstractAccount.*`
+> 2026-03-09 against the pre-V3 contract tree. The `contracts/SmartAccount.*`
 > files it references were removed in the V3 rewrite
-> (`contracts/UnifiedSmartWallet*.cs`), so individual entries are annotated
+> (`contracts/SmartAccount*.cs`), so individual entries are annotated
 > below with where the protection lives today. For the current security
 > reference, see `docs/SECURITY_MODEL.md` (threat model, trust assumptions,
 > defense-in-depth) and `docs/SECURITY_AUDIT_RESULTS.md`.
@@ -11,16 +11,16 @@
 ## Implemented Changes
 
 ### 1. Smart contract input validation
-- **File (historical)**: `contracts/AbstractAccount.MetaTx.cs` — removed in the V3 rewrite
+- **File (historical)**: `contracts/SmartAccount.MetaTx.cs` — removed in the V3 rewrite
 - **Change**: added explicit 65-byte uncompressed pubkey length validation before signature verification
 - **Why**: rejects malformed pubkey payloads earlier in the meta-tx flow
 - **Where it lives now**: `contracts/verifiers/Web3AuthVerifier.cs` asserts `uncompressedPubKey.Length == 65` on setup and `pubKey.Length == 65` on verification
 
 ### 2. Project isolation for repo-wide C# builds
-- **File (historical)**: `contracts/AbstractAccount.csproj` — removed in the V3 rewrite
+- **File (historical)**: `contracts/SmartAccount.csproj` — removed in the V3 rewrite
 - **Change**: disabled default compile globbing and explicitly included the intended contract sources
 - **Why**: prevents `contracts/recovery/obj` intermediates from polluting the main contract build
-- **Where it lives now**: `contracts/UnifiedSmartWallet.csproj` keeps `EnableDefaultCompileItems=false` with explicit `<Compile Include=...>` entries
+- **Where it lives now**: `contracts/SmartAccount.csproj` keeps `EnableDefaultCompileItems=false` with explicit `<Compile Include=...>` entries
 
 ### 3. Relay and operator API rate limiting
 - **Files**: `frontend/api/rateLimiter.js`, `frontend/api/relay-transaction.js`, `frontend/api/draft-operator.js`
@@ -48,7 +48,7 @@
 ```bash
 cd frontend && npm test -- tests/apiSecurity.test.js
 cd frontend && npm run build
-dotnet test neo-abstract-account.sln -c Release --nologo
+dotnet test SmartAccount.sln -c Release --nologo
 node --test sdk/js/tests/projectIsolation.unit.test.js
 ```
 

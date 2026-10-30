@@ -6,7 +6,7 @@ using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
-namespace AbstractAccount.Tests.Fixtures
+namespace SmartAccount.Tests.Fixtures
 {
     // Deliberately violates NEP-17 success semantics. Private diagnostics only.
     [DisplayName("DailyOutflowToken")]

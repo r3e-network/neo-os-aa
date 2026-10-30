@@ -11,7 +11,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  AbstractAccountClient,
+  SmartAccountClient,
   EC,
   TRANSFER_RETURNED_FALSE,
   TRANSFER_RETURNED_FALSE_MESSAGE,
@@ -23,14 +23,14 @@ const {
 } = require('../src/index');
 const { wallet } = require('../src/neonCompat');
 
-const MASTER_HASH = 'b1bda4a9170b54dd67898ac3f5fd34ea091f15ee'; // UnifiedSmartWalletV3 of the recorded run
+const MASTER_HASH = 'b1bda4a9170b54dd67898ac3f5fd34ea091f15ee'; // SmartAccountV3 of the recorded run
 const ACCOUNT_ID = 'f951cd3eb5196dacde99b339c5dcca37ac38cc22';
 const GAS_HASH = 'd2a4cff31913016155e38e474a2c06d08be276cf';
 const BUYER_HASH = '49c095ce04d38642e39155f5481615c58227a498';
 const VERIFIER = 'b4107cb2cb4bace0ebe15bc4842890734abe133a';
 
 function newClient({ previewThrows = false } = {}) {
-  const client = new AbstractAccountClient('http://127.0.0.1:9', MASTER_HASH);
+  const client = new SmartAccountClient('http://127.0.0.1:9', MASTER_HASH);
   client.getUserOpValidationPreview = async () => {
     if (previewThrows) throw new Error('rpc unavailable');
     return { deadlineValid: true, nonceAcceptable: true, hasVerifier: true, verifier: VERIFIER, hook: '' };

@@ -370,7 +370,7 @@ class UserOperationBuilder {
    *
    * The legacy flow verifies against the MASTER contract, not the account's
    * verifier plugin, so the verifying contract must be passed explicitly
-   * (AbstractAccountClient.createEIP712Payload uses its masterContractHash).
+   * (SmartAccountClient.createEIP712Payload uses its masterContractHash).
    *
    * @param {string} argsHash - The computed args hash (32 bytes)
    * @param {string} verifyingContract - The master contract hash the legacy

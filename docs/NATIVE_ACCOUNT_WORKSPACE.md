@@ -1,13 +1,17 @@
 # Native account workspace
 
 `/native` is an independent ABI 2 workflow. It never substitutes the deployed V3
-contract for the fixed native AccountManagement service. A new endpoint starts
+contract for the fixed native SmartAccount contract. A new endpoint starts
 read-only; discovery requires the expected network magic, native contract id,
-service hash/name, exact ABI, profile digest and successful getVersion=2.
+native contract hash/name, exact ABI, profile digest and successful getVersion=2.
 
 Read the [account user guide](NATIVE_ACCOUNT_USER_GUIDE.md) for the authority and
 timing matrix, backup requirements and key-loss scenarios. External protocol
 review and public-network activation remain separate draft-release gates.
+
+New authority admission requires consent: registration includes custody and a nonzero guardian; guardian replacement includes custody and the new nonzero guardian; custody recovery proposals include the configured guardian and proposed custody. The review lists every required witness and fails submission if the selected signing integration cannot supply them. A signer entry without its wallet or contract witness does not satisfy consent. Native account proxies are not supported authority addresses. Mature activation remains permissionless.
+
+Consent is checked when an authority is newly introduced relative to the current custody, recovery and pending-authority addresses. Re-proposing an already admitted pending address does not require fresh recipient consent; current controlling-authority checks still apply.
 
 ## User flows and trust boundaries
 
@@ -33,7 +37,7 @@ review and public-network activation remain separate draft-release gates.
    **Cancellation authority** selects the wallet that authorizes cancellation,
    separately from **Fee payer**. The same-wallet default remains available.
    An independent payer receives `None` scope; the selected authority receives
-   `CustomContracts` restricted to the native service. Choosing different wallets
+   `CustomContracts` restricted to the native contract. Choosing different wallets
    automatically uses the exact-script SDK path. At maturity, including the exact
    boundary, custody can no longer cancel; recovery can cancel while the proposal
    is still pending. Fresh chain time is checked again before export and handoff.
@@ -151,7 +155,7 @@ proxy signer scopes against the rebuilt plan. Then use the native SDK's
 its actual wallet signer interfaces and final user approval. SDK-mode scopes are
 shown before export: payer first (`None` unless also required), proxy second for
 execution, then remaining authorities with `CustomContracts` restricted to the
-native service. Recovery cancellation exports its selected `cancellationAuthority`
+native contract. Recovery cancellation exports its selected `cancellationAuthority`
 separately from `feePayer`, and includes only that selected custody/recovery wallet
 in the required set. Rebuilding checks the exported authority and the complete
 actual signer roster against the fresh plan; it does not change the issued plan.

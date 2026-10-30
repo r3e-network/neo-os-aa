@@ -16,11 +16,11 @@ class NativeProxyValidationTests(unittest.TestCase):
         self.assertEqual(identity["accountAddressDisplay"], proxy.proxy_address(account))
 
     def test_application_initializer_matches_independent_core_vector(self):
-        account = "0x3e25330008563c55fe2853e07868b36ca00020ac"
+        account = "0x2168f4b52e13e1400a4cc93228f4c302d122b4b7"
         operation = A(H(proxy.CORE), S("ping"), A(), I(0), I(0), B(b""))
-        expected = ("1b170c001010c20c0470696e670c144117a67f088e2ea046e74bdce906f2ad071d42d916c0"
-                    "0c14ac2000a06cb36878e05328fe553c56080033253e14c01f0c0d65786563757465557365724f70"
-                    "0c144117a67f088e2ea046e74bdce906f2ad071d42d941627d5b52")
+        expected = ("1b170c001010c20c0470696e670c148480150c393799ced53e53c5fa7e7d22f0c38d3916c0"
+                    "0c14b7b422d102c3f42832c94c0a40e1132eb5f4682114c01f0c0d65786563757465557365724f70"
+                    "0c148480150c393799ced53e53c5fa7e7d22f0c38d3941627d5b52")
         self.assertEqual(expected, proxy.application_script(account, operation, authority_epoch=7, configuration_nonce=11).hex())
         self.assertIn(b"executeUserOps", proxy.application_script(account, A(operation, operation), batch=True, authority_epoch=7, configuration_nonce=11))
         for field in ('authority_epoch','configuration_nonce'):

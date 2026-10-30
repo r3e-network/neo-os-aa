@@ -13,7 +13,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/run_live_testnet_validation.sh [--smoke-only|--plugin-matrix-only|--paymaster-only]
 
-Runs live testnet validation layers for neo-abstract-account:
+Runs live testnet validation layers for smart-account:
 - smoke
 - plugin matrix
 - paymaster policy

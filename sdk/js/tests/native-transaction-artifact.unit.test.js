@@ -389,6 +389,8 @@ test("SDK exports only signed objects, with public artifact fields and no callba
   const prepared = await client.prepareTransaction(plan, {
     feePayer: { account: fixture.review.feePayer, verificationScript: fixture.artifact.witnesses[0].verification,
       sign(signData) { assert.equal(signData, fixture.artifact.signData); return fixture.artifact.witnesses[0].invocation.slice(4); } },
+    authoritySigners: [{ account: fixture.recipe.recoveryAddress, verificationScript: fixture.artifact.witnesses[1].verification,
+      sign(signData) { assert.equal(signData, fixture.artifact.signData); return fixture.artifact.witnesses[1].invocation.slice(4); } }],
     ...caps, nonce: 42, validUntilBlock: 50, systemFee: "200000",
   });
   const signed = await client.signTransaction(prepared);

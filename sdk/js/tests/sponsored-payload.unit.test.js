@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { sc, u } = require('@cityofzion/neon-js');
 const compat = require('../src/neonCompat');
-const { AbstractAccountClient } = require('../src/index');
+const { SmartAccountClient } = require('../src/index');
 
 const MASTER = '11'.repeat(20);
 const ACCOUNT = '22'.repeat(20);
@@ -12,7 +12,7 @@ const SPONSOR = '44'.repeat(20);
 const HASH256 = '0123456789abcdef'.repeat(4);
 const PUBLIC_KEY = '036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296';
 const SIGNATURE = '0123456789abcdef'.repeat(8);
-const client = new AbstractAccountClient('http://127.0.0.1:1', MASTER);
+const client = new SmartAccountClient('http://127.0.0.1:1', MASTER);
 const json = (value) => JSON.parse(JSON.stringify(value));
 const bytes = (hex) => sc.ContractParam.byteArray(u.HexString.fromHex(hex, true));
 const op = (args = []) => ({ TargetContract: TARGET, Method: 'transfer', Args: args,

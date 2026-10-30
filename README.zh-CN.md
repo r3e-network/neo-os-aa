@@ -1,4 +1,4 @@
-# Neo N3 抽象账户
+# Neo N3 智能账户（SmartAccount）
 
 这是仓库 `README.md` 的中文入口版，帮助中文读者快速找到当前可用的文档和工作流。
 
@@ -16,7 +16,7 @@
 
 本项目包含：
 
-- Neo N3 抽象账户主合约
+- Neo N3 智能账户主合约（`SmartAccount`，V3 交付名 `SmartAccountV3`）
 - 前端操作工作区与协作草稿流
 - JavaScript SDK 与测试网验证脚本
 
@@ -35,10 +35,10 @@
 
 同一主分支保留两个实现入口：
 [用户合约实现](implementations/ordinary/README.md) 和
-[原生 AccountManagement 提交实现](implementations/native/README.md)。
+[原生 SmartAccount 提交实现](implementations/native/README.md)。
 两个目录中的 `profile.json` 记录各自的源码根、兼容路径、构建产物和
 验证命令。源码继续放在现有构建路径中，避免破坏当前工具链；原生
-AccountManagement 共识服务仍属于对应的 Neo core 仓库。
+SmartAccount 共识服务仍属于对应的 Neo core 仓库。
 
 ## 说明
 
@@ -46,7 +46,7 @@ AccountManagement 共识服务仍属于对应的 Neo core 仓库。
 
 ## 项目结构
 
-- `implementations/ordinary/`：当前可用的 `UnifiedSmartWalletV3` 用户合约实现入口。
+- `implementations/ordinary/`：当前可用的 `SmartAccountV3` 用户合约实现入口。
 - `implementations/native/`：原生 ABI 2 标准提交实现入口，当前为 draft/unactivated。
 - `contracts/`：C# 主入口合约实现。
 - `contracts/verifiers/`：验证器插件（Web3Auth、TEE、WebAuthn、SessionKey、MultiSig 等）。

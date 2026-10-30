@@ -8,7 +8,7 @@
  * the source of a byte-order split-brain where the two sides disagreed on
  * the returned convention.
  *
- * Byte-order contract (mirrors UnifiedSmartWallet.Accounts.cs
+ * Byte-order contract (mirrors SmartAccount.Accounts.cs
  * ComputeRegistrationAccountId):
  *
  *   payload = 'aa524701' || backupOwner || verifier || hook ||

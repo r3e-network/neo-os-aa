@@ -14,7 +14,8 @@ import tempfile
 import time
 from neoexpress_validate import Chain, RawKey, ValidationFailure, H, B, I, ZERO, hash_le, decode, serialize_unsigned, serialize_witnesses, aa_proxy_rules
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes
-from neoexpress_native_service_validate import CORE, STDLIB, check_native, persist, operation, check_account_record, transaction_system_fee, execution_arguments
+from neoexpress_native_service_validate import (CORE, STDLIB, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
+    check_native, persist, operation, check_account_record, transaction_system_fee, execution_arguments)
 from neoexpress_native_proxy_validate import push_bytes, check_transaction, check_fault, proxy_address, verification_script, check_admission_rejection, GAS
 from neoexpress_native_configuration_validate import call_script, pending_log
 
@@ -65,21 +66,22 @@ class RecoveryTransactions:
             if proxy:
                 require(method in ('executeUserOp','executeUserOps'),'Proxy authority can only execute operations')
                 signers.append({'account':proxy_address(self.account),'scopes':'WitnessRules','rules':aa_proxy_rules(CORE,STDLIB)})
-            sysfee, netfee = transaction_system_fee(self.chain, script, signers), (2 if proxy else 1)*GAS
+            sysfee, netfee = transaction_system_fee(self.chain, script, signers, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI), (2 if proxy else 1)*GAS
             unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee, self.chain.rpc("getblockcount", []) + 50, signers, script)
             digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()
             witnesses = [(push_bytes(k.sign(self.chain.magic.to_bytes(4, "little") + digest)), k.verification) for k in keys]
             if proxy:witnesses.append((b'',verification_script(self.account)))
             raw = base64.b64encode(unsigned + serialize_witnesses(witnesses)).decode()
             if prepare_only:
-                preflight=self.chain.rpc('invoketransaction',[raw])
-                require(preflight.get('hash')==txid and preflight.get('network')==self.chain.magic and
-                    preflight.get('verification')=='Succeed' and preflight.get('state')=='HALT' and
-                    preflight.get('relayed') is False and preflight.get('mempoolChecked') is False,
-                    'Retained raw must pass exact signed preflight before the authority changes')
-                minimum=preflight.get('minimumrequiredfee')
-                require(type(minimum) is str and minimum.isascii() and minimum.isdecimal() and int(minimum)<=sysfee,
-                    'Retained raw does not reserve the actual signed preflight minimum')
+                simulation=self.chain.rpc('invokescript', [base64.b64encode(script).decode('ascii'), signers])
+                require(simulation.get('state')=='HALT',
+                    'Retained transaction script did not pass standard RPC simulation before the authority changes')
+                consumed=simulation.get('gasconsumed')
+                require(type(consumed) is str and consumed.isascii() and consumed.isdecimal() and int(consumed)<=sysfee,
+                    'Retained transaction does not reserve the simulated execution fee')
+                preflight={'method':'invokescript', 'state':simulation['state'], 'gasconsumed':consumed,
+                    'rawTransactionHash':txid, 'signersMatched':True, 'signedWitnessesConstructed':True,
+                    'signatureAdmissionDeferredToSendRawTransaction':True}
                 require(equal_typed(before,self.state()),'Signed preflight changed retained account state')
                 return {'method':method,'raw':raw,'script':script,'signers':signers,'witnesses':witnesses,'txid':txid,
                     'systemFee':sysfee,'networkFee':netfee,'rawSha256':hashlib.sha256(base64.b64decode(raw)).hexdigest(),
@@ -172,7 +174,7 @@ def validate(runtime, dotnet, output):
                     chain.nx("wallet", "create", label); chain.nx("transfer", "1000", "GAS", "genesis", label)
                     keys[label] = RawKey(directory, "private-" + label, chain.wallet_private_key(label))
                     addresses[label] = "0x" + keys[label].script_hash[::-1].hex()
-                account = persist(chain, report, "register", "registerAccount", [H(addresses["owner"]), B(bytes(32)), H(ZERO), H(ZERO), H(addresses["guardian"])], "AccountCreated")
+                account = persist(chain, report, "register", "registerAccount", [H(addresses["owner"]), B(bytes(32)), H(ZERO), H(ZERO), H(addresses["guardian"])], "AccountCreated", consent_wallets=("guardian",), gas_reserve=PRIVATE_CORE_GAS_ENVELOPE_DATOSHI)
                 account = "0x" + account[::-1].hex(); chain.start_node(); check_native(chain.rpc("getcontractstate", [CORE]))
                 require(chain.rpc("getversion", [])["protocol"]["network"] == chain.magic, "Wrong private network")
                 driver = RecoveryTransactions(chain, account, report); initial = driver.state()
@@ -183,7 +185,7 @@ def validate(runtime, dotnet, output):
                 stage = "joint-witness-matrix"
                 driver.send("custody-cannot-freeze", "freeze", [], [O], fault="configured recovery authority")
                 driver.send("seed-verifier-intent", "proposeVerifier", [H(ZERO)], [O], event="VerifierChangeProposed", pending=(9, ZERO, MODULE_DELAY))
-                driver.send("seed-address-intent", "proposeRecoveryAddress", [H(addresses["replacement"])], [O], event="RecoveryAddressChangeProposed", pending=(11, addresses["replacement"], MODULE_DELAY))
+                driver.send("seed-address-intent", "proposeRecoveryAddress", [H(addresses["replacement"])], [O, N], event="RecoveryAddressChangeProposed", pending=(11, addresses["replacement"], MODULE_DELAY))
                 retained_before_configuration=driver.send("retain-before-configuration-change","executeUserOp",[operation(0)],[O],prepare_only=True)
                 proxy_before_configuration=driver.send("retain-proxy-before-configuration-change","executeUserOp",[operation(0)],[O],proxy=True,prepare_only=True)
                 driver.send("guardian-freeze", "freeze", [], [G], event="AccountFrozen", changes={**clear, 7: 1, 8: 1})
@@ -195,12 +197,12 @@ def validate(runtime, dotnet, output):
                     prepared=retained_before_configuration,fault=STALE_AUTHORITY)
                 driver.send("proxy-retained-raw-rejected-after-configuration","executeUserOp",[],[],prepared=proxy_before_configuration,admission_rejection=True)
                 driver.send("custody-cannot-propose-recovery", "proposeRecovery", [H(addresses["replacement"])], [O], fault="configured recovery authority")
-                driver.send("guardian-propose-recovery", "proposeRecovery", [H(addresses["replacement"])], [G], event="RecoveryProposed", pending=(12, addresses["replacement"], RECOVERY_DELAY))
+                driver.send("guardian-propose-recovery", "proposeRecovery", [H(addresses["replacement"])], [G, N], event="RecoveryProposed", pending=(12, addresses["replacement"], RECOVERY_DELAY))
                 driver.send("configuration-during-recovery", "proposeHook", [H(ZERO)], [O], fault="Configuration is unavailable during custody recovery")
                 driver.send("immature-recovery", "executeRecovery", [], [R], fault="immature or stale")
                 driver.send("custody-cancels-before-maturity", "cancelRecovery", [], [O], event="RecoveryCancelled", changes={12: None})
                 driver.send("seed-retained-module-intent", "proposeVerifier", [H(ZERO)], [O], event="VerifierChangeProposed", pending=(9, ZERO, MODULE_DELAY))
-                driver.send("guardian-renews-recovery", "proposeRecovery", [H(addresses["replacement"])], [G], event="RecoveryProposed", pending=(12, addresses["replacement"], RECOVERY_DELAY))
+                driver.send("guardian-renews-recovery", "proposeRecovery", [H(addresses["replacement"])], [G, N], event="RecoveryProposed", pending=(12, addresses["replacement"], RECOVERY_DELAY))
                 driver.send("active-execute-during-recovery", "executeUserOp", [operation(0)], [O], event="UserOpExecuted", nonce_delta=1)
                 retained_before_recovery=driver.send("retain-before-recovery","executeUserOp",[operation(1)],[O],prepare_only=True)
                 proxy_before_recovery=driver.send("retain-proxy-before-recovery","executeUserOp",[operation(1)],[O],proxy=True,prepare_only=True)
@@ -208,7 +210,7 @@ def validate(runtime, dotnet, output):
                 stage = "mature-recovery-matrix"
                 driver.send("custody-cannot-cancel-mature", "cancelRecovery", [], [O], fault="Custody cancellation expires at recovery maturity")
                 driver.send("guardian-cancels-after-maturity", "cancelRecovery", [], [G], event="RecoveryCancelled", changes={12: None})
-                driver.send("final-recovery-proposal", "proposeRecovery", [H(addresses["replacement"])], [G], event="RecoveryProposed", pending=(12, addresses["replacement"], RECOVERY_DELAY))
+                driver.send("final-recovery-proposal", "proposeRecovery", [H(addresses["replacement"])], [G, N], event="RecoveryProposed", pending=(12, addresses["replacement"], RECOVERY_DELAY))
                 chain.stop_node(); chain.nx("fastfwd", "1", "-t", str(RECOVERY_DELAY // 1000 + 1)); chain.start_node()
                 driver.send("neutral-payer-executes-recovery", "executeRecovery", [], [R], event="RecoveryExecuted", changes={**clear, 3: hash_le(addresses["replacement"]), 5: None, 6: None, 8: 3, 13: 1})
                 driver.send("retained-raw-stale-after-recovery","executeUserOp",[],[],prepared=retained_before_recovery,fault=STALE_AUTHORITY)

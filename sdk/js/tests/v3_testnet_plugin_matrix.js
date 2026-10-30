@@ -15,7 +15,7 @@ const {
 const { ethers } = require("ethers");
 
 const { extractDeployedContractHash } = require("../src/deployLog");
-const { AbstractAccountClient } = require("../src/index");
+const { SmartAccountClient } = require("../src/index");
 const { buildV3UserOperationTypedData, sanitizeHex } = require("../src/metaTx");
 const { resolveTestnetRpcUrl } = require("./testnet-rpc");
 
@@ -701,7 +701,7 @@ async function main() {
     rpcClient,
     account,
     networkMagic,
-    "UnifiedSmartWalletV3",
+    "SmartAccountV3",
     `${deploymentTag}-core`,
   );
   const web3AuthA = needWeb3AuthA
@@ -977,7 +977,7 @@ async function main() {
     );
   }
 
-  const aaClient = new AbstractAccountClient(RPC_URL, core.hash);
+  const aaClient = new SmartAccountClient(RPC_URL, core.hash);
 
   async function registerAccount(label, options = {}) {
     const initialVerifier = normalizeHash(options.verifier || "0".repeat(40));

@@ -73,7 +73,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 ### 1. Plugin Lifecycle (install/update/remove) ✓
 
-**Implementation Location:** `contracts/UnifiedSmartWallet.Accounts.cs`
+**Implementation Location:** `contracts/SmartAccount.Accounts.cs`
 
 **Features:**
 - **Installation:** `registerAccount()` sets initial verifier and hook
@@ -96,7 +96,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 ### 2. Neo 2D Nonce Management (191-bit channel + 64-bit sequence) ✓
 
-**Implementation Location:** `contracts/UnifiedSmartWallet.Execution.cs` (`IsNonceAcceptable` / `ConsumeNonce`)
+**Implementation Location:** `contracts/SmartAccount.Execution.cs` (`IsNonceAcceptable` / `ConsumeNonce`)
 
 **Canonical nonce domain:**
 ```csharp
@@ -129,7 +129,7 @@ are republished; that read boundary does not make such a channel executable.
 
 ### 3. Escape Hatch Mechanism (timelock, cooldown, finalization) ✓
 
-**Implementation Location:** `contracts/UnifiedSmartWallet.Escape.cs`
+**Implementation Location:** `contracts/SmartAccount.Escape.cs`
 
 **Flow:**
 ```mermaid
@@ -143,7 +143,7 @@ stateDiagram-v2
 
 The deployed names carry the account id: `initiateEscape(accountId)` and
 `finalizeEscape(accountId, newVerifier)` are the two ABI methods in
-`contracts/build/UnifiedSmartWalletV3.manifest.json` (`contracts/UnifiedSmartWallet.Escape.cs`).
+`contracts/build/SmartAccountV3.manifest.json` (`contracts/SmartAccount.Escape.cs`).
 
 **Features:**
 - **Timelock:** Configurable 7-90 days (604,800-7,776,000 seconds)
@@ -196,7 +196,7 @@ The deployed names carry the account id: `initiateEscape(accountId)` and
 
 ### 5. Account State Management (atomic) ✓
 
-**Implementation Location:** `contracts/UnifiedSmartWallet.State.cs`
+**Implementation Location:** `contracts/SmartAccount.State.cs`
 
 **State Structure:**
 ```csharp
@@ -232,9 +232,11 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 
 ---
 
+`initiateEscape(accountId)` starts the backup-owner recovery window.
+
 ### 6. Market Escrow (cancellation, expiry, dispute) ✓
 
-**Implementation Location:** `contracts/UnifiedSmartWallet.MarketEscrow.cs`
+**Implementation Location:** `contracts/SmartAccount.MarketEscrow.cs`
 
 **Features:**
 - **Entry:** `enterMarketEscrow(accountId, marketContract, listingId)`
@@ -249,8 +251,8 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 ExecutionEngine.Assert(!isMarketEscrowActive(accountId), "Account locked in market escrow");
 ```
 The call is written as the deployed ABI spells it (`isMarketEscrowActive`, in
-`contracts/build/UnifiedSmartWalletV3.manifest.json`). The C# source defines it with a leading
-capital (IsMarketEscrowActive, contracts/UnifiedSmartWallet.State.cs:143); that form names a method
+`contracts/build/SmartAccountV3.manifest.json`). The C# source defines it with a leading
+capital (IsMarketEscrowActive, contracts/SmartAccount.State.cs:143); that form names a method
 the deployment does not export, which is why it is not code-formatted here.
 - Prevents concurrent operations during active listing
 
@@ -284,7 +286,7 @@ public interface IVerifier {
 
 **Native Script Model Integration:**
 ```csharp
-// From UnifiedSmartWallet.Execution.cs
+// From SmartAccount.Execution.cs
 SetVerifyContext(accountId);
 ...
 object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, op.Args);
@@ -317,7 +319,7 @@ ClearVerifyContext(accountId);
 
 ### 8. Paymaster/Sponsor Flow ✓
 
-**Implementation Locations:** `contracts/UnifiedSmartWallet.Paymaster.cs`, `contracts/paymaster/Paymaster.cs`, and the optional Morpheus authorization service
+**Implementation Locations:** `contracts/SmartAccount.Paymaster.cs`, `contracts/paymaster/Paymaster.cs`, and the optional Morpheus authorization service
 
 The relay pays the enclosing N3 transaction's system and network fees. For the
 on-chain sponsored path, the core checks that the selected paymaster is bound to
@@ -368,7 +370,7 @@ verifier/hook admission policy before funding transactions.
 **Known Limitations (as documented):**
 - **VULN-001:** The matching private AA artifact uses the non-bypassable
   platform bounded-call syscall and has a NeoExpress adversarial-callback
-  receipt; native AccountManagement activation and public deployment remain
+  receipt; native SmartAccount activation and public deployment remain
   pending.
 - **VULN-002:** Market/escape and settlement cleanup require deployed/refinement
   evidence; the current private artifact now has source-to-artifact certification,
@@ -434,7 +436,7 @@ verifier/hook admission policy before funding transactions.
      `validateSignature()`; an ABI parameter alone cannot cap VM execution.
    - The matching private AA artifact already uses the versioned
      `System.Contract.CallWithGasLimit` capability and has a fresh NeoExpress
-   receipt. Native AccountManagement activation, target-node parity, and public
+   receipt. Native SmartAccount activation, target-node parity, and public
    deployment remain approval-gated deployment work and are intentionally outside
    this private validation closure.
 

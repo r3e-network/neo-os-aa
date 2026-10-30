@@ -139,7 +139,7 @@ class NativeProfileCiTests(unittest.TestCase):
                     "sdk/js/src/native.js", "sdk/js/tests/fixtures/native-signed-execution.json",
                     "scripts/native_profile_ci.py", "scripts/native-profile-core-locks.json", "tests/NativeMultiSigProbe/Program.cs",
                     "scripts/verify_repo.sh", "scripts/verify_repo.test.mjs", "tests/NativeEpochProbe/Program.cs",
-                    "tests/NativeEpochProbe/contracts/NativeEpochCore.cs", "tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs"):
+                    "tests/NativeEpochProbe/contracts/NativeEpochCore.cs", "tests/SmartAccount.Contracts.Tests/RuntimeTestSupport.cs"):
                 with self.subTest(changed=changed):
                     self.assertTrue(any(fnmatch.fnmatchcase(changed, pattern) for pattern in patterns), changed)
         self.assertIn("./scripts/verify_repo.sh --profile native --contracts-only", workflow)

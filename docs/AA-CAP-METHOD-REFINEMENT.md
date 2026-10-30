@@ -1,14 +1,15 @@
 # Complete reimbursement-helper reference refinement
 
-The certificate covers all **208 bytes / 96 instructions / 47 opcode names** at
-`[13557,13765)` of `CapReimbursementToActualCost`. It compares the complete
-12-statement source program, independently projected from the typed source
+The certificate covers all **281 bytes / 116 instructions / 52 opcode names** at
+`[13557,13838)` of `CapReimbursementToActualCost`. It compares the complete
+14-statement source program, independently projected from the typed source
 inventory, with an executable reference VM that decodes the actual NEF bytes.
 No expected settlement is passed to a native-call oracle or substituted for a
 bytecode instruction.
 
 The universal result includes the storage-load branch, new-record construction,
-both transaction-hash branches, fee arithmetic, rejection, aliased reservation
+both transaction-hash branches, fee arithmetic, the headroom guard against an
+accumulation that would leave the signed range, rejection, aliased reservation
 mutation, serialization, storage write and return. Separate classification
 lemmas establish the expected return or rejection, storage snapshot and effect
 trace. The final theorem excludes both accidental faults and fuel exhaustion on
@@ -31,11 +32,13 @@ contract settles `q` for a zero-fee estimation, otherwise
 Paid ledgers with `r >= c` are included and universally reject. The domain does
 not impose `r <= c`.
 
-Zero-fee estimation additionally requires `r + q < 2^255`. Source BigInteger
-arithmetic remains unbounded: a separately kernel-checked actual-byte example
-shows that outside this bound the VM faults while the source model returns the
-larger mathematical reservation. It is deliberately not described as a shared
-fault or hidden by changing source arithmetic to bounded arithmetic.
+Zero-fee estimation additionally requires `r + q < 2^255`. The helper asserts
+that headroom against the domain maximum before it accumulates, so a separately
+kernel-checked actual-byte example shows the artifact rejecting with the margin
+message instead of faulting on the overflowing addition, and the projected
+source rejecting on the same assertion. Source BigInteger arithmetic remains
+unbounded: the guard is a precondition the helper checks, not a change to source
+arithmetic semantics.
 
 ## Source and environment contracts
 
@@ -99,10 +102,11 @@ a failure receipt before work and retains failure on any error.
 
 Six semantic controls first compile valid mutated definitions, then require the
 kernel certificate to reject MIN changed to MAX, the reversed assertion branch,
-a dropped reservation write, a source return changed to zero, an initial source
-reservation changed to one, and a deleted source assertion. Syntax errors,
-missing tools and timeouts do not count as semantic rejection. Execution tests
-also cover every one of the 96 actual instruction offsets across their cases.
+a duplicated value left after the reservation write, a source return changed to
+zero, an initial source reservation changed to one, and a deleted source
+assertion. Syntax errors, missing tools and timeouts do not count as semantic
+rejection. Execution tests also cover every one of the 116 actual instruction
+offsets across their cases.
 
 The receipt uses `scope: complete-helper-reference-refinement` and
 `fullImplementationVerified: false`. This is a complete private-helper reference

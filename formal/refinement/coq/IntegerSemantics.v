@@ -10,10 +10,13 @@ Definition integer_fitsb (z : Z) : bool :=
   (-integer_limit <=? z) && (z <? integer_limit).
 Definition checked_integer (z : Z) : option Z :=
   if integer_fitsb z then Some z else None.
-Inductive BinaryOp := Add | Sub | Mul | Min | Max.
+Inductive BinaryOp := Add | Sub | Mul | Shl | Min | Max.
 Definition binary_value (op : BinaryOp) (left right : Z) : Z :=
   match op with
   | Add => left + right | Sub => left - right | Mul => left * right
+  (* The shift count is a mathematical exponent here; the VM checks the result
+     for representability like every other arithmetic instruction. *)
+  | Shl => left * 2 ^ right
   | Min => Z.min left right | Max => Z.max left right
   end.
 Definition checked_binary (op : BinaryOp) (left right : Z) : option Z :=

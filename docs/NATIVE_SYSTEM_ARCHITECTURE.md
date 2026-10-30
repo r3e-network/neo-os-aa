@@ -3,12 +3,12 @@
 This document describes the native implementation of the parallel
 [smart-account strategy](AA-IMPLEMENTATION-STRATEGY.md). The deployed-contract
 implementation is the near-term NeoOS delivery priority. The native path is
-`AccountManagement`, a protocol service with a
+`SmartAccount`, a protocol service with a
 small, explicit authorization boundary. The [ABI 2 profile](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)
 defines the wire contract. The [SDK](NATIVE_SDK.md) and [workspace](NATIVE_ACCOUNT_WORKSPACE.md)
-consume that contract; neither can grant authority the native service rejects.
+consume that contract; neither can grant authority the native contract rejects.
 The profile remains a draft until the Neo proposal and activation process is
-complete. Public `UnifiedSmartWalletV3` and private `PLATFORM` are separate
+complete. Public `SmartAccountV3` and private `PLATFORM` are separate
 runtime profiles with separate account identities and artifacts. Native
 implementation progress does not retire or suspend deployed-contract development.
 
@@ -78,15 +78,15 @@ recovery path handles broken or unavailable old modules.
 
 ## Execution and revocation
 
-1. Discover the native service on the explicitly selected network and verify
+1. Discover the native contract on the explicitly selected network and verify
    its identity, ABI version, profile digest and activation.
 2. Read current account state and the selected operation nonce channel. Build
    the exact target, method, typed arguments, deadline and nonce.
-3. Bind authorization to network, native service, account, authority epoch and
+3. Bind authorization to network, native contract, account, authority epoch and
    configuration nonce. Execute with
    `executeUserOp(accountId, operation, expectedAuthorityEpoch, expectedConfigurationNonce)`;
    batch execution uses the same four-argument order.
-4. The native service checks both counters before authorization and callbacks.
+4. The native contract checks both counters before authorization and callbacks.
    The proxy verification path enforces the same canonical envelope. This binds
    transaction-witness authorization as well as operation signatures to the
    reviewed account state; an old signed transaction cannot survive a counter
@@ -116,7 +116,7 @@ does not authorize arbitrary transaction fees.
 Native MultiSig selects the first threshold of approving children in configured
 roster order. Only those children receive post-execution authority and consume
 their policy allowances. Supplying an additional valid signature does not select
-that child once the quorum has been reached. The native service retains an
+that child once the quorum has been reached. The native contract retains an
 independent approval receipt for this operation, checks the active code pins,
 and discards the receipt on completion or failure. Verification receipts never
 carry into Application, and batch operations never share receipts.

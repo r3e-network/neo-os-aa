@@ -140,9 +140,13 @@ test("historical architecture and audit docs stay aligned with the professionali
   );
   assert.match(v3Blueprint, /historical|design note|current runtime/i);
 
-  assert.doesNotMatch(securityAudit, /contracts\/AbstractAccount\.cs/);
+  assert.doesNotMatch(securityAudit, /contracts\/SmartAccount\.cs/);
+  // The audit may cite the current split source files, but it must not present a
+  // superseded wrapper path as supported (DS-CU-163 section 4.5 T2). AbstractAccount
+  // and UnifiedSmartWallet are the two historical contract names before the rename.
   assert.doesNotMatch(securityAudit, /contracts\/AbstractAccount\./);
-  assert.match(securityAudit, /UnifiedSmartWalletV3|current V3 runtime/i);
+  assert.doesNotMatch(securityAudit, /contracts\/UnifiedSmartWallet\./);
+  assert.match(securityAudit, /SmartAccountV3|current V3 runtime/i);
 });
 
 test("repo README keeps a single quickstart heading", () => {
@@ -476,8 +480,8 @@ test("HomeView keeps the first screen focused on AA operation entry", () => {
   assert.doesNotMatch(homeViewSource, /defineAsyncComponent/);
 });
 
-test("AbstractAccountTool lazy-loads heavy studio panels", () => {
-  const studioToolSource = read("src/components/AbstractAccountTool.vue");
+test("SmartAccountTool lazy-loads heavy studio panels", () => {
+  const studioToolSource = read("src/components/SmartAccountTool.vue");
 
   assert.match(studioToolSource, /defineAsyncComponent/);
   assert.match(
@@ -491,8 +495,8 @@ test("AbstractAccountTool lazy-loads heavy studio panels", () => {
   assert.doesNotMatch(studioToolSource, /import CreateAccountPanel from/);
 });
 
-test("AbstractAccountTool keeps wallet-gated tabs out of the keyboard order", () => {
-  const studioToolSource = read("src/components/AbstractAccountTool.vue");
+test("SmartAccountTool keeps wallet-gated tabs out of the keyboard order", () => {
+  const studioToolSource = read("src/components/SmartAccountTool.vue");
 
   assert.match(
     studioToolSource,
@@ -508,8 +512,8 @@ test("AbstractAccountTool keeps wallet-gated tabs out of the keyboard order", ()
   );
 });
 
-test("AbstractAccountTool does not present paymaster relay as operational before preflight", () => {
-  const studioToolSource = read("src/components/AbstractAccountTool.vue");
+test("SmartAccountTool does not present paymaster relay as operational before preflight", () => {
+  const studioToolSource = read("src/components/SmartAccountTool.vue");
 
   assert.match(studioToolSource, /Runtime configuration detected/);
   assert.match(studioToolSource, /Preflight required/);

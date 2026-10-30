@@ -14,7 +14,7 @@ namespace Neo.SmartContract.Examples
     {
         // Recovery timelock bounds (milliseconds, matching Runtime.Time units), aligned with
         // the estate standard enforced by the AA core escape hatch (7–90 days;
-        // UnifiedSmartWallet.Accounts.cs rejects escapeTimelock outside 604800–7776000
+        // SmartAccount.Accounts.cs rejects escapeTimelock outside 604800–7776000
         // seconds). A shorter window leaves the owner too little time to cancel a malicious
         // recovery after the threshold is met; an unbounded one lets a pending recovery
         // linger forever. Audit finding: bounds were previously 1h minimum / no maximum.

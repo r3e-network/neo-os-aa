@@ -30,6 +30,36 @@ SOURCE_RUNNER_FILES = (
     "tests/localchain/expected-source.json",
 )
 
+# Receipts are review artifacts and may contain exception traces from the relay
+# probe. Keep the diagnostic text while removing machine-specific locations.
+_RECEIPT_REDACTIONS = (
+    (str(AA), "<repo>"),
+    (str(Path.home()), "<home>"),
+    ("/private/tmp/", "<tmp>/"),
+    ("/tmp/", "<tmp>/"),
+    ("/opt/homebrew/", "<toolchain>/"),
+    ("node_modules/", "<dependencies>/"),
+)
+
+
+def _redact_receipt_value(value):
+    """Remove local filesystem locations from a receipt without changing its schema."""
+    if isinstance(value, str):
+        for source, replacement in _RECEIPT_REDACTIONS:
+            value = value.replace(source, replacement)
+        return value
+    if isinstance(value, dict):
+        return {_redact_receipt_value(key): _redact_receipt_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_receipt_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_receipt_value(item) for item in value)
+    return value
+
+
+def _write_receipt(path, receipt):
+    path.write_text(json.dumps(_redact_receipt_value(receipt), indent=2, default=str) + "\n")
+
 
 def source_runner_snapshot():
     """Identity of the source-chain runner, its oracle and expectation inputs."""
@@ -77,7 +107,7 @@ def bring_up(c, variant, workdir, bin_dir=None):
     c.start()
     c.fund(NAMES, 3000)
     bin_dir = Path(bin_dir) if bin_dir else AA / "contracts/build"
-    core = c.deploy("UnifiedSmartWalletV3", bin_dir / "UnifiedSmartWalletV3.nef")
+    core = c.deploy("SmartAccountV3", bin_dir / "SmartAccountV3.nef")
     c.deploy("MockTransferTarget", bin_dir / "MockTransferTarget.nef")
     for name in ("WebAuthnVerifier", "SessionKeyVerifier", "AAPaymaster", "WhitelistHook", "DailyLimitHook"):
         c.deploy(name, bin_dir / f"{name}.nef", data_core=core)
@@ -1602,7 +1632,7 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
             receipt["sourceSponsorshipCap"] = x.source_sponsorship_cap
         if x is not None and hasattr(x, "sdkSponsored"):
             receipt["sdkSponsored"] = x.sdkSponsored
-        receipt_path.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
+        _write_receipt(receipt_path, receipt)
     def attempt(name, fn, *a):
         _attempt(receipt, c, save, name, fn, *a)
     try:
@@ -1656,7 +1686,7 @@ def run_source(workdir, port, receipt_path, source_dir=None):
             receipt["sourceOwnerRecovery"] = x.source_owner_recovery
         if x is not None and hasattr(x, "source_sponsorship_cap"):
             receipt["sourceSponsorshipCap"] = x.source_sponsorship_cap
-        receipt_path.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
+        _write_receipt(receipt_path, receipt)
     def attempt(name, fn, *a):
         _attempt(receipt, c, save, name, fn, *a)
     try:
@@ -1667,9 +1697,9 @@ def run_source(workdir, port, receipt_path, source_dir=None):
         else:
             source_dir = srcbuild.require_artifacts(Path(source_dir))
             receipt["builtFromSource"] = False
-        profile = srcbuild.profile_of(source_dir / "UnifiedSmartWalletV3.nef")
+        profile = srcbuild.profile_of(source_dir / "SmartAccountV3.nef")
         profile["deployedCoreSha256"] = hashlib.sha256(
-            (AA / "contracts/build/UnifiedSmartWalletV3.nef").read_bytes()).hexdigest()
+            (AA / "contracts/build/SmartAccountV3.nef").read_bytes()).hexdigest()
         profile["sourceDir"] = str(source_dir)
         receipt["profile"] = profile["profile"]
         receipt["source"] = profile
@@ -1963,7 +1993,7 @@ def validate_source_receipt(receipt, expected):
     if profile == srcbuild.PROFILE_SYSCALL_ABSENT:
         proof = receipt.get("sourceProxyRelay") or {}
         failures += _source_proxy_relay_failures(proof)
-        if proof.get("core") != (receipt.get("contracts") or {}).get("UnifiedSmartWalletV3"):
+        if proof.get("core") != (receipt.get("contracts") or {}).get("SmartAccountV3"):
             failures.append("proxy relay proof uses the deployed source core")
         if proof.get("amount") != GAS:
             failures.append("proxy relay proof transfers exactly one GAS")
@@ -1971,7 +2001,7 @@ def validate_source_receipt(receipt, expected):
     failures += _source_recovery_failures(recovery)
     failures += _source_sponsorship_cap_failures(cap)
     contracts = receipt.get("contracts") or {}
-    if recovery.get("core") != contracts.get("UnifiedSmartWalletV3") or cap.get("core") != contracts.get("UnifiedSmartWalletV3"):
+    if recovery.get("core") != contracts.get("SmartAccountV3") or cap.get("core") != contracts.get("SmartAccountV3"):
         failures.append("recovery and sponsorship use the deployed source core")
     if recovery.get("verifier") != contracts.get("WebAuthnVerifier") or recovery.get("hook") != contracts.get("WhitelistHook") or \
             recovery.get("reboundCore") != contracts.get("MockTransferTarget") or cap.get("paymaster") != contracts.get("AAPaymaster"):
@@ -2014,7 +2044,7 @@ def validate_source_artifact_runtime(receipt):
             for field in ("nefSha256", "manifestSha256", "nefScriptSha256", "manifestCanonicalSha256"):
                 if not hex64(artifact[field]):
                     failures.append("source artifact hash: " + name + "/" + field)
-            if name == "UnifiedSmartWalletV3" and artifact["nefSha256"] != receipt["source"]["coreSha256"]:
+            if name == "SmartAccountV3" and artifact["nefSha256"] != receipt["source"]["coreSha256"]:
                 failures.append("source core artifact digest")
             if row["contractHash"] != receipt["contracts"][name]:
                 failures.append("source RPC contract identity: " + name)
@@ -2100,7 +2130,7 @@ def main():
     receipt["gateFailures"] = failures
     if a.variant == "deployed":
         receipt["artifacts"] = expected["artifacts"]
-    a.receipt.write_text(json.dumps(receipt, indent=2, default=str) + "\n")
+    _write_receipt(a.receipt, receipt)
     for failure in failures:
         print(f"FAIL: {failure}")
     counts = Counter(r["outcome"] for r in receipt["records"] if "outcome" in r)

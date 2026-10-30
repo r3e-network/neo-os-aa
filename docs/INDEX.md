@@ -53,7 +53,7 @@ semantics. Receipts absent from this checkout are not current release evidence.
 - `docs/PAYMASTER_RELAY_VALIDATION.md` — Morpheus off-chain paymaster relay validation
 - `contracts/paymaster/Paymaster.cs` — on-chain `AAPaymaster` contract (deposits, policies, settlement)
 - `contracts/paymaster/PaymasterAuthority.cs` — authority pattern for Paymaster admin and core validation
-- `contracts/UnifiedSmartWallet.Paymaster.cs` — AA core integration (`executeSponsoredUserOp`)
+- `contracts/SmartAccount.Paymaster.cs` — AA core integration (`executeSponsoredUserOp`)
 
 ## Security Notes
 

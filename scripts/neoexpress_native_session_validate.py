@@ -17,7 +17,8 @@ import time
 from neoexpress_validate import (Chain, RawKey, P256Key, ValidationFailure, H, B, I, S, A, ZERO,
                                 decode, hash_le, hash160, varint, serialize_unsigned, serialize_witnesses, aa_proxy_rules)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
-from neoexpress_native_service_validate import CORE, check_native, persist, check_account_record, module_storage_key, transaction_system_fee, execution_arguments
+from neoexpress_native_service_validate import (CORE, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
+    check_native, persist, check_account_record, module_storage_key, transaction_system_fee, execution_arguments)
 from neoexpress_native_proxy_validate import (GAS, GAS_TOKEN, push_bytes, proxy_address, verification_script,
                                             application_script, check_transaction, check_fault)
 from neoexpress_native_configuration_validate import call_script, pending_log
@@ -106,22 +107,24 @@ class SessionTransactions:
                 'spent':self.value(self.verifier,'getSpentAmount',[H(account)]),'raw':self.storage(account),
                 'balance':self.value(GAS_TOKEN,'balanceOf',[H(proxy_address(account))])}
 
-    def send(self,label,target,method,args,*,key=None,proxy=False,fault=None,expected=None,events=(),change=None,raw_changes=(),recipient_delta=0,admission_rejection=False,witness_target=GAS_TOKEN):
+    def send(self,label,target,method,args,*,key=None,consent_keys=(),proxy=False,fault=None,expected=None,events=(),change=None,raw_changes=(),recipient_delta=0,admission_rejection=False,witness_target=GAS_TOKEN):
         require(not admission_rejection or proxy and fault is None,'Admission rejection requires a proxy witness and no Application fault expectation')
         before=self.state(self.account);other=self.state(self.other)
         recipient=self.value(GAS_TOKEN,'balanceOf',[H(self.recipient)])
         payer=key or self.payer
-        signers=[{'account':'0x'+payer.script_hash[::-1].hex(),'scopes':'CalledByEntry'}]
+        keys=[payer,*consent_keys]
+        require(len({k.script_hash for k in keys})==len(keys),'Consent identities must be distinct')
+        signers=[{'account':'0x'+k.script_hash[::-1].hex(),'scopes':'CalledByEntry'}for k in keys]
         if proxy:signers.append({'account':self.proxy,'scopes':'WitnessRules','rules':aa_proxy_rules(CORE,witness_target)})
         if target==CORE and method in ('executeUserOp','executeUserOps'):
             require(len(args)==2,'Fresh execution requires account and payload')
             args=execution_arguments(self.account,args[1],before['account'])
         script=application_script(self.account,args[1],batch=method=='executeUserOps',
             authority_epoch=before['account'][13],configuration_nonce=before['account'][8]) if proxy else call_script(target,method,args)
-        sysfee,netfee=transaction_system_fee(self.chain,script,signers),2*GAS
+        sysfee,netfee=transaction_system_fee(self.chain,script,signers,PRIVATE_CORE_GAS_ENVELOPE_DATOSHI),2*GAS
         unsigned=serialize_unsigned(int.from_bytes(os.urandom(4),'little'),sysfee,netfee,self.chain.rpc('getblockcount',[])+50,signers,script)
         digest=hashlib.sha256(unsigned).digest();txid='0x'+digest[::-1].hex()
-        witnesses=[(push_bytes(payer.sign(self.chain.magic.to_bytes(4,'little')+digest)),payer.verification)]
+        witnesses=[(push_bytes(k.sign(self.chain.magic.to_bytes(4,'little')+digest)),k.verification)for k in keys]
         if proxy:witnesses.append((b'',verification_script(self.account)))
         raw=base64.b64encode(unsigned+serialize_witnesses(witnesses)).decode()
         try: submitted=self.chain.rpc('sendrawtransaction',[raw])
@@ -226,7 +229,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 deployed=chain.json_from(text);verifier=deployed['contract-hash'];report['module']={'contractHash':verifier,'deploymentTransaction':deployed['tx-hash'],'nefSha256':sha256(path),'manifestSha256':sha256(path.with_suffix('.manifest.json'))}
                 accounts=[]
                 for salt in (bytes([2])*32,bytes([3])*32):
-                    account=persist(chain,report,'register-'+str(len(accounts)),'registerAccount',[H(addresses['owner']),B(salt),H(verifier),H(ZERO),H(addresses['guardian'])],'AccountCreated')
+                    account=persist(chain,report,'register-'+str(len(accounts)),'registerAccount',[H(addresses['owner']),B(salt),H(verifier),H(ZERO),H(addresses['guardian'])],'AccountCreated',consent_wallets=('guardian',),gas_reserve=PRIVATE_CORE_GAS_ENVELOPE_DATOSHI)
                     accounts.append('0x'+account[::-1].hex())
                 account,other=accounts;proxy=proxy_address(account)
                 fund=chain.invoke_file(GAS_TOKEN,'transfer',[H(addresses['owner']),H(proxy),I(2*GAS),None])
@@ -343,7 +346,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output):
                 def recovery_proposal(state,timestamp):
                     state['account'][12]=[hash_le(addresses['replacement']),timestamp,timestamp+604800000,state['account'][8]]
                 driver.send('guardian-proposes-session-recovery',CORE,'proposeRecovery',[H(account),H(addresses['replacement'])],
-                    key=keys['guardian'],events=[(CORE,'RecoveryProposed')],change=recovery_proposal)
+                    key=keys['guardian'],consent_keys=(keys['replacement'],),events=[(CORE,'RecoveryProposed')],change=recovery_proposal)
                 chain.stop_node();chain.nx('fastfwd','1','-t','604801');chain.start_node()
                 def recovered(state,timestamp):
                     state['account'][3]=hash_le(addresses['replacement']);state['account'][5:7]=[None,None]

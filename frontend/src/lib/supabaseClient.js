@@ -19,7 +19,7 @@ export function createSupabaseBrowserClient(runtime = OPERATIONS_RUNTIME) {
     },
     global: {
       headers: {
-        'x-application-name': 'neo-abstract-account-frontend',
+        'x-application-name': 'smart-account-frontend',
       },
     },
   });

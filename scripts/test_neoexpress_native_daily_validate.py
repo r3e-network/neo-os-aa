@@ -145,6 +145,14 @@ class NativeDailyTests(unittest.TestCase):
         chain.rpc=Mock(return_value={'results':[],'next':'','truncated':False})
         self.assertEqual({},storage_prefix(chain,'contract',b'\x01'))
 
+    def test_standard_numeric_findstorage_pagination_is_supported(self):
+        a,b=row(b'\x01a'),row(b'\x01b')
+        chain=SimpleNamespace(rpc=Mock(side_effect=[ValidationFailure('standard RPC requires an integer start'),
+            {'results':[a],'next':1,'truncated':True}, {'results':[b],'next':2,'truncated':False}]))
+        self.assertEqual({a['key']:a['value'],b['key']:b['value']},storage_prefix(chain,'contract',b'\x01'))
+        self.assertEqual(['contract','AQ==',0],chain.rpc.call_args_list[1].args[1])
+        self.assertEqual(['contract','AQ==',1],chain.rpc.call_args_list[2].args[1])
+
     def test_terminal_empty_page_preserves_the_exclusive_cursor(self):
         first=row(b'\x01a')
         chain=SimpleNamespace(rpc=Mock(side_effect=[{'results':[first],'next':first['key'],'truncated':True},
@@ -165,7 +173,7 @@ class NativeDailyTests(unittest.TestCase):
     def test_malformed_pagination_and_foreign_keys_fail_closed(self):
         valid=row(b'\x01a');later=row(b'\x01b')
         for page in ({'results':[],'next':'','truncated':True},
-                     {'results':[valid],'next':2,'truncated':False},
+                     {'results':[valid],'next':3,'truncated':False},
                      {'results':[valid],'next':True,'truncated':False},
                      {'results':[valid],'next':'@@@','truncated':False},
                      {'results':[valid],'next':later['key'],'truncated':False},
@@ -175,7 +183,7 @@ class NativeDailyTests(unittest.TestCase):
                      {'results':[{'key':'AWH=','value':'AQ=='}],'next':'AWH=','truncated':False},
                      {'results':[{'key':valid['key'],'value':'AR=='}],'next':valid['key'],'truncated':False},
                      {'results':[{}],'next':valid['key'],'truncated':False},
-                     {'results':[],'next':0,'truncated':False}):
+                     {'results':[],'next':1,'truncated':False}):
             with self.assertRaises(ValidationFailure):
                 storage_prefix(SimpleNamespace(rpc=Mock(return_value=page)),'contract',b'\x01')
 

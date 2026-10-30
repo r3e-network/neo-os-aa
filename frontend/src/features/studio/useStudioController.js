@@ -3,7 +3,7 @@ import { MAX_REGISTRATION_ESCAPE_TIMELOCK_DAYS, MIN_REGISTRATION_ESCAPE_TIMELOCK
 import { useToast } from 'vue-toastification';
 import { connectedAccount } from '@/utils/wallet';
 import { connectedDidProfile } from '@/utils/did';
-import { walletService, getAbstractAccountHash } from '@/services/walletService';
+import { walletService, getSmartAccountHash } from '@/services/walletService';
 import { buildMatrixRegistrationInvocation, isMatrixDomain } from '@/services/matrixDomainService.js';
 import { loadContractSourceFiles } from './contractSources';
 import { useI18n } from '@/i18n';
@@ -181,7 +181,7 @@ export function useStudioController() {
 
 
   async function invokeReadOperation(operation, args = []) {
-    const aaHash = getAbstractAccountHash();
+    const aaHash = getSmartAccountHash();
     if (!aaHash) {
       throw new Error(EC.contractNotFound);
     }
@@ -285,7 +285,7 @@ export function useStudioController() {
     }
 
     try {
-      const aaHash = getAbstractAccountHash();
+      const aaHash = getSmartAccountHash();
       if (!aaHash) return;
 
       const verifierHash = createForm.value.verifierContract.trim()
@@ -346,7 +346,7 @@ export function useStudioController() {
   async function invokeOperation(label, operation, args, { waitForConfirmation = false, context = null } = {}) {
     const operationContext = context || {
       rpcUrl: resolveRpcUrl(walletService),
-      coreHash: getAbstractAccountHash(),
+      coreHash: getSmartAccountHash(),
       wallet: connectedAccount.value,
     };
     const aaHash = operationContext.coreHash;
@@ -384,14 +384,14 @@ export function useStudioController() {
       const loadEpoch = contextEpoch;
       const loadWallet = connectedAccount.value;
       const loadRpcUrl = resolveRpcUrl(walletService);
-      const loadCoreHash = getAbstractAccountHash();
+      const loadCoreHash = getSmartAccountHash();
       const loadWalletContext = walletService.contextVersion;
       const accountHash = deriveAccountIdHash(requestedAccount);
       const isCurrentLoad = () => loadEpoch === contextEpoch
         && requestedAccount.toLowerCase() === normalizeAccountId(manageForm.value.accountAddress).toLowerCase()
         && loadWallet === connectedAccount.value
         && loadRpcUrl === resolveRpcUrl(walletService)
-        && loadCoreHash === getAbstractAccountHash()
+        && loadCoreHash === getSmartAccountHash()
         && loadWalletContext === walletService.contextVersion
         && walletService.sessionState === 'verified';
 
@@ -459,7 +459,7 @@ export function useStudioController() {
         escapeTimelock: escapeTimelockSeconds,
       });
       const createInvocation = {
-        scriptHash: getAbstractAccountHash(),
+        scriptHash: getSmartAccountHash(),
         operation: 'registerAccount',
         args: [
           // Display-form account id: matches the on-chain
@@ -517,7 +517,7 @@ export function useStudioController() {
   }
 
   async function fetchGovernanceSnapshot(accountId) {
-    const state = await governanceRpc('getcontractstate', [getAbstractAccountHash()]);
+    const state = await governanceRpc('getcontractstate', [getSmartAccountHash()]);
     return readGovernanceSnapshot({
       accountId, read: invokeReadOperation,
       readClock: () => readChainClock(governanceRpc),
@@ -542,7 +542,7 @@ export function useStudioController() {
   function prepareGovernanceAction(operation) {
     if (!isGovernanceOwner.value) throw new Error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
     const review = buildGovernanceAction(manageSnapshot.value, operation, governanceOptions(operation));
-    return { ...review, rpcUrl: resolveRpcUrl(walletService), coreHash: getAbstractAccountHash(), wallet: connectedAccount.value };
+    return { ...review, rpcUrl: resolveRpcUrl(walletService), coreHash: getSmartAccountHash(), wallet: connectedAccount.value };
   }
 
   function canGovernanceAction(operation) {
@@ -556,7 +556,7 @@ export function useStudioController() {
     governanceOutcome.value = '';
     try {
       const sameContext = () => review.rpcUrl === resolveRpcUrl(walletService)
-        && review.coreHash === getAbstractAccountHash() && review.wallet === connectedAccount.value
+        && review.coreHash === getSmartAccountHash() && review.wallet === connectedAccount.value
         && review.snapshot.accountId === normalizeAccountId(manageForm.value.accountAddress).toLowerCase();
       if (!sameContext()) throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
       const fresh = await fetchGovernanceSnapshot(review.snapshot.accountId);
@@ -603,7 +603,7 @@ export function useStudioController() {
     const accountAddress = normalizeAccountId(manageForm.value.accountAddress);
     const accountIdHash = deriveAccountIdHash(accountAddress);
     const rpcUrl = resolveRpcUrl(walletService);
-    const coreHash = getAbstractAccountHash();
+    const coreHash = getSmartAccountHash();
     const wallet = connectedAccount.value;
     const snapshotOwner = manageSnapshot.value.backupOwner;
     const idToken = (connectedDidProfile.value?.idToken || '').trim();
@@ -630,7 +630,7 @@ export function useStudioController() {
         backupOwner: manageSnapshot.value.backupOwner,
         wallet: connectedAccount.value,
         rpcUrl: resolveRpcUrl(walletService),
-        coreHash: getAbstractAccountHash(),
+        coreHash: getSmartAccountHash(),
         metadataUri: metadataForm.value.metadataUri,
         description: metadataForm.value.description,
         logoUrl: metadataForm.value.logoUrl,

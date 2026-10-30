@@ -1,6 +1,6 @@
 /**
  * Shared RPC retry utility with configurable backoff.
- * Used across neo-abstract-account, neo-miniapps-platform, and neo-morpheus-oracle.
+ * Used across smart-account, neo-miniapps-platform, and neo-morpheus-oracle.
  */
 
 const DEFAULT_CONFIG = {

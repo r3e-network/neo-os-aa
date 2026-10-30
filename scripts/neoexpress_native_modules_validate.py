@@ -16,7 +16,8 @@ import time
 from neoexpress_validate import (Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO, decode,
                                 hash_le, nef_script, varint, serialize_unsigned, serialize_witnesses)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
-from neoexpress_native_service_validate import CORE, STDLIB, check_native, persist, operation, transaction_system_fee, module_storage_key, execution_arguments
+from neoexpress_native_service_validate import (CORE, STDLIB, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
+    check_native, persist, operation, transaction_system_fee, module_storage_key, execution_arguments)
 from neoexpress_native_proxy_validate import push_bytes, check_transaction, check_fault, GAS
 from neoexpress_native_configuration_validate import call_script, pending_log
 from neoexpress_native_recovery_validate import equal_typed
@@ -171,7 +172,7 @@ class ModuleTransactions:
             require(len(args) == 2, "Fresh execution requires account and payload")
             args = execution_arguments(self.account, args[1], before[0])
         script = call_script(target, method, args); signers = module_signers(keys, module_scope)
-        sysfee, netfee = transaction_system_fee(self.chain, script, signers), GAS
+        sysfee, netfee = transaction_system_fee(self.chain, script, signers, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI), GAS
         unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee,
                                       self.chain.rpc("getblockcount", []) + 50, signers, script)
         digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()
@@ -274,7 +275,9 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 verifier, hook = modules; accounts = []
                 for salt in (bytes(32), bytes([1]) * 32):
                     account = persist(chain, report, "register-" + str(len(accounts)), "registerAccount",
-                                      [H(addresses[0]), B(salt), H(verifier), H(hook), H(recovery_addresses["guardian"])], "AccountCreated")
+                                      [H(addresses[0]), B(salt), H(verifier), H(hook), H(recovery_addresses["guardian"])],
+                                      "AccountCreated", consent_wallets=("guardian",),
+                                      gas_reserve=PRIVATE_CORE_GAS_ENVELOPE_DATOSHI)
                     accounts.append("0x" + account[::-1].hex())
                 chain.start_node(); check_native(chain.rpc("getcontractstate", [CORE]))
                 require(chain.rpc("getversion", [])["protocol"]["network"] == chain.magic, "Wrong private network")
@@ -284,7 +287,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                         state = chain.rpc("getcontractstate", [row["contractHash"]])
                         check_readback(state, script, path.read_bytes(), json.loads(path.with_suffix(".manifest.json").read_text()))
                         require(nef_from_rpc(state["nef"]) == path.read_bytes(), "Full RPC NEF bytes differ from the compiled artifact")
-                        require(chain.rpc_invoke(row["contractHash"], "authorizedCore", [])[0] == hash_le(CORE), "Module service identity mismatch")
+                        require(chain.rpc_invoke(row["contractHash"], "authorizedCore", [])[0] == hash_le(CORE), "Module native contract identity mismatch")
                         row["scriptChecksumAndManifestReadbackMatched"] = True
                         row["fullNefByteReadbackMatched"] = True
                 readback(); driver = ModuleTransactions(chain, *accounts, verifier, hook, report); account = accounts[0]
@@ -373,7 +376,7 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 old_storage=old_namespace();require(all(v is not None for v in old_storage),"Recovery requires initialized native and hook storage")
                 guardian=recovery_keys["guardian"];replacement=recovery_keys["replacement"]
                 driver.send("guardian-proposes-module-recovery",CORE,"proposeRecovery",[H(account),H(recovery_addresses["replacement"])],
-                    [guardian],event="RecoveryProposed",recovery_pending=recovery_addresses["replacement"])
+                    [guardian,replacement],event="RecoveryProposed",recovery_pending=recovery_addresses["replacement"])
                 chain.stop_node();chain.nx("fastfwd","1","-t","604801");chain.start_node()
                 def recovered(state):
                     state[0][3]=hash_le(recovery_addresses["replacement"]);state[0][5:7]=[None,None]

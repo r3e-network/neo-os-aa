@@ -21,10 +21,14 @@ import nef_decode
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
-START, END = 13557, 13765
-METHOD = "AbstractAccount.UnifiedSmartWallet.CapReimbursementToActualCost(System.Numerics.BigInteger)"
+START, END = 13557, 13838
+METHOD = "SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
 LIMIT = 1 << 255
 ERROR = b"Reimbursement exceeds actual gas cost"
+# The headroom assertion added after the charge region aborts with its own
+# message, so an accumulation that would leave the signed range is rejected
+# before the ADD runs rather than faulting inside it.
+MARGIN_ERROR = b"Reimbursement budget exceeds VM integer limit"
 NATIVE = "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0"
 
 
@@ -38,16 +42,24 @@ def digest(data):
 
 
 def bind_method(inventory):
-    """Join current files, independently decoded NEF, token table and full range."""
+    """Hash and parse one captured payload per input; never reread to decode.
+
+    run_proofs performs a separate final binding to detect persistent drift
+    during kernel verification. Every accepted identity below comes from the
+    exact bytes consumed by this binding, including the full NEF container.
+    """
+    snapshots = {filename: Path(filename).read_bytes() for filename in inventory["inputs"]}
+    input_hashes = {filename:digest(raw) for filename, raw in snapshots.items()}
     for filename, expected in inventory["inputs"].items():
-        require(digest(Path(filename).read_bytes()) == expected, "Inventory input drift: " + filename)
-    paths = [Path(name) for name, expected in inventory["inputs"].items()
-             if name.endswith("UnifiedSmartWalletV3.nef") and expected == inventory["nef"]["sha256"]]
+        require(input_hashes[filename] == expected, "Inventory input drift: " + filename)
+    paths = [name for name, expected in inventory["inputs"].items()
+             if name.endswith("SmartAccountV3.nef") and expected == inventory["nef"]["sha256"]]
     require(len(paths) == 1, "Ambiguous actual NEF")
     spec = importlib.util.spec_from_file_location("cap_method_binding", ROOT / "verify.py")
     binding = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(binding)
-    raw = paths[0].read_bytes()
+    raw = snapshots[paths[0]]
+    require(digest(raw) == inventory["nef"]["sha256"], "Actual NEF container identity mismatch")
     decoded = binding.decode_nef(raw)
     script = decoded["script"]
     require(script.hex() == inventory["nef"]["scriptHex"], "Raw NEF script differs from inventory")
@@ -73,10 +85,18 @@ def bind_method(inventory):
                               **{key: token[key] for key in ("method", "parametersCount", "hasReturnValue", "callFlags")})
                          for token in decoded["tokens"]]
     require(normalized_tokens == inventory["nef"]["tokens"], "Actual NEF token table differs")
+    manifests = [name for name, expected in inventory["inputs"].items()
+                 if name.endswith("SmartAccountV3.manifest.json")
+                 and expected == inventory["manifest"]["sha256"]]
+    require(len(manifests) == 1, "Ambiguous actual manifest")
+    manifest_raw = snapshots[manifests[0]]
+    require(json.loads(manifest_raw)["abi"]["methods"] == inventory["manifest"]["methods"],
+            "Actual full manifest differs from inventory")
     require(inventory["sourceMap"]["exactByteMatch"] and inventory["sourceMap"]["exactManifestMatch"],
             "Source/debug artifact correspondence unavailable")
     return dict(start=START, end=END, bytes=list(script[START:END]), instructions=region,
                 nefSha256=digest(raw), scriptSha256=digest(script), methodSha256=digest(script[START:END]),
+                manifestSha256=digest(manifest_raw), inputSha256=input_hashes,
                 tokens=decoded["tokens"])
 
 
@@ -145,6 +165,8 @@ def execute(program, *, requested, system_fee, network_fee, tx_hash, stored, max
                     raise ReferenceFault("duplicate INITSLOT")
                 locals_ = [None] * operand[0]
                 args = [pop() for _ in range(operand[1])]
+            elif op in (0x00, 0x01):
+                stack.append(int.from_bytes(operand, "little", signed=True))
             elif 0x10 <= op <= 0x20:
                 stack.append(op - 0x10)
             elif op == 0x0b:
@@ -162,6 +184,17 @@ def execute(program, *, requested, system_fee, network_fee, tx_hash, stored, max
                 locals_[op-0x70] = pop()
             elif 0x78 <= op <= 0x7e:
                 stack.append(args[op-0x78])
+            elif op in (0x6f, 0x77, 0x7f):
+                # The compact slot opcodes stop at six; a method with a seventh
+                # local uses the generic form carrying the slot as an operand.
+                slot = operand[0]
+                target = args if op == 0x7f else locals_
+                if slot >= len(target):
+                    raise ReferenceFault("slot out of range")
+                if op == 0x77:
+                    target[slot] = pop()
+                else:
+                    stack.append(target[slot])
             elif op in (0x97, 0x98):
                 right, left = pop(), pop()
                 equal = type(left) is type(right) and left == right
@@ -205,6 +238,11 @@ def execute(program, *, requested, system_fee, network_fee, tx_hash, stored, max
                 if isinstance(value, Ref):
                     raise ReferenceFault("nested field outside helper contract")
                 values[index] = value
+            elif op == 0xa8:
+                shift, value = integer(pop()), integer(pop())
+                if not 0 <= shift <= 256:
+                    raise ReferenceFault("shift out of range")
+                stack.append(integer(value << shift))
             elif op in (0x9e, 0x9f, 0xa0, 0xb9, 0xba, 0xb7):
                 right, left = integer(pop()), integer(pop())
                 if op == 0xb7:
@@ -214,6 +252,9 @@ def execute(program, *, requested, system_fee, network_fee, tx_hash, stored, max
                              0xa0: lambda: left*right, 0xb9: lambda: min(left,right),
                              0xba: lambda: max(left,right)}[op]()
                     stack.append(integer(value))
+            elif op == 0xb6:
+                right, left = integer(pop()), integer(pop())
+                stack.append(left <= right)
             elif op == 0x41:
                 if operand == bytes.fromhex("2d510830"):
                     effects.append("GetScriptContainer"); stack.append(Ref(0))
@@ -274,21 +315,32 @@ Ltac state_norm := cbv [with_stack with_local with_heap with_effect with_storage
   pc stack arguments locals heap storage effects statics object_kind fields tx_object
   firstn skipn nth_error length app repeat Nat.add Nat.sub Nat.mul].
 Theorem source_present_classified : forall hash old sf nf q r kind,
- observe (run_source 40 source (initial_source hash sf nf q (VWire kind [VBytes old;VInt r]))) =
+ observe (run_source 48 source (initial_source hash sf nf q (VWire kind [VBytes old;VInt r]))) =
  classified (if bytes_eqb old hash then old else hash) sf nf q
  (if bytes_eqb old hash then r else 0) kind
  (VWire kind [VBytes old;VInt r]) [ReadStorage (VWire kind [VBytes old;VInt r]);Deserialized (VWire kind [VBytes old;VInt r])].
 Proof.
- intros. destruct (bytes_eqb old hash) eqn:E;
- [destruct (0 <? charge_expression (sf+nf) q r) eqn:Hguard | destruct (0 <? charge_expression (sf+nf) q 0) eqn:Hguard];
- unfold charge_expression in Hguard; cbn [repeat] in E; unfold initial_source, source.
- all: repeat (rewrite run_source_one_step; source_norm; rewrite ?E, ?Hguard; source_norm; state_norm).
- all: unfold classified, charge_expression.
- all: rewrite Hguard; cbn [observe]; source_norm; reflexivity.
+ intros. destruct (bytes_eqb old hash) eqn:E.
+ (* Same transaction hash: the stored reservation is the effective one. The
+    headroom assertion is decided by a case split, because neither operand is a
+    numeral: the rejection branch is the classification's own rejection. *)
+ - destruct (0 <? charge_expression (sf+nf) q r) eqn:Hguard;
+   unfold charge_expression in Hguard; cbn [repeat] in E; unfold initial_source, source;
+   repeat (rewrite run_source_one_step; source_norm; rewrite ?E, ?Hguard; source_norm; state_norm);
+   unfold classified, charge_expression, vm_max; rewrite Hguard;
+   destruct (vm_leb r (1 * 2 ^ 254 - 1 + 1 * 2 ^ 254 - Z.min q (Z.max (sf+nf-r) 0 + (1 - Z.min (sf+nf) 1) * q))) eqn:Hmargin;
+   cbn [observe]; source_norm; reflexivity.
+ (* Different hash: the helper resets the reservation to zero first. *)
+ - destruct (0 <? charge_expression (sf+nf) q 0) eqn:Hguard;
+   unfold charge_expression in Hguard; cbn [repeat] in E; unfold initial_source, source;
+   repeat (rewrite run_source_one_step; source_norm; rewrite ?E, ?Hguard; source_norm; state_norm);
+   unfold classified, charge_expression, vm_max; rewrite Hguard;
+   destruct (vm_leb 0 (1 * 2 ^ 254 - 1 + 1 * 2 ^ 254 - Z.min q (Z.max (sf+nf-0) 0 + (1 - Z.min (sf+nf) 1) * q))) eqn:Hmargin;
+   cbn [observe]; source_norm; reflexivity.
 Qed.
 Print Assumptions source_present_classified.
 Theorem source_absent_classified : forall hash sf nf q,
- observe (run_source 40 source (initial_source hash sf nf q VNull)) =
+ observe (run_source 48 source (initial_source hash sf nf q VNull)) =
  classified (if bytes_eqb (repeat 0%nat 32) hash then repeat 0%nat 32 else hash)
  sf nf q 0 ArrayKind VNull [ReadStorage VNull].
 Proof.
@@ -296,8 +348,9 @@ Proof.
  destruct (0 <? charge_expression (sf+nf) q 0) eqn:Hguard;
  unfold charge_expression in Hguard; cbn [repeat] in E; unfold initial_source, source.
  all: repeat (rewrite run_source_one_step; source_norm; rewrite ?E, ?Hguard; source_norm; state_norm).
- all: unfold classified, charge_expression.
- all: rewrite Hguard; cbn [observe]; source_norm; reflexivity.
+ all: unfold classified, charge_expression, vm_max; rewrite Hguard.
+ all: destruct (vm_leb 0 (1 * 2 ^ 254 - 1 + 1 * 2 ^ 254 - Z.min q (Z.max (sf+nf-0) 0 + (1 - Z.min (sf+nf) 1) * q))) eqn:Hmargin.
+ all: cbn [observe]; source_norm; reflexivity.
 Qed.
 Print Assumptions source_absent_classified.
 
@@ -306,7 +359,7 @@ Print Assumptions source_absent_classified.
 VM_PROOFS = r"""
 Ltac norm := cbv [artifact decode vm_step with_stack change with_local with_heap
        with_effect with_storage allocate deserialize serialize read_field write_field
-       get_storage put_storage value_eqb scalar jump_target signed_byte
+       get_storage put_storage value_eqb scalar jump_target signed_byte signed_short
        pc stack arguments locals heap storage effects object_kind fields tx_object
        skipn firstn nth_error repeat length app Nat.eqb Nat.leb Nat.ltb Nat.add Nat.sub Nat.mul andb orb negb Bool.eqb checked_binary binary_value statics forallb Z.of_nat Pos.of_succ_nat Pos.succ Z.leb Z.compare].
 Ltac drive sf nf q r Heq Hstatic := repeat (first [ progress norm
@@ -321,6 +374,14 @@ Ltac drive sf nf q r Heq Hstatic := repeat (first [ progress norm
  | progress (rewrite (Z.max_comm 0 (sf+nf-r)))
  | progress (rewrite (Z.min_comm (Z.max (sf+nf-r) 0+(1-Z.min (sf+nf) 1)*q) q))
  | match goal with
+   | |- context[checked_integer ?z] => progress change (checked_integer z) with (Some z)
+   end
+ | match goal with
+   | |- context[checked_integer (1 * 2 ^ 254 - 1 + 1 * 2 ^ 254 - ?z)] =>
+       progress (rewrite (checked_integer_in_range (1 * 2 ^ 254 - 1 + 1 * 2 ^ 254 - z))
+         by (apply vm_margin_fits; [assumption | assumption]))
+   end
+ | match goal with
    | |- context[checked_integer ?z] => rewrite (checked_integer_in_range z) by (unfold integer_fits in *; lia)
    end
  ]).
@@ -329,7 +390,7 @@ Theorem vm_same_hash_classified : forall hash old sf nf q r kind static_values,
  cap_domain (sf+nf) q r ->
  integer_fits (r + charge_expression (sf+nf) q r) ->
  bytes_eqb old hash = true ->
- observe (run_vm 110 artifact (initial_vm hash sf nf q (VWire kind [VBytes old;VInt r]) static_values)) =
+ observe (run_vm 130 artifact (initial_vm hash sf nf q (VWire kind [VBytes old;VInt r]) static_values)) =
  classified old sf nf q r kind (VWire kind [VBytes old;VInt r])
  [ReadStorage (VWire kind [VBytes old;VInt r]);Deserialized (VWire kind [VBytes old;VInt r])].
 Proof.
@@ -339,9 +400,11 @@ Proof.
  assert (Hcost : integer_fits (sf+nf)) by (apply nonnegative_integer_fits; destruct Hdom as [H _]; exact H).
  pose proof integer_limit_positive as HL.
  assert (Hsmall : 8 < integer_limit) by (vm_compute; reflexivity).
- unfold initial_vm, classified, charge_expression, method_error.
+ unfold initial_vm, classified, charge_expression, method_error, vm_max.
  drive sf nf q r Heq Hstatic.
  destruct (0 <? Z.min q (Z.max (sf+nf-r) 0+(1-Z.min (sf+nf) 1)*q)) eqn:Hpositive; drive sf nf q r Heq Hstatic.
+ all: destruct (vm_leb r (1 * 2 ^ 254 - 1 + 1 * 2 ^ 254 - Z.min q (Z.max (sf+nf-r) 0 + (1 - Z.min (sf+nf) 1) * q))) eqn:Hmargin.
+ all: drive sf nf q r Heq Hstatic.
  all: cbv [observe]; norm; reflexivity.
 Qed.
 Print Assumptions vm_same_hash_classified.
@@ -350,7 +413,7 @@ Theorem vm_different_hash_classified : forall hash old sf nf q r kind static_val
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  bytes_eqb old hash = false ->
- observe (run_vm 110 artifact (initial_vm hash sf nf q (VWire kind [VBytes old;VInt r]) static_values)) =
+ observe (run_vm 130 artifact (initial_vm hash sf nf q (VWire kind [VBytes old;VInt r]) static_values)) =
  classified hash sf nf q 0 kind (VWire kind [VBytes old;VInt r])
  [ReadStorage (VWire kind [VBytes old;VInt r]);Deserialized (VWire kind [VBytes old;VInt r])].
 Proof.
@@ -360,10 +423,12 @@ Proof.
  assert (Hcost : integer_fits (sf+nf)) by (apply nonnegative_integer_fits; destruct Hdom as [H _]; exact H).
  pose proof integer_limit_positive as HL.
  assert (Hsmall : 8 < integer_limit) by (vm_compute; reflexivity).
- unfold initial_vm, classified, charge_expression, method_error.
+ unfold initial_vm, classified, charge_expression, method_error, vm_max.
  drive sf nf q constr:(0) Heq Hstatic.
  destruct (0 <? Z.min q (Z.max (sf+nf-0) 0+(1-Z.min (sf+nf) 1)*q)) eqn:Hpositive;
  drive sf nf q constr:(0) Heq Hstatic.
+ all: destruct (vm_leb 0 (1 * 2 ^ 254 - 1 + 1 * 2 ^ 254 - Z.min q (Z.max (sf+nf-0) 0 + (1 - Z.min (sf+nf) 1) * q))) eqn:Hmargin.
+ all: drive sf nf q constr:(0) Heq Hstatic.
  all: cbv [observe]; norm; reflexivity.
 Qed.
 Print Assumptions vm_different_hash_classified.
@@ -376,7 +441,7 @@ Theorem vm_absent_classified : forall hash sf nf q static_values,
  static_values 34%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
- observe (run_vm 110 artifact (initial_vm hash sf nf q VNull static_values)) =
+ observe (run_vm 130 artifact (initial_vm hash sf nf q VNull static_values)) =
  classified (if bytes_eqb (repeat 0%nat 32) hash then repeat 0%nat 32 else hash)
  sf nf q 0 ArrayKind VNull [ReadStorage VNull].
 Proof.
@@ -388,10 +453,12 @@ Proof.
  assert (Hsmall : 8 < integer_limit) by (vm_compute; reflexivity).
  destruct (bytes_eqb (repeat 0%nat 32) hash) eqn:Heq;
  cbn [repeat] in Heq;
- unfold initial_vm, classified, charge_expression, method_error;
+ unfold initial_vm, classified, charge_expression, method_error, vm_max;
  drive sf nf q constr:(0) Heq Hstatic.
  all: destruct (0 <? Z.min q (Z.max (sf+nf-0) 0+(1-Z.min (sf+nf) 1)*q)) eqn:Hpositive;
  drive sf nf q constr:(0) Heq Hstatic.
+ all: destruct (vm_leb 0 (1 * 2 ^ 254 - 1 + 1 * 2 ^ 254 - Z.min q (Z.max (sf+nf-0) 0 + (1 - Z.min (sf+nf) 1) * q))) eqn:Hmargin.
+ all: drive sf nf q constr:(0) Heq Hstatic.
  all: cbv [observe]; norm; reflexivity.
 Qed.
 Print Assumptions vm_absent_classified.
@@ -401,7 +468,7 @@ Print Assumptions vm_absent_classified.
 COMPOSITION_PROOFS = r"""
 Theorem source_method_classified : forall hash sf nf q input,
  legal_inputs hash sf nf q input ->
- observe (run_source 40 source (initial_source hash sf nf q (stored_value input))) =
+ observe (run_source 48 source (initial_source hash sf nf q (stored_value input))) =
  contract_observation hash sf nf q input.
 Proof.
  intros hash sf nf q input Hlegal.
@@ -423,7 +490,7 @@ Print Assumptions source_method_classified.
 Theorem vm_method_classified : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
  static_values 34%nat = Some (VBuffer [33%nat]) ->
- observe (run_vm 110 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
+ observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  contract_observation hash sf nf q input.
 Proof.
  intros hash sf nf q input static_values Hlegal Hstatic.
@@ -446,28 +513,30 @@ Qed.
 Theorem complete_helper_reference_refinement : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
  static_values 34%nat = Some (VBuffer [33%nat]) ->
- observe (run_vm 110 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
- observe (run_source 40 source (initial_source hash sf nf q (stored_value input))).
+ observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
+ observe (run_source 48 source (initial_source hash sf nf q (stored_value input))).
 Proof. intros. rewrite vm_method_classified by assumption.
  symmetry. apply source_method_classified. assumption. Qed.
 
 Theorem complete_helper_no_fault_or_timeout : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
  static_values 34%nat = Some (VBuffer [33%nat]) ->
- exists s, (exists result, run_vm 110 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Halt result s)
-        \/ (exists message, run_vm 110 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Aborted message s).
+ exists s, (exists result, run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Halt result s)
+        \/ (exists message, run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Aborted message s).
 Proof.
  intros. pose proof (vm_method_classified hash sf nf q input static_values H H0) as Hclass.
- unfold contract_observation in Hclass.
- destruct (0 <? source_charge (sf+nf) q (effective_reserved hash input));
- destruct (run_vm 110 artifact (initial_vm hash sf nf q (stored_value input) static_values));
- cbn [observe] in Hclass; try discriminate; eauto.
+ destruct (contract_observation_total hash sf nf q input) as
+   [[value [wire [trace Hc]]]|[message [stored [trace Hc]]]].
+ all: destruct (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) eqn:E.
+ all: try (rewrite Hc in Hclass; cbn [observe] in Hclass; discriminate).
+ all: try (eexists; left; eexists; reflexivity).
+ all: eexists; right; eexists; reflexivity.
 Qed.
 Theorem complete_helper_paid_exhaustion_aborts : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
  static_values 34%nat = Some (VBuffer [33%nat]) ->
  0 < sf+nf -> sf+nf <= effective_reserved hash input ->
- observe (run_vm 110 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
+ observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  Rejected method_error (stored_value input) (input_trace input).
 Proof.
  intros hash sf nf q input static_values Hlegal Hstatic Hpaid Hspent.
@@ -480,25 +549,24 @@ Qed.
 
 Definition reviewed_statics (slot : nat) := if Nat.eqb slot 34 then Some (VBuffer [33%nat]) else None.
 Example actual_nonempty_success :
- observe (run_vm 110 artifact (initial_vm (repeat 1%nat 32) 50 10 90 VNull reviewed_statics)) =
+ observe (run_vm 130 artifact (initial_vm (repeat 1%nat 32) 50 10 90 VNull reviewed_statics)) =
  Returned (VInt 60) (VWire ArrayKind [VBytes (repeat 1%nat 32);VInt 60])
  [ReadStorage VNull;Serialized (VWire ArrayKind [VBytes (repeat 1%nat 32);VInt 60]);
  WroteStorage (VWire ArrayKind [VBytes (repeat 1%nat 32);VInt 60])].
 Proof. vm_compute. reflexivity. Qed.
-Example actual_zero_estimation_overflow_counterexample :
+Example actual_zero_estimation_overflow_margin_rejected :
  let before := VWire StructKind [VBytes (repeat 1%nat 32);VInt (integer_limit-1)] in
- let after := VWire StructKind [VBytes (repeat 1%nat 32);VInt integer_limit] in
- observe (run_vm 110 artifact (initial_vm (repeat 1%nat 32) 0 0 1 before reviewed_statics)) =
- Faulted before [ReadStorage before;Deserialized before] /\
- observe (run_source 40 source (initial_source (repeat 1%nat 32) 0 0 1 before)) =
- Returned (VInt 1) after [ReadStorage before;Deserialized before;Serialized after;WroteStorage after].
+ observe (run_vm 130 artifact (initial_vm (repeat 1%nat 32) 0 0 1 before reviewed_statics)) =
+ Rejected margin_error before [ReadStorage before;Deserialized before] /\
+ observe (run_source 48 source (initial_source (repeat 1%nat 32) 0 0 1 before)) =
+ Rejected margin_error before [ReadStorage before;Deserialized before].
 Proof. vm_compute. split; reflexivity. Qed.
 Print Assumptions vm_method_classified.
 Print Assumptions complete_helper_reference_refinement.
 Print Assumptions complete_helper_no_fault_or_timeout.
 Print Assumptions complete_helper_paid_exhaustion_aborts.
 Print Assumptions actual_nonempty_success.
-Print Assumptions actual_zero_estimation_overflow_counterexample.
+Print Assumptions actual_zero_estimation_overflow_margin_rejected.
 
 """
 
@@ -517,7 +585,9 @@ def declared_names(source):
     require(names and len(names) == len(set(names)), "Missing or duplicate declaration inventory")
     return names
 
-def _kernel_command(arguments, work, log_name, timeout=600):
+def _kernel_command(arguments, work, log_name, timeout=1800):
+    # 600s was measured too tight for coqc CapMethodArtifact.v on a loaded
+    # host (2026-10-15); use the same budget as the gate lane wrapper.
     result = subprocess.run(arguments, cwd=str(work), text=True, capture_output=True, timeout=timeout)
     log = work / log_name
     log.write_text(result.stdout + result.stderr)
@@ -540,7 +610,10 @@ def semantic_controls(program, projection, work):
     mutants = []
     for name, offset, opcode in [("MinToMax", 13687, 0xba),
                                  ("ReverseAssertBranch", 13692, 0x26),
-                                 ("DropReservationWrite", 13743, 0x45)]:
+                                 # The drop after the reservation write: replacing it with a
+                                 # duplicate leaves the written value on the stack, so the
+                                 # helper no longer halts with a single result.
+                                 ("DropReservationWrite", 13817, 0x4a)]:
         mutated = copy.deepcopy(program)
         mutated["bytes"][offset-START] = opcode
         mutants.append((name, mutated, projection))
@@ -621,7 +694,7 @@ def run_proofs(inventory, output_dir, controls=False):
     control_results = semantic_controls(bound, projection, work) if controls else []
     # A fresh input read closes a race with work performed by other lanes.
     after = bind_method(inventory)
-    for key in ("nefSha256", "scriptSha256", "methodSha256"):
+    for key in ("nefSha256", "scriptSha256", "methodSha256", "manifestSha256", "inputSha256"):
         require(after[key] == bound[key], "Artifact changed during kernel verification")
     for module, expected in model_hashes.items():
         require(digest((ROOT / "coq" / (module + ".v")).read_bytes()) == expected,
@@ -632,6 +705,7 @@ def run_proofs(inventory, output_dir, controls=False):
                 referenceRefinementVerified=True, fullImplementationVerified=False,
                 methodRange=[START, END], byteCount=len(bound["bytes"]), instructionCount=len(bound["instructions"]),
                 nefSha256=bound["nefSha256"], scriptSha256=bound["scriptSha256"], methodSha256=bound["methodSha256"],
+                manifestSha256=bound["manifestSha256"], inputSha256=bound["inputSha256"],
                 sourceProjectionSha256=projection["sourceProjectionSha256"],
                 sourceTreeSha256=projection["sourceTreeSha256"], certificateSha256=digest(certificate.encode()),
                 modelSha256=model_hashes, toolInputSha256=tool_hashes,
@@ -681,7 +755,7 @@ THEOREM_NAMES = ["source_present_classified", "source_absent_classified", "vm_sa
                  "vm_different_hash_classified", "vm_absent_classified", "source_method_classified",
                  "vm_method_classified", "complete_helper_reference_refinement",
                  "complete_helper_no_fault_or_timeout", "complete_helper_paid_exhaustion_aborts",
-                 "actual_nonempty_success", "actual_zero_estimation_overflow_counterexample"]
+                 "actual_nonempty_success", "actual_zero_estimation_overflow_margin_rejected"]
 
 if __name__ == "__main__":
     raise SystemExit(main())

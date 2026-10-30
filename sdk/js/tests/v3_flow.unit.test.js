@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { buildV3UserOp, buildEIP712PayloadForWeb3AuthVerifier } = require('../src/v3/UserOp');
 const {
-  AbstractAccountClient,
+  SmartAccountClient,
   buildV3UserOperationTypedData,
   buildContractCompatibleStructHash,
   buildWeb3AuthSigningPayload,
@@ -205,7 +205,7 @@ test('escape status compares millisecond trigger time with second timelock', asy
 });
 
 test('deriveRegistrationAccountIdHash matches the frontend V3 registration vector', () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   const accountId = client.deriveRegistrationAccountIdHash({
     verifierContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
     verifierParamsHex: '11223344',
@@ -217,7 +217,7 @@ test('deriveRegistrationAccountIdHash matches the frontend V3 registration vecto
 });
 
 test('deriveVirtualAccount uses canonical Neo UInt160 byte order', () => {
-  const client = new AbstractAccountClient(
+  const client = new SmartAccountClient(
     'https://example.invalid',
     '0x0123456789abcdef0123456789abcdef01234567'
   );
@@ -234,7 +234,7 @@ test('deriveVirtualAccount uses canonical Neo UInt160 byte order', () => {
 });
 
 test('createAccountPayload derives the registration-bound account id', () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   const options = {
     verifierContractHash: '0x2222222222222222222222222222222222222222',
     verifierParamsHex: 'abcd',
@@ -252,7 +252,7 @@ test('createAccountPayload derives the registration-bound account id', () => {
 });
 
 test('SDK registration helpers reject escape timelocks outside the contract registration bounds', () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
 
   assert.throws(
     () => client.deriveRegistrationAccountIdHash({
@@ -272,7 +272,7 @@ test('SDK registration helpers reject escape timelocks outside the contract regi
 });
 
 test('SDK registration and verifier update helpers reject malformed verifier parameters', () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   for (const verifierParamsHex of ['zz', '0x12zz', 'abc']) {
     assert.throws(
       () => client.createAccountPayload({
@@ -458,7 +458,7 @@ test('mainnet deploy script reads GAS balance from the resolved RPC URL and surf
 });
 
 test('createEIP712Payload builds the V3 UserOperation schema when accountIdHash is provided', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   client.computeArgsHash = async () => 'ab'.repeat(32);
   client.rpcClient = {
     async invokeScript() {
@@ -485,7 +485,7 @@ test('createEIP712Payload builds the V3 UserOperation schema when accountIdHash 
 });
 
 test('update payload helpers target V3 hook and verifier methods', () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
 
   const verifierPayload = client.createUpdateVerifierPayload({
     accountScriptHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
@@ -502,11 +502,11 @@ test('update payload helpers target V3 hook and verifier methods', () => {
 });
 
 test('client exposes standards-aligned account capability introspection helpers', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   const responses = [
     {
       state: 'HALT',
-      stack: [{ type: 'ByteString', value: Buffer.from('org.r3e.neo.aa.unified-smart-wallet.v3').toString('base64') }],
+      stack: [{ type: 'ByteString', value: Buffer.from('org.r3e.neo.smart-account.v3').toString('base64') }],
     },
     {
       state: 'HALT',
@@ -531,7 +531,7 @@ test('client exposes standards-aligned account capability introspection helpers'
     },
   };
 
-  assert.equal(await client.getAccountImplementationId(), 'org.r3e.neo.aa.unified-smart-wallet.v3');
+  assert.equal(await client.getAccountImplementationId(), 'org.r3e.neo.smart-account.v3');
   assert.equal(await client.supportsExecutionMode('single'), true);
   assert.equal(await client.supportsModuleType('validator'), true);
   assert.equal(
@@ -553,7 +553,7 @@ test('client exposes standards-aligned account capability introspection helpers'
 });
 
 test('ERC-1271 adapter accepts recoverable 65-byte signatures', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   client.rpcClient = {
     async invokeScript() {
       return {
@@ -573,7 +573,7 @@ test('ERC-1271 adapter accepts recoverable 65-byte signatures', async () => {
 });
 
 test('client decodes previewUserOpValidation into a structured validation preview', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   client.rpcClient = {
     async invokeFunction() {
       return {
@@ -611,7 +611,7 @@ test('client decodes previewUserOpValidation into a structured validation previe
 });
 
 test('getAccountState uses invokefunction for every V3 getter', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   const responses = new Map([
     ['getVerifier', { state: 'HALT', stack: [leByteStringStackItem('b4107cb2cb4bace0ebe15bc4842890734abe133a')] }],
     ['getHook', { state: 'HALT', stack: [leByteStringStackItem('1111111111111111111111111111111111111111')] }],
@@ -654,7 +654,7 @@ test('getAccountState uses invokefunction for every V3 getter', async () => {
 });
 
 test('computeArgsHash uses invokefunction for array payloads', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   let invokeFunctionCalled = false;
 
   client.rpcClient = {
@@ -680,7 +680,7 @@ test('computeArgsHash uses invokefunction for array payloads', async () => {
 });
 
 test('pending maintenance helpers read pending verifier and hook calls through invokefunction', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   const responses = {
     hasPendingVerifierCall: { state: 'HALT', stack: [{ type: 'Boolean', value: true }] },
     getPendingVerifierCallTime: { state: 'HALT', stack: [{ type: 'Integer', value: '123456' }] },
@@ -731,11 +731,11 @@ test('pending maintenance helpers read pending verifier and hook calls through i
 });
 
 test('contract and docs expose a generic module lifecycle alongside legacy verifier and hook events', () => {
-  const eventsSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'UnifiedSmartWallet.Events.cs'), 'utf8');
-  const accountsSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'UnifiedSmartWallet.Accounts.cs'), 'utf8');
-  const stateSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'UnifiedSmartWallet.State.cs'), 'utf8');
-  const escapeSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'UnifiedSmartWallet.Escape.cs'), 'utf8');
-  const marketSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'UnifiedSmartWallet.MarketEscrow.cs'), 'utf8');
+  const eventsSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.Events.cs'), 'utf8');
+  const accountsSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.Accounts.cs'), 'utf8');
+  const stateSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.State.cs'), 'utf8');
+  const escapeSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.Escape.cs'), 'utf8');
+  const marketSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.MarketEscrow.cs'), 'utf8');
   const architectureDoc = fs.readFileSync(path.join(repoRoot, 'docs', 'architecture.md'), 'utf8');
 
   assert.match(eventsSource, /DisplayName\("ModuleInstalled"\)/);
@@ -760,7 +760,7 @@ test('contract and docs expose a generic module lifecycle alongside legacy verif
 });
 
 test('contract state exposes pending verifier and hook maintenance-call getters', () => {
-  const stateSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'UnifiedSmartWallet.State.cs'), 'utf8');
+  const stateSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.State.cs'), 'utf8');
 
   assert.match(stateSource, /HasPendingVerifierCall/);
   assert.match(stateSource, /HasPendingHookCall/);
@@ -824,7 +824,7 @@ test('web3auth verifier also uses the shared verifier operation model', () => {
 });
 
 test('legacy role-based discovery methods throw in V3', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
 
   await assert.rejects(() => client.getAccountsByAdmin('NULegacyAddressPlaceholder'), /Removed in V3/);
   await assert.rejects(() => client.getAccountsByManager('NULegacyAddressPlaceholder'), /Removed in V3/);
@@ -1076,7 +1076,7 @@ test('getAccountState decodes real-node little-endian ByteStrings to big-endian 
     'fixture must be the little-endian form of the display hash',
   );
 
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   client.rpcClient = realNodeAccountStateRpcMock();
 
   const state = await client.getAccountState('0xf951cd3eb5196dacde99b339c5dcca37ac38cc22');
@@ -1086,7 +1086,7 @@ test('getAccountState decodes real-node little-endian ByteStrings to big-endian 
 
 test('preFlightCheck accepts a matching verifier against real-node wire encoding', async () => {
   const { preFlightCheck, checkVerifier } = require('../src/simulation');
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   client.rpcClient = realNodeAccountStateRpcMock();
 
   const verifierCheck = await checkVerifier(
@@ -1107,7 +1107,7 @@ test('preFlightCheck accepts a matching verifier against real-node wire encoding
 });
 
 test('createEIP712Payload auto-resolves the verifier from real-node wire encoding', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   client.computeArgsHash = async () => 'ab'.repeat(32);
   client.rpcClient = {
     async invokeScript() {

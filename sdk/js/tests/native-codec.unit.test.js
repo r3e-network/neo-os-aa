@@ -16,7 +16,7 @@ const v = JSON.parse(
 const reverse = (hex) => Buffer.from(hex, "hex").reverse().toString("hex");
 const accountId = reverse(v.identity.accountIdWire);
 const op = {
-  targetContract: v.serviceHashDisplay,
+  targetContract: v.contractHashDisplay,
   method: v.operation.methodUtf8,
   args: v.operation.args,
   nonce: "0",
@@ -87,7 +87,7 @@ test("ABI2 auth domain binds epoch/config while identity version remains one", (
     Buffer.from([2]),
     Buffer.from(
       "78563412" +
-        v.serviceHashWire +
+        v.contractHashWire +
         v.identity.accountIdWire +
         "01000000000000000200000000000000",
       "hex",

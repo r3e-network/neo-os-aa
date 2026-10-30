@@ -6,7 +6,7 @@ _Date:_ March 11, 2026
 
 ## Summary
 
-This document records a focused static security audit of an earlier Neo Abstract Account contract generation together with the fixes applied during remediation. The current production runtime is `UnifiedSmartWalletV3`; this audit is retained as historical security context rather than as the sole description of the current system.
+This document records a focused static security audit of an earlier Neo Abstract Account contract generation together with the fixes applied during remediation. The current production runtime is `SmartAccountV3`; this audit is retained as historical security context rather than as the sole description of the current system.
 
 The audit concentrated on the following areas:
 
@@ -24,7 +24,7 @@ This was a source-level audit and regression-hardening exercise. It was not a fo
 
 ### Core Contract
 
-- predecessor account-abstraction runtime modules that predate `UnifiedSmartWalletV3`
+- predecessor account-abstraction runtime modules that predate `SmartAccountV3`
 
 ### Recovery Verifiers
 
@@ -167,7 +167,7 @@ While most sensitive methods still performed their own authorization checks, the
 
 ### Core Wallet
 
-- predecessor account-abstraction runtime modules later superseded by `UnifiedSmartWalletV3`
+- predecessor account-abstraction runtime modules later superseded by `SmartAccountV3`
 
 ### Recovery Verifiers
 
@@ -188,7 +188,7 @@ While most sensitive methods still performed their own authorization checks, the
 The following commands were used to verify the remediated state:
 
 ```bash
-dotnet build neo-abstract-account.sln -c Release --nologo
+dotnet build SmartAccount.sln -c Release --nologo
 cd contracts/recovery && dotnet build ArgentRecoveryVerifier.csproj -nologo
 cd contracts/recovery && dotnet build SafeRecoveryVerifier.csproj -nologo
 cd contracts/recovery && dotnet build LoopringRecoveryVerifier.csproj -nologo
@@ -228,10 +228,10 @@ After the fixes described here, all identified issues from this audit pass were 
 
 ### Scope
 
-This audit covers the current production V3 runtime (`UnifiedSmartWallet`) and all plugin contracts (verifiers and hooks), plus relay server API endpoints.
+This audit covers the current production V3 runtime (`SmartAccount`) and all plugin contracts (verifiers and hooks), plus relay server API endpoints.
 
 **Components Audited:**
-- Core contract: `UnifiedSmartWallet` (Execution, Accounts, State, Escape, MarketEscrow, Internal, VerifyContext)
+- Core contract: `SmartAccount` (Execution, Accounts, State, Escape, MarketEscrow, Internal, VerifyContext)
 - Verifier plugins: Web3AuthVerifier, TEEVerifier, WebAuthnVerifier, SessionKeyVerifier, MultiSigVerifier, SubscriptionVerifier, ZkLoginVerifier
 - Hook plugins: WhitelistHook, DailyLimitHook, TokenRestrictedHook, MultiHook, NeoDIDCredentialHook
 - Market contract: AAAddressMarket
@@ -253,7 +253,7 @@ The review used the following process:
 > `docs/AA-FORMAL-VERIFICATION.md`, and the dated receipts in
 > `docs/reports/`. The matching private-chain artifact now routes both verifier
 > and hook callbacks through the platform bounded-call syscall. Native
-> `AccountManagement` activation, public deployment parity, and independent
+> `SmartAccount` activation, public deployment parity, and independent
 > review remain separate gates.
 
 ---
@@ -264,7 +264,7 @@ The review used the following process:
 
 **Severity:** Critical
 
-**Affected File:** `contracts/UnifiedSmartWallet.Execution.cs:42`
+**Affected File:** `contracts/SmartAccount.Execution.cs:42`
 
 **Historical issue:**
 The core contract calls `validateSignature` on verifiers without any gas limit:
@@ -327,7 +327,7 @@ ERC-4337 implementations often use nonce-based invalidation or delay windows for
 
 **Severity:** High
 
-**Affected Files:** `contracts/UnifiedSmartWallet.Escape.cs:21`, `contracts/UnifiedSmartWallet.MarketEscrow.cs:47-77`
+**Affected Files:** `contracts/SmartAccount.Escape.cs:21`, `contracts/SmartAccount.MarketEscrow.cs:47-77`
 
 **Issue:**
 The escape hatch checks for market escrow:
@@ -394,7 +394,7 @@ Add explicit assertion: `ExecutionEngine.Assert(verifiers.Length > 0, "At least 
 
 **Severity:** Medium
 
-**Affected File:** `contracts/UnifiedSmartWallet.MarketEscrow.cs:47-77`
+**Affected File:** `contracts/SmartAccount.MarketEscrow.cs:47-77`
 
 **Issue:**
 The settlement clears core state but doesn't verify all plugin state is wiped:
@@ -457,7 +457,7 @@ ERC-4337 uses EIP-712 typed data encoding which prevents collision issues by inc
 
 **Severity:** Low
 
-**Affected File:** `contracts/UnifiedSmartWallet.Execution.cs`
+**Affected File:** `contracts/SmartAccount.Execution.cs`
 
 **Issue:**
 The executable `UserOperation` path accepts only the non-negative signed NeoVM Integer
@@ -544,7 +544,7 @@ This ensures signatures cannot be replayed across different Neo networks.
 ### 2. STRONG: Reentrancy Protection
 
 The execution lock mechanism prevents reentrancy:
-- `UnifiedSmartWallet.Execution.cs:25-108`: Uses `IsAnyExecutionActive()` and `SetExecutionLock()`
+- `SmartAccount.Execution.cs:25-108`: Uses `IsAnyExecutionActive()` and `SetExecutionLock()`
 - Proper try-finally cleanup ensures lock release
 
 ### 3. STRONG: Hook Authority Validation

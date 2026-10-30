@@ -26,7 +26,7 @@ flowchart LR
   User[User / Operator] --> UI[Frontend Workspace]
   UI --> Drafts[Draft Store]
   UI --> Relay[Optional Relay API]
-  UI --> Master[UnifiedSmartWallet Master Contract]
+  UI --> Master[SmartAccount Master Contract]
   Master --> Policies[Roles + Policies + Limits]
   Master --> Target[Target Contract]
   Master --> Proxy[Deterministic Verify Proxy Address]

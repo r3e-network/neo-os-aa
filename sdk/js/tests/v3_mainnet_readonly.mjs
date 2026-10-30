@@ -14,7 +14,7 @@ const NEO_NNS_ADDRESS_RECORD_TYPE = 16;
 
 const EXPECTED_CONTRACTS = {
   aaCore: {
-    manifestName: "UnifiedSmartWalletV3",
+    manifestName: "SmartAccountV3",
     methods: [
       "registerAccount",
       "computeRegistrationAccountId",

@@ -5,7 +5,7 @@ using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Services;
 
-namespace AbstractAccount.Tests.Fixtures
+namespace SmartAccount.Tests.Fixtures
 {
     // Private diagnostic only: an explicit router delegation, not a production token.
     [DisplayName("RestrictedOutflowToken")]

@@ -1,0 +1,301 @@
+{
+  "schema": "smartaccount-native-proxy-private/v1",
+  "status": "PASS",
+  "publicNetworksTouched": false,
+  "scope": "Actual signed native proxy, GAS balances, persisted atomic rollback and witness admission controls; not full native conformance or a cryptographic proof.",
+  "runtimeMode": "Complete source-built NeoExpress runtime; exact full file map verified before and after each matrix.",
+  "transactions": [
+    {
+      "step": "register",
+      "txid": "0xd5a96e20feb10495cdb7cb92866d4318db0dd26382bce78ae1a34e9bad670493",
+      "operation": "registerAccount",
+      "vmstate": "HALT",
+      "event": "AccountCreated",
+      "gasConsumedDatoshi": 18666769,
+      "systemFeeDatoshi": 1018666769
+    }
+  ],
+  "executions": [
+    {
+      "step": "missing-proxy-witness",
+      "txid": "0xc3617f0ed54cf77cd56e20bbda82765218f53cf7a52b7bece10eb67ff678e9e5",
+      "proxyScope": "absent",
+      "canonicalEnvelope": true,
+      "scriptSha256": "70d025aec9115cf6e2e3b07423f386b0ab765a55d2d12e585d5cd41d7c720f33",
+      "before": [
+        1000000000,
+        0,
+        0
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "persisted": true,
+      "vmstate": "HALT",
+      "gasConsumedDatoshi": 17097257,
+      "systemFeeDatoshi": 1000000000,
+      "networkFeeDatoshi": 200000000,
+      "after": [
+        1000000000,
+        0,
+        1
+      ],
+      "notifications": 1,
+      "confirmedBlock": "0x15de677b755524d77a4afe77112a89cf64a048499f485f0838793dd02f13aa08",
+      "rawTransactionReadbackMatched": true,
+      "witnessBytesReadbackMatched": true,
+      "abortRecipientBalance": 0
+    },
+    {
+      "step": "signed-proxy-transfer",
+      "txid": "0x4d8f3923fe54ef5d0b0b366c9c2c05002fc1850385ada458d9c2d4cb27cb2879",
+      "proxyScope": "allow",
+      "canonicalEnvelope": true,
+      "scriptSha256": "7780ff37c9b3352100207b23c6189f71576ac8d2825d1b659b10323dfc1cb274",
+      "before": [
+        1000000000,
+        0,
+        1
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "persisted": true,
+      "vmstate": "HALT",
+      "gasConsumedDatoshi": 12597257,
+      "systemFeeDatoshi": 1000000000,
+      "networkFeeDatoshi": 200000000,
+      "after": [
+        900000000,
+        100000000,
+        2
+      ],
+      "notifications": 2,
+      "confirmedBlock": "0x9e1d5ffe8e9791f813824a53f7a070ccc89d1004538d667f28117efd7ba306fb",
+      "rawTransactionReadbackMatched": true,
+      "witnessBytesReadbackMatched": true,
+      "abortRecipientBalance": 0
+    },
+    {
+      "step": "denying-proxy-scope",
+      "txid": "0x6a71b06c81c06ea1a0e021f3f7c2fcb09c894018ff46e6ed531a17403b2ca82b",
+      "proxyScope": "deny",
+      "canonicalEnvelope": true,
+      "scriptSha256": "21a2940eb4dfe71f07639629ded3202ca96a997b7fb74edfa69e7185b1a0ed99",
+      "before": [
+        900000000,
+        100000000,
+        2
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "persisted": true,
+      "vmstate": "HALT",
+      "gasConsumedDatoshi": 12597257,
+      "systemFeeDatoshi": 1000000000,
+      "networkFeeDatoshi": 200000000,
+      "after": [
+        900000000,
+        100000000,
+        3
+      ],
+      "notifications": 1,
+      "confirmedBlock": "0x92780f497537109f7241a9400cd03b64ce98db8483e85c651667427b5f72aabc",
+      "rawTransactionReadbackMatched": true,
+      "witnessBytesReadbackMatched": true,
+      "abortRecipientBalance": 0
+    },
+    {
+      "step": "recipient-callback-abort",
+      "txid": "0xe411a04c83ebeb781daa6780293e58c923992584a25a8f10a21f6e67fa8926aa",
+      "proxyScope": "allow",
+      "canonicalEnvelope": true,
+      "scriptSha256": "395dfc995aad07b73bf1dfec304e29f047fb5d7c106dea52da4cbe585331ee06",
+      "before": [
+        900000000,
+        100000000,
+        3
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "persisted": true,
+      "vmstate": "FAULT",
+      "gasConsumedDatoshi": 11982792,
+      "systemFeeDatoshi": 1000000000,
+      "networkFeeDatoshi": 200000000,
+      "after": [
+        900000000,
+        100000000,
+        3
+      ],
+      "notifications": 0,
+      "confirmedBlock": "0x7e4914bc4453fcbe64d940fd5e3415eec6769fe7cdde0456d44efecbfd0a9e09",
+      "rawTransactionReadbackMatched": true,
+      "witnessBytesReadbackMatched": true,
+      "abortRecipientBalance": 0
+    },
+    {
+      "step": "batch-second-callback-abort",
+      "txid": "0x27d2c55dcf5e2e41e0ba721b59a26a853ad02763ec69b7d297c8f1bec241be9b",
+      "proxyScope": "allow",
+      "canonicalEnvelope": true,
+      "scriptSha256": "7b20feb4085b0b8c3fe1461b038d034875079d411c21996c29f6a91ed9d950a1",
+      "before": [
+        900000000,
+        100000000,
+        3
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "persisted": true,
+      "vmstate": "FAULT",
+      "gasConsumedDatoshi": 22613511,
+      "systemFeeDatoshi": 1000000000,
+      "networkFeeDatoshi": 200000000,
+      "after": [
+        900000000,
+        100000000,
+        3
+      ],
+      "notifications": 0,
+      "confirmedBlock": "0xce3b67701043ff5fc3d157a46a30c5fd1849f8ea49ea73beb17beb0168405b6d",
+      "rawTransactionReadbackMatched": true,
+      "witnessBytesReadbackMatched": true,
+      "abortRecipientBalance": 0
+    },
+    {
+      "step": "signed-proxy-batch",
+      "txid": "0xf7f5bc2dd086d5400821a2d75541b56ceddd80256b70deadc47d793b5adb9ccb",
+      "proxyScope": "allow",
+      "canonicalEnvelope": true,
+      "scriptSha256": "408afa0c1a6108e5d47b99505ee01f19c0bbbb6edde857f6dd2b4ed9cf843af0",
+      "before": [
+        900000000,
+        100000000,
+        3
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "persisted": true,
+      "vmstate": "HALT",
+      "gasConsumedDatoshi": 23227976,
+      "systemFeeDatoshi": 1000000000,
+      "networkFeeDatoshi": 200000000,
+      "after": [
+        800000000,
+        200000000,
+        5
+      ],
+      "notifications": 4,
+      "confirmedBlock": "0x8f7f1e01f59677c3f3f68ffd1b0460b00dcc4fd7fe07f9ffb3eb059e3a78f84c",
+      "rawTransactionReadbackMatched": true,
+      "witnessBytesReadbackMatched": true,
+      "abortRecipientBalance": 0
+    }
+  ],
+  "admissionRejections": [
+    {
+      "step": "duplicate-batch-nonce",
+      "txid": "0x1832662e0f9cd68b1b2348b91d07aa4dd801da4c8102af65f6bd28cd971c74ec",
+      "proxyScope": "allow",
+      "canonicalEnvelope": true,
+      "scriptSha256": "cacfdadce340b170fef6af1e8c5974517cebbbfd5093d9c5a38d559d4ff26465",
+      "before": [
+        900000000,
+        100000000,
+        3
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "admission": "REJECTED",
+      "expectedReason": "Invalid",
+      "persisted": false,
+      "after": [
+        900000000,
+        100000000,
+        3
+      ],
+      "absentFromMempoolAndReadback": true,
+      "abortRecipientBalance": 0
+    },
+    {
+      "step": "noncanonical-tail",
+      "txid": "0x4fe4774a02d413d7d3243613bec167dedfcf8a46b63b258c5b026437d790a1fe",
+      "proxyScope": "allow",
+      "canonicalEnvelope": false,
+      "scriptSha256": "09404188c4368a8176ba3e7b7a9a081d8d6df60e48764e0e3078f56b7fb3023b",
+      "before": [
+        900000000,
+        100000000,
+        3
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "admission": "REJECTED",
+      "expectedReason": "Invalid",
+      "persisted": false,
+      "after": [
+        900000000,
+        100000000,
+        3
+      ],
+      "absentFromMempoolAndReadback": true,
+      "abortRecipientBalance": 0
+    },
+    {
+      "step": "invalid-payer-signature",
+      "txid": "0xa0c9af8a1b8fe60a77bd100ee10678b63f98c57896068a7dd23396520ff87330",
+      "proxyScope": "allow",
+      "canonicalEnvelope": true,
+      "scriptSha256": "c0905b2ae07f24ec465102b51a8b206f12ced1fb75f8fac85e600f9feaed26e4",
+      "before": [
+        900000000,
+        100000000,
+        3
+      ],
+      "committedAuthorityEpoch": 0,
+      "committedConfigurationNonce": 0,
+      "admission": "REJECTED",
+      "expectedReason": "InvalidSignature",
+      "persisted": false,
+      "after": [
+        900000000,
+        100000000,
+        3
+      ],
+      "absentFromMempoolAndReadback": true,
+      "abortRecipientBalance": 0
+    }
+  ],
+  "ownedNodesStopped": true,
+  "sourceSha256": {
+    "neoexpress_native_proxy_validate.py": "753928f7488812294383b55abc6af1c5ee715605317081853cbe98d0a990769f",
+    "neoexpress_native_service_validate.py": "e753b796ce1f8c33404d4537a8fd43a9a5a900f519807e9ba2f8052e6eb1208f",
+    "neoexpress_activation_validate.py": "48a98ebc18b0a049219c7ef4cd1870a4d775e19196896317eb5bcb8f10df0217",
+    "neoexpress_validate.py": "63625ab257fa80bb7c2c611edf9c74d73a1eb3f33b7126425e9fe2b268e6c8fe"
+  },
+  "runtimeSha256": {
+    "neoxp.dll": "837e9e9788692d1793c281e6f9c7f7f06e3469cc88332104232e51ba75103efc",
+    "Neo.dll": "4c4c59c5330b2e28a75328eafbc50449f97f9fd96e172730f89c534dd25ea3a5",
+    "Neo.Extensions.dll": "27fc804625bd5f6aceebd757de13976a40b1fc504838c6f87f7a4c028b1e50c9",
+    "Neo.IO.dll": "cbb983b32101f5c5e459a5416852c4d0be56ad7f97f6ce89c7bc5003909820ba",
+    "Neo.Json.dll": "02bc3082719af8d651a7ce3bde42a390ba9253d0f368d2bf9ab33b8872e0c2ce",
+    "Neo.VM.dll": "ccd160139cb55fec9d9656dc5a36e222b79e99a7b81888da598a1bd04cbaac97"
+  },
+  "fundingTransaction": "0xa91c1b730b7ca123d097f31e6be0f1e4a4f379e16e79f90dcdb3888ac40fa7c1",
+  "networkMagic": 813342230,
+  "accountId": "0xa427bbef706dfe70a235c844e6879ba4e324a3a1",
+  "proxy": "0x41ab2ab12eafcfc98e79a7599366e8a89efec947",
+  "finalState": [
+    800000000,
+    200000000,
+    5
+  ],
+  "receiverReadbackMatched": true,
+  "receiverNefSha256": "b2eee6a19d532d2d3d5cdde3c910f8e29bed101fd3349417a48b34ce1ff84831",
+  "blockCount": 11,
+  "nodeVersion": "/Neo:3.10.2/",
+  "runtimeHashesUnchanged": true,
+  "completedAtUtc": "2026-10-29T23:55:33.687753+00:00",
+  "sourceBuildReceiptSha256": "427002a455579e7f7d8dcb0ca81fe2babb37109bf1b3136ddad0b616758a824a",
+  "rawReceipt": "proxy.raw.json",
+  "rawReceiptSha256": "7ab4264c0e07cf1ea928af30e39f1568b2059b6d658dfc1c3713ea01aa89ecc4"
+}

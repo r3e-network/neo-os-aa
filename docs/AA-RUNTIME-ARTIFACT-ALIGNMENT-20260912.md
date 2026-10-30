@@ -40,7 +40,7 @@ artifact set no longer matches its source generation.
 
 ```sh
 INCLUDE_VALIDATION_MOCKS=1 bash contracts/compile.sh
-dotnet test tests/AbstractAccount.Contracts.Tests/AbstractAccount.Contracts.Tests.csproj \
+dotnet test tests/SmartAccount.Contracts.Tests/SmartAccount.Contracts.Tests.csproj \
   --no-restore --verbosity quiet --blame-hang-timeout 60s
 ```
 
@@ -63,7 +63,7 @@ scratch directory, replays the `contracts/compile.sh` command sequence there, an
 every `.nef` / `.manifest.json` with `contracts/bin/v3` byte-for-byte.
 
 Current result: **76 artifacts compared, release matches a fresh build: YES**. The tracked
-`contracts/build/UnifiedSmartWalletV3.nef` is reported separately as the deployed-mainnet
+`contracts/build/SmartAccountV3.nef` is reported separately as the deployed-mainnet
 bytecode anchor and is *expected* to differ from the working-tree source; it must not be
 regenerated while it is the only artifact-level evidence of what mainnet runs.
 

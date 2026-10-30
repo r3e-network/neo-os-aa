@@ -341,7 +341,7 @@ sealed class Harness : IDisposable
 {
     internal static readonly UInt160 Owner = UInt160.Parse("0x0101010101010101010101010101010101010101");
     internal static readonly UInt160 Other = UInt160.Parse("0x0202020202020202020202020202020202020202");
-    internal static UInt160 Core => NativeContract.AccountManagement.Hash;
+    internal static UInt160 Core => NativeContract.SmartAccount.Hash;
     internal const ulong Delay = 86_400_000;
     internal ulong Time;
     internal IDiagnostic? Trace;

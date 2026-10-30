@@ -32,14 +32,14 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 export const PATHS = {
   props: "Directory.Build.props",
   nugetConfig: "nuget.config",
-  testsProject: "tests/AbstractAccount.Contracts.Tests/AbstractAccount.Contracts.Tests.csproj",
+  testsProject: "tests/SmartAccount.Contracts.Tests/SmartAccount.Contracts.Tests.csproj",
   contractsDir: "contracts",
   nativeProbeProject: "tests/NativeEpochProbe/NativeEpochProbe.csproj",
   nativeProbeContractProject: "tests/NativeEpochProbe/contracts/NativeEpochCore.csproj",
   nativeRuntimeProbeProject: "tests/NativeModuleProbe/NativeModuleProbe.csproj",
   nativeMultiSigProbeProject: "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj",
   coreAssets: "contracts/obj/project.assets.json",
-  testsAssets: "tests/AbstractAccount.Contracts.Tests/obj/project.assets.json",
+  testsAssets: "tests/SmartAccount.Contracts.Tests/obj/project.assets.json",
   manifest: "contracts/neo-platform-packages.json",
   doc: "docs/AA-REPRODUCIBLE-BUILD.md",
 };

@@ -2,7 +2,7 @@ const crypto = require("node:crypto");
 const { rpc } = require("./neonCompat");
 const {
   createNativeCodec,
-  NATIVE_ACCOUNT_SERVICE,
+  NATIVE_SMART_ACCOUNT_CONTRACT,
   NATIVE_ABI_VERSION,
 } = require("../../../shared/nativeSmartAccount.mjs");
 const digest = (algorithm, hex) =>
@@ -48,6 +48,6 @@ module.exports = {
   NATIVE_PROFILE_PARAMETER_DIGEST,
   nativeCodec,
   createNativeCodec,
-  NATIVE_ACCOUNT_SERVICE,
+  NATIVE_SMART_ACCOUNT_CONTRACT,
   NATIVE_ABI_VERSION,
 };

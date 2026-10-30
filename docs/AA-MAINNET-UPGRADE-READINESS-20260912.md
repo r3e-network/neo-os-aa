@@ -15,7 +15,7 @@ the transaction's **Application HALT** and exact deployed script and manifest.
 - NEF checksum: `2035992441`; 90 ABI entries / 89 distinct method names;
   `transferAdmin` is absent.
 - System fee: **0.38820645 GAS**; network fee: **0.00800884 GAS**.
-- Evidence: [transaction, Application logs, and independent readback](reports/mainnet-unified-smart-wallet-upgrade-20260915-evidence.json).
+- Evidence: [transaction, Application logs, and independent readback](reports/mainnet-smart-account-upgrade-20260915-evidence.json).
 
 **Correction:** Earlier sections decoded little-endian RPC stack bytes as a
 canonical script hash, producing the wrong `NVrSS…` address. The matching signing
@@ -45,7 +45,7 @@ not be used as current deployment instructions.
   contract admin witness alone. There is no propose/confirm timelock at this revision,
   so an upgrade takes effect in the same transaction that carries it.
 - The live NEF is byte-identical to the repository artifact at commit
-  `fa452d141013d6f7d44470b57a655b671df70331` (`contracts/build/UnifiedSmartWalletV3.nef`),
+  `fa452d141013d6f7d44470b57a655b671df70331` (`contracts/build/SmartAccountV3.nef`),
   whose checksum and manifest ABI/events/permissions/trusts also match the live contract.
   This is exact binary provenance, stronger than the ABI-proxy inference the shared
   preflight records by default.
@@ -58,10 +58,10 @@ Built from the current worktree with the canonical command:
 cd neo-os-aa && INCLUDE_VALIDATION_MOCKS=1 bash contracts/compile.sh
 ```
 
-- `contracts/bin/v3/UnifiedSmartWalletV3.nef` SHA-256
+- `contracts/bin/v3/SmartAccountV3.nef` SHA-256
   `360f830f3f56731fabbab909865cbbe1c76dab6557412bbbc405393254d479b0`,
   NEF checksum `2875851451`.
-- `contracts/bin/v3/UnifiedSmartWalletV3.manifest.json` SHA-256
+- `contracts/bin/v3/SmartAccountV3.manifest.json` SHA-256
   `8cacd63c82077f0419d30942e786cdc666f8968d6358c084847f35bc0b45b475`.
 
 Blocking provenance caveat: the worktree is dirty, so this candidate is not pinned to a
@@ -87,14 +87,14 @@ deployed bytes can be regenerated and audited later.
 
 ## Test Evidence
 
-`dotnet test tests/AbstractAccount.Contracts.Tests/AbstractAccount.Contracts.Tests.csproj`
+`dotnet test tests/SmartAccount.Contracts.Tests/SmartAccount.Contracts.Tests.csproj`
 passes 234/234, including the fixed-artifact rejection test and the pinned
 deployed-bytecode test that still reproduces the live bypass.
 
 ## Plan Run (executed, read-only)
 
 ```sh
-node scripts/upgrade_mainnet_unified_smart_wallet.js
+node scripts/upgrade_mainnet_smart_account.js
 ```
 
 Recorded output (`docs/reports/mainnet-unified-smart-wallet-upgrade-latest.json`):
@@ -119,12 +119,12 @@ Recorded output (`docs/reports/mainnet-unified-smart-wallet-upgrade-latest.json`
 #    AA admin to the new account through the governed flow.
 
 # 1. Plan only (read-only; already run successfully).
-node scripts/upgrade_mainnet_unified_smart_wallet.js
+node scripts/upgrade_mainnet_smart_account.js
 
 # 2. Broadcast with the admin key supplied through the environment only.
 CONFIRM_AA_MAINNET_UPDATE=I_UNDERSTAND_THIS_WRITES_MAINNET \
 AA_MAINNET_UPDATE_WIF='<admin key from a secure source>' \
-  node scripts/upgrade_mainnet_unified_smart_wallet.js --execute
+  node scripts/upgrade_mainnet_smart_account.js --execute
 ```
 
 The execute path verifies the WIF resolves to the live admin, broadcasts `update`, then

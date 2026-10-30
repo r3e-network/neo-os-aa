@@ -7,7 +7,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount
+namespace SmartAccount
 {
     /// <summary>
     /// Trustless GAS escrow market for deterministic Neo Abstract Account addresses.

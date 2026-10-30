@@ -9,7 +9,7 @@ outside its ownership.
 ## Purpose
 
 `neo-os-aa` owns the Neo N3 account-abstraction security boundary. Its tracked README
-describes UnifiedSmartWallet V3, verifier and hook plugins, the paymaster path, frontend
+describes SmartAccount V3, verifier and hook plugins, the paymaster path, frontend
 workflows, and the JavaScript SDK. The approved organization standard assigns AA
 authorization to this repository as protocol component C03.
 
@@ -44,7 +44,7 @@ that composition does not transfer DID ownership to AA.
 The tracked production and verification roots are:
 
 ```text
-contracts/       UnifiedSmartWallet and AA modules, verifiers, hooks, recovery, market, paymaster
+contracts/       SmartAccount and AA modules, verifiers, hooks, recovery, market, paymaster
 frontend/        AA application and operator-facing routes
 sdk/             JavaScript/TypeScript AA SDK
 shared/          shared AA helpers and wire adapters

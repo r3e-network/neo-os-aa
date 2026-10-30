@@ -8,7 +8,7 @@ function hash160(value, name) {
 
 function reverse(hex) { return Buffer.from(hex, 'hex').reverse().toString('hex'); }
 
-/** Exact UnifiedSmartWallet.GetProxyScriptHash preimage. Inputs use display byte order. */
+/** Exact SmartAccount.GetProxyScriptHash preimage. Inputs use display byte order. */
 function createProxyVerificationScript({ coreHash, accountId }) {
   return `0c14${reverse(hash160(accountId, 'accountId'))}11c01f0c067665726966790c14${reverse(hash160(coreHash, 'coreHash'))}41627d5b52`;
 }

@@ -154,7 +154,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertEqual(["v3", "platform"], verify.MODEL_PROFILES["coq/ProxyWitnessScript.v"])
         self.assertEqual(22, len(verify.COQ_MODULES["NativeAuthorityEpoch.v"]))
         # Legacy escape-owner and uint256/paymaster models are not native ABI 2 semantics.
-        for model in ("coq/UnifiedSmartWalletAA.v", "tla/UnifiedSmartWalletAA.tla", "smt/aa_core.smt2"):
+        for model in ("coq/SmartAccountAA.v", "tla/SmartAccountAA.tla", "smt/aa_core.smt2"):
             self.assertNotIn("native", verify.MODEL_PROFILES[model])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeIntegerDomain.v"])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/PluginLifecycle.v"])
@@ -180,23 +180,23 @@ class VerificationGateTests(unittest.TestCase):
             'OG_018_delay_is_seven_days_in_milliseconds'):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinaryGovernance.v'])
-        self.assertIn('contracts/UnifiedSmartWallet.PlatformRegistrar.cs', verify.SOURCE_FILES)
+        self.assertIn('contracts/SmartAccount.PlatformRegistrar.cs', verify.SOURCE_FILES)
         self.assertEqual(14, len(verify.COQ_MODULES['OrdinaryGovernance.v']))
-        for path in ('contracts/UnifiedSmartWallet.Admin.cs', 'contracts/UnifiedSmartWallet.MarketEscrow.cs'):
+        for path in ('contracts/SmartAccount.Admin.cs', 'contracts/SmartAccount.MarketEscrow.cs'):
             self.assertIn(path, verify.SOURCE_FILES)
 
     def test_ordinary_governance_millisecond_and_cleanup_correspondence(self):
         self.assertEqual(604800000, verify.check_ordinary_governance_correspondence()['delayMilliseconds'])
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for name in ('formal/coq/OrdinaryGovernance.v', 'contracts/UnifiedSmartWallet.Admin.cs',
-                         'contracts/UnifiedSmartWallet.PlatformRegistrar.cs', 'contracts/UnifiedSmartWallet.Escape.cs',
-                         'contracts/UnifiedSmartWallet.MarketEscrow.cs'):
+            for name in ('formal/coq/OrdinaryGovernance.v', 'contracts/SmartAccount.Admin.cs',
+                         'contracts/SmartAccount.PlatformRegistrar.cs', 'contracts/SmartAccount.Escape.cs',
+                         'contracts/SmartAccount.MarketEscrow.cs'):
                 destination = root / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(verify.ROOT.parent / name, destination)
             verify.check_ordinary_governance_correspondence(root)
-            source = root / 'contracts/UnifiedSmartWallet.Admin.cs'
+            source = root / 'contracts/SmartAccount.Admin.cs'
             source.write_text(source.read_text().replace('7L * 24 * 60 * 60 * 1000', '6L * 24 * 60 * 60 * 1000'))
             with self.assertRaisesRegex(ValueError, 'millisecond delay'):
                 verify.check_ordinary_governance_correspondence(root)
@@ -217,9 +217,9 @@ class VerificationGateTests(unittest.TestCase):
         self.assertTrue(verify.check_ordinary_sponsorship_correspondence()['reservationBeforeCallbacks'])
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            target = root / 'contracts/UnifiedSmartWallet.Paymaster.cs'
+            target = root / 'contracts/SmartAccount.Paymaster.cs'
             target.parent.mkdir(parents=True)
-            source = (verify.ROOT.parent / 'contracts/UnifiedSmartWallet.Paymaster.cs').read_text()
+            source = (verify.ROOT.parent / 'contracts/SmartAccount.Paymaster.cs').read_text()
             target.write_text(source.replace('BigInteger.Max(actualCost - budget.Reserved, 0)', 'actualCost'))
             with self.assertRaisesRegex(ValueError, 'reservation source guard'):
                 verify.check_ordinary_sponsorship_correspondence(root)
@@ -328,7 +328,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("PostHook; VerifierPost; Emit", model)
 
     def test_ordinary_execution_scopes_optional_callbacks(self):
-        model = (verify.ROOT / "coq" / "UnifiedSmartWalletAA.v").read_text()
+        model = (verify.ROOT / "coq" / "SmartAccountAA.v").read_text()
         declarations = verify.coq_declarations(model)
         self.assertIn("AA_020_disabled_callbacks_do_not_gate_execution", declarations)
         self.assertIn("pre_callback_valid", model)
@@ -343,6 +343,14 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("CPT_017_composite_children_are_leaves", model)
         self.assertIn("CPT_018_disabled_callbacks_omit_phases", model)
         self.assertIn("CPT_019_configured_callbacks_match_full_trace", model)
+        for theorem in ("CPT_020_absent_hook_results_are_irrelevant",
+                        "CPT_021_absent_verifier_result_is_irrelevant",
+                        "CPT_022_configured_trace_exact_acceptance"):
+            self.assertIn(theorem, verify.coq_declarations(model))
+        for mutation in ("callback-absent-hook-result", "callback-absent-hook-post-result",
+                         "callback-absent-verifier-result", "callback-installed-hook-result",
+                         "callback-installed-hook-post-result", "callback-installed-verifier-result"):
+            self.assertIn(mutation, verify.CALLBACK_PLUGIN_COQ_MUTATIONS)
 
     def test_authorization_evidence_model_is_registered(self):
         model = (verify.ROOT / "coq" / "AuthorizationEvidence.v").read_text()
@@ -423,10 +431,18 @@ class VerificationGateTests(unittest.TestCase):
                         "abi_projection_rejects_missing_initializer",
                         "abi_projection_rejects_duplicate_dispatch_key",
                         "abi_projection_rejects_missing_source_method",
-                        "abi_projection_rejects_extra_manifest_method"):
+                        "abi_projection_rejects_extra_manifest_method",
+                        "exact_projection_preserves_source_signatures",
+                        "abi_projection_rejects_retyped_parameter",
+                        "abi_projection_rejects_reordered_parameters",
+                        "abi_projection_rejects_malformed_source_arity",
+                        "abi_projection_rejects_malformed_manifest_arity",
+                        "abi_projection_rejects_initializer_parameters"):
             self.assertIn(theorem, model)
         for mutation in ("abi-requires-initializer", "abi-requires-unique-dispatch-keys",
-                         "abi-requires-every-manifest-method", "abi-requires-safe-flag-equality"):
+                         "abi-requires-every-manifest-method", "abi-requires-safe-flag-equality",
+                         "abi-requires-ordered-parameter-types", "abi-requires-parameter-order",
+                         "abi-requires-consistent-arities", "abi-requires-empty-initializer-parameters"):
             self.assertIn(mutation, verify.ABI_MANIFEST_PROJECTION_COQ_MUTATIONS)
 
     def test_neo_vm_continuation_model_is_registered(self):
@@ -440,7 +456,10 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(theorem, model)
         for mutation in ("neo-vm-child-budget-bound", "neo-vm-hardfork-gate",
                          "neo-vm-loadscript-continuation", "neo-vm-callt-return-address",
-                         "neo-vm-rollback-storage", "neo-vm-ancestor-charge"):
+                         "neo-vm-rollback-storage", "neo-vm-ancestor-charge",
+                         "neo-vm-positive-child-budget", "neo-vm-ancestor-admission",
+                         "neo-vm-step-ancestor-charge", "neo-vm-bounded-return-parent",
+                         "neo-vm-bounded-return-ancestors", "neo-vm-atomic-chain-check"):
             self.assertIn(mutation, verify.NEO_VM_CONTINUATION_COQ_MUTATIONS)
 
     def test_witness_fault_model_is_registered(self):
@@ -511,7 +530,20 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertIn("coq/NativeInvocation.v", verify.ARTIFACTS)
         self.assertIs(verify.COQ_MODULES["NativeInvocation.v"], verify.NATIVE_INVOCATION_COQ_MUTATIONS)
-        self.assertEqual(15, len(verify.NATIVE_INVOCATION_COQ_MUTATIONS))
+        self.assertEqual(22, len(verify.NATIVE_INVOCATION_COQ_MUTATIONS))
+        for theorem in ("module_authorization_checks_all_layers", "invalid_role_phase_is_rejected",
+                        "invalid_trigger_is_rejected", "verifier_preexecute_is_rejected",
+                        "hook_validation_is_rejected", "unknown_role_is_rejected",
+                        "unknown_phase_is_rejected", "verification_mutable_phase_is_rejected",
+                        "other_triggers_are_rejected", "admitted_direct_root_is_reachable",
+                        "every_legal_application_role_phase_is_reachable",
+                        "verification_verifier_validation_is_reachable", "admitted_direct_leaf_is_reachable"):
+            self.assertIn(theorem, verify.coq_declarations(model))
+        for mutation in ("invocation-role-phase-admission", "invocation-trigger-admission",
+                         "invocation-verifier-preexecute", "invocation-hook-validation",
+                         "invocation-unknown-phase", "invocation-verification-mutable-phase",
+                         "invocation-other-trigger"):
+            self.assertIn(mutation, verify.NATIVE_INVOCATION_COQ_MUTATIONS)
         for theorem in ("module_rejects_wrong_service", "module_requires_context", "module_matching_context_is_reachable"):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertIn("contracts/native/NativeAuthority.cs", verify.SOURCE_FILES)
@@ -551,7 +583,7 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertIn("coq/NativeLifecycle.v", verify.ARTIFACTS)
         self.assertIs(verify.COQ_MODULES["NativeLifecycle.v"], verify.NATIVE_LIFECYCLE_COQ_MUTATIONS)
-        self.assertEqual(12, len(verify.NATIVE_LIFECYCLE_COQ_MUTATIONS))
+        self.assertEqual(17, len(verify.NATIVE_LIFECYCLE_COQ_MUTATIONS))
 
     def test_configuration_postcondition_checks_both_bindings_and_rollback(self):
         model = (verify.ROOT / "coq" / "NativeLifecycle.v").read_text()
@@ -666,7 +698,7 @@ class VerificationGateTests(unittest.TestCase):
                     "sources": {name: hashlib.sha256((repo / name).read_bytes()).hexdigest() for name in verify.SOURCE_FILES}}
             (formal / "source-lock.json").write_text(json.dumps(lock))
             verify.check_inventory(formal)
-            (repo / "contracts/UnifiedSmartWallet.Execution.cs").write_text("// drift\n")
+            (repo / "contracts/SmartAccount.Execution.cs").write_text("// drift\n")
             with self.assertRaisesRegex(ValueError, "Source drift"):
                 verify.check_inventory(formal)
 

@@ -5,7 +5,7 @@ This is the NeoOS AA (Abstract Account) repository - Neo N3 account abstraction 
 Primary responsibilities:
 - C03 account: sole authority for account abstraction - user operations, proxy verification, and recovery (protocol-aa-core)
 - AA decides whether an actor authorized an operation and nothing more
-- UnifiedSmartWalletV3: deterministic accounts keyed by 20-byte accountId
+- SmartAccountV3: deterministic accounts keyed by 20-byte accountId
 - Verifier plugin authorization: Web3Auth, TEE, WebAuthn, session keys, multisig
 - Hook plugin policy enforcement: daily limits, token restrictions, credential gates
 - Backup-owner escape hatch with timelocked verifier rotation

@@ -52,7 +52,7 @@
         </button>
       </div>
       <p v-if="profile" class="small mono">
-        AccountManagement · ABI {{ profile.abiVersion }} · Network
+        SmartAccount · ABI {{ profile.abiVersion }} · Network
         {{ profile.networkMagic }}<br />{{ profile.profileParameterDigest }}
       </p>
       <p v-else class="callout">
@@ -258,6 +258,7 @@
                 spellcheck="false"
                 placeholder="0x…"
             /></label>
+            <p v-if="['proposeRecovery', 'proposeRecoveryAddress'].includes(action)" class="small">{{ L("The new nonzero authority must also witness this proposal. Coordinate both signing paths before continuing. Mature activation needs only a fee payer.", "新增的非零权限地址也必须为本次提议提供 witness。继续前请协调双方签名；到期激活仅需费用支付者。") }}</p>
             <p v-if="actionBlocked" class="small">{{ actionBlocked }}</p>
             <button
               :disabled="
@@ -316,8 +317,8 @@
           <p class="small">
             {{
               L(
-                "Use a separately controlled Neo wallet you can access. Recovery can freeze spending and replace custody after 7 days. Unfreezing needs both authorities, so preserve both signing paths and agree how to cooperate. An Ethereum-shaped hash does not prove Neo wallet control.",
-                "请选择可实际使用、独立保管的 Neo 钱包。恢复方可以冻结支出，并在 7 天后更换托管方。解冻需要双方权限，请确保双方签名方式可用并约定协作方式。Ethereum 地址外形并不证明具备 Neo 钱包控制权。",
+                "Use a separately controlled Neo wallet you can access. Custody and recovery must both witness registration. Recovery can freeze spending and replace custody after 7 days. Unfreezing needs both authorities, so preserve both signing paths and agree how to cooperate. An Ethereum-shaped hash does not prove Neo wallet control.",
+                "请选择可实际使用、独立保管的 Neo 钱包。注册需要托管方与恢复方共同提供 witness。恢复方可以冻结支出，并在 7 天后更换托管方。解冻需要双方权限，请确保双方签名方式可用并约定协作方式。Ethereum 地址外形并不证明具备 Neo 钱包控制权。",
               )
             }}
           </p>

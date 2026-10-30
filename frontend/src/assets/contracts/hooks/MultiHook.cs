@@ -7,7 +7,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Hooks
+namespace SmartAccount.Hooks
 {
     public class UserOperation
     {

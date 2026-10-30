@@ -5,7 +5,7 @@ const {
   NativeSmartAccountClient,
   nativeCodec: c,
   NATIVE_PROFILE_PARAMETER_DIGEST: PROFILE,
-  NATIVE_ACCOUNT_SERVICE: CORE,
+  NATIVE_SMART_ACCOUNT_CONTRACT: CORE,
 } = require("../src/native");
 const {
   NATIVE_REQUIRED_ABI,
@@ -211,7 +211,7 @@ function lifecycleFixture(role = "verifier") {
       I(11),
     ]),
     manifest = {
-      name: "AccountManagement",
+    name: "SmartAccount",
       extra: { smartAccount: { abiVersion: 2, profileParameterDigest: PROFILE } },
       abi: {
         methods: Object.entries(NATIVE_REQUIRED_ABI).map(
@@ -481,7 +481,7 @@ test("replacing a pending module cancellation intent rejects signing before any 
     assert.deepEqual(plan.pending, expectedPending);
   }
 });
-test("native witness fallback adds independent custody authority scoped only to native service", async () => {
+test("native witness fallback adds independent custody authority scoped only to the SmartAccount contract", async () => {
   const f = fixture();
   f.plan.requiredAuthorities = [f.custody.account];
   await assert.rejects(
@@ -494,7 +494,7 @@ test("native witness fallback adds independent custody authority scoped only to 
   });
   assert.equal(p.transaction.signers.length, 3);
   assert.deepEqual(p.transaction.signers[2].allowedcontracts, [
-    "0xd9421d07adf206e9dc4be746a02e8e087fa61741",
+    "0x398dc3f0227d7efac5533ed5ce9937390c158084",
   ]);
   await f.tool.signNativeTransaction(f.client, p);
 });
@@ -1210,4 +1210,19 @@ test("custody cancellation rejects maturity reached during signing before final 
   await assert.rejects(f.tool.signNativeTransaction(f.client,prepared),/matur/);
   assert.equal(f.calls.filter(call=>call.method === "calculatenetworkfee").length,1);
   assert.equal(f.calls.some(call=>call.method === "sendrawtransaction"),false);
+});
+
+test("new authority consent must have a real matching wallet witness before signing", async () => {
+  const f = fixture(), recipient = signer();
+  f.plan.kind = "lifecycle";
+  delete f.plan.proxySigner; delete f.plan.proxyWitness;
+  f.plan.method = "proposeRecovery";
+  f.plan.script = c.dynamicCall(CORE, "proposeRecovery", [c.hashValue(f.plan.accountId), c.hashValue(recipient.account)]);
+  f.plan.requiredAuthorities = [f.custody.account, recipient.account];
+  await assert.rejects(f.tool.prepareNativeTransaction(f.client, f.plan, { ...f.options, authoritySigners: [f.custody] }), /missing required custody\/recovery transaction signer/);
+  const prepared = await f.tool.prepareNativeTransaction(f.client, f.plan, { ...f.options, authoritySigners: [f.custody, recipient] });
+  const signed = await f.tool.signNativeTransaction(f.client, prepared);
+  assert.deepEqual(prepared.transaction.signers.map(s => s.account.replace(/^0x/, "")), [f.payer.account, f.custody.account, recipient.account]);
+  assert.equal(signed.witnesses.length, 3);
+  assert.ok(signed.witnesses.every(w => w.invocation.length === 132));
 });

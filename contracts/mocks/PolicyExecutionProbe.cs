@@ -5,7 +5,7 @@ using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Mocks
+namespace SmartAccount.Mocks
 {
     /// <summary>Test-only stateful adversarial token and atomic policy lifecycle driver.</summary>
     [DisplayName("PolicyExecutionProbe")]

@@ -2,9 +2,9 @@
 
 ## Runtime and authority versions (2026-10-09 convergence)
 
-Ordinary deployed `UnifiedSmartWallet` remains the public `v3` implementation
+Ordinary deployed `SmartAccount` remains the public `v3` implementation
 from the tested main branch; its separate `PLATFORM` build retains 10 GAS bounded
-verifier callbacks. Neither is the native AccountManagement service. Native ABI 2
+verifier callbacks. Neither is the native SmartAccount contract. Native ABI 2
 uses a 1 GAS verifier budget (within the 1.5 GAS verification envelope), 2.5 GAS
 hook/maintenance budgets, and explicit epoch-aware module packaging.
 
@@ -41,7 +41,7 @@ VM budget evidence, separate from the bounded policy proofs.
 The Neo N3 Abstract Account system implements a policy-gated, plugin-based account abstraction architecture. This document defines the threat model, trust assumptions, security properties, and defense-in-depth mechanisms across all layers of the system.
 
 The deployed-contract profile is not automatically compatible with native
-AccountManagement. The native NeoNativeVerifier, WhitelistHook, SessionKeyVerifier,
+SmartAccount. The native NeoNativeVerifier, WhitelistHook, SessionKeyVerifier,
 DailyLimitHook and TokenRestrictedHook historical ABI 1 profiles
 have private-chain evidence for actual witnesses, exact invocation grants,
 delayed configuration, rollback and cleanup. The remaining modules still require
@@ -204,7 +204,7 @@ branch coverage remain outside the demonstrated scope.
 
 | Property | Implementation | Threat Mitigated |
 | --- | --- | --- |
-| **Integrity** | State in `UnifiedSmartWallet` | Contract can't be modified without deployer |
+| **Integrity** | State in `SmartAccount` | Contract can't be modified without deployer |
 | **Confidentiality** | No confidentiality guarantee from account abstraction | Transaction and stored contract data are public; secrets must not be placed on-chain |
 | **Availability** | No per-account deployment | Single point of failure |
 | **Non-repudiation** | Nonce + Deadline | Sender can't deny transaction |
@@ -566,8 +566,8 @@ stateDiagram-v2
 ```
 
 Both entrypoints take the account id; `finalizeEscape` also takes the verifier the account falls
-back to (`contracts/build/UnifiedSmartWalletV3.manifest.json`, implemented in
-`contracts/UnifiedSmartWallet.Escape.cs`).
+back to (`contracts/build/SmartAccountV3.manifest.json`, implemented in
+`contracts/SmartAccount.Escape.cs`).
 
 ### 9.2 Security Properties
 

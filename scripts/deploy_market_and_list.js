@@ -119,7 +119,7 @@ async function main() {
 
   // Step 1: Deploy contracts
   console.log('[1/5] Deploying AA Core (with market escrow)...');
-  const core = await deployArtifact({ ...deployCtx, baseName: 'UnifiedSmartWalletV3', uniqueSuffix: `${DEPLOY_TAG}-core` });
+  const core = await deployArtifact({ ...deployCtx, baseName: 'SmartAccountV3', uniqueSuffix: `${DEPLOY_TAG}-core` });
   console.log(`  AA Core deployed: ${core.hash}`);
   console.log('');
 

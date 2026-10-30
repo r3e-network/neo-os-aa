@@ -127,7 +127,7 @@ if [[ $run_contracts -eq 1 ]]; then
   node scripts/check_neo_platform_packages.mjs --compiler-only
   if [[ $run_ordinary -eq 1 ]]; then
     if [[ $skip_contract_build -eq 0 ]]; then
-      dotnet build contracts/UnifiedSmartWallet.csproj -c Release -p:WarningsAsErrors=nullable -nologo
+      dotnet build contracts/SmartAccount.csproj -c Release -p:WarningsAsErrors=nullable -nologo
       bash contracts/compile.sh
     fi
     # The NeoDIDRegistry cross-contract proof deploys a compiled artifact built by
@@ -152,13 +152,13 @@ if [[ $run_contracts -eq 1 ]]; then
       echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
     fi
     echo "public-profile gate: verifier-callback tests run on the published TestEngine; private PLATFORM bytecode is checked separately."
-    dotnet test neo-abstract-account.sln -c Release --nologo
+    dotnet test SmartAccount.sln -c Release --nologo
     python3 -m unittest discover -s scripts -p 'test_neoexpress_validate.py'
     python3 -m unittest discover -s scripts -p 'test_neoexpress_source_validate.py'
     python3 -m unittest discover -s scripts -p 'test_neoexpress_reproducible_build.py'
     node --test scripts/lib/deploy-helpers.test.mjs \
-      scripts/upgrade_mainnet_unified_smart_wallet.test.mjs \
-      scripts/upgrade_testnet_unified_smart_wallet.test.mjs \
+      scripts/upgrade_mainnet_smart_account.test.mjs \
+      scripts/upgrade_testnet_smart_account.test.mjs \
       scripts/deploy_latest_aa_verifiers.test.mjs \
       scripts/check_neo_platform_packages.test.mjs \
       scripts/check-artifact-reproducibility.test.mjs \
@@ -168,7 +168,7 @@ if [[ $run_contracts -eq 1 ]]; then
       scripts/verify-private-artifact-provenance.test.mjs \
       scripts/implementation_profiles.test.mjs \
       scripts/verify_repo.test.mjs
-    dotnet format neo-abstract-account.sln --verify-no-changes --no-restore --verbosity minimal
+    dotnet format SmartAccount.sln --verify-no-changes --no-restore --verbosity minimal
   fi
   if [[ $run_native -eq 1 ]]; then
     # Keep the shared profile registry covered even when the native contract

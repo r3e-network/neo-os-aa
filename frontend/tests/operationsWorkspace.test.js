@@ -8,7 +8,7 @@ import { buildRelayPayloadOptions } from '../src/features/operations/execution.j
 test('workspace holds AA identity, operation body, signers, signatures, and share metadata', () => {
   const workspace = createOperationsWorkspace();
 
-  workspace.loadAbstractAccount({
+  workspace.loadSmartAccount({
     accountAddressScriptHash: 'bb22',
   });
   workspace.setOperationBody({ kind: 'invoke', targetContract: 'cc33', method: 'transfer', args: ['x'] });
@@ -46,14 +46,14 @@ test('workspace holds AA identity, operation body, signers, signatures, and shar
 test('workspace derives signer and bound-address forms from an AA draft', () => {
   const workspace = createOperationsWorkspace();
 
-  workspace.loadAbstractAccount({
+  workspace.loadSmartAccount({
     accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
     accountAddressScriptHash: '11223344',
   });
   assert.equal(workspace.account.value.accountIdHash, 'f951cd3eb5196dacde99b339c5dcca37ac38cc22');
   assert.equal(workspace.account.value.accountSignerScriptHash, '44332211');
 
-  workspace.loadAbstractAccount({
+  workspace.loadSmartAccount({
     accountSignerScriptHash: 'aabbccdd',
   });
   assert.equal(workspace.account.value.accountAddressScriptHash, 'ddccbbaa');

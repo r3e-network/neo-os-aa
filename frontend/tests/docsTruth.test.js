@@ -88,7 +88,7 @@ const AUDIT_DOCS = ['frontend/src/assets/docs/SECURITY_AUDIT.md'];
 // The native ABI 2 profile is a separate runtime with its own documents (DS-CU-163 section 2.2),
 // and NativeSmartAccountClient declares the exact method set it validates a deployment against.
 // Only these documents are read against that artefact; a name that merely coincides with a native
-// method (callVerifierChild is also defined in contracts/UnifiedSmartWallet.VerifierChildren.cs and
+// method (callVerifierChild is also defined in contracts/SmartAccount.VerifierChildren.cs and
 // absent from the deployed manifest) is still judged by the deployed ABI everywhere else.
 const NATIVE_PROFILE_DOCS = ['docs/NATIVE_SDK.md', 'docs/NATIVE_ACCOUNT_WORKSPACE.md'];
 const nativeAbiNames = new Set(Object.keys(NATIVE_REQUIRED_ABI));
@@ -145,15 +145,15 @@ const V2_DEBT = {
 };
 
 // Framework and service calls that share a name with a contract method but are not one.
-// ContractManagement is the Neo native contract: contracts/UnifiedSmartWallet.Accounts.cs:404 calls
-// ContractManagement.GetContract and tests/AbstractAccount.Contracts.Tests/*.cs invoke the native
+// ContractManagement is the Neo native contract: contracts/SmartAccount.Accounts.cs:404 calls
+// ContractManagement.GetContract and tests/SmartAccount.Contracts.Tests/*.cs invoke the native
 // "getContract" by string, so a document that reads a NEF back that way names no AA entrypoint.
 // CallFlags is the SmartContract.Framework enum used as the third argument of Contract.Call; it is a
 // type, not an entrypoint, and naming it here is what keeps the scan's vocabulary from being widened
 // entry by entry (DS-CU-210 section 3).
 const FRAMEWORK_RECEIVERS = new Set(['Runtime', 'Contract', 'ContractManagement', 'System', 'CryptoLib', 'Storage', 'Helper', 'ExecutionEngine', 'Neo', 'CallFlags']);
 // Inline code that looks like an entrypoint but is a parameter, a field or a service name.
-// callHash is a field of the pending-module-call record (contracts/UnifiedSmartWallet.Models.cs:65),
+// callHash is a field of the pending-module-call record (contracts/SmartAccount.Models.cs:65),
 // not a callable; DS-CU-202 section 4.
 const NON_CALLABLES = new Set(['create_aa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash']);
 
@@ -525,7 +525,7 @@ const HISTORICAL_SNIPPET_SCOPE = /retained as historical security context|as a d
 //     previous rule asked `deployedAbiLower.has(name.toLowerCase())` and therefore judged
 //     `CanExecuteHook` live while every manifest exports `canExecuteHook`;
 //   * a C# definition no manifest exports is live as source. `CallVerifierChild`
-//     (contracts/UnifiedSmartWallet.VerifierChildren.cs) is the recorded example: the pinned build
+//     (contracts/SmartAccount.VerifierChildren.cs) is the recorded example: the pinned build
 //     does not export it (DS-CU-202 finding F1), and a document that names it names real code.
 //
 // The two halves are why the rule keys on the artifact rather than on letter case: refusing every
@@ -1725,7 +1725,7 @@ const V2_FENCE_MENTIONS = {
   },
   'docs/NATIVE_ACCOUNT_TRANSACTION_GUARDS.md': {
     names: ['cancelModuleCall'],
-    reason: 'The native account work landed on the default branch after this chain forked; its text fence is the NeoVM script the signed application runs, and the name is the AccountManagement method that script pushes as a string, so the document names the call rather than making it.',
+    reason: 'The native account work landed on the default branch after this chain forked; its text fence is the NeoVM script the signed application runs, and the name is the SmartAccount method that script pushes as a string, so the document names the call rather than making it.',
   },
   'frontend/src/assets/docs/data-flow.md': {
     names: ['CallCustom', 'HasID'],

@@ -18,7 +18,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
 MODULES = ("IntegerSemantics.v", "CapArithmetic.v", "ArithmeticVm.v")
-METHOD = "AbstractAccount.UnifiedSmartWallet.CapReimbursementToActualCost(System.Numerics.BigInteger)"
+METHOD = "SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
 BIG = "global::System.Numerics.BigInteger"
 PAIR = "(System.Numerics.BigInteger,System.Numerics.BigInteger)"
 IDENTITY_CONVERSION = dict(Exists=True, IsIdentity=True, IsImplicit=True,
@@ -106,11 +106,11 @@ def expression_from_operation(node, environment):
                 "Unknown source parameter")
         return ("input", "Requested")
     if kind == "FieldReference":
-        require(details == {"symbol": "F:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement.Reserved"}
+        require(details == {"symbol": "F:SmartAccount.SmartAccount.TransactionReimbursement.Reserved"}
                 and len(children) == 1, "Unsupported source field")
         receiver = children[0]
         require(receiver["kind"] == "LocalReference" and receiver["details"] == {"symbol": "budget"}
-                and receiver["type"] == "global::AbstractAccount.UnifiedSmartWallet.TransactionReimbursement"
+                and receiver["type"] == "global::SmartAccount.SmartAccount.TransactionReimbursement"
                 and not receiver["children"], "Wrong reserved-field receiver")
         metadata_supported(receiver)
         return ("input", "Reserved")
@@ -207,7 +207,11 @@ def selected_region(inventory, declarations, actual_instructions=None):
     require(len(focuses) == 1, "Missing/duplicate debug locator")
     focus = focuses[0]
     expected_locals = ["transactionHash,Hash256,0", "data,ByteArray,1", "budget,Any,2", "actualCost,Integer,3",
-                       "estimationFlag,Integer,4", "cap,Integer,5", "settled,Integer,6"]
+                       "estimationFlag,Integer,4", "cap,Integer,5", "settled,Integer,6",
+                       # The VM-integer-range margin guard declares a further local after
+                       # `settled`. It is not read by the certified arithmetic region, but
+                       # the debug frame must match the actual 8-slot INITSLOT.
+                       "vmMax,Integer,7"]
     require(focus["source"]["variables"] == expected_locals and
             focus["source"]["params"] == ["requested,Integer,0"], "Unsupported region input/locals mapping")
     documents = inventory["sourceMap"]["debug"]["documents"]
@@ -268,7 +272,7 @@ def generated_proof(program, expression, recipe=None):
 
 
 def command(args, directory, logfile, expect_success=True):
-    completed = subprocess.run(args, cwd=directory, capture_output=True, text=True, timeout=120)
+    completed = subprocess.run(args, cwd=directory, capture_output=True, text=True, timeout=600)
     output = completed.stdout + completed.stderr
     Path(logfile).write_text(output)
     if expect_success:
@@ -333,7 +337,7 @@ def run_proofs(inventory, output_dir):
     for filename, expected in inventory["inputs"].items():
         require(digest(filename) == expected, "Inventory input drift: " + filename)
     nef_paths = [Path(p) for p, h in inventory["inputs"].items()
-                 if p.endswith("UnifiedSmartWalletV3.nef") and h == inventory["nef"]["sha256"]]
+                 if p.endswith("SmartAccountV3.nef") and h == inventory["nef"]["sha256"]]
     require(len(nef_paths) == 1, "Ambiguous actual NEF input")
     spec = importlib.util.spec_from_file_location("aa_refinement_binding", ROOT / "verify.py")
     binding = importlib.util.module_from_spec(spec); spec.loader.exec_module(binding)
@@ -378,7 +382,7 @@ def run_proofs(inventory, output_dir):
             "instruction gas/pricing and resource bounds",
             "load/deserialize/transaction reset", "assert settled>0", "reserved+=settled/store/rollback",
             "remaining entrypoints and external contracts"],
-        "outsideRegionCounterexample": "cost=0,reserved=2^255-1,requested=1: region succeeds; reservation ADD at pc13739 faults",
+        "outsideRegionCounterexample": "cost=0,reserved=2^255-1,requested=1: the charge region succeeds; the later headroom assertion at pc13806 aborts before the reservation ADD at pc13812",
         "tcb": ["Coq kernel/toolchain", "validated Roslyn typed-subtree projection and debug/local binding",
                 "NEF container/input binding parser", "reference semantics to pinned NeoVM correspondence remains external"]}
 

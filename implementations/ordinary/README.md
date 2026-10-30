@@ -5,21 +5,21 @@ use on the published Neo N3 runtime. The source remains in the repository's
 existing build-compatible locations; [`profile.json`](profile.json) records the
 canonical roots, excluded native roots, artifacts and verification commands.
 
-Use this path for ordinary `UnifiedSmartWalletV3` contracts, their verifier and
-hook modules, the ordinary frontend workspace, and the ordinary `AbstractAccountClient` SDK. Its gates are
+Use this path for ordinary `SmartAccountV3` contracts, their verifier and
+hook modules, the ordinary frontend workspace, and the ordinary `SmartAccountClient` SDK. Its gates are
 selected with `./scripts/verify_repo.sh --profile ordinary`.
 
 The profile is `public-artifact-identity-verified-upgrade-required`: the tracked
 `contracts/build` pair
 matches the mainnet readback recorded in
-[`mainnet-unified-smart-wallet-upgrade-20260915-evidence.json`](../../docs/reports/mainnet-unified-smart-wallet-upgrade-20260915-evidence.json)
+[`mainnet-smart-account-upgrade-20260915-evidence.json`](../../docs/reports/mainnet-smart-account-upgrade-20260915-evidence.json)
 through two independent RPC nodes. This verifies the historical artifact identity; it does not certify the public
 artifact against the newly discovered reimbursement and recovery issues. `contracts/bin/v3` is the current source candidate;
 its ABI additions require a new artifact review and governed upgrade before
 they can be called public deployment evidence.
 
 The ordinary profile is a user-contract implementation. It must not be
-labelled as native AccountManagement or used as evidence of native consensus
+labelled as native SmartAccount or used as evidence of native consensus
 activation.
 
 The ordinary protocol status is `source-checks-passed-conformance-open`: its

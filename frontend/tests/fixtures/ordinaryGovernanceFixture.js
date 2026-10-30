@@ -47,7 +47,7 @@ export function createOrdinaryGovernanceFixture() {
     unexpectedRequests: [],
   };
   function contractState() {
-    return { hash: '0x' + ordinaryCore, manifest: { name: 'UnifiedSmartWalletV3', abi: { methods: state.fullPendingRoles.map((role) => ({
+    return { hash: '0x' + ordinaryCore, manifest: { name: 'SmartAccountV3', abi: { methods: state.fullPendingRoles.map((role) => ({
       name: `getPending${role === 'verifier' ? 'Verifier' : 'Hook'}Update`,
       parameters: [{ name: 'accountId', type: 'Hash160' }],
       returntype: 'Any', safe: true,

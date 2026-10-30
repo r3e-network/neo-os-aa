@@ -13,7 +13,7 @@ import {
 } from "./fixtures/nativeRpcFixture.js";
 import {
   nativeCodec as c,
-  NATIVE_ACCOUNT_SERVICE as CORE,
+  NATIVE_SMART_ACCOUNT_CONTRACT as CORE,
 } from "../src/features/native/nativeWorkspace.js";
 import { getAddressFromScriptHash } from "../src/utils/neo.js";
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -58,7 +58,7 @@ test(
           { type: "ByteString", value: nativeTestSalt },
           c.hashValue("00".repeat(20)),
           c.hashValue("00".repeat(20)),
-          c.hashValue(nativeTestRecovery),
+          c.hashValue("00".repeat(20)),
         ]);
         return { txid: "aa".repeat(32) };
       });
@@ -130,6 +130,14 @@ test(
         path: "/tmp/aa-native-desktop-20261008.png",
         fullPage: true,
       });
+      assert.equal(await page.getByRole("button", { name: "Send to wallet for approval", exact: true }).isDisabled(), true,
+        "registration with a guardian needs both real authority witnesses");
+      assert.equal(requests.length, 0);
+      await page.getByTestId("native-recovery").fill("");
+      await page.getByLabel("I understand: without recovery, lost custody keys may permanently lock this account.", { exact: true }).check();
+      await page.getByRole("button", { name: "Review registration", exact: true }).click();
+      await page.getByText("registerAccount", { exact: true }).waitFor();
+      await page.getByLabel("I reviewed the network, authority, target, scope and fee payer.", { exact: true }).check();
       await page
         .getByRole("button", {
           name: "Send to wallet for approval",

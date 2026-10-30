@@ -108,11 +108,38 @@ class PinnedDownloadRetryTests(unittest.TestCase):
     def test_retried_bytes_still_have_to_match_the_pinned_hash(self):
         key=next(iter(source.SOURCES))
         with tempfile.TemporaryDirectory() as out:
-            with mock.patch.object(source.urllib.request,'urlopen',
-                                   lambda url,timeout=None:_Payload(b'not the pinned source')):
-                with self.assertRaisesRegex(ValueError,'Downloaded pinned source mismatch'):
-                    source.project_production(out)
+            # The offline mirror is an environment fault fallback, not part of
+            # this contract: if it is set the download never happens and this
+            # test would assert nothing. Neutralise it so the pinned-hash check
+            # is what actually rejects the bytes.
+            with mock.patch.dict(os.environ,{'AA_ENTRY_DISPATCH_SOURCE_MIRROR':''}):
+                with mock.patch.object(source.urllib.request,'urlopen',
+                                       lambda url,timeout=None:_Payload(b'not the pinned source')):
+                    with self.assertRaisesRegex(ValueError,'Downloaded pinned source mismatch'):
+                        source.project_production(out)
             self.assertEqual([],list(Path(out).iterdir()))
+
+    def test_offline_mirror_bytes_still_have_to_match_the_pinned_hash(self):
+        key=next(iter(source.SOURCES))
+        with tempfile.TemporaryDirectory() as out, tempfile.TemporaryDirectory() as mirror:
+            (Path(mirror)/(key.replace('/','-')+'.cs')).write_bytes(b'not the pinned source')
+            with mock.patch.dict(os.environ,{'AA_ENTRY_DISPATCH_SOURCE_MIRROR':mirror}):
+                # A mirror must not launder different bytes: the pin still decides.
+                with mock.patch.object(source.urllib.request,'urlopen',
+                                       lambda *a,**k:self.fail('mirror hit attempted a download')):
+                    with self.assertRaisesRegex(ValueError,'Offline mirror source mismatch'):
+                        source.project_production(out)
+            self.assertEqual([],list(Path(out).iterdir()))
+
+    def test_absent_mirror_entry_falls_back_to_the_pinned_download(self):
+        with tempfile.TemporaryDirectory() as out, tempfile.TemporaryDirectory() as mirror:
+            def unreachable(url,timeout=None):raise TimeoutError('transport unavailable')
+            with mock.patch.dict(os.environ,{'AA_ENTRY_DISPATCH_SOURCE_MIRROR':mirror}):
+                with mock.patch.object(source.urllib.request,'urlopen',unreachable):
+                    # An empty mirror directory is not evidence of anything, so the
+                    # lane must still reach the network path and fail closed there.
+                    with self.assertRaises(TimeoutError):
+                        source.project_production(out)
 
 
 class _Payload(object):

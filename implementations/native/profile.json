@@ -1,5 +1,5 @@
 {
-  "id": "native-account-management",
+  "id": "native-smart-account",
   "version": 1,
   "kind": "native-protocol-submission",
   "status": "draft-unactivated",
@@ -19,7 +19,7 @@
     "shared/nativeWalletWitness.mjs"
   ],
   "excludedSourceRoots": [
-    "contracts/UnifiedSmartWallet.cs",
+    "contracts/SmartAccount.cs",
     "contracts/verifiers",
     "contracts/hooks",
     "contracts/paymaster",
@@ -53,15 +53,21 @@
     ]
   },
   "externalBoundaries": [
-    "neo/neo: the consensus AccountManagement service and native VM enforcement are maintained outside this repository",
+    "neo/neo: the consensus SmartAccount contract and native VM enforcement are maintained outside this repository",
     "neo-project/proposals#243: ABI 2 proposal and review acceptance are external protocol gates",
     "Hardfork activation, node integration, formal refinement and public-network readback remain required before native status can change"
   ],
   "openGates": [
-    "NATIVE-CROSS-PROXY-AUTHORITY",
+    "CURRENT-PROFILE-ARTIFACT-READBACK",
     "EXTERNAL-PROTOCOL-ACCEPTANCE",
     "FORMAL-NEOVM-COMPILER-REFINEMENT",
     "FORMAL-NATIVE-FEE-RESOURCE-REFINEMENT",
     "PUBLIC-HARDFORK-ACTIVATION"
-  ]
+  ],
+  "localAuthorityAdmission": {
+    "status": "implemented-in-local-candidate",
+    "scope": "Registered native proxies are rejected in current and pending authority slots; each newly introduced nonzero address requires a witness, while retained pending promotion remains permissionless.",
+    "parameterSource": "docs/proposals/smartaccount-native-profile-v2-parameters.json#authorityAdmission",
+    "evidenceBoundary": "Current-digest runtime builds, module packaging and deployed-byte readback must be verified independently. Earlier digests and receipts remain historical; local remediation does not establish public activation or complete formal refinement."
+  }
 }

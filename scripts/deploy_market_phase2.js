@@ -10,7 +10,7 @@
  * default (the core default now tracks the canonical testnet deployment), but
  * every deployment-specific value can now be overridden:
  *
- *   AA_TESTNET_CORE_HASH    already-deployed AA core (default: canonical testnet UnifiedSmartWalletV3)
+ *   AA_TESTNET_CORE_HASH    already-deployed AA core (default: canonical testnet SmartAccountV3)
  *   AA_TESTNET_MARKET_HASH  already-deployed AAAddressMarket (default: 2026-03 phase 1)
  *   MARKET_DEPLOY_TAG       manifest suffix tag for the TEEVerifier deployment
  *   MARKET_DEPLOY_WIF / NEO_TESTNET_WIF   funded deployer WIF
@@ -51,7 +51,7 @@ const NEON_DB_URL = process.env.NEON_DB_URL || '';
 const TESTNET_NETWORK_MAGIC = 894710606;
 
 // Already-deployed contracts. The core default is the canonical testnet
-// UnifiedSmartWalletV3 (the 2026-03 phase-1 core 0x2818ce32… is superseded);
+// SmartAccountV3 (the 2026-03 phase-1 core 0x2818ce32… is superseded);
 // the market default is still the 2026-03 phase-1 deployment.
 const CORE_HASH = normalizeHash(process.env.AA_TESTNET_CORE_HASH || '0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2');
 const MARKET_HASH = normalizeHash(process.env.AA_TESTNET_MARKET_HASH || '0x8dbd4cf6fc47afc013e7fd7128d028db2985bddf');

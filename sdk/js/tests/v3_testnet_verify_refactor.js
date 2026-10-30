@@ -12,7 +12,7 @@ const path = require('path');
 const { rpc, sc, wallet, experimental, tx, u, CONST } = require('@cityofzion/neon-js');
 const { ethers } = require('ethers');
 
-const { AbstractAccountClient, buildWeb3AuthSigningPayload } = require('../src/index');
+const { SmartAccountClient, buildWeb3AuthSigningPayload } = require('../src/index');
 const { sanitizeHex, computeArgsHash: sdkComputeArgsHash } = require('../src/metaTx');
 const { extractDeployedContractHash } = require('../src/deployLog');
 
@@ -134,7 +134,7 @@ async function main() {
 
   // ── Deploy core + plugins ──
   console.log('\n== Deploy ==');
-  const core = await deploy(client, account, magic, 'UnifiedSmartWalletV3', `${tag}-core`);
+  const core = await deploy(client, account, magic, 'SmartAccountV3', `${tag}-core`);
   const web3auth = await deploy(client, account, magic, 'Web3AuthVerifier', `${tag}-w3a`);
   const sessionKey = await deploy(client, account, magic, 'SessionKeyVerifier', `${tag}-sk`);
   const dailyLimit = await deploy(client, account, magic, 'DailyLimitHook', `${tag}-dl`);
@@ -151,7 +151,7 @@ async function main() {
   }
   console.log('  all plugins authorized');
 
-  const aa = new AbstractAccountClient(RPC_URL, core);
+  const aa = new SmartAccountClient(RPC_URL, core);
 
   // ═════════════════════════════════════════════════════════════════
   // TEST 1: Register + native ExecuteUserOp (no verifier, no hook)

@@ -1,0 +1,34 @@
+{
+  "schema": "aa-abi-scenario-input/v1",
+  "name": "probe-plugin-account-ids",
+  "contractAddress": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2",
+  "blockTimestamp": 1700000000000,
+  "defaultSigner": "0x1111111111111111111111111111111111111111",
+  "deploySigner": "0x1111111111111111111111111111111111111111",
+  "steps": [
+    {
+      "id": "id-verifier",
+      "method": "computeRegistrationAccountId",
+      "args": [
+        { "type": "Hash160", "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e" },
+        { "type": "ByteString", "value": "" },
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" },
+        { "type": "Hash160", "value": "0x9999999999999999999999999999999999999999" },
+        { "type": "Integer", "value": "604800" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "id-hook",
+      "method": "computeRegistrationAccountId",
+      "args": [
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" },
+        { "type": "ByteString", "value": "" },
+        { "type": "Hash160", "value": "0xd4ec13dc96887873c74b374e08ee5f4592e2035e" },
+        { "type": "Hash160", "value": "0x9999999999999999999999999999999999999999" },
+        { "type": "Integer", "value": "604800" }
+      ],
+      "expect": "HALT"
+    }
+  ]
+}

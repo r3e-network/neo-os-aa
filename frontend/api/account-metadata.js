@@ -6,7 +6,7 @@ import {
   DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET,
   DEFAULT_RPC_URL,
   DEFAULT_RPC_URL_TESTNET,
-  resolveAbstractAccountHash,
+  resolveSmartAccountHash,
 } from '../src/config/runtimeConfig.js';
 import { checkRateLimit, resolveClientIp, resolveRateLimitFailure, sanitizeError } from './rateLimiter.js';
 import { apiFetch } from './outboundFetch.js';
@@ -59,7 +59,7 @@ function resolveControlAaHash(network) {
   const configured = network === 'testnet'
     ? process.env.AA_RELAY_TESTNET_ALLOWED_HASH || process.env.VITE_AA_HASH_TESTNET || process.env.VITE_ABSTRACT_ACCOUNT_HASH_TESTNET
     : process.env.AA_RELAY_MAINNET_ALLOWED_HASH || process.env.VITE_AA_HASH || process.env.VITE_ABSTRACT_ACCOUNT_HASH;
-  return resolveAbstractAccountHash(
+  return resolveSmartAccountHash(
     trim(process.env.AA_RELAY_ALLOWED_HASH) || trim(configured) || defaultHash,
     defaultHash,
   );

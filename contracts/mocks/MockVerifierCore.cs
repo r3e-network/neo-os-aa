@@ -6,7 +6,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Mocks
+namespace SmartAccount.Mocks
 {
     /// <summary>
     /// Minimal AA-core stub used by verifier runtime tests.
@@ -120,7 +120,7 @@ namespace AbstractAccount.Mocks
         [Safe]
         public static bool CanConfigureHook(UInt160 accountId, UInt160 hook) => true;
 
-        // Proxy verification script layout, byte-for-byte the core's UnifiedSmartWallet.Proxy.cs:
+        // Proxy verification script layout, byte-for-byte the core's SmartAccount.Proxy.cs:
         //   PUSHDATA1 20 <accountId> | PUSH1 PACK PUSH15 | PUSHDATA1 6 "verify" |
         //   PUSHDATA1 20 <core> | SYSCALL System.Contract.Call
         private static readonly byte[] ProxyScriptPushData20 = new byte[] { 0x0C, 0x14 };
@@ -155,7 +155,7 @@ namespace AbstractAccount.Mocks
         public static bool CanExecuteHook(UInt160 accountId, UInt160 caller, UInt160 hook) => true;
 
         // Test-only dependency registry used to exercise the same composite cleanup
-        // contract as UnifiedSmartWallet without deploying a full account fixture.
+        // contract as SmartAccount without deploying a full account fixture.
         public static void SetVerifierDependencies(UInt160 accountId, UInt160[] children)
         {
             byte[] key = Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId);

@@ -3,7 +3,7 @@
   "updatecounter": 0,
   "hash": "0x1111111111111111111111111111111111111111",
   "manifest": {
-    "name": "UnifiedSmartWalletV3",
+    "name": "SmartAccountV3",
     "abi": {
       "methods": [
         {

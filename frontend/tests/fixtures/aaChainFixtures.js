@@ -17,7 +17,7 @@ export const chain = JSON.parse(
 );
 
 export const GAS_HASH = 'd2a4cff31913016155e38e474a2c06d08be276cf';
-export const CORE_HASH = chain.contracts.UnifiedSmartWalletV3.replace(/^0x/, '');
+export const CORE_HASH = chain.contracts.SmartAccountV3.replace(/^0x/, '');
 export const MOCK_TARGET_HASH = chain.contracts.MockTransferTarget.replace(/^0x/, '');
 // Well-known sample hashes of the repository's own tests (accountId, its proxy address, a buyer).
 export const ACCOUNT_ID = 'f951cd3eb5196dacde99b339c5dcca37ac38cc22';

@@ -7,7 +7,7 @@
 ## Executive Summary
 
 This audit covers the complete Neo Abstract Account smart contract system, including:
-- UnifiedSmartWallet core contract (V3 AA runtime)
+- SmartAccount core contract (V3 AA runtime)
 - Hook plugins (DailyLimitHook, MultiHook, WhitelistHook, TokenRestrictedHook, NeoDIDCredentialHook)
 - Verifier plugins (Web3AuthVerifier, WebAuthnVerifier, TEEVerifier, SessionKeyVerifier, MultiSigVerifier, SubscriptionVerifier, ZkLoginVerifier, ZKEmailVerifier)
 - Market escrow system (AAAddressMarket)
@@ -650,7 +650,7 @@ public static void SetSessionKey(UInt160 accountId, ByteString pubKey, BigIntege
 
 ### MEDIUM-4: Escape Hatch Can Be Cancelled By Any Operation
 
-**Contract**: `contracts/UnifiedSmartWallet.Execution.cs`
+**Contract**: `contracts/SmartAccount.Execution.cs`
 **Method**: `ExecuteUserOp` (lines 55-61)
 **Lines**: 55-61
 
@@ -792,7 +792,7 @@ public static bool ValidateSignature(UInt160 accountId, UserOperation op)
 **Issue**: Several methods do not fully validate all input parameters
 
 **Examples**:
-- `UnifiedSmartWallet.RegisterAccount`: No validation that `accountId` is a valid address
+- `SmartAccount.RegisterAccount`: No validation that `accountId` is a valid address
 - `DailyLimitHook.TryReadTrackedTransfer`: No validation that args array structure is correct beyond length checks
 - `AAAddressMarket.ParseListingId`: Assumes data is either BigInteger or ByteString, doesn't handle other types gracefully
 
@@ -820,7 +820,7 @@ Add gas estimation or warning hooks. Consider making `MaxHooks` configurable per
 
 ### LOW-3: Escape Timelock Minimum May Be Too Short
 
-**Contract**: `contracts/UnifiedSmartWallet.Accounts.cs`
+**Contract**: `contracts/SmartAccount.Accounts.cs`
 **Method**: `RegisterAccount` (lines 18-59)
 **Lines**: 22-23
 
@@ -836,7 +836,7 @@ Consider allowing users to set longer minimums or implementing a graduated timel
 
 ### LOW-4: Market Escrow No Protection Against Race Conditions
 
-**Contract**: `contracts/UnifiedSmartWallet.MarketEscrow.cs`, `contracts/market/AAAddressMarket.cs`
+**Contract**: `contracts/SmartAccount.MarketEscrow.cs`, `contracts/market/AAAddressMarket.cs`
 **Method**: `SettleMarketEscrow`, `SettleListing`
 **Lines**: MarketEscrow.cs:47-77, AAAddressMarket.cs:106-138
 
@@ -902,7 +902,7 @@ private static readonly byte[] Prefix_DailyLimit = new byte[] { 0x01, 0x02 };
 
 ### INFO-1: Good Use of Execution Lock
 
-**Contract**: `contracts/UnifiedSmartWallet.Execution.cs`
+**Contract**: `contracts/SmartAccount.Execution.cs`
 **Method**: `ExecuteUserOp`
 **Description**: The execution lock (`IsAnyExecutionActive`, `SetExecutionLock`, `ClearExecutionLock`) properly prevents re-entrant calls. This is a good security practice.
 
@@ -910,14 +910,14 @@ private static readonly byte[] Prefix_DailyLimit = new byte[] { 0x01, 0x02 };
 
 ### INFO-2: Proper Context Management for Plugin Calls
 
-**Contracts**: `contracts/UnifiedSmartWallet.Internal.cs`, `contracts/UnifiedSmartWallet.VerifyContext.cs`
+**Contracts**: `contracts/SmartAccount.Internal.cs`, `contracts/SmartAccount.VerifyContext.cs`
 **Description**: The use of context keys (`Prefix_VerifyContext`, `Prefix_HookExecutionContext`) to enable plugins to verify authorization is well-designed. The `try-finally` blocks ensure cleanup even on errors.
 
 ---
 
 ### INFO-3: Market Escrow Properly Locks Account
 
-**Contract**: `contracts/UnifiedSmartWallet.MarketEscrow.cs`
+**Contract**: `contracts/SmartAccount.MarketEscrow.cs`
 **Description**: The `AssertNoMarketEscrow` check is called in all critical methods, preventing configuration changes or escapes while an account is listed for sale. This is correct behavior.
 
 ---
@@ -936,7 +936,7 @@ private static readonly byte[] Prefix_DailyLimit = new byte[] { 0x01, 0x02 };
 - **Security**: Properly validates calling script hash and core authorization
 - **Finding**: No timelock on admin rotation (MEDIUM-1)
 
-### UnifiedSmartWallet Access Controls
+### SmartAccount Access Controls
 - **Backup Owner**: Required for all configuration changes
 - **Verifier Authorization**: Verified via plugin or native witness
 - **Market Escrow**: Properly blocks operations during escrow
@@ -992,7 +992,7 @@ All contracts use single-byte prefixes, which is acceptable but could be more ro
 
 ## Re-entrancy Analysis
 
-### Core Contract (`UnifiedSmartWallet.Execution.cs`)
+### Core Contract (`SmartAccount.Execution.cs`)
 - **Execution Lock**: Properly implemented to prevent re-entrancy
 - **Hook Calls**: Made within try-finally blocks with proper cleanup
 - **Finding**: No re-entrancy vulnerabilities found
@@ -1103,12 +1103,12 @@ All contracts use single-byte prefixes, which is acceptable but could be more ro
 | MEDIUM-1 | Medium | HookAuthority, VerifierAuthority | Initialize, RotateAdmin | NOT FIXED |
 | MEDIUM-2 | Medium | MultiHook | SetHooks | NOT FIXED |
 | MEDIUM-3 | Medium | SessionKeyVerifier | SetSessionKey | NOT FIXED |
-| MEDIUM-4 | Medium | UnifiedSmartWallet.Execution | ExecuteUserOp | NOT FIXED |
+| MEDIUM-4 | Medium | SmartAccount.Execution | ExecuteUserOp | NOT FIXED |
 | MEDIUM-5 | Medium | SubscriptionVerifier | ValidateSignature | NOT FIXED |
 | LOW-1 | Low | Various | Multiple | NOT FIXED |
 | LOW-2 | Low | MultiHook | PreExecute, PostExecute | NOT FIXED |
-| LOW-3 | Low | UnifiedSmartWallet.Accounts | RegisterAccount | NOT FIXED |
-| LOW-4 | Low | UnifiedSmartWallet.MarketEscrow | SettleMarketEscrow | NOT FIXED |
+| LOW-3 | Low | SmartAccount.Accounts | RegisterAccount | NOT FIXED |
+| LOW-4 | Low | SmartAccount.MarketEscrow | SettleMarketEscrow | NOT FIXED |
 | LOW-5 | Low | Various | Multiple | NOT FIXED |
 | LOW-6 | Low | Various | Multiple | NOT FIXED |
 
@@ -1223,12 +1223,12 @@ The following critical and high severity fixes have been applied:
 | MEDIUM-1 | Medium | HookAuthority, VerifierAuthority | Initialize, RotateAdmin | FIXED |
 | MEDIUM-2 | Medium | MultiHook | SetHooks | FIXED |
 | MEDIUM-3 | Medium | SessionKeyVerifier | SetSessionKey | FIXED |
-| MEDIUM-4 | Medium | UnifiedSmartWallet.Execution | ExecuteUserOp | FIXED |
+| MEDIUM-4 | Medium | SmartAccount.Execution | ExecuteUserOp | FIXED |
 | MEDIUM-5 | Medium | SubscriptionVerifier | ValidateSignature | FIXED |
 | LOW-1 | Low | Various | Multiple | FIXED |
 | LOW-2 | Low | MultiHook | PreExecute, PostExecute | N/A |
-| LOW-3 | Low | UnifiedSmartWallet.Accounts | RegisterAccount | N/A |
-| LOW-4 | Low | UnifiedSmartWallet.MarketEscrow | SettleMarketEscrow | N/A |
+| LOW-3 | Low | SmartAccount.Accounts | RegisterAccount | N/A |
+| LOW-4 | Low | SmartAccount.MarketEscrow | SettleMarketEscrow | N/A |
 | LOW-5 | Low | Various | Multiple | N/A |
 | LOW-6 | Low | Various | Multiple | NOT FIXED |
 

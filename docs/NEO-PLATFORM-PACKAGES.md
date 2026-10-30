@@ -39,7 +39,7 @@ action below instead of a bare `NU1102` from deep inside the build.
 | Profile | Artifact directory | Verifier callback | Runtime requirement |
 | --- | --- | --- | --- |
 | Public `v3` | `contracts/bin/v3` | Standard `System.Contract.Call`; validation is read-only and post-execution accounting retains write access | Published Neo runtime; no isolated verifier child gas budget |
-| Native ABI 2 | Explicit native-module build output | AccountManagement bounded native callbacks: verifier 1 GAS, hook/maintenance 2.5 GAS | Source-built native service, `HF_SmartAccountV1`, ABI 2 metadata and epoch-aware modules |
+| Native ABI 2 | Explicit native-module build output | SmartAccount bounded native callbacks: verifier 1 GAS, hook/maintenance 2.5 GAS | Source-built native contract, `HF_SmartAccountV1`, ABI 2 metadata and epoch-aware modules |
 | Private `PLATFORM` | `contracts/bin/platform` | `System.Contract.CallWithGasLimit`, 10 GAS per verifier callback | Matching private runtime and activation; cannot run on an ordinary public node |
 
 `bash contracts/compile.sh` builds public `v3` and private `PLATFORM` profiles from the pinned published compiler and
@@ -53,7 +53,7 @@ six projects obey the same root `Directory.Build.props`, `nuget.config` and
 reviewed per-project locks; a missing or changed lock is a build failure. The
 packager requires `native-v2`, exact Array callbacks, ABI 2 metadata and explicit
 `getAuthorityEpoch` permission. SessionKeyVerifier additionally requires explicit
-`canonicalP256PublicKey` permission on the fixed native service. Every module
+`canonicalP256PublicKey` permission on the fixed native contract. Every module
 declares the exact parameter
 fingerprint and a Boolean verifier-composition marker; composite verifiers must
 expose the additional receipt validation and post-execution callbacks. It records original/prepared sources and both
@@ -96,8 +96,8 @@ The deployed AA cores do not depend on any of this. Public JSON-RPC reads on 202
 
 The MainNet core is reproducible from public packages: compiling commit `4149496` (the source before
 the gas cap) with the public framework 3.9.1 and `nccs` 3.9.1 from a clean cache gives
-`UnifiedSmartWalletV3.nef` with checksum 2035992441, byte-identical to the chain and to
-`contracts/build/UnifiedSmartWalletV3.nef`. The current source has additional contract changes and separate runtime profiles;
+`SmartAccountV3.nef` with checksum 2035992441, byte-identical to the chain and to
+`contracts/build/SmartAccountV3.nef`. The current source has additional contract changes and separate runtime profiles;
 current public deployment parity requires a fresh source/artifact/RPC comparison.
 
 ## Historical private packages

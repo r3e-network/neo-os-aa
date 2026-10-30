@@ -14,7 +14,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { AbstractAccountClient } = require('../src/index');
+const { SmartAccountClient } = require('../src/index');
 const neonCompat = require('../src/neonCompat');
 const { createHash } = require('node:crypto');
 const recoveryStateFixture = require('./fixtures/ordinary-owner-only-contract-state.json');
@@ -38,7 +38,7 @@ function loadAbiMethods(manifestFileName) {
   return methods;
 }
 
-const walletAbi = loadAbiMethods('UnifiedSmartWalletV3.manifest.json');
+const walletAbi = loadAbiMethods('SmartAccountV3.manifest.json');
 const paymasterAbi = loadAbiMethods('AAPaymaster.manifest.json');
 
 // Optional methods are backed by the complete candidate manifest and its
@@ -55,14 +55,14 @@ const descriptor = (method) => ({
 function assertCandidateEvidence(bytes = candidateBytes) {
   const compatibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-candidate-compatibility-20261013.json')));
   const reproducibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-artifact-reproducibility-20261013.json')));
-  const manifestReceipt = reproducibility.profiles.v3.artifacts.filter((entry) => entry.artifact === 'UnifiedSmartWalletV3.manifest.json');
+  const manifestReceipt = reproducibility.profiles.v3.artifacts.filter((entry) => entry.artifact === 'SmartAccountV3.manifest.json');
   assert.equal(manifestReceipt.length, 1);
   assert.equal(reproducibility.release_matches_fresh_build, true);
   assert.equal(manifestReceipt[0].match, true);
   assert.equal(manifestReceipt[0].expected_sha256, manifestReceipt[0].actual_sha256);
   assert.equal(sha256(bytes), manifestReceipt[0].actual_sha256, 'candidate fixture must be the reproducibly compiled manifest');
   assert.equal(sha256(bytes), compatibility.candidateArtifact.manifestSha256);
-  const publicBytes = fs.readFileSync(path.join(repoRoot, 'contracts/build/UnifiedSmartWalletV3.manifest.json'));
+  const publicBytes = fs.readFileSync(path.join(repoRoot, 'contracts/build/SmartAccountV3.manifest.json'));
   assert.equal(sha256(publicBytes), '24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4', 'pinned public artifact is unchanged');
   assert.equal(sha256(publicBytes), compatibility.pinnedArtifact.manifestSha256);
   assert.equal(JSON.parse(publicBytes).abi.methods.length, 90);
@@ -120,7 +120,7 @@ test('candidate evidence and method surfaces fail closed on drift or ungated add
 
 test('candidate recovery payload and read use exact compiled descriptors after capability verification', async () => {
   assertCandidateEvidence();
-  const client = new AbstractAccountClient('https://example.invalid', MASTER_HASH);
+  const client = new SmartAccountClient('https://example.invalid', MASTER_HASH);
   const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: ACCOUNT_HASH });
   const write = candidateManifest.abi.methods.find((entry) => entry.name === payload.operation);
   assert.equal(write.safe, false);
@@ -151,7 +151,7 @@ test('candidate recovery payload and read use exact compiled descriptors after c
   assert.deepEqual(calls, ['getcontractstate', 'isOwnerOnlyRecovery']);
   // The original public artifact is still exercised and cannot authorize the
   // new query. It reports unknown mode without making a query invocation.
-  const pinned = JSON.parse(fs.readFileSync(path.join(repoRoot, 'contracts/build/UnifiedSmartWalletV3.manifest.json')));
+  const pinned = JSON.parse(fs.readFileSync(path.join(repoRoot, 'contracts/build/SmartAccountV3.manifest.json')));
   client.rpcClient.send = async () => ({ hash: `0x${MASTER_HASH}`, manifest: pinned });
   client.rpcClient.invokeFunction = async () => assert.fail('old public ABI must not invoke candidate read');
   assert.deepEqual(await client.getOwnerOnlyRecoveryStatus(ACCOUNT_HASH), { supported: false, ownerOnlyRecovery: null });
@@ -174,7 +174,7 @@ test('the six phantom PascalCase operations stay out of the SDK', () => {
 });
 
 test('payload builders target manifest methods with matching arity', () => {
-  const client = new AbstractAccountClient('https://example.invalid', `0x${MASTER_HASH}`);
+  const client = new SmartAccountClient('https://example.invalid', `0x${MASTER_HASH}`);
   const accountScriptHash = ACCOUNT_HASH;
   const userOp = {
     TargetContract: TARGET_HASH,
@@ -212,14 +212,14 @@ test('payload builders target manifest methods with matching arity', () => {
 
   for (const payload of payloads) {
     const arities = walletAbi.get(payload.operation);
-    assert.ok(arities, `operation '${payload.operation}' missing from UnifiedSmartWalletV3 ABI`);
+    assert.ok(arities, `operation '${payload.operation}' missing from SmartAccountV3 ABI`);
     assert.ok(arities.has(payload.args.length),
       `operation '${payload.operation}' arity ${payload.args.length} does not match ABI (${[...(arities || [])].join('/')})`);
   }
 });
 
 test('client read methods invoke manifest methods with matching arity', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', `0x${MASTER_HASH}`);
+  const client = new SmartAccountClient('https://example.invalid', `0x${MASTER_HASH}`);
   const recorded = [];
   const genericResponse = () => ({
     state: 'HALT',
@@ -297,7 +297,7 @@ test('client read methods invoke manifest methods with matching arity', async ()
 
   for (const { target, operation, paramCount } of recorded) {
     const abi = target === PAYMASTER_HASH ? paymasterAbi : walletAbi;
-    const abiName = target === PAYMASTER_HASH ? 'AAPaymaster' : 'UnifiedSmartWalletV3';
+    const abiName = target === PAYMASTER_HASH ? 'AAPaymaster' : 'SmartAccountV3';
     const arities = abi.get(operation);
     assert.ok(arities, `operation '${operation}' missing from ${abiName} ABI`);
     assert.ok(arities.has(paramCount),

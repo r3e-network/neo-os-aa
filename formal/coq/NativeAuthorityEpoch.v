@@ -7,6 +7,9 @@
   authority_valid input represents stored-authority/intent validation, including
   the proposal's authorization and replacement-custody restrictions; it is NOT
   a requirement for an old-custody witness when executing a mature recovery.
+  NativeLifecycle.v separately projects admission consent over the bounded
+  current/pending authority set. Actual witness soundness, registered-proxy
+  lookup and the C# state-read/save correspondence remain external obligations.
 
   The recovery transition has no module callback. Returning (false, before)
   models atomic rejection; it is not a proof of NeoVM or ledger rollback.

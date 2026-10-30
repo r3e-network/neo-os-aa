@@ -3,7 +3,7 @@ using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
-namespace AbstractAccount.Verifiers
+namespace SmartAccount.Verifiers
 {
     /// <summary>
     /// Canonical signer-domain commitments used by the threshold composition profile.

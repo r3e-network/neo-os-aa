@@ -11,7 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "types": [],
     "paths": {
-      "neo-abstract-account": ["./src/index.d.ts"]
+      "smart-account": ["./src/index.d.ts"]
     }
   },
   "files": ["tests/types/consumer.ts"]

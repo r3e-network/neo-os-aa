@@ -262,12 +262,12 @@ if (options.mode === "preflight-raw") {
     plan = client.buildExecution([operation]);
   }
   const required = plan.requiredAuthorities ?? [];
+  const suppliedAuthorities = [custody, ...(options.authorityPrivateKeys ?? []).map(wallet)];
   const prepared = await client.prepareTransaction(plan, {
     feePayer: payer,
     authoritySigners:
-      required.includes(custody.account) && payer.account !== custody.account
-        ? [custody]
-        : [],
+      suppliedAuthorities.filter((signer, index) => required.includes(signer.account) &&
+        signer.account !== payer.account && suppliedAuthorities.findIndex(other => other.account === signer.account) === index),
     verifierSigners: (options.verifierPrivateKeys ?? []).map(wallet),
     maxSystemFee: "1000000000",
     maxNetworkFee: "300000000",

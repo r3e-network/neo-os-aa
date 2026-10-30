@@ -10,6 +10,6 @@
     <PackageReference Include="Neo.SmartContract.Testing" Version="$(NeoSmartContractFrameworkVersion)" />
     <PackageReference Include="MSTest.TestFramework" Version="3.10.4" />
     <Compile Include="Program.cs" />
-    <Compile Include="../AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs" Link="RuntimeTestSupport.cs" />
+    <Compile Include="../SmartAccount.Contracts.Tests/RuntimeTestSupport.cs" Link="RuntimeTestSupport.cs" />
   </ItemGroup>
 </Project>

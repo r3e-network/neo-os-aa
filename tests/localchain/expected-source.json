@@ -1,7 +1,7 @@
 {
   "variant": "source",
   "deployedCore": {
-    "path": "contracts/build/UnifiedSmartWalletV3.nef",
+    "path": "contracts/build/SmartAccountV3.nef",
     "sha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b"
   },
   "profiles": {

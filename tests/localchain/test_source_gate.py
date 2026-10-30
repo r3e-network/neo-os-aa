@@ -22,7 +22,24 @@ import aa_rpc_scenarios as suite  # noqa: E402
 import source_build  # noqa: E402
 
 SOURCE_EXPECTED = ROOT / "tests/localchain/expected-source.json"
-DEPLOYED_CORE = ROOT / "contracts/build/UnifiedSmartWalletV3.nef"
+DEPLOYED_CORE = ROOT / "contracts/build/SmartAccountV3.nef"
+
+
+class ReceiptPrivacyTest(unittest.TestCase):
+    def test_receipt_redaction_removes_machine_specific_locations(self):
+        raw = {
+            "trace": f"file://{ROOT}/frontend/node_modules/x.js",
+            "workdir": "/private" + "/tmp/aa-localchain-1234",
+            "tool": "/opt/homebrew/Cellar/openssl@3/bin/openssl",
+            "nested": ["/tmp/aa-localchain-5678"],
+        }
+        rendered = json.dumps(suite._redact_receipt_value(raw))
+        for marker in ("/Users/", "/private/tmp/", "/tmp/", "/opt/homebrew/", "node_modules/"):
+            self.assertNotIn(marker, rendered)
+        self.assertIn("<repo>", rendered)
+        self.assertIn("<tmp>/", rendered)
+        self.assertIn("<toolchain>/", rendered)
+        self.assertIn("<dependencies>/", rendered)
 
 
 def varint(value):
@@ -170,7 +187,7 @@ class DetectorTest(unittest.TestCase):
 def source_new_path_proofs(contracts):
     """Independent minimal RPC observations for the new causal evidence mutation gates."""
     core, verifier, hook, target, pm = [contracts[name] for name in
-        ("UnifiedSmartWalletV3", "WebAuthnVerifier", "WhitelistHook", "MockTransferTarget", "AAPaymaster")]
+        ("SmartAccountV3", "WebAuthnVerifier", "WhitelistHook", "MockTransferTarget", "AAPaymaster")]
     owner, relay, sponsor = ["0x" + digit * 40 for digit in ("a", "b", "c")]
     account = "0x" + "d" * 40
     proxy = "0x" + suite.v.hash160(suite.proxy_script_for(account, core))[::-1].hex()
@@ -256,7 +273,7 @@ class SourceReceiptGateTest(unittest.TestCase):
             receipt["records"].extend({"outcome": outcome} for _ in range(wanted["totals"][key]))
         if profile == source_build.PROFILE_SYSCALL_ABSENT:
             receipt["sourceProxyRelay"] = proxy_relay_proof()
-            receipt["contracts"]["UnifiedSmartWalletV3"] = receipt["sourceProxyRelay"]["core"]
+            receipt["contracts"]["SmartAccountV3"] = receipt["sourceProxyRelay"]["core"]
             receipt["sourceArtifactRuntime"]["readback"][0]["contractHash"] = receipt["sourceProxyRelay"]["core"]
         receipt["sourceOwnerRecovery"], receipt["sourceSponsorshipCap"] = source_new_path_proofs(receipt["contracts"])
         return receipt
@@ -337,15 +354,15 @@ class SourceReceiptGateTest(unittest.TestCase):
                 Path(output, name + ".manifest.json").write_text(json.dumps({"name": name}))
             rows = source_build.artifact_snapshot(output)
             self.assertEqual(list(source_build.REQUIRED_ARTIFACTS), [row["contractName"] for row in rows])
-            core = Path(output, "UnifiedSmartWalletV3.nef")
+            core = Path(output, "SmartAccountV3.nef")
             core.write_bytes(core.read_bytes()[:-1] + b"\x00")
             with self.assertRaises(source_build.NefError):
                 source_build.artifact_snapshot(output)
             core.write_bytes(nef_bytes(b"\x40"))
-            Path(output, "UnifiedSmartWalletV3.manifest.json").write_text('{"name":"HistoricalOther"}')
+            Path(output, "SmartAccountV3.manifest.json").write_text('{"name":"HistoricalOther"}')
             with self.assertRaises(source_build.BuildError):
                 source_build.artifact_snapshot(output)
-            Path(output, "UnifiedSmartWalletV3.manifest.json").unlink()
+            Path(output, "SmartAccountV3.manifest.json").unlink()
             with self.assertRaises(source_build.BuildError):
                 source_build.artifact_snapshot(output)
 

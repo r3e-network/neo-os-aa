@@ -36,7 +36,7 @@ import {
   MORPHEUS_NETWORK_DEFAULTS,
   getRuntimeConfig,
   resolveRuntimeNetwork,
-  resolveAbstractAccountHash,
+  resolveSmartAccountHash,
   resolveNetworkMagic,
   resolveOptionalHash,
   resolveRpcUrl,
@@ -48,15 +48,15 @@ test('sanitizeHex removes prefix and lowercases input', () => {
   assert.equal(sanitizeHex('abcd'), 'abcd');
 });
 
-test('resolveAbstractAccountHash accepts valid 40-byte hex values', () => {
+test('resolveSmartAccountHash accepts valid 40-byte hex values', () => {
   assert.equal(
-    resolveAbstractAccountHash('0x49C095CE04D38642E39155F5481615C58227A498'),
+    resolveSmartAccountHash('0x49C095CE04D38642E39155F5481615C58227A498'),
     '49c095ce04d38642e39155f5481615c58227a498'
   );
 });
 
-test('resolveAbstractAccountHash falls back for invalid values', () => {
-  assert.equal(resolveAbstractAccountHash('bad-value'), DEFAULT_ABSTRACT_ACCOUNT_HASH);
+test('resolveSmartAccountHash falls back for invalid values', () => {
+  assert.equal(resolveSmartAccountHash('bad-value'), DEFAULT_ABSTRACT_ACCOUNT_HASH);
 });
 
 test('default abstract account hash tracks the hardened verified deployment', () => {

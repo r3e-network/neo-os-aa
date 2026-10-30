@@ -22,20 +22,20 @@ if [[ "${1:-}" == "--platform" ]]; then
   trap 'rm -rf "$profile_dir"' EXIT
   mkdir -p "$profile_dir/contracts"
   cp "$ROOT_DIR/Directory.Build.props" "$ROOT_DIR/nuget.config" "$profile_dir/"
-  cp "$ROOT_DIR"/contracts/*.cs "$ROOT_DIR/contracts/UnifiedSmartWallet.csproj" \
+  cp "$ROOT_DIR"/contracts/*.cs "$ROOT_DIR/contracts/SmartAccount.csproj" \
     "$ROOT_DIR/contracts/packages.lock.json" "$profile_dir/contracts/"
-  { printf '#define PLATFORM\n'; cat "$ROOT_DIR/contracts/UnifiedSmartWallet.Execution.cs"; } \
-    > "$profile_dir/contracts/UnifiedSmartWallet.Execution.cs"
+  { printf '#define PLATFORM\n'; cat "$ROOT_DIR/contracts/SmartAccount.Execution.cs"; } \
+    > "$profile_dir/contracts/SmartAccount.Execution.cs"
   cd "$profile_dir/contracts"
-  "$NCCS_BIN" UnifiedSmartWallet.csproj -o "$ROOT_DIR/contracts/bin/platform"
+  "$NCCS_BIN" SmartAccount.csproj -o "$ROOT_DIR/contracts/bin/platform"
   exit 0
 fi
 
 echo "Cleaning stale build intermediates..."
 find "$ROOT_DIR/contracts" -type d -name obj -prune -exec rm -rf {} +
 
-echo "Compiling UnifiedSmartWallet V3 Core..."
-"$NCCS_BIN" UnifiedSmartWallet.csproj -o bin/v3
+echo "Compiling SmartAccount V3 Core..."
+"$NCCS_BIN" SmartAccount.csproj -o bin/v3
 
 echo "Compiling Verifiers..."
 pushd verifiers >/dev/null

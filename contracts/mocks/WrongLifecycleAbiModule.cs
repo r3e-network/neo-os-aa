@@ -3,7 +3,7 @@ using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
 using System.ComponentModel;
 
-namespace AbstractAccount.Mocks
+namespace SmartAccount.Mocks
 {
     /// <summary>
     /// Test-only module whose method names are present but whose validation return type is

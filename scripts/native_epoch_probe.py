@@ -51,10 +51,10 @@ def main():
                     report['testSourceSha256'][str(source.relative_to(root))] = digest(source)
                     if source.name.endswith('.lock.json'):
                         report['lockSha256'][str(source.relative_to(root))] = digest(source)
-            support = scratch / 'tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs'
+            support = scratch / 'tests/SmartAccount.Contracts.Tests/RuntimeTestSupport.cs'
             support.parent.mkdir(parents=True)
-            shutil.copyfile(root / 'tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs', support)
-            report['testSourceSha256']['tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs'] = digest(support)
+            shutil.copyfile(root / 'tests/SmartAccount.Contracts.Tests/RuntimeTestSupport.cs', support)
+            report['testSourceSha256']['tests/SmartAccount.Contracts.Tests/RuntimeTestSupport.cs'] = digest(support)
             raw = scratch / 'artifacts'
             raw.mkdir()
             projects = [scratch / 'contracts/native' / spec['project'] for spec in profiles.values()]

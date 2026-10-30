@@ -254,9 +254,9 @@ function invokeRpcReadWithRetry(fn, attempts = DEFAULT_RPC_READ_RETRY_ATTEMPTS) 
  *
  * @example
  * ```javascript
- * const { AbstractAccountClient } = require('neo-abstract-account');
+ * const { SmartAccountClient } = require('smart-account');
  *
- * const client = new AbstractAccountClient(
+ * const client = new SmartAccountClient(
  *   'https://rpc.example.com',
  *   '0x1234...40chars'
  * );
@@ -273,9 +273,9 @@ function invokeRpcReadWithRetry(fn, attempts = DEFAULT_RPC_READ_RETRY_ATTEMPTS) 
  * });
  * ```
  */
-class AbstractAccountClient {
+class SmartAccountClient {
   /**
-   * Creates a new AbstractAccountClient instance.
+   * Creates a new SmartAccountClient instance.
    *
    * @param {string} rpcUrl - RPC endpoint URL (http:// or https://)
    * @param {string} masterContractHash - Master contract hash (40 hex chars)
@@ -1682,7 +1682,7 @@ class AbstractAccountClient {
 }
 
 module.exports = {
-  AbstractAccountClient,
+  SmartAccountClient,
   ...require('./native'),
   ...require('./proxyWitness'),
   ...require('./multisig'),

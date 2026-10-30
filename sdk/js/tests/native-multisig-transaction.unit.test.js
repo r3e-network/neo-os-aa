@@ -1,9 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
-const { NativeSmartAccountClient, nativeCodec: c, NATIVE_ACCOUNT_SERVICE: CORE } = require("../src/native");
+const { NativeSmartAccountClient, nativeCodec: c, NATIVE_SMART_ACCOUNT_CONTRACT: CORE } = require("../src/native");
 const hash160 = (script) => Buffer.from(crypto.createHash("ripemd160").update(crypto.createHash("sha256").update(Buffer.from(script, "hex")).digest()).digest()).reverse().toString("hex");
-// Public fixture scalars already used by core AccountManagement Witness (2, 3),
+// Public fixture scalars already used by core SmartAccount Witness (2, 3),
 // TransactionCommitment (19) and Clock (41) tests. Never use these test wallets.
 function fixtureKey(scalar) {
   const secret = Buffer.alloc(32); secret[31] = scalar;

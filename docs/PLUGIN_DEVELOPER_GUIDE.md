@@ -542,7 +542,7 @@ For official plugin listing, provide:
 - **Security Model:** `docs/SECURITY_MODEL.md`
 - **Ethereum Comparison:** `docs/ETHEREUM_AA_COMPARISON.md`
 - **Plugin Matrix:** `docs/PLUGIN_MATRIX.md`
-- **Core Contract:** `contracts/UnifiedSmartWallet.cs`
+- **Core Contract:** `contracts/SmartAccount.cs`
 - **Verifier Examples:**
   - `contracts/verifiers/Web3AuthVerifier.cs`
   - `contracts/verifiers/WebAuthnVerifier.cs`
@@ -558,7 +558,7 @@ For official plugin listing, provide:
 
 Found a vulnerability in an existing plugin? Report to:
 
-1. **Critical/High:** Email `security@neo-abstract-account.org`
+1. **Critical/High:** Email `security@smart-account.org`
 2. **Medium/Low:** Open GitHub issue with `[security]` label
 
 Include:

@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { AbstractAccountClient } = require('../src/index');
+const { SmartAccountClient } = require('../src/index');
 
 test('invokeScriptWithRetry retries transient transport failures', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   let attempts = 0;
   client.rpcClient = {
     async invokeScript() {
@@ -22,7 +22,7 @@ test('invokeScriptWithRetry retries transient transport failures', async () => {
 });
 
 test('invokeScriptWithRetry does not retry non-transport failures', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   let attempts = 0;
   client.rpcClient = {
     async invokeScript() {
@@ -36,7 +36,7 @@ test('invokeScriptWithRetry does not retry non-transport failures', async () => 
 });
 
 test('invokeFunctionWithRetry retries transient transport failures', async () => {
-  const client = new AbstractAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
+  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
   let attempts = 0;
   client.rpcClient = {
     async invokeFunction() {

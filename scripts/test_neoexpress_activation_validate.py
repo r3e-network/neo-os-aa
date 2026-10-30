@@ -79,17 +79,20 @@ class BoundaryTests(unittest.TestCase):
         return {"state": state, "gasconsumed": "42", "stack": [{"type": "Boolean", "value": True}] if state == "HALT" else []}
 
     def test_exact_live_boundary_is_required(self):
-        chain = self.chain([8, 8, 9, 9], [self.result("FAULT"), self.result("HALT")])
+        chain = self.chain([7, 7, 8, 8], [self.result("FAULT"), self.result("HALT")])
         samples = activation.sample_boundary(chain, "probe", 8, 5, sleep=lambda _: None)
-        self.assertEqual([s["ledgerIndex"] for s in samples], [7, 8])
+        self.assertEqual([s["ledgerIndex"] for s in samples], [6, 7])
+        self.assertEqual([s["executionIndex"] for s in samples], [7, 8])
+        self.assertEqual([s["applicationState"] for s in samples], ["FAULT", "HALT"])
+        self.assertTrue(all("verificationState" not in s for s in samples))
 
     def test_block_race_is_discarded(self):
-        chain = self.chain([7, 8, 8, 8, 9, 9], [self.result("HALT"), self.result("FAULT"), self.result("HALT")])
+        chain = self.chain([6, 7, 7, 7, 8, 8], [self.result("FAULT"), self.result("FAULT"), self.result("HALT")])
         samples = activation.sample_boundary(chain, "probe", 8, 5, sleep=lambda _: None)
         self.assertEqual(len(samples), 2)
 
     def test_unexpected_early_activation_fails(self):
-        chain = self.chain([8, 8], [self.result("HALT")])
+        chain = self.chain([7, 7], [self.result("HALT")])
         with self.assertRaises(activation.ValidationFailure):
             activation.sample_boundary(chain, "probe", 8, 5, sleep=lambda _: None)
 
@@ -105,7 +108,7 @@ class BoundaryTests(unittest.TestCase):
             activation.sample_boundary(chain, "probe", 8, 5, clock=lambda: next(times), sleep=lambda _: None)
 
     def test_invalid_boundaries_and_timeouts_fail_before_rpc(self):
-        for height, timeout in ((1, 10), (8, 0), (8, -1), (2**32, 10)):
+        for height, timeout in ((2, 10), (8, 0), (8, -1), (2**32, 10)):
             chain = Mock()
             with self.subTest(height=height), self.assertRaises(activation.ValidationFailure):
                 activation.sample_boundary(chain, "probe", height, timeout)
@@ -178,7 +181,11 @@ class LifecycleTests(unittest.TestCase):
             factory, chain = self.fake_chain(active)
             with self.subTest(height=height), patch.object(activation, "Chain", side_effect=factory):
                 result = activation.run_case("case", "local-runner", height, "HALT" if active else "FAULT")
-            self.assertEqual(result["verificationState"], "HALT" if active else "FAULT")
+            expected_verification = None if height == 2**32 - 1 else ("HALT" if active else "FAULT")
+            self.assertEqual(result["verificationState"], expected_verification)
+            if height == 2**32 - 1:
+                self.assertEqual(result["applicationState"], "FAULT")
+                self.assertIn("no persisting block context", result["verificationContext"])
             chain.stop_node.assert_called_once()
             self.assertFalse(chain.file.exists())
 

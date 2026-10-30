@@ -4,8 +4,8 @@ using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
-// Test-only service ABI fixture. Installed into an in-memory public NeoVM at the
-// private service hash; it is not the native service or recovery implementation.
+// Test-only SmartAccount ABI fixture. Installed into an in-memory public NeoVM at the
+// private test-contract hash; it is not the SmartAccount native contract or recovery implementation.
 [ContractPermission("*", "validateCompositeSignature", "postExecuteComposite")]
 public class NativeEpochCore : SmartContract
 {

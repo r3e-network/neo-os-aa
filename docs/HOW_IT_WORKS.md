@@ -26,7 +26,7 @@ flowchart LR
   User[User / Operator] --> UI[Frontend Workspace]
   UI --> Drafts[Draft Store]
   UI --> Relay[Optional Relay API]
-  UI --> Master[UnifiedSmartWallet Master Contract]
+  UI --> Master[SmartAccount Master Contract]
   Master --> Policies[Roles + Policies + Limits]
   Master --> Target[Target Contract]
   Master --> Proxy[Deterministic Verify Account Address]
@@ -52,7 +52,7 @@ one account at a time.
   on the deployed core registers several accounts in one transaction; the SDK has no batch payload
   builder, so build one `createAccountPayload` per account and submit them through that entrypoint.
 - **Registration authority:** `registerAccount` requires the witness of the `backupOwner` argument
-  (`contracts/UnifiedSmartWallet.Accounts.cs:75`), not of the transaction sender.
+  (`contracts/SmartAccount.Accounts.cs:75`), not of the transaction sender.
 
 ## 3. Choose the Right Path
 

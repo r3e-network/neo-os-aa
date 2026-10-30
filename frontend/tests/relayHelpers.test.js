@@ -15,7 +15,7 @@ import {
 // CU-203: the relay allowlist is a security boundary that used to be typed by hand, so it kept
 // naming entrypoints the deployed core does not export. It is now generated from the artifact that
 // is actually deployed, and these tests read that artifact directly as their oracle.
-const DEPLOYED_MANIFEST = path.resolve('..', 'contracts', 'build', 'UnifiedSmartWalletV3.manifest.json');
+const DEPLOYED_MANIFEST = path.resolve('..', 'contracts', 'build', 'SmartAccountV3.manifest.json');
 const GENERATED_OPERATIONS_FILE = path.resolve('api', 'relayOperations.generated.js');
 const GENERATOR_SCRIPT = path.resolve('..', 'scripts', 'generate-relay-operations.mjs');
 

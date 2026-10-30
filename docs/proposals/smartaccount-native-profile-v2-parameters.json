@@ -4,6 +4,26 @@
   "argumentCountMax": 64,
   "argumentDepthMax": 8,
   "argumentSizeMax": 4096,
+  "authorityAdmission": {
+    "absentPriorAuthorities": "emptySet",
+    "authorityReservation": "none",
+    "authoritySlots": [
+      "custodyAddress",
+      "recoveryAddress",
+      "pendingRecovery.newCustodyAddress",
+      "pendingRecoveryAddr.recoveryAddress"
+    ],
+    "introducedAddresses": "Authorities(next)-Authorities(prior)",
+    "pendingPromotion": "noAdditionalRecipientWitness",
+    "priorState": "validStoredRecordImmediatelyBeforeTransition",
+    "recipientConsent": "witnessEveryIntroducedNonzeroAddress",
+    "registeredNativeProxies": "rejectCurrentAndPendingOnReadAndWrite",
+    "removedAddressRenomination": "freshRecipientWitness",
+    "retainedAddressReuse": "noAdditionalRecipientWitness",
+    "transitionInitiatorWitnesses": "unchanged",
+    "version": 1,
+    "zeroAuthority": "excluded"
+  },
   "authorityEpochWidthBits": 64,
   "authorizationDomainSuffix": [
     "authorityEpochLE64",
@@ -135,7 +155,7 @@
   },
   "profileVersion": 2,
   "recoveryRevokesModules": true,
-  "serviceName": "AccountManagement",
+  "contractName": "SmartAccount",
   "signatureBytesMax": 1024,
   "verifierBudgetDatoshi": 100000000
 }

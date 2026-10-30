@@ -82,7 +82,7 @@ function resolveProxyHashes(client, { accountIdHash, accountAddress }) {
  * contract explicit. The signature is only validated by the on-chain
  * executeUserOp (or by the relay's full-operation simulation).
  *
- * @param {AbstractAccountClient} client - The SDK client instance
+ * @param {SmartAccountClient} client - The SDK client instance
  * @param {Object} options - Simulation options
  * @param {string} options.accountIdHash - Account ID hash
  * @param {string} options.accountAddress - Legacy account address (alternative)
@@ -241,7 +241,7 @@ async function simulateUserOperation(client, options) {
  * Both the expected hash input and the reported current hash are big-endian
  * display hex — getAccountState normalizes the node's little-endian wire
  * bytes, so the comparison is byte-order safe against real nodes.
- * @param {AbstractAccountClient} client - The SDK client instance
+ * @param {SmartAccountClient} client - The SDK client instance
  * @param {string} accountHashOrAddress - Account hash or address
  * @param {string} verifierHash - Verifier contract hash to check (big-endian display hex)
  * @returns {Promise<Object>} Check result with valid flag and details (hashes in big-endian display hex)
@@ -268,7 +268,7 @@ async function checkVerifier(client, accountHashOrAddress, verifierHash) {
 /**
  * Checks if a hook is valid for the account.
  * Hash inputs and outputs are big-endian display hex, matching getAccountState.
- * @param {AbstractAccountClient} client - The SDK client instance
+ * @param {SmartAccountClient} client - The SDK client instance
  * @param {string} accountHashOrAddress - Account hash or address
  * @param {string} hookHash - Hook contract hash to check (optional, big-endian display hex)
  * @returns {Promise<Object>} Check result with valid flag and details (hashes in big-endian display hex)
@@ -303,7 +303,7 @@ async function checkHook(client, accountHashOrAddress, hookHash) {
 
 /**
  * Checks if the account's escape hatch is active.
- * @param {AbstractAccountClient} client - The SDK client instance
+ * @param {SmartAccountClient} client - The SDK client instance
  * @param {string} accountHashOrAddress - Account hash or address
  * @returns {Promise<Object>} Check result with escape status
  */
@@ -330,7 +330,7 @@ async function checkEscapeStatus(client, accountHashOrAddress) {
 /**
  * Estimates gas for a UserOperation.
  * Note: This requires the contract to support gas estimation.
- * @param {AbstractAccountClient} client - The SDK client instance
+ * @param {SmartAccountClient} client - The SDK client instance
  * @param {Object} userOp - The UserOperation to estimate
  * @returns {Promise<Object>} Gas estimate or error
  */
@@ -347,7 +347,7 @@ async function estimateGas(client, userOp) {
  * Runs a comprehensive pre-flight check suite.
  * All Hash160 options (verifierHash, hookHash) are big-endian display hex;
  * reported hashes in the results use the same byte order.
- * @param {AbstractAccountClient} client - The SDK client instance
+ * @param {SmartAccountClient} client - The SDK client instance
  * @param {Object} options - Check options
  * @returns {Promise<Object>} Comprehensive check results
  */

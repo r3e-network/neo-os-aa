@@ -166,8 +166,10 @@ class ToolFailureTests(unittest.TestCase):
     def test_timeout_preserves_partial_diagnostic(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "timeout.log"
+            # Interpreter startup alone can exceed short timeouts on a loaded
+            # host; 1.0s still proves partial diagnostics survive a timeout.
             with self.assertRaises(gate.RefinementError):
-                gate._run([sys.executable, "-c", "import time; print('kernel started', flush=True); time.sleep(2)"], path, 0.1)
+                gate._run([sys.executable, "-c", "import time; print('kernel started', flush=True); time.sleep(5)"], path, 1.0)
             self.assertIn("kernel started", path.read_text())
 
 

@@ -33,7 +33,7 @@ jobs:
           node scripts/check_neo_platform_packages.mjs
           bash contracts/compile.sh
       - name: Check profiles and verifier callbacks on published TestEngine
-        run: dotnet test tests/AbstractAccount.Contracts.Tests -c Release --nologo --filter 'FullyQualifiedName~CompiledCoreSyscallTests|FullyQualifiedName~ExecuteUserOpRuntimeTests'
+        run: dotnet test tests/SmartAccount.Contracts.Tests -c Release --nologo --filter 'FullyQualifiedName~CompiledCoreSyscallTests|FullyQualifiedName~ExecuteUserOpRuntimeTests'
       - name: Execute public verifier-signed operation on published neoxp
         run: python3 tests/localchain/test_public_profile.py
 

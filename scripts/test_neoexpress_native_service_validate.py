@@ -1,15 +1,47 @@
-"""Receipt checks for the actual native-service private-chain harness."""
+"""Receipt checks for the actual native-contract private-chain harness."""
 import base64
 import copy
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import neoexpress_native_service_validate as native
 from neoexpress_validate import ValidationFailure
 
 
-class NativeServiceReceiptTests(unittest.TestCase):
+class NativeContractReceiptTests(unittest.TestCase):
+    def test_consent_signers_each_sign_and_node_state_is_restored(self):
+        from types import SimpleNamespace
+        from pathlib import Path
+        keys = [SimpleNamespace(script_hash=bytes([n]) * 20, verification=bytes([n]), sign=Mock(return_value=bytes([n]) * 64)) for n in (1, 2)]
+        chain = SimpleNamespace(workdir=Path("/unused"), node=None, magic=123,
+            wallet_private_key=Mock(side_effect=["owner-key", "guardian-key"]),
+            start_node=Mock(), stop_node=Mock())
+        captured = {}
+        execution = {"vmstate": "HALT", "gasconsumed": "10", "stack": [{"type": "ByteString", "value": base64.b64encode(bytes(20)).decode()}], "notifications": []}
+        def rpc(method, args):
+            if method == "getblockcount": return 10
+            if method == "sendrawtransaction":
+                captured["raw"] = base64.b64decode(args[0])
+                # Two fixed witnesses are 69 bytes each plus the witness count.
+                unsigned = captured["raw"][:-139]
+                import hashlib
+                captured["txid"] = "0x" + hashlib.sha256(unsigned).digest()[::-1].hex()
+                return {"hash": captured["txid"]}
+            if method == "getapplicationlog": return {"executions": [execution]}
+            if method == "getrawtransaction": return {"hash": captured["txid"]}
+            self.fail("Unexpected RPC: " + method)
+        chain.rpc = rpc
+        report = {"transactions": []}
+        with patch.object(native, "RawKey", side_effect=keys), patch.object(native, "transaction_system_fee", return_value=100), patch.object(native, "check_application"), patch("neoexpress_native_proxy_validate.check_transaction") as readback:
+            native.persist(chain, report, "register", "registerAccount", [], "AccountCreated", consent_wallets=("guardian",))
+        self.assertEqual(1, keys[0].sign.call_count)
+        self.assertEqual(keys[0].sign.call_args, keys[1].sign.call_args)
+        self.assertEqual(2, len(readback.call_args.args[3]))
+        self.assertEqual(2, len(readback.call_args.args[4]))
+        self.assertEqual(2, report["transactions"][0]["consentWitnesses"])
+        chain.stop_node.assert_called_once()
+
     def manifest(self):
-        return {"hash": native.CORE, "id": -13, "manifest": {"name": "AccountManagement",
+        return {"hash": native.CORE, "id": -13, "manifest": {"name": "SmartAccount",
             "extra": {"smartAccount": {"abiVersion": 2, "profileParameterDigest": native.DIGEST}},
             "abi": {"methods": [{"name": name, **copy.deepcopy(descriptor)}
                                   for name, descriptor in native.REQUIRED_METHOD_ABI.items()],
@@ -19,14 +51,20 @@ class NativeServiceReceiptTests(unittest.TestCase):
     def test_valid_native_identity(self):
         native.check_native(self.manifest())
 
-    def test_service_digest_matches_the_canonical_current_parameters(self):
+    def test_prior_abi2_digest_does_not_identify_authority_admission_revision(self):
+        legacy = self.manifest()
+        legacy["manifest"]["extra"]["smartAccount"]["profileParameterDigest"] = "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"
+        with self.assertRaises(ValidationFailure):
+            native.check_native(legacy)
+
+    def test_contract_digest_matches_the_canonical_current_parameters(self):
         import hashlib
         import json
         from pathlib import Path
         parameters = json.loads((Path(__file__).resolve().parent.parent / 'docs/proposals/smartaccount-native-profile-v2-parameters.json').read_text())
         canonical = json.dumps(parameters, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode()
         self.assertEqual(hashlib.sha256(b'NeoSmartAccount/Profile\x02' + canonical).hexdigest(), native.DIGEST)
-        self.assertEqual('4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4', native.DIGEST)
+        self.assertEqual('ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a', native.DIGEST)
 
     def test_p256_canonicalization_abi_is_unique_safe_and_account_independent(self):
         item = self.manifest(); native.check_native(item)
@@ -200,11 +238,11 @@ class TransactionSystemFeeTests(unittest.TestCase):
                         {"account": "0x" + "34" * 20, "scopes": "WitnessRules",
                          "rules": [{"action": "Allow", "condition": {"type": "CalledByEntry"}}]}]
 
-    def fee(self, result):
+    def fee(self, result, reserve=0):
         chain = Mock()
         chain.rpc.return_value = result
         signers_before = copy.deepcopy(self.signers)
-        fee = native.transaction_system_fee(chain, self.script, self.signers)
+        fee = native.transaction_system_fee(chain, self.script, self.signers, reserve)
         chain.rpc.assert_called_once_with("invokescript", [base64.b64encode(self.script).decode("ascii"), self.signers])
         self.assertEqual(signers_before, self.signers)
         self.assertIs(type(fee), int)
@@ -225,12 +263,13 @@ class TransactionSystemFeeTests(unittest.TestCase):
     def test_zero_fees_are_valid(self):
         self.assertEqual(0, self.fee({"state": "HALT", "gasconsumed": "0", "minimumrequiredfee": "0"}))
 
-    def test_missing_consumed_or_minimum_fee_fails_closed(self):
-        for field in ("gasconsumed", "minimumrequiredfee"):
-            result = {"state": "HALT", "gasconsumed": "1", "minimumrequiredfee": "2"}
-            del result[field]
-            with self.subTest(field=field), self.assertRaises(ValidationFailure):
-                self.fee(result)
+    def test_explicit_core_envelope_is_reserved(self):
+        self.assertEqual(1_000_000_000, self.fee({"state": "HALT", "gasconsumed": "1"}, 1_000_000_000))
+
+    def test_missing_consumed_fee_fails_closed_but_optional_minimum_is_supported(self):
+        self.assertEqual(1, self.fee({"state": "HALT", "gasconsumed": "1"}))
+        with self.assertRaises(ValidationFailure):
+            self.fee({"state": "HALT", "minimumrequiredfee": "2"})
 
     def test_malformed_fee_amounts_fail_closed(self):
         for field in ("gasconsumed", "minimumrequiredfee"):

@@ -48,7 +48,7 @@ test('repo README documents the local verification entrypoint explicitly', () =>
 
   assert.match(readme, /preferred local verification entrypoint/i);
   assert.match(readme, /\.\/scripts\/verify_repo\.sh/);
-  assert.match(verifyScript, /dotnet build contracts\/UnifiedSmartWallet\.csproj/);
+  assert.match(verifyScript, /dotnet build contracts\/SmartAccount\.csproj/);
   assert.match(verifyScript, /npm run audit:prod/);
   assert.match(verifyScript, /npm run types:check/);
   assert.match(verifyScript, /test:e2e:browser:built/);

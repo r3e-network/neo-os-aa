@@ -13,7 +13,8 @@ import tempfile
 import time
 from neoexpress_validate import Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO, decode, hash_le, varint, serialize_unsigned, serialize_witnesses
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
-from neoexpress_native_service_validate import CORE, DIGEST, check_native, persist, transaction_system_fee
+from neoexpress_native_service_validate import (CORE, DIGEST, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
+    check_native, persist, transaction_system_fee)
 from neoexpress_native_proxy_validate import encode_value, push_bytes, check_transaction, check_fault, GAS
 
 MANAGEMENT = "0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"
@@ -74,13 +75,15 @@ def pending_log(error):
                           "rpc getapplicationlog: Unknown transaction/blockhash")
 
 
-def send(chain, owner, report, label, method, args, *, fault=False, cancellation=False, event=None):
+def send(chain, owner, report, label, method, args, *, fault=False, cancellation=False, event=None, consent_keys=()):
     script = call_script(CORE, method, args)
-    signers = [{"account": "0x" + owner.script_hash[::-1].hex(), "scopes": "CalledByEntry"}]
-    sysfee, netfee = transaction_system_fee(chain, script, signers), GAS
+    keys = [owner, *consent_keys]
+    require(len({key.script_hash for key in keys}) == len(keys), "Consent identities must be distinct")
+    signers = [{"account": "0x" + key.script_hash[::-1].hex(), "scopes": "CalledByEntry"} for key in keys]
+    sysfee, netfee = transaction_system_fee(chain, script, signers, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI), GAS
     unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee, chain.rpc("getblockcount", []) + 50, signers, script)
     digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()
-    witnesses = [(push_bytes(owner.sign(chain.magic.to_bytes(4, "little") + digest)), owner.verification)]
+    witnesses = [(push_bytes(key.sign(chain.magic.to_bytes(4, "little") + digest)), key.verification) for key in keys]
     raw = base64.b64encode(unsigned + serialize_witnesses(witnesses)).decode()
     require(chain.rpc("sendrawtransaction", [raw]).get("hash") == txid, "Node transaction hash mismatch")
     deadline = time.monotonic() + 90; execution = None
@@ -142,7 +145,7 @@ def validate(runtime, dotnet, output):
                     bad_artifact = module_fixture(hook, False, root); good_artifact = module_fixture(hook, False)
                     bad = deploy(role + "-bad", bad_artifact); good = deploy(role + "-good", good_artifact)
                     account = persist(chain, report, role + "-register", "registerAccount",
-                        [H(custody), B(bytes([1 + int(hook)]) * 32), H(ZERO if hook else root), H(root if hook else ZERO), H(recovery_addresses["guardian"])], "AccountCreated")
+                        [H(custody), B(bytes([1 + int(hook)]) * 32), H(ZERO if hook else root), H(root if hook else ZERO), H(recovery_addresses["guardian"])], "AccountCreated", consent_wallets=("guardian",), gas_reserve=PRIVATE_CORE_GAS_ENVELOPE_DATOSHI)
                     scenarios.append({"role": role, "route": "callHookChild" if hook else "callVerifierChild", "id": "0x" + account[::-1].hex(),
                         "root": root, "bad": bad, "good": good, "artifacts": [(root, root_artifact), (bad, bad_artifact), (good, good_artifact)]})
                 chain.start_node(); check_native(chain.rpc("getcontractstate", [CORE]))
@@ -181,7 +184,7 @@ def validate(runtime, dotnet, output):
                     before=state(scenario);nonce=value(CORE,"getNonce",[H(account),I(0)])
                     require(before[1] is not None and len(before[2][1])==1,"Recovery fixture must contain pending authority and enrollment")
                     send(chain,recovery_keys["guardian"],report,scenario["role"]+"-propose-recovery","proposeRecovery",
-                         [H(account),H(recovery_addresses["replacement"])],event="RecoveryProposed")
+                         [H(account),H(recovery_addresses["replacement"])],event="RecoveryProposed", consent_keys=(recovery_keys["replacement"],))
                     scenario["recoveryBefore"]=(before,nonce)
                 chain.stop_node();chain.nx("fastfwd","1","-t","604801");chain.start_node()
                 for scenario in scenarios:

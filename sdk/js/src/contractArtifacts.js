@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { createError, EC } = require('./errors');
 
-const NEF_RELATIVE_PATH = path.join('contracts', 'bin', 'sc', 'UnifiedSmartWalletV2.nef');
-const MANIFEST_RELATIVE_PATH = path.join('contracts', 'bin', 'sc', 'UnifiedSmartWalletV2.manifest.json');
+const NEF_RELATIVE_PATH = path.join('contracts', 'bin', 'sc', 'SmartAccountV2.nef');
+const MANIFEST_RELATIVE_PATH = path.join('contracts', 'bin', 'sc', 'SmartAccountV2.manifest.json');
 
 /** Cache for resolved artifact data keyed by fromDir. */
 const artifactCache = new Map();

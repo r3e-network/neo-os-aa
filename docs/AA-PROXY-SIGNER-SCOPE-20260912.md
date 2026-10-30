@@ -33,11 +33,11 @@ No native-asset permissions or target allowlists were broadened.
 
 ## Verification
 
-Recompiled current UnifiedSmartWallet.csproj with nccs --optimize=All into
+Recompiled current SmartAccount.csproj with nccs --optimize=All into
 contracts/build. Full suite:
 
 ```sh
-dotnet test tests/AbstractAccount.Contracts.Tests/AbstractAccount.Contracts.Tests.csproj --no-restore --verbosity quiet --blame-hang-timeout 60s
+dotnet test tests/SmartAccount.Contracts.Tests/SmartAccount.Contracts.Tests.csproj --no-restore --verbosity quiet --blame-hang-timeout 60s
 ```
 
 230 passed, zero failed or skipped, including all three witness cases.
@@ -68,7 +68,7 @@ The mainnet AA core `0x0268a387913b250166ddec032b03332690a1ef78` runs updateCoun
 Its NEF was read back through a read-only `ContractManagement.getContract`
 `invokefunction` call and hashes to
 `009b1b499a87dab1c17c5ed732717af294ae615fc05e1fc958fe712eb443c3ba`, which is
-byte-identical to the repository artifact `contracts/build/UnifiedSmartWalletV3.nef`
+byte-identical to the repository artifact `contracts/build/SmartAccountV3.nef`
 committed at `fa452d1`. Its manifest metadata matches that artifact as well
 (64 methods, 21 events, `*:*` permission, `Basic` optimization).
 

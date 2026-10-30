@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { createI18nController } from '@/i18n';
 
 const MainLayout = () => import('@/components/layout/MainLayout.vue');
-const AbstractAccountTool = () => import('@/components/AbstractAccountTool.vue');
+const SmartAccountTool = () => import('@/components/SmartAccountTool.vue');
 const HomeView = () => import('@/views/HomeView.vue');
 const ConsoleView = () => import('@/views/ConsoleView.vue');
 const IdentityView = () => import('@/views/IdentityView.vue');
@@ -32,7 +32,7 @@ const routes = [
       {
         path: 'app',
         name: 'app-workspace',
-        component: AbstractAccountTool,
+        component: SmartAccountTool,
         meta: { breadcrumb: 'Workspace', breadcrumbKey: 'nav.app', titleKey: 'page.titleApp', title: 'App Workspace — Neo Abstract Account' }
       },
       {

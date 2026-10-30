@@ -14,7 +14,7 @@
 | [#220](https://github.com/neo-project/proposals/pull/220) | Draft: Abstract Account Metadata Standard | Closed, not merged | Optional presentation and discovery extension. |
 | [#221](https://github.com/neo-project/proposals/pull/221) | Draft: Abstract Account Entry Contract and Custom Verifier Standard | Closed, not merged | Direct predecessor of the revised protocol foundation. |
 | [#242](https://github.com/neo-project/proposals/issues/242) | Proposal: Neo Native SmartAccount Standard | Open issue | Native SmartAccount profile that may build on the foundation. |
-| [#243](https://github.com/neo-project/proposals/pull/243) | Draft: SmartAccount Protocol Foundation for Native AccountManagement | Draft PR | Current deployment-independent protocol foundation. |
+| [#243](https://github.com/neo-project/proposals/pull/243) | Draft: SmartAccount Protocol Foundation for Native SmartAccount | Draft PR | Current deployment-independent protocol foundation. |
 
 Closed proposals are historical references. Closed status must not be interpreted as either adoption or formal rejection by the Neo protocol.
 
@@ -24,7 +24,7 @@ The proposals have three distinct layers:
 
 1. **Generic witness layer - #218.** Defines reusable contract-based verification-script behavior. It must remain generic with respect to method names, argument counts, and invocation data.
 2. **SmartAccount protocol foundation - #243.** Defines UserOperation encoding, account identity, replay protection, verifier and hook lifecycle, callback authority, execution ordering, failure semantics, witness bridging, and module resource boundaries.
-3. **Native SmartAccount profile - #242.** Defines the node-native identity, activation, fee and resource schedule, governance, state model, and migration rules required by a native service.
+3. **Native SmartAccount profile - #242.** Defines the node-native identity, activation, fee and resource schedule, governance, state model, and migration rules required by a native contract.
 
 Transferable ownership, metadata, marketplaces, paymasters, and application-specific authorization schemes are extensions. They must not silently become prerequisites of the foundation.
 
@@ -56,7 +56,7 @@ A native proposal must not copy ordinary deployed-contract assumptions into a no
 - deterministic storage and state migration;
 - compatibility for existing accounts, verification-script addresses, and assets.
 
-A deployed contract, its bytecode, its administrator, or its private-chain test results do not establish that a node-native SmartAccount service has been activated or specified.
+A deployed contract, its bytecode, its administrator, or its private-chain test results do not establish that a node-native SmartAccount contract has been activated or specified.
 
 ## 5. Scope and evidence boundary
 

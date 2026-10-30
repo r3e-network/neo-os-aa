@@ -170,7 +170,7 @@ function certificateFixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "aa-certificate-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const files = Object.fromEntries(["v3", "platform"].flatMap((profile) => [
-    [`${profile}/UnifiedSmartWalletV3.nef`, profile], [`${profile}/UnifiedSmartWalletV3.manifest.json`, "{}"],
+    [`${profile}/SmartAccountV3.nef`, profile], [`${profile}/SmartAccountV3.manifest.json`, "{}"],
   ]));
   const hashes = {};
   for (const [name, contents] of Object.entries(files)) {
@@ -197,21 +197,21 @@ test("release certificate compares every fresh/release NEF and manifest to disk"
 
 for (const [name, mutate] of Object.entries({
   "false certificate verdict": (r) => { r.certificate.byte_equal_release = false; },
-  "contradictory drift list": (r) => { r.drifted = ["v3/UnifiedSmartWalletV3.nef"]; },
-  "contradictory missing list": (r) => { r.missing = ["v3/UnifiedSmartWalletV3.nef"]; },
+  "contradictory drift list": (r) => { r.drifted = ["v3/SmartAccountV3.nef"]; },
+  "contradictory missing list": (r) => { r.missing = ["v3/SmartAccountV3.nef"]; },
   "wrong artifact count": (r) => { r.artifacts_compared = 1; },
-  "missing fresh manifest": (r) => { delete r.certificate.fresh_artifact_sha256["v3/UnifiedSmartWalletV3.manifest.json"]; },
-  "missing release manifest": (r) => { delete r.certificate.release_artifact_sha256["v3/UnifiedSmartWalletV3.manifest.json"]; },
-  "different fresh bytes": (r) => { r.certificate.fresh_artifact_sha256["v3/UnifiedSmartWalletV3.nef"] = "0".repeat(64); },
+  "missing fresh manifest": (r) => { delete r.certificate.fresh_artifact_sha256["v3/SmartAccountV3.manifest.json"]; },
+  "missing release manifest": (r) => { delete r.certificate.release_artifact_sha256["v3/SmartAccountV3.manifest.json"]; },
+  "different fresh bytes": (r) => { r.certificate.fresh_artifact_sha256["v3/SmartAccountV3.nef"] = "0".repeat(64); },
   "matching maps but different disk bytes": (r) => {
-    r.certificate.fresh_artifact_sha256["v3/UnifiedSmartWalletV3.manifest.json"] = "0".repeat(64);
-    r.certificate.release_artifact_sha256["v3/UnifiedSmartWalletV3.manifest.json"] = "0".repeat(64);
+    r.certificate.fresh_artifact_sha256["v3/SmartAccountV3.manifest.json"] = "0".repeat(64);
+    r.certificate.release_artifact_sha256["v3/SmartAccountV3.manifest.json"] = "0".repeat(64);
   },
   "missing private profile": (r, root) => { fs.rmSync(path.join(root, "../platform"), { recursive: true }); },
   "private profile falsely marked missing": (r) => { r.profiles.platform.required_core_present = false; },
-  "stale private release bytes": (r, root) => { fs.writeFileSync(path.join(root, "../platform/UnifiedSmartWalletV3.nef"), "stale"); },
+  "stale private release bytes": (r, root) => { fs.writeFileSync(path.join(root, "../platform/SmartAccountV3.nef"), "stale"); },
   "additional release output": (r, root) => { fs.writeFileSync(path.join(root, "Extra.nef"), "extra"); },
-  "deleted local output": (r, root) => { fs.unlinkSync(path.join(root, "UnifiedSmartWalletV3.nef")); },
+  "deleted local output": (r, root) => { fs.unlinkSync(path.join(root, "SmartAccountV3.nef")); },
 })) {
   test(`release certificate rejects ${name}`, (t) => {
     const { root, repro } = certificateFixture(t);
@@ -238,7 +238,7 @@ test("provenance joins both-profile certificate to all public-module RPC readbac
     contracts.push({ contractName, nefScriptSha256: hash(script), nefChecksumEquality: true,
       manifestSemanticEquality: true, nefScriptByteEquality: true });
   }
-  writePair("platform/UnifiedSmartWalletV3.nef");
+  writePair("platform/SmartAccountV3.nef");
   const source = buildInputSnapshot();
   const repro = { release_matches_fresh_build: true, artifacts_compared: 50, drifted: [], missing: [],
     profiles: { v3: { artifacts_compared: 48, required_core_present: true, matches_fresh_build: true },

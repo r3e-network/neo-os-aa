@@ -10,11 +10,11 @@
   cleanup cannot rotate the module pointer.
 
   Concrete correspondence points:
-    contracts/UnifiedSmartWallet.Execution.cs
-    contracts/UnifiedSmartWallet.Accounts.cs
-    contracts/UnifiedSmartWallet.Internal.cs
-    contracts/UnifiedSmartWallet.Models.cs
-    contracts/UnifiedSmartWallet.VerifyContext.cs
+    contracts/SmartAccount.Execution.cs
+    contracts/SmartAccount.Accounts.cs
+    contracts/SmartAccount.Internal.cs
+    contracts/SmartAccount.Models.cs
+    contracts/SmartAccount.VerifyContext.cs
     contracts/hooks/MultiHook.cs
     contracts/verifiers/MultiSigVerifier.cs
     contracts/verifiers/VerifierPayload.cs
@@ -91,7 +91,8 @@ Definition callback_trace (authorized well_shaped pre_ok target_ok hook_post_ok 
 Definition configured_callback_trace
     (hook verifier authorized well_shaped pre_ok target_ok hook_post_ok verifier_post_ok : bool)
     : list Phase :=
-  if authorized && well_shaped && pre_ok && target_ok && hook_post_ok && verifier_post_ok
+  if authorized && well_shaped && (if hook then pre_ok else true) && target_ok &&
+     (if hook then hook_post_ok else true) && (if verifier then verifier_post_ok else true)
   then [Validate]
        ++ (if hook then [PreHook] else [])
        ++ [TargetCall]
@@ -304,6 +305,28 @@ Theorem CPT_019_configured_callbacks_match_full_trace :
   configured_callback_trace true true true true true true true true =
     success_trace true true true true true true.
 Proof. reflexivity. Qed.
+
+Theorem CPT_020_absent_hook_results_are_irrelevant :
+  forall verifier authorized well_shaped target_ok verifier_post_ok pre1 pre2 post1 post2,
+    configured_callback_trace false verifier authorized well_shaped pre1 target_ok post1 verifier_post_ok =
+    configured_callback_trace false verifier authorized well_shaped pre2 target_ok post2 verifier_post_ok.
+Proof. reflexivity. Qed.
+
+Theorem CPT_021_absent_verifier_result_is_irrelevant :
+  forall hook authorized well_shaped pre_ok target_ok hook_post_ok first second,
+    configured_callback_trace hook false authorized well_shaped pre_ok target_ok hook_post_ok first =
+    configured_callback_trace hook false authorized well_shaped pre_ok target_ok hook_post_ok second.
+Proof. reflexivity. Qed.
+
+Theorem CPT_022_configured_trace_exact_acceptance :
+  forall hook verifier authorized well_shaped pre_ok target_ok hook_post_ok verifier_post_ok,
+    configured_callback_trace hook verifier authorized well_shaped pre_ok target_ok hook_post_ok verifier_post_ok <> [] <->
+    authorized = true /\ well_shaped = true /\ target_ok = true /\
+    (hook = true -> pre_ok = true /\ hook_post_ok = true) /\
+    (verifier = true -> verifier_post_ok = true).
+Proof.
+  intros [] [] [] [] [] [] [] []; simpl; intuition discriminate.
+Qed.
 
 Theorem CPT_005_witness_scope_binds_called_by_entry :
   forall entry target allowed,
@@ -530,3 +553,6 @@ Print Assumptions CPT_016_successful_dependency_replacement_has_no_removed_child
 Print Assumptions CPT_017_composite_children_are_leaves.
 Print Assumptions CPT_018_disabled_callbacks_omit_phases.
 Print Assumptions CPT_019_configured_callbacks_match_full_trace.
+Print Assumptions CPT_020_absent_hook_results_are_irrelevant.
+Print Assumptions CPT_021_absent_verifier_result_is_irrelevant.
+Print Assumptions CPT_022_configured_trace_exact_acceptance.

@@ -90,12 +90,29 @@ for required in (
 ):
     assert required in DOCUMENT, required
 
+# These clauses and the parameter fingerprint bind the draft's admission policy,
+# not a proof that native execution refines it. ABI number alone is insufficient.
+authority_document = " ".join(DOCUMENT.split())
+for required in (
+    "Current and pending custody or recovery authorities MUST NOT be registered native SmartAccount proxies.",
+    "Every account-state read and write MUST validate all current and pending non-zero authority addresses",
+    "`recoveryAddress`, `pendingRecovery.newCustodyAddress` and `pendingRecoveryAddr.recoveryAddress`",
+    "An absent prior account has the empty authority set.",
+    "admission MUST require a witness for every address in `Authorities(next) - Authorities(prior)`",
+    "`prior` is the valid stored record immediately before the transition",
+    "zero represents absent recovery and requires no witness",
+    "require the custody address and every non-zero recovery address to witness the transaction",
+    "They MUST NOT require a fresh recipient witness merely to move that address into its current slot.",
+    "The SmartAccount native contract MUST NOT reserve an authority address in a reverse index or prevent its independent account registration because another account nominated it.",
+):
+    assert required in authority_document, required
+
 assert "**Version:** 2 (identity version 1; authorization and account-record version 2)" in DOCUMENT
 assert VECTORS["profileVersion"] == 2
 assert VECTORS["identityVersion"] == 1
 assert VECTORS["authorizationVersion"] == VECTORS["accountRecordVersion"] == VECTORS["abiVersion"] == 2
-assert VECTORS["serviceName"] == "AccountManagement"
-assert VECTORS["serviceHashDisplay"] == "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
+assert VECTORS["contractName"] == "SmartAccount"
+assert VECTORS["contractHashDisplay"] == "0x398dc3f0227d7efac5533ed5ce9937390c158084"
 assert "| Verifier callback budget | `100,000,000` datoshi per callback |" in DOCUMENT
 assert "| Module maintenance callback budget | `250,000,000` datoshi per callback |" in DOCUMENT
 assert "### Resource units and effective bounds" in DOCUMENT
@@ -109,14 +126,14 @@ assert "less than or equal to Neo's `MaxVerificationGas` envelope of `150,000,00
 assert "| `AccountCreated` | `Hash160, Hash160, Hash160, Hash160, Hash160, Hash160` |" in DOCUMENT
 
 identity = VECTORS["identity"]
-service_wire = bytes.fromhex(VECTORS["serviceHashWire"])
+contract_wire = bytes.fromhex(VECTORS["contractHashWire"])
 custody = bytes.fromhex(identity["custodyAddressWire"])
 salt = bytes.fromhex(identity["salt"])
 account_input = (
     b"NeoSmartAccount"
     + bytes([1])
     + (0x12345678).to_bytes(4, "little")
-    + service_wire
+    + contract_wire
     + custody
     + salt
 )
@@ -132,7 +149,7 @@ assert script == (
     + bytes([0x11, 0xC0, 0x15, 0x0C, 0x06])
     + b"verify"
     + bytes([0x0C, 0x14])
-    + service_wire
+    + contract_wire
     + bytes.fromhex("41627d5b52")
 )
 assert "0x" + hash160(script)[::-1].hex() == identity["accountAddressDisplay"]
@@ -146,6 +163,21 @@ PARAMETERS = json.loads((ROOT / "smartaccount-native-profile-v2-parameters.json"
 profile_json = json.dumps(PARAMETERS, sort_keys=True, separators=(",", ":"))
 assert PARAMETERS["abiVersion"] == PARAMETERS["accountRecordVersion"] == PARAMETERS["authorizationVersion"] == PARAMETERS["profileVersion"] == 2
 assert PARAMETERS["identityVersion"] == 1
+assert exact_json_equal(PARAMETERS["authorityAdmission"], {
+    "version": 1,
+    "authoritySlots": ["custodyAddress", "recoveryAddress", "pendingRecovery.newCustodyAddress", "pendingRecoveryAddr.recoveryAddress"],
+    "registeredNativeProxies": "rejectCurrentAndPendingOnReadAndWrite",
+    "recipientConsent": "witnessEveryIntroducedNonzeroAddress",
+    "introducedAddresses": "Authorities(next)-Authorities(prior)",
+    "priorState": "validStoredRecordImmediatelyBeforeTransition",
+    "absentPriorAuthorities": "emptySet",
+    "zeroAuthority": "excluded",
+    "retainedAddressReuse": "noAdditionalRecipientWitness",
+    "pendingPromotion": "noAdditionalRecipientWitness",
+    "removedAddressRenomination": "freshRecipientWitness",
+    "transitionInitiatorWitnesses": "unchanged",
+    "authorityReservation": "none",
+})
 assert PARAMETERS["authorityEpochWidthBits"] == PARAMETERS["configurationNonceWidthBits"] == 64
 assert PARAMETERS["authorizationDomainSuffix"] == ["authorityEpochLE64", "configurationNonceLE64"]
 assert PARAMETERS["recoveryRevokesModules"] is True
@@ -337,7 +369,7 @@ def check_authorization(vector):
     assert 0 <= epoch < 1 << 64 and 0 <= configuration < 1 << 64
     domain = (b"NeoSmartAccount/UserOperation" + bytes([2])
               + int(VECTORS["networkMagic"], 16).to_bytes(4, "little")
-              + service_wire + bytes.fromhex(identity["accountIdWire"])
+              + contract_wire + bytes.fromhex(identity["accountIdWire"])
               + epoch.to_bytes(8, "little") + configuration.to_bytes(8, "little"))
     message = domain + bytes.fromhex(operation["canonicalOperationWithoutSignature"])
     assert domain.hex() == vector["authorizationDomain"]
@@ -396,9 +428,9 @@ def push_value(value):
 
 
 account_wire = bytes.fromhex(identity["accountIdWire"])
-minimal = [service_wire, b"ping", [], 0, 0, b""]
-sequential = [minimal, [service_wire, b"ping", [], 1, 0, b""]]
-published = [service_wire, b"transfer", [account_wire, 42], 0, 1700000000000, b""]
+minimal = [contract_wire, b"ping", [], 0, 0, b""]
+sequential = [minimal, [contract_wire, b"ping", [], 1, 0, b""]]
+published = [contract_wire, b"transfer", [account_wire, 42], 0, 1700000000000, b""]
 expected_envelopes = [("minimal-single", minimal, False),
                       ("sequential-batch", sequential, True),
                       ("published-operation", published, False)]
@@ -412,7 +444,7 @@ for vector, (name, payload, batch) in zip(VECTORS["applicationEnvelopes"], expec
     commitments = push_integer(configuration) + push_integer(epoch)
     tail = (push_value(account_wire) + push_integer(4) + b"\xc0" + push_integer(15)
             + push_value(b"executeUserOps" if batch else b"executeUserOp")
-            + push_value(service_wire) + bytes.fromhex("41627d5b52"))
+            + push_value(contract_wire) + bytes.fromhex("41627d5b52"))
     assert vector["initializer"] == prefix.hex()
     assert vector["applicationScript"] == (commitments + prefix + tail).hex()
 assert VECTORS["applicationEnvelopes"][2]["serializedPayload"] == operation["canonicalOperationWithoutSignature"]

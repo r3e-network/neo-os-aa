@@ -5,18 +5,21 @@ import base64
 import datetime
 import hashlib
 import json
+import os
+import time
 import re
 import shutil
 import socket
 import tempfile
 from pathlib import Path
 
-from neoexpress_validate import Chain, H, B, I, S, A, ZERO, decode, hash_le, hash160, varint
+from neoexpress_validate import Chain, RawKey, ValidationFailure, serialize_unsigned, serialize_witnesses, H, B, I, S, A, ZERO, decode, hash_le, hash160, varint
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
 
-CORE = "0xd9421d07adf206e9dc4be746a02e8e087fa61741"
+CORE = "0x398dc3f0227d7efac5533ed5ce9937390c158084"
 STDLIB = "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0"
-DIGEST = "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"
+DIGEST = "ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a"
+PRIVATE_CORE_GAS_ENVELOPE_DATOSHI = 10 * 100_000_000
 
 
 def _parameters(*entries):
@@ -96,10 +99,10 @@ REQUIRED_EVENTS = set(REQUIRED_EVENT_ABI)
 
 
 def check_native(state):
-    require(state.get("hash") == CORE and state.get("id") == -13, "Wrong native service identity")
+    require(state.get("hash") == CORE and state.get("id") == -13, "Wrong native contract identity")
     manifest = state.get("manifest")
     require(type(manifest) is dict, "Malformed native manifest")
-    require(manifest.get("name") == "AccountManagement", "Wrong native service name")
+    require(manifest.get("name") == "SmartAccount", "Wrong native contract name")
     extra = manifest.get("extra")
     require(extra is None or type(extra) is dict, "Malformed native manifest metadata")
     metadata = (extra or {}).get("smartAccount", {})
@@ -193,22 +196,30 @@ def module_storage_key(account, prefix, authority_epoch, suffix=b''):
     return b'\xa2' + bytes([prefix]) + hash_le(account) + authority_epoch.to_bytes(8, 'little') + suffix
 
 
-def transaction_system_fee(chain, script, signers):
+def transaction_system_fee(chain, script, signers, reserve=0):
     """Price these exact transaction inputs, including intentionally faulting probes."""
+    require(type(reserve) is int and reserve >= 0, "Transaction fee reserve must be nonnegative")
     result = chain.rpc("invokescript", [base64.b64encode(script).decode("ascii"), signers])
     require(type(result) is dict and result.get("state") in ("HALT", "FAULT"),
             "Transaction fee simulation must finish in HALT or FAULT")
-    fees = []
-    for field in ("gasconsumed", "minimumrequiredfee"):
-        value = result.get(field)
-        require(type(value) is str and re.fullmatch(r"[0-9]+", value) is not None,
-                f"Transaction fee simulation requires nonnegative integer {field} datoshi")
-        fees.append(int(value))
-    return max(fees)
+    consumed = result.get("gasconsumed")
+    require(type(consumed) is str and re.fullmatch(r"[0-9]+", consumed) is not None,
+            "Transaction fee simulation requires nonnegative integer gasconsumed datoshi")
+    # minimumrequiredfee is an optional RPC extension.  The source-built
+    # neo-node runtime returns the standard invokescript fields only; when the
+    # extension is present, retain its conservative upper bound.
+    minimum = result.get("minimumrequiredfee")
+    if "minimumrequiredfee" not in result:
+        return max(int(consumed), reserve)
+    require(type(minimum) is str and re.fullmatch(r"[0-9]+", minimum) is not None,
+            "Transaction fee simulation requires nonnegative integer minimumrequiredfee datoshi")
+    return max(int(consumed), int(minimum), reserve)
 
 
 def check_application(execution, event):
-    require(execution.get("vmstate") == "HALT", "Persisted native transaction did not halt")
+    require(execution.get("vmstate") == "HALT",
+            f"Persisted native transaction did not halt: vmstate={execution.get('vmstate')!r}, "
+            f"exception={execution.get('exception')!r}")
     require(any(n.get("eventname") == event and n.get("contract") == CORE
                 for n in execution.get("notifications", [])), "Expected native event missing")
 
@@ -228,7 +239,46 @@ def operation(nonce):
     return A(H(STDLIB), S("serialize"), A(I(7)), I(nonce), I(4_102_444_800_000), B(b""))
 
 
-def persist(chain, report, label, method, args, event, wallet="owner"):
+def persist_with_consent(chain, report, label, method, args, event, wallet, consent_wallets, gas_reserve=0):
+    """Sign every admitted authority with its explicitly selected local fixture wallet."""
+    from neoexpress_native_proxy_validate import encode_value, push_bytes, check_transaction
+    wallets = [wallet, *consent_wallets]
+    require(len(set(wallets)) == len(wallets), "Consent wallets must be distinct")
+    keys = [RawKey(chain.workdir, "consent-" + name, chain.wallet_private_key(name)) for name in wallets]
+    require(len({key.script_hash for key in keys}) == len(keys), "Consent identities must be distinct")
+    script = encode_value(A(*args)) + b"\x1f" + push_bytes(method.encode()) + push_bytes(hash_le(CORE)) + b"\x41\x62\x7d\x5b\x52"
+    signers = [{"account": "0x" + key.script_hash[::-1].hex(), "scopes": "CalledByEntry"} for key in keys]
+    was_running = chain.node is not None
+    try:
+        chain.start_node()
+        sysfee, netfee = transaction_system_fee(chain, script, signers, gas_reserve), 100_000_000
+        unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee, chain.rpc("getblockcount", []) + 50, signers, script)
+        digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()
+        witnesses = [(push_bytes(key.sign(chain.magic.to_bytes(4, "little") + digest)), key.verification) for key in keys]
+        raw = base64.b64encode(unsigned + serialize_witnesses(witnesses)).decode()
+        require(chain.rpc("sendrawtransaction", [raw]).get("hash") == txid, "Consent transaction hash mismatch")
+        deadline = time.monotonic() + 90; execution = None
+        while time.monotonic() < deadline:
+            try:
+                execution = chain.rpc("getapplicationlog", [txid])["executions"][0]; break
+            except ValidationFailure as error:
+                require(str(error) in ("rpc getapplicationlog: Unknown transaction", "rpc getapplicationlog: Unknown application log", "rpc getapplicationlog: Unknown transaction/blockhash"), "Unexpected consent receipt failure")
+            time.sleep(0.5)
+        require(execution is not None, "Consent transaction did not persist")
+        transaction = chain.rpc("getrawtransaction", [txid, True])
+        check_transaction(transaction, txid, script, signers, witnesses)
+        check_application(execution, event)
+        report["transactions"].append({"step": label, "txid": txid, "operation": method, "vmstate": "HALT", "event": event,
+            "gasConsumedDatoshi": int(execution["gasconsumed"]), "systemFeeDatoshi": sysfee,
+            "consentWitnesses": len(witnesses), "rawTransactionAndWitnessReadbackMatched": True})
+        return decode(execution["stack"][0]) if execution["stack"] else None
+    finally:
+        if not was_running: chain.stop_node()
+
+
+def persist(chain, report, label, method, args, event, wallet="owner", *, consent_wallets=(), gas_reserve=0):
+    if consent_wallets:
+        return persist_with_consent(chain, report, label, method, args, event, wallet, consent_wallets, gas_reserve)
     if method in ("executeUserOp", "executeUserOps"):
         require(len(args) == 2, "Fresh execution requires account and payload")
         args = execution_arguments(args[0]["value"], args[1], chain.results(CORE, "getAccount", args[0]))
@@ -261,7 +311,7 @@ def rejected(chain, report, label, method, args, expected):
 
 
 def validate(runtime, dotnet, output):
-    report = {"schema": "smartaccount-native-service-private/v1", "status": "RUNNING", "publicNetworksTouched": False,
+    report = {"schema": "smartaccount-native-contract-private/v1", "status": "RUNNING", "publicNetworksTouched": False,
               "scope": "Actual native activation, registration, fallback operations and recovery-address lifecycle; not full native conformance.",
               "runtimeMode": "Caller-supplied NeoExpress runtime; this runner does not establish build provenance. Verify the separate source-build receipt.",
               "transactions": [], "preflightRejections": [], "ownedNodesStopped": False,
@@ -271,7 +321,7 @@ def validate(runtime, dotnet, output):
     stage = "runtime-validation"
     try:
         hashes = runtime_hashes(runtime); report["runtimeSha256"] = hashes
-        with tempfile.TemporaryDirectory(prefix="smartaccount-native-service-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="smartaccount-native-contract-") as scratch:
             directory = Path(scratch); chain = Chain(make_runner(runtime, dotnet, directory), directory)
             try:
                 stage = "private-chain-creation"
@@ -312,13 +362,13 @@ def validate(runtime, dotnet, output):
                 rejected(chain, report, "replay", "executeUserOp", [H(account_text), operation(0)], "sequence is not current")
                 stage = "witness-boundary"
                 for nonce, principal, expected, label in ((1, addresses["owner"], True, "custody-witness-control"),
-                                                          (2, CORE, False, "service-hash-not-authority")):
+                                                          (2, CORE, False, "native-contract-hash-not-authority")):
                     op = A(H(diagnostic), S("check"), A(H(principal)), I(nonce), I(4_102_444_800_000), B(b""))
                     result = persist(chain, report, label, "executeUserOp", [H(account_text), op], "UserOpExecuted")
                     require(result is expected, "Witness control returned the wrong exact Boolean")
                     report["transactions"][-1]["witnessResult"] = result
                 stage = "delayed-recovery-address"
-                persist(chain, report, "propose-guardian", "proposeRecoveryAddress", [H(account_text), H(addresses["guardian"])], "RecoveryAddressChangeProposed")
+                persist(chain, report, "propose-guardian", "proposeRecoveryAddress", [H(account_text), H(addresses["guardian"])], "RecoveryAddressChangeProposed", consent_wallets=("guardian",))
                 rejected(chain, report, "immature-guardian", "activateRecoveryAddress", [H(account_text)], "mature")
                 chain.nx("fastfwd", "1", "-t", "86401")
                 persist(chain, report, "activate-guardian", "activateRecoveryAddress", [H(account_text)], "RecoveryAddressChanged")
@@ -332,7 +382,7 @@ def validate(runtime, dotnet, output):
                 check_readback(chain.rpc("getcontractstate", [diagnostic]), probe_script, probe_nef, probe_manifest)
                 report["witnessDiagnostic"] = {"contractHash": diagnostic, "readbackMatched": True,
                     "nefSha256": hashlib.sha256(probe_nef).hexdigest(), "scriptHex": probe_script.hex()}
-                require(chain.rpc_invoke(CORE, "getVersion", [])[0] == 2, "Native service version is not ABI v2")
+                require(chain.rpc_invoke(CORE, "getVersion", [])[0] == 2, "SmartAccount native contract version is not ABI v2")
                 state, _, _ = chain.rpc_invoke(CORE, "getAccount", [H(account_text)])
                 nonce, _, _ = chain.rpc_invoke(CORE, "getNonce", [H(account_text), I(0)])
                 proxy, _, _ = chain.rpc_invoke(CORE, "getAccountAddress", [H(account_text)])
@@ -369,7 +419,7 @@ def main():
     parser.add_argument("--dotnet", type=Path, default=shutil.which("dotnet")); args = parser.parse_args()
     require(args.dotnet is not None, "A local dotnet runtime is required")
     validate(args.runtime.resolve(), Path(args.dotnet).resolve(), args.output)
-    print("PASS: native service private lifecycle and RPC readback (bounded scenario coverage)")
+    print("PASS: native contract private lifecycle and RPC readback (bounded scenario coverage)")
 
 
 if __name__ == "__main__": main()

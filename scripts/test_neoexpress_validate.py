@@ -70,7 +70,7 @@ class ReadbackTests(unittest.TestCase):
         self.chain.start_node = Mock()
         self.chain.stop_node = Mock()
         self.chain.rpc = Mock(side_effect=self.rpc)
-        self.add_artifact("UnifiedSmartWalletV3")
+        self.add_artifact("SmartAccountV3")
         # This artifact is not in ARTIFACTS. It must receive the same complete
         # readback checks as the contracts deployed from contracts/bin/v3.
         self.add_artifact("NeoDIDRegistry")
@@ -110,7 +110,7 @@ class ReadbackTests(unittest.TestCase):
         result = self.chain.readback()
         self.assertEqual(result["blockCountAtReadback"], 42)
         rows = result["contracts"]
-        self.assertEqual([row["contractName"] for row in rows], ["UnifiedSmartWalletV3", "NeoDIDRegistry"])
+        self.assertEqual([row["contractName"] for row in rows], ["SmartAccountV3", "NeoDIDRegistry"])
         for row in rows:
             for field in ("nefScriptByteEquality", "nefChecksumEquality", "manifestSemanticEquality"):
                 self.assertTrue(row[field])

@@ -7,7 +7,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Verifiers
+namespace SmartAccount.Verifiers
 {
     /// <summary>
     /// Verifier for recurring merchant payments with period-bound replay protection.
@@ -123,7 +123,7 @@ namespace AbstractAccount.Verifiers
             ExecutionEngine.Assert((BigInteger)op.Args[2] > 0, "Subscription amount must be positive");
             // A virtual AA account never holds a balance at its accountId: its assets sit at the
             // core's proxy script hash, which is also the only "from" the token's CheckWitness can
-            // accept during executeUserOp (UnifiedSmartWallet.Proxy.cs). Pinning the source to the
+            // accept during executeUserOp (SmartAccount.Proxy.cs). Pinning the source to the
             // accountId therefore authorized a transfer that could never move funds; the source
             // must be the asset address the core derives for this account.
             ExecutionEngine.Assert((UInt160)op.Args[0] == AssetAddressOf(accountId), "Transfer source must be the account asset address");

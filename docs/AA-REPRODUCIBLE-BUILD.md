@@ -26,7 +26,7 @@ dotnet tool install -g neo.compiler.csharp --version 3.9.1
 node scripts/check_neo_platform_packages.mjs                  # pins, lock files, locked restore, package hashes
 node scripts/check_neo_platform_packages.mjs --compiler-only  # the installed nccs is the pinned package
 bash contracts/compile.sh                                     # every contract into contracts/bin/v3
-dotnet test neo-abstract-account.sln -c Release
+dotnet test SmartAccount.sln -c Release
 ```
 
 `./scripts/verify_repo.sh --contracts-only` runs the same steps plus the deploy-tool tests and the format
@@ -142,7 +142,7 @@ service. Two clean builds matched all six NEFs, six packaged manifests and the
 packaging certificate; the current input/output maps are in
 [`aa-native-abi2-module-build-20261008.json`](reports/aa-native-abi2-module-build-20261008.json).
 The receipt identifies both original sources and the explicit native preprocessing
-recipe. These modules require AccountManagement and are not public `v3` artifacts.
+recipe. These modules require SmartAccount and are not public `v3` artifacts.
 
 The native node/NeoExpress runtime has a separate source build and private-chain
 gate, documented in [native validation](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md).
@@ -154,10 +154,10 @@ current source, and a fresh reproduction report is required after every contract
 
 | Profile / artifact | SHA-256 |
 | --- | --- |
-| `v3/UnifiedSmartWalletV3.nef` | `63d33c11d9fe89d7386ec3d96d8a8e79680be432d7ccd01ee17e704e8cced245` |
-| `v3/UnifiedSmartWalletV3.manifest.json` | `b72317b021775187f55ed7851cdc268a63b3598153235cf02df3307007fd1546` |
-| `platform/UnifiedSmartWalletV3.nef` | `088f9157bb1c5f1217d29e49f6177f9da5a370fa671941da2c6bb216959bbc94` |
-| `platform/UnifiedSmartWalletV3.manifest.json` | `9db29a5f9c3d2b38e16daa61a1ea9bbee3227d5cbf81026e23ce88d81420c44d` |
+| `v3/SmartAccountV3.nef` | `63d33c11d9fe89d7386ec3d96d8a8e79680be432d7ccd01ee17e704e8cced245` |
+| `v3/SmartAccountV3.manifest.json` | `b72317b021775187f55ed7851cdc268a63b3598153235cf02df3307007fd1546` |
+| `platform/SmartAccountV3.nef` | `088f9157bb1c5f1217d29e49f6177f9da5a370fa671941da2c6bb216959bbc94` |
+| `platform/SmartAccountV3.manifest.json` | `9db29a5f9c3d2b38e16daa61a1ea9bbee3227d5cbf81026e23ce88d81420c44d` |
 
 `docs/reports/aa-published-build-reproducibility-20261004.json` lists the 76 files written by the 2026-10-04 build
 (24 contracts; the verifiers and hooks are written twice). Two clean exports at paths of 118 and 165
@@ -180,7 +180,7 @@ characters, each with an empty NuGet cache, produced identical bytes and no warn
 ## How to bump
 
 1. Change `NeoSmartContractFrameworkVersion` in `Directory.Build.props`, or another package version in
-   `tests/AbstractAccount.Contracts.Tests/AbstractAccount.Contracts.Tests.csproj`.
+   `tests/SmartAccount.Contracts.Tests/SmartAccount.Contracts.Tests.csproj`.
 2. Update every lock file: `for p in $(find contracts tests -name '*.csproj'); do dotnet restore "$p" --force-evaluate; done`.
    Locked mode refuses this without `--force-evaluate`, and CI never passes it.
 3. Run `node scripts/check_neo_platform_packages.mjs`. It lists each Neo package whose content hash differs

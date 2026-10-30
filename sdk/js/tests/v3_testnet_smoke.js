@@ -7,7 +7,7 @@ const { rpc, sc, wallet, experimental, tx, u, CONST } = require('@cityofzion/neo
 const { ethers } = require('ethers');
 
 const { extractDeployedContractHash } = require('../src/deployLog');
-const { AbstractAccountClient } = require('../src/index');
+const { SmartAccountClient } = require('../src/index');
 const { buildV3UserOperationTypedData, sanitizeHex } = require('../src/metaTx');
 const { resolveTestnetRpcUrl } = require('./testnet-rpc');
 
@@ -252,14 +252,14 @@ async function main() {
   }, null, 2));
 
   logSection('Deploy Contracts');
-  const core = await deployContract(rpcClient, account, networkMagic, 'UnifiedSmartWalletV3', `${deploymentTag}-core`);
+  const core = await deployContract(rpcClient, account, networkMagic, 'SmartAccountV3', `${deploymentTag}-core`);
   const web3Auth = await deployContract(rpcClient, account, networkMagic, 'Web3AuthVerifier', `${deploymentTag}-web3auth`);
   const whitelist = await deployContract(rpcClient, account, networkMagic, 'WhitelistHook', `${deploymentTag}-whitelist`);
   await authorizeVerifier(rpcClient, core.hash, web3Auth.hash, account, networkMagic);
   await authorizeHook(rpcClient, core.hash, whitelist.hash, account, networkMagic);
   console.log(JSON.stringify({ core, web3Auth, whitelist }, null, 2));
 
-  const aaClient = new AbstractAccountClient(RPC_URL, core.hash);
+  const aaClient = new SmartAccountClient(RPC_URL, core.hash);
   const accountId = aaClient.deriveRegistrationAccountIdHash({
     backupOwnerAddress: account.scriptHash,
     escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,

@@ -4,7 +4,7 @@ using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
-namespace AbstractAccount.Verifiers
+namespace SmartAccount.Verifiers
 {
     /// <summary>
     /// Shared payload builder for cryptographic signature verification across all verifier plugins.
@@ -92,7 +92,7 @@ namespace AbstractAccount.Verifiers
 
 #if SMARTACCOUNT_NATIVE
         // Only a phase-authorized validation callback may use this path. The native
-        // service has already validated the operation's canonical shape and bounds.
+        // The native contract has already validated the operation's canonical shape and bounds.
         // Public getPayload retains that validation for independently supplied inputs.
         internal static byte[] BuildValidationPayload(UInt160 accountId, UInt160 targetContract, string method, object[] args, BigInteger nonce, BigInteger deadline)
         {
@@ -102,7 +102,7 @@ namespace AbstractAccount.Verifiers
         private static byte[] BuildNativePayload(UInt160 accountId, UInt160 targetContract, string method, object[] args, BigInteger nonce, BigInteger deadline, bool validateCanonical)
         {
             UInt160 core = VerifierAuthority.AuthorizedCore();
-            ExecutionEngine.Assert(core == NativeAuthority.Service, "Wrong native SmartAccount service");
+            ExecutionEngine.Assert(core == NativeAuthority.SmartAccount, "Wrong native SmartAccount contract");
             object[] unsigned = new object[] { targetContract, method, args, nonce, deadline, (ByteString)new byte[0] };
             ByteString domain = (ByteString)Contract.Call(core, "getAuthorizationDomain", CallFlags.ReadOnly, new object[] { accountId });
             byte[] payload = Helper.Concat((byte[])domain, (byte[])StdLib.Serialize(unsigned));

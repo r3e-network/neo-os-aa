@@ -11,7 +11,7 @@ END_TIME=$(( $(date +%s) + HOURS * 3600 ))
 PASS=0
 TOTAL_ITERATIONS=0
 START=$(date +%s)
-SLN="$(cd "$(dirname "$0")/.." && pwd)/neo-abstract-account.sln"
+SLN="$(cd "$(dirname "$0")/.." && pwd)/SmartAccount.sln"
 FILTER="FullyQualifiedName~SourceInvariant_"
 
 # The SourceInvariant_ suite deploys the compiled contracts from contracts/bin/v3,
@@ -20,8 +20,8 @@ FILTER="FullyQualifiedName~SourceInvariant_"
 # failure and read as an invariant counterexample, so fail fast here instead.
 CONTRACTS_BIN="$(cd "$(dirname "$0")/.." && pwd)/contracts/bin/v3"
 REQUIRED_ARTIFACTS=(
-  "UnifiedSmartWalletV3.nef"
-  "UnifiedSmartWalletV3.manifest.json"
+  "SmartAccountV3.nef"
+  "SmartAccountV3.manifest.json"
   "MockTransferTarget.nef"
   "MockTransferTarget.manifest.json"
 )
@@ -33,10 +33,10 @@ for artifact in "${REQUIRED_ARTIFACTS[@]}"; do
   fi
 done
 if [[ "$MISSING" -ne 0 ]]; then
-  echo "environment not ready: the SourceInvariant suite deploys UnifiedSmartWalletV3 and" >&2
+  echo "environment not ready: the SourceInvariant suite deploys SmartAccountV3 and" >&2
   echo "environment not ready: MockTransferTarget from contracts/bin/v3 before it can run." >&2
   echo "environment not ready: build the artifacts with:" >&2
-  echo "environment not ready:   dotnet build contracts/UnifiedSmartWallet.csproj -c Release -nologo" >&2
+  echo "environment not ready:   dotnet build contracts/SmartAccount.csproj -c Release -nologo" >&2
   echo "environment not ready:   bash contracts/compile.sh" >&2
   echo "environment not ready: (or run ./scripts/verify_repo.sh). Exiting 2; no invariant counterexample was found." >&2
   exit 2

@@ -1,7 +1,7 @@
 // CU-209 gate: the client may not build, stage or select an invocation naming an entrypoint the
 // deployed Abstract Account ABI does not export.
 //
-// The oracle is the deployed manifest itself (contracts/build/UnifiedSmartWalletV3.manifest.json),
+// The oracle is the deployed manifest itself (contracts/build/SmartAccountV3.manifest.json),
 // never a hand-written list. Two halves:
 //   1. an inventory of every exported function on the client's execution surface, so a new producer
 //      cannot be added without appearing here;
@@ -22,7 +22,7 @@ import * as signedInvocation from '../src/features/operations/signedInvocation.j
 import { EC } from '../src/config/errorCodes.js';
 
 const FRONTEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MANIFEST_PATH = path.resolve(FRONTEND_ROOT, '..', 'contracts', 'build', 'UnifiedSmartWalletV3.manifest.json');
+const MANIFEST_PATH = path.resolve(FRONTEND_ROOT, '..', 'contracts', 'build', 'SmartAccountV3.manifest.json');
 const CLIENT_SURFACE = { metaTx, execution, signedInvocation };
 
 // The exported functions of the three client modules that can carry an invocation between them.
@@ -92,6 +92,10 @@ function stagedV3Body() {
 test('the deployed manifest is the V3 core, excludes the V1/V2 names and names its execution surface', () => {
   const { manifest, methods, entrypoints } = readDeployedAbi();
 
+  // The checked-in file carries the renamed repository's file name, but the
+  // manifest bytes are the immutable mainnet deployment, whose `name` field is
+  // on-chain data and still reads UnifiedSmartWalletV3. Renaming the source tree
+  // cannot rename a deployed contract, so this asserts the deployed value.
   assert.equal(manifest.name, 'UnifiedSmartWalletV3');
   assert.deepEqual(
     entrypoints.slice().sort(),
@@ -126,7 +130,7 @@ test('the client execution-surface list is exactly the deployed ABI execution su
   assert.deepEqual(
     signedInvocation.DEPLOYED_ENTRYPOINTS.slice().sort(),
     entrypoints.slice().sort(),
-    'the client list drifted from the deployed ABI: derive it from contracts/build/UnifiedSmartWalletV3.manifest.json',
+    'the client list drifted from the deployed ABI: derive it from contracts/build/SmartAccountV3.manifest.json',
   );
   for (const operation of entrypoints) {
     assert.equal(signedInvocation.isDeployedEntrypoint(operation), true, `${operation} must be accepted`);

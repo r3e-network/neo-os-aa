@@ -2,13 +2,14 @@
 ; NeoOS formal verification -- AA core arithmetic obligations
 ;
 ; Source correspondence (read at 2026-09-18):
-;   ../neo-os-aa/contracts/UnifiedSmartWallet.Execution.cs
-;   ../neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs
+;   ../neo-os-aa/contracts/SmartAccount.Execution.cs
+;   ../neo-os-aa/contracts/SmartAccount.Paymaster.cs
 ;   ../neo-os-aa/contracts/paymaster/Paymaster.cs
 ;
 ; OBL: the negation is unsat, so the arithmetic property holds.
-; CTRL: a deliberately unguarded bad state is sat, proving the obligation is
-;       not merely true because the domain was accidentally empty.
+; CTRL: an explicit accepted-domain witness or a deliberately unguarded bad
+;       state is sat. Only controls sharing the accepted predicate establish
+;       that its domain is nonempty; unrelated bad states do not establish this.
 ;
 ; The AA core now rejects negative and over-width nonce values before splitting
 ; the Neo BigInteger into channel/sequence. NeoVM Integer is a signed 256-bit
@@ -22,6 +23,7 @@
 (define-fun SEQUENCE_LIMIT () Int 18446744073709551616) ; 2^64
 (define-fun CHANNEL_LIMIT () Int 3138550867693340381917894711603833208051177722232017256448) ; 2^191
 (define-fun NONCE_LIMIT () Int 57896044618658097711785492504343953926634992332820282019728792003956564819968) ; 2^255
+(define-fun accepted ((nonce Int)) Bool (and (>= nonce 0) (< nonce NONCE_LIMIT)))
 
 ; ---------------------------------------------------------------------------
 ; OBL 1: the core's accepted nonce domain is exactly the non-negative half of
@@ -30,18 +32,17 @@
 (echo "OBL:nonce-acceptance-is-signed-vm-bounded")
 (push)
 (declare-const nonce Int)
-(define-fun accepted () Bool (and (>= nonce 0) (< nonce NONCE_LIMIT)))
-(assert (not (=> accepted (and (>= nonce 0) (< nonce NONCE_LIMIT)))))
+(assert (not (= (accepted nonce) (and (>= nonce 0) (< nonce NONCE_LIMIT)))))
 (check-sat)
 (pop)
 
-; CTRL 1: omitting the upper-bound guard admits a non-representable input.
+; CTRL 1: the same predicate accepts both executable boundary values. This
+;         fails for a reject-all domain or the loss of either endpoint.
 ; ---------------------------------------------------------------------------
-(echo "CTRL:nonce-acceptance-without-upper-bound-is-expressible")
+(echo "CTRL:nonce-acceptance-includes-both-executable-boundaries")
 (push)
-(declare-const nonce Int)
-(assert (= nonce NONCE_LIMIT))
-(assert (not (and (>= nonce 0) (< nonce NONCE_LIMIT))))
+(assert (accepted 0))
+(assert (accepted (- NONCE_LIMIT 1)))
 (check-sat)
 (pop)
 
@@ -65,7 +66,7 @@
 
 ; ---------------------------------------------------------------------------
 ; CTRL 2: outside the signed-VM non-negative domain, the same arithmetic can express a non-representable
-;        nonce. This keeps OBL 1's finite domain explicit rather than vacuous.
+;        nonce. CTRL 1 separately establishes that the accepted domain is nonempty.
 ; ---------------------------------------------------------------------------
 (echo "CTRL:nonce-outside-signed-vm-domain-is-expressible")
 (push)

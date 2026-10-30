@@ -110,7 +110,7 @@ export function resolveNetworkMagic(value, fallback = DEFAULT_NETWORK_MAGIC) {
   return Number.isFinite(normalized) && normalized > 0 ? normalized : fallback;
 }
 
-export function resolveAbstractAccountHash(value, fallback = DEFAULT_ABSTRACT_ACCOUNT_HASH) {
+export function resolveSmartAccountHash(value, fallback = DEFAULT_ABSTRACT_ACCOUNT_HASH) {
   const normalized = sanitizeHex(value);
   if (!/^[0-9a-f]{40}$/.test(normalized)) return fallback;
   return normalized;
@@ -157,7 +157,7 @@ export function getRuntimeConfig(env = import.meta.env ?? {}) {
   const networkDefaults = MORPHEUS_NETWORK_DEFAULTS[runtimeNetwork];
   return {
     morpheusNetwork: runtimeNetwork,
-    abstractAccountHash: resolveAbstractAccountHash(
+    abstractAccountHash: resolveSmartAccountHash(
       env.VITE_AA_HASH || env.VITE_ABSTRACT_ACCOUNT_HASH,
       networkDefaults.abstractAccountHash
     ),
@@ -227,7 +227,7 @@ export function getRuntimeConfig(env = import.meta.env ?? {}) {
       env.VITE_AA_N3INDEX_NETWORK || env.VITE_N3INDEX_NETWORK,
       networkDefaults.n3IndexNetwork
     ),
-    neoNnsContractHash: resolveAbstractAccountHash(
+    neoNnsContractHash: resolveSmartAccountHash(
       env.VITE_AA_NEO_NNS_CONTRACT_HASH || env.VITE_NEO_NNS_CONTRACT_HASH,
       DEFAULT_NEO_NNS_CONTRACT_HASH
     ),

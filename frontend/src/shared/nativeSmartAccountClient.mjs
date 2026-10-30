@@ -1,7 +1,7 @@
-const SERVICE = "d9421d07adf206e9dc4be746a02e8e087fa61741";
+const SMART_ACCOUNT_CONTRACT = "398dc3f0227d7efac5533ed5ce9937390c158084";
 const STDLIB = "acce6fd80d44e1796aa0c2c625e9e4e0ce39efc0";
 export const NATIVE_PROFILE_PARAMETER_DIGEST =
-  "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4";
+  "ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a";
 export const NATIVE_COMPOSITE_MAX_CHILDREN = 3;
 const NATIVE_COMPOSITE_MAX_THRESHOLD = 2;
 const ZERO = "00".repeat(20);
@@ -32,6 +32,10 @@ const freeze = (value) => {
 const I = (value) => ({ type: "Integer", value: String(value) });
 const A = (value) => ({ type: "Array", value });
 const parameters = (entries) => entries.map(([name, type]) => ({ name, type }));
+const RESERVED_CONFIGURATION_METHODS = Object.freeze([
+  "validateSignature", "validateSignatureForPostExecute", "validateCompositeSignature", "postExecuteComposite",
+  "preExecute", "postExecute", "clearAccount", "supportsComposition", "getSignerDomains",
+]);
 const requiredMethod = (entries, returntype, safe) => [
   entries.map(([, type]) => type),
   returntype,
@@ -410,7 +414,7 @@ export function validateNativeModuleProfile(deployed, profileDigest) {
     typeof metadata.compositeVerifier !== "boolean"
   )
     error(
-      "module profile ABI version, digest or composition metadata does not match the native service",
+      "module profile ABI version, digest or composition metadata does not match the native contract",
     );
   return metadata;
 }
@@ -480,7 +484,7 @@ export function createNativeClientClass(codec) {
     const a = array(v, 2, "module binding");
     const contract = hash(a[0]);
     const codeHash = hash(a[1], 32);
-    if (contract === ZERO || contract === SERVICE || /^0+$/.test(codeHash))
+    if (contract === ZERO || contract === SMART_ACCOUNT_CONTRACT || /^0+$/.test(codeHash))
       error("invalid module binding");
     return { contract, codeHash };
   };
@@ -523,11 +527,11 @@ export function createNativeClientClass(codec) {
       id !== codec.hex(accountId, 20) ||
       address !== codec.accountAddress(id) ||
       custody === ZERO ||
-      custody === SERVICE ||
+      custody === SMART_ACCOUNT_CONTRACT ||
       custody === address
     )
       error("account identity/address mismatch");
-    if (recovery !== ZERO && [custody, address, SERVICE].includes(recovery))
+    if (recovery !== ZERO && [custody, address, SMART_ACCOUNT_CONTRACT].includes(recovery))
       error("invalid recovery identity");
     if (a[7] !== 0n && a[7] !== 1n) error("unknown account status");
     if (typeof a[13] !== "bigint" || typeof a[8] !== "bigint" || a[13] > a[8])
@@ -575,7 +579,7 @@ export function createNativeClientClass(codec) {
       this._prepared = new WeakSet();
       this._plans = new WeakSet();
     }
-    async _read(method, args = [], contract = SERVICE, signers = []) {
+    async _read(method, args = [], contract = SMART_ACCOUNT_CONTRACT, signers = []) {
       const script = codec.dynamicCall(contract, method, args, 5);
       const result = await this.rpc.send("invokescript", [
         bytesToBase64(codec.bytes(script)),
@@ -592,19 +596,29 @@ export function createNativeClientClass(codec) {
       return decode(result.stack[0]);
     }
     async discover() {
+      if (this._discovery) return this._discovery;
+      const request = this._discover();
+      this._discovery = request;
+      try {
+        return await request;
+      } finally {
+        if (this._discovery === request) this._discovery = null;
+      }
+    }
+    async _discover() {
       const [version, state] = await Promise.all([
         this.rpc.send("getversion", []),
-        this.rpc.send("getcontractstate", ["0x" + SERVICE]),
+        this.rpc.send("getcontractstate", ["0x" + SMART_ACCOUNT_CONTRACT]),
       ]);
       if (version?.protocol?.network !== this.networkMagic)
         error("RPC network magic mismatch");
       if (
         !Number.isSafeInteger(state?.id) ||
         state.id !== -13 ||
-        codec.hex(state?.hash, 20) !== SERVICE ||
-        state?.manifest?.name !== "AccountManagement"
+        codec.hex(state?.hash, 20) !== SMART_ACCOUNT_CONTRACT ||
+        state?.manifest?.name !== "SmartAccount"
       )
-        error("native AccountManagement service is not available");
+        error("native SmartAccount contract is not available");
       const marker = state.manifest.extra?.smartAccount;
       if (
         marker?.abiVersion !== 2 ||
@@ -637,9 +651,9 @@ export function createNativeClientClass(codec) {
           error(`native ABI event mismatch: ${name}`);
       }
       if ((await this._read("getVersion")) !== 2n)
-        error("native service is inactive or has wrong version");
+        error("native contract is inactive or has wrong version");
       this.profile = freeze({
-        service: SERVICE,
+        contract: SMART_ACCOUNT_CONTRACT,
         networkMagic: this.networkMagic,
         abiVersion: 2,
         identityVersion: 1,
@@ -704,15 +718,15 @@ export function createNativeClientClass(codec) {
         recovery = codec.hex(recoveryAddress, 20);
       if (
         recovery !== ZERO &&
-        [custody, identity.accountAddress, SERVICE].includes(recovery)
+        [custody, identity.accountAddress, SMART_ACCOUNT_CONTRACT].includes(recovery)
       )
         error("recovery authority must be independent");
       return this._plan({
         kind: "registration",
         ...identity,
         method: "registerAccount",
-        requiredAuthorities: [custody],
-        script: codec.dynamicCall(SERVICE, "registerAccount", [
+        requiredAuthorities: recovery === ZERO ? [custody] : [custody, recovery],
+        script: codec.dynamicCall(SMART_ACCOUNT_CONTRACT, "registerAccount", [
           H(custody),
           { type: "ByteString", value: codec.hex(salt, 32) },
           H(verifier),
@@ -734,12 +748,16 @@ export function createNativeClientClass(codec) {
         operations.length > 32
       )
         error("prepare requires 1..32 operations");
+      const inputs = operations.map((input) => ({
+        ...input,
+        args: codec.canonicalValue(A(input.args ?? [])).value,
+      }));
       await this.discover();
       const { state, context } = await this._context(accountId);
       if (state.status !== "Active") error("account is Frozen");
       const cursors = new Map(),
         prepared = [];
-      for (const input of operations) {
+      for (const input of inputs) {
         const channel = codec
           .unsigned(input.channel ?? 0n, 191, "nonce channel")
           .toString();
@@ -801,7 +819,7 @@ export function createNativeClientClass(codec) {
         !this._prepared.has(prepared) ||
         prepared?.kind !== "native-operation" ||
         prepared?.profile?.networkMagic !== this.networkMagic ||
-        prepared.profile.service !== SERVICE ||
+        prepared.profile.contract !== SMART_ACCOUNT_CONTRACT ||
         prepared.profile.profileParameterDigest !==
           this.profileParameterDigest ||
         codec.operationDigest(prepared.context, prepared.operation) !==
@@ -1006,6 +1024,15 @@ export function createNativeClientClass(codec) {
         error("module role must be verifier or hook");
     }
     async buildModuleCall({ accountId, role, child, method, args = [] }) {
+      if (
+        !Array.isArray(args) ||
+        args.length > 63 ||
+        typeof method !== "string" ||
+        method.startsWith("_") ||
+        RESERVED_CONFIGURATION_METHODS.includes(method)
+      )
+        error("invalid module configuration call");
+      const canonicalArgs = codec.canonicalValue(A(args));
       await this.discover();
       this._role(role);
       const state = await this.getAccount(accountId);
@@ -1016,28 +1043,10 @@ export function createNativeClientClass(codec) {
       const selected = child ? codec.hex(child, 20) : root.contract;
       if (
         selected === ZERO ||
-        selected === SERVICE ||
+        selected === SMART_ACCOUNT_CONTRACT ||
         (child && selected === root.contract)
       )
         error("invalid child module");
-      if (
-        !Array.isArray(args) ||
-        args.length > 63 ||
-        method.startsWith("_") ||
-        [
-          "validateSignature",
-          "validateSignatureForPostExecute",
-          "validateCompositeSignature",
-          "postExecuteComposite",
-          "preExecute",
-          "postExecute",
-          "clearAccount",
-          "supportsComposition",
-          "getSignerDomains",
-        ].includes(method)
-      )
-        error("invalid module configuration call");
-      const canonicalArgs = codec.canonicalValue(A(args));
       if (
         codec.serializeValue(A([H(accountId), ...canonicalArgs.value])).length >
         8192
@@ -1069,14 +1078,17 @@ export function createNativeClientClass(codec) {
       }
       const capabilities = metadata.configurationMethods;
       const matches = deployed?.manifest?.abi?.methods?.filter(
-        (m) => m.name === method && m.parameters?.length === args.length + 1,
+        (m) => m.name === method && m.parameters?.length === canonicalArgs.value.length + 1,
       );
       if (
         !Array.isArray(capabilities) ||
+        capabilities.some((name) => typeof name !== "string" || name.startsWith("_") ||
+          RESERVED_CONFIGURATION_METHODS.includes(name)) ||
+        new Set(capabilities).size !== capabilities.length ||
         !capabilities.includes(method) ||
         matches?.length !== 1 ||
         matches[0].safe !== false ||
-        matches[0].parameters?.length !== args.length + 1 ||
+        matches[0].parameters?.length !== canonicalArgs.value.length + 1 ||
         matches[0].parameters[0]?.type !== "Hash160"
       )
         error("module has no declared account-scoped configuration capability");
@@ -1106,7 +1118,7 @@ export function createNativeClientClass(codec) {
             "native MultiSig requires 1–3 children and a reachable threshold of 1–2",
           );
         const seen = new Set();
-        const forbidden = new Set([ZERO, H(SERVICE).value, H(selected).value]);
+        const forbidden = new Set([ZERO, H(SMART_ACCOUNT_CONTRACT).value, H(selected).value]);
         for (const entry of roster.value) {
           if (
             entry.type !== "ByteString" ||
@@ -1115,7 +1127,7 @@ export function createNativeClientClass(codec) {
             seen.has(entry.value)
           )
             error(
-              "native MultiSig requires unique nonzero 20-byte child hashes, excluding its root and service",
+              "native MultiSig requires unique nonzero 20-byte child hashes, excluding its root and SmartAccount contract",
             );
           seen.add(entry.value);
         }
@@ -1138,7 +1150,7 @@ export function createNativeClientClass(codec) {
         method: route,
         requiredAuthorities: [state.custodyAddress],
         configurationNonce: state.configurationNonce,
-        script: codec.dynamicCall(SERVICE, route, params),
+        script: codec.dynamicCall(SMART_ACCOUNT_CONTRACT, route, params),
         pending: await this.getPendingModuleCall(accountId, role),
       });
     }
@@ -1189,15 +1201,21 @@ export function createNativeClientClass(codec) {
         authorities = [];
       if (action === "unfreeze" && state.recoveryAddress !== ZERO)
         authorities = [state.custodyAddress, state.recoveryAddress];
+      if (["proposeRecoveryAddress", "proposeRecovery"].includes(action)) {
+        const recipient = codec.hex(address, 20);
+        const admitted = new Set([state.custodyAddress, state.recoveryAddress,
+          state.pendingRecoveryAddress?.address, state.pendingRecovery?.address]);
+        if (recipient !== ZERO && !admitted.has(recipient) && !authorities.includes(recipient)) authorities.push(recipient);
+      }
       if (action === "cancelRecovery") authorities = []; // Either recovery, or custody strictly before maturity; caller supplies actor for simulation.
-      let script = codec.dynamicCall(SERVICE, action, params);
+      let script = codec.dynamicCall(SMART_ACCOUNT_CONTRACT, action, params);
       let pendingCallBytes;
       if (action === "cancelModuleCall") {
         pendingCallBytes = pendingEncodings.get(pendingCall);
         if (!pendingCallBytes)
           error("pending module call must come from this client");
         script =
-          codec.dynamicCall(SERVICE, "getPendingModuleCall", params, 5) +
+          codec.dynamicCall(SMART_ACCOUNT_CONTRACT, "getPendingModuleCall", params, 5) +
           // PUSH1 PACK passes the read result to StdLib.serialize with None flags.
           "11c010" +
           codec.encodeValue(S("serialize")) +

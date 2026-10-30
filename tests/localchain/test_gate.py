@@ -115,9 +115,9 @@ class GateTest(unittest.TestCase):
 
     def test_artifact_mismatch_names_file(self):
         expected = copy.deepcopy(self.expected)
-        name = "contracts/build/UnifiedSmartWalletV3.nef"
+        name = "contracts/build/SmartAccountV3.nef"
         next(a for a in expected["artifacts"] if a["path"] == name)["sha256"] = "0" * 64
-        with self.assertRaisesRegex(suite.Fail, "UnifiedSmartWalletV3.nef"):
+        with self.assertRaisesRegex(suite.Fail, "SmartAccountV3.nef"):
             suite.validate_artifacts(expected)
 
 if __name__ == "__main__":

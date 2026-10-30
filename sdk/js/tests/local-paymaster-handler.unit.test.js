@@ -11,7 +11,7 @@ test('resolveLocalPaymasterHandlerPath honors an explicit handler path', () => {
 });
 
 test('resolveLocalPaymasterHandlerPath discovers the sibling Morpheus worker when present', () => {
-  const repoRoot = '/workspace/neo-abstract-account';
+  const repoRoot = '/workspace/smart-account';
   const expected = path.resolve(
     repoRoot,
     '..',
@@ -26,5 +26,5 @@ test('resolveLocalPaymasterHandlerPath discovers the sibling Morpheus worker whe
 });
 
 test('resolveLocalPaymasterHandlerPath returns empty when no local worker exists', () => {
-  assert.equal(resolveLocalPaymasterHandlerPath({}, '/workspace/neo-abstract-account', () => false), '');
+  assert.equal(resolveLocalPaymasterHandlerPath({}, '/workspace/smart-account', () => false), '');
 });

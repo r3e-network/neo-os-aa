@@ -17,7 +17,7 @@ PUSH accountIdBytes
 PUSH 2; PACK
 PUSH ReadOnly
 PUSH "getPendingModuleCall"
-PUSH AccountManagementHashBytes
+PUSH SmartAccountHashBytes
 SYSCALL System.Contract.Call
 
 PUSH 1; PACK
@@ -34,7 +34,7 @@ PUSH accountIdBytes
 PUSH 2; PACK
 PUSH All
 PUSH "cancelModuleCall"
-PUSH AccountManagementHashBytes
+PUSH SmartAccountHashBytes
 SYSCALL System.Contract.Call
 ```
 

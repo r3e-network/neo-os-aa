@@ -5,7 +5,7 @@ using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Hooks
+namespace SmartAccount.Hooks
 {
     /// <summary>
     /// Hook that restricts an AA account to an explicit target-contract allowlist.
@@ -16,7 +16,7 @@ namespace AbstractAccount.Hooks
     /// </remarks>
     [DisplayName("WhitelistHook")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch")]
+    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "hasModuleContext", "getAuthorityEpoch")]
     [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canExecuteHook")]

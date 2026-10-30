@@ -119,7 +119,7 @@ test('fetchNonceForAddress reads the current meta-tx nonce for an address signer
 });
 
 test('the V1/V2 invocation builder is gone from the client transaction builders', async () => {
-  // CU-209: the deployed UnifiedSmartWalletV3 ABI exports four execute* entrypoints and neither
+  // CU-209: the deployed SmartAccountV3 ABI exports four execute* entrypoints and neither
   // V1/V2 name, so no builder for that envelope may exist here. The manifest-oracle gate lives in
   // metaInvocationProducer.test.js.
   const metaTx = await import('../src/features/operations/metaTx.js');

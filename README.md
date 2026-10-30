@@ -3,8 +3,8 @@
 `neo-os-aa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Abstract Accounts on Neo N3.
 
 The project keeps two implementation tracks for one smart-account protocol.
-`UnifiedSmartWalletV3` is the current user-contract delivery path for NeoOS;
-the protocol's native `AccountManagement` service is developed in parallel for
+`SmartAccountV3` is the current user-contract delivery path for NeoOS;
+the protocol's native `SmartAccount` service is developed in parallel for
 the standard submission path. Start with the [implementation strategy](docs/AA-IMPLEMENTATION-STRATEGY.md)
 and [capability boundaries](docs/AA-SYSTEM-STATUS.md). For the native track,
 see the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
@@ -34,7 +34,7 @@ local implementation evidence from the remaining protocol and activation gates.
 
 Runtime and deployment boundaries:
 
-- This repository retains `UnifiedSmartWalletV3` compatibility for the public deployments listed below, alongside the native `AccountManagement` implementation.
+- This repository retains `SmartAccountV3` compatibility for the public deployments listed below, alongside the native `SmartAccount` implementation.
 - V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
 - The public `v3` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
 - [System capability boundaries](docs/AA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
@@ -43,7 +43,7 @@ Runtime and deployment boundaries:
 
 The two implementation versions live on this branch behind explicit directory
 entrypoints: [ordinary user-contract](implementations/ordinary/README.md) and
-[native AccountManagement profile](implementations/native/README.md). Their
+[native SmartAccount profile](implementations/native/README.md). Their
 `profile.json` files map canonical source roots, compatibility paths, artifacts
 and profile-specific verification commands. Source stays in the existing
 build-compatible directories so current tooling and artifact checks address the
@@ -51,9 +51,9 @@ same files.
 
 ## Architecture authority
 
-In the NeoOS workspace ownership map, `neo-os-aa` owns account abstraction: user operations, proxy
+In the NeoOS workspace ownership map, `neo-os-aa` is the sole authority for account abstraction: user operations, proxy
 verification, and recovery (`protocol-aa-core`). Native consensus enforcement lives in the matching
-Neo core `AccountManagement` implementation; this repository supplies its profile, modules, SDK and UI.
+Neo core `SmartAccount` implementation; this repository supplies its profile, modules, SDK and UI.
 AA decides whether an actor authorized an
 operation and nothing more: it does not grant DID eligibility, hold network identity, or
 select signers, and it has no dependency on the DID registry. The operation-policy layer
@@ -139,7 +139,7 @@ When this repo references Morpheus-integrated addresses, treat the following as 
 | Item | Mainnet | Testnet |
 | --- | --- | --- |
 | AA core | `0x0268a387913b250166ddec032b03332690a1ef78` | `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2` |
-| AA runtime label | `UnifiedSmartWalletV3` | `UnifiedSmartWalletV3` |
+| AA runtime label | `SmartAccountV3` | `SmartAccountV3` |
 | Morpheus Oracle | `0xf54d8584ef82315c1800373272ab08ae0db2d5ef` | `0xf54d8584ef82315c1800373272ab08ae0db2d5ef` |
 | Morpheus DataFeed | `0x03013f49c42a14546c8bbe58f9d434c3517fccab` | `0x9bea75cf702f6afc09125aa6d22f082bfd2ee064` |
 | Oracle callback consumer | `0xe1226268f2fe08bea67fb29e1c8fda0d7c8e9844` | `0x0ac1fa9cdcb66c1672f0642f62d767902f460f2b` |
@@ -246,7 +246,7 @@ is the separate full-node gate. Neither lane activates a public network.
 ### Test
 
 ```bash
-dotnet test neo-abstract-account.sln -c Release --nologo
+dotnet test SmartAccount.sln -c Release --nologo
 (cd frontend && npm test)
 (cd sdk/js && npm test)
 ```
@@ -333,10 +333,10 @@ The shared platform-account registrar is enabled in a separate, testnet-only AA 
 
 ```bash
 AA_TESTNET_UPDATE_SIGNER=<public-AA-admin-address-or-script-hash> \
-  node scripts/upgrade_testnet_unified_smart_wallet.js
+  node scripts/upgrade_testnet_smart_account.js
 ```
 
-The helper verifies testnet magic, the local `UnifiedSmartWalletV3` artifact, the live update surface, and the exact `update` preview. It writes `docs/reports/testnet-unified-smart-wallet-upgrade-latest.json` without signing or broadcasting. Execution requires `--execute`, `CONFIRM_AA_TESTNET_UPDATE=I_UNDERSTAND_THIS_WRITES_CHAIN`, and `AA_TESTNET_UPDATE_WIF`; the WIF-derived signer must match the public identity used for the preview. After a successful upgrade, rerun the platform shared-AA preflight before configuring the Registry core.
+The helper verifies testnet magic, the local `SmartAccountV3` artifact, the live update surface, and the exact `update` preview. It writes a `testnet-smart-account-upgrade-latest.json` receipt under `docs/reports/` without signing or broadcasting. Execution requires `--execute`, `CONFIRM_AA_TESTNET_UPDATE=I_UNDERSTAND_THIS_WRITES_CHAIN`, and `AA_TESTNET_UPDATE_WIF`; the WIF-derived signer must match the public identity used for the preview. After a successful upgrade, rerun the platform shared-AA preflight before configuring the Registry core.
 
 ### Build
 
@@ -370,7 +370,7 @@ What that run shows, stated precisely:
 
 The evidence this repository can reproduce today is the local-chain suite
 (`tests/localchain/README.md`). Its deployed variant runs the eight artifacts pinned by SHA-256 in
-`tests/localchain/expected-deployed.json` — `UnifiedSmartWalletV3`, `MockTransferTarget`,
+`tests/localchain/expected-deployed.json` — `SmartAccountV3`, `MockTransferTarget`,
 `WebAuthnVerifier`, `SessionKeyVerifier`, `AAPaymaster`, `WhitelistHook`, `DailyLimitHook` and
 `SocialRecoveryVerifier` — and it performs no public-chain readback. The remaining matrix plugins
 have no reproducible acceptance run on the current artifacts.

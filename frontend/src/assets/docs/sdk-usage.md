@@ -16,12 +16,12 @@ with another instance. The canonical anchors are generated from neo-os-services 
 generated module wins on any conflict.
 
 ```javascript
-const { AbstractAccountClient } = require('./sdk/js/src');
+const { SmartAccountClient } = require('./sdk/js/src');
 
 const rpcUrl = 'https://testnet1.neo.coz.io:443';
 const masterHash = '0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2';
 
-const aaClient = new AbstractAccountClient(rpcUrl, masterHash);
+const aaClient = new SmartAccountClient(rpcUrl, masterHash);
 ```
 
 ## 2. Derive the Deterministic Proxy Address

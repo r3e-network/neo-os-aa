@@ -24,27 +24,27 @@ const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath)
 const manifest = parseManifest(read(PATHS.manifest));
 const projects = listProjects(repoRoot);
 
-// Captured from `dotnet restore --force` of contracts/UnifiedSmartWallet.csproj against a lock file
+// Captured from `dotnet restore --force` of contracts/SmartAccount.csproj against a lock file
 // that was edited by hand (2026-10-04, paths shortened).
 const STALE_LOCK_RESTORE = `
   Determining projects to restore...
-/w/contracts/UnifiedSmartWallet.csproj : error NU1004: The package reference Neo.SmartContract.Framework version has changed from [3.10.0, ) to [3.10.1, ).The packages lock file is inconsistent with the project dependencies so restore can't be run in locked mode. Disable the RestoreLockedMode MSBuild property or pass an explicit --force-evaluate option to run restore to update the lock file.
-  Failed to restore /w/contracts/UnifiedSmartWallet.csproj (in 72 ms).
+/w/contracts/SmartAccount.csproj : error NU1004: The package reference Neo.SmartContract.Framework version has changed from [3.10.0, ) to [3.10.1, ).The packages lock file is inconsistent with the project dependencies so restore can't be run in locked mode. Disable the RestoreLockedMode MSBuild property or pass an explicit --force-evaluate option to run restore to update the lock file.
+  Failed to restore /w/contracts/SmartAccount.csproj (in 72 ms).
 `;
 
 const FORGED_LOCK_RESTORE = `
   Determining projects to restore...
-/w/contracts/UnifiedSmartWallet.csproj : error NU1403: Package content hash validation failed for Neo.SmartContract.Framework.3.10.1. The package is different than the last restore.
-/w/contracts/UnifiedSmartWallet.csproj : error NU1403:
-  Failed to restore /w/contracts/UnifiedSmartWallet.csproj (in 487 ms).
+/w/contracts/SmartAccount.csproj : error NU1403: Package content hash validation failed for Neo.SmartContract.Framework.3.10.1. The package is different than the last restore.
+/w/contracts/SmartAccount.csproj : error NU1403:
+  Failed to restore /w/contracts/SmartAccount.csproj (in 487 ms).
 `;
 
 // Captured from `dotnet restore` of a project that pins a version nuget.org does not have.
 const MISSING_VERSION_RESTORE = `
   Determining projects to restore...
-/w/contracts/UnifiedSmartWallet.csproj : error NU1102: Unable to find package Neo.SmartContract.Framework with version (>= 3.10.2-CI00384)
-/w/contracts/UnifiedSmartWallet.csproj : error NU1102:   - Found 35 version(s) in nuget.org [ Nearest version: 3.10.1 ]
-  Failed to restore /w/contracts/UnifiedSmartWallet.csproj (in 5.54 sec).
+/w/contracts/SmartAccount.csproj : error NU1102: Unable to find package Neo.SmartContract.Framework with version (>= 3.10.2-CI00384)
+/w/contracts/SmartAccount.csproj : error NU1102:   - Found 35 version(s) in nuget.org [ Nearest version: 3.10.1 ]
+  Failed to restore /w/contracts/SmartAccount.csproj (in 5.54 sec).
 `;
 
 function locksFromRepository() {
@@ -98,7 +98,7 @@ test("the manifest lists the framework, the test engine, their Neo closure and t
 test("pin drift between the props file, the tests project and the manifest is reported", () => {
   const problems = pinConsistencyProblems({ propsVersion: "3.10.2", testsVersion: "3.10.1", manifest });
   assert.equal(problems.length, 4);
-  assert.match(problems[0], /AbstractAccount\.Contracts\.Tests\.csproj pins 3\.10\.1 but Directory\.Build\.props pins 3\.10\.2/);
+  assert.match(problems[0], /SmartAccount\.Contracts\.Tests\.csproj pins 3\.10\.1 but Directory\.Build\.props pins 3\.10\.2/);
   assert.match(problems[1], /neo-platform-packages\.json records 3\.10\.1 but Directory\.Build\.props pins 3\.10\.2/);
   assert.match(problems[2], /lists Neo\.SmartContract\.Framework 3\.10\.1, expected 3\.10\.2/);
   assert.match(problems[3], /lists Neo\.SmartContract\.Testing 3\.10\.1, expected 3\.10\.2/);
@@ -170,8 +170,8 @@ test("epoch probe locks the actual Testing and Framework dependencies independen
 test("projects that share a directory get their own lock file, the others use packages.lock.json", () => {
   const files = projects.map((project) => lockFileFor(project, projects));
   assert.equal(new Set(files).size, projects.length, "no two projects may share a lock file");
-  assert.equal(lockFileFor("contracts/UnifiedSmartWallet.csproj", projects), "contracts/packages.lock.json");
-  assert.equal(lockFileFor(PATHS.testsProject, projects), "tests/AbstractAccount.Contracts.Tests/packages.lock.json");
+  assert.equal(lockFileFor("contracts/SmartAccount.csproj", projects), "contracts/packages.lock.json");
+  assert.equal(lockFileFor(PATHS.testsProject, projects), "tests/SmartAccount.Contracts.Tests/packages.lock.json");
   assert.equal(lockFileFor("contracts/hooks/MultiHook.csproj", projects), "contracts/hooks/packages.MultiHook.lock.json");
   assert.equal(lockFileFor("contracts/verifiers/ZkLoginVerifier.csproj", projects), "contracts/verifiers/packages.ZkLoginVerifier.lock.json");
 });
@@ -356,13 +356,13 @@ test("verify_repo.sh runs the package and compiler gates before the first contra
   const compiler = script.indexOf("node scripts/check_neo_platform_packages.mjs --compiler-only");
   assert.notEqual(gate, -1);
   assert.notEqual(compiler, -1);
-  for (const first of ["dotnet build contracts/UnifiedSmartWallet.csproj", "bash contracts/compile.sh", "dotnet test neo-abstract-account.sln"]) {
+  for (const first of ["dotnet build contracts/SmartAccount.csproj", "bash contracts/compile.sh", "dotnet test SmartAccount.sln"]) {
     assert.ok(gate < script.indexOf(first), `the package gate must run before ${first}`);
     assert.ok(compiler < script.indexOf(first), `the compiler gate must run before ${first}`);
   }
   // Both suites belong to the contract gate's `node --test` invocation.
   const nodeTest = script.indexOf("node --test scripts/lib/deploy-helpers.test.mjs");
-  const format = script.indexOf("dotnet format neo-abstract-account.sln");
+  const format = script.indexOf("dotnet format SmartAccount.sln");
   for (const suite of ["scripts/check_neo_platform_packages.test.mjs", "scripts/repo_hygiene.test.mjs"]) {
     const at = script.indexOf(suite, nodeTest);
     assert.ok(nodeTest !== -1 && at > nodeTest && at < format, `${suite} is not in the contract gate's node --test run`);
@@ -373,5 +373,5 @@ test("compile.sh refuses to compile with an unpinned compiler", () => {
   const script = read("contracts/compile.sh");
   const gate = script.indexOf("node \"$ROOT_DIR/scripts/check_neo_platform_packages.mjs\" --compiler-only");
   assert.notEqual(gate, -1);
-  assert.ok(gate < script.indexOf('"$NCCS_BIN" UnifiedSmartWallet.csproj'));
+  assert.ok(gate < script.indexOf('"$NCCS_BIN" SmartAccount.csproj'));
 });

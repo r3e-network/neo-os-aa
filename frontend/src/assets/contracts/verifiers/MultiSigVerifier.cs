@@ -7,7 +7,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Verifiers
+namespace SmartAccount.Verifiers
 {
     /// <summary>
     /// Threshold verifier that composes multiple child verifiers into one approval policy.
@@ -18,7 +18,7 @@ namespace AbstractAccount.Verifiers
     /// </remarks>
     [DisplayName("MultiSigVerifier")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch", "setVerifierDependencies", "clearVerifierDependencies")]
+    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "hasModuleContext", "getAuthorityEpoch", "setVerifierDependencies", "clearVerifierDependencies")]
     [ContractPermission("*", "validateSignatureForPostExecute")]
     [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
@@ -295,7 +295,7 @@ namespace AbstractAccount.Verifiers
         }
 
 #if SMARTACCOUNT_NATIVE
-        // The native service owns this receipt for one operation only. It is never
+        // The SmartAccount native contract owns this receipt for one operation only. It is never
         // written to storage or accepted from a transaction-supplied argument.
         public static object[] ValidateCompositeSignature(UInt160 accountId, object[] fields)
         {
@@ -363,7 +363,7 @@ namespace AbstractAccount.Verifiers
                     new object[] { accountId, childOp, immutableResult ? result : StdLib.Deserialize(resultSnapshot!) });
             }
             // A child cannot leave a changed signer policy for another child or the
-            // next operation, even when its configuration is outside the native service.
+            // next operation, even when its configuration is outside the SmartAccount native contract.
             MultiSigConfig? after = GetConfig(accountId);
             ExecutionEngine.Assert(after != null && PolicyCommitment(accountId, after!) == commitment,
                 "Composite policy changed during post execution");

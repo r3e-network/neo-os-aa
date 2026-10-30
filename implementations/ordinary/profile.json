@@ -44,7 +44,7 @@
     "shared"
   ],
   "entrypoints": [
-    "contracts/UnifiedSmartWallet.csproj",
+    "contracts/SmartAccount.csproj",
     "frontend",
     "sdk/js"
   ],
@@ -54,11 +54,11 @@
   ],
   "verifiedArtifact": {
     "contractName": "UnifiedSmartWalletV3",
-    "path": "contracts/build/UnifiedSmartWalletV3.nef",
-    "manifestPath": "contracts/build/UnifiedSmartWalletV3.manifest.json",
+    "path": "contracts/build/SmartAccountV3.nef",
+    "manifestPath": "contracts/build/SmartAccountV3.manifest.json",
     "nefSha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
     "manifestSha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
-    "publicReadbackEvidence": "docs/reports/mainnet-unified-smart-wallet-upgrade-20260915-evidence.json",
+    "publicReadbackEvidence": "docs/reports/mainnet-smart-account-upgrade-20260915-evidence.json",
     "network": "mainnet",
     "coreHash": "0x0268a387913b250166ddec032b03332690a1ef78",
     "independentRpcReadbacks": 2,
@@ -82,6 +82,6 @@
       "cd frontend && npm run test:ordinary:browser"
     ]
   },
-  "nativeBoundary": "This profile does not claim native AccountManagement consensus semantics or native-chain activation.",
+  "nativeBoundary": "This profile does not claim native SmartAccount consensus semantics or native-chain activation.",
   "artifactIdentityVerified": true
 }

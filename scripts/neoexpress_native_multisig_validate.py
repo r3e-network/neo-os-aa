@@ -15,7 +15,8 @@ import time
 
 from neoexpress_validate import Chain, RawKey, P256Key, ValidationFailure, H, B, I, S, A, ZERO, decode, hash_le, serialize_unsigned, serialize_witnesses, aa_proxy_rules
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
-from neoexpress_native_service_validate import CORE, DIGEST, check_native, persist, execution_arguments, transaction_system_fee
+from neoexpress_native_service_validate import (CORE, DIGEST, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
+    check_native, persist, execution_arguments, transaction_system_fee)
 from neoexpress_native_proxy_validate import GAS, GAS_TOKEN, proxy_address, push_bytes, verification_script, application_script, check_transaction, check_fault, transfer
 from neoexpress_native_configuration_validate import call_script, pending_log
 from neoexpress_native_recovery_validate import equal_typed
@@ -153,7 +154,7 @@ class CompositeTransactions:
             args = execution_arguments(self.account, args[1], before['account'])
         script = application_script(self.account, args[1], batch=method=='executeUserOps',
             authority_epoch=before['account'][13], configuration_nonce=before['account'][8]) if proxy else call_script(target, method, args)
-        sysfee = transaction_system_fee(self.chain, script, rows)
+        sysfee = transaction_system_fee(self.chain, script, rows, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI)
         unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), 'little'), sysfee, 2 * GAS, self.chain.rpc('getblockcount', []) + 50, rows, script)
         digest = hashlib.sha256(unsigned).digest(); txid = '0x' + digest[::-1].hex()
         witnesses = [(push_bytes(key.sign(self.chain.magic.to_bytes(4, 'little') + digest)), key.verification) for key in keys]
@@ -253,7 +254,9 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 accounts = []
                 for salt in (bytes([10]) * 32, bytes([11]) * 32):
                     account = persist(chain, report, 'register-' + str(len(accounts)), 'registerAccount',
-                                      [H(addresses['owner']), B(salt), H(modules[NAMES[0]]), H(ZERO), H(addresses['guardian'])], 'AccountCreated')
+                                      [H(addresses['owner']), B(salt), H(modules[NAMES[0]]), H(ZERO), H(addresses['guardian'])],
+                                      'AccountCreated', consent_wallets=("guardian",),
+                                      gas_reserve=PRIVATE_CORE_GAS_ENVELOPE_DATOSHI)
                     accounts.append('0x' + account[::-1].hex())
                 account, other = accounts; proxy = proxy_address(account)
                 fund = chain.invoke_file(GAS_TOKEN, 'transfer', [H(addresses['owner']), H(proxy), I(2 * GAS), None])
@@ -393,8 +396,11 @@ def validate(runtime, dotnet, artifacts, build_receipt, module_receipt, output):
                 require(all(retained_storage[name][0] for name in NAMES),'Recovery requires initialized root and both child configurations')
                 def propose_recovery(state,timestamp):
                     state['account'][12]=[hash_le(addresses['replacement']),timestamp,timestamp+7*DAY,state['account'][8]]
+                driver.send('composite-only-recipient-scope-cannot-consent',CORE,'proposeRecovery',[H(account),H(addresses['replacement'])],
+                    [keys['guardian'],keys['replacement']],fault='Each new custody or recovery authority must supply an admission witness.')
+                # Admission consent is checked by the native contract, outside the composite callback.
                 driver.send('guardian-proposes-composite-recovery',CORE,'proposeRecovery',[H(account),H(addresses['replacement'])],
-                    [keys['guardian']],events=[(CORE,'RecoveryProposed')],change=propose_recovery)
+                    [keys['guardian'],keys['replacement']],scoped=False,events=[(CORE,'RecoveryProposed')],change=propose_recovery)
                 chain.stop_node();chain.nx('fastfwd','1','-t','604801');chain.start_node()
                 def recovered(state,timestamp):
                     state['account'][3]=hash_le(addresses['replacement']);state['account'][5:7]=[None,None]

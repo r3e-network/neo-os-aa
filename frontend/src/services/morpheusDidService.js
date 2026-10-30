@@ -5,7 +5,7 @@ import { invokeReadFunction, getScriptHashFromAddress } from '@/utils/neo';
 import { sanitizeHex } from '@/utils/hex';
 import { fetchWithTimeout } from '@/utils/fetchWithTimeout.js';
 import { encryptJsonWithMorpheusOracleKey } from '@/utils/morpheusEncryption';
-import { walletService, getAbstractAccountHash } from '@/services/walletService';
+import { walletService, getSmartAccountHash } from '@/services/walletService';
 import { buildZkLoginVerifierParamsHex, formatZkLoginTicket, normalizeZkLoginProvider } from '@/services/zkLoginVerifierService.js';
 import { connectedDidProfile } from '@/utils/did';
 import { createAccountIdentityReader } from './aaIdentityReadService.js';
@@ -355,7 +355,7 @@ class MorpheusDidService {
     return callNeoDid('recovery-ticket', {
       ...subjectPatch,
       network: 'neo_n3',
-      aa_contract: `0x${sanitizeHex(aaContract || getAbstractAccountHash())}`,
+      aa_contract: `0x${sanitizeHex(aaContract || getSmartAccountHash())}`,
       verifier_contract: `0x${sanitizeHex(verifierContract)}`,
       account_id: trim(accountId),
       new_owner: `0x${normalizeScriptHash(newOwner)}`,
@@ -435,7 +435,7 @@ class MorpheusDidService {
     });
 
     const notificationPayload = {
-      aa_contract: getAbstractAccountHash(),
+      aa_contract: getSmartAccountHash(),
       verifier: sanitizeHex(verifierHash),
       account_id: accountIdHex,
       new_owner: normalizeScriptHash(newOwner),

@@ -10,9 +10,9 @@ From the repository root:
 dotnet build formal/refinement/export/RefinementExport.csproj --nologo
 dotnet formal/refinement/export/bin/Debug/net10.0/RefinementExport.dll \
   --source-root "$PWD" \
-  --project "$PWD/contracts/UnifiedSmartWallet.csproj" \
-  --nef "$PWD/contracts/bin/v3/UnifiedSmartWalletV3.nef" \
-  --manifest "$PWD/contracts/bin/v3/UnifiedSmartWalletV3.manifest.json" \
+  --project "$PWD/contracts/SmartAccount.csproj" \
+  --nef "$PWD/contracts/bin/v3/SmartAccountV3.nef" \
+  --manifest "$PWD/contracts/bin/v3/SmartAccountV3.manifest.json" \
   > /tmp/aa-refinement-inventory.json
 python3 -m unittest formal/refinement/export/test_export.py
 ```
@@ -54,7 +54,7 @@ Schema `neoos-aa-refinement-inventory/v1` has these stable fields:
 Operation nodes also contain an additive `semanticCollections` object keyed by
 the full Roslyn interface/property name. Known symbol collections use
 `{ "kind": "symbols", "items": [...], "complete": true }`; each item carries
-`id`, `type`, `kind`, `name`, `isStatic` and `isReadOnly`. Field and local types
+`"id"`, `"type"`, `"kind"`, `"name"`, `"isStatic"` and `"isReadOnly"`. Field and local types
 are their declared value types, not a null type merely because they are symbols.
 The item order is exactly the Roslyn collection order, including empty arrays.
 

@@ -37,8 +37,8 @@ core-derived proxy: `executeUserOp` selects the verifier and hook from core stat
 and `verify` accepts Application-phase witness requests only in an active target
 context. `canConfigureVerifier` / `canConfigureHook` require a temporary context;
 `canExecuteVerifier` / `canExecuteHook` require the active root and immediate
-caller. The checks are implemented in `UnifiedSmartWallet.Execution.cs` and
-`UnifiedSmartWallet.VerifyContext.cs`; the corresponding module-side checks are
+caller. The checks are implemented in `SmartAccount.Execution.cs` and
+`SmartAccount.VerifyContext.cs`; the corresponding module-side checks are
 in `VerifierAuthority.cs` and `HookAuthority.cs`.
 
 Those checks do not prove that detaching a module erases all of its authority:

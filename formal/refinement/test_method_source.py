@@ -30,8 +30,9 @@ class MethodSourceTests(unittest.TestCase):
     def test_complete_source_body_and_initializers_are_projected(self):
         result = self.project()
         self.assertEqual(result["staticKey"], [33])
-        self.assertEqual(len(result["statements"]), 12)
-        self.assertEqual(result["locals"], ["transactionHash", "data", "budget", "actualCost", "estimationFlag", "cap", "settled"])
+        self.assertEqual(len(result["statements"]), 14)
+        self.assertEqual(result["locals"], ["transactionHash", "data", "budget", "actualCost",
+                                            "estimationFlag", "cap", "settled", "vmMax"])
         rendered = source.render_program(result)
         for token in ["SAssert", "EPut", "ESerialize", "EDeserialize", "SSetField", "SReturn", "ETransaction"]:
             self.assertIn(token, rendered)

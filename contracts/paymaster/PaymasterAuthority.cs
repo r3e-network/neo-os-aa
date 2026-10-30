@@ -4,7 +4,7 @@ using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
-namespace AbstractAccount
+namespace SmartAccount
 {
     internal static class PaymasterAuthority
     {

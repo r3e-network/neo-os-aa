@@ -10,13 +10,13 @@
     "note": "Final deployed-variant run: artifacts = contracts/build (byte-identical to the MainNet core); published neoxp 3.10.1.18; 54 checks, 96 recorded steps (66 transactions executed on the local chain, 21 simulated faults, 6 node-refused transactions); no key material is recorded"
   },
   "contracts": {
-    "UnifiedSmartWalletV3": "0xb1bda4a9170b54dd67898ac3f5fd34ea091f15ee",
+    "SmartAccountV3": "0xb1bda4a9170b54dd67898ac3f5fd34ea091f15ee",
     "MockTransferTarget": "0xe1498b74d783c2dd1d8ea1db0c2f5f0eaab55139"
   },
   "records": {
     "ownerWitnessUserOp": {
       "step": "executeUserOp nonce 0 (owner witness)",
-      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "call": "SmartAccountV3.executeUserOp",
       "signers": [
         "owner"
       ],
@@ -32,7 +32,7 @@
     },
     "gasTransferFromProxyByPlainWallet": {
       "step": "a. GAS.transfer(proxy->buyer) submitted by a plain wallet (what the web wallet's NEP-17 preset and the relay route produce)",
-      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "call": "SmartAccountV3.executeUserOp",
       "signers": [
         "owner"
       ],
@@ -48,7 +48,7 @@
     },
     "gasTransferProxyWitness": {
       "step": "c. proxy-witness transaction after the admin set the scope target",
-      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "call": "SmartAccountV3.executeUserOp",
       "signers": [
         "owner",
         "proxy"
@@ -66,7 +66,7 @@
     },
     "armSessionKey": {
       "step": "arm setSessionKey for session-relay (24h timelock)",
-      "call": "UnifiedSmartWalletV3.callVerifier",
+      "call": "SmartAccountV3.callVerifier",
       "signers": [
         "owner"
       ],
@@ -80,7 +80,7 @@
     },
     "armDailyLimit": {
       "step": "arm setDailyLimit 5 GAS for the value-flow account",
-      "call": "UnifiedSmartWalletV3.callHook",
+      "call": "SmartAccountV3.callHook",
       "signers": [
         "owner"
       ],
@@ -94,7 +94,7 @@
     },
     "sessionOpSubmittedByRelay": {
       "step": "relay submits a session-signed op (relay holds no key)",
-      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "call": "SmartAccountV3.executeUserOp",
       "signers": [
         "relay"
       ],
@@ -110,7 +110,7 @@
     },
     "gasTransferSessionProxyWitness": {
       "step": "relay (fee payer) + proxy witness submit the session-signed 3 GAS transfer; no owner witness, user holds no GAS",
-      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "call": "SmartAccountV3.executeUserOp",
       "signers": [
         "relay",
         "proxy"
@@ -128,7 +128,7 @@
     },
     "dailyLimitRefusal": {
       "step": "a second 3 GAS transfer would exceed the 5 GAS daily limit: the hook refuses",
-      "call": "UnifiedSmartWalletV3.executeUserOp",
+      "call": "SmartAccountV3.executeUserOp",
       "signers": [
         "relay",
         "proxy"

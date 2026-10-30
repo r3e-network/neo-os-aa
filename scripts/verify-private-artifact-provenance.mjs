@@ -39,7 +39,7 @@ const receiptPath = latestDatedReport("aa-neoexpress-validation");
 // 24 artifacts produced by this repository. NeoDIDRegistry is an external sibling
 // artifact and is checked by the NeoExpress receipt but not by this source tree.
 export const LOCAL_ARTIFACTS = {
-  UnifiedSmartWalletV3: "UnifiedSmartWalletV3.nef",
+  SmartAccountV3: "SmartAccountV3.nef",
   MockTransferTarget: "MockTransferTarget.nef",
   Web3AuthVerifier: "verifiers/Web3AuthVerifier.nef",
   TEEVerifier: "verifiers/TEEVerifier.nef",
@@ -156,7 +156,7 @@ export function verifyReleaseCertificate(repro, releaseRoot = releaseDir) {
     const entry = repro.profiles?.[profile];
     if (entry?.matches_fresh_build !== true || entry?.required_core_present !== true
         || entry.artifacts_compared !== files.length
-        || !["UnifiedSmartWalletV3.nef", "UnifiedSmartWalletV3.manifest.json"].every((name) => files.includes(name))) {
+        || !["SmartAccountV3.nef", "SmartAccountV3.manifest.json"].every((name) => files.includes(name))) {
       throw new Error(`rebuild certificate profile inventory mismatch: ${profile}`);
     }
     return files.map((file) => `${profile}/${file}`);

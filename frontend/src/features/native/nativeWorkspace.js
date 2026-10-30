@@ -1,7 +1,7 @@
 import { sha256, ripemd160 } from "ethers";
 import {
   createNativeCodec,
-  NATIVE_ACCOUNT_SERVICE,
+  NATIVE_SMART_ACCOUNT_CONTRACT,
 } from "../../shared/nativeSmartAccount.mjs";
 import {
   createNativeClientClass,
@@ -12,7 +12,7 @@ import {
   getAddressFromScriptHash,
 } from "../../utils/neo.js";
 
-export { NATIVE_ACCOUNT_SERVICE, NATIVE_PROFILE_PARAMETER_DIGEST };
+export { NATIVE_SMART_ACCOUNT_CONTRACT, NATIVE_PROFILE_PARAMETER_DIGEST };
 export const ZERO_HASH = "00".repeat(20);
 export const nativeCodec = createNativeCodec({
   sha256: (hex) => sha256("0x" + hex).slice(2),
@@ -63,7 +63,7 @@ export function nativeAddress(value, { zero = false } = {}) {
     raw.startsWith("N") ? getScriptHashFromAddress(raw) : raw,
     20,
   );
-  if (!zero && (address === ZERO_HASH || address === NATIVE_ACCOUNT_SERVICE))
+  if (!zero && (address === ZERO_HASH || address === NATIVE_SMART_ACCOUNT_CONTRACT))
     fail("A nonzero Neo authority or contract is required.");
   if (raw.startsWith("N") && getAddressFromScriptHash(address) !== raw)
     fail("Use a Neo N3 address.");
@@ -222,7 +222,7 @@ export function buildRecoveryDescriptor(input) {
     abiVersion: 2,
     networkMagic,
     profileParameterDigest: NATIVE_PROFILE_PARAMETER_DIGEST,
-    service: NATIVE_ACCOUNT_SERVICE,
+    contract: NATIVE_SMART_ACCOUNT_CONTRACT,
     ...identity,
     custodyAddress: custody,
     salt,
@@ -241,7 +241,7 @@ export function readRecoveryDescriptor(text, profile) {
     value?.format !== "neo-native-account-descriptor" ||
     value.version !== 1 ||
     value.abiVersion !== 2 ||
-    value.service !== NATIVE_ACCOUNT_SERVICE
+    value.contract !== NATIVE_SMART_ACCOUNT_CONTRACT
   )
     fail("Unsupported native recovery descriptor.");
   if (
@@ -465,7 +465,7 @@ function sdkReviewSigners(plan, actor, authorities) {
     account: "0x" + account,
     scopes: required.has(account) ? "CustomContracts" : "None",
     ...(required.has(account)
-      ? { allowedcontracts: ["0x" + NATIVE_ACCOUNT_SERVICE] } : {}),
+      ? { allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT] } : {}),
   });
   return [signer(actor), ...(plan.proxySigner ? [plan.proxySigner] : []),
     ...authorities.filter((account) => account !== actor).map(signer)];
@@ -696,7 +696,7 @@ export function createNativeWorkspace({
       walletSupported,
       request: walletSupported
         ? {
-            scriptHash: "0x" + NATIVE_ACCOUNT_SERVICE,
+            scriptHash: "0x" + NATIVE_SMART_ACCOUNT_CONTRACT,
             operation: plan.method,
             args,
             signers,

@@ -30,7 +30,7 @@ on:
       - 'sdk/js/tests/fixtures/native-*'
       - 'tests/NativeMultiSigProbe/**'
       - 'tests/NativeEpochProbe/**'
-      - 'tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs'
+      - 'tests/SmartAccount.Contracts.Tests/RuntimeTestSupport.cs'
   pull_request:
     paths:
       - '.github/workflows/native-profile.yml'
@@ -59,7 +59,7 @@ on:
       - 'sdk/js/tests/fixtures/native-*'
       - 'tests/NativeMultiSigProbe/**'
       - 'tests/NativeEpochProbe/**'
-      - 'tests/AbstractAccount.Contracts.Tests/RuntimeTestSupport.cs'
+      - 'tests/SmartAccount.Contracts.Tests/RuntimeTestSupport.cs'
   workflow_dispatch:
 
 # PR code only receives read access. This job never publishes, uses deployment

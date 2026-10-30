@@ -63,7 +63,10 @@ def source_evidence(cache=None):
 
 
 def command(arguments, directory, log, success=True):
-    result = subprocess.run(arguments, cwd=directory, capture_output=True, text=True, timeout=60)
+    # coqchk on IntegerSemantics+NumericCoercions measured ~86s wall on a
+    # loaded host (2026-10-15); 60s caused spurious gate failures. Match the
+    # 600s budget used by method_proofs.py kernel commands.
+    result = subprocess.run(arguments, cwd=directory, capture_output=True, text=True, timeout=600)
     output = result.stdout + result.stderr
     Path(log).write_text(output)
     if success:

@@ -15,7 +15,7 @@ using Neo.VM.Types;
 internal sealed class ProbeHarness : IDisposable
 {
     internal static readonly UInt160 Custody = UInt160.Parse("0x0101010101010101010101010101010101010101");
-    internal static UInt160 Core => NativeContract.AccountManagement.Hash;
+    internal static UInt160 Core => NativeContract.SmartAccount.Hash;
     internal const ulong Delay = 86_400_000;
     internal static readonly string[] BalanceKinds = ["zero", "positive", "negative", "boolean", "bytes", "null", "array", "struct", "map", "buffer", "pointer", "interop"];
     internal ulong Time { get; set; } = 1000;

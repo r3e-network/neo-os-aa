@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Package ABI v2 native modules without changing compiler NEF bytes.
 
-A native-v2 compiler marker and explicit service epoch permission are admission
+A native-v2 compiler marker and explicit SmartAccount authority-epoch permission are admission
 requirements; packaging never upgrades legacy native-v1 semantics by relabelling.
 """
 import argparse
@@ -43,8 +43,8 @@ def profile_digest(parameters):
     return hashlib.sha256(b"NeoSmartAccount/Profile" + bytes([2]) + canonical).hexdigest()
 
 
-NATIVE_SERVICE = "d9421d07adf206e9dc4be746a02e8e087fa61741"
-NATIVE_SERVICE_METHODS = {
+NATIVE_CONTRACT = "398dc3f0227d7efac5533ed5ce9937390c158084"
+NATIVE_CONTRACT_METHODS = {
     "NeoNativeVerifier": {"getAuthorityEpoch", "hasModuleContext"},
     "WhitelistHook": {"getAuthorityEpoch", "hasModuleContext"},
     "SessionKeyVerifier": {
@@ -68,22 +68,22 @@ def package_manifest(original, role, capabilities, composite_verifier, parameter
     if type(parameter_digest) is not str or not re.fullmatch(r"[0-9a-f]{64}", parameter_digest):
         raise ValueError("Explicit canonical profile digest required")
     name = original.get("name")
-    expected_service_methods = NATIVE_SERVICE_METHODS.get(name)
-    if expected_service_methods is None:
+    expected_contract_methods = NATIVE_CONTRACT_METHODS.get(name)
+    if expected_contract_methods is None:
         raise ValueError("Native-v2 module has no permission profile: " + str(name))
     permissions = original.get("permissions", [])
-    service_entries = [
+    native_contract_entries = [
         p for p in permissions
         if isinstance(p, dict) and isinstance(p.get("contract"), str)
-        and p["contract"].lower().removeprefix("0x") == NATIVE_SERVICE
+        and p["contract"].lower().removeprefix("0x") == NATIVE_CONTRACT
     ] if isinstance(permissions, list) else []
-    if len(service_entries) != 1 or not isinstance(service_entries[0].get("methods"), list):
-        raise ValueError("Native-v2 requires one exact native service permission entry")
-    service_methods = service_entries[0]["methods"]
-    if (any(not isinstance(method, str) for method in service_methods)
-            or set(service_methods) != expected_service_methods
-            or len(service_methods) != len(expected_service_methods)):
-        raise ValueError("Native-v2 native service permission allowlist mismatch for " + name)
+    if len(native_contract_entries) != 1 or not isinstance(native_contract_entries[0].get("methods"), list):
+        raise ValueError("Native-v2 requires one exact native contract permission entry")
+    native_contract_methods = native_contract_entries[0]["methods"]
+    if (any(not isinstance(method, str) for method in native_contract_methods)
+            or set(native_contract_methods) != expected_contract_methods
+            or len(native_contract_methods) != len(expected_contract_methods)):
+        raise ValueError("Native-v2 native contract permission allowlist mismatch for " + name)
     methods = original.get("abi", {}).get("methods", [])
     def require(name, result, types, safe=None):
         found = [m for m in methods if m["name"] == name and len(m["parameters"]) == len(types)]

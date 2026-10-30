@@ -23,7 +23,7 @@ Never put private keys in a descriptor or reviewed request.
 In the [native workspace](NATIVE_ACCOUNT_WORKSPACE.md), verify the network and
 node, then choose accepted Neo wallet authorities for custody and an independently
 controlled guardian. Review the derived account ID and separate funding address,
-confirm registration, and read the recorded account state before funding it.
+obtain custody and guardian consent witnesses in the same transaction, confirm registration, and read the recorded account state before funding it.
 Fund the account's funding address. Keep wallet backups separately from the
 public descriptor. The [SDK guide](NATIVE_SDK.md) describes supported signing
 interfaces and exact transaction review.
@@ -36,11 +36,14 @@ also act as custody or guardian when it controls the required wallet.
 
 | Change | Who starts it | Who completes it, and when | Who can cancel while pending |
 | --- | --- | --- | --- |
-| Replace or remove verifier/hook; change guardian | Custody, while Active with no pending custody recovery | Any payer after 24 hours; account must still meet those state conditions | Custody, including after maturity until activation executes |
+| Replace or remove verifier/hook | Custody, while Active with no pending custody recovery | Any payer after 24 hours; account must still meet those state conditions | Custody, including after maturity until activation executes |
 | Change module policy, including a session key | Custody, while Active with no pending custody recovery | Custody repeats the exact stored call after 24 hours | Custody; select the verifier or hook role and review its pending call |
-| Recover custody to a new wallet | Configured guardian, while Active or Frozen | Any payer after seven days | Guardian at any time while pending; custody only strictly before maturity |
+| Change guardian | Custody plus the new nonzero guardian, while Active with no pending custody recovery | Any payer after 24 hours | Custody while pending |
+| Recover custody to a new wallet | Configured guardian plus the proposed custody wallet, while Active or Frozen | Any payer after seven days | Guardian at any time while pending; custody only strictly before maturity |
 | Freeze | Configured guardian, while Active | Takes effect when the transaction executes; no protocol waiting period | No pending proposal; resuming requires unfreeze |
 | Unfreeze | Custody and configured guardian together | Takes effect when the transaction executes; no protocol waiting period | No pending proposal |
+
+Consent is checked when an authority is newly introduced relative to the current custody, recovery and pending-authority addresses. Re-proposing an already admitted pending address does not require fresh recipient consent; current controlling-authority checks still apply.
 
 A mature activation applies the authorized intent present when it executes; its
 payer does not choose the replacement in the activation call. Module replacement still requires valid

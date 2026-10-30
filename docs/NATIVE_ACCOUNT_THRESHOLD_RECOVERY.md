@@ -6,6 +6,10 @@ another native account proxy. It does not change account identity, recovery
 delays, or the custody-plus-guardian unfreeze rule. Public activation remains a
 separate protocol decision.
 
+The guardian quorum must also consent when it is first configured: registration and guardian replacement include its actual witness. Proposed new custody must likewise witness its recovery proposal. Mature activation requires only a payer; zero removes the optional guardian without a new guardian witness.
+
+Consent is checked when an authority is newly introduced relative to the current custody, recovery and pending-authority addresses. Re-proposing an already admitted pending address does not require fresh recipient consent; current controlling-authority checks still apply.
+
 ## Signer contract
 
 Supply the standard wallet script hash as `account` and its exact canonical

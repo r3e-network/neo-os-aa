@@ -3,12 +3,19 @@
   The historical field named epoch below is configurationNonce, not ABI 2's
   separate authorityEpoch. NativeAuthorityEpoch.v models the latter and the
   callback-free recovery transition; this module covers only the stated
-  authority, status, counter and pending-intent projections.
+  authority, status, counter and pending-intent projections. The four-slot
+  authority projection additionally models new-recipient consent and the
+  exclusion of registered proxies, including pending destinations. Prior-state
+  membership represents retained admission consent, not a historical allowlist.
+  Structural decoding and the prior state having been validly admitted remain
+  external obligations. Future-proxy exclusion is conditional on a false witness;
+  witness soundness and cryptographic address disjointness are not proved here.
   Witness results are assumptions supplied by an abstract caller, not proofs
   of Neo witness evaluation. This model does not claim C# refinement, callback
-  cleanup, ledger rollback, or complete native-service semantics.
+  cleanup, ledger rollback, or complete native-contract semantics.
 *)
-From Coq Require Import ZArith Bool Lia.
+From Coq Require Import ZArith Bool Lia List.
+Import ListNotations.
 Open Scope Z_scope.
 
 Record State := mkState {
@@ -49,6 +56,34 @@ Definition finalize_configuration {Store : Type} (before staged : Store)
     (root_pin child_pin : Z) (root_now child_now : option Z) : bool * Store :=
   if configuration_bindings_match root_pin child_pin root_now child_now
   then (true, staged) else (false, before).
+
+(* Membership gives this bounded list set semantics: duplicate roles do not
+   introduce a new address. Zero is an absent authority, including empty intents.
+   The booleans supplied to this projection are observations; no callback, signer
+   validation, registered-proxy lookup or hashing implementation is modeled. *)
+Record AuthorityProjection := mkAuthorityProjection {
+  custody_authority : Z;
+  recovery_authority : Z;
+  pending_rotation_authority : option Z;
+  pending_custody_authority : option Z
+}.
+Definition optional_authority (address : option Z) : Z :=
+  match address with Some value => value | None => 0 end.
+Definition authority_slots (s : AuthorityProjection) : list Z :=
+  [custody_authority s; recovery_authority s;
+   optional_authority (pending_rotation_authority s);
+   optional_authority (pending_custody_authority s)].
+Definition authority_addresses (s : AuthorityProjection) : list Z :=
+  filter (fun address => negb (Z.eqb address 0)) (authority_slots s).
+Definition authority_member (s : AuthorityProjection) (address : Z) : bool :=
+  existsb (Z.eqb address) (authority_addresses s).
+Definition authority_admission (registered_proxy witnessed : Z -> bool)
+    (prior next : AuthorityProjection) : bool :=
+  forallb (fun address => negb (registered_proxy address) &&
+    (authority_member prior address || witnessed address))
+    (authority_addresses next).
+Definition empty_authorities : AuthorityProjection :=
+  mkAuthorityProjection 0 0 None None.
 
 Theorem pending_recovery_blocks_configuration : forall s,
   pending_recovery s = true -> configuration_allowed s = false.
@@ -225,3 +260,205 @@ Print Assumptions configuration_success_preserves_pins.
 Print Assumptions configuration_failure_keeps_entire_snapshot.
 Print Assumptions configuration_matching_pins_commits.
 Print Assumptions selected_only_check_is_insufficient.
+
+Theorem authority_address_membership : forall s address,
+  In address (authority_addresses s) <->
+    In address (authority_slots s) /\ address <> 0.
+Proof.
+  intros s address. unfold authority_addresses. rewrite filter_In.
+  rewrite negb_true_iff, Z.eqb_neq. reflexivity.
+Qed.
+
+Theorem authority_projection_is_bounded : forall s,
+  (length (authority_addresses s) <= 4)%nat.
+Proof.
+  intros s. unfold authority_addresses.
+  pose proof (filter_length_le (fun address => negb (Z.eqb address 0)) (authority_slots s)) as H.
+  unfold authority_slots in H. simpl in H. exact H.
+Qed.
+
+Theorem zero_authority_is_exempt : forall s,
+  ~ In 0 (authority_addresses s).
+Proof.
+  intros s H. apply authority_address_membership in H. tauto.
+Qed.
+
+Theorem authority_member_is_membership : forall s address,
+  authority_member s address = true <-> In address (authority_addresses s).
+Proof.
+  intros s address. unfold authority_member. rewrite existsb_exists.
+  split.
+  - intros [value [Hin Heq]]. apply Z.eqb_eq in Heq. subst value. exact Hin.
+  - intros Hin. exists address. split; [exact Hin|apply Z.eqb_refl].
+Qed.
+
+Theorem admission_checks_every_next_address : forall registered witnessed prior next address,
+  authority_admission registered witnessed prior next = true ->
+  In address (authority_addresses next) ->
+  registered address = false /\
+    (In address (authority_addresses prior) \/ witnessed address = true).
+Proof.
+  intros registered witnessed prior next address Hadmit Hin.
+  unfold authority_admission in Hadmit.
+  apply forallb_forall with (x := address) in Hadmit; [|exact Hin].
+  apply andb_true_iff in Hadmit as [Hproxy Hconsent].
+  apply negb_true_iff in Hproxy. split; [exact Hproxy|].
+  apply orb_true_iff in Hconsent as [Hprior|Hwitness]; [left|right].
+  - apply authority_member_is_membership. exact Hprior.
+  - exact Hwitness.
+Qed.
+
+Theorem admission_requires_new_recipient_witness : forall registered witnessed prior next address,
+  authority_admission registered witnessed prior next = true ->
+  In address (authority_addresses next) ->
+  ~ In address (authority_addresses prior) ->
+  witnessed address = true.
+Proof.
+  intros registered witnessed prior next address Hadmit Hin Hnew.
+  pose proof (admission_checks_every_next_address _ _ _ _ _ Hadmit Hin) as [_ Hconsent].
+  destruct Hconsent as [Hprior|Hwitness]; [contradiction|exact Hwitness].
+Qed.
+
+Theorem retained_authorities_need_no_new_witness : forall registered witnessed prior next,
+  (forall address, In address (authority_addresses next) -> registered address = false) ->
+  (forall address, In address (authority_addresses next) -> In address (authority_addresses prior)) ->
+  authority_admission registered witnessed prior next = true.
+Proof.
+  intros registered witnessed prior next Hproxy Hprior.
+  unfold authority_admission. apply forallb_forall. intros address Hin.
+  rewrite (Hproxy address Hin). simpl.
+  assert (authority_member prior address = true) as Hmember.
+  { apply authority_member_is_membership. apply Hprior. exact Hin. }
+  rewrite Hmember. reflexivity.
+Qed.
+
+Theorem admission_accepts_consented_nonproxy_addresses : forall registered witnessed prior next,
+  (forall address, In address (authority_addresses next) -> registered address = false) ->
+  (forall address, In address (authority_addresses next) ->
+    ~ In address (authority_addresses prior) -> witnessed address = true) ->
+  authority_admission registered witnessed prior next = true.
+Proof.
+  intros registered witnessed prior next Hproxy Hwitness.
+  unfold authority_admission. apply forallb_forall. intros address Hin.
+  rewrite (Hproxy address Hin). simpl.
+  destruct (authority_member prior address) eqn:Hmember; [reflexivity|].
+  apply Hwitness; [exact Hin|]. intros Hprior.
+  apply authority_member_is_membership in Hprior. rewrite Hprior in Hmember. discriminate.
+Qed.
+
+Theorem registered_proxy_is_rejected_even_if_retained : forall registered witnessed prior next address,
+  In address (authority_addresses next) -> registered address = true ->
+  authority_admission registered witnessed prior next = false.
+Proof.
+  intros registered witnessed prior next address Hin Hproxy.
+  destruct (authority_admission registered witnessed prior next) eqn:Hadmit; [|reflexivity].
+  pose proof (admission_checks_every_next_address _ _ _ _ _ Hadmit Hin) as [Hfalse _].
+  rewrite Hproxy in Hfalse. discriminate.
+Qed.
+
+Theorem unwitnessed_new_authority_is_rejected : forall registered witnessed prior next address,
+  In address (authority_addresses next) ->
+  ~ In address (authority_addresses prior) -> witnessed address = false ->
+  authority_admission registered witnessed prior next = false.
+Proof.
+  intros registered witnessed prior next address Hin Hnew Hfalse.
+  destruct (authority_admission registered witnessed prior next) eqn:Hadmit; [|reflexivity].
+  pose proof (admission_requires_new_recipient_witness _ _ _ _ _ Hadmit Hin Hnew) as Htrue.
+  rewrite Htrue in Hfalse. discriminate.
+Qed.
+
+Theorem removed_then_reintroduced_authority_needs_witness :
+  forall registered witnessed before middle next address,
+  In address (authority_addresses before) ->
+  ~ In address (authority_addresses middle) ->
+  In address (authority_addresses next) -> witnessed address = false ->
+  authority_admission registered witnessed middle next = false.
+Proof.
+  intros registered witnessed before middle next address _ Hremoved Hnext Hfalse.
+  eapply unwitnessed_new_authority_is_rejected; eassumption.
+Qed.
+
+(* No claim is made that an unregistered proxy can never pass actual CheckWitness.
+   That soundness/hash-disjointness property is an external boundary. Given false
+   witness evidence, precomputing its address does not bypass admission. *)
+Theorem future_proxy_without_witness_cannot_be_introduced :
+  forall registered witnessed prior next future_proxy,
+  registered future_proxy = false ->
+  In future_proxy (authority_addresses next) ->
+  ~ In future_proxy (authority_addresses prior) -> witnessed future_proxy = false ->
+  authority_admission registered witnessed prior next = false.
+Proof.
+  intros registered witnessed prior next future_proxy _ Hin Hnew Hfalse.
+  eapply unwitnessed_new_authority_is_rejected; eassumption.
+Qed.
+
+Example registration_requires_each_distinct_recipient :
+  authority_admission (fun _ => false) (fun address => Z.eqb address 1)
+    empty_authorities (mkAuthorityProjection 1 2 None None) = false /\
+  authority_admission (fun _ => false) (fun address => Z.eqb address 1 || Z.eqb address 2)
+    empty_authorities (mkAuthorityProjection 1 2 None None) = true.
+Proof. split; reflexivity. Qed.
+
+Example zero_slots_do_not_require_witnesses :
+  authority_admission (fun _ => true) (fun _ => false)
+    empty_authorities empty_authorities = true.
+Proof. reflexivity. Qed.
+
+Example previously_consented_pending_promotion_is_permissionless :
+  authority_admission (fun _ => false) (fun _ => false)
+    (mkAuthorityProjection 1 2 None (Some 3))
+    (mkAuthorityProjection 3 2 None None) = true /\
+  authority_admission (fun _ => false) (fun _ => false)
+    (mkAuthorityProjection 1 2 (Some 3) None)
+    (mkAuthorityProjection 1 3 None None) = true.
+Proof. split; reflexivity. Qed.
+
+Example pending_destinations_require_consent_at_introduction :
+  authority_admission (fun _ => false) (fun _ => false)
+    (mkAuthorityProjection 1 2 None None)
+    (mkAuthorityProjection 1 2 None (Some 3)) = false /\
+  authority_admission (fun _ => false) (fun address => Z.eqb address 3)
+    (mkAuthorityProjection 1 2 None None)
+    (mkAuthorityProjection 1 2 (Some 3) None) = true.
+Proof. split; reflexivity. Qed.
+
+Example registered_pending_proxy_is_rejected :
+  authority_admission (fun address => Z.eqb address 3) (fun _ => true)
+    (mkAuthorityProjection 1 2 None (Some 3))
+    (mkAuthorityProjection 1 2 None (Some 3)) = false.
+Proof. reflexivity. Qed.
+
+Example removed_consent_does_not_survive_reintroduction :
+  authority_admission (fun _ => false) (fun _ => false)
+    (mkAuthorityProjection 1 2 None None)
+    (mkAuthorityProjection 1 0 None None) = true /\
+  authority_admission (fun _ => false) (fun _ => false)
+    (mkAuthorityProjection 1 0 None None)
+    (mkAuthorityProjection 1 2 None None) = false.
+Proof. split; reflexivity. Qed.
+
+Example future_proxy_without_admission_witness_is_rejected :
+  authority_admission (fun _ => false) (fun _ => false)
+    (mkAuthorityProjection 1 2 None None)
+    (mkAuthorityProjection 1 2 (Some 99) None) = false.
+Proof. reflexivity. Qed.
+
+Print Assumptions authority_address_membership.
+Print Assumptions authority_projection_is_bounded.
+Print Assumptions zero_authority_is_exempt.
+Print Assumptions authority_member_is_membership.
+Print Assumptions admission_checks_every_next_address.
+Print Assumptions admission_requires_new_recipient_witness.
+Print Assumptions retained_authorities_need_no_new_witness.
+Print Assumptions admission_accepts_consented_nonproxy_addresses.
+Print Assumptions registered_proxy_is_rejected_even_if_retained.
+Print Assumptions unwitnessed_new_authority_is_rejected.
+Print Assumptions removed_then_reintroduced_authority_needs_witness.
+Print Assumptions future_proxy_without_witness_cannot_be_introduced.
+Print Assumptions registration_requires_each_distinct_recipient.
+Print Assumptions zero_slots_do_not_require_witnesses.
+Print Assumptions previously_consented_pending_promotion_is_permissionless.
+Print Assumptions pending_destinations_require_consent_at_introduction.
+Print Assumptions registered_pending_proxy_is_rejected.
+Print Assumptions removed_consent_does_not_survive_reintroduction.
+Print Assumptions future_proxy_without_admission_witness_is_rejected.

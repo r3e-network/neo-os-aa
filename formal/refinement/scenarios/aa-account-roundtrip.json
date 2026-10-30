@@ -1,0 +1,527 @@
+{
+  "schema": "aa-abi-scenario-input/v1",
+  "name": "account-registration-pending-reads-and-native-execution",
+  "contractAddress": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2",
+  "contractAddressNote": "The address of the deployment this scenario drives. It is a function of the NEF, the manifest name and the deploy signer, so the receipt records the address the engine actually deployed and requires it to equal this one.",
+  "note": [
+    "An ordered list of calls with literal arguments over one deployment. This file says what to call; the dump says what happened. It is input, never evidence.",
+    "The account id below is the value computeRegistrationAccountId derives for these parameters. It is pinned here as a literal so that every step's script bytes are a function of this file alone, and the compute step is joined to it by readsForward so a wrong literal is caught before it is used. registerAccount independently recomputes the id and faults on a mismatch.",
+    "The pinned id is the address form. Neo stores a Hash160 little-endian, so the value an ABI call receives, and the bytes a call returns, are both the reverse of that display hex. The compute step's result therefore reads as the reverse of the literal below, and the readsForward link compares stack bytes with stack bytes.",
+    "A step that expects FAULT is placed only after the writes later steps read, because this harness shares one storage snapshot across steps and does not roll a faulting step back.",
+    "The user operations name the contract under test as their target, so the execution phase calls back into this same deployment while its own execution lock is set."
+  ],
+  "blockTimestamp": 1700000000000,
+  "defaultSigner": "0x1111111111111111111111111111111111111111",
+  "deploySigner": "0x1111111111111111111111111111111111111111",
+  "steps": [
+    {
+      "id": "propose-update",
+      "method": "proposeUpdate",
+      "args": [
+        {
+          "type": "Hash256",
+          "value": "0x3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+          "type": "Hash256",
+          "value": "0x4444444444444444444444444444444444444444444444444444444444444444"
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "update-before-window",
+      "method": "update",
+      "args": [
+        {
+          "type": "ByteString",
+          "value": "00"
+        },
+        {
+          "type": "String",
+          "value": "{}"
+        }
+      ],
+      "expect": "FAULT",
+      "reason": "Update timelock not expired"
+    },
+    {
+      "id": "cancel-update",
+      "method": "cancelUpdate",
+      "args": [],
+      "expect": "HALT"
+    },
+    {
+      "id": "update-without-proposal",
+      "method": "update",
+      "args": [
+        {
+          "type": "ByteString",
+          "value": "00"
+        },
+        {
+          "type": "String",
+          "value": "{}"
+        }
+      ],
+      "expect": "FAULT",
+      "reason": "No pending update"
+    },
+    {
+      "id": "propose-admin-transfer",
+      "method": "proposeAdminTransfer",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0x2222222222222222222222222222222222222222"
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "cancel-admin-transfer",
+      "method": "cancelAdminTransfer",
+      "args": [],
+      "expect": "HALT"
+    },
+    {
+      "id": "confirm-admin-transfer-without-proposal",
+      "method": "confirmAdminTransfer",
+      "args": [],
+      "expect": "FAULT",
+      "reason": "No pending admin transfer"
+    },
+    {
+      "id": "compute-account-id",
+      "method": "computeRegistrationAccountId",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "type": "ByteString",
+          "value": ""
+        },
+        {
+          "type": "Hash160",
+          "value": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "type": "Hash160",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        {
+          "type": "Integer",
+          "value": "604800"
+        }
+      ],
+      "expect": "HALT",
+      "readsForward": {
+        "step": "register-account",
+        "arg": 0
+      }
+    },
+    {
+      "id": "register-account",
+      "method": "registerAccount",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        },
+        {
+          "type": "Hash160",
+          "value": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "type": "ByteString",
+          "value": ""
+        },
+        {
+          "type": "Hash160",
+          "value": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "type": "Hash160",
+          "value": "0x1111111111111111111111111111111111111111"
+        },
+        {
+          "type": "Integer",
+          "value": "604800"
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-backup-owner",
+      "method": "getBackupOwner",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "readsBack": {
+        "step": "register-account",
+        "arg": 4
+      }
+    },
+    {
+      "id": "read-escape-timelock",
+      "method": "getEscapeTimelock",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "integer": "604800"
+    },
+    {
+      "id": "read-verifier",
+      "method": "getVerifier",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "readsBack": {
+        "step": "register-account",
+        "arg": 1
+      }
+    },
+    {
+      "id": "read-hook",
+      "method": "getHook",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "readsBack": {
+        "step": "register-account",
+        "arg": 3
+      }
+    },
+    {
+      "id": "read-nonce",
+      "method": "getNonce",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        },
+        {
+          "type": "Integer",
+          "value": "0"
+        }
+      ],
+      "expect": "HALT",
+      "integer": "0"
+    },
+    {
+      "id": "read-owner-only-recovery",
+      "method": "isOwnerOnlyRecovery",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "read-module-installed",
+      "method": "isModuleInstalled",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        },
+        {
+          "type": "String",
+          "value": "verifier"
+        },
+        {
+          "type": "Hash160",
+          "value": "0x5555555555555555555555555555555555555555"
+        }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "read-pending-verifier-update",
+      "method": "getPendingVerifierUpdate",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-pending-hook-update",
+      "method": "getPendingHookUpdate",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-pending-platform-rotation",
+      "method": "getPendingPlatformAccountOwnerRotation",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "write-metadata-uri",
+      "method": "setMetadataUri",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        },
+        {
+          "type": "String",
+          "value": "ipfs://aa-scenario/metadata.json"
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-metadata-uri",
+      "method": "getMetadataUri",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "readsBack": {
+        "step": "write-metadata-uri",
+        "arg": 1
+      }
+    },
+    {
+      "id": "initiate-escape",
+      "method": "initiateEscape",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-escape-triggered",
+      "method": "getEscapeTriggeredAt",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "integer": "@blockTimestamp"
+    },
+    {
+      "id": "read-escape-active",
+      "method": "isEscapeActive",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "boolean": true
+    },
+    {
+      "id": "finalize-escape-before-timelock",
+      "method": "finalizeEscapeToOwner",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "FAULT",
+      "reason": "Timelock active"
+    },
+    {
+      "id": "preview-user-op",
+      "method": "previewUserOpValidation",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        },
+        {
+          "type": "Array",
+          "items": [
+            {
+              "type": "Hash160",
+              "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+            },
+            {
+              "type": "String",
+              "value": "getAccountImplementationId"
+            },
+            {
+              "type": "Array",
+              "items": []
+            },
+            {
+              "type": "Integer",
+              "value": "0"
+            },
+            {
+              "type": "Integer",
+              "value": "1700003600000"
+            },
+            {
+              "type": "ByteString",
+              "value": "4151"
+            }
+          ]
+        }
+      ],
+      "expect": "HALT",
+      "items": 5
+    },
+    {
+      "id": "execute-user-op",
+      "method": "executeUserOp",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        },
+        {
+          "type": "Array",
+          "items": [
+            {
+              "type": "Hash160",
+              "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+            },
+            {
+              "type": "String",
+              "value": "getAccountImplementationId"
+            },
+            {
+              "type": "Array",
+              "items": []
+            },
+            {
+              "type": "Integer",
+              "value": "0"
+            },
+            {
+              "type": "Integer",
+              "value": "1700003600000"
+            },
+            {
+              "type": "ByteString",
+              "value": "4151"
+            }
+          ]
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-escape-cancelled",
+      "method": "getEscapeTriggeredAt",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        }
+      ],
+      "expect": "HALT",
+      "integer": "0"
+    },
+    {
+      "id": "execute-user-ops",
+      "method": "executeUserOps",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        },
+        {
+          "type": "Array",
+          "items": [
+            {
+              "type": "Array",
+              "items": [
+                {
+                  "type": "Hash160",
+                  "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+                },
+                {
+                  "type": "String",
+                  "value": "getAccountImplementationId"
+                },
+                {
+                  "type": "Array",
+                  "items": []
+                },
+                {
+                  "type": "Integer",
+                  "value": "1"
+                },
+                {
+                  "type": "Integer",
+                  "value": "1700003600000"
+                },
+                {
+                  "type": "ByteString",
+                  "value": "4151"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expect": "HALT",
+      "items": 1
+    },
+    {
+      "id": "read-nonce-after-ops",
+      "method": "getNonce",
+      "args": [
+        {
+          "type": "Hash160",
+          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
+        },
+        {
+          "type": "Integer",
+          "value": "0"
+        }
+      ],
+      "expect": "HALT",
+      "integer": "2"
+    }
+  ]
+}

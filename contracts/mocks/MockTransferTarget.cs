@@ -6,7 +6,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Mocks
+namespace SmartAccount.Mocks
 {
     /// <summary>
     /// Minimal mock target used by validation suites for transfer-like calls.

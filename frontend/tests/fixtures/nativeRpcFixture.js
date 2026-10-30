@@ -1,6 +1,6 @@
 import {
   nativeCodec as c,
-  NATIVE_ACCOUNT_SERVICE as CORE,
+  NATIVE_SMART_ACCOUNT_CONTRACT as CORE,
   NATIVE_PROFILE_PARAMETER_DIGEST,
 } from "../../src/features/native/nativeWorkspace.js";
 import {
@@ -44,7 +44,7 @@ export function createNativeRpcFixture() {
   const add = (method, args, value) =>
     responses.set(c.dynamicCall(CORE, method, args, 5), value);
   const manifest = () => ({
-    name: "AccountManagement",
+    name: "SmartAccount",
     extra: {
       smartAccount: {
         abiVersion: state.abiVersion,

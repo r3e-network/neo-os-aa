@@ -81,7 +81,7 @@ import { useRoute } from "vue-router";
 import { useI18n } from "@/i18n";
 import DidIdentityPanel from "@/features/operations/components/DidIdentityPanel.vue";
 import {
-  getAbstractAccountHash,
+  getSmartAccountHash,
   walletService,
 } from "@/services/walletService.js";
 import { getScriptHashFromAddress } from "@/utils/neo.js";
@@ -89,7 +89,7 @@ import { getScriptHashFromAddress } from "@/utils/neo.js";
 const route = useRoute();
 const { t } = useI18n();
 
-const aaContractHash = getAbstractAccountHash();
+const aaContractHash = getSmartAccountHash();
 const accountIdPrefill = computed(() =>
   String(route.query.accountId || "").trim(),
 );

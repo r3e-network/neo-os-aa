@@ -1,6 +1,6 @@
 {
   "source": "actual exporter /tmp/aa-refinement-inventory-final.json; fixture for proof mutation tests only",
-  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "nefSha256": "4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198",
   "start": 13667,
   "endExclusive": 13689,
   "hex": "11116bb99f74106b6a11ce9fba6c78a09e756d78b976",
@@ -13,7 +13,7 @@
         "implicit": false,
         "constant": null,
         "location": {
-          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+          "path": "contracts/SmartAccount.Paymaster.cs",
           "startLine": 66,
           "startColumn": 41,
           "endLine": 66,
@@ -48,7 +48,7 @@
             "implicit": true,
             "constant": null,
             "location": {
-              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "path": "contracts/SmartAccount.Paymaster.cs",
               "startLine": 66,
               "startColumn": 41,
               "endLine": 66,
@@ -104,7 +104,7 @@
                   }
                 },
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 66,
                   "startColumn": 41,
                   "endLine": 66,
@@ -127,7 +127,7 @@
             "implicit": false,
             "constant": null,
             "location": {
-              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "path": "contracts/SmartAccount.Paymaster.cs",
               "startLine": 66,
               "startColumn": 45,
               "endLine": 66,
@@ -158,7 +158,7 @@
                 "implicit": false,
                 "constant": null,
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 66,
                   "startColumn": 60,
                   "endLine": 66,
@@ -226,7 +226,7 @@
                     "implicit": false,
                     "constant": null,
                     "location": {
-                      "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                      "path": "contracts/SmartAccount.Paymaster.cs",
                       "startLine": 66,
                       "startColumn": 60,
                       "endLine": 66,
@@ -257,7 +257,7 @@
                 "implicit": false,
                 "constant": null,
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 66,
                   "startColumn": 72,
                   "endLine": 66,
@@ -325,7 +325,7 @@
                     "implicit": true,
                     "constant": null,
                     "location": {
-                      "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                      "path": "contracts/SmartAccount.Paymaster.cs",
                       "startLine": 66,
                       "startColumn": 72,
                       "endLine": 66,
@@ -381,7 +381,7 @@
                           }
                         },
                         "location": {
-                          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                          "path": "contracts/SmartAccount.Paymaster.cs",
                           "startLine": 66,
                           "startColumn": 72,
                           "endLine": 66,
@@ -416,7 +416,7 @@
         "implicit": false,
         "constant": null,
         "location": {
-          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+          "path": "contracts/SmartAccount.Paymaster.cs",
           "startLine": 67,
           "startColumn": 30,
           "endLine": 67,
@@ -451,7 +451,7 @@
             "implicit": false,
             "constant": null,
             "location": {
-              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "path": "contracts/SmartAccount.Paymaster.cs",
               "startLine": 67,
               "startColumn": 30,
               "endLine": 67,
@@ -482,7 +482,7 @@
                 "implicit": false,
                 "constant": null,
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 67,
                   "startColumn": 45,
                   "endLine": 67,
@@ -550,7 +550,7 @@
                     "implicit": false,
                     "constant": null,
                     "location": {
-                      "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                      "path": "contracts/SmartAccount.Paymaster.cs",
                       "startLine": 67,
                       "startColumn": 45,
                       "endLine": 67,
@@ -585,7 +585,7 @@
                         "implicit": false,
                         "constant": null,
                         "location": {
-                          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                          "path": "contracts/SmartAccount.Paymaster.cs",
                           "startLine": 67,
                           "startColumn": 45,
                           "endLine": 67,
@@ -613,7 +613,7 @@
                         "implicit": false,
                         "constant": null,
                         "location": {
-                          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                          "path": "contracts/SmartAccount.Paymaster.cs",
                           "startLine": 67,
                           "startColumn": 58,
                           "endLine": 67,
@@ -622,17 +622,17 @@
                           "length": 15
                         },
                         "details": {
-                          "symbol": "F:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement.Reserved"
+                          "symbol": "F:SmartAccount.SmartAccount.TransactionReimbursement.Reserved"
                         },
                         "boundMetadata": {
                           "IMemberReferenceOperation.Instance": "Operation child; see ordered children",
                           "IMemberReferenceOperation.Member": {
-                            "id": "F:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement.Reserved",
+                            "id": "F:SmartAccount.SmartAccount.TransactionReimbursement.Reserved",
                             "type": null
                           },
                           "IMemberReferenceOperation.ConstrainedToType": null,
                           "IFieldReferenceOperation.Field": {
-                            "id": "F:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement.Reserved",
+                            "id": "F:SmartAccount.SmartAccount.TransactionReimbursement.Reserved",
                             "type": null
                           },
                           "IFieldReferenceOperation.IsDeclaration": false
@@ -641,11 +641,11 @@
                         "children": [
                           {
                             "kind": "LocalReference",
-                            "type": "global::AbstractAccount.UnifiedSmartWallet.TransactionReimbursement",
+                            "type": "global::SmartAccount.SmartAccount.TransactionReimbursement",
                             "implicit": false,
                             "constant": null,
                             "location": {
-                              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                              "path": "contracts/SmartAccount.Paymaster.cs",
                               "startLine": 67,
                               "startColumn": 58,
                               "endLine": 67,
@@ -682,7 +682,7 @@
                 "implicit": false,
                 "constant": null,
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 67,
                   "startColumn": 75,
                   "endLine": 67,
@@ -750,7 +750,7 @@
                     "implicit": true,
                     "constant": null,
                     "location": {
-                      "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                      "path": "contracts/SmartAccount.Paymaster.cs",
                       "startLine": 67,
                       "startColumn": 75,
                       "endLine": 67,
@@ -806,7 +806,7 @@
                           }
                         },
                         "location": {
-                          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                          "path": "contracts/SmartAccount.Paymaster.cs",
                           "startLine": 67,
                           "startColumn": 75,
                           "endLine": 67,
@@ -835,7 +835,7 @@
             "implicit": false,
             "constant": null,
             "location": {
-              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "path": "contracts/SmartAccount.Paymaster.cs",
               "startLine": 67,
               "startColumn": 80,
               "endLine": 67,
@@ -870,7 +870,7 @@
                 "implicit": false,
                 "constant": null,
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 67,
                   "startColumn": 80,
                   "endLine": 67,
@@ -898,7 +898,7 @@
                 "implicit": false,
                 "constant": null,
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 67,
                   "startColumn": 97,
                   "endLine": 67,
@@ -935,7 +935,7 @@
         "implicit": false,
         "constant": null,
         "location": {
-          "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+          "path": "contracts/SmartAccount.Paymaster.cs",
           "startLine": 68,
           "startColumn": 34,
           "endLine": 68,
@@ -966,7 +966,7 @@
             "implicit": false,
             "constant": null,
             "location": {
-              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "path": "contracts/SmartAccount.Paymaster.cs",
               "startLine": 68,
               "startColumn": 49,
               "endLine": 68,
@@ -1034,7 +1034,7 @@
                 "implicit": false,
                 "constant": null,
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 68,
                   "startColumn": 49,
                   "endLine": 68,
@@ -1065,7 +1065,7 @@
             "implicit": false,
             "constant": null,
             "location": {
-              "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+              "path": "contracts/SmartAccount.Paymaster.cs",
               "startLine": 68,
               "startColumn": 60,
               "endLine": 68,
@@ -1133,7 +1133,7 @@
                 "implicit": false,
                 "constant": null,
                 "location": {
-                  "path": "/Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/UnifiedSmartWallet.Paymaster.cs",
+                  "path": "contracts/SmartAccount.Paymaster.cs",
                   "startLine": 68,
                   "startColumn": 60,
                   "endLine": 68,

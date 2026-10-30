@@ -158,6 +158,26 @@ class NativeMultiSigMatrixTests(unittest.TestCase):
         encoded = serialize_unsigned(1, 100, 100, 1, rows, b'\x40')
         self.assertIn(bytes.fromhex('2833'), encoded)
 
+    def test_native_consent_serializes_both_authorities_in_order_with_entry_scope(self):
+        from neoexpress_validate import serialize_unsigned
+        m = self.module(); root = '0x' + '33' * 20
+        guardian, recipient = bytes(range(20)), bytes(range(20, 40))
+        keys = [SimpleNamespace(script_hash=value) for value in (guardian, recipient)]
+        rows = m.signers(keys, root, False)
+        self.assertEqual([
+            {'account': '0x' + guardian[::-1].hex(), 'scopes': 'CalledByEntry'},
+            {'account': '0x' + recipient[::-1].hex(), 'scopes': 'CalledByEntry'},
+        ], rows)
+        encoded = serialize_unsigned(1, 100, 100, 1, rows, b'\x40')
+        # Fixed transaction header (25 bytes), signer count, then account/scope pairs.
+        self.assertEqual(b'\x02' + guardian + b'\x01' + recipient + b'\x01', encoded[25:68])
+        restricted = m.signers(keys, root, True)
+        self.assertEqual(rows[0], restricted[0])
+        self.assertEqual(rows[1]['account'], restricted[1]['account'])
+        self.assertEqual('WitnessRules', restricted[1]['scopes'])
+        self.assertEqual(root, restricted[1]['rules'][0]['condition']['expressions'][0]['hash'])
+        self.assertNotEqual(encoded, serialize_unsigned(1, 100, 100, 1, restricted, b'\x40'))
+
     def test_missing_provenance_replaces_stale_success(self):
         m = self.module()
         with tempfile.TemporaryDirectory() as tmp:

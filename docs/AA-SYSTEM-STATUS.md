@@ -19,7 +19,7 @@ from one path does not establish runtime guarantees for the other. See the
 | --- | --- | --- |
 | Public `v3` | Standard `System.Contract.Call`; account nonce, verifier, hooks and execution in one transaction | Published Neo runtime; current core and matching plugin artifacts |
 | Private `PLATFORM` | Adds bounded verifier child calls | Runtime with the matching private syscall; not deployable by choosing a public RPC URL |
-| Native SmartAccount | ABI 2 `AccountManagement`, independently derived identity, epoch-scoped modules and bounded callbacks | Corresponding Neo core implementation and hardfork activation; public V3 deployment does not activate it |
+| Native SmartAccount | ABI 2 `SmartAccount`, independently derived identity, epoch-scoped modules and bounded callbacks | Corresponding Neo core implementation and hardfork activation; public V3 deployment does not activate it |
 
 The public profile has no per-child verifier gas budget. Relays and sponsors must
 bound transaction fees and review the selected modules and their mutable child
@@ -85,7 +85,7 @@ reviewed immutable core commit and two identical native module copies, then chec
 the complete measured composite scenario matrix with the actual native VM. It
 rejects missing, duplicate, unknown, failed or over-budget cases; synthetic
 transaction signers make this a host test, not mempool or block confirmation.
-NativeEpochProbe in the native gate uses a test-only epoch service and is a
+NativeEpochProbe in the native gate uses a test-only SmartAccount ABI fixture and is a
 different test boundary. Full-node SDK/private-chain receipts remain separate.
 Historical reports retain the commits and bytes they tested; a later test-only
 core commit does not change the production runtime identity recorded there.

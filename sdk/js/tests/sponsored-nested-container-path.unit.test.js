@@ -17,7 +17,7 @@ const PAYMASTER = '0x' + '66'.repeat(20);
 const SPONSOR = '0x' + '77'.repeat(20);
 
 function client() {
-  return new SDK.AbstractAccountClient('http://127.0.0.1:1', CORE);
+  return new SDK.SmartAccountClient('http://127.0.0.1:1', CORE);
 }
 
 function userOp(args) {

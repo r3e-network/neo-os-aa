@@ -1,4 +1,4 @@
-"""Native packaging must enforce the profile instead of widening the service ABI."""
+"""Native packaging must enforce the profile instead of widening the native contract ABI."""
 import copy
 import unittest
 from pathlib import Path
@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def manifest():
     def method(name, result, safe, types):
         return {"name":name,"returntype":result,"safe":safe,"parameters":[{"name":"p","type":t} for t in types],"offset":0}
-    return {"name":"NeoNativeVerifier","extra":{"SmartAccountProfile":"native-v2"},"permissions":[{"contract":"0xd9421d07adf206e9dc4be746a02e8e087fa61741","methods":["getAuthorityEpoch", "hasModuleContext"]}],"abi":{"methods":[
+    return {"name":"NeoNativeVerifier","extra":{"SmartAccountProfile":"native-v2"},"permissions":[{"contract":"0x398dc3f0227d7efac5533ed5ce9937390c158084","methods":["getAuthorityEpoch", "hasModuleContext"]}],"abi":{"methods":[
         method("supportsComposition","Boolean",True,[]),method("getSignerDomains","Array",True,["Hash160"]),
         method("clearAccount","Void",False,["Hash160"]),method("validateSignature","Boolean",False,["Hash160","Array"]),
         method("postExecute","Void",False,["Hash160","Array","Any"]),method("setConfig","Void",False,["Hash160","Array","Integer"])]}}
@@ -169,8 +169,8 @@ class NativeModuleProfileTests(unittest.TestCase):
 
     def test_epoch_permission_must_name_the_native_service_and_method(self):
         for permissions in ([], [{"contract": "*", "methods": ["getAuthorityEpoch"]}],
-                            [{"contract": "0xd9421d07adf206e9dc4be746a02e8e087fa61741", "methods": "*"}],
-                            [{"contract": "0xd9421d07adf206e9dc4be746a02e8e087fa61741", "methods": ["hasModuleContext"]}],
+                            [{"contract": "0x398dc3f0227d7efac5533ed5ce9937390c158084", "methods": "*"}],
+                            [{"contract": "0x398dc3f0227d7efac5533ed5ce9937390c158084", "methods": ["hasModuleContext"]}],
                             [{"contract": "0x" + "00" * 20, "methods": ["getAuthorityEpoch"]}]):
             wrong = manifest(); wrong["permissions"] = permissions
             with self.assertRaises(ValueError): self.package_manifest(wrong, "verifier", ["setConfig"])
@@ -205,7 +205,7 @@ class NativeModuleProfileTests(unittest.TestCase):
                 ROOT / "frontend/src/shared/nativeSmartAccountClient.mjs",
                 r"NATIVE_PROFILE_PARAMETER_DIGEST\s*=\s*\"([0-9a-f]{64})\"",
             ),
-            "native service validator": (
+            "SmartAccount native contract validator": (
                 ROOT / "scripts/neoexpress_native_service_validate.py",
                 r"\bDIGEST\s*=\s*\"([0-9a-f]{64})\"",
             ),

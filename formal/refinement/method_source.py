@@ -8,11 +8,11 @@ import copy
 import hashlib
 import json
 
-METHOD = "M:AbstractAccount.UnifiedSmartWallet.CapReimbursementToActualCost(System.Numerics.BigInteger)"
-RECORD = "global::AbstractAccount.UnifiedSmartWallet.TransactionReimbursement"
-RECORD_ID = "T:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement"
-CTOR = "M:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement.#ctor"
-PREFIX = "F:AbstractAccount.UnifiedSmartWallet.Prefix_TransactionReimbursement"
+METHOD = "M:SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
+RECORD = "global::SmartAccount.SmartAccount.TransactionReimbursement"
+RECORD_ID = "T:SmartAccount.SmartAccount.TransactionReimbursement"
+CTOR = "M:SmartAccount.SmartAccount.TransactionReimbursement.#ctor"
+PREFIX = "F:SmartAccount.SmartAccount.Prefix_TransactionReimbursement"
 FRAMEWORK = "global::Neo.SmartContract.Framework."
 BIG = "global::System.Numerics.BigInteger"
 UINT = FRAMEWORK + "UInt256"
@@ -162,7 +162,11 @@ class Projector:
             identifier, ch = self.member(n, is_property=True)
             properties = {"P:Neo.SmartContract.Framework.Services.Runtime.Transaction": (TRANSACTION, ["ETransaction"]),
                           "P:Neo.SmartContract.Framework.Services.Storage.CurrentContext": (CONTEXT, ["EContext"]),
-                          "P:Neo.SmartContract.Framework.UInt256.Zero": (UINT, literal_bytes(bytes(32)))}
+                          "P:Neo.SmartContract.Framework.UInt256.Zero": (UINT, literal_bytes(bytes(32))),
+                          # BigInteger.One is the framework multiplicative identity the
+                          # domain-maximum expression is built from; it is an intrinsic,
+                          # not a repository member.
+                          "P:System.Numerics.BigInteger.One": (BIG, integer(1))}
             require(identifier in properties and not ch, "Unknown source property intrinsic")
             expected_type, expression = properties[identifier]
             require(t == expected_type, "Property result type mismatch")
@@ -227,6 +231,18 @@ class Projector:
                 require(t == "bool" and [c["type"] for c in ch] == [BIG, "long"], "Comparison types")
                 method = "M:System.Numerics.BigInteger.op_GreaterThan(System.Numerics.BigInteger,System.Int64)"
                 constructor = ["EGT"]
+            elif op == "LeftShift":
+                # `BigInteger.One << n` is the only shift in the helper: the VM-integer
+                # domain maximum is built from 2^254 so that no intermediate is outside
+                # the domain. The count is an Int32 literal, which the source dialect
+                # reads as a mathematical exponent.
+                require(t == BIG and [c["type"] for c in ch] == [BIG, "int"], "Shift operand types")
+                method = "M:System.Numerics.BigInteger.op_LeftShift(System.Numerics.BigInteger,System.Int32)"
+                constructor = ["EBinary", "Shl"]
+            elif op == "LessThanOrEqual":
+                require(t == "bool" and all(c["type"] == BIG for c in ch), "Comparison types")
+                method = "M:System.Numerics.BigInteger.op_LessThanOrEqual(System.Numerics.BigInteger,System.Numerics.BigInteger)"
+                constructor = ["ELE"]
             else:
                 raise SourceProjectionError("Unsupported binary operator")
             self.check(n, typ=t, details={"operator": op, "checked": False, "lifted": False, "operatorMethod": method}, count=2,
@@ -386,7 +402,7 @@ class Projector:
         require(len(types) == 1, "Unique source record required")
         record = types[0]
         require(record["kind"] == "Class" and record["baseType"] == "object" and record["isValueType"] is False, "Record representation changed")
-        fields = [dict(id="F:AbstractAccount.UnifiedSmartWallet.TransactionReimbursement." + name, name=name, type=typ,
+        fields = [dict(id="F:SmartAccount.SmartAccount.TransactionReimbursement." + name, name=name, type=typ,
                        isStatic=False, isReadOnly=False, constant=None) for name, typ in [("TransactionHash", UINT), ("Reserved", BIG)]]
         require(same(record["fields"], fields), "Record field order/type changed")
         require(record["synthesizedMembers"] == [{"id": CTOR, "kind": "Method", "issue": "Compiler-synthesized member has no separately exported source body"}], "Record constructor is not the supported synthesized default")
@@ -445,7 +461,7 @@ class Projector:
         self.check(body, kind="MethodBodyOperation", count=1,
                    meta={"IMethodBodyBaseOperation.BlockBody": CHILD, "IMethodBodyBaseOperation.ExpressionBody": None})
         statements = self.block(body["children"][0], root=True)
-        require(len(self.local_names) == 7, "Helper frame local count changed")
+        require(len(self.local_names) == 8, "Helper frame local count changed")
         result = dict(schema="neoos-aa-cap-source-program/v1", method=METHOD, statements=statements,
                     locals=self.local_names, localTypes=self.local_types, staticKey=self.static_key,
                     recordLayout=layout, recordInitializers=self.record_values,
@@ -503,7 +519,7 @@ def render_program(projection):
             return f"(SIf {render(args[0])} {render_list(args[1])} {render_list(args[2])})"
         if tag == "SAssert":
             return f"(SAssert {render(args[0])} [" + "; ".join(f"{x}%nat" for x in args[1]) + "])"
-        require(tag in ("EVal", "EEq", "ENeq", "EGT", "EGet", "EDeserialize", "ESerialize", "EPut", "SExpr", "SReturn"), "Unknown IR constructor")
+        require(tag in ("EVal", "EEq", "ENeq", "EGT", "ELE", "EGet", "EDeserialize", "ESerialize", "EPut", "SExpr", "SReturn"), "Unknown IR constructor")
         return "(" + tag + " " + " ".join(render(x) for x in args) + ")"
 
     def render_list(items):

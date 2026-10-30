@@ -2,7 +2,7 @@
 
 ## Acceptance objective
 
-The target is the ordinary `UnifiedSmartWalletV3` source and its exact compiled
+The target is the ordinary `SmartAccountV3` source and its exact compiled
 NEF/manifest, including all public entrypoints and their reachable helpers. The
 required result is semantic preservation from typed C# operations to decoded
 NeoVM execution, followed by preservation of the protocol properties already

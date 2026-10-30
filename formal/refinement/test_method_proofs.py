@@ -3,17 +3,26 @@ import copy
 import hashlib
 import gzip
 import json
+import os
 from pathlib import Path
 import unittest
 import shutil
 import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
 
 import method_proofs as method
 
 ROOT = Path(__file__).resolve().parents[2]
-INVENTORY = ROOT / "docs/reports/aa-implementation-refinement-20261013/inventory.json.gz"
+# The lane binds the current build. The 20261013 fixture predates the
+# SmartAccount rename: its focusedMethods table names the old method ids, so it
+# can no longer bind the helper the runner pins and the binding fails before a
+# single test runs. The inventory is resolved from the environment first, so a
+# rebuild rebinds the lane without editing this file, and otherwise points at
+# the newest checked-in host inventory.
+DEFAULT_INVENTORY = ROOT / "docs/reports/aa-method-refinement-20261015/host/inventory.json.gz"
+INVENTORY = Path(os.environ.get("AA_METHOD_INVENTORY") or DEFAULT_INVENTORY)
 
 
 def materialize_nef_fixture(inventory, directory):
@@ -46,7 +55,7 @@ def materialize_nef_fixture(inventory, directory):
     nef = body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4]
     if hashlib.sha256(nef).hexdigest() != inventory["nef"]["sha256"]:
         raise AssertionError("Reconstituted test NEF does not match the original candidate")
-    path = Path(directory) / "UnifiedSmartWalletV3.nef"
+    path = Path(directory) / "SmartAccountV3.nef"
     path.write_bytes(nef)
     return path
 
@@ -61,13 +70,60 @@ class MethodProofTests(unittest.TestCase):
         # Replace host-specific source/compiler inputs only in this fixture
         # assembly. Production CLI still checks every fresh exporter input.
         cls.inventory["inputs"] = {str(nef):cls.inventory["nef"]["sha256"]}
+        # A portable manifest fixture binds the complete ABI list. Its test-only
+        # container digest is explicit; it does not impersonate the production
+        # manifest's original digest or require host build output.
+        manifest = Path(cls.fixture_directory.name) / "SmartAccountV3.manifest.json"
+        manifest_raw = json.dumps({"abi":{"methods":cls.inventory["manifest"]["methods"]}},
+                                  sort_keys=True).encode()
+        manifest.write_bytes(manifest_raw)
+        cls.inventory["manifest"]["sha256"] = hashlib.sha256(manifest_raw).hexdigest()
+        cls.inventory["inputs"][str(manifest)] = cls.inventory["manifest"]["sha256"]
         cls.program = method.bind_method(cls.inventory)
+
+    def test_nef_hash_and_decode_share_one_captured_payload(self):
+        nef_path = next(Path(name) for name in self.inventory["inputs"]
+                        if name.endswith("SmartAccountV3.nef"))
+        read = Path.read_bytes
+        original = read(nef_path)
+        changed = bytearray(original)
+        changed[4] ^= 1  # valid NEF compiler metadata; actual script unchanged
+        changed[-4:] = hashlib.sha256(hashlib.sha256(changed[:-4]).digest()).digest()[:4]
+        calls = []
+        def alternate(path):
+            if path == nef_path:
+                calls.append(1)
+                return original if len(calls) % 2 else bytes(changed)
+            return read(path)
+        with patch.object(Path, "read_bytes", alternate):
+            bound = method.bind_method(self.inventory)
+        self.assertEqual(bound["nefSha256"], hashlib.sha256(original).hexdigest())
+        self.assertEqual(len(calls), 1, "Hash and decode must consume the same raw NEF snapshot")
+
+    def test_actual_manifest_abi_is_bound(self):
+        inventory = copy.deepcopy(self.inventory)
+        inventory["manifest"]["methods"][0]["offset"] += 1
+        with self.assertRaisesRegex(ValueError, "manifest"):
+            method.bind_method(inventory)
+
+    def test_every_input_is_captured_once_including_manifest(self):
+        read = Path.read_bytes
+        counts = {Path(name):0 for name in self.inventory["inputs"]}
+        def count(path):
+            if path in counts:
+                counts[path] += 1
+            return read(path)
+        with patch.object(Path, "read_bytes", count):
+            bound = method.bind_method(self.inventory)
+        self.assertEqual(set(counts.values()), {1})
+        self.assertEqual(bound["inputSha256"], self.inventory["inputs"])
+        self.assertEqual(bound["manifestSha256"], self.inventory["manifest"]["sha256"])
 
     def test_complete_method_is_bound(self):
         self.assertEqual(self.program["start"], 13557)
-        self.assertEqual(self.program["end"], 13765)
-        self.assertEqual(len(self.program["bytes"]), 208)
-        self.assertEqual(len(self.program["instructions"]), 96)
+        self.assertEqual(self.program["end"], 13838)
+        self.assertEqual(len(self.program["bytes"]), 281)
+        self.assertEqual(len(self.program["instructions"]), 116)
 
     def test_empty_storage_reserves_from_actual_fee(self):
         result = method.execute(self.program["bytes"], requested=90, system_fee=50,
@@ -102,13 +158,33 @@ class MethodProofTests(unittest.TestCase):
         self.assertEqual(result["stored"], ledger)
         self.assertNotIn("Storage.Put", result["effects"])
 
-    def test_zero_fee_update_overflow_faults_without_write(self):
+    def test_zero_fee_update_overflow_margin_aborts_without_write(self):
         ledger = method.Ledger(bytes([1])*32, (1 << 255)-1, "Array")
         result = method.execute(self.program["bytes"], requested=1, system_fee=0,
                                 network_fee=0, tx_hash=bytes([1])*32, stored=ledger)
-        self.assertEqual(result["status"], "FAULT")
+        # The helper now asserts the remaining VM-integer headroom before the
+        # addition, so this input is rejected by that assertion at 13806 and the
+        # ADD at 13812 never runs. It is an abort, not an arithmetic fault.
+        self.assertEqual(result["status"], "ABORT")
+        self.assertEqual(result["error"], method.MARGIN_ERROR)
         self.assertEqual(result["stored"], ledger)
         self.assertNotIn("Storage.Put", result["effects"])
+
+    def test_inputs_at_the_margin_boundary_still_commit(self):
+        # reserved + settled == 2^255-1 exactly saturates the signed range and is
+        # admitted: the guard compares against vmMax = 2^255-1 itself, not a
+        # strictly smaller bound, so the endpoint is reachable.
+        for reserved, settled in (((1 << 255)-2, 1), (1 << 254, (1 << 254)-1)):
+            with self.subTest(reserved=reserved, settled=settled):
+                ledger = method.Ledger(bytes([1])*32, reserved, "Array")
+                result = method.execute(self.program["bytes"], requested=settled, system_fee=0,
+                                        network_fee=0, tx_hash=bytes([1])*32, stored=ledger)
+                self.assertEqual(result["status"], "HALT")
+                self.assertEqual(result["stored"].reserved, reserved + settled)
+
+    def test_margin_abort_message_matches_the_asserted_bytes(self):
+        self.assertEqual(method.MARGIN_ERROR, b"Reimbursement budget exceeds VM integer limit")
+        self.assertNotEqual(method.MARGIN_ERROR, method.ERROR)
 
     def execute(self, *, stored=None, tx_hash=bytes([1])*32, requested=30,
                 system_fee=50, network_fee=10, **kwargs):
@@ -164,7 +240,11 @@ class MethodProofTests(unittest.TestCase):
         cases = [dict(), dict(tx_hash=bytes(32)),
                  dict(stored=method.Ledger(bytes([1])*32, 40)),
                  dict(stored=method.Ledger(bytes([2])*32, 40, "Struct")),
-                 dict(stored=method.Ledger(bytes([1])*32, 60))]
+                 dict(stored=method.Ledger(bytes([1])*32, 60)),
+                 # The headroom assertion has its own abort site and message
+                 # push, so a saturated reservation is needed to reach them.
+                 dict(stored=method.Ledger(bytes([1])*32, (1 << 255)-1),
+                      system_fee=0, network_fee=0, requested=1)]
         offsets = {offset for case in cases for offset in self.execute(**case)["instructionOffsets"]}
         self.assertEqual(offsets, {item["offset"] for item in self.program["instructions"]})
 
@@ -206,11 +286,11 @@ class MethodProofTests(unittest.TestCase):
         from method_source import project_method
         fixture = json.loads((ROOT / "formal/refinement/fixtures/cap-method-source.json").read_text())
         projection = project_method(fixture)
-        self.assertEqual(len(projection["statements"]), 12)
+        self.assertEqual(len(projection["statements"]), 14)
         self.assertEqual(projection["statements"][-1], ["SReturn", ["ELocal", 6]])
         certificate = method.render_certificate(self.program, projection)
         self.assertIn("Theorem complete_helper_no_fault_or_timeout", certificate)
-        self.assertIn("actual_zero_estimation_overflow_counterexample", certificate)
+        self.assertIn("actual_zero_estimation_overflow_margin_rejected", certificate)
         self.assertEqual(set(method.THEOREM_NAMES) - set(method.declared_names(certificate)), set())
 
     def test_failed_cli_overwrites_old_success_receipt(self):
@@ -240,8 +320,8 @@ class MethodProofTests(unittest.TestCase):
             self.assertIs(receipt["kernelChecked"], True)
             self.assertIs(receipt["referenceRefinementVerified"], True)
             self.assertIs(receipt["fullImplementationVerified"], False)
-            self.assertEqual(receipt["methodRange"], [13557, 13765])
-            self.assertEqual((receipt["byteCount"], receipt["instructionCount"]), (208, 96))
+            self.assertEqual(receipt["methodRange"], [13557, 13838])
+            self.assertEqual((receipt["byteCount"], receipt["instructionCount"]), (281, 116))
             self.assertEqual(len(receipt["semanticControls"]), 6)
             self.assertTrue(all(item["definitionsCompiled"] and item["certificateRejected"]
                                 for item in receipt["semanticControls"]))

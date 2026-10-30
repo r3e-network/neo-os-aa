@@ -89,7 +89,7 @@ function createNativeTransactionTools(c) {
     const contracts = [
       ...new Set([
         ...(requiredAuthorities.has(account)
-          ? ["0xd9421d07adf206e9dc4be746a02e8e087fa61741"]
+          ? ["0x398dc3f0227d7efac5533ed5ce9937390c158084"]
           : []),
         ...verifierScopes.map((h) => "0x" + h),
       ]),

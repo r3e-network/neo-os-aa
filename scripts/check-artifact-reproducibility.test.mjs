@@ -45,20 +45,20 @@ test("listing ignores non-artifact files and missing directories", () => {
 
 test("public success cannot hide private profile drift or omission", () => {
   const files = {
-    "v3/UnifiedSmartWalletV3.nef": "public",
-    "v3/UnifiedSmartWalletV3.manifest.json": "{}",
-    "platform/UnifiedSmartWalletV3.nef": "private",
-    "platform/UnifiedSmartWalletV3.manifest.json": "{}",
+    "v3/SmartAccountV3.nef": "public",
+    "v3/SmartAccountV3.manifest.json": "{}",
+    "platform/SmartAccountV3.nef": "private",
+    "platform/SmartAccountV3.manifest.json": "{}",
   };
   const expected = scratchTree(files);
-  const actual = scratchTree({ ...files, "platform/UnifiedSmartWalletV3.nef": "drift" });
+  const actual = scratchTree({ ...files, "platform/SmartAccountV3.nef": "drift" });
   let profiles = compareProfiles(expected, actual);
   assert.equal(profiles.v3.matches_fresh_build, true);
   assert.equal(profiles.platform.matches_fresh_build, false);
   fs.rmSync(path.join(actual, "platform"), { recursive: true });
   profiles = compareProfiles(expected, actual);
   assert.equal(profiles.platform.matches_fresh_build, false);
-  assert.deepEqual(profiles.platform.missing, ["UnifiedSmartWalletV3.manifest.json", "UnifiedSmartWalletV3.nef"]);
+  assert.deepEqual(profiles.platform.missing, ["SmartAccountV3.manifest.json", "SmartAccountV3.nef"]);
 });
 
 test("two absent or empty profile directories never establish reproducibility", () => {
@@ -71,8 +71,8 @@ test("two absent or empty profile directories never establish reproducibility", 
 
 test("identical profile trees pass and unexpected artifacts fail", () => {
   const files = Object.fromEntries(["v3", "platform"].flatMap((profile) => [
-    [`${profile}/UnifiedSmartWalletV3.nef`, profile],
-    [`${profile}/UnifiedSmartWalletV3.manifest.json`, "{}"],
+    [`${profile}/SmartAccountV3.nef`, profile],
+    [`${profile}/SmartAccountV3.manifest.json`, "{}"],
   ]));
   const expected = scratchTree(files);
   const actual = scratchTree(files);
@@ -85,7 +85,7 @@ test("the scratch copy carries the sources, the lock files and the restore polic
   const scratch = prepareScratch();
   try {
     for (const file of RESTORE_POLICY_FILES) assert.ok(fs.existsSync(path.join(scratch, file)), `${file} is missing from the scratch copy`);
-    assert.ok(fs.existsSync(path.join(scratch, "contracts", "UnifiedSmartWallet.Execution.cs")));
+    assert.ok(fs.existsSync(path.join(scratch, "contracts", "SmartAccount.Execution.cs")));
     assert.ok(fs.existsSync(path.join(scratch, "contracts", "packages.lock.json")));
     assert.ok(fs.existsSync(path.join(scratch, "contracts", "verifiers", "packages.SessionKeyVerifier.lock.json")));
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "dotnet_env.sh")));

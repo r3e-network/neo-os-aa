@@ -50,10 +50,10 @@ const fromBase64 = (s) => {
   return Array.from(bytes, (ch) => ch.charCodeAt(0).toString(16).padStart(2, "0")).join("");
 };
 function profile(value) {
-  exactKeys(value, ["service", "networkMagic", "abiVersion", "identityVersion", "authorizationVersion", "profileParameterDigest"], "profile");
-  if (value.service !== "d9421d07adf206e9dc4be746a02e8e087fa61741" || value.abiVersion !== 2 || value.identityVersion !== 1 || value.authorizationVersion !== 2)
+  exactKeys(value, ["contract", "networkMagic", "abiVersion", "identityVersion", "authorizationVersion", "profileParameterDigest"], "profile");
+  if (value.contract !== "398dc3f0227d7efac5533ed5ce9937390c158084" || value.abiVersion !== 2 || value.identityVersion !== 1 || value.authorizationVersion !== 2)
     fail("unsupported native profile");
-  return { service: hex(value.service, 20), networkMagic: uint32(value.networkMagic, "network magic"), abiVersion: 2,
+  return { contract: hex(value.contract, 20), networkMagic: uint32(value.networkMagic, "network magic"), abiVersion: 2,
     identityVersion: 1, authorizationVersion: 2, profileParameterDigest: hex(value.profileParameterDigest, 32) };
 }
 function signer(value) {
@@ -189,11 +189,11 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
     if (archive?.format !== "neo-native-reviewed-request" || archive.version !== 1 || archive.submission !== "native-sdk") fail("unsupported archived review format or signing path");
     const p = profile(archive.profile), prior = archive.plan, recipe = archive.recipe;
     if (!prior || !recipe || !recipe.input) fail("archived review requires a reconstructable recipe");
-    const inputPlan = recipe.input, H = c.hashValue, S = c.stringValue, service = p.service, zero = "00".repeat(20);
+    const inputPlan = recipe.input, H = c.hashValue, S = c.stringValue, contract = p.contract, zero = "00".repeat(20);
     let plan;
     if (recipe.method === "buildRegistration" && prior.kind === "registration") {
       const identity = c.deriveIdentity({ networkMagic: p.networkMagic, custodyAddress: inputPlan.custodyAddress, salt: inputPlan.salt });
-      plan = { kind: "registration", ...identity, method: "registerAccount", script: c.dynamicCall(service, "registerAccount", [
+      plan = { kind: "registration", ...identity, method: "registerAccount", script: c.dynamicCall(contract, "registerAccount", [
         H(inputPlan.custodyAddress), { type: "ByteString", value: c.hex(inputPlan.salt, 32) }, H(inputPlan.verifier ?? zero), H(inputPlan.hook ?? zero), H(inputPlan.recoveryAddress ?? zero),
       ]) };
     } else if (recipe.method === "buildAction" && prior.kind === "lifecycle") {
@@ -205,11 +205,11 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
         if (!["verifier", "hook"].includes(inputPlan.role) || prior.role !== inputPlan.role || prior.requiresExactScript !== true) fail("archived cancellation requires its exact role and guard");
         params.push(S(inputPlan.role));
       }
-      let script = c.dynamicCall(service, method, params);
+      let script = c.dynamicCall(contract, method, params);
       if (method === "cancelModuleCall") {
         const pending = hex(prior.pendingCallBytes, undefined, 8192);
         if (!pending) fail("archived cancellation has no guarded pending bytes");
-        script = c.dynamicCall(service, "getPendingModuleCall", params, 5) + "11c010" + c.encodeValue(S("serialize")) +
+        script = c.dynamicCall(contract, "getPendingModuleCall", params, 5) + "11c010" + c.encodeValue(S("serialize")) +
           c.encodeValue(H("acce6fd80d44e1796aa0c2c625e9e4e0ce39efc0")) + "41627d5b52" + c.encodeValue({ type: "ByteString", value: pending }) + "9739" + script;
       }
       plan = { kind: "lifecycle", accountId, accountAddress: c.accountAddress(accountId), method, script };
@@ -217,7 +217,7 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
       if (!["verifier", "hook"].includes(inputPlan.role) || prior.role !== inputPlan.role) fail("unsupported archived module role");
       const accountId = c.hex(inputPlan.accountId, 20), method = "call" + (inputPlan.role === "verifier" ? "Verifier" : "Hook") + (inputPlan.child ? "Child" : "");
       const args = c.canonicalValue({ type: "Array", value: inputPlan.args ?? [] });
-      plan = { kind: "configuration", accountId, accountAddress: c.accountAddress(accountId), method, script: c.dynamicCall(service, method, [
+      plan = { kind: "configuration", accountId, accountAddress: c.accountAddress(accountId), method, script: c.dynamicCall(contract, method, [
         H(accountId), ...(inputPlan.child ? [H(inputPlan.child)] : []), S(inputPlan.method), args,
       ]) };
     } else if (recipe.method === "prepareOperation" && prior.kind === "execution") {

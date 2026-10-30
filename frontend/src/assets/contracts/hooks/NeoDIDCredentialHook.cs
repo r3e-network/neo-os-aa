@@ -7,7 +7,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Hooks
+namespace SmartAccount.Hooks
 {
     /// <summary>
     /// Hook that gates target-contract access on account-local NeoDID credential markers.

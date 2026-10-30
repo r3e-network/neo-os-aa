@@ -18,7 +18,7 @@ flowchart LR
   Wallets[Neo 钱包 / EVM 钱包 / Web3Auth]
   Drafts[本地存储 / Supabase]
   Relay[可选中继]
-  Core[UnifiedSmartWalletV3]
+  Core[SmartAccountV3]
   Verifier[验证器插件]
   Hook[钩子插件]
   Paymaster[AAPaymaster]
@@ -61,7 +61,7 @@ V3 核心刻意保持小巧：授权委托给验证器插件，策略委托给�
 
 | 文件 | 职责 |
 | --- | --- |
-| `contracts/UnifiedSmartWallet.cs` | V3 核心账户状态、`verify`、`executeUserOp`、nonce 处理、备份所有者逃生、钩子/验证器配置 |
+| `contracts/SmartAccount.cs` | V3 核心账户状态、`verify`、`executeUserOp`、nonce 处理、备份所有者逃生、钩子/验证器配置 |
 | `contracts/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` 验证 |
 | `contracts/verifiers/TEEVerifier.cs` | TEE 签名授权 |
 | `contracts/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn 授权 |

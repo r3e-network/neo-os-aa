@@ -1,6 +1,6 @@
 # Morpheus Private Actions & NeoDID Binding (V3 Architecture)
 
-Under the V3 Unified Smart Wallet architecture, heavy on-chain components (like Oracle Dead-man switches and Social Recovery) have been removed in favor of the lightweight **L1 Native Escape Hatch**. However, the Neo Abstract Account system still seamlessly integrates with the **Morpheus TEE Environment** to enable Private Actions, Session Keys, and NeoDID bindings.
+Under the V3 Smart Account architecture, heavy on-chain components (like Oracle Dead-man switches and Social Recovery) have been removed in favor of the lightweight **L1 Native Escape Hatch**. However, the Neo Abstract Account system still seamlessly integrates with the **Morpheus TEE Environment** to enable Private Actions, Session Keys, and NeoDID bindings.
 
 ## How It Works
 
@@ -34,6 +34,6 @@ Session Keys allow an application to submit transactions on behalf of the user w
 ## Verification Flow (V3)
 1. **Prepare:** The client builds the transaction and gathers standard N3/EVM signatures.
 2. **TEE Signature:** The client requests the Morpheus Enclave to evaluate the private policy. The Enclave returns an `ActionTicket`.
-3. **Execute:** The transaction is submitted. The Unified Smart Wallet delegates validation to the `TEEVerifier`, which successfully authenticates the Enclave's signature, validating the off-chain private rules.
+3. **Execute:** The transaction is submitted. The Smart Account delegates validation to the `TEEVerifier`, which successfully authenticates the Enclave's signature, validating the off-chain private rules.
 
 By keeping policy logic inside the TEE and eliminating the legacy on-chain Oracle Dead-man switch, the V3 architecture significantly reduces gas costs and deployment complexity while retaining robust privacy and NeoDID support.

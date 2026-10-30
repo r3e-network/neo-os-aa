@@ -1,6 +1,6 @@
-# Native AccountManagement SDK (ABI 2)
+# Native SmartAccount SDK (ABI 2)
 
-`NativeSmartAccountClient` targets the consensus-native service. `AbstractAccountClient` remains the independent public deployed-contract V3 client. Changing its core hash does not convert V3 registration, EIP-712 signatures, identity or transaction format into the native protocol.
+`NativeSmartAccountClient` targets the consensus-native contract. `SmartAccountClient` remains the independent public deployed-contract V3 client. Changing its core hash does not convert V3 registration, EIP-712 signatures, identity or transaction format into the native protocol.
 
 Discovery requires the exact ABI 2 manifest/profile digest, native id/hash/name, explicit expected network magic, and callable `getVersion() == 2`. The node must activate `HF_SmartAccountV1`. Private tests do not establish public activation.
 
@@ -17,7 +17,7 @@ Hash160 inputs are display-order hex; `nativeCodec.hashValue(hash)` converts the
 Provide wallet adapters `{account, verificationScript, sign(signDataHex)}` for standard Neo P-256 CHECKSIG or canonical CHECKMULTISIG accounts. `sign` signs the exact supplied bytes using P-256/SHA-256 once. A single-signature adapter returns 64-byte IEEE P1363 r||s hex; a multisignature adapter returns `{publicKey, signature}` records. The SDK verifies every submitted signature and assembles the required quorum in script order. Do not apply a message prefix or hash an already hashed digest again. The SDK stores no private keys. See [threshold recovery](NATIVE_ACCOUNT_THRESHOLD_RECOVERY.md) for script limits and backup requirements.
 
 ```js
-const { NativeSmartAccountClient, nativeCodec: c } = require('neo-abstract-account');
+const { NativeSmartAccountClient, nativeCodec: c } = require('smart-account');
 const client = new NativeSmartAccountClient({rpcUrl, networkMagic});
 await client.discover();
 const registration = client.buildRegistration({
@@ -27,12 +27,16 @@ const registration = client.buildRegistration({
 });
 const limits = {maxSystemFee:'1000000000', maxNetworkFee:'300000000', maxTotalFee:'1300000000'};
 const tx = await client.prepareTransaction(registration, {
-  feePayer: payerWallet, authoritySigners:[custodyWallet], ...limits,
+  feePayer: payerWallet, authoritySigners:[custodyWallet, recoveryWallet], ...limits,
 });
 const signed = await client.signTransaction(tx);
 await client.preflightTransaction(signed);
 await client.broadcastTransaction(signed);
 ```
+
+Registration requires custody and every nonzero recovery authority to witness the same transaction. Introducing a new recovery authority or proposing replacement custody also requires that recipient to witness the proposal. Removing an optional recovery authority uses zero and needs no recipient witness. Mature activation remains permissionless. Native account proxies cannot be custody or recovery authorities; standard wallets, multisig wallets and deployed contract authorities retain their protocol witness paths. The built-in wallet adapters support CHECKSIG/CHECKMULTISIG; a deployed contract authority needs a compatible external transaction builder. A signer entry alone is not proof of consent.
+
+Consent is checked when an authority is newly introduced relative to the current custody, recovery and pending-authority addresses. Re-proposing an already admitted pending address does not require fresh recipient consent; current controlling-authority checks still apply.
 
 Wait for a confirmed receipt and verify AccountCreated/getAccount against the independently derived identity. Fund `registration.accountAddress`, the asset principal. Persist the salt; recovery does not replace the account identity. Submission returns `{submitted:true,confirmed:false}`. `getTransactionReceipt(signed)` verifies persisted raw bytes and returns Application results. An unknown/pending transaction can produce an RPC error; poll the same txid with bounded retries, never silently sign a replacement after timeout.
 
@@ -52,14 +56,14 @@ const transferTx = await client.prepareTransaction(plan, {
 await client.broadcastTransaction(await client.signTransaction(transferTx));
 ```
 
-The external payer is signer zero. Its scope is None unless it is also an explicitly required custody/recovery authority. Proxy scope is CustomContracts restricted to operation targets; its witness is empty invocation plus canonical verification script. Custody/recovery scopes target AccountManagement. Proxy-as-payer, conflicting wallet identities and unsupported wallet scripts are rejected. A wallet explicitly selected in several authority roles is encoded once with only those derived scopes. Standard wallet multisignatures are supported for custody, recovery and the payer. They count public-key signatures within one wallet witness and are distinct from the native MultiSigVerifier's module quorum.
+The external payer is signer zero. Its scope is None unless it is also an explicitly required custody/recovery authority. Proxy scope is CustomContracts restricted to operation targets; its witness is empty invocation plus canonical verification script. Custody/recovery scopes target SmartAccount. Proxy-as-payer, conflicting wallet identities and unsupported wallet scripts are rejected. A wallet explicitly selected in several authority roles is encoded once with only those derived scopes. Standard wallet multisignatures are supported for custody, recovery and the payer. They count public-key signatures within one wallet witness and are distinct from the native MultiSigVerifier's module quorum.
 
 `client.exportSignedTransaction(signed)` produces a versioned public artifact with the exact signed bytes, transaction fields, profile and witnesses. The browser can import it for the same reviewed plan, validate wallet signatures and fee ceilings, perform complete signed preflight, and explicitly send those bytes. See [signed transaction import](NATIVE_SIGNED_TRANSACTION_IMPORT.md). Import does not grant the workspace access to signing keys.
 
 For `cancelRecovery`, keep the cancellation authority separate from the payer.
 Pass `cancellationAuthority: custodyWallet.account` or the recovery wallet account
 alongside its wallet in `authoritySigners` (or as `feePayer` if it also pays).
-An explicit choice determines the native-service witness scope even when the
+An explicit choice determines the native-contract witness scope even when the
 other authority pays. Custody can cancel only before maturity; recovery can
 cancel any pending recovery. The SDK rechecks custody's chain-time window before
 requesting signatures. Without an explicit choice, the existing recovery-first
@@ -84,7 +88,7 @@ ABI 2 has no legacy import endpoint, import registry or migration event. Registe
 
 `buildModuleCall({accountId,role,child?,method,args})` accepts only method-specific args; the core prepends accountId. It checks the deployed configuration capability and resolves the ABI by method name plus argument count, including the account ID prepended by the core. Different-arity overloads are valid; duplicate matching signatures, safe methods and methods without a leading Hash160 are refused. Module admission for both configuration and witness signing requires metadata with numeric `abiVersion: 2`, the exact service profile digest and a Boolean composition marker. Missing, old or mistyped versions are refused. The core revalidates identity/code hash/authority/delay/epoch independently.
 
-For the declared native-v2 `MultiSigVerifier` profile and its exact `setConfig(Hash160, Array, Integer)` capability, the SDK also checks the known configuration shape before staging: 1–3 ordered, unique child hashes and an integer threshold of 1–2 that does not exceed the roster size. Zero, self and service hashes are refused. This is a convenience for the built-in schema, not an inference about arbitrary third-party `setConfig` methods. The three-domain total, disjoint child signer domains, code pins and current child policies remain core-authoritative checks. Initial staging can succeed before child configuration is ready; its simulation does not prove the future configuration can be applied. After maturity, rebuild the complete confirmation and simulate it again before signing.
+For the declared native-v2 `MultiSigVerifier` profile and its exact `setConfig(Hash160, Array, Integer)` capability, the SDK also checks the known configuration shape before staging: 1–3 ordered, unique child hashes and an integer threshold of 1–2 that does not exceed the roster size. Zero, self and native contract hashes are refused. This is a convenience for the built-in schema, not an inference about arbitrary third-party `setConfig` methods. The three-domain total, disjoint child signer domains, code pins and current child policies remain core-authoritative checks. Initial staging can succeed before child configuration is ready; its simulation does not prove the future configuration can be applied. After maturity, rebuild the complete confirmation and simulate it again before signing.
 
 For native SessionKeyVerifier:
 
@@ -147,10 +151,11 @@ may also be the listed authority if it has the corresponding key.
 
 | Action | Required account authority | Timing and state | Cancellation |
 | --- | --- | --- | --- |
-| `proposeVerifier`, `proposeHook`, `proposeRecoveryAddress` | Custody | Active; no pending custody recovery; starts a 24-hour delay | Custody uses the matching cancel action while the intent remains pending |
+| `proposeVerifier`, `proposeHook` | Custody | Active; no pending custody recovery; starts a 24-hour delay | Custody uses the matching cancel action while the intent remains pending |
 | `activateVerifier`, `activateHook`, `activateRecoveryAddress` | None; payer only | Current pending intent at or after maturity; Active; no pending custody recovery | Custody can cancel a still-pending intent, including after maturity, before activation executes |
 | `buildModuleCall` proposal and application | Custody for both calls | Active; no pending custody recovery; repeat the exact method/arguments after 24 hours | Custody uses `cancelModuleCall` with the explicit role and reviewed pending call |
-| `proposeRecovery` | Configured guardian | Active or Frozen; starts a seven-day delay | Guardian while pending; custody only strictly before maturity |
+| `proposeRecoveryAddress` | Custody plus the new nonzero recovery authority | Active; no pending custody recovery; starts a 24-hour delay | Custody uses the matching cancel action while the intent remains pending |
+| `proposeRecovery` | Configured guardian plus proposed custody | Active or Frozen; starts a seven-day delay | Guardian while pending; custody only strictly before maturity |
 | `executeRecovery` | None; payer only | Current pending recovery at or after maturity | No pending recovery remains after execution |
 | `freeze` | Configured guardian | Active; no protocol waiting period | Clears every pending intent; use `unfreeze` to resume |
 | `unfreeze` | Custody and configured guardian | Frozen; no protocol waiting period | No pending proposal |

@@ -7,7 +7,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Hooks
+namespace SmartAccount.Hooks
 {
     /// <summary>
     /// Hook that enforces per-token daily transfer ceilings for an AA account.
@@ -18,7 +18,7 @@ namespace AbstractAccount.Hooks
     /// </remarks>
     [DisplayName("DailyLimitHook")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAccountAddress", "getAuthorityEpoch")]
+    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "hasModuleContext", "getAccountAddress", "getAuthorityEpoch")]
     [ContractPermission("*", "balanceOf")]
     [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
@@ -323,7 +323,7 @@ namespace AbstractAccount.Hooks
         /// <remarks>
         /// A virtual AA account keeps its assets at the script hash of the core's fixed
         /// proxy verification script, not at the accountId - the core states the
-        /// invariant in UnifiedSmartWallet.Proxy.cs: "Hooks, verifiers and consumers
+        /// invariant in SmartAccount.Proxy.cs: "Hooks, verifiers and consumers
         /// must meter and restrict against this address, not against the accountId
         /// (which never holds a balance)". Metering the accountId therefore read a
         /// balance that is always zero, so no outflow was ever charged against the

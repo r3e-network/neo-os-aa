@@ -84,7 +84,7 @@ submission checks, not substitutes for on-chain policy enforcement. A gasless us
 experience means another party pays, not that execution is free.
 
 Public ordinary callbacks have no isolated verifier/Hook child gas budget. A private
-PLATFORM syscall, native AccountManagement budget or abstract formal model cannot
+PLATFORM syscall, native SmartAccount budget or abstract formal model cannot
 close that public gate. Sponsoring arbitrary unaudited plugins remains NO-GO.
 
 ### Backup-owner recovery

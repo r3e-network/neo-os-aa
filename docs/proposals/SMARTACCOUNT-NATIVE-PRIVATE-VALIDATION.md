@@ -20,6 +20,66 @@ mempool rejection, admitted FAULT and persisted HALT, and compare actual account
 nonce, module storage and asset deltas. Historical ABI 1 and intermediate ABI 2
 receipts below do not establish acceptance for changed final sources.
 
+The current local authority-admission revision remains ABI 2 and uses digest
+`ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a`.
+The fingerprint now binds consent for newly introduced non-zero authority
+addresses and rejection of registered native proxies in current and pending
+authority slots. Current validation must rebuild the runtime, repackage modules
+with this digest and verify deployed bytes. An older ABI 2 digest does not
+identify this revision. Historical receipts keep their original values and
+cannot substitute for that new build and readback evidence.
+
+## Current source-built NeoExpress authority validation (2026-10-30)
+
+The current authority-admission revision was rebuilt into a complete source-built
+NeoExpress runtime. The native module build receipt is
+[`smartaccount-native-module-build-20261030-authority.json`](../reports/smartaccount-native-module-build-20261030-authority.json),
+and the successful two-build runner receipt is
+[`smartaccount-native-runner-build-20261030-authority2.json`](../reports/smartaccount-native-runner-build-20261030-authority2.json).
+The earlier failed runner attempt remains recorded separately and is not used as
+current provenance.
+
+The aggregate receipt is
+[`summary.json`](../reports/smartaccount-native-source-runtime-20261030-authority/summary.json).
+It is `PASS` with all five matrices passing: native service lifecycle, signed
+proxy and atomic rollback, configuration-root mutation, authority recovery, and
+activation-boundary validation. The individual receipts are retained beside the
+aggregate. The runtime file map matched before and after every matrix, all owned
+NeoExpress nodes stopped, and no public network was touched.
+
+The evidence is bounded. It exercises the source-built private runtime and
+persisted RPC readback for the listed scenarios; it does not prove complete
+protocol conformance, arbitrary future-plugin cleanup, cryptographic or proof
+soundness, full NeoVM semantics, compiler refinement, public deployment, or
+public artifact parity. The aggregate therefore keeps
+`fullProtocolConformanceVerified` set to `false`.
+
+## Current extended native matrix (2026-10-30)
+
+The extended source-built matrix is indexed by
+[`index.json`](../reports/smartaccount-native-extended-matrix-20261030-authority/index.json).
+It records `PASS` for five additional private NeoExpress scenarios:
+
+- MultiSig composition with real P-256 and native witnesses;
+- DailyLimit fixed and rolling accounting, prefix cleanup, and rollback;
+- SessionKey execution with real P-256 signatures, native GAS transfers, and
+  epoch cleanup;
+- zero-cap, exact-method, wildcard, regrant, and retained-signature session
+  scope rules; and
+- direct and indirect restricted-token policy, hostile queries, and rollback.
+
+The accompanying packaging receipt covers the six shipped native profiles:
+`NeoNativeVerifier`, `WhitelistHook`, `SessionKeyVerifier`, `DailyLimitHook`,
+`TokenRestrictedHook`, and `MultiSigVerifier`. Every matrix is bound to the
+current source-built runner and module-build receipts, preserves runtime-file
+parity, stops its owned nodes, and records `publicNetworksTouched: false`.
+This is scenario evidence for the native protocol boundary. It does not close
+cryptographic correctness, arbitrary-plugin liveness, full NeoVM semantics,
+C#-to-NEF refinement, MultiSig private-key independence, or public deployment
+parity.
+
+## Historical 2026-10-09 composite-profile evidence
+
 The final 2026-10-09 composite-profile runtime pins core `ff422d940a4722c361c32398c6f28c00fb7f0693`,
 node `fa35e69af130661e2ac60bffd43eb6c6c78aa7d5` and profile digest
 `4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4`.
@@ -27,10 +87,11 @@ Use [`aa-native-composite-final-runner-build-20261009.json`](../reports/aa-nativ
 for its two complete source builds (314 core, 123 node and 182 Express inputs;
 104 identical runtime files and 50 dependency archives), and
 [`aa-native-composite-final-build-proof-20261009.json`](../reports/aa-native-composite-final-build-proof-20261009.json)
-for the module, public-artifact and model evidence. The current core head changes
-only two test files after that pin; its production source tree is identical.
+for that dated module, public-artifact and model evidence. Those source-identity
+claims apply to that recorded input set, not the current authority-admission
+revision.
 
-Final execution evidence is separate:
+Execution evidence for that dated revision is separate:
 [`aa-native-final-private-runtime-20261009.json`](../reports/aa-native-final-private-runtime-20261009.json)
 records the ten-suite private matrix, selected producer bytes and retention limits;
 [`aa-native-final-sdk-runtime-20261009.json`](../reports/aa-native-final-sdk-runtime-20261009.json)
@@ -43,8 +104,8 @@ The separate `scripts/neoexpress_activation_validate.py` receipt uses
 an ordinary diagnostic contract only to exercise the
 `System.Contract.CallWithGasLimit` activation boundary, rejection path and
 budget-exhaustion behavior. It does not activate, invoke, or establish
-conformance for the native `AccountManagement` service. Native service
-lifecycle evidence is produced by the distinct native-service harness below
+conformance for the `SmartAccount` native contract. Native contract
+lifecycle evidence is produced by the distinct native-contract harness below
 and remains subject to the profile, node, upstream-review and network-activation
 gates.
 
@@ -96,27 +157,28 @@ Every field of each module's RPC NEF, including method tokens and compiler/sourc
 metadata, is reserialized and compared with the local NEF bytes. Packaged
 manifests are compared structurally. The complete runner directory and module
 build pins are checked, and independent replay uses a new chain and new keys.
-The final receipts are `docs/reports/aa-neoexpress-native-real-modules-final-20261006.json`
-and `docs/reports/aa-neoexpress-native-real-modules-replay-20261006.json`.
-Only the replay receipt pins the latest fail-closed receipt-initialization helper.
+The final and replay receipt files from that 2026-10-06 run are not present in
+this checkout, so they are historical identifiers only and are not used as
+current evidence. The current source-built receipts are listed in the
+2026-10-30 section above.
 
 This establishes the tested two-profile compatibility, not every verifier/hook,
 private-key independence, full cryptographic soundness, or compiler refinement.
 The earlier diagnostic harness scopes and evidence remain distinct below.
 
-The native-service harness activates `HF_SmartAccountV1` on a newly created,
+The native-contract harness activates `HF_SmartAccountV1` on a newly created,
 disposable NeoExpress chain before its first block. It never accepts a remote
 endpoint or an existing wallet/chain. Wallet material stays in a temporary
 chain directory and is not written to receipts. RPC is loopback-only and its
 network magic must match the created chain.
 
-This is distinct from the bounded-call diagnostic probe: the service harness
-requires a deployed native `AccountManagement`, validates its manifest identity,
+This is distinct from the bounded-call diagnostic probe: the SmartAccount native-contract harness
+requires a deployed native `SmartAccount`, validates its manifest identity,
 ABI/version/digest, and submits actual registration, operation, delayed recovery-
 address rotation and freeze transactions. Transaction receipts are read from
 persisted application logs; expected preflight faults are labelled separately.
 A deployed witness diagnostic also provides a positive custody-witness control
-and a negative service-hash witness control through persisted UserOperations. Its
+and a negative native-contract-hash witness control through persisted UserOperations. Its
 NEF script, checksum and manifest must match RPC readback byte-for-byte/structurally.
 The final account and nonce state is independently read through RPC after the
 node starts. The recorded runtime assembly hashes must remain unchanged.
@@ -174,7 +236,7 @@ validation, with its exact assembly hashes recorded. Previous overlay receipts
 remain historical evidence and are not relabelled as source-built results.
 
 `neoexpress_source_validate.py` verifies the complete two-build file map before
-and after each existing service, proxy, configuration, recovery and activation
+and after each existing native-contract, proxy, configuration, recovery and activation
 validator. It retains each original receipt unchanged as `*.raw.json`; a linked
 receipt records the verified source-build provenance instead of the older
 harnesses' fixed overlay label. VM outcomes, transactions and source hashes must
@@ -237,7 +299,7 @@ The matrix funds the script address with private GAS, then checks:
   signature are rejected before persistence, separately labelled as admission
   failures. Expected rejections are not counted as persisted rollback evidence.
 
-Receipt validation checks the exact native service, transaction hash, raw
+Receipt validation checks the exact native contract, transaction hash, raw
 application script, signer identities/scopes, block inclusion, VM result/event
 shape, and balances/cursors read over loopback RPC. Diagnostic NEF/manifest bytes
 must match deployed readback. Only child processes and temporary wallets created

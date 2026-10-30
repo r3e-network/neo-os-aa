@@ -9,7 +9,7 @@
 5. `validateBundle` rereads the network, root/config, nonce and argument hash, rejects drift, constructs exact ordered slots and simulates `validateSignature` against the bound root. It rereads the config after simulation. A rejected or faulting verifier fails closed.
 
 ```js
-const { createMultiSigClient } = require('neo-abstract-account');
+const { createMultiSigClient } = require('smart-account');
 const multisig = createMultiSigClient({ rpcUrl });
 const context = await multisig.fetchContext({ coreContractHash, accountIdHash });
 const operation = await multisig.prepareOperation({
@@ -35,7 +35,7 @@ Public V3 thresholds count verifier modules, not independent keys or people. Dif
 
 ## Configuring child credentials
 
-For cores exposing the `callVerifierChild` API — absent from the pinned deployed artifact (`contracts/build/UnifiedSmartWalletV3.manifest.json`), so source-only for now (DS-CU-202 finding F1) — `buildChildConfiguration` creates an invocation for the owner-controlled, timelocked child configuration path. It accepts only `setPublicKey(accountId, publicKey)` or `setConfig(accountId, signers, threshold)` and only direct configured children. The first call stages the exact intent and returns false; submit identical calldata after the 24-hour delay to apply it. Successful Void child configuration may return null. Changed root, child, child order, threshold or arguments restarts the delay.
+For cores exposing the `callVerifierChild` API — absent from the pinned deployed artifact (`contracts/build/SmartAccountV3.manifest.json`), so source-only for now (DS-CU-202 finding F1) — `buildChildConfiguration` creates an invocation for the owner-controlled, timelocked child configuration path. It accepts only `setPublicKey(accountId, publicKey)` or `setConfig(accountId, signers, threshold)` and only direct configured children. The first call stages the exact intent and returns false; submit identical calldata after the 24-hour delay to apply it. Successful Void child configuration may return null. Changed root, child, child order, threshold or arguments restarts the delay.
 
 `readPendingConfiguration({ context })` reads the shared verifier pending slot (`moduleHash`, `callHash`, `initiatedAt`). The slot is shared with root verifier configuration; a pending record alone does not prove it corresponds to a particular child request. Compare against the exact intended invocation and authoritative core state before owner confirmation. See [child configuration](MULTISIG_CHILD_CONFIGURATION.md) for the contract boundary. Older deployed cores do not gain this API from an SDK update.
 

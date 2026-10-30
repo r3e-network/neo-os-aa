@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
+ARTIFACTS = {"coq/SmartAccountAA.v", "coq/MultiSigPolicy.v",
              "coq/ProxyWitnessScript.v",
              "coq/OrdinaryGovernance.v",
              "coq/OrdinarySponsorship.v",
@@ -30,8 +30,8 @@ ARTIFACTS = {"coq/UnifiedSmartWalletAA.v", "coq/MultiSigPolicy.v",
              "coq/NativeSessionScope.v",
              "coq/NativeDailyPolicy.v",
              "coq/NativeRestrictedPolicy.v", "coq/NativeCompositePhase.v",
-             "tla/UnifiedSmartWalletAA.tla",
-             "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
+             "tla/SmartAccountAA.tla",
+             "tla/SmartAccountAA.cfg", "smt/aa_core.smt2"}
 # Scope is part of the fail-closed source correspondence record. Successful
 # abstract budget proofs must never be attributed to standard public Call.
 RUNTIME_PROFILES = {
@@ -40,43 +40,42 @@ RUNTIME_PROFILES = {
     "platform": {"artifactDirectory": "contracts/bin/platform", "define": "PLATFORM",
                  "verifierCall": "System.Contract.CallWithGasLimit", "verifierChildBudgetEnforced": True},
     "native": {"artifactDirectory": "explicit native build output", "define": "SMARTACCOUNT_NATIVE",
-               "core": "AccountManagement", "abiVersion": 2, "identityVersion": 1,
+               "core": "SmartAccount", "abiVersion": 2, "identityVersion": 1,
                "verifierCall": "bounded native callback", "verifierChildBudgetEnforced": True,
                "verifierBudgetDatoshi": 100000000, "hookBudgetDatoshi": 250000000},
 }
-PUBLIC_MODELS = {"coq/UnifiedSmartWalletAA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
+PUBLIC_MODELS = {"coq/SmartAccountAA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
                  "coq/OrdinaryGovernance.v",
                  "coq/OrdinarySponsorship.v",
                  "coq/OrdinaryRecovery.v",
-                 "tla/UnifiedSmartWalletAA.tla", "tla/UnifiedSmartWalletAA.cfg", "smt/aa_core.smt2"}
+                 "tla/SmartAccountAA.tla", "tla/SmartAccountAA.cfg", "smt/aa_core.smt2"}
 MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
                          ["v3", "platform"] if name in PUBLIC_MODELS else ["native"])
                   for name in sorted(ARTIFACTS)}
 # The core checkout is external: no host path is committed or trusted as identity.
-# Hash the full selected Neo source graph, not only AccountManagement partials.
+# Hash the full selected Neo source graph, not only SmartAccount partials.
 NATIVE_CORE_REQUIRED_FILES = {
     "src/Neo/Neo.csproj", "src/Neo/Hardfork.cs", "src/Neo/ProtocolSettings.cs",
     "src/Neo/SmartContract/ApplicationEngine.cs", "src/Neo/SmartContract/ApplicationEngine.Contract.cs",
     "src/Neo/SmartContract/ApplicationEngine.Runtime.cs", "src/Neo/SmartContract/Native/NativeContract.cs",
     *{"src/Neo/SmartContract/Native/" + name for name in (
-        "AccountManagement.cs", "AccountManagement.Execution.cs", "AccountManagement.Modules.cs", "AccountManagement.Keys.cs",
-        "SmartAccountProtocol.cs", "SmartAccountState.cs", "SmartAccountModulePolicy.cs",
-        "SmartAccountCanonicalJson.cs", "SmartAccountInvocationContext.cs", "SmartAccountEnvelope.cs")},
+        "SmartAccountProtocol.cs", "SmartAccountState.cs",
+        "SmartAccountInvocationContext.cs", "SmartAccountEnvelope.cs")},
 }
 
-SOURCE_FILES = {"contracts/compile.sh", "contracts/UnifiedSmartWallet.csproj",
-                "contracts/UnifiedSmartWallet.cs",
-                "contracts/UnifiedSmartWallet.VerifierChildren.cs",
-                "contracts/UnifiedSmartWallet.Execution.cs",
-                "contracts/UnifiedSmartWallet.Accounts.cs",
-                "contracts/UnifiedSmartWallet.PlatformRegistrar.cs",
-                "contracts/UnifiedSmartWallet.Admin.cs",
-                "contracts/UnifiedSmartWallet.MarketEscrow.cs",
-                "contracts/UnifiedSmartWallet.Internal.cs",
-                "contracts/UnifiedSmartWallet.Models.cs",
-                "contracts/UnifiedSmartWallet.State.cs",
-                "contracts/UnifiedSmartWallet.Escape.cs",
-                "contracts/UnifiedSmartWallet.Paymaster.cs",
+SOURCE_FILES = {"contracts/compile.sh", "contracts/SmartAccount.csproj",
+                "contracts/SmartAccount.cs",
+                "contracts/SmartAccount.VerifierChildren.cs",
+                "contracts/SmartAccount.Execution.cs",
+                "contracts/SmartAccount.Accounts.cs",
+                "contracts/SmartAccount.PlatformRegistrar.cs",
+                "contracts/SmartAccount.Admin.cs",
+                "contracts/SmartAccount.MarketEscrow.cs",
+                "contracts/SmartAccount.Internal.cs",
+                "contracts/SmartAccount.Models.cs",
+                "contracts/SmartAccount.State.cs",
+                "contracts/SmartAccount.Escape.cs",
+                "contracts/SmartAccount.Paymaster.cs",
                 "contracts/paymaster/Paymaster.cs",
                 "contracts/verifiers/VerifierPayload.cs",
                 "contracts/verifiers/SignerDomain.cs",
@@ -92,7 +91,7 @@ SOURCE_FILES = {"contracts/compile.sh", "contracts/UnifiedSmartWallet.csproj",
                 "contracts/hooks/WhitelistHook.cs",
                 "contracts/hooks/DailyLimitHook.cs",
                 "contracts/hooks/TokenRestrictedHook.cs",
-                "contracts/UnifiedSmartWallet.VerifyContext.cs",
+                "contracts/SmartAccount.VerifyContext.cs",
                 "docs/proposals/smartaccount-native-profile-v2-parameters.json",
                 "docs/proposals/smartaccount-native-profile-v2-vectors.json",
                 "scripts/native_module_profile.py", "scripts/build_native_modules.py",
@@ -200,6 +199,18 @@ CALLBACK_PLUGIN_COQ_MUTATIONS = {
     "topology-all-children-leaf": (
         "forallb (fun child => negb (composite child)) children.",
         "true."),
+    "callback-absent-hook-result": (
+        "(if hook then pre_ok else true)", "pre_ok"),
+    "callback-absent-hook-post-result": (
+        "(if hook then hook_post_ok else true)", "hook_post_ok"),
+    "callback-absent-verifier-result": (
+        "(if verifier then verifier_post_ok else true)", "verifier_post_ok"),
+    "callback-installed-hook-result": (
+        "(if hook then pre_ok else true)", "true"),
+    "callback-installed-hook-post-result": (
+        "(if hook then hook_post_ok else true)", "true"),
+    "callback-installed-verifier-result": (
+        "(if verifier then verifier_post_ok else true)", "true"),
 }
 ORDINARY_GOVERNANCE_COQ_MUTATIONS = {
     # These mutations remove one source-candidate owner-rotation invariant.
@@ -446,40 +457,57 @@ SIGNER_DOMAIN_SEPARATION_COQ_MUTATIONS = {
         "    (domain_scheme (signature_domain expected)) &&",
         "true &&"),
 }
-ABI_MANIFEST_PROJECTION_COQ_MUTATIONS = {
-    "abi-requires-initializer": (
-        "Nat.eqb (length manifest) (S (length source)).",
-        "Nat.eqb (length manifest) (length source)."),
-    "abi-requires-unique-dispatch-keys": (
-        "unique_keys (map dispatch_key_manifest manifest) &&",
-        "true &&"),
-    "abi-requires-every-manifest-method": (
-        "manifest_methods_match source manifest &&",
-        "true &&"),
-    "abi-requires-safe-flag-equality": (
-        "Bool.eqb (manifest_safe manifest) (source_safe source).",
-        "true."),
-}
-NEO_VM_CONTINUATION_COQ_MUTATIONS = {
-    "neo-vm-child-budget-bound": (
-        "if requested <=? parent then Some requested else None.",
-        "if true then Some requested else None."),
-    "neo-vm-hardfork-gate": (
-        "if callback_gas_cap_enabled config\n          then match callback_budget",
-        "if true\n          then match callback_budget"),
-    "neo-vm-loadscript-continuation": (
-        "          push_continuation state target\n      | ICallback",
-        "          mkVmState target (vm_stack state) (vm_continuations state)\n            (vm_budget state) (vm_storage state) Running\n      | ICallback"),
-    "neo-vm-callt-return-address": (
-        "Definition push_continuation (state : VmState) (target : nat) : VmState :=\n  mkVmState target (vm_stack state) (S (vm_pc state) :: vm_continuations state)",
-        "Definition push_continuation (state : VmState) (target : nat) : VmState :=\n  mkVmState target (vm_stack state) (vm_pc state :: vm_continuations state)"),
-    "neo-vm-rollback-storage": (
-        "(vm_budget final) (vm_storage initial) Faulted",
-        "(vm_budget final) (vm_storage final) Faulted"),
-    "neo-vm-ancestor-charge": (
-        "then Some (map (fun budget => budget - amount) budgets)",
-        "then Some budgets"),
-}
+ABI_MANIFEST_PROJECTION_COQ_MUTATIONS = {'abi-requires-initializer': ('Nat.eqb (length manifest) (S (length source)).',
+                              'Nat.eqb (length manifest) (length source).'),
+ 'abi-requires-unique-dispatch-keys': ('unique_keys (map dispatch_key_manifest manifest) &&', 'true &&'),
+ 'abi-requires-every-manifest-method': ('manifest_methods_match source manifest &&', 'true &&'),
+ 'abi-requires-safe-flag-equality': ('Bool.eqb (manifest_safe manifest) (source_safe source).', 'true.'),
+ 'abi-requires-ordered-parameter-types': ('parameter_types_eqb (manifest_parameter_types manifest)\n'
+                                          '    (source_parameter_types source) &&',
+                                          'true &&'),
+ 'abi-requires-parameter-order': ('parameter_types_eqb (manifest_parameter_types manifest)\n'
+                                  '    (source_parameter_types source) &&',
+                                  'forallb (fun parameter => existsb (Nat.eqb parameter) '
+                                  '(source_parameter_types source))\n'
+                                  '    (manifest_parameter_types manifest) &&'),
+ 'abi-requires-consistent-arities': ('source_descriptor_valid source &&\n'
+                                     '  manifest_descriptor_valid manifest &&',
+                                     'true &&\n  true &&'),
+ 'abi-requires-empty-initializer-parameters': ('parameter_types_eqb (manifest_parameter_types method) '
+                                               '[] &&',
+                                               'true &&')}
+NEO_VM_CONTINUATION_COQ_MUTATIONS = {'neo-vm-child-budget-bound': ('if (0 <? requested) && (requested <=? parent) then Some requested else '
+                               'None.',
+                               'if (0 <? requested) then Some requested else None.'),
+ 'neo-vm-positive-child-budget': ('if (0 <? requested) && (requested <=? parent) then Some requested '
+                                  'else None.',
+                                  'if requested <=? parent then Some requested else None.'),
+ 'neo-vm-ancestor-admission': ('if forallb (fun budget => requested <=? budget) ancestors', 'if true'),
+ 'neo-vm-hardfork-gate': ('if callback_gas_cap_enabled config\n'
+                          '          then match callback_chain_budget',
+                          'if true\n          then match callback_chain_budget'),
+ 'neo-vm-loadscript-continuation': ('          push_continuation state target\n      | ICallback',
+                                    '          mkVmState target (vm_stack state) (vm_continuations '
+                                    'state)\n'
+                                    '            (vm_budget state) (vm_ancestor_budgets state) '
+                                    '(vm_storage state) Running\n'
+                                    '      | ICallback'),
+ 'neo-vm-callt-return-address': ('(SharedContinuation (S (vm_pc state)) :: vm_continuations state)',
+                                 '(SharedContinuation (vm_pc state) :: vm_continuations state)'),
+ 'neo-vm-rollback-storage': ('(vm_budget final) (vm_ancestor_budgets final) (vm_storage initial) '
+                             'Faulted',
+                             '(vm_budget final) (vm_ancestor_budgets final) (vm_storage final) Faulted'),
+ 'neo-vm-ancestor-charge': ('then Some (map (fun budget => budget - amount) budgets)',
+                            'then Some budgets'),
+ 'neo-vm-step-ancestor-charge': ('match ancestor_charge (vm_budget state :: vm_ancestor_budgets state) '
+                                 'amount with',
+                                 'match ancestor_charge [vm_budget state] amount with'),
+ 'neo-vm-bounded-return-parent': ('mkVmState continuation (vm_stack state) rest parent ancestors',
+                                  'mkVmState continuation (vm_stack state) rest (vm_budget state) '
+                                  'ancestors'),
+ 'neo-vm-bounded-return-ancestors': ('mkVmState continuation (vm_stack state) rest parent ancestors',
+                                     'mkVmState continuation (vm_stack state) rest parent []'),
+ 'neo-vm-atomic-chain-check': ('if forallb (fun budget => amount <=? budget) budgets', 'if true')}
 WITNESS_RULE_REFINEMENT_COQ_MUTATIONS = {
     # These mutations remove one correspondence condition from the executable
     # fault-aware evaluator.  The refinement theorem must fail closed rather
@@ -533,20 +561,36 @@ NATIVE_INTEGER_DOMAIN_COQ_MUTATIONS = {
         "| None => None\n      end\n  end.",
         "| None => Some cursors\n      end\n  end."),
 }
-NATIVE_LIFECYCLE_COQ_MUTATIONS = {
-    "native-config-root-postcheck": ("Z.eqb r root_pin && Z.eqb c child_pin", "true && Z.eqb c child_pin"),
-    "native-config-child-postcheck": ("Z.eqb r root_pin && Z.eqb c child_pin", "Z.eqb r root_pin && true"),
-    "native-config-missing-binding": ("| _, _ => false\n  end.", "| _, _ => true\n  end."),
-    "native-config-fault-rollback": ("then (true, staged) else (false, before).", "then (true, staged) else (false, staged)."),
-    "native-config-success-commit": ("then (true, staged) else (false, before).", "then (true, before) else (false, before)."),
-    "native-lifecycle-frozen-config": ("active s && negb (pending_recovery s)", "true && negb (pending_recovery s)"),
-    "native-lifecycle-recovery-config": ("active s && negb (pending_recovery s)", "active s && true"),
-    "native-lifecycle-joint-unfreeze": ("(negb (has_recovery s) || recovery)", "true"),
-    "native-lifecycle-cancel-boundary": ("(custody && (now <? maturity))", "(custody && (now <=? maturity))"),
-    "native-lifecycle-clear-recovery": ("                  false false false false)", "                  false false false (pending_recovery s))"),
-    "native-lifecycle-epoch-increment": ("(epoch s + 1)", "(epoch s + 2)"),
-    "native-lifecycle-epoch-overflow": ("if (0 <=? epoch s) && (epoch s <? epoch_limit - 1) then", "if (0 <=? epoch s) && (epoch s <=? epoch_limit - 1) then"),
-}
+NATIVE_LIFECYCLE_COQ_MUTATIONS = {'native-config-root-postcheck': ('Z.eqb r root_pin && Z.eqb c child_pin', 'true && Z.eqb c child_pin'),
+ 'native-config-child-postcheck': ('Z.eqb r root_pin && Z.eqb c child_pin', 'Z.eqb r root_pin && true'),
+ 'native-config-missing-binding': ('| _, _ => false\n  end.', '| _, _ => true\n  end.'),
+ 'native-config-fault-rollback': ('then (true, staged) else (false, before).',
+                                  'then (true, staged) else (false, staged).'),
+ 'native-config-success-commit': ('then (true, staged) else (false, before).',
+                                  'then (true, before) else (false, before).'),
+ 'native-lifecycle-frozen-config': ('active s && negb (pending_recovery s)',
+                                    'true && negb (pending_recovery s)'),
+ 'native-lifecycle-recovery-config': ('active s && negb (pending_recovery s)', 'active s && true'),
+ 'native-lifecycle-joint-unfreeze': ('(negb (has_recovery s) || recovery)', 'true'),
+ 'native-lifecycle-cancel-boundary': ('(custody && (now <? maturity))',
+                                      '(custody && (now <=? maturity))'),
+ 'native-lifecycle-clear-recovery': ('                  false false false false)',
+                                     '                  false false false (pending_recovery s))'),
+ 'native-lifecycle-epoch-increment': ('(epoch s + 1)', '(epoch s + 2)'),
+ 'native-lifecycle-epoch-overflow': ('if (0 <=? epoch s) && (epoch s <? epoch_limit - 1) then',
+                                     'if (0 <=? epoch s) && (epoch s <=? epoch_limit - 1) then'),
+ 'native-authority-registered-proxy': ['fun address => negb (registered_proxy address) &&',
+                                       'fun address => true &&'],
+ 'native-authority-new-recipient-consent': ['(authority_member prior address || witnessed address)',
+                                            '(authority_member prior address || true)'],
+ 'native-authority-retained-consent': ['(authority_member prior address || witnessed address)',
+                                       '(false || witnessed address)'],
+ 'native-authority-zero-exemption': ['filter (fun address => negb (Z.eqb address 0)) (authority_slots '
+                                     's).',
+                                     'filter (fun address => true) (authority_slots s).'],
+ 'native-authority-pending-projection': ['optional_authority (pending_rotation_authority s);\n'
+                                         '   optional_authority (pending_custody_authority s)',
+                                         '0;\n   0']}
 NATIVE_DISPATCH_COQ_MUTATIONS = {
     "native-dispatch-missing-activation": ("| None => false end.", "| None => true end."),
     "native-dispatch-future-height": ("Some boundary => (boundary <=? height)", "Some boundary => true"),
@@ -572,6 +616,20 @@ NATIVE_INVOCATION_COQ_MUTATIONS = {
     "invocation-fault-reset": ("Definition on_fault (_ : option Grant) : option Grant := None.", "Definition on_fault (active : option Grant) : option Grant := active."),
     "invocation-config-delegation": ("Definition may_delegate (p : nat) : bool := p <? 3.", "Definition may_delegate (p : nat) : bool := p <? 4."),
     "invocation-witness-substitution": ("grant && original_witness.", "grant || original_witness."),
+    "invocation-role-phase-admission": (
+        "  valid_phase k p && trigger_allowed trigger p &&", "  true && trigger_allowed trigger p &&"),
+    "invocation-trigger-admission": (
+        "  valid_phase k p && trigger_allowed trigger p &&", "  valid_phase k p && true &&"),
+    "invocation-verifier-preexecute": (
+        "if k =? 0 then (p =? 0) || (p =? 2)", "if k =? 0 then (p =? 0) || (p =? 1) || (p =? 2)"),
+    "invocation-hook-validation": (
+        "else if k =? 1 then (p =? 1) || (p =? 2)", "else if k =? 1 then (p =? 0) || (p =? 1) || (p =? 2)"),
+    "invocation-unknown-phase": (
+        "if k =? 0 then (p =? 0) || (p =? 2)", "if k =? 0 then (p =? 5) || (p =? 0) || (p =? 2)"),
+    "invocation-verification-mutable-phase": (
+        "| Verification => p =? 0", "| Verification => true"),
+    "invocation-other-trigger": (
+        "| OtherTrigger => false", "| OtherTrigger => true"),
 }
 NATIVE_SESSION_COQ_MUTATIONS = {
     "session-rotation-reset-spent": ("then Some (Policy true (consumed s) (Some now))", "then Some (Policy true 0 (Some now))"),
@@ -737,7 +795,7 @@ COQ_MODULES = {
     "NativeSessionScope.v": NATIVE_SESSION_SCOPE_COQ_MUTATIONS,
     "NativeDailyPolicy.v": NATIVE_DAILY_COQ_MUTATIONS,
     "NativeSessionPolicy.v": NATIVE_SESSION_COQ_MUTATIONS,
-    "UnifiedSmartWalletAA.v": COQ_MUTATIONS,
+    "SmartAccountAA.v": COQ_MUTATIONS,
     "OrdinaryGovernance.v": ORDINARY_GOVERNANCE_COQ_MUTATIONS,
     "OrdinarySponsorship.v": ORDINARY_SPONSORSHIP_COQ_MUTATIONS,
     "OrdinaryRecovery.v": ORDINARY_RECOVERY_COQ_MUTATIONS,
@@ -841,7 +899,7 @@ def check_inventory(root=ROOT):
 
 def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
     """Narrow reviewed source guards, not a C#/VM refinement theorem."""
-    admin = (repo_root / "contracts/UnifiedSmartWallet.Admin.cs").read_text()
+    admin = (repo_root / "contracts/SmartAccount.Admin.cs").read_text()
     model = (repo_root / "formal/coq/OrdinaryGovernance.v").read_text()
     factors = re.search(r"MinUpgradeDelayMs\s*=\s*(\d+)L\s*\*\s*(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*;", admin)
     require(factors is not None, "Ordinary governance source delay expression changed")
@@ -851,11 +909,11 @@ def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
     model_delay = re.search(r"Definition min_upgrade_delay : Z := (\d+)\.", model)
     require(model_delay is not None and source_delay == int(model_delay.group(1)) == 604800000,
             "Ordinary governance millisecond delay correspondence changed")
-    registrar = (repo_root / "contracts/UnifiedSmartWallet.PlatformRegistrar.cs").read_text()
+    registrar = (repo_root / "contracts/SmartAccount.PlatformRegistrar.cs").read_text()
     require("bool owner = state.BackupOwner != UInt160.Zero && Runtime.CheckWitness(state.BackupOwner);" in registrar,
             "Ordinary owner cancellation witness source guard changed")
     for name in ("Escape", "MarketEscrow"):
-        source = (repo_root / f"contracts/UnifiedSmartWallet.{name}.cs").read_text()
+        source = (repo_root / f"contracts/SmartAccount.{name}.cs").read_text()
         require("Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingPlatformOwnerRotation, (byte[])accountId));" in source,
                 f"Ordinary pending rotation cleanup source guard missing: {name}")
     return {"delayMilliseconds": source_delay, "ownerWitnessIndependentOfCaller": True,
@@ -864,7 +922,7 @@ def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
 
 def check_ordinary_sponsorship_correspondence(repo_root=ROOT.parent):
     """Bind the cumulative model to selected reviewed source expressions/order."""
-    source = (repo_root / "contracts/UnifiedSmartWallet.Paymaster.cs").read_text()
+    source = (repo_root / "contracts/SmartAccount.Paymaster.cs").read_text()
     for fragment in ("if (budget.TransactionHash != transactionHash)", "budget.Reserved = 0;",
                      "BigInteger.Max(actualCost - budget.Reserved, 0) + estimationFlag * requested",
                      "BigInteger settled = BigInteger.Min(requested, cap);", "budget.Reserved += settled;",
@@ -882,7 +940,7 @@ def check_ordinary_sponsorship_correspondence(repo_root=ROOT.parent):
 
 def check_ordinary_recovery_correspondence(repo_root=ROOT.parent):
     """Selected guards only; arbitrary storage/entrypoint refinement remains external."""
-    source = (repo_root / "contracts/UnifiedSmartWallet.Escape.cs").read_text()
+    source = (repo_root / "contracts/SmartAccount.Escape.cs").read_text()
     begin = source.index("public static void FinalizeEscapeToOwner(")
     end = source.index("public static void InitiateEscape(", begin)
     recovery = source[begin:end]
@@ -895,7 +953,7 @@ def check_ordinary_recovery_correspondence(repo_root=ROOT.parent):
             "Ordinary irreversible installation latch source guard changed")
     require("Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_OwnerOnlyRecovery" not in source,
             "Ordinary recovery source may not remove permanent latch")
-    accounts = (repo_root / "contracts/UnifiedSmartWallet.Accounts.cs").read_text()
+    accounts = (repo_root / "contracts/SmartAccount.Accounts.cs").read_text()
     for argument in ("newHookId", "pending.NewHookId", "newVerifier", "pending.NewVerifier"):
         require(f"AssertPluginInstallationAllowed(accountId, {argument});" in accounts,
                 "Ordinary module installation source guard missing: " + argument)
@@ -1322,17 +1380,17 @@ def main():
                             f"Coq mutation escaped or failed without proof rejection: {name}")
                 report["coqMutationsRejected"][module] = list(mutations)
             command = [java, "-Xmx1g", "-XX:+UseParallelGC", "-cp", jar, "tlc2.TLC",
-                       "-workers", "1", "-coverage", "1", "-config", "UnifiedSmartWalletAA.cfg",
-                       "UnifiedSmartWalletAA.tla"]
+                       "-workers", "1", "-coverage", "1", "-config", "SmartAccountAA.cfg",
+                       "SmartAccountAA.tla"]
             rc, out = run(command, work, logs, "tlc")
             report["tlc"] = parse_tlc(out, rc)
             report["toolVersions"]["tlc"] = out.splitlines()[0]
-            model = (work / "UnifiedSmartWalletAA.tla").read_text()
+            model = (work / "SmartAccountAA.tla").read_text()
             for name, (old, new, invariant) in TLA_MUTATIONS.items():
                 directory = work / ("tla-" + name)
                 directory.mkdir()
-                shutil.copyfile(work / "UnifiedSmartWalletAA.cfg", directory / "UnifiedSmartWalletAA.cfg")
-                (directory / "UnifiedSmartWalletAA.tla").write_text(replace_once(model, old, new))
+                shutil.copyfile(work / "SmartAccountAA.cfg", directory / "SmartAccountAA.cfg")
+                (directory / "SmartAccountAA.tla").write_text(replace_once(model, old, new))
                 rc, out = run(command, directory, logs, "tlc-" + name + "-mutant")
                 require(rc != 0 and f"Invariant {invariant} is violated" in out,
                         f"TLC mutation did not produce the expected counterexample: {name}")

@@ -45,7 +45,7 @@ with `getAccountState(accountHashOrAddress)`:
 
 **Via SDK:**
 ```javascript
-const client = new AbstractAccountClient(rpcUrl, masterContractHash);
+const client = new SmartAccountClient(rpcUrl, masterContractHash);
 
 const state = await client.getAccountState(accountIdHash);
 ```
@@ -86,7 +86,7 @@ const accountId = client.deriveRegistrationAccountIdHash({
 ```
 
 **Key behaviors:**
-- Registration requires the backup owner's witness (`contracts/UnifiedSmartWallet.Accounts.cs:75`)
+- Registration requires the backup owner's witness (`contracts/SmartAccount.Accounts.cs:75`)
 - Every account carries its own verifier, hook and backup owner; there is no shared governance state
 - Single transaction reduces fees
 - Atomic operation: all accounts created or none

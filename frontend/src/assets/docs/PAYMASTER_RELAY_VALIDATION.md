@@ -38,7 +38,7 @@ Refresh note on 2026-05-18:
 
 ## Scope
 
-This historical report records end-to-end `AbstractAccount -> Morpheus paymaster pre-authorization -> AA relay -> Neo N3 execution` validation on testnet, plus the current runtime-credential gates that determine whether the same path is available from a deployed frontend.
+This historical report records end-to-end `SmartAccount -> Morpheus paymaster pre-authorization -> AA relay -> Neo N3 execution` validation on testnet, plus the current runtime-credential gates that determine whether the same path is available from a deployed frontend.
 
 Validated components:
 

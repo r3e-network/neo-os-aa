@@ -27,7 +27,7 @@ class PublicProfileTest(unittest.TestCase):
                     chain.start()
                     chain.fund(["deployer", "owner", "buyer", "relay"], 3000)
                     artifacts = ROOT / "contracts/bin/v3"
-                    core = chain.deploy("UnifiedSmartWalletV3", artifacts / "UnifiedSmartWalletV3.nef")
+                    core = chain.deploy("SmartAccountV3", artifacts / "SmartAccountV3.nef")
                     chain.deploy("MockTransferTarget", artifacts / "MockTransferTarget.nef")
                     chain.deploy("WebAuthnVerifier", artifacts / "verifiers/WebAuthnVerifier.nef", data_core=core)
                     context = Ctx(chain, "public", workdir)

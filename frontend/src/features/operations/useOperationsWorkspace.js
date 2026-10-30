@@ -41,7 +41,7 @@ export function createOperationsWorkspace() {
 
   const isDraftImmutable = computed(() => Boolean(share.value.draftId));
 
-  function loadAbstractAccount(input) {
+  function loadSmartAccount(input) {
     account.value = {
       ...account.value,
       ...deriveAccountForms(input),
@@ -162,7 +162,7 @@ export function createOperationsWorkspace() {
     share,
     broadcast,
     isDraftImmutable,
-    loadAbstractAccount,
+    loadSmartAccount,
     setOperationBody,
     setTransactionBody,
     setSignerRequirements,

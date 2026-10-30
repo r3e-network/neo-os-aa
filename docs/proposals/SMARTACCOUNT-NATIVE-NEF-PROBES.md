@@ -4,8 +4,8 @@ The examples and recorded coverage below refer to the historical ABI 1 native
 probe. A current ABI 2 run must use the four-argument execution entrypoints,
 14-field state and tagged authorityEpoch namespaces, plus current source/build
 receipts. The separate `tests/NativeEpochProbe` gate executes compiled native
-modules on the public test VM with a test-only epoch service; it is not this
-source-built AccountManagement runtime and does not replace its chain evidence.
+modules on the public test VM with a test-only SmartAccount ABI fixture; it is not this
+source-built SmartAccount runtime and does not replace its chain evidence.
 
 ## Purpose and boundary
 
@@ -20,7 +20,7 @@ output path. Runtime and module build receipts must be checked by its launcher
 before execution and again afterwards. The runtime is loaded locally, without
 public peers, wallets, RPC or network writes. No production artifact or callback
 grant is replaced. Registration, configuration delay and callback dispatch use
-the actual AccountManagement native contract.
+the actual SmartAccount native contract.
 
 ## Observations and failure handling
 
@@ -104,7 +104,7 @@ positive pre-balance must reject as outflow, not as a type error.
 Direct calls must fail without a phase grant. Malformed callback Arrays may be
 injected at the native diagnostic boundary to test the hook's defensive shape
 guards, without weakening the actual native parser. Such injections are not
-claims that a correctly executing native service produces those shapes.
+claims that a correctly executing native contract produces those shapes.
 
 ## Compiler source mapping
 

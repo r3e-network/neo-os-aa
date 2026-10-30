@@ -1,0 +1,190 @@
+{
+  "schema": "aa-plugin-provenance/v1",
+  "note": [
+    "AssertV3Verifier and AssertV3Hook read a deployed contract's manifest, so the plugin admission check is a claim about bytes rather than about a source file. These bytes are pinned by hash below, and the gate reads the hashes.",
+    "That the pinned compiler turns these sources into these bytes is a recorded build step, not something any run re-derives. build-plugins.sh is that step: it refuses to run against a different compiler and exits non-zero if any artifact it produces hashes differently from what is written here. This is the same standing contracts/bin/v3 has for the main contract, and no stronger.",
+    "Nothing here proves the plugins are correct, or that they are what a deployed chain would run. It says which bytes the scenario deployed and where they came from.",
+    "The fourth entry is not a plugin. It is the caller side of the platform-registrar channel: the account only runs its registrar-gated calls when the caller is the registrar it recorded, so measuring that channel means deploying a contract that calls back. Same rule applies to it - name the bytes."
+  ],
+  "compiler": {
+    "name": "nccs",
+    "version": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697",
+    "path": "~/.dotnet/tools/nccs",
+    "frameworkPackage": "Neo.SmartContract.Framework 3.10.1",
+    "note": "The NEF header names the compiler and its code generation decides the bytes, so an artifact built by anything else is not the artifact this file pins."
+  },
+  "rebuild": "formal/refinement/plugins/build-plugins.sh",
+  "plugins": [
+    {
+      "name": "MultiSigVerifier",
+      "project": "contracts/verifiers/MultiSigVerifier.csproj",
+      "projectSha256": "7ea0f896fc2348ef3e46c605f013144c91ec4a700d22ce9812106a5ed8bde1f0",
+      "sources": [
+        {
+          "path": "contracts/verifiers/VerifierAuthority.cs",
+          "sha256": "87b4bb35def35d072f7c190780f82626fd2b8dbf6ed10f7b973e7f1d42993c95"
+        },
+        {
+          "path": "contracts/verifiers/VerifierModels.cs",
+          "sha256": "2dd36b691fdaf4ba015eb27205dd20b776d7123a0f9e4bfe771d1eca7c0bdd3d"
+        },
+        {
+          "path": "contracts/verifiers/SignerDomain.cs",
+          "sha256": "8cf186502b7b45654ee46902f05fa848888ad940bbea4959a36717e84972a4cf"
+        },
+        {
+          "path": "contracts/verifiers/MultiSigVerifier.cs",
+          "sha256": "457ae8e3ac6f1e591c952877f72519224f15a934fb90120a09155afaf529c891"
+        }
+      ],
+      "artifacts": {
+        "nef": {
+          "file": "MultiSigVerifier.nef",
+          "sha256": "54a76816bd7a3e32061097fbe39b2519d34af28229402ed568a2f1580a719e67"
+        },
+        "manifest": {
+          "file": "MultiSigVerifier.manifest.json",
+          "sha256": "e219eacf1ef42a7c365d6c9f95041508fd6ee86674db854625b65064db8db362"
+        }
+      },
+      "manifestName": "MultiSigVerifier",
+      "abiMethods": 19,
+      "permissions": 0
+    },
+    {
+      "name": "NeoDIDCredentialHook",
+      "project": "contracts/hooks/NeoDIDCredentialHook.csproj",
+      "projectSha256": "3729ca53d3d612c09bc14ad0eed3795ee1f748d970e0fd42b3e1d2086be8e6a4",
+      "sources": [
+        {
+          "path": "contracts/hooks/HookAuthority.cs",
+          "sha256": "110ef6756b7b8208a912bd88cac067c519c5811e3d5419f27e2c79e8c4ac20dd"
+        },
+        {
+          "path": "contracts/hooks/NeoDIDCredentialHook.cs",
+          "sha256": "766c002d6db957a1b8f0bb19e02349851abc8872b51feb8ec65dfdd772541074"
+        }
+      ],
+      "artifacts": {
+        "nef": {
+          "file": "NeoDIDCredentialHook.nef",
+          "sha256": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c"
+        },
+        "manifest": {
+          "file": "NeoDIDCredentialHook.manifest.json",
+          "sha256": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8"
+        }
+      },
+      "manifestName": "NeoDIDCredentialHook",
+      "abiMethods": 25,
+      "permissions": 0
+    },
+    {
+      "name": "MultiHook",
+      "project": "contracts/hooks/MultiHook.csproj",
+      "projectSha256": "07d13f326572c6c0004eb842760419cf551e1d169166d58917e89864958cba22",
+      "sources": [
+        {
+          "path": "contracts/hooks/HookAuthority.cs",
+          "sha256": "110ef6756b7b8208a912bd88cac067c519c5811e3d5419f27e2c79e8c4ac20dd"
+        },
+        {
+          "path": "contracts/hooks/MultiHook.cs",
+          "sha256": "124c27e8627f3c1229989b5f59f265aeacf503d5b991f578e56fa03b8c18b2a1"
+        }
+      ],
+      "artifacts": {
+        "nef": {
+          "file": "MultiHook.nef",
+          "sha256": "635b03965425d57bb34eb7831dc144f073ab3ed0d3b9adce3fb66a255222655b"
+        },
+        "manifest": {
+          "file": "MultiHook.manifest.json",
+          "sha256": "1f93c73a7282d85aa37c63af04b49053426467ae52092898e250f1b2c965c81e"
+        }
+      },
+      "manifestName": "MultiHook",
+      "abiMethods": 21,
+      "permissions": 0
+    },
+    {
+      "name": "PlatformRegistrarMock",
+      "project": "contracts/mocks/PlatformRegistrarMock.csproj",
+      "projectSha256": "32c7ede85254e723e71d1c63a67ffb6e75c362be2a79289f7fbbdc7d261b1b00",
+      "sources": [
+        {
+          "path": "contracts/mocks/PlatformRegistrarMock.cs",
+          "sha256": "1f2f22178c850cd06717283a4c9cfc6f74184e8b96e5cb7395e359108d547728"
+        }
+      ],
+      "artifacts": {
+        "nef": {
+          "file": "PlatformRegistrarMock.nef",
+          "sha256": "fdd56fe4ccd14f29dfb4527450b4a9dd8b18342fa1c60174626e90dbf9d36f42"
+        },
+        "manifest": {
+          "file": "PlatformRegistrarMock.manifest.json",
+          "sha256": "2c5b922ef308391f413b8aaa0a484ee85cfd29d0681647e16f0826b05594bb0a"
+        }
+      },
+      "manifestName": "PlatformRegistrarMock",
+      "abiMethods": 5,
+      "permissions": 8,
+      "why": "Not a plugin. The account's platform-registrar channel asserts that its caller is the registrar, so `registerPlatformAccount` and the platform owner-rotation calls only execute when a second contract calls them. This mock is that second contract, and pinning its bytes is what makes the scenario's claim about who called the account a claim about an artifact."
+    },
+    {
+      "name": "MockVerifierCore",
+      "project": "contracts/mocks/MockVerifierCore.csproj",
+      "projectSha256": "d8e4363563ececd72ab5109f1747e44443406b497dca7bc4489558fabba9d03c",
+      "sources": [
+        {
+          "path": "contracts/mocks/MockVerifierCore.cs",
+          "sha256": "b8f2e36e883de5021a57a3a3400c5920e355aa36a4acafcc977b16b8b506c2ef"
+        }
+      ],
+      "artifacts": {
+        "nef": {
+          "file": "MockVerifierCore.nef",
+          "sha256": "41d74e71eeb590e0e2c856e14fffa748054041c749a44b3db24e4d0f2b290911"
+        },
+        "manifest": {
+          "file": "MockVerifierCore.manifest.json",
+          "sha256": "6d8f9b7c3555ee32a07ecb6552cae3975868dddff91809292c75e17569e44120"
+        }
+      },
+      "manifestName": "MockVerifierCore",
+      "abiMethods": 24,
+      "permissions": "all",
+      "why": "Not a plugin either: it is the caller this scenario uses as the market. It exposes forward(target, method, args) and is permitted to call anything, so a listing can be opened, cancelled and settled with the market itself as the calling script - which is the only shape those entries accept."
+    },
+    {
+      "name": "AAPaymaster",
+      "project": "contracts/paymaster/Paymaster.csproj",
+      "projectSha256": "db4eb4f1980fcaf349d6ae42e081773bcb7d28187e3188275a263b2aeae7a89a",
+      "sources": [
+        {
+          "path": "contracts/paymaster/Paymaster.cs",
+          "sha256": "489ae595a81155d2aa0f676208de06c9f4c744607bf96078a1619b6c820e9f7c"
+        },
+        {
+          "path": "contracts/paymaster/PaymasterAuthority.cs",
+          "sha256": "53c12d10fc9f70b8c4895611a0f4f93adbba6d12f56f8187293adc96814b0451"
+        }
+      ],
+      "artifacts": {
+        "nef": {
+          "file": "AAPaymaster.nef",
+          "sha256": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a"
+        },
+        "manifest": {
+          "file": "AAPaymaster.manifest.json",
+          "sha256": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54"
+        }
+      },
+      "manifestName": "AAPaymaster",
+      "abiMethods": 27,
+      "permissions": "all",
+      "why": "The sponsor side of the sponsored paths. executeSponsoredUserOp asserts that the paymaster's authorizedCore points back at this account before it executes anything, so with a deployed paymaster the run reaches that assertion; re-pointing it is an admin call on the paymaster, which is why its signer is pinned here too."
+    }
+  ]
+}

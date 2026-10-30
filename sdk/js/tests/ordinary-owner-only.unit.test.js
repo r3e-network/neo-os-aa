@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { AbstractAccountClient } = require('../src/index');
+const { SmartAccountClient } = require('../src/index');
 const stateFixture = require('./fixtures/ordinary-owner-only-contract-state.json');
 
 const CORE = '11'.repeat(20);
@@ -8,7 +8,7 @@ const ACCOUNT = '22'.repeat(20);
 function fixture() { return structuredClone(stateFixture); }
 function clientWithState(state = fixture(), result = { state: 'HALT', stack: [{ type: 'Boolean', value: false }] }) {
   const calls = [];
-  const client = new AbstractAccountClient('http://127.0.0.1:9', CORE);
+  const client = new SmartAccountClient('http://127.0.0.1:9', CORE);
   client.rpcClient = {
     async send(method, params) {
       calls.push({ method, params });
@@ -29,7 +29,7 @@ function clientWithState(state = fixture(), result = { state: 'HALT', stack: [{ 
 }
 
 test('ordinary owner-only payload is a direct core call with one account-id Hash160', () => {
-  const client = new AbstractAccountClient('http://127.0.0.1:9', CORE);
+  const client = new SmartAccountClient('http://127.0.0.1:9', CORE);
   const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: '0x' + ACCOUNT });
   assert.equal(payload.scriptHash, CORE);
   assert.equal(payload.operation, 'finalizeEscapeToOwner');
@@ -124,7 +124,7 @@ test('ordinary status query consumes actual JSON-RPC contract-state and Boolean 
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
-  const client = new AbstractAccountClient(`http://127.0.0.1:${server.address().port}`, CORE);
+  const client = new SmartAccountClient(`http://127.0.0.1:${server.address().port}`, CORE);
   assert.deepEqual(await client.getOwnerOnlyRecoveryStatus(ACCOUNT), { supported: true, ownerOnlyRecovery: true });
   assert.deepEqual(requests.map(({ method }) => method), ['getcontractstate', 'invokefunction']);
   assert.deepEqual(requests[0].params, ['0x' + CORE]);

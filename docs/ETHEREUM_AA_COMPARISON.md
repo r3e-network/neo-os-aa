@@ -19,7 +19,7 @@ This document maps Ethereum ERC-4337 (Account Abstraction) and ERC-7579 (Modular
 
 | Ethereum Concept | Neo N3 Equivalent | Implementation Notes |
 | --- | --- | --- |
-| **EntryPoint Contract** | `UnifiedSmartWallet` | Global singleton contract serving all accounts. No per-account deployment needed. |
+| **EntryPoint Contract** | `SmartAccount` | Global singleton contract serving all accounts. No per-account deployment needed. |
 | **Smart Account** | Virtual Account (`accountId`) | Deterministic address derived from `verify(accountId)` script, not a deployed contract. |
 | **WalletContract** | N/A | Neo uses native `CheckWitness` with `VerifyContext` instead of separate wallet contract. |
 | **Paymaster** | `AAPaymaster` Contract + Off-chain Morpheus | On-chain Paymaster contract for trustless sponsorship with deposit/policy/settlement, plus optional off-chain Morpheus integration. |
@@ -98,7 +98,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Relay[Relay / Client] --> Core[UnifiedSmartWallet]
+    Relay[Relay / Client] --> Core[SmartAccount]
     Core --> Execute[executeUserOp]
     Execute --> Auth{Verifier or BackupOwner?}
     Auth -- Yes --> Nonce[Consume Nonce]
@@ -302,8 +302,8 @@ stateDiagram-v2
 ```
 
 The two deployed entrypoints take the account id, and `finalizeEscape` also takes the verifier the
-account falls back to (`contracts/build/UnifiedSmartWalletV3.manifest.json`; implemented in
-`contracts/UnifiedSmartWallet.Escape.cs`, where the C# methods are spelled with a leading capital —
+account falls back to (`contracts/build/SmartAccountV3.manifest.json`; implemented in
+`contracts/SmartAccount.Escape.cs`, where the C# methods are spelled with a leading capital —
 that form names no exported method, which is why it is not code-formatted here).
 
 **Features:**
@@ -334,7 +334,7 @@ that form names no exported method, which is why it is not code-formatted here).
 
 ## 10. Migration Guide for Ethereum AA Developers
 
-### From Ethereum EntryPoint to Neo UnifiedSmartWallet
+### From Ethereum EntryPoint to Neo SmartAccount
 
 | Concept | How to Adapt |
 | --- | --- |

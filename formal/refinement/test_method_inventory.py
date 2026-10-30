@@ -15,7 +15,7 @@ def load(name):
     return module
 
 
-METHOD = "AbstractAccount.UnifiedSmartWallet.CapReimbursementToActualCost(System.Numerics.BigInteger)"
+METHOD = "SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
 BODY = bytes.fromhex(
     "570701412d51083010ce705f22419bf667ce41925de83171690b97262910"
     "0c200000000000000000000000000000000000000000000000000000000000000000"
@@ -29,7 +29,7 @@ BODY = bytes.fromhex(
 def fixture(script=BODY, end=None):
     decoder = load("nef_decode")
     end = len(script) - 1 if end is None else end
-    debug = {"id": METHOD, "name": "AbstractAccount.UnifiedSmartWallet,CapReimbursementToActualCost",
+    debug = {"id": METHOD, "name": "SmartAccount.SmartAccount,CapReimbursementToActualCost",
              "range": "0-" + str(end), "params": ["requested,Integer,0"],
              "variables": ["local%d,Any,%d" % (i, i) for i in range(7)],
              "sequence-points": ["3[0]55:39-55:63"]}
@@ -38,7 +38,7 @@ def fixture(script=BODY, end=None):
                "parametersCount": 1, "hasReturnValue": True, "callFlags": 15} for i in range(5)]
     return {"nef": {"sha256": "a" * 64, "scriptSha256": __import__("hashlib").sha256(script).hexdigest(),
                     "scriptHex": script.hex(), "instructions": decoder.decode_script(script, len(tokens)), "tokens": tokens},
-            "sourceMap": {"exactByteMatch": True, "debug": {"documents": ["UnifiedSmartWallet.Paymaster.cs"], "methods": [debug]},
+            "sourceMap": {"exactByteMatch": True, "debug": {"documents": ["SmartAccount.Paymaster.cs"], "methods": [debug]},
                           "focusedMethods": [{"id": METHOD, "range": debug["range"], "source": deepcopy(debug)}]}}
 
 

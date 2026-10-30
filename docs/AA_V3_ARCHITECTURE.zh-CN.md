@@ -6,7 +6,7 @@
 > [`docs/ORDINARY_ACCOUNT_WORKSPACE.md`](ORDINARY_ACCOUNT_WORKSPACE.md)、
 > [`docs/AA-FORMAL-VERIFICATION.md`](AA-FORMAL-VERIFICATION.md) 以及对应的
 > `implementations/*/profile.json` 为准。本文中的方案、示例和产品设想不能替代
-> 当前 ABI、字节码、链上回读或原生 AccountManagement 的协议激活。
+> 当前 ABI、字节码、链上回读或原生 SmartAccount 的协议激活。
 
 当前普通合约的源码检查已通过；公共回调资源隔离、候选源码升级、部署等价性和
 原生协议激活仍有待验证，不能据此宣布协议整体 GO。
@@ -71,7 +71,7 @@ nonce 的唯一执行规则是 `0 <= nonce < 2^255`：高 191 位为通道，低
 不是链上结算的替代品。“用户免 Gas”只表示他人付费，不表示交易免费。
 
 公共普通合约没有 verifier/Hook 的独立子调用 gas 预算。私有 PLATFORM 构建的
-扩展 syscall、原生 AccountManagement 的预算或抽象 formal 模型不能关闭这个
+扩展 syscall、原生 SmartAccount 的预算或抽象 formal 模型不能关闭这个
 公共门禁；资助任意未经审阅插件的操作仍是 NO-GO。
 
 ### 备用恢复

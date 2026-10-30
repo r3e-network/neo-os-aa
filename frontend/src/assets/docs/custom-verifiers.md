@@ -51,7 +51,7 @@ const payload = {
   scriptHash: masterContractHash,
   operation: 'updateVerifier',
   args: [
-    sc.ContractParam.hash160(myAbstractAccountAddress),
+    sc.ContractParam.hash160(mySmartAccountAddress),
     sc.ContractParam.hash160(myCustomVerifierScriptHash),
     sc.ContractParam.byteArray('0x')
   ]
@@ -62,8 +62,8 @@ await walletService.invoke(payload);
 ```
 
 `updateVerifier(accountId, newVerifier, verifierParams)` is the deployed entrypoint
-(`contracts/UnifiedSmartWallet.Accounts.cs:249`, in every pinned
-`contracts/build/UnifiedSmartWalletV3.manifest.json`); the studio calls it the same way in
+(`contracts/SmartAccount.Accounts.cs:249`, in every pinned
+`contracts/build/SmartAccountV3.manifest.json`); the studio calls it the same way in
 `frontend/src/features/studio/useStudioController.js:498`. `verifierParams` is an empty `ByteArray`
 for a verifier that takes no configuration.
 

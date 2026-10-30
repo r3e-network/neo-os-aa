@@ -74,7 +74,7 @@ Created a custom struct hasher in the SDK that EXACTLY replicates the contract's
 
 7. **Index.js Exports** ✓
    - All public SDK functionality exported
-   - Includes: AbstractAccountClient, EIP-712 builders, errors, validation, UserOpBuilder, simulation, events, utility functions
+   - Includes: SmartAccountClient, EIP-712 builders, errors, validation, UserOpBuilder, simulation, events, utility functions
 
 ### Total Error Codes: 42
 

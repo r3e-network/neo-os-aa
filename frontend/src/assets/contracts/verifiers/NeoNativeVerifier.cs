@@ -7,7 +7,7 @@ using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
-namespace AbstractAccount.Verifiers
+namespace SmartAccount.Verifiers
 {
     /// <summary>
     /// Verifier that uses Neo N3's native witness verification system.
@@ -16,7 +16,7 @@ namespace AbstractAccount.Verifiers
     /// </summary>
     [DisplayName("NeoNativeVerifier")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0xd9421d07adf206e9dc4be746a02e8e087fa61741", "hasModuleContext", "getAuthorityEpoch")]
+    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "hasModuleContext", "getAuthorityEpoch")]
     [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canConfigureVerifier")]

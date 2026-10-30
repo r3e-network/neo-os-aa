@@ -15,7 +15,7 @@ import {
   nativeWalletNetwork,
   createNativeRpc,
   NATIVE_PROFILE_PARAMETER_DIGEST,
-  NATIVE_ACCOUNT_SERVICE,
+  NATIVE_SMART_ACCOUNT_CONTRACT,
 } from "../src/features/native/nativeWorkspace.js";
 
 const custody = "11".repeat(20),
@@ -25,7 +25,7 @@ const profile = {
   networkMagic: 123,
   abiVersion: 2,
   profileParameterDigest: NATIVE_PROFILE_PARAMETER_DIGEST,
-  service: NATIVE_ACCOUNT_SERVICE,
+  contract: NATIVE_SMART_ACCOUNT_CONTRACT,
 };
 const identity = () =>
   nativeCodec.deriveIdentity({
@@ -75,9 +75,9 @@ function fixture(options = {}) {
       kind: "registration",
       ...identity(),
       method: "registerAccount",
-      requiredAuthorities: [input.custodyAddress],
+      requiredAuthorities: [input.custodyAddress, ...(input.recoveryAddress && input.recoveryAddress !== "00".repeat(20) ? [input.recoveryAddress] : [])],
       script: nativeCodec.dynamicCall(
-        NATIVE_ACCOUNT_SERVICE,
+        NATIVE_SMART_ACCOUNT_CONTRACT,
         "registerAccount",
         [
           nativeCodec.hashValue(input.custodyAddress),
@@ -244,7 +244,7 @@ test("manual wallet handoff checks current network/actor/state and uses bounded 
   const review = await f.workspace.registration({
     custodyAddress: custody,
     salt,
-    recoveryAddress: recovery,
+    allowNoRecovery: true,
   });
   f.wallet.network = async () => 456;
   await assert.rejects(() => f.workspace.submit(review), /network/i);
@@ -261,7 +261,7 @@ test("manual wallet handoff checks current network/actor/state and uses bounded 
   const fresh = await f.workspace.registration({
     custodyAddress: custody,
     salt,
-    recoveryAddress: recovery,
+    allowNoRecovery: true,
   });
   f.change();
   await assert.rejects(() => f.workspace.submit(fresh), /changed/);
@@ -281,7 +281,7 @@ test("unsuccessful simulation never reaches wallet", async () => {
   const review = await f.workspace.registration({
     custodyAddress: custody,
     salt,
-    recoveryAddress: recovery,
+    allowNoRecovery: true,
   });
   await assert.rejects(() => f.workspace.submit(review), /simulation/i);
   assert.equal(f.called(), 0);
@@ -342,7 +342,7 @@ const { createNativeRpcFixture, nativeTestIdentity } =
   await import("./fixtures/nativeRpcFixture.js");
 const { createNativeClientClass } =
   await import("../src/shared/nativeSmartAccountClient.mjs");
-test("actual browser client rejects absent native service, ABI1, wrong digest, native id and malformed account", async () => {
+test("actual browser client rejects absent native contract, ABI1, wrong digest, native id and malformed account", async () => {
   const Client = createNativeClientClass(nativeCodec);
   for (const change of [
     (f) => (f.state.abiVersion = 1),
@@ -443,7 +443,7 @@ test("editing a review while submission awaits the node never opens the wallet",
   const review = await f.workspace.registration({
     custodyAddress: custody,
     salt,
-    recoveryAddress: recovery,
+    allowNoRecovery: true,
   });
   let release;
   f.client.revalidatePlan = () => new Promise((resolve) => (release = resolve));
@@ -462,7 +462,7 @@ test("late wallet response is not shown as current after a network switch", asyn
   const review = await f.workspace.registration({
     custodyAddress: custody,
     salt,
-    recoveryAddress: recovery,
+    allowNoRecovery: true,
   });
   let signal, release;
   const opened = new Promise((resolve) => (signal = resolve));
@@ -493,7 +493,7 @@ test("lost profile attestation during a later recheck revokes the verified state
   const review = await w.registration({
     custodyAddress: custody,
     salt,
-    recoveryAddress: recovery,
+    allowNoRecovery: true,
   });
   f.state.magic = 456;
   await assert.rejects(() => w.submit(review), /network magic mismatch/);
@@ -667,14 +667,15 @@ test("SDK review uses SDK payer scope while wallet invocation remains a separate
     {
       account: "0x" + custody,
       scopes: "CustomContracts",
-      allowedcontracts: ["0x" + NATIVE_ACCOUNT_SERVICE],
+      allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT],
     },
+    { account: "0x" + recovery, scopes: "CustomContracts", allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT] },
   ]);
   await assert.rejects(() => f.workspace.submit(review), /exact-script/);
   const walletReview = await f.workspace.registration({
     custodyAddress: custody,
     salt,
-    recoveryAddress: recovery,
+    allowNoRecovery: true,
   });
   const { rebuildNativeReview } =
     await import("../src/features/native/nativeWorkspace.js");
@@ -711,7 +712,7 @@ test("SDK recovery cancellation grants the actor core scope; permissionless reco
   assert.equal(cancel.signers[0].scopes, "CustomContracts");
   assert.deepEqual(cancel.requiredAuthorities, [recovery]);
   assert.deepEqual(cancel.signers[0].allowedcontracts, [
-    "0x" + NATIVE_ACCOUNT_SERVICE,
+    "0x" + NATIVE_SMART_ACCOUNT_CONTRACT,
   ]);
   state = { ...state, pendingRecovery: { matureAt: "1" } };
   const execute = await f.workspace.lifecycle({
@@ -786,7 +787,7 @@ test("guarded policy cancellation preserves the selected intent and cannot fall 
     assert.equal(review.request, null);
     assert.equal(review.plan.requiresExactScript, true);
     assert.match(review.plan.pendingCallBytes, /^400a[0-9a-f]+$/);
-    assert.notEqual(review.plan.script, nativeCodec.dynamicCall(NATIVE_ACCOUNT_SERVICE, "cancelModuleCall", [
+    assert.notEqual(review.plan.script, nativeCodec.dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, "cancelModuleCall", [
       nativeCodec.hashValue(nativeTestIdentity.accountId), nativeCodec.stringValue(role),
     ]));
     assert.equal(review.plan.role, role);
@@ -993,7 +994,7 @@ function recoveryCancellationFixture(options = {}) {
   f.client.buildAction = async ({ accountId, action }) => ({
     kind: "lifecycle", accountId, accountState: structuredClone(f.state), method: action,
     requiredAuthorities: [], authorityPolicy: "recovery-or-custody-before-maturity",
-    script: nativeCodec.dynamicCall(NATIVE_ACCOUNT_SERVICE, action, [nativeCodec.hashValue(accountId)]),
+    script: nativeCodec.dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, action, [nativeCodec.hashValue(accountId)]),
   });
   return { ...f, time(value) { chainTime = value; } };
 }
@@ -1011,7 +1012,7 @@ test("cancellation authority is separate from payer and forces exact signing onl
     assert.deepEqual(review.requiredAuthorities, [authority]);
     assert.deepEqual(review.plan.requiredAuthorities, [], "the client-issued plan is not rewritten");
     assert.deepEqual(review.signers, [{ account: "0x" + payer, scopes: "None" },
-      { account: "0x" + authority, scopes: "CustomContracts", allowedcontracts: ["0x" + NATIVE_ACCOUNT_SERVICE] }]);
+      { account: "0x" + authority, scopes: "CustomContracts", allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT] }]);
   }
   for (const authority of [custody, recovery]) {
     const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: authority });
@@ -1147,7 +1148,7 @@ test("cancellation review rebuilds through SDK signing and real browser witness 
   rpc.state.registered = true;
   rpc.state.time = 1900000000000;
   const identity = nativeCodec.deriveIdentity({ networkMagic: 123, custodyAddress: owner.account, salt });
-  const accountRead = nativeCodec.dynamicCall(NATIVE_ACCOUNT_SERVICE, "getAccount", [nativeCodec.hashValue(identity.accountId)], 5);
+  const accountRead = nativeCodec.dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, "getAccount", [nativeCodec.hashValue(identity.accountId)], 5);
   const H = (value) => ({ type: "ByteString", value: Buffer.from(value, "hex").reverse().toString("base64") });
   const I = (value) => ({ type: "Integer", value: String(value) });
   let replacement = "55".repeat(20);
@@ -1181,7 +1182,7 @@ test("cancellation review rebuilds through SDK signing and real browser witness 
     assert.equal(imported.witnesses.length, payer === authority ? 1 : 2);
     assert.equal(imported.transaction.signers[0].scopes, payer === authority ? "CustomContracts" : "None");
     assert.equal(imported.transaction.signers.at(-1).account, "0x" + authority.account);
-    assert.deepEqual(imported.transaction.signers.at(-1).allowedcontracts, ["0x" + NATIVE_ACCOUNT_SERVICE]);
+    assert.deepEqual(imported.transaction.signers.at(-1).allowedcontracts, ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT]);
     const changedRoster = structuredClone(artifact);
     changedRoster.transaction.signers[0].scopes = "Global";
     await assert.rejects(() => workspace.importSigned(review, JSON.stringify(changedRoster), caps), /scope|canonical|signer/);
@@ -1276,4 +1277,14 @@ test("archived receipt restoration is revoked by a network change during verific
   f.workspace.invalidate();
   finish(Object.freeze({ receiptOnly: true }));
   await assert.rejects(() => restoring, /Stale/);
+});
+
+test("registration review requires the new guardian witness and refuses single-wallet handoff", async () => {
+  const f = fixture();
+  await f.workspace.connect({ rpcUrl: "http://localhost:1234", networkMagic: 123 });
+  const review = await f.workspace.registration({ custodyAddress: custody, recoveryAddress: recovery, salt });
+  assert.deepEqual(review.requiredAuthorities, [custody, recovery]);
+  assert.equal(review.walletSupported, false);
+  await assert.rejects(f.workspace.submit(review), /multiple-authority/);
+  assert.equal(f.called(), 0);
 });

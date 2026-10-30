@@ -10,9 +10,9 @@
 ### Task 1: Normalize The Account Interface
 
 **Files:**
-- Modify: `contracts/UnifiedSmartWallet.State.cs`
-- Modify: `contracts/UnifiedSmartWallet.Accounts.cs`
-- Modify: `contracts/UnifiedSmartWallet.Models.cs`
+- Modify: `contracts/SmartAccount.State.cs`
+- Modify: `contracts/SmartAccount.Accounts.cs`
+- Modify: `contracts/SmartAccount.Models.cs`
 - Modify: `sdk/js/src/index.js`
 - Test: `sdk/js/tests/v3_flow.unit.test.js`
 
@@ -47,15 +47,15 @@ Expected: PASS.
 **Step 5: Commit**
 
 ```bash
-git add contracts/UnifiedSmartWallet.State.cs contracts/UnifiedSmartWallet.Accounts.cs contracts/UnifiedSmartWallet.Models.cs sdk/js/src/index.js sdk/js/tests/v3_flow.unit.test.js
+git add contracts/SmartAccount.State.cs contracts/SmartAccount.Accounts.cs contracts/SmartAccount.Models.cs sdk/js/src/index.js sdk/js/tests/v3_flow.unit.test.js
 git commit -m "feat: add standards-aligned account introspection"
 ```
 
 ### Task 2: Formalize Module Lifecycle Semantics
 
 **Files:**
-- Modify: `contracts/UnifiedSmartWallet.Accounts.cs`
-- Modify: `contracts/UnifiedSmartWallet.State.cs`
+- Modify: `contracts/SmartAccount.Accounts.cs`
+- Modify: `contracts/SmartAccount.State.cs`
 - Modify: `docs/architecture.md`
 - Test: `sdk/js/tests/v3_flow.unit.test.js`
 
@@ -84,15 +84,15 @@ Expected: PASS.
 **Step 5: Commit**
 
 ```bash
-git add contracts/UnifiedSmartWallet.Accounts.cs contracts/UnifiedSmartWallet.State.cs docs/architecture.md sdk/js/tests/v3_flow.unit.test.js
+git add contracts/SmartAccount.Accounts.cs contracts/SmartAccount.State.cs docs/architecture.md sdk/js/tests/v3_flow.unit.test.js
 git commit -m "refactor: normalize verifier and hook lifecycle semantics"
 ```
 
 ### Task 3: Add Simulation-Grade Validation Surface
 
 **Files:**
-- Modify: `contracts/UnifiedSmartWallet.Execution.cs`
-- Modify: `contracts/UnifiedSmartWallet.State.cs`
+- Modify: `contracts/SmartAccount.Execution.cs`
+- Modify: `contracts/SmartAccount.State.cs`
 - Modify: `frontend/api/relay-transaction.js`
 - Modify: `frontend/src/features/operations/metaTx.js`
 - Test: `frontend/tests/relayPreflight.test.js`
@@ -125,7 +125,7 @@ Run the same commands and confirm PASS.
 **Step 5: Commit**
 
 ```bash
-git add contracts/UnifiedSmartWallet.Execution.cs contracts/UnifiedSmartWallet.State.cs frontend/api/relay-transaction.js frontend/src/features/operations/metaTx.js frontend/tests/relayPreflight.test.js sdk/js/tests/v3_flow.unit.test.js
+git add contracts/SmartAccount.Execution.cs contracts/SmartAccount.State.cs frontend/api/relay-transaction.js frontend/src/features/operations/metaTx.js frontend/tests/relayPreflight.test.js sdk/js/tests/v3_flow.unit.test.js
 git commit -m "feat: add validation preview surface for relay and SDK"
 ```
 

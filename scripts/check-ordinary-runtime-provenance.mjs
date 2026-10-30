@@ -29,7 +29,7 @@ r=json.load(sys.stdin)
 expected=json.loads((Path(sys.argv[1]) / 'tests/localchain/expected-source.json').read_text())
 failures=suite.validate_source_receipt(r,expected)
 if failures: raise ValueError('Source acceptance oracle failed: ' + '; '.join(failures))
-p=source_build.profile_of(Path(sys.argv[2]) / 'UnifiedSmartWalletV3.nef')
+p=source_build.profile_of(Path(sys.argv[2]) / 'SmartAccountV3.nef')
 if p['profile'] != source_build.PROFILE_SYSCALL_ABSENT: raise ValueError('Ordinary build contains a private bounded syscall')
 if r['source']['coreSha256'] != p['coreSha256']: raise ValueError('Source receipt core differs from release NEF')
 print(json.dumps(list(source_build.REQUIRED_ARTIFACTS)))`;

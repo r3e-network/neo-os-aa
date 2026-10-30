@@ -14,7 +14,7 @@ import {
 } from "./fixtures/nativeRpcFixture.js";
 import {
   nativeCodec as c,
-  NATIVE_ACCOUNT_SERVICE as CORE,
+  NATIVE_SMART_ACCOUNT_CONTRACT as CORE,
 } from "../src/features/native/nativeWorkspace.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));

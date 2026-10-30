@@ -22,7 +22,7 @@ import { canonicalByteHex, compareSponsArgs, sameValue } from './sponsoredArgume
 const AA = fileURLToPath(new URL('../../', import.meta.url));
 const request = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const sdkRequire = createRequire(`${AA}/sdk/js/package.json`);
-const { AbstractAccountClient } = sdkRequire(`${AA}/sdk/js/src/index.js`);
+const { SmartAccountClient } = sdkRequire(`${AA}/sdk/js/src/index.js`);
 const { sc, u } = sdkRequire('@cityofzion/neon-js');
 
 // The relay's typed byte boundary, as an object array the script builder can emit.
@@ -75,7 +75,7 @@ function same(left, right) {
 const requestArgs = request.args || [];
 const expectedArgs = requestArgs;
 
-const client = new AbstractAccountClient(request.rpcUrl, request.core);
+const client = new SmartAccountClient(request.rpcUrl, request.core);
 // The payload has to survive the transport the relay uses: JSON in, JSON out, unchanged. Everything
 // below inspects the serialised form, so a payload whose parameter kinds only exist in memory is
 // caught here instead of at the relay.

@@ -1,0 +1,171 @@
+{
+  "schema": "smartaccount-private-activation-regression/v2",
+  "status": "PASS",
+  "scope": "Ordinary diagnostic probe for System.Contract.CallWithGasLimit activation boundary and budget exhaustion; syscall smoke only, not native SmartAccount activation, conformance, or native internal helper invocation.",
+  "evidenceKind": "syscall-smoke",
+  "testedCapability": "System.Contract.CallWithGasLimit",
+  "nativeActivationClaim": false,
+  "publicNetworksTouched": false,
+  "nativeSmartAccountVerified": false,
+  "cases": [
+    {
+      "name": "current-future",
+      "activationHeight": 4294967295,
+      "networkMagic": 293964965,
+      "nodeVersion": "/Neo:3.10.2/",
+      "deploymentTransaction": "0xcd77717b8178477296bec020fc643356df44e40a1f5f4fab8673da47851e3740",
+      "contractHash": "0x674616b0f4f23420440bb11d9570c2555fc6997d",
+      "readbackScriptAndManifestMatched": true,
+      "readbackChecksumMatched": true,
+      "nativeSmartAccountPresent": false,
+      "verificationState": null,
+      "applicationState": "FAULT",
+      "verificationContext": "omitted: invokecontractverify has no persisting block context",
+      "applicationGasConsumedDatoshi": "469",
+      "blockCount": 2
+    },
+    {
+      "name": "current-disabled",
+      "activationHeight": null,
+      "networkMagic": 4203523542,
+      "nodeVersion": "/Neo:3.10.2/",
+      "deploymentTransaction": "0xe9d892bdbd1908f1b4d3eb567e12852f84fbe739218e27c88b554c382005f340",
+      "contractHash": "0xc666fa3e42495329bc5d5fdf6df76b2fa74bd689",
+      "readbackScriptAndManifestMatched": true,
+      "readbackChecksumMatched": true,
+      "nativeSmartAccountPresent": false,
+      "verificationState": "FAULT",
+      "applicationState": "FAULT",
+      "verificationGasConsumedDatoshi": "469",
+      "blockCount": 2
+    },
+    {
+      "name": "current-active",
+      "activationHeight": 0,
+      "networkMagic": 1317589029,
+      "nodeVersion": "/Neo:3.10.2/",
+      "deploymentTransaction": "0x6dafa6ffdfa18c4241f3facf894957785147a8864f13939305aca9e26eaa4225",
+      "contractHash": "0x53feb6ca0b87e083ef96a01417f9d0d787cf329a",
+      "readbackScriptAndManifestMatched": true,
+      "readbackChecksumMatched": true,
+      "nativeSmartAccountPresent": true,
+      "verificationState": "HALT",
+      "applicationState": "HALT",
+      "verificationGasConsumedDatoshi": "1106599",
+      "boundedExhaustionState": "FAULT",
+      "blockCount": 2
+    },
+    {
+      "name": "current-live-boundary",
+      "activationHeight": 8,
+      "networkMagic": 1435443101,
+      "nodeVersion": "/Neo:3.10.2/",
+      "deploymentTransaction": "0x9d85a8af47ca1ef3779c39b2de37a26c317ae6f36e01e1205c569f969f8309fb",
+      "contractHash": "0xab5a9c7928728e30ae7e5edbf687d485eae92594",
+      "readbackScriptAndManifestMatched": true,
+      "readbackChecksumMatched": true,
+      "nativeSmartAccountPresent": false,
+      "samples": [
+        {
+          "ledgerIndex": 1,
+          "executionIndex": 2,
+          "applicationState": "FAULT",
+          "applicationGasConsumedDatoshi": "469"
+        },
+        {
+          "ledgerIndex": 2,
+          "executionIndex": 3,
+          "applicationState": "FAULT",
+          "applicationGasConsumedDatoshi": "469"
+        },
+        {
+          "ledgerIndex": 3,
+          "executionIndex": 4,
+          "applicationState": "FAULT",
+          "applicationGasConsumedDatoshi": "469"
+        },
+        {
+          "ledgerIndex": 4,
+          "executionIndex": 5,
+          "applicationState": "FAULT",
+          "applicationGasConsumedDatoshi": "469"
+        },
+        {
+          "ledgerIndex": 5,
+          "executionIndex": 6,
+          "applicationState": "FAULT",
+          "applicationGasConsumedDatoshi": "469"
+        },
+        {
+          "ledgerIndex": 6,
+          "executionIndex": 7,
+          "applicationState": "FAULT",
+          "applicationGasConsumedDatoshi": "469"
+        },
+        {
+          "ledgerIndex": 7,
+          "executionIndex": 8,
+          "applicationState": "HALT",
+          "applicationGasConsumedDatoshi": "1106599"
+        }
+      ],
+      "pollTimeoutSeconds": 180,
+      "blockCount": 8
+    }
+  ],
+  "runtimeMode": "Complete source-built NeoExpress runtime; exact full file map verified before and after each matrix.",
+  "sourceSha256": {
+    "neoexpress_activation_validate.py": "48a98ebc18b0a049219c7ef4cd1870a4d775e19196896317eb5bcb8f10df0217",
+    "neoexpress_validate.py": "63625ab257fa80bb7c2c611edf9c74d73a1eb3f33b7126425e9fe2b268e6c8fe"
+  },
+  "currentRuntimeSha256": {
+    "neoxp.dll": "837e9e9788692d1793c281e6f9c7f7f06e3469cc88332104232e51ba75103efc",
+    "Neo.dll": "4c4c59c5330b2e28a75328eafbc50449f97f9fd96e172730f89c534dd25ea3a5",
+    "Neo.Extensions.dll": "27fc804625bd5f6aceebd757de13976a40b1fc504838c6f87f7a4c028b1e50c9",
+    "Neo.IO.dll": "cbb983b32101f5c5e459a5416852c4d0be56ad7f97f6ce89c7bc5003909820ba",
+    "Neo.Json.dll": "02bc3082719af8d651a7ce3bde42a390ba9253d0f368d2bf9ab33b8872e0c2ce",
+    "Neo.VM.dll": "ccd160139cb55fec9d9656dc5a36e222b79e99a7b81888da598a1bd04cbaac97"
+  },
+  "historicalRuntimeSha256": null,
+  "probe": {
+    "scriptHex": "1011c00280969800150c0973657269616c697a650c14c0ef39cee0e4e925c6c2a06a79e1440dd86fceac41c45fbc51450840",
+    "nefSha256": "db3073acb06737523632566ec8cdfaa72dfefaed6427017f692b0389c53dc888",
+    "manifest": {
+      "name": "NativeActivationProbe",
+      "groups": [],
+      "features": {},
+      "supportedstandards": [],
+      "abi": {
+        "methods": [
+          {
+            "name": "verify",
+            "parameters": [],
+            "returntype": "Boolean",
+            "offset": 0,
+            "safe": true
+          }
+        ],
+        "events": []
+      },
+      "permissions": [
+        {
+          "contract": "*",
+          "methods": [
+            "serialize"
+          ]
+        }
+      ],
+      "trusts": [],
+      "extra": null
+    }
+  },
+  "runtimeHashesUnchanged": true,
+  "diagnosticDeploymentsPersisted": 4,
+  "protocolExecutionTransactionsPersisted": 0,
+  "historicalRegressionReproduced": false,
+  "ownedNodesStopped": true,
+  "completedAtUtc": "2026-10-30T00:03:05.540408+00:00",
+  "sourceBuildReceiptSha256": "427002a455579e7f7d8dcb0ca81fe2babb37109bf1b3136ddad0b616758a824a",
+  "rawReceipt": "activation.raw.json",
+  "rawReceiptSha256": "3fa2f652fd758f346b306248d8787eb1740315aa34938e68681cc90b846b3580"
+}

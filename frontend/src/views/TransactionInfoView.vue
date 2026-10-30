@@ -636,7 +636,7 @@ import {
   buildDraftShareUrl,
 } from "@/features/operations/shareLinks.js";
 import {
-  getAbstractAccountHash,
+  getSmartAccountHash,
   walletService,
 } from "@/services/walletService.js";
 
@@ -1044,7 +1044,7 @@ async function signWithEvmWallet() {
 
     const { signatureRecord } = await signUserOpWithEvm({
       rpcUrl: walletService.rpcUrl,
-      aaContractHash: getAbstractAccountHash(),
+      aaContractHash: getSmartAccountHash(),
       accountIdHash: draft.value.account?.accountIdHash,
       operationBody: draft.value.operation_body,
       signerId: evmAddress.value,

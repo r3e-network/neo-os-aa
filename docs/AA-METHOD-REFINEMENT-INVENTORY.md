@@ -4,9 +4,9 @@ This is a structural inventory and implementation plan. It proves no VM, Applica
 
 ## Exact candidate and scope
 
-The public ordinary candidate NEF has SHA256 `083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a`. Its reviewed debug mapping identifies `CapReimbursementToActualCost(BigInteger)` at inclusive offsets **13557–13764**: **208 bytes, 96 instructions, 47 distinct opcodes**. All 96 instructions are listed below, including the prefix, assertion fault path, reservation update, serialization, storage write, and return. Debug/source identity and source locations are bound exporter evidence, not a compiler-refinement theorem.
+The public ordinary candidate NEF has SHA256 `4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`. Its reviewed debug mapping identifies `CapReimbursementToActualCost(BigInteger)` at inclusive offsets **13557–13837**: **281 bytes, 116 instructions, 52 distinct opcodes**. All 116 instructions are listed below, including the prefix, assertion fault path, reservation update, serialization, storage write, and return. Debug/source identity and source locations are bound exporter evidence, not a compiler-refinement theorem.
 
-The current arithmetic proof covers `[13667,13689)`. Its complete uncovered prefix is `[13557,13667)` and suffix is `[13689,13765)`. Structural accounting of claimed regions must expose both. `method_inventory.py` independently decodes raw script bytes and rejects incomplete debug boundaries, forged instruction metadata, invalid source points, overlaps, and an arithmetic certificate presented as whole-method evidence. Its output always retains `implementationVerified=false` and `wholeMethodVerified=false`.
+The current arithmetic proof covers `[13667,13689)`. Its complete uncovered prefix is `[13557,13667)` and suffix is `[13689,13838)`. Structural accounting of claimed regions must expose both. `method_inventory.py` independently decodes raw script bytes and rejects incomplete debug boundaries, forged instruction metadata, invalid source points, overlaps, and an arithmetic certificate presented as whole-method evidence. Its output always retains `implementationVerified=false` and `wholeMethodVerified=false`.
 
 The CLI first binds the inventory to the actual NEF, manifest, input hashes and current source membership, and checks them again before writing the report. It also records and checks the inventory tool, independent decoder and binding-parser hashes. Its optional certificate accounting checks exact method/artifact identity and instruction boundaries but does not authenticate or prove the certificate. Even a claimed interval covering every byte remains structural accounting. A future whole-helper checker must supply its own reviewed semantic acceptance path.
 
@@ -17,15 +17,15 @@ python3 formal/refinement/method_inventory.py \
   --json-report /path/to/method-inventory.json
 ```
 
-Only `INITSLOT` at 13557 has no exact declared source point; the other 95 instructions have explicit debug source points. The optional existing arithmetic certificate claims 22 instructions, leaving 74 method instructions unaccounted for by that certificate. These are counts of declared coverage, not proof acceptance.
+Only `INITSLOT` at 13557 has no exact declared source point; the other 115 instructions have explicit debug source points. The optional existing arithmetic certificate claims 22 instructions, leaving 94 method instructions unaccounted for by that certificate. These are counts of declared coverage, not proof acceptance.
 
-The two `LDSFLD` instructions at 13568 and 13749 use static index 34, named `Prefix_TransactionReimbursement`. Outside this helper, initialization is `25369: 0c0121` (PUSHDATA1 containing `21`), `25372: db30` (CONVERT to Buffer), `25374: 6722` (STSFLD 34). Thus a helper entry-state specification must bind slot 34 to `Buffer([0x21])` and establish that initialization ran. Those three initializer instructions are not part of the 96-instruction helper.
+The two `LDSFLD` instructions at 13568 and 13822 use static index 34, named `Prefix_TransactionReimbursement`. Outside this helper, initialization is `25432: 0c0121` (PUSHDATA1 containing `21`), `25435: db30` (CONVERT to Buffer), `25437: 6722` (STSFLD 34). (These three offsets are 10 lower than in the pre-rename build `083ed325…`, which kept the same `LDSFLD` sites at 13568/13749 but was 10 script bytes longer after `getAccountImplementationId`.) Thus a helper entry-state specification must bind slot 34 to `Buffer([0x21])` and establish that initialization ran. Those three initializer instructions are not part of the 116-instruction helper.
 
 ## Interpreter and correspondence split
 
 1. **VM control and data operations.** Extend the existing arithmetic semantics with `INITSLOT`, static fields, Null/ByteString/Array/Struct values, PACK, stack rearrangements, field mutation, equality, conditional/unconditional branches, ABORTMSG, and RET. Preserve actual pc, slot counts, stack order, type/index faults, object aliasing, and frame conditions; do not replace the method with its source formula.
 2. **Explicit environment outcomes.** Give the seven SYSCALL sites and two native CALLT sites success/fault relations. Bind repeated script-container reads to the same transaction and bind the static field at index 34 to the initialized reimbursement key. State deployed-contract/context and ReadStates/WriteStates/AllowCall assumptions. Model absent storage separately from deserialization and the matching/different transaction-hash paths.
-3. **All helper paths.** Certify all 96 instructions against an explicit two-field stored-budget invariant, or extend the value model to other deserialized shapes and their type/index faults. Include settled<=0 ABORTMSG and reservation overflow before serialization; the arithmetic proof alone does not establish these paths. Observe returned settlement and the serialized budget stored under the correct contract/key, with other state unchanged on the success path.
+3. **All helper paths.** Certify all 116 instructions against an explicit two-field stored-budget invariant, or extend the value model to other deserialized shapes and their type/index faults. Include settled<=0 ABORTMSG and reservation overflow before serialization; the arithmetic proof alone does not establish these paths. Observe returned settlement and the serialized budget stored under the correct contract/key, with other state unchanged on the success path.
 4. **ApplicationEngine composition.** Connect the environment relations to pinned handler implementations, native dispatch, conversion, fee charging, contract permissions, hardfork selection, snapshot ownership and rollback. A helper-under-environment theorem is distinct from this correspondence and from complete transaction/caller refinement. Do not label either partial layer as full implementation verification.
 
 ## Pinned ordinary ApplicationEngine boundary
@@ -58,11 +58,11 @@ Target Neo core: [`d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d`](https://github.com
 
 ## Complete instruction and source-point list
 
-Offsets are absolute script positions; the method end is exclusive 13765. `d17` is `UnifiedSmartWallet.Paymaster.cs`; d5/d6/d7/d15 are pinned framework `Services/Runtime.cs`, `Services/Storage.cs`, `Native/StdLib.cs`, and `UInt256.cs`. Only exact declared source points are shown; `—` means unmapped, with no fabricated nearest-line association. Relative targets are independently checked by the raw decoder. No internal CALL/CALL_L, indirect CALLA, or explicit TRY handler occurs in this method. CALLT/SYSCALL fallthrough is a declared continuation, not a guarantee that a handler returns successfully.
+Offsets are absolute script positions; the method end is exclusive 13838. `d17` is `SmartAccount.Paymaster.cs`; d5/d6/d7/d15 are pinned framework `Services/Runtime.cs`, `Services/Storage.cs`, `Native/StdLib.cs`, and `UInt256.cs`. Only exact declared source points are shown; `—` means unmapped, with no fabricated nearest-line association. Relative targets are independently checked by the raw decoder. No internal CALL/CALL_L, indirect CALLA, or explicit TRY handler occurs in this method. CALLT/SYSCALL fallthrough is a declared continuation, not a guarantee that a handler returns successfully.
 
 | pc | Full instruction bytes | Opcode | Non-fallthrough edge / environment effect | Exact source point(s) |
 | ---: | --- | --- | --- | --- |
-| 13557 | `570701` | INITSLOT | — | — |
+| 13557 | `570801` | INITSLOT | — | — |
 | 13560 | `412d510830` | SYSCALL | System.Runtime.GetScriptContainer | d5:51:14–51:58 |
 | 13565 | `10` | PUSH0 | — | d17:55:39–55:63 |
 | 13566 | `ce` | PICKITEM | — | d17:55:39–55:63 |
@@ -139,22 +139,42 @@ Offsets are absolute script positions; the method end is exclusive 13765. `d17` 
 | 13692 | `242a` | JMPIF | branch→13734 | d17:69:13–69:89 |
 | 13694 | `0c255265696d62757273656d656e7420657863656564732061637475616c2067617320636f7374` | PUSHDATA1 | — | d17:69:49–69:88 |
 | 13733 | `e0` | ABORTMSG | — | d17:69:13–69:89 |
-| 13734 | `6a` | LDLOC2 | — | d17:70:13–70:19 |
-| 13735 | `4a` | DUP | — | d17:70:13–70:39 |
-| 13736 | `11` | PUSH1 | — | d17:70:13–70:39 |
-| 13737 | `ce` | PICKITEM | — | d17:70:13–70:39 |
-| 13738 | `6e` | LDLOC6 | — | d17:70:32–70:39 |
-| 13739 | `9e` | ADD | — | d17:70:13–70:39 |
-| 13740 | `4e` | TUCK | — | d17:70:13–70:39 |
-| 13741 | `11` | PUSH1 | — | d17:70:13–70:39 |
-| 13742 | `50` | SWAP | — | d17:70:13–70:39 |
-| 13743 | `d0` | SETITEM | — | d17:70:13–70:39 |
-| 13744 | `45` | DROP | — | d17:70:13–70:39 |
-| 13745 | `6a` | LDLOC2 | — | d17:71:99–71:105 |
-| 13746 | `370300` | CALLT | CALLT 3 StdLib.serialize | d7:19:6–19:60 |
-| 13749 | `5f22` | LDSFLD | — | d17:71:49–71:80 |
-| 13751 | `419bf667ce` | SYSCALL | System.Storage.GetContext | d6:27:14–27:50 |
-| 13756 | `41e63f1884` | SYSCALL | System.Storage.Put | d6:91:10–91:39 |
-| 13761 | `6e` | LDLOC6 | — | d17:72:20–72:27 |
-| 13762 | `2202` | JMP | branch→13764 | d17:72:13–72:28 |
-| 13764 | `40` | RET | — | d17:73:9–73:10 |
+| 13734 | `11` | PUSH1 | — | d17:81:34–81:48 |
+| 13735 | `01fe00` | PUSHINT16 | — | d17:81:52–81:55 |
+| 13738 | `a8` | SHL | — | d17:81:34–81:55 |
+| 13739 | `11` | PUSH1 | — | d17:81:59–81:60 |
+| 13740 | `9f` | SUB | — | d17:81:33–81:60 |
+| 13741 | `11` | PUSH1 | — | d17:81:65–81:79 |
+| 13742 | `01fe00` | PUSHINT16 | — | d17:81:83–81:86 |
+| 13745 | `a8` | SHL | — | d17:81:65–81:86 |
+| 13746 | `9e` | ADD | — | d17:81:32–81:87 |
+| 13747 | `7707` | STLOC | — | d17:81:24–81:87 |
+| 13749 | `6a` | LDLOC2 | — | d17:82:36–82:42 |
+| 13750 | `11` | PUSH1 | — | d17:82:36–82:51 |
+| 13751 | `ce` | PICKITEM | — | d17:82:36–82:51 |
+| 13752 | `6f07` | LDLOC | — | d17:82:55–82:60 |
+| 13754 | `6e` | LDLOC6 | — | d17:82:63–82:70 |
+| 13755 | `9f` | SUB | — | d17:82:55–82:70 |
+| 13756 | `b6` | LE | — | d17:82:36–82:70 |
+| 13757 | `2432` | JMPIF | branch→13807 | d17:82:13–83:65 |
+| 13759 | `0c2d5265696d62757273656d656e7420627564676574206578636565647320564d20696e7465676572206c696d6974` | PUSHDATA1 | — | d17:83:17–83:64 |
+| 13806 | `e0` | ABORTMSG | — | d17:82:13–83:65 |
+| 13807 | `6a` | LDLOC2 | — | d17:84:13–84:19 |
+| 13808 | `4a` | DUP | — | d17:84:13–84:39 |
+| 13809 | `11` | PUSH1 | — | d17:84:13–84:39 |
+| 13810 | `ce` | PICKITEM | — | d17:84:13–84:39 |
+| 13811 | `6e` | LDLOC6 | — | d17:84:32–84:39 |
+| 13812 | `9e` | ADD | — | d17:84:13–84:39 |
+| 13813 | `4e` | TUCK | — | d17:84:13–84:39 |
+| 13814 | `11` | PUSH1 | — | d17:84:13–84:39 |
+| 13815 | `50` | SWAP | — | d17:84:13–84:39 |
+| 13816 | `d0` | SETITEM | — | d17:84:13–84:39 |
+| 13817 | `45` | DROP | — | d17:84:13–84:39 |
+| 13818 | `6a` | LDLOC2 | — | d17:85:99–85:105 |
+| 13819 | `370300` | CALLT | CALLT 3 StdLib.serialize | d7:19:6–19:60 |
+| 13822 | `5f22` | LDSFLD | — | d17:85:49–85:80 |
+| 13824 | `419bf667ce` | SYSCALL | System.Storage.GetContext | d6:27:14–27:50 |
+| 13829 | `41e63f1884` | SYSCALL | System.Storage.Put | d6:91:10–91:39 |
+| 13834 | `6e` | LDLOC6 | — | d17:86:20–86:27 |
+| 13835 | `2202` | JMP | branch→13837 | d17:86:13–86:28 |
+| 13837 | `40` | RET | — | d17:87:9–87:10 |

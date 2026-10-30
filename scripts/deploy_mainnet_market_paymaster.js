@@ -40,7 +40,7 @@ const {
 const { rpc, sc, wallet, experimental, CONST } = neon;
 const { ethers } = requireWorkspacePackage('ethers');
 
-const { AbstractAccountClient } = require('../sdk/js/src/index');
+const { SmartAccountClient } = require('../sdk/js/src/index');
 const { buildV3UserOperationTypedData } = require('../sdk/js/src/metaTx');
 
 const MAINNET_MAGIC = 860833102;
@@ -201,7 +201,7 @@ function writeResults(results) {
 async function runPaymasterSmoke({ client, account, networkMagic, rpcUrl, coreHash, verifierHash, paymasterHash }) {
   if (planOnly) return null;
   const invokeCtx = { client, account, networkMagic, rpcUrl };
-  const aaClient = new AbstractAccountClient(rpcUrl, coreHash);
+  const aaClient = new SmartAccountClient(rpcUrl, coreHash);
   const evmWallet = ethers.Wallet.createRandom();
   const verifierParamsHex = evmWallet.signingKey.publicKey.slice(2);
   const accountId = aaClient.deriveRegistrationAccountIdHash({
@@ -360,8 +360,8 @@ async function main() {
   };
 
   const core = (deployCore || planOnly)
-    ? await deployContract(client, account, networkMagic, rpcUrl, 'UnifiedSmartWalletV3')
-    : { baseName: 'UnifiedSmartWalletV3', manifestName: 'UnifiedSmartWalletV3', hash: coreHash, txid: null, status: 'configured' };
+    ? await deployContract(client, account, networkMagic, rpcUrl, 'SmartAccountV3')
+    : { baseName: 'SmartAccountV3', manifestName: 'SmartAccountV3', hash: coreHash, txid: null, status: 'configured' };
   const activeCoreHash = core.hash;
 
   const modules = {};

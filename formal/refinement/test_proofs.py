@@ -72,8 +72,12 @@ class CapProofTests(unittest.TestCase):
         inventory = {"nef": {"scriptHex": script.hex(), "tokens": []}, "sourceMap": {
             "debug": {"documents": ["cap.cs"]}, "focusedMethods": [{"id": module.METHOD,
                 "range": "0-24", "source": {"params": ["requested,Integer,0"],
+                    # The debug frame must match the actual 8-slot INITSLOT, including the
+                    # VM-integer-range margin local; otherwise the locals gate fires first
+                    # and this test never reaches the instruction-boundary check it names.
                     "variables": ["transactionHash,Hash256,0", "data,ByteArray,1", "budget,Any,2", "actualCost,Integer,3",
-                                  "estimationFlag,Integer,4", "cap,Integer,5", "settled,Integer,6"],
+                                  "estimationFlag,Integer,4", "cap,Integer,5", "settled,Integer,6",
+                                  "vmMax,Integer,7"],
                     "sequence-points": ["2[0]1:1-1:2", "23[0]3:1-3:2"]}}]}}
         with self.assertRaisesRegex(ValueError, "actual instruction boundaries"):
             module.selected_region(inventory, declarations)

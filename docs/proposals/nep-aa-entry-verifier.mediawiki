@@ -11,7 +11,7 @@
 
 This NEP specifies a deployment-independent protocol foundation for Neo N3 SmartAccounts. It defines account identity, UserOperation encoding, replay protection, authorization and policy callbacks, execution ordering, failure semantics, witness integration, and resource-accounting requirements for untrusted authorization modules.
 
-This document revises the earlier entry-contract and custom-verifier draft in [https://github.com/neo-project/proposals/pull/221 PR #221]. It is a protocol foundation, not a proposal to activate a particular native contract. A separate proposal, currently discussed in [https://github.com/neo-project/proposals/issues/242 issue #242], may define a node-native <code>AccountManagement</code> service that conforms to this foundation.
+This document revises the earlier entry-contract and custom-verifier draft in [https://github.com/neo-project/proposals/pull/221 PR #221]. It is a protocol foundation, not a proposal to activate a particular native contract. A separate proposal, currently discussed in [https://github.com/neo-project/proposals/issues/242 issue #242], may define a node-native <code>SmartAccount</code> service that conforms to this foundation.
 
 ==Motivation==
 
@@ -19,9 +19,9 @@ Neo N3 already supports contract-based accounts through verification scripts and
 
 A SmartAccount protocol must also separate authorization from policy. A verifier answers whether an operation is authorized by the account's configured authorization scheme. A hook applies account policy before and after the target call. Neither component may replace the account's configured bindings, bypass replay protection, or create an unbounded resource-consumption path.
 
-This foundation is intentionally independent of deployment topology. It can be implemented by an ordinary deployed contract or by a separately specified native service. A native implementation requires additional consensus, identity, fee, governance, and migration rules; those rules are not implied by this foundation.
+This foundation is intentionally independent of deployment topology. It can be implemented by an ordinary deployed contract or by a separately specified native contract. A native implementation requires additional consensus, identity, fee, governance, and migration rules; those rules are not implied by this foundation.
 
-Ordinary-contract and native implementations can be developed in parallel and compared against the shared operation, authorization and state-transition semantics. Such comparison does not make their deployment, witness enforcement, resource accounting or upgrade guarantees interchangeable. In particular, an ordinary contract on a network without the required platform-enforced child-budget capability can validate shared logical behavior, but cannot claim that a transaction-wide gas limit or contract convention satisfies the resource requirements below. Implementing the same operation interface does not activate a native service or preserve another profile's addresses and signing domain.
+Ordinary-contract and native implementations can be developed in parallel and compared against the shared operation, authorization and state-transition semantics. Such comparison does not make their deployment, witness enforcement, resource accounting or upgrade guarantees interchangeable. In particular, an ordinary contract on a network without the required platform-enforced child-budget capability can validate shared logical behavior, but cannot claim that a transaction-wide gas limit or contract convention satisfies the resource requirements below. Implementing the same operation interface does not activate a native contract or preserve another profile's addresses and signing domain.
 
 ===Relationship to other proposals===
 
@@ -35,7 +35,7 @@ The closed transferable-account and metadata drafts (#219 and #220) describe opt
 
 The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative requirements of this draft. Unless a profile states otherwise, all integers are non-negative integers, all timestamps are Unix milliseconds, and all timestamps are evaluated against the executing block's <code>Runtime.Time</code>, not a relayer's wall clock.
 
-The term <code>core</code> means the callable SmartAccount service identity that owns account state and executes UserOperations on one Neo N3 network. The term does not select a deployment mechanism or a native contract address.
+The term <code>core</code> means the callable SmartAccount native contract identity that owns account state and executes UserOperations on one Neo N3 network. The term does not select a deployment mechanism or a native contract address.
 
 * <code>accountId</code> is a non-zero 20-byte identifier exposed as <code>Hash160</code> in the Neo contract ABI. It identifies account state within one core and is not itself an asset-holding address.
 * An account's protocol identity is <code>(networkMagic, coreHash, accountId)</code>. An authorization profile MUST bind signatures or witnesses to this identity where replay across networks or cores would otherwise be possible.
@@ -190,7 +190,7 @@ Each stateful callback MUST authenticate the calling core and an account-specifi
 
 The application-authorization context MUST NOT confer authority on arbitrary descendants of the target. Any nested-call authorization profile MUST explicitly define its scope and termination conditions.
 
-Execution authority, configuration authority, recovery authority, custody authority, and service-upgrade authority are separate concepts. A profile MUST state who holds each authority and which transitions, delays, and cancellation rules apply. This foundation neither requires a single owner nor grants an ordinary-contract administrator authority over a native service.
+Execution authority, configuration authority, recovery authority, custody authority, and contract-upgrade authority are separate concepts. A profile MUST state who holds each authority and which transitions, delays, and cancellation rules apply. This foundation neither requires a single owner nor grants an ordinary-contract administrator authority over a native contract.
 
 ===Witness bridge===
 
@@ -244,7 +244,7 @@ This document revises an unaccepted draft and does not modify an assigned or Fin
 
 The earlier <code>executeUnifiedByAddress</code>, verifier <code>verify</code>, and <code>verifyMetaTx</code> interfaces are not mandatory interfaces of this foundation. Legacy implementations MAY continue operating. An adapter MUST specify identifier conversion, authorization-domain binding, serialization, and policy preservation; renaming methods alone does not establish conformance.
 
-This document does not activate a consensus change. A native service implementing it requires the activation, governance, resource, and migration plan defined by its own proposal.
+This document does not activate a consensus change. A native contract implementing it requires the activation, governance, resource, and migration plan defined by its own proposal.
 
 ==Test Cases==
 
@@ -268,7 +268,7 @@ The vectors are conformance requirements for a claimed profile. This list is not
 
 This NEP specifies protocol behavior and does not prescribe source language, contract layout, bytecode, deployment topology, or a particular NeoVM syscall. An implementation is conforming only if it satisfies every applicable normative requirement, publishes its profile parameters and resource semantics, and passes the required conformance vectors.
 
-An ordinary deployed contract and a node-native service MAY both implement this foundation, but an ordinary deployed contract MUST NOT be described as a node-native SmartAccount service without the corresponding consensus and activation specification.
+An ordinary deployed contract and a node-native contract MAY both implement this foundation, but an ordinary deployed contract MUST NOT be described as a node-native SmartAccount contract without the corresponding consensus and activation specification.
 
 ==Revision provenance==
 

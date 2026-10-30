@@ -6,6 +6,7 @@ No initializer/body/RET is executed and no deployed state is authenticated.
 import hashlib
 import http.client
 import json
+import os
 from pathlib import Path
 import re
 import urllib.error
@@ -147,7 +148,8 @@ TEMPLATES = {'CallContract': '{if(method.StartsWith(\'_\'))thrownewArgumentExcep
  'StackConstructor': '{_referenceCounter=referenceCounter;}',
  'Push': '{_innerList.Add(item);_referenceCounter.AddStackReference(item);}'}
 
-TOKEN = re.compile(r'''\s+|//[^\n]*|/\*[\s\S]*?\*/|\$?"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])'|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|==|!=|<=|>=|&&|\|\||\+\+|--|=>|\?\?=|[{}()\[\];,.!+*\-/<>=?:@&|~^%]''')
+from csharp_tokens import TOKENIZER as TOKEN
+
 BASE_PROGRAM = dict(exact_arity=True, reject_underscore=True, check_count=True, check_return=True,
     allowed_flags=15, safe_clear_mask=10, intersect_flags=True, nonvoid_rv=1, void_rv=0,
     offset_delta=0, reverse_push=True, initializer_first=True, clone_shared=True, clone_rv=0,
@@ -267,13 +269,32 @@ def download_pinned(url):
     raise last_error
 
 
+def mirror_source(key,row):
+    """Return pinned bytes from a local mirror directory, or None.
+
+    The pin, not the transport, is the evidence: mirror bytes must hash to the
+    same pinned value a download would have to reach, so a mirror cannot launder
+    a different artifact. This only substitutes for a stalled network, which is
+    an environment fault rather than a fact about the source. Point
+    AA_ENTRY_DISPATCH_SOURCE_MIRROR at a directory of previously fetched
+    `<key>.cs` files to run the lane offline.
+    """
+    mirror=os.environ.get('AA_ENTRY_DISPATCH_SOURCE_MIRROR')
+    if not mirror: return None
+    candidate=Path(mirror)/(key.replace('/','-')+'.cs')
+    if not candidate.is_file(): return None
+    raw=candidate.read_bytes();require(sha(raw)==row['sha256'],'Offline mirror source mismatch')
+    return raw
+
+
 def project_production(directory):
     directory=Path(directory); directory.mkdir(parents=True,exist_ok=True)
     contents={}; rows={}
     for key,row in SOURCES.items():
         path=directory/(key.replace('/','-')+'.cs')
         if not path.exists():
-            raw=download_pinned(source_url(row))
+            raw=mirror_source(key,row)
+            if raw is None: raw=download_pinned(source_url(row))
             require(sha(raw)==row['sha256'],'Downloaded pinned source mismatch');path.write_bytes(raw)
         raw=path.read_bytes();require(sha(raw)==row['sha256'],'Pinned source file drift')
         contents[key]=raw.decode('utf-8');rows[key]=dict(path=str(path.resolve()),url=source_url(row),sha256=sha(raw))

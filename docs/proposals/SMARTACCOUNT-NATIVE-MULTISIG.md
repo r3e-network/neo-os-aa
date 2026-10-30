@@ -2,8 +2,8 @@
 
 ## Purpose and compatibility
 
-Adapt the heterogeneous MultiSigVerifier policy to the native AccountManagement
-service without weakening callback phase isolation. This is a module profile,
+Adapt the heterogeneous MultiSigVerifier policy to the SmartAccount native
+contract without weakening callback phase isolation. This is a module profile,
 not a change to native consensus activation, callback budgets or operation bytes.
 Legacy artifacts remain separate. Native compatibility requires a fresh module
 deployment and binding; it is not an in-place legacy upgrade. The current native
@@ -58,7 +58,7 @@ latter even when its one supplied witness is valid.
 Validation checks every signature slot's type before considering a quorum. It
 visits children in configured order, skipping Null slots, and stops after the
 first `threshold` exact Boolean approvals. It returns the exact Array
-`[true, orderedApprovedChildren, policyCommitment32]`. The native service strictly
+`[true, orderedApprovedChildren, policyCommitment32]`. The native contract strictly
 checks the shape and ordered subset, deep copies it, and retains it only for
 this one operation. It is never persisted, accepted from the transaction, or
 shared across Verification and Application. Batch operations each create a
@@ -70,7 +70,7 @@ compares their commitment. Only the approved children receive post grants and
 callbacks, in configured order. Later supplied valid signatures are not part of
 the selected quorum and do not consume Session allowances. The root reloads the
 configuration and domains again after all child callbacks; a changed commitment
-faults the operation. The native service additionally checks current code pins.
+faults the operation. The native contract additionally checks current code pins.
 
 Post execution skips only duplicate cryptographic operation-signature work.
 Each Session freshly checks that its key is active, unexpired and permits the
@@ -91,7 +91,7 @@ also remains subject to the global 1.5 GAS limit.
 ## Dependency ownership and cleanup
 
 Custody configures leaves through delayed `callVerifierChild` operations before
-the root activates the roster with delayed `callVerifier`. The native service
+the root activates the roster with delayed `callVerifier`. The native contract
 owns enrolled/active dependency records, code identities and cleanup ordering.
 Root `clearAccount` requires a cleanup grant, checks the native dependency-clear
 operation and removes root configuration. It must not impersonate a leaf's

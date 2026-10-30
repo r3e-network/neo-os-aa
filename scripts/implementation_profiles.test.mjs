@@ -29,7 +29,7 @@ test('ordinary and native profiles have separate, existing entrypoints', () => {
   const native = readProfile('native');
 
   assert.equal(ordinary.data.id, 'ordinary-user-contract');
-  assert.equal(native.data.id, 'native-account-management');
+  assert.equal(native.data.id, 'native-smart-account');
   assert.notEqual(ordinary.data.id, native.data.id);
   assert.equal(ordinary.data.verification.profile, 'ordinary');
   assert.equal(native.data.verification.profile, 'native');
@@ -62,9 +62,12 @@ test('ordinary and native profiles have separate, existing entrypoints', () => {
   }
 
   assert.ok(native.data.externalBoundaries.length >= 2, 'native external boundary must be documented');
-  assert.match(native.data.externalBoundaries.join('\n'), /AccountManagement/);
+  assert.match(native.data.externalBoundaries.join('\n'), /SmartAccount/);
   assert.equal(native.data.implementationVerified, false);
-  assert.ok(native.data.openGates.includes('NATIVE-CROSS-PROXY-AUTHORITY'));
+  // The cross-proxy authority gate was closed in the local candidate and
+  // replaced by an independent readback requirement; see
+  // `localAuthorityAdmission` in the native profile.
+  assert.ok(native.data.openGates.includes('CURRENT-PROFILE-ARTIFACT-READBACK'));
   assert.ok(native.data.openGates.includes('EXTERNAL-PROTOCOL-ACCEPTANCE'));
   assert.ok(native.data.openGates.includes('PUBLIC-HARDFORK-ACTIVATION'));
 });
@@ -90,6 +93,11 @@ test('ordinary artifact identity does not certify the newer source fixes or a pu
   assert.equal(ordinary.currentSourceCandidate.releaseGate, 'required-before-public-upgrade');
 
   const verified = ordinary.verifiedArtifact;
+  // The published mainnet deployment is an immutable on-chain fact: its manifest
+  // still carries the pre-rename contract name, and the pinned sha256 below is
+  // the hash of the bytes that are actually deployed. Renaming the local source
+  // tree must not relabel it, so this block keeps the deployed identity until a
+  // new deployment supplies its own readback evidence.
   assert.equal(verified.contractName, 'UnifiedSmartWalletV3');
   const nefPath = path.join(repoRoot, verified.path);
   const manifestPath = path.join(repoRoot, verified.manifestPath);

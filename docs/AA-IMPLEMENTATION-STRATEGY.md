@@ -15,8 +15,8 @@ implements; passing its tests is not acceptance of a Neo standard.
 
 | Path | Starting implementation | Delivery boundary |
 | --- | --- | --- |
-| Deployed contract | `UnifiedSmartWalletV3`, its public `v3` modules, `AbstractAccountClient` and app | Deployable on the published Neo N3 runtime after artifact, integration and release validation |
-| Native service | `AccountManagement`, native ABI 2 modules, `NativeSmartAccountClient` and `/native` | Matching node implementation, protocol review and hardfork activation |
+| Deployed contract | `SmartAccountV3`, its public `v3` modules, `SmartAccountClient` and app | Deployable on the published Neo N3 runtime after artifact, integration and release validation |
+| Native contract | `SmartAccount`, native ABI 2 modules, `NativeSmartAccountClient` and `/native` | Matching node implementation, protocol review and hardfork activation |
 | Runtime experiments | Private `PLATFORM` build | Research and controlled validation only; not a third public product |
 
 Existing V3 is the operational starting point for the deployed-contract path,
@@ -39,13 +39,13 @@ encoding has been implemented and verified on both paths. In particular:
 
 | Boundary | Public deployed V3 | Native ABI 2 |
 | --- | --- | --- |
-| Availability | Ordinary deployment and matching modules | Consensus activation of the service |
+| Availability | Ordinary deployment and matching modules | Consensus activation of the native contract |
 | Account and asset identity | V3 account registration and proxy script | Native account derivation and canonical native proxy script |
-| Operation authorization | V3 verifier-specific signatures and witness rules | Native service/network/account/epoch/configuration commitment |
+| Operation authorization | V3 verifier-specific signatures and witness rules | Native contract/network/account/epoch/configuration commitment |
 | Callback resources | Transaction budget and reviewed module behavior; no isolated child budget | Platform-enforced verifier, hook and maintenance child budgets |
 | Recovery | Backup-owner escape with timelock and checked old-module cleanup | Independent custody recovery revokes old modules through the authority epoch |
 | Sponsored fees | Existing constrained paymaster and relay flows | External transaction payer; no native reimbursement paymaster in ABI 2 |
-| Service changes | Contract deployment/update authority and documented version migration | Protocol governance and hardfork migration |
+| Contract changes | Contract deployment/update authority and documented version migration | Protocol governance and hardfork migration |
 
 The public runtime cannot reproduce a non-bypassable child execution budget using
 a contract convention. Do not weaken or remove the native requirement to claim

@@ -31,7 +31,7 @@ function readUInt160(result) {
 }
 
 // Transport injection keeps identity semantics testable without connecting a
-// wallet. All methods below are safe entries in UnifiedSmartWallet's V3 ABI.
+// wallet. All methods below are safe entries in SmartAccount's V3 ABI.
 export function createAccountIdentityReader(invokeReadFunction) {
   return async function fetchAccountIdentity({
     rpcUrl, aaContractHash, accountIdHex, accountAddressScriptHash,

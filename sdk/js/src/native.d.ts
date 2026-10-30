@@ -1,4 +1,4 @@
-/** Native AccountManagement ABI 2. Hashes are display-order hex; ByteString values are wire-order hex. */
+/** Native SmartAccount ABI 2. Hashes are display-order hex; ByteString values are wire-order hex. */
 export type NativeInteger = string | bigint | number;
 export type NativeValue =
   | { type: "Null"; value?: null }
@@ -76,11 +76,11 @@ export declare function createNativeCodec(hashAdapters: {
   sha256: (hex: string) => string;
   hash160: (hex: string) => string;
 }): NativeCodec;
-export declare const NATIVE_ACCOUNT_SERVICE: "d9421d07adf206e9dc4be746a02e8e087fa61741";
+export declare const NATIVE_SMART_ACCOUNT_CONTRACT: "398dc3f0227d7efac5533ed5ce9937390c158084";
 export declare const NATIVE_ABI_VERSION: 2;
 export declare const NATIVE_PROFILE_PARAMETER_DIGEST: string;
 export interface NativeProfile {
-  readonly service: string;
+  readonly contract: string;
   readonly networkMagic: number;
   readonly abiVersion: 2;
   readonly identityVersion: 1;

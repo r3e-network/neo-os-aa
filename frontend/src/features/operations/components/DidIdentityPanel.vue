@@ -797,7 +797,7 @@ import {
   fetchUnifiedVerifierState,
 } from "@/services/morpheusDidService.js";
 import { notificationService } from "@/services/notificationService.js";
-import { getAbstractAccountHash } from "@/services/walletService.js";
+import { getSmartAccountHash } from "@/services/walletService.js";
 import { getScriptHashFromAddress } from "@/utils/neo.js";
 import { sanitizeHex } from "@/utils/hex.js";
 import { RUNTIME_CONFIG } from "@/config/runtimeConfig.js";
@@ -1061,7 +1061,7 @@ async function refreshAccountContext() {
   try {
     const identity = await fetchAccountIdentity({
       rpcUrl: RUNTIME_CONFIG.rpcUrl,
-      aaContractHash: props.aaContractHash || getAbstractAccountHash(),
+      aaContractHash: props.aaContractHash || getSmartAccountHash(),
       accountIdHex: props.accountIdPrefill,
       accountAddressScriptHash: props.accountAddressScriptHash,
     });
@@ -1125,7 +1125,7 @@ async function refreshVerifierState(accountId, verifier) {
     const [maintenance, state] = await Promise.all([
       fetchAccountMaintenanceState({
         rpcUrl: RUNTIME_CONFIG.rpcUrl,
-        aaContractHash: props.aaContractHash || getAbstractAccountHash(),
+        aaContractHash: props.aaContractHash || getSmartAccountHash(),
         accountIdHex: accountId,
       }),
       verifier ? fetchUnifiedVerifierState({
@@ -1278,7 +1278,7 @@ async function bindDidAction() {
       claimType: claimType.value,
       claimValue: claimValue.value,
       metadata: {
-        aa_contract: props.aaContractHash || getAbstractAccountHash(),
+        aa_contract: props.aaContractHash || getSmartAccountHash(),
         account_address: props.accountAddressScriptHash || undefined,
         account_id: resolvedAccountId.value || undefined,
       },
@@ -1326,7 +1326,7 @@ async function previewRecoveryAction() {
   busy.value = "previewRecovery";
   try {
     const response = await morpheusDidService.previewRecoveryTicket({
-      aaContract: props.aaContractHash || getAbstractAccountHash(),
+      aaContract: props.aaContractHash || getSmartAccountHash(),
       verifierContract: recoveryVerifierHash.value,
       accountId: resolvedAccountId.value,
       newOwner: recoveryNewOwner.value,
@@ -1372,7 +1372,7 @@ async function previewProxyAction() {
   try {
     const response = await morpheusDidService.previewActionTicket({
       executor: proxyExecutor.value,
-      actionId: `aa_proxy:${props.aaContractHash || getAbstractAccountHash()}:${resolvedAccountId.value || "unresolved"}:${normalizeHashOrAddress(proxyExecutor.value)}:${toExpiry(proxyExpiryMinutes.value)}`,
+      actionId: `aa_proxy:${props.aaContractHash || getSmartAccountHash()}:${resolvedAccountId.value || "unresolved"}:${normalizeHashOrAddress(proxyExecutor.value)}:${toExpiry(proxyExpiryMinutes.value)}`,
     });
     resultJson.value = JSON.stringify(response, null, 2);
     publishStatus(t("didPanel.previewTicket", "Preview Ticket"));
@@ -1506,7 +1506,7 @@ async function sendEmailNoticeAction() {
       did: didProfile.value?.did,
       email: didProfile.value?.email,
       payload: {
-        aa_contract: props.aaContractHash || getAbstractAccountHash(),
+        aa_contract: props.aaContractHash || getSmartAccountHash(),
         account_id: resolvedAccountId.value || "",
         verifier:
           recoveryVerifierHash.value || effectiveProxyVerifierHash.value || "",
@@ -1532,7 +1532,7 @@ async function sendSmsNoticeAction() {
       did: didProfile.value?.did,
       phone: didProfile.value?.phone,
       payload: {
-        aa_contract: props.aaContractHash || getAbstractAccountHash(),
+        aa_contract: props.aaContractHash || getSmartAccountHash(),
         account_id: resolvedAccountId.value || "",
         verifier:
           recoveryVerifierHash.value || effectiveProxyVerifierHash.value || "",

@@ -11,7 +11,7 @@
 ```mermaid
 flowchart LR
   User[用户 / 操作员] --> UI[前端工作台]
-  UI --> Master[UnifiedSmartWallet 主合约]
+  UI --> Master[SmartAccount 主合约]
   Master --> Policies[角色 + 策略 + 限额]
   Master --> Target[目标合约]
   Master --> Proxy[确定性验证代理地址]

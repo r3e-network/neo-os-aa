@@ -143,7 +143,7 @@ try:
                 require(int(result['account']['configurationNonce']) == before+1, 'Configuration nonce did not advance once')
                 return result
             def register(name, salt):
-                return record('register-'+name, sdk(dict(secrets, mode='register', salt=salt*32, verifier=modules[name], recoveryAddress=addresses['guardian'])))
+                return record('register-'+name, sdk(dict(secrets, mode='register', salt=salt*32, verifier=modules[name], recoveryAddress=addresses['guardian'], authorityPrivateKeys=[keys['guardian']])))
             def operation(proxy):
                 return {'targetContract': TOKEN, 'method': 'transfer', 'args': [
                     {'type': 'ByteString', 'value': hash_le(proxy).hex()},

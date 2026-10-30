@@ -30,10 +30,10 @@ function readComponentTree(parentVuePath) {
   return sources.join('\n\n');
 }
 
-function readUnifiedSmartWalletSource() {
+function readSmartAccountSource() {
   const contractsDir = path.resolve('..', 'contracts');
   const files = fs.readdirSync(contractsDir)
-    .filter((name) => name.startsWith('UnifiedSmartWallet') && name.endsWith('.cs'))
+    .filter((name) => name.startsWith('SmartAccount') && name.endsWith('.cs'))
     .sort();
   return files.map((name) => fs.readFileSync(path.join(contractsDir, name), 'utf8')).join('\n\n');
 }
@@ -57,7 +57,7 @@ test('address market UI and docs describe trustless escrow semantics', () => {
 });
 
 test('AA core and market contract expose escrow transfer primitives', () => {
-  const core = readUnifiedSmartWalletSource();
+  const core = readSmartAccountSource();
   const market = fs.readFileSync(marketContractPath, 'utf8');
 
   assert.match(core, /EnterMarketEscrow/);

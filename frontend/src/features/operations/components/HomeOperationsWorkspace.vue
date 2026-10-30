@@ -899,7 +899,7 @@ import { useDraftPersistence } from "@/features/operations/useDraftPersistence.j
 import { useBroadcastReceipts } from "@/features/operations/useBroadcastReceipts.js";
 import { createOperationsWorkspace } from "@/features/operations/useOperationsWorkspace.js";
 import {
-  getAbstractAccountHash,
+  getSmartAccountHash,
   walletService,
 } from "@/services/walletService.js";
 import { morpheusDidService } from "@/services/morpheusDidService.js";
@@ -1872,7 +1872,7 @@ async function loadAccount(overrideAddress = "") {
   const resolvedAccountIdHash = sanitizeHex(lookup);
 
   const verifyScript = createVerifyScript(
-    getAbstractAccountHash(),
+    getSmartAccountHash(),
     resolvedAccountIdHash,
   );
   const resolvedAddressScriptHash = reverseHex(hash160(verifyScript));
@@ -1882,12 +1882,12 @@ async function loadAccount(overrideAddress = "") {
   try {
     await assertV3AccountExists({
       rpcUrl: walletService.rpcUrl,
-      aaContractHash: getAbstractAccountHash(),
+      aaContractHash: getSmartAccountHash(),
       accountIdHash: resolvedAccountIdHash,
     });
     accountAddressScriptHash.value = resolvedAccountIdHash;
 
-    workspace.loadAbstractAccount({
+    workspace.loadSmartAccount({
       accountAddressScriptHash: resolvedAddressScriptHash,
       accountIdHash: resolvedAccountIdHash,
     });
@@ -1928,7 +1928,7 @@ function stageOperation() {
   workspace.setOperationBody(nextOperationBody);
   workspace.setTransactionBody(
     buildStagedTransactionBody({
-      aaContractHash: getAbstractAccountHash(),
+      aaContractHash: getSmartAccountHash(),
       account: workspace.account.value,
       operationBody: nextOperationBody,
       signerAddress: walletService.address,
@@ -2082,7 +2082,7 @@ async function signWithEvmWallet() {
 
     const { signatureRecord, metaInvocation } = await signUserOpWithEvm({
       rpcUrl: walletService.rpcUrl,
-      aaContractHash: getAbstractAccountHash(),
+      aaContractHash: getSmartAccountHash(),
       accountIdHash: workspace.account.value.accountIdHash,
       operationBody: workspace.operationBody.value,
       signerId: evmAddress.value,
@@ -2137,7 +2137,7 @@ async function signWithZkLogin() {
       await didConnection.connectDid();
     }
 
-    const aaContractHash = getAbstractAccountHash();
+    const aaContractHash = getSmartAccountHash();
     const { argsHashHex, verifierHash, nonce, deadline } =
       await prepareV3UserOpContext({
         rpcUrl: walletService.rpcUrl,

@@ -16,7 +16,7 @@ const { buildV3UserOperationTypedData } = require('../metaTx');
  * @param {Object} options.userOp - UserOperation object
  * @param {string} options.argsHash - On-chain-computed args hash. REQUIRED: this
  *   must equal keccak256(StdLib.Serialize(args)) as produced by the contract's
- *   computeArgsHash method (see AbstractAccountClient.computeArgsHash). It is not
+ *   computeArgsHash method (see SmartAccountClient.computeArgsHash). It is not
  *   derived locally because a JS-side hash (e.g. of JSON.stringify(args)) does
  *   NOT match the on-chain serialization, which would yield a signature that can
  *   never be verified.
@@ -35,7 +35,7 @@ function buildEIP712PayloadForWeb3AuthVerifier({ chainId, verifierHash, accountI
     // hash computed on-chain instead of silently failing later.
     throw new Error(
       'buildEIP712PayloadForWeb3AuthVerifier requires argsHash. Compute it on-chain ' +
-      'via AbstractAccountClient.computeArgsHash(args) (keccak256(StdLib.Serialize(args))) ' +
+      'via SmartAccountClient.computeArgsHash(args) (keccak256(StdLib.Serialize(args))) ' +
       'and pass it as argsHash; do not let it be derived locally.'
     );
   }
