@@ -1,0 +1,66 @@
+{
+  "schema": "neoos-aa-neoexpress-readback/v1",
+  "observedOn": "2026-09-20",
+  "scope": "Fresh one-node private NeoExpress deployment and RPC readback of the post-callback-ABI core; no public-chain or production deployment.",
+  "tool": {
+    "name": "NeoExpress",
+    "version": "3.10.1.18+3373db93dd",
+    "neoVersion": "3.10.1"
+  },
+  "network": {
+    "kind": "isolated-private-single-node",
+    "networkMagic": 2953880320,
+    "rpcHost": "127.0.0.1",
+    "blockCountAtReadback": 160,
+    "publicNetwork": false,
+    "feeSettings": "local-only reduced deployment/storage/execution factors; isolated private chain"
+  },
+  "deployment": {
+    "contractName": "UnifiedSmartWalletV3",
+    "contractHash": "0x61c7132ff08904c804390dde934256a48c68fe92",
+    "deploymentTransaction": "0x238dab9d18324237c8e8e192d1659f4359f24eabc062cf4b134d5e99d698a0b3",
+    "localNefSha256": "657b3e8b33094f3279aa46a1b4d63a52edc94a176859bcd95901b774d58adb56",
+    "localManifestSha256": "784c13ef904216904e009335efc1795b0bc9408c4519f5eea52e3f6ace7a3912"
+  },
+  "rpcReadback": {
+    "manifestSemanticEquality": true,
+    "nefScriptByteEquality": true,
+    "nefScriptSha256": "37d1ca322cfee60544527b6585649fc888c78d3c4c77d23a08e1795dad964451",
+    "nefScriptLength": 20200,
+    "nefChecksum": 2808031062,
+    "manifestName": "UnifiedSmartWalletV3",
+  "status": "historical-post-callback-ABI-local-readback"
+  },
+  "runtimeProbes": [
+    {
+      "method": "supportsExecutionMode",
+      "input": "single",
+      "result": "HALT true"
+    },
+    {
+      "method": "previewUserOpValidation",
+      "input": "nonzero account with zero-target operation",
+      "result": "FAULT Target contract required",
+      "expected": "fail-closed"
+    },
+    {
+      "method": "getAccountImplementationId",
+      "result": "org.r3e.neo.aa.unified-smart-wallet.v3"
+    }
+  ],
+  "parityBoundary": {
+    "currentCsharpToLocalNef": "verified-by-independent-byte-identical-builds",
+    "currentLocalNefToNeoExpressRpc": "verified-historical-post-callback-ABI",
+    "publicTestnetOrMainnetReadback": "unverified",
+    "productionDeployment": false,
+    "transactionSigningOrBroadcast": false
+  },
+  "privacy": {
+    "credentialsIncluded": false,
+    "privateKeysIncluded": false,
+    "absoluteUserPathsIncluded": false
+  },
+  "status": "historical-pre-current-remediation",
+  "supersededBy": "aa-neoexpress-readback-20260920-current.json",
+  "boundaryNote": "This receipt predates the current manifest-lifecycle preflight and subsequent core remediation; use the current receipt for the current artifact."
+}

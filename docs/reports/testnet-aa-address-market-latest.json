@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-08-30T23:25:58.918Z",
+  "status": "pass",
+  "network": "testnet",
+  "networkMagic": 894710606,
+  "rpcUrl": "https://testnet1.neo.coz.io:443",
+  "deployer": "NTmHjwiadq4g3VHpJ5FQigQcD4fF5m8TyX",
+  "adminHash": "0x0c3146e78efc42bfb7d4cc2e06e3efd063c01c56",
+  "coreHash": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
+  "marketHash": "0x6b979cdd246cc6491a20000a2a822e497c92c23b",
+  "manifestName": "AAAddressMarket-v3-mtgftify",
+  "deployTx": "0xfaf2ba4ea9b7047323182cef80413c2860c525aa98ec72104f4470bbce51f87d",
+  "allowCoreTx": "0x88f29088ed6d386831926bd00ffd81a30f4f6d196f63c3164c8a2744fde4935d",
+  "listingCount": "0",
+  "requiredAbiVerified": true,
+  "coreAllowlistVerified": true
+}

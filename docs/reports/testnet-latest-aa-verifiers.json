@@ -1,0 +1,24 @@
+{
+  "network": "testnet",
+  "networkMagic": 894710606,
+  "rpcUrl": "https://api.n3index.dev/testnet",
+  "coreHash": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
+  "deployer": "NR3E4D8NUXh3zhbf5ZkAp3rTxWbQqNih32",
+  "planOnly": false,
+  "deployments": [
+    {
+      "module": "recovery",
+      "artifact": "SocialRecoveryVerifier",
+      "hash": "0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26",
+      "status": "deployed",
+      "deploymentTx": "0xce204382bfa5e270f79b399f0e5731feaf1a861927a8ffd3bc38b8b3f3cae7fb",
+      "bindingTx": "0x254260f55dae8c9b22bfe042b8b4b0d3460c38a42296b19d492f53cacd8f4f43",
+      "checksum": 2171070755,
+      "methodCount": 57,
+      "supportsV3": true,
+      "authorizedCore": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
+      "version": "2.0.0"
+    }
+  ],
+  "generatedAt": "2026-08-31T05:12:51.174Z"
+}

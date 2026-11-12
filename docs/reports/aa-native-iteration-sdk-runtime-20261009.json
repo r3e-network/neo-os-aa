@@ -1,0 +1,1024 @@
+{
+  "schema": "neo-native-sdk-runtime-iteration/v1",
+  "status": "PASS",
+  "completedAtUtc": "2026-10-08T21:16:24.823189+00:00",
+  "auditedAtUtc": "2026-10-08T21:16:47.897167+00:00",
+  "profileParameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4",
+  "publicNetworksTouched": false,
+  "evidence": {
+    "rawReceipt": "retained-private/sdk-verifiers-iteration.json",
+    "rawReceiptSha256": "3f219bef1eb9415cbe88e6a0c029567e9ec90259eb2a48f8d7bbf2d50a67038e",
+    "runtimeBuildReceipt": "aa-native-iteration-runner-build-20261009.json",
+    "runtimeBuildReceiptSha256": "b172f9846e98d3a4649b2e1b24d10ac8e21acd1710d50ec1c30a890d8b0242fe",
+    "moduleBuildReceipt": "aa-native-composite-final-module-build-20261009.json",
+    "moduleBuildReceiptSha256": "2f9f2dc15489dcc2ea9e5d319f32be2561401b3a9897f3aa35d8a04ab5c5b72e",
+    "commandRecord": "retained-private/aa-native-sdk-iteration-command-20261009.json",
+    "log": "retained-private/aa-native-sdk-iteration-runtime-20261009.log"
+  },
+  "provenance": {
+    "runtimeSourceCommits": {
+      "core": "ff422d940a4722c361c32398c6f28c00fb7f0693",
+      "node": "2f4b607699d7c34e24b770ede56effde7c5ef60b",
+      "express": "da143f8643ebca7841cc7f56e4e3e00293819fbc"
+    },
+    "runtimeSourceCounts": {
+      "core": 314,
+      "node": 123,
+      "express": 182
+    },
+    "currentRuntimeSourceMatchesBuildReceipt": true,
+    "currentSdkProducerMatchesRawReceipt": true,
+    "sdkSourceSha256": {
+      "sdk/js/tests/native-runtime-verifiers.py": "3856cdd00bdd725024f38dc7925ab4fce1247024dfe730df989809baf1a1b819",
+      "sdk/js/tests/native-runtime-driver.mjs": "7148732b34b8e69b87151a58db8d126769d00a0c6b1db8f2829d12b8f36d0ad4",
+      "shared/nativeSmartAccount.mjs": "b53b885f26740df922836644fb1dcc6f53a29735f213b5419c33235d5348f1db",
+      "shared/nativeSmartAccountClient.mjs": "349c3fd86c6441155422db8e4e42d9dfcd16fcf0d77b18efd126ba090f45504c",
+      "sdk/js/src/native.js": "353d7ff9aec8a656b2e83304133d70ccf4747423e79d5aab61b09d67a96fb07b",
+      "sdk/js/src/neonCompat.js": "a57ae946b0eac96aa62224783508d8a97357d95a936265e15167b1cbc676a88b",
+      "sdk/js/src/native/client.js": "5cb709a35a733a7dc078a095b13284d28161825a4005f86b301bae17cc26d62a",
+      "sdk/js/src/native/moduleIdentity.js": "87aaee57abb0dab5360ffdf1501a89d707dd6d6b1a6d0341ee12ca767a58e1bb",
+      "sdk/js/src/native/transaction.js": "0686b9a93d094c4b93d08fb3087055950bf4c46371f2cb6a443047c908f0417c",
+      "sdk/js/src/native/verifierWitness.js": "8a300a538f9c82609649cb84ae7b78eb60d9fc4b2621c6a340f0bec7df8c9ba5",
+      "scripts/neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a",
+      "scripts/neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+      "scripts/neoexpress_native_service_validate.py": "46d278944976c18ba1abe7f7a32d36092d6a1e6011e57fc050c269b315883cc8",
+      "scripts/neoexpress_native_modules_validate.py": "b9017e098d89505a0c3282c3859d504148ded6f0a8d8ee4216e0c4babdf1e3e4",
+      "scripts/neoexpress_native_proxy_validate.py": "e89dd35336da0d1b31ba6047675c40df22508d1d3f4be555e02f68c056f82256",
+      "scripts/neoexpress_reproducible_build.py": "2c85285d70b5ac67f58c38b4f141df3fd860d974df825b634c8d0c81f28ad28d",
+      "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
+      "scripts/native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2"
+    },
+    "independentCleanBuilds": 2,
+    "identicalRuntimeFiles": 104,
+    "identicalPackages": 49
+  },
+  "counts": {
+    "confirmedSdkTransactions": 36,
+    "signedPreflightVerificationSucceed": 36,
+    "signedPreflightApplicationHalt": 36,
+    "nextBlockOnPersistHaltDeclarations": 36,
+    "exactSignedRawReadbacks": 36,
+    "expectedRejections": 3,
+    "deployedModuleInstances": 4
+  },
+  "matrix": [
+    "NeoNative root explicit verifier witness and independent fee payer",
+    "Session root with exact chain getPayload and P-256 signature",
+    "Session and NeoNative mixed 2-of-2",
+    "Two Session verifier instances, 2-of-2",
+    "4096-byte operation argument limit",
+    "191-bit channel maximum and argument depth 8",
+    "All three allowed pairs in an ordered 2-of-3 roster",
+    "Three valid proofs select and consume only the first two children",
+    "Removed child policy clearance and delayed re-enrollment",
+    "Unexpired signed raw rejected after configuration; newly signed raw succeeds"
+  ],
+  "selectedQuorum": {
+    "threshold": 2,
+    "providedProofs": 3,
+    "selectedIndices": [
+      0,
+      1
+    ],
+    "unselectedSessionSpentUnchanged": true
+  },
+  "checks": {
+    "independentBalanceNonceAndSessionPolicyReadback": true,
+    "authorityKeysRemainZeroGas": true,
+    "deployedFullNefAndManifestReadback": true,
+    "ownedNodesStopped": true,
+    "sdkOwnedNodeProcessesRemaining": [],
+    "unrelatedProcessesModified": false
+  },
+  "transactions": [
+    {
+      "step": "register-NeoNativeVerifier",
+      "txid": "0xa4e0b81cff5123505b1e45b0961a4896fd3ff89b03825b1065edcd8d46ad0497",
+      "signedRawSha256": "521e4f2139e3f7f3840eee40c2f459cd4ac3d91491e55d466c0c307a6da34aec",
+      "blockHash": "0x296ec7889f6eabfbb5846e69056ea430405a6940684f6220469032c3e0eeb1e4",
+      "systemFee": "253932817",
+      "networkFee": "2444040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 6,
+        "hash": "0x42ebb0cfb9babf7d567253b2911d4ec4cc832fedb919fa3df71a3a7e797f4d80"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 7,
+        "timestamp": "1791493855349",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "register-SessionKeyVerifier",
+      "txid": "0x0d3a4f75b80a06e34a120086c1ece502053542b437cb26e046a6411e759e17b0",
+      "signedRawSha256": "ddcceb0934b87e9f6f51df571898ec26b39c355bc128e96f94bc06ce62638dcb",
+      "blockHash": "0xd5d37d3f030d3f940209a077c2adf8b2b1bed4ce332dfa8c805a9eabd758a97d",
+      "systemFee": "253932817",
+      "networkFee": "2444040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 7,
+        "hash": "0x296ec7889f6eabfbb5846e69056ea430405a6940684f6220469032c3e0eeb1e4"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 8,
+        "timestamp": "1791493856772",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "register-MultiSigVerifier",
+      "txid": "0x7952ddf8548522c729f257b04cb4f9e540eeaeaa93393ab84e4f17be06e0c40f",
+      "signedRawSha256": "7616cee7ec66deece9196551e1313b316af0ad90530c0d29f7390d09c5103c63",
+      "blockHash": "0xa01add1e16cd012097658b4f4198c4a9fa1c7a7154aec88bc11707df95008213",
+      "systemFee": "253932817",
+      "networkFee": "2444040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 8,
+        "hash": "0xd5d37d3f030d3f940209a077c2adf8b2b1bed4ce332dfa8c805a9eabd758a97d"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 9,
+        "timestamp": "1791493857802",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "native-root-config-propose",
+      "txid": "0x2a207d43e26817bc99a4b6a965de16347f07b432c4e7e36fddf200226e90428e",
+      "signedRawSha256": "c781d3e9be067e92b5c9c8a6c6cc04cd945fb354b4f7edfd5f509c82566a6a7a",
+      "blockHash": "0x9561f0994f5f56a48186843527246bf5f9b6f86c956f98d23acaddd6c38d3f10",
+      "systemFee": "27650069",
+      "networkFee": "2379040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 31,
+        "hash": "0xe1cba918d76809c014d214cda2aba375df9d879dae11ae12078a86de68e29730"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 32,
+        "timestamp": "1791493882821",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "native-root-config-confirm",
+      "txid": "0x4fc6ba3f7f1a9da2f868cda87cfd8ff212d3bf38220fa5a18e0aa2bf08529d3f",
+      "signedRawSha256": "3605cec6549482b453b15fc874dd80b833f8fdb3614eac8187a6b00f8a3492b7",
+      "blockHash": "0x6b4b56fa77222bb1e3f23ef334bfb528f316eedc59502e1a154d57497b3aeec3",
+      "systemFee": "254916116",
+      "networkFee": "2379040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 53,
+        "hash": "0x2085d5c9a8ae5f09e526415486bc7f74afc29141e77fa2f5e484e4fa2d2fc6cd"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 54,
+        "timestamp": "1791580307359",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "native-root-transfer",
+      "txid": "0x413e3a4f6064f3ccf4eb8d5fbe69d9872bd2f1d6c5301f3f86d7a14dbccd0baf",
+      "signedRawSha256": "c2c73c82e0f78c9ce065e336a178e73dca402127b3e1db6bcaf172cc8f356bb2",
+      "blockHash": "0x4194e8b10bfc5cb4cd10de6c44395a2ed26c429b67412571d1da25eef062e04f",
+      "systemFee": "129444597",
+      "networkFee": "106494154",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 54,
+        "hash": "0x6b4b56fa77222bb1e3f23ef334bfb528f316eedc59502e1a154d57497b3aeec3"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 55,
+        "timestamp": "1791580307360",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "native-root-reconfigure-propose",
+      "txid": "0xd9a784030054878756a05a116a83ed2698aeec32ffecba9ccff052a9d9d1d802",
+      "signedRawSha256": "0b804696434beeaa528f2e72784e538633ff82693d5bde718eea2eb14ffeaf46",
+      "blockHash": "0xb5a2218654b0cf596a891d8ea7ce66040be2f2b970e29dde53821692b600820a",
+      "systemFee": "27750069",
+      "networkFee": "2379040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 55,
+        "hash": "0x4194e8b10bfc5cb4cd10de6c44395a2ed26c429b67412571d1da25eef062e04f"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 56,
+        "timestamp": "1791580307361",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "native-root-reconfigure-confirm",
+      "txid": "0xb64f5589b6f58019fceeaba2d2bd8791df694836aaf0d131d8cf646f0e12ddca",
+      "signedRawSha256": "570e07dabe5f032309ab1f4b71c63d2fce125f2ca27636c8c6c89d39be220f6b",
+      "blockHash": "0x08be1eadc5749202d2aa4146048a0fb9dbdf90bf825af6bd4c47f655a8afe788",
+      "systemFee": "254916116",
+      "networkFee": "2379040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 76,
+        "hash": "0x67ea50f9e31e9fd843a6f81a5f1cbbddbc14d6eaaf4f9aeb5ca579c4df2e574f"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 77,
+        "timestamp": "1791666708382",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "native-root-fresh-after-config",
+      "txid": "0x5bc4fe11d83aff74b43b2d48b9f7465642a6b1953481b57fcb67524459f7ece1",
+      "signedRawSha256": "5cd151787dacce4f6a22c5abb6e8cd6f3673016e169d03fe571437d6dc4ec3fc",
+      "blockHash": "0xc9391477f3d84fa399cc2cb4cf7212db834cf5b6d61b861c4aec879b3a2cedd8",
+      "systemFee": "124944597",
+      "networkFee": "106494154",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 77,
+        "hash": "0x08be1eadc5749202d2aa4146048a0fb9dbdf90bf825af6bd4c47f655a8afe788"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 78,
+        "timestamp": "1791666708383",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "session-root-config-propose",
+      "txid": "0x7e37bfff5e6f5df37f9faa1f8d1321d1b077356939b3beb2779d603f3a31d9ab",
+      "signedRawSha256": "6ae124de01df023b9392104be8cd645b2f5ba815782f3fa4f1acba26c16230e7",
+      "blockHash": "0x4d70372cb45a215c32106939d1a6891725b0761d6778c316dfea43666d7ed145",
+      "systemFee": "35950198",
+      "networkFee": "2464040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 78,
+        "hash": "0xc9391477f3d84fa399cc2cb4cf7212db834cf5b6d61b861c4aec879b3a2cedd8"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 79,
+        "timestamp": "1791666708384",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "session-root-config-confirm",
+      "txid": "0xa32026dff2e2284acf8f6f276b12fb1f7dd742a4ad893594e8add110e8842126",
+      "signedRawSha256": "1990693903fdb5b2fb57c43e9928c0f528165ec43274ec2a57de00105a07e502",
+      "blockHash": "0x96468e66aa3af569e6969f82492f014e8a7f0aa418e1003358cb1ad81d4c8dfe",
+      "systemFee": "254916246",
+      "networkFee": "2464040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 99,
+        "hash": "0x82ed0f990820e25e68ed58b753ddadece67c838275ee4c4c13e2da0b77d78e58"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 100,
+        "timestamp": "1791753109405",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "session-root-transfer",
+      "txid": "0xd9ade6818e83d2886d1c0f8464b97d09788cd32aaa771a0419903042030173ec",
+      "signedRawSha256": "defcfee727c144afd294c6cb56bff40d5f53cd7c1eb712e8d4e1967de7d5f029",
+      "blockHash": "0x7c4a57f96777d25d966e91e2da9b82341845bbb4b92ebeae00219e6f1b6f95ba",
+      "systemFee": "140384648",
+      "networkFee": "106408154",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 100,
+        "hash": "0x96468e66aa3af569e6969f82492f014e8a7f0aa418e1003358cb1ad81d4c8dfe"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 101,
+        "timestamp": "1791753109406",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-session-child-config-propose",
+      "txid": "0xcfb3c48d28e17062dc3c7e5bb8f24fd06262339a5072981b3fbf96458aab17b9",
+      "signedRawSha256": "99112cec68de8232f6cb5e46abb377f1f861885bdea1fadd3173a6a560692d52",
+      "blockHash": "0x35c2b546e45075c03c0cbc8e93a21b969776d7559771fc8d0b3e42d7af695eaa",
+      "systemFee": "257867841",
+      "networkFee": "2491040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 101,
+        "hash": "0x7c4a57f96777d25d966e91e2da9b82341845bbb4b92ebeae00219e6f1b6f95ba"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 102,
+        "timestamp": "1791753109407",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-session-child-config-confirm",
+      "txid": "0x91692a06e19ca29116555e4e994959cc1d87b1f6cd4b7ca655c5a2cf90a378e6",
+      "signedRawSha256": "f8730c0fd2e5144c1f253dcfcd6ed037b84930bd67128d910ecb8f0e95a558ea",
+      "blockHash": "0xbefd8219618432fde10d14f72e8590fdcce2bdb2c813a78276373899fa674c62",
+      "systemFee": "274237895",
+      "networkFee": "2491040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 122,
+        "hash": "0xfa2de4004038796c6e5cab3c3e7dc7e22c454f55d5ee8cc662f6d62be1e26334"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 123,
+        "timestamp": "1791839510428",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-native-child-config-propose",
+      "txid": "0x0949fd48c935a13e07aa2777c9945078e87c88a4d49726079174a3dfc1ce2300",
+      "signedRawSha256": "de48830a60d3841aa3159fa1de66c3995937bdcbc3df080284913d60f72d19d7",
+      "blockHash": "0xc2fc3762c41cb28ccb27d453a1998de420edc71d73da6251d6e60c2a0145b10b",
+      "systemFee": "257867712",
+      "networkFee": "2406040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 124,
+        "hash": "0xbefd8219618432fde10d14f72e8590fdcce2bdb2c813a78276373899fa674c62"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 125,
+        "timestamp": "1791839510430",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-native-child-config-confirm",
+      "txid": "0xc6c124d3751703b0e8a4f0a8df958d677861f0a86cd09785d25f8e1437e4f2aa",
+      "signedRawSha256": "abb620d1c490e8de6252a1b3af51c8611fd8956294fac8938ab9cd830af3dcd9",
+      "blockHash": "0xeca9c15b56c168a5b650b24904054562ea58202748db6387614442a7f8e47724",
+      "systemFee": "268736869",
+      "networkFee": "2406040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 145,
+        "hash": "0x457d4b899888ccc421681aa4b06efc77714a41f1c554b4cd51db91de7e6dcb09"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 146,
+        "timestamp": "1791925911451",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-root-config-propose",
+      "txid": "0x5e7414e74e8b0a59c550c2b86fc216ffe3a27aa9b443931a0d77bced2aa6282a",
+      "signedRawSha256": "a138087ef03a987609ec79fdc4889651b12ced81a6c342fc11b60b33e7833f0b",
+      "blockHash": "0x786787d2124257ca73a5cd615c8d36962f2550dc047cdb3c64568006a5db834b",
+      "systemFee": "29950125",
+      "networkFee": "2401040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 146,
+        "hash": "0xeca9c15b56c168a5b650b24904054562ea58202748db6387614442a7f8e47724"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 147,
+        "timestamp": "1791925911452",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-root-config-confirm",
+      "txid": "0x228945aa335ea971dda578c7c3e1ef06389c16f56e8992e3c2af09ea957852d4",
+      "signedRawSha256": "7e05f98f0f062e31274e79fda1a8a7067e979a5ed3fe6169de1896d6d2c5f196",
+      "blockHash": "0x210a78544f49423ca40f094f50d05484a7e44a42e21b0d87d4d6f4de9be925b1",
+      "systemFee": "335696898",
+      "networkFee": "2401040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 167,
+        "hash": "0x87c87f1bdd84c3378efd5bb5ae1347c22363f7912497c69df695ebe429f2fbff"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 168,
+        "timestamp": "1792012312473",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-active-native-leaf-transfer",
+      "txid": "0xd13c75cca4d44fab7fef8441189c40de26e2e95ab5dcb8b4beb4abefce6b9c2b",
+      "signedRawSha256": "fe8eb33303efbb662590277634d0cc67fef0f0438742e00000f975338a7c62ed",
+      "blockHash": "0xb9e7cb300813fb4cfc0bd94c91614732111c19740a0416d71548db95fe4a7963",
+      "systemFee": "180820602",
+      "networkFee": "108532234",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 168,
+        "hash": "0x210a78544f49423ca40f094f50d05484a7e44a42e21b0d87d4d6f4de9be925b1"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 169,
+        "timestamp": "1792012312474",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-second-session-child-config-propose",
+      "txid": "0xf19fd73ec0de942b6f37c85eba278840d8aa3b8fc6627b2c6447d71a33d632bf",
+      "signedRawSha256": "257a56e26a87f6728d3a459628138a5480f90a8d19afe341b7d8fae2bda9d64a",
+      "blockHash": "0xd71548322aba3d4cd754010e3d026fe853e2e19bbc6c69ac636859b85ab7051f",
+      "systemFee": "257867841",
+      "networkFee": "2491040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 169,
+        "hash": "0xb9e7cb300813fb4cfc0bd94c91614732111c19740a0416d71548db95fe4a7963"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 170,
+        "timestamp": "1792012312475",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-second-session-child-config-confirm",
+      "txid": "0x9582971c809bf3b714d3e3ce76ea5eee740730b6a1cbbac48348a49156b7ef39",
+      "signedRawSha256": "a75ecfc1f79fa511495b6367d89542f7d5d01e4c3c193ad950aa4c04f221b755",
+      "blockHash": "0x4084ec69615df32395d042e601835edf49fe26d56809e3398a22e26fcb6a075f",
+      "systemFee": "345772040",
+      "networkFee": "2491040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 190,
+        "hash": "0xd6bf02687b7b882521edb574db050ba4f3cec07eb3c73eaefde3bd18284bc8ab"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 191,
+        "timestamp": "1792098713496",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-session-two-of-two-config-propose",
+      "txid": "0x7f3c28fd1e8f530b7a73c87a7d1c0def64141fd8cc98a8e6e15ab4479a1b57ac",
+      "signedRawSha256": "e6672d6c64e7f87d337cfb89948501b04a9f718e9b09b92e9ec68d47a94629ee",
+      "blockHash": "0x00b3a4b72b0f6cbc594382f6e2a86781aaa3314a4922f15312e2a48250c4c71c",
+      "systemFee": "29950125",
+      "networkFee": "2401040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 191,
+        "hash": "0x4084ec69615df32395d042e601835edf49fe26d56809e3398a22e26fcb6a075f"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 192,
+        "timestamp": "1792098713497",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-session-two-of-two-config-confirm",
+      "txid": "0xd9854667cc41e6e6f018669ef8c3a04f3ecc40b2a6f4d97b0ba34209be7242ee",
+      "signedRawSha256": "451ff5b5c46257b12afbe3abb2eca1177b1e973ef229f97dce73458aa51d26bb",
+      "blockHash": "0xaf69c7e1f2aeb02788a98ffc81f733fce561248dac7f4f85c0854a0c82bb02d4",
+      "systemFee": "339446998",
+      "networkFee": "2401040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 212,
+        "hash": "0x1b6be0736079ebb9aac85c768d4deb971c4a25e4c5495a1f2f2397b36aa386a9"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 213,
+        "timestamp": "1792185114518",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-session-two-of-two-transfer",
+      "txid": "0x019e43801ef4640ec356ca26e36fa3685c0a09ba7eb4ebb923cce5e686e0b25c",
+      "signedRawSha256": "15499e6b75f873961ae371a54016beee4604cab6bfb1ae51b0e972b5ebcf49b9",
+      "blockHash": "0xcbc6cda27d374c0874da3d42a26010ae3027e56c7fa797e8e8a174acd58e8bc5",
+      "systemFee": "187257970",
+      "networkFee": "108446234",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 213,
+        "hash": "0xaf69c7e1f2aeb02788a98ffc81f733fce561248dac7f4f85c0854a0c82bb02d4"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 214,
+        "timestamp": "1792185114519",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-session-maximum-argument-bytes",
+      "txid": "0x7955bb3d35db0ba81e059e7aeff340100def9f076db5e23da6ba781434305564",
+      "signedRawSha256": "b8af41125a1e29d4c075dd5e5d39dcef9035fa435bd7a7800f747dc5d6447f91",
+      "blockHash": "0x7a8d3746116eb4ef54e943bdbf0da54dde38b13a352a14468cec354ebfc1083f",
+      "systemFee": "187263423",
+      "networkFee": "112489234",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 214,
+        "hash": "0xcbc6cda27d374c0874da3d42a26010ae3027e56c7fa797e8e8a174acd58e8bc5"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 215,
+        "timestamp": "1792185114520",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-session-maximum-channel-and-depth",
+      "txid": "0x426ebf9b1ee7043ab18feb1397815dcc1b67d2337ac5d9a31eae02e64ff18525",
+      "signedRawSha256": "806b562da2e6fcd8a28ceec5c92fadf082b5432b5b646441633c515f1c0b2cc7",
+      "blockHash": "0x84597f0d1178130f6904561632272efd499f7da7302ac9216f5bee9e0c179315",
+      "systemFee": "191759354",
+      "networkFee": "108478234",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 215,
+        "hash": "0x7a8d3746116eb4ef54e943bdbf0da54dde38b13a352a14468cec354ebfc1083f"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 216,
+        "timestamp": "1792185114521",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-native-child-reenroll-propose",
+      "txid": "0x592324d8c7a178b77124e3e11cea15a1ea658c9dc2cb0cacd0d32166f88440f0",
+      "signedRawSha256": "29a323159e78bb700012354fd9aa7f976bdcaaa0594bae1bca9daa90d641aef0",
+      "blockHash": "0x439fbd47b37b204299d0c7f6712e0b775ee7391fba94e8df0156b0a87f53252e",
+      "systemFee": "257867712",
+      "networkFee": "2406040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 216,
+        "hash": "0x84597f0d1178130f6904561632272efd499f7da7302ac9216f5bee9e0c179315"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 217,
+        "timestamp": "1792185114522",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "multisig-native-child-reenroll-confirm",
+      "txid": "0x03b76520a1755eeb2fe8a5cd49497fcc2e530d2597998d70adf08677b336b8c5",
+      "signedRawSha256": "d1b1edde685d6a3b478dff190cad214fb00940d9705e67ff563522018f4bee8b",
+      "blockHash": "0x858d0952b8b39c4f99c389de73368488e6cee28c8e3bc3b354ae116e00df2661",
+      "systemFee": "320189231",
+      "networkFee": "2406040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 237,
+        "hash": "0x57feed5c4e3d36e0fd89a0df63405854c6bc2a765016682777aea67bf0c35810"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 238,
+        "timestamp": "1792271515543",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-of-three-config-propose",
+      "txid": "0x7a2fa8e7526e64e28260e21fa709f42505d7280a43d3e17a7bcd431b6c59c969",
+      "signedRawSha256": "befd6d317c24bdbbc2e61554fb72466000c7050c247cb3b7416cb6d9e6b1bc95",
+      "blockHash": "0x0aca092c94b198a2dbb006be23f5edec2e9d1d0cec4defde6bbcdcd1b5f70022",
+      "systemFee": "32150180",
+      "networkFee": "2423040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 238,
+        "hash": "0x858d0952b8b39c4f99c389de73368488e6cee28c8e3bc3b354ae116e00df2661"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 239,
+        "timestamp": "1792271515544",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-of-three-config-confirm",
+      "txid": "0xe51a4268a659d71f07a2429952a2e697ae1d29be8b4f137dd7e8f0dd9f71394d",
+      "signedRawSha256": "73fca59ebf3b14c41176e4282be7c6c1a51c921102c9ef885d9604b90b71a3a1",
+      "blockHash": "0x0acbb62c57dfe2a4672f1a24ff4942622d7e3cdd17e7256baed81c3d52bcfcb5",
+      "systemFee": "357429233",
+      "networkFee": "2423040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 260,
+        "hash": "0x7cd7c533af53e9398b81c9ed61522571ad2d2d6e2fad2b94689be057e7c8c245"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 261,
+        "timestamp": "1792357916566",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-of-three-both-sessions",
+      "txid": "0x35ba8ec4760de3cdd8bc9ecee02ae656aedf771c9e0c464ed8a21bb87d49d081",
+      "signedRawSha256": "ac9a0f6ba491f5b6abfa95aa941a1fc9e3064afaa4295c9f887915f6dda2fe01",
+      "blockHash": "0xaac386e68604dc85100eb92cef0f5764b184c77f63757f01fde971af989adac6",
+      "systemFee": "194218616",
+      "networkFee": "109430274",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 261,
+        "hash": "0x0acbb62c57dfe2a4672f1a24ff4942622d7e3cdd17e7256baed81c3d52bcfcb5"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 262,
+        "timestamp": "1792357916567",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-of-three-session-one-and-native",
+      "txid": "0xdc330c04ff69ffa242114c215cf0d24181b01fa66a8537b51333c223c431913e",
+      "signedRawSha256": "8aa5bf8835b5264e17021327ee54ce7a5352cf1a4cce0b9a3e90166895a6b28c",
+      "blockHash": "0xdae49075ce07a33b9ef2cc50472ff0584ab626711b56ed40fdd03688f7bfda63",
+      "systemFee": "183279857",
+      "networkFee": "109516274",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 262,
+        "hash": "0xaac386e68604dc85100eb92cef0f5764b184c77f63757f01fde971af989adac6"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 263,
+        "timestamp": "1792357916568",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-of-three-session-two-and-native",
+      "txid": "0xc2c6fd391f8caee8e3dedc5559def8b6bd4a48859041fe3864744e98b6c9ba14",
+      "signedRawSha256": "61041162da86c84ffccde5e2b59b1d20fb56d0a0b7e075745a8a5e8c80baa888",
+      "blockHash": "0xd9c219f87cf7a8f4869198413f17fef5056dca5651afd69537f783a7d56bb024",
+      "systemFee": "183279857",
+      "networkFee": "109516274",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 263,
+        "hash": "0xdae49075ce07a33b9ef2cc50472ff0584ab626711b56ed40fdd03688f7bfda63"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 264,
+        "timestamp": "1792357916569",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-of-three-order-native-second-propose",
+      "txid": "0xeb7714b70838a0ba23a1227158cdff8abe29e9bc91461e19c67933e60cb93c7f",
+      "signedRawSha256": "92bf101cdf2aaa23b40c51a0613e2528ee15a0469545805abe198a70fd73b343",
+      "blockHash": "0x2d09c1764015f1d59ed6836b6d2274e95e66cd8639f9605c513da646edaf3a22",
+      "systemFee": "32150180",
+      "networkFee": "2423040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 264,
+        "hash": "0xd9c219f87cf7a8f4869198413f17fef5056dca5651afd69537f783a7d56bb024"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 265,
+        "timestamp": "1792357916570",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "two-of-three-order-native-second-confirm",
+      "txid": "0x0dc961b62abd590ce7d4f21d6e1bd1a6d980f02688c623a1c30abb1deae547cf",
+      "signedRawSha256": "1e43009b543d397ff468192e786f046937c305832d9390b42ff5e2d5d2e096d9",
+      "blockHash": "0x0ba4107cab6706a01a4c87172da163e337f0174165ae83a0715d2cefb537fa02",
+      "systemFee": "354129233",
+      "networkFee": "2423040",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 286,
+        "hash": "0xe4aa9cbf5b237ce38a43574065b1549498a9491215dec1504d572c7ad19e5aa5"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 287,
+        "timestamp": "1792444317592",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    },
+    {
+      "step": "three-valid-proofs-select-first-two",
+      "txid": "0xf5cde37c8a74fde737736d94f466815d8c4690c91a102f1c021846b705b5f8ea",
+      "signedRawSha256": "b4542c58410f8dac4447790226d9f4af9b141e577b247220e863d28e8f976314",
+      "blockHash": "0xe04f530eda12fbc49d184e404b802541de5c7d64ab7668c098b70c7d0b70a55a",
+      "systemFee": "183278594",
+      "networkFee": "109581274",
+      "verification": "Succeed",
+      "applicationState": "HALT",
+      "receiptState": "HALT",
+      "snapshot": {
+        "height": 287,
+        "hash": "0x0ba4107cab6706a01a4c87172da163e337f0174165ae83a0715d2cefb537fa02"
+      },
+      "simulation": {
+        "mode": "single-transaction-next-block",
+        "height": 288,
+        "timestamp": "1792444317593",
+        "primaryIndex": 0,
+        "view": 0,
+        "transactionCount": 1,
+        "onPersist": "HALT",
+        "nextConsensus": "0x62e0b4744c730057176d89e6dc17b8ac1b667997"
+      }
+    }
+  ],
+  "rejections": [
+    {
+      "step": "native-root-missing-witness",
+      "layer": "SDK-before-broadcast",
+      "verification": null,
+      "unchangedAccountAndNonce": null,
+      "unexpiredAtRejection": null
+    },
+    {
+      "step": "native-root-old-raw-after-config",
+      "layer": "real-signed-native-witness",
+      "verification": "Invalid",
+      "unchangedAccountAndNonce": true,
+      "unexpiredAtRejection": true
+    },
+    {
+      "step": "two-of-three-insufficient-proof",
+      "layer": "SDK-before-broadcast",
+      "verification": null,
+      "unchangedAccountAndNonce": null,
+      "unexpiredAtRejection": null
+    }
+  ],
+  "limits": [
+    "Private-chain evidence for pinned scenarios; no public deployment or activation claim.",
+    "Simulation uses one assumed next-block transaction after native OnPersist, not a prediction of actual block membership, timestamp, primary or future state.",
+    "No mempool admission or nonce reservation is established.",
+    "Raw signed evidence stays in the local receipt; this report contains no fixture private keys."
+  ]
+}

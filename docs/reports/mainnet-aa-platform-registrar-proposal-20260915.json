@@ -1,0 +1,16 @@
+{
+  "network": "mainnet",
+  "operation": "proposePlatformRegistrar",
+  "core": "0x0268a387913b250166ddec032b03332690a1ef78",
+  "registrar": "0x2cac9aba4db53fdb92b68e09e49349a2a1f08381",
+  "chain_writes_performed": true,
+  "generated_at": "2026-09-15T12:14:53.432Z",
+  "txid": "0x23caa01f688ee1a9b67ad4d0fd08cfe231ddf4198bcfdbb906d090d1e600d085",
+  "application_halt": true,
+  "available_after_utc": "2026-09-22T12:15:00.063Z",
+  "chain_readback": {
+    "pending_registrar": "0x2cac9aba4db53fdb92b68e09e49349a2a1f08381",
+    "available_at_utc": "2026-09-22T12:14:58.259Z",
+    "current_registrar": "0x0000000000000000000000000000000000000000"
+  }
+}

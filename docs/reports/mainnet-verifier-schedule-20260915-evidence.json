@@ -1,0 +1,30 @@
+{
+  "network": "mainnet",
+  "readOnly": true,
+  "checkedAt": "2026-09-15T11:13:36.424Z",
+  "targets": [
+    {
+      "name": "SessionKeyVerifier",
+      "hash": "0x63d6a10d388dd4885bc42ba69593734476f47151",
+      "updateCounter": 0,
+      "pendingNefPresent": true,
+      "pendingManifestPresent": true,
+      "pendingTimePresent": true,
+      "availableAt": "2026-09-22T11:08:43.113Z",
+      "pendingNefMatches": true,
+      "pendingManifestMatches": true
+    },
+    {
+      "name": "SocialRecoveryVerifier",
+      "hash": "0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26",
+      "updateCounter": 0,
+      "pendingNefPresent": true,
+      "pendingManifestPresent": true,
+      "pendingTimePresent": true,
+      "availableAt": "2026-09-22T11:08:49.512Z",
+      "pendingNefMatches": true,
+      "pendingManifestMatches": true
+    }
+  ],
+  "note": "Raw pending digests checked against CryptoLib.Sha256; no update call."
+}

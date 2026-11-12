@@ -1,0 +1,101 @@
+{
+  "status": "PASS",
+  "receipt": "retained-private/aa-sponsored-private-attempt2-20261009.json",
+  "receiptSha256": "70ea9202d36cff5864bf598eec6c319747ad25ce7d225af4952faf87f795e279",
+  "checks": 33,
+  "checksPassed": 33,
+  "seconds": 53.21,
+  "allOutcomes": {
+    "HALT": 16,
+    "FAULT": 1
+  },
+  "actualCoreRpcAndSdkRelayScriptsEqual": true,
+  "allPersistedScriptsEqual": true,
+  "sourcesUnchangedDuringRun": true,
+  "sourceHashes": {
+    "sdk/js/src/index.js": "001f68bae9836a26dad6b0e775aeb4ffc4c7f0a93837010a91ead35d22d35543",
+    "shared/relayContractParameter.mjs": "e0dc31f20cd7626b61857d0622c4bab680a7b07df80f37a28294d6862ad74efc",
+    "shared/multiSigCore.mjs": "153741bf2f847359160581b5fb1336704ef265babfa6116abd7e162e0edc0022",
+    "frontend/api/relayHelpers.js": "495841c93250b7937deb32d8920b763ff8f9ea20c505cac3b50813806129dc36",
+    "frontend/src/shared/relayContractParameter.mjs": "e0dc31f20cd7626b61857d0622c4bab680a7b07df80f37a28294d6862ad74efc"
+  },
+  "nodeStopped": true,
+  "privateChainAndKeysRemoved": true,
+  "ownedProcessAndPortReadBackClosed": true,
+  "limitations": [
+    "Target is MockTransferTarget: transfer returns true and does not hold token balances; actual value movement here is GAS paymaster settlement.",
+    "P-256 verifier is bare ECDSA, not a WebAuthn browser ceremony.",
+    "Targeted public V3 private-chain coverage, not public-network activation or the native AccountManagement profile."
+  ],
+  "supersedesOneEntryMapEvidence": false,
+  "extendsEvidenceWithMultiEntryAndNestedMaps": true,
+  "originalReceiptPreserved": "retained-private/aa-sponsored-private-probe-20261009.json",
+  "redReceiptPreserved": "retained-private/aa-sponsored-private-map-red-20261009.json",
+  "targetedTransactions": [
+    {
+      "label": "single nested typed args",
+      "txid": "0x9e261bfc94002de9d4fcc18d4f6d371975a50cd7534d17a5605d31a4785389e5",
+      "blockhash": "0x3f8c99e2901cedd931a8b08c4adc7571fde529da7ca51d0bdb2ece06925d5c20",
+      "state": "HALT",
+      "nonceBefore": 0,
+      "nonceAfter": 1,
+      "settledDatoshi": 1100000000,
+      "feeDatoshi": 1100000000
+    },
+    {
+      "label": "batch two distinct nonces",
+      "txid": "0x691aa17041682ede16a48416cab80362bd1db425a0e5c842caa14c3f30fea0b9",
+      "blockhash": "0x1f66eb2516e1efc72cf6adefa781adff86a1ea7824ce4adca7ce485bb1213d98",
+      "state": "HALT",
+      "nonceBefore": 1,
+      "nonceAfter": 3,
+      "settledDatoshi": 1100000000,
+      "feeDatoshi": 1100000000
+    },
+    {
+      "label": "fees above policy but requested within cap",
+      "txid": "0x2cb67ce56142ea7324336345914b227ba5529a71c9e3030b8ec5c9d806e582b3",
+      "blockhash": "0x48a34773ea6cd332f30da0b5d21f0e39099b70086f99f3417257de81c4287645",
+      "state": "HALT",
+      "nonceBefore": 3,
+      "nonceAfter": 4,
+      "settledDatoshi": 50000000,
+      "feeDatoshi": 1100000000
+    },
+    {
+      "label": "settled above cap",
+      "txid": "0xeab5d34d552df7a16af94f543d61c91317b632d8ceed26789eae6e5eb2047ed4",
+      "blockhash": "0xaabd34d7fc529e3c501d11813fbf5c0ca207a2a101cfdca28478db75579cb7d4",
+      "state": "FAULT",
+      "nonceBefore": 4,
+      "nonceAfter": 4,
+      "settledDatoshi": 0,
+      "feeDatoshi": 1100000000
+    }
+  ],
+  "signatureTamperFault": "FAULT",
+  "runtimeAndArtifacts": {
+    "runtimeNeoSha256": "8435cfd23339ecc67c1cd1ade53936074f728259e3c1847b45ae0012e245f73a",
+    "artifacts": {
+      "UnifiedSmartWalletV3.nef": "1f6e53443269b1eedaf6b324d04c453a1cbeaf755c6ad810f88c106ee5d9952d",
+      "UnifiedSmartWalletV3.manifest.json": "48fda3ed98a26961c647b220144604df494c65f6026e963b3c916bf0f51e658c",
+      "AAPaymaster.nef": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
+      "AAPaymaster.manifest.json": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54",
+      "MockTransferTarget.nef": "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
+      "MockTransferTarget.manifest.json": "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c",
+      "WebAuthnVerifier.nef": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+      "WebAuthnVerifier.manifest.json": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7"
+    }
+  },
+  "reproduce": "Private probe scripts and raw receipts are retained in the recovery archive; repository regressions are sdk/js/tests/sponsored-payload.unit.test.js and frontend/tests/relayContractParameter.test.js.",
+  "scripts": {
+    "aa-sponsored-private-attempt2-20261009.py": "46a55243a824a98b5a47f7eb8087d6dd21fcc6c524526076db3ebdb04930359a",
+    "aa-sponsored-private-attempt2-20261009.mjs": "66003337cb20a3c78b0ab7625b9dbca38645567d8be85de8b39893e3bacb3144"
+  },
+  "mapCases": {
+    "outerEntries": 3,
+    "nestedEntries": 4,
+    "distinctBooleanAndIntegerKeys": true,
+    "comparison": "actual core invokefunction script, SDK relay script and persisted script"
+  }
+}

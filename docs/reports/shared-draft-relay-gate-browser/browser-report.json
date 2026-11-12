@@ -1,0 +1,31 @@
+{
+  "passed": true,
+  "url": "http://127.0.0.1:4197/tx/aa-browser-relay-gate?access=operator-aa-browser-relay-gate",
+  "initialSubmitDisabled": true,
+  "submitEnabledAfterPreflight": true,
+  "capturedRequests": [
+    {
+      "simulate": true,
+      "relayPayloadMode": "raw",
+      "rawTransactionLength": 256,
+      "hasNetwork": true
+    },
+    {
+      "simulate": false,
+      "relayPayloadMode": "raw",
+      "rawTransactionLength": 256,
+      "hasNetwork": true
+    }
+  ],
+  "txid": "0xcacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacaca",
+  "mobileHorizontalOverflow": 0,
+  "visibleSubmit": true,
+  "textContainsRelayReceiptAfterSubmit": true,
+  "textContainsTxidAfterSubmit": true,
+  "screenshots": [
+    "<repo-root>/docs/reports/shared-draft-relay-gate-browser/desktop-before-preflight.png",
+    "<repo-root>/docs/reports/shared-draft-relay-gate-browser/desktop-after-preflight.png",
+    "<repo-root>/docs/reports/shared-draft-relay-gate-browser/desktop-after-submit.png",
+    "<repo-root>/docs/reports/shared-draft-relay-gate-browser/mobile-shared-draft.png"
+  ]
+}

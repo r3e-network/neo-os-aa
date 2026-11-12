@@ -1,0 +1,430 @@
+{
+  "schema": "smartaccount-native-runtime-matrix-summary/v1",
+  "status": "PASS_BOUNDED_PRIVATE_RUNTIME_MATRIX",
+  "completedAtUtc": "2026-10-08T18:16:32.034171+00:00",
+  "profileDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4",
+  "scope": "Ten isolated private NeoExpress scenarios, with sequential transactions within each chain and at most three concurrent matrix runners. Four report-text-only reruns replace their original receipts in the final selection.",
+  "buildIdentity": {
+    "sourceCommits": {
+      "core": "ff422d940a4722c361c32398c6f28c00fb7f0693",
+      "node": "fa35e69af130661e2ac60bffd43eb6c6c78aa7d5",
+      "express": "da143f8643ebca7841cc7f56e4e3e00293819fbc"
+    },
+    "sourceBuildReceiptSha256": "0163cbf7de2884cbd3041a57682aa18db4c8ecb69dd289d963e081958ab7b345",
+    "moduleBuildReceiptSha256": "2f9f2dc15489dcc2ea9e5d319f32be2561401b3a9897f3aa35d8a04ab5c5b72e",
+    "runtimeFileCount": 104,
+    "moduleArtifactFileCount": 13,
+    "currentRuntimeSourceFilesMatched": 619,
+    "moduleSourceFilesMatched": 30,
+    "independentRuntimeBuilds": 2,
+    "runtimeBuildByteMapsIdentical": true,
+    "nativeModuleRecordedBuildByteMapsIdentical": true,
+    "nativeModuleNefBytesUnchangedByPackaging": true,
+    "neoAssemblySha256": "8435cfd23339ecc67c1cd1ade53936074f728259e3c1847b45ae0012e245f73a",
+    "neoExpressAssemblySha256": "5396bc42409836729ba98876a362271a22aab94ec9492e10ad5a16f761bb0c05",
+    "preAndPostConsumerChecksBothAttempts": "PASS"
+  },
+  "totals": {
+    "persistedHALT": 300,
+    "persistedFAULT": 187,
+    "admissionRejected": 23,
+    "preflightRejected": 3,
+    "separateCanonicalP256RpcNegativeControls": 10
+  },
+  "countingScope": "Unique transaction outcome rows in the selected receipts only. HALT/FAULT counts include recorded registration/execution rows; deployments or funding represented only by transaction IDs are excluded. Admission/preflight/P256 RPC controls are separate. Extra attempt-1 receipts for the four rerun scenarios are preserved and are not counted twice.",
+  "scenarios": [
+    {
+      "scenario": "service",
+      "attempt": "attempt-2",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-2/receipts/native-service.json",
+      "receiptSha256": "fa331d49e7fff1f59f9f71f4cd7b79548c9b4715f7d0b28d85672a56556da8ce",
+      "schema": "smartaccount-native-service-private/v1",
+      "persistedHALT": 7,
+      "persistedFAULT": 0,
+      "admissionRejected": 0,
+      "preflightRejected": 3,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "a1f4e9692a1844be5ff9b77c36fedf7ddcfc46905edff200a57b3a871f2c40fa",
+      "producerSourceSha256": {
+        "neoexpress_native_service_validate.py": "46d278944976c18ba1abe7f7a32d36092d6a1e6011e57fc050c269b315883cc8",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a"
+      },
+      "stateAssertions": {},
+      "recoveryEpoch": null
+    },
+    {
+      "scenario": "recovery",
+      "attempt": "attempt-2",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-2/receipts/native-recovery.json",
+      "receiptSha256": "0780a70f55d97508339bdc38e1e789b31cba372101bfdb5e5ceaf8191493914f",
+      "schema": "smartaccount-native-recovery-private/v1",
+      "persistedHALT": 16,
+      "persistedFAULT": 12,
+      "admissionRejected": 2,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "a1f4e9692a1844be5ff9b77c36fedf7ddcfc46905edff200a57b3a871f2c40fa",
+      "producerSourceSha256": {
+        "neoexpress_native_recovery_validate.py": "b4371b5f68886cd9750d30a1784c204331891765016e277e0826ef832bfe3463",
+        "neoexpress_native_configuration_validate.py": "c2237b9032a36f2430760218584f35cba9375132d2305c824ee5406b3fa39d12",
+        "neoexpress_native_proxy_validate.py": "e89dd35336da0d1b31ba6047675c40df22508d1d3f4be555e02f68c056f82256",
+        "neoexpress_native_service_validate.py": "46d278944976c18ba1abe7f7a32d36092d6a1e6011e57fc050c269b315883cc8",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a"
+      },
+      "stateAssertions": {
+        "witnessBytesReadbackMatched": 27,
+        "fullAccountAndNonceMatched": 27
+      },
+      "recoveryEpoch": null
+    },
+    {
+      "scenario": "configuration",
+      "attempt": "attempt-2",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-2/receipts/native-configuration.json",
+      "receiptSha256": "683e260e913181e76c6fb8bf6b803eff339124a834076bdbcda8514e18e5cfd1",
+      "schema": "smartaccount-native-configuration-private/v1",
+      "persistedHALT": 16,
+      "persistedFAULT": 2,
+      "admissionRejected": 0,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "a1f4e9692a1844be5ff9b77c36fedf7ddcfc46905edff200a57b3a871f2c40fa",
+      "producerSourceSha256": {
+        "neoexpress_native_configuration_validate.py": "c2237b9032a36f2430760218584f35cba9375132d2305c824ee5406b3fa39d12",
+        "neoexpress_native_proxy_validate.py": "e89dd35336da0d1b31ba6047675c40df22508d1d3f4be555e02f68c056f82256",
+        "neoexpress_native_service_validate.py": "46d278944976c18ba1abe7f7a32d36092d6a1e6011e57fc050c269b315883cc8",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a"
+      },
+      "stateAssertions": {
+        "rawTransactionAndWitnessReadbackMatched": 16
+      },
+      "recoveryEpoch": null
+    },
+    {
+      "scenario": "modules",
+      "attempt": "attempt-1",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-1/receipts/native-modules.json",
+      "receiptSha256": "6aed9f5b89a624ffdab971245ab6746c55b1e06ef86fd8da9fbc083e40430266",
+      "schema": "smartaccount-native-real-modules-private/v1",
+      "persistedHALT": 32,
+      "persistedFAULT": 20,
+      "admissionRejected": 0,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "e2516aa6fdef6835548b17b7be678e02db9b355a4c9ea3a573bca68328d455d7",
+      "producerSourceSha256": {
+        "neoexpress_native_modules_validate.py": "b9017e098d89505a0c3282c3859d504148ded6f0a8d8ee4216e0c4babdf1e3e4",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_native_service_validate.py": "4a8da0cf76379b550d9505bdf30f64ae64317ea11e702303065a385a2bfafd81",
+        "neoexpress_native_proxy_validate.py": "4f252ffd772588b865b0d849e31a27a9661da291e4ac274d907ee847b2ce3f12",
+        "neoexpress_native_configuration_validate.py": "903f41688ebfe915ba981edb5a05ae33eb47c4e56d5c0d8ec6d3872f29310175",
+        "neoexpress_native_recovery_validate.py": "8544a2aff94fa9e2a53d3671c98667fdd4af525e0849423bf5ab1500d5c6a8e1",
+        "neoexpress_reproducible_build.py": "2c85285d70b5ac67f58c38b4f141df3fd860d974df825b634c8d0c81f28ad28d",
+        "build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
+        "native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2"
+      },
+      "stateAssertions": {
+        "rawTransactionAndWitnessReadbackMatched": 50,
+        "accountNonceIntentsAndPolicyMatched": 50,
+        "otherAccountUnchanged": 50
+      },
+      "recoveryEpoch": {
+        "before": 0,
+        "after": 1,
+        "nativeAndHookOldConfigurationDidNotResurrect": true,
+        "oldNamespaceUnchanged": true,
+        "newAuthorityExecutionSucceeded": true
+      }
+    },
+    {
+      "scenario": "session",
+      "attempt": "attempt-1",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-1/receipts/native-session.json",
+      "receiptSha256": "eb4bf20cf5a9f8a81b091999eed8757360333cea162abcef44fcea84dc9752bb",
+      "schema": "smartaccount-native-session-private/v1",
+      "persistedHALT": 28,
+      "persistedFAULT": 27,
+      "admissionRejected": 10,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "e2516aa6fdef6835548b17b7be678e02db9b355a4c9ea3a573bca68328d455d7",
+      "producerSourceSha256": {
+        "neoexpress_native_session_validate.py": "7d1c0b3107ddf245ad11b39872af65d89b215ee7e400974ae84d6ddca8b725d6",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_native_service_validate.py": "4a8da0cf76379b550d9505bdf30f64ae64317ea11e702303065a385a2bfafd81",
+        "neoexpress_native_proxy_validate.py": "4f252ffd772588b865b0d849e31a27a9661da291e4ac274d907ee847b2ce3f12",
+        "neoexpress_native_configuration_validate.py": "903f41688ebfe915ba981edb5a05ae33eb47c4e56d5c0d8ec6d3872f29310175",
+        "neoexpress_native_recovery_validate.py": "8544a2aff94fa9e2a53d3671c98667fdd4af525e0849423bf5ab1500d5c6a8e1",
+        "neoexpress_native_modules_validate.py": "b9017e098d89505a0c3282c3859d504148ded6f0a8d8ee4216e0c4babdf1e3e4",
+        "neoexpress_reproducible_build.py": "2c85285d70b5ac67f58c38b4f141df3fd860d974df825b634c8d0c81f28ad28d",
+        "native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
+        "build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3"
+      },
+      "stateAssertions": {
+        "rawTransactionAndWitnessReadbackMatched": 53,
+        "observedStateAndIsolationMatched": 53
+      },
+      "recoveryEpoch": {
+        "before": 0,
+        "after": 1,
+        "oldConfigurationDidNotResurrect": true,
+        "oldNamespaceUnchanged": true,
+        "newAuthorityTransferSucceeded": true,
+        "operationNoncePreservedAtRecovery": 5
+      }
+    },
+    {
+      "scenario": "session_scope",
+      "attempt": "attempt-1",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-1/receipts/native-session_scope.json",
+      "receiptSha256": "d09dfe0e7e3dc18153bd0b20d28760f137fe2d20f0a75a6d6c053840f99466ae",
+      "schema": "smartaccount-native-session-scope-private/v1",
+      "persistedHALT": 29,
+      "persistedFAULT": 19,
+      "admissionRejected": 7,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "e2516aa6fdef6835548b17b7be678e02db9b355a4c9ea3a573bca68328d455d7",
+      "producerSourceSha256": {
+        "neoexpress_native_session_scope_validate.py": "5869da8aa8503d278b3bc0a5bffbe94725e3304709cffef39d6d9519a22e8774",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_native_service_validate.py": "4a8da0cf76379b550d9505bdf30f64ae64317ea11e702303065a385a2bfafd81",
+        "neoexpress_native_proxy_validate.py": "4f252ffd772588b865b0d849e31a27a9661da291e4ac274d907ee847b2ce3f12",
+        "neoexpress_native_configuration_validate.py": "903f41688ebfe915ba981edb5a05ae33eb47c4e56d5c0d8ec6d3872f29310175",
+        "neoexpress_native_recovery_validate.py": "8544a2aff94fa9e2a53d3671c98667fdd4af525e0849423bf5ab1500d5c6a8e1",
+        "neoexpress_native_modules_validate.py": "b9017e098d89505a0c3282c3859d504148ded6f0a8d8ee4216e0c4babdf1e3e4",
+        "neoexpress_reproducible_build.py": "2c85285d70b5ac67f58c38b4f141df3fd860d974df825b634c8d0c81f28ad28d",
+        "native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
+        "build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
+        "neoexpress_native_session_validate.py": "7d1c0b3107ddf245ad11b39872af65d89b215ee7e400974ae84d6ddca8b725d6"
+      },
+      "stateAssertions": {
+        "rawTransactionAndWitnessReadbackMatched": 46,
+        "observedStateAndIsolationMatched": 46
+      },
+      "recoveryEpoch": null
+    },
+    {
+      "scenario": "daily",
+      "attempt": "attempt-1",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-1/receipts/native-daily.json",
+      "receiptSha256": "f8571218d673b36235021b06a5d8e5fad58206c88189123423d0b53e652c1c43",
+      "schema": "smartaccount-native-daily-private/v1",
+      "persistedHALT": 89,
+      "persistedFAULT": 29,
+      "admissionRejected": 0,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "e2516aa6fdef6835548b17b7be678e02db9b355a4c9ea3a573bca68328d455d7",
+      "producerSourceSha256": {
+        "neoexpress_native_daily_validate.py": "19a16074d5db8cb53c070be737d4a265d1a0a72e9330cb288532066f7789a10d",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_native_service_validate.py": "4a8da0cf76379b550d9505bdf30f64ae64317ea11e702303065a385a2bfafd81",
+        "neoexpress_native_proxy_validate.py": "4f252ffd772588b865b0d849e31a27a9661da291e4ac274d907ee847b2ce3f12",
+        "neoexpress_native_configuration_validate.py": "903f41688ebfe915ba981edb5a05ae33eb47c4e56d5c0d8ec6d3872f29310175",
+        "neoexpress_native_recovery_validate.py": "8544a2aff94fa9e2a53d3671c98667fdd4af525e0849423bf5ab1500d5c6a8e1",
+        "neoexpress_native_modules_validate.py": "b9017e098d89505a0c3282c3859d504148ded6f0a8d8ee4216e0c4babdf1e3e4",
+        "neoexpress_native_session_validate.py": "7d1c0b3107ddf245ad11b39872af65d89b215ee7e400974ae84d6ddca8b725d6",
+        "neoexpress_reproducible_build.py": "2c85285d70b5ac67f58c38b4f141df3fd860d974df825b634c8d0c81f28ad28d",
+        "native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
+        "build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
+        "DailyOutflowToken.cs": "0d355dfecdfd7f7ce8b7c6bac775d4c973c08f19a5435887641a745f682d9a08",
+        "DailyOutflowToken.csproj": "2aa9cfabae6a089319cf8516d4faec6d40e83e1e68cf832f937e34f015aed581"
+      },
+      "stateAssertions": {
+        "rawTransactionAndWitnessReadbackMatched": 116,
+        "observedStateAndIsolationMatched": 116
+      },
+      "recoveryEpoch": null
+    },
+    {
+      "scenario": "restricted",
+      "attempt": "attempt-1",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-1/receipts/native-restricted.json",
+      "receiptSha256": "d85d0f8e9d87d7f9ba7faad15aa95ffabbd64a9913e9431eb1039e2cccab7c2c",
+      "schema": "smartaccount-native-restricted-private/v1",
+      "persistedHALT": 37,
+      "persistedFAULT": 29,
+      "admissionRejected": 0,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "e2516aa6fdef6835548b17b7be678e02db9b355a4c9ea3a573bca68328d455d7",
+      "producerSourceSha256": {
+        "neoexpress_native_restricted_validate.py": "940dec488319c33d59b03167f1446977def76929e533239cc1a92906137003f3",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_native_service_validate.py": "4a8da0cf76379b550d9505bdf30f64ae64317ea11e702303065a385a2bfafd81",
+        "neoexpress_native_proxy_validate.py": "4f252ffd772588b865b0d849e31a27a9661da291e4ac274d907ee847b2ce3f12",
+        "neoexpress_native_configuration_validate.py": "903f41688ebfe915ba981edb5a05ae33eb47c4e56d5c0d8ec6d3872f29310175",
+        "neoexpress_native_recovery_validate.py": "8544a2aff94fa9e2a53d3671c98667fdd4af525e0849423bf5ab1500d5c6a8e1",
+        "neoexpress_native_modules_validate.py": "b9017e098d89505a0c3282c3859d504148ded6f0a8d8ee4216e0c4babdf1e3e4",
+        "neoexpress_native_session_validate.py": "7d1c0b3107ddf245ad11b39872af65d89b215ee7e400974ae84d6ddca8b725d6",
+        "neoexpress_native_daily_validate.py": "19a16074d5db8cb53c070be737d4a265d1a0a72e9330cb288532066f7789a10d",
+        "neoexpress_reproducible_build.py": "2c85285d70b5ac67f58c38b4f141df3fd860d974df825b634c8d0c81f28ad28d",
+        "native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
+        "build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
+        "RestrictedOutflow.csproj": "2fde7b75aa05e3f8ecfffdc6ffd73884448189b7ba246c36c108f50dc29e0dbd",
+        "RestrictedOutflowRouter.cs": "ba2358852ad294ae7299d8f10d40592a9586238df3c30837d1ac30697f3cf391",
+        "RestrictedOutflowToken.cs": "284d262e40dc977da18eac1e704d1b38bc65a801c291e10a36b3028c11232d27"
+      },
+      "stateAssertions": {
+        "rawTransactionAndWitnessReadbackMatched": 64,
+        "observedStateAndIsolationMatched": 64
+      },
+      "recoveryEpoch": null
+    },
+    {
+      "scenario": "proxy",
+      "attempt": "attempt-2",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-2/receipts/native-proxy.json",
+      "receiptSha256": "eabf92fcf71f561b80044520d8c7e0c50587a269b7b23473fef5b8da4164e8f7",
+      "schema": "smartaccount-native-proxy-private/v1",
+      "persistedHALT": 5,
+      "persistedFAULT": 2,
+      "admissionRejected": 3,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "a1f4e9692a1844be5ff9b77c36fedf7ddcfc46905edff200a57b3a871f2c40fa",
+      "producerSourceSha256": {
+        "neoexpress_native_proxy_validate.py": "e89dd35336da0d1b31ba6047675c40df22508d1d3f4be555e02f68c056f82256",
+        "neoexpress_native_service_validate.py": "46d278944976c18ba1abe7f7a32d36092d6a1e6011e57fc050c269b315883cc8",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a"
+      },
+      "stateAssertions": {
+        "rawTransactionReadbackMatched": 6,
+        "witnessBytesReadbackMatched": 6
+      },
+      "recoveryEpoch": null
+    },
+    {
+      "scenario": "multisig",
+      "attempt": "attempt-1",
+      "status": "PASS",
+      "receipt": "native-matrix/attempt-1/receipts/native-multisig.json",
+      "receiptSha256": "529ffc834299e066d81da0e53b5a848c30184d0abf1661c12e50959563e7b04c",
+      "schema": "smartaccount-native-multisig-private/v1",
+      "persistedHALT": 41,
+      "persistedFAULT": 47,
+      "admissionRejected": 1,
+      "preflightRejected": 0,
+      "nodesStopped": true,
+      "publicNetworksTouched": false,
+      "producerSnapshotManifestSha256": "e2516aa6fdef6835548b17b7be678e02db9b355a4c9ea3a573bca68328d455d7",
+      "producerSourceSha256": {
+        "neoexpress_native_multisig_validate.py": "9d8d09d82b0801f5faa676e0716c62c5fc85fcdda518adc545db2dab2013c75d",
+        "neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a",
+        "neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+        "neoexpress_native_service_validate.py": "4a8da0cf76379b550d9505bdf30f64ae64317ea11e702303065a385a2bfafd81",
+        "neoexpress_native_proxy_validate.py": "4f252ffd772588b865b0d849e31a27a9661da291e4ac274d907ee847b2ce3f12",
+        "neoexpress_native_configuration_validate.py": "903f41688ebfe915ba981edb5a05ae33eb47c4e56d5c0d8ec6d3872f29310175",
+        "neoexpress_native_recovery_validate.py": "8544a2aff94fa9e2a53d3671c98667fdd4af525e0849423bf5ab1500d5c6a8e1",
+        "neoexpress_native_modules_validate.py": "b9017e098d89505a0c3282c3859d504148ded6f0a8d8ee4216e0c4babdf1e3e4",
+        "neoexpress_native_session_validate.py": "7d1c0b3107ddf245ad11b39872af65d89b215ee7e400974ae84d6ddca8b725d6",
+        "neoexpress_native_daily_validate.py": "19a16074d5db8cb53c070be737d4a265d1a0a72e9330cb288532066f7789a10d",
+        "neoexpress_reproducible_build.py": "2c85285d70b5ac67f58c38b4f141df3fd860d974df825b634c8d0c81f28ad28d",
+        "native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2",
+        "build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3"
+      },
+      "stateAssertions": {
+        "rawTransactionAndWitnessReadbackMatched": 86,
+        "observedStateAndIsolationMatched": 86
+      },
+      "recoveryEpoch": {
+        "before": 0,
+        "after": 1,
+        "sameRootAndChildrenOldConfigurationDidNotResurrect": true,
+        "oldNamespaceUnchanged": true,
+        "newAuthorityExecutionSucceeded": true
+      }
+    }
+  ],
+  "authorityAndPolicyEvidence": [
+    "Recovery changes authority epoch 0 to 1 while retaining operation nonce and frozen state; old signed authority is rejected and replacement authority executes successfully.",
+    "Reinstalling the same native verifier, session verifier, composite verifier and hooks does not restore old-epoch configuration; old namespace bytes remain unchanged.",
+    "Session key and metadata getters retain five- and three-field shapes; domain prefix05 and last-used prefix06 are checked, including revocation and full cleanup.",
+    "NeoNative ordered domain prefix03 is checked together with two-field configuration and same-epoch cleanup.",
+    "MultiSig uses the first approved quorum, enforces roster/threshold/domain caps, rejects malformed proof bundles and cleans enrolled leaves.",
+    "Daily limits reject the 51st retained rolling entry and resume after expiry pruning; malformed pre/post token-balance responses fail closed. Restricted direct and intermediary outflows are rejected.",
+    "Proxy transfers and batches use actual signed witnesses; invalid signatures are rejected and target faults preserve declared state.",
+    "canonicalP256PublicKey accepts 33/65-byte public vectors under CallFlags.None with no account or signers, returns exact compressed bytes, and rejects ten malformed/type controls."
+  ],
+  "producerIdentity": {
+    "currentSourceReferences": 70,
+    "historicalSnapshotSourceReferences": 24,
+    "unexpectedMismatches": 0,
+    "historicalReferenceExplanation": "Six retained attempt-1 receipts each refer to four helper files from their original producer snapshot. Those hashes are not represented as the current source tree.",
+    "snapshotManifests": {
+      "attempt-1": "e2516aa6fdef6835548b17b7be678e02db9b355a4c9ea3a573bca68328d455d7",
+      "attempt-2": "a1f4e9692a1844be5ff9b77c36fedf7ddcfc46905edff200a57b3a871f2c40fa"
+    },
+    "onlyChangesBetweenAttempts": [
+      {
+        "file": "scripts/neoexpress_native_configuration_validate.py",
+        "oldSha256": "903f41688ebfe915ba981edb5a05ae33eb47c4e56d5c0d8ec6d3872f29310175",
+        "newSha256": "c2237b9032a36f2430760218584f35cba9375132d2305c824ee5406b3fa39d12",
+        "change": "runtimeMode output text only"
+      },
+      {
+        "file": "scripts/neoexpress_native_proxy_validate.py",
+        "oldSha256": "4f252ffd772588b865b0d849e31a27a9661da291e4ac274d907ee847b2ce3f12",
+        "newSha256": "e89dd35336da0d1b31ba6047675c40df22508d1d3f4be555e02f68c056f82256",
+        "change": "runtimeMode output text only"
+      },
+      {
+        "file": "scripts/neoexpress_native_recovery_validate.py",
+        "oldSha256": "8544a2aff94fa9e2a53d3671c98667fdd4af525e0849423bf5ab1500d5c6a8e1",
+        "newSha256": "b4371b5f68886cd9750d30a1784c204331891765016e277e0826ef832bfe3463",
+        "change": "runtimeMode output text only"
+      },
+      {
+        "file": "scripts/neoexpress_native_service_validate.py",
+        "oldSha256": "4a8da0cf76379b550d9505bdf30f64ae64317ea11e702303065a385a2bfafd81",
+        "newSha256": "46d278944976c18ba1abe7f7a32d36092d6a1e6011e57fc050c269b315883cc8",
+        "change": "runtimeMode output text only"
+      }
+    ],
+    "correctionDiffSha256": "c72d6546324196f162105d947cdf936eaf58ccfbe6505eea0a4c374e1ded2d1f",
+    "correction": "Four runtimeMode descriptions incorrectly claimed an assembly overlay. Only those output strings changed; the four affected runners were replayed. No production/runtime/module/profile bytes changed.",
+    "finalRuntimeMode": "Caller-supplied NeoExpress runtime; this runner does not establish build provenance. Verify the separate source-build receipt."
+  },
+  "independentReview": {
+    "status": "FINAL_SELECTED_CONSISTENT_WITH_LIMITATIONS",
+    "receiptSha256": "b814992950d52d8a4fcc7ecd35065b74fb0c6a6c260cc9c9932210a9e5d2e276",
+    "openIssues": 0,
+    "distinctNetworkMagics": 10,
+    "matrixNodesRemainingAtFinalReadback": 0
+  },
+  "evidenceLimits": [
+    "The raw RPC responses, signed raw transaction bytes and ephemeral chain databases are not retained for independent offline replay. Receipts retain outcomes and producer readback assertions, with their exact source snapshots.",
+    "The MultiSig receipt has 86 execution rows without serialized confirmedBlock hashes. Its frozen producer reads persisted application logs, transactions and block headers, but those block-hash references are not retained.",
+    "The two module-build maps are recorded and equal; one temporary module build directory was removed by the build process. The surviving packaged artifacts, recorded pins and input recipes were independently checked.",
+    "This report establishes the stated bounded private scenarios and reproducible runtime identity, not compiler correctness or unrestricted protocol conformance."
+  ],
+  "companionSdkReport": "aa-native-final-sdk-runtime-20261009.json"
+}

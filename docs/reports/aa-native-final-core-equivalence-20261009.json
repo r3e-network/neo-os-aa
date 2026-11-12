@@ -1,0 +1,50 @@
+{
+  "status": "PASS",
+  "baseHead": "ff422d940a4722c361c32398c6f28c00fb7f0693",
+  "scope": "Only standard copyright headers and import ordering in two tests; test bodies unchanged.",
+  "changedFilesSha256": {
+    "tests/Neo.UnitTests/SmartContract/Native/UT_AccountManagement.CompositeReceipt.cs": "49be9568c12299d8ab0ae1089066d629d0d08df89d57ba2e602d4550a67ae948",
+    "tests/Neo.UnitTests/SmartContract/Native/UT_AccountManagement.PublicKey.cs": "557e0731ea0b454685fbc0d984eaf871056de247dcf0a19a50d0c8e42cce854a"
+  },
+  "productionSourceCount": 294,
+  "productionSourceDrift": [],
+  "verification": {
+    "command": "dotnet format neo.sln --no-restore --verify-no-changes --verbosity diagnostic",
+    "exitCode": 0,
+    "workspaceFiles": 652,
+    "wouldChangeFiles": 0,
+    "log": "/tmp/aa-core-solution-format-green.log",
+    "solutionRestoreLog": "/tmp/aa-core-solution-format-restore.log"
+  },
+  "priorCheckGap": "dotnet format whitespace did not execute IMPORTS or IDE0073 code-style analyzers. Include path handling was not the demonstrated cause.",
+  "head": "d973071ed608aa98053695db668b0ec6587a2fd6",
+  "changedFiles": [
+    "tests/Neo.UnitTests/SmartContract/Native/UT_AccountManagement.CompositeReceipt.cs",
+    "tests/Neo.UnitTests/SmartContract/Native/UT_AccountManagement.PublicKey.cs"
+  ],
+  "productionGitTreesIdentical": true,
+  "sourceSecurityReview": {
+    "scope": "Bounded source diff review of the 17 pinned files; no unresolved substantive source blockers. This is not complete security certification.",
+    "reviewedFilesSha256": {
+      "core/src/Neo/SmartContract/Native/AccountManagement.cs": "666d940d5f8899c0d0cfc4716fbf61bc0e1b8c604cced6cc6ba8ca4dc31e5ac1",
+      "core/src/Neo/SmartContract/Native/AccountManagement.Execution.cs": "08eded5e1593baf67625f1e91ca3ef3af18ffd176b07555a1a3292867d813f33",
+      "core/src/Neo/SmartContract/Native/AccountManagement.Modules.cs": "c4f2636eb1594cc50e943b0140e57ee4a432282629d9f3f884af0af917efad8d",
+      "core/src/Neo/SmartContract/Native/AccountManagement.Keys.cs": "ec7e2ceab22735b454ac512089f7a4a7030994798d9a978315847f752c068134",
+      "core/src/Neo/SmartContract/Native/SmartAccountModulePolicy.cs": "38b60b9afaefaaa1d15848b44ef76894d6b2e2eea78f0cac9a9f669d2ca48075",
+      "core/src/Neo/SmartContract/Native/SmartAccountInvocationContext.cs": "16c5d9b6db00ee245252e1d4a9178f9ed2cfaff2131fdd971017d416b10851ed",
+      "core/src/Neo/SmartContract/Native/SmartAccountState.cs": "be108b98ecce19ba081c42b42c554450d5b244e4a3b90ccb9f39d7d084b65f1c",
+      "core/src/Neo/SmartContract/Native/SmartAccountProtocol.cs": "ea4a64b53c8adca2c84e294fc298c7398647f7d65a38bcff4a940b686d590dc9",
+      "aa/contracts/verifiers/MultiSigVerifier.cs": "f3dcdcd30914a14f2d3a06dd4795500ae75d1ebdf0cbd69ee6da3d6a4aab41de",
+      "aa/contracts/verifiers/SessionKeyVerifier.cs": "5f31d1e42d24f4a8abfe1f7529462b6d9047c2276e4bb9125f74a28c44812a29",
+      "aa/contracts/verifiers/NeoNativeVerifier.cs": "e8bf031d41bb5bbd745e01d51b703aeb60f948f0177ab63a597623fac841763e",
+      "aa/contracts/verifiers/VerifierPayload.cs": "f2fc6713d49b49054dd9f2a833d8be93d40bd521ce03d8868391036706d78c80",
+      "aa/contracts/verifiers/SignerDomain.cs": "107ab905f362fd661b9c24585a23a79a7ecf7bce1370c97bc0beb6d3ca4afaf6",
+      "aa/contracts/verifiers/VerifierAuthority.cs": "b964e3e2886718075f9b30f74e3a26c70e7d3d77af9f63f2ba22e4a16626993e",
+      "aa/contracts/verifiers/NativeOperation.cs": "682e6a13c7aa7eeb6987bd32668439dde76fb6dd9b24746d724dccda5024254f",
+      "aa/contracts/native/NativeAuthority.cs": "78c74c0d4fec03d5c8d68a6ac7b2c289f9dc3468fe9cddbbf593e350cabd4f3d",
+      "aa/docs/proposals/smartaccount-native-profile-v2-parameters.json": "b7e4d88a516d5d2340bb6c2ecdec7d46ceffab47798c900bd8b7ea3d5f6218ea"
+    },
+    "unchangedAtFinalRecheck": true,
+    "originalReportSha256": "862f5c0f4f94d82383c32dbab81eac63fc36fa3680994caedbfaf4c41269c40c"
+  }
+}

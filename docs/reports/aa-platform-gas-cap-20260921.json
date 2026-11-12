@@ -1,0 +1,115 @@
+{
+  "report": "aa-platform-gas-cap-20260921",
+  "date": "2026-09-21",
+  "status": "integrated-private-chain-not-public",
+  "purpose": "Current evidence receipt for the NeoVM and DevPack capability that bounds untrusted AA verifier execution, compiled into the AA artifact and exercised on a fresh isolated NeoExpress chain.",
+  "security_boundary": {
+    "current_aa_artifact_uses_call_with_gas_limit": true,
+    "current_aa_vuln_001": "mitigated for this matching private-chain artifact; public activation and deployment remain pending",
+    "public_network_activation": "not-performed",
+    "public_deployment_or_broadcast": false
+  },
+  "neo_core": {
+    "branch": "aa/verifier-gas-cap",
+    "base_commit": "8461a720a5c8eaa2f1b077d505d5b02fa8eb71b4",
+    "patch_sha256": "6f55e0faf8339ffd200f977b1308de634b7a9eb5af387f3aa497e43256fe7c1b",
+    "syscall": "System.Contract.CallWithGasLimit",
+    "activation": "Hardfork.HF_Iara",
+    "private_chain_activation_block": 0,
+    "gas_limit": {
+      "datoshi": 1000000000,
+      "gas": 10
+    },
+    "runtime_neo_dll_sha256": "79a5b3839ac327b66d84e6fa36d5fdb0d3c0ca1eb134c022c9d57fbad826e8ef",
+    "targeted_tests": {
+      "passed": 9,
+      "failed": 0,
+      "vectors": [
+        "child-limit-exhaustion-fault",
+        "ordinary-nested-call-inherits-ancestor-budget",
+        "bounded-nested-child-cannot-escape-ancestor",
+        "child-storage-rolls-back-on-exhaustion",
+        "fee-whitelist-still-charges-child-budget",
+        "child-within-limit-succeeds",
+        "invalid-and-excessive-limits-rejected",
+        "syscall-registration",
+        "syscall-rejected-before-hardfork-activation"
+      ]
+    },
+    "full_unit_tests": {
+      "passed": 1435,
+      "failed": 0,
+      "skipped": 0
+    },
+    "build": {
+      "warnings": 0,
+      "errors": 0
+    }
+  },
+  "devpack": {
+    "branch": "aa/verifier-gas-cap",
+    "base_commit": "34255c46676b7b847b98b787616de10e268331c5",
+    "framework_declaration": "System.Contract.CallWithGasLimit",
+    "framework_package": "Neo.SmartContract.Framework.3.10.2-CI00384",
+    "framework_package_sha256": "172597b180f6ae9d93c1901bec11d8f2ce76b46c465a2dd3552ae876e5421d65",
+    "testing_package": "Neo.SmartContract.Testing.3.10.2-CI00384",
+    "testing_package_sha256": "92a06b27548c10da98c54043ff4dfd5eaf6c1b74df4fc707b6e7cc67c7b9ce6a",
+    "compiler_sha256": "c595229929f8aa2978a2bb8b54878c7aa1ad3437da6a96ddad6ddb6dd82bda2f",
+    "compiler_emission_smoke": "passed",
+    "compiler_unit_tests_on_published_core": {
+      "passed": 1359,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "aa_integration": {
+    "framework_version": "3.10.2-CI00384",
+    "verifier_calls": "System.Contract.CallWithGasLimit(..., 1000000000, ...)",
+    "nef_sha256": "7097d766d09f52b2540e893f52b25719ffc3e40b51eeb98576010ebbe852107f",
+    "manifest_sha256": "eadee3a8eac3964f176b5455612a34a77ebbfd1d3597956892ec3759eea079cb",
+    "syscall_hash_little_endian": "c45fbc51",
+    "contract_tests": {
+      "passed": 292,
+      "failed": 0,
+      "skipped": 0
+    },
+    "private_chain_receipt": "docs/reports/aa-neoexpress-gas-cap-20260921.json"
+  },
+  "neoexpress": {
+    "binary_sha256": "ff1ef949ce8ee37cc1f63b6726610efc1113e4f25eaa59968573b1af9a315577",
+    "runtime_matches_core_dll": true,
+    "receipt_status": "PASS",
+    "artifacts_deployed": 25,
+    "scenarios": 12,
+    "transactions_halted": 73,
+    "expected_faults": 26,
+    "assertions": 61,
+    "readback_parity": "all 25 local NEF scripts byte-identical, checksums equal, manifests semantically equal over private JSON-RPC",
+    "adversarial_verifier": "burning MockVerifierCore callback faults with Contract call gas limit exceeded and nonce remains unchanged"
+  },
+  "formal": {
+    "receipt": "docs/reports/aa-formal-gate-20260921.json",
+    "host": "5 Coq modules, 72 closed declarations, 26 Coq mutations, 4 TLC mutations, 6 SMT obligations and 6 controls",
+    "docker": "cached-base BuildKit stage PASS; 20/20 runner tests"
+  },
+  "privacy": {
+    "contains_credentials": false,
+    "contains_private_keys": false,
+    "contains_absolute_paths": false
+  },
+  "remaining_boundaries": [
+    "No TestNet/MainNet activation or deployment was performed.",
+    "Formal models do not cover cryptography, witness-rule evaluation, complete NeoVM semantics, mechanized C# to NEF to deployed refinement, arbitrary plugin-cycle absence, or MultiSig key independence.",
+    "No independent external audit has been performed."
+  ],
+  "artifact_reproducibility": {
+    "command": "NCCS_BIN=<matching compiler> node scripts/check-artifact-reproducibility.mjs --json",
+    "artifactsCompared": 76,
+    "releaseMatchesFreshBuild": true,
+    "drifted": [],
+    "missing": [],
+    "trackedBuildAnchor": "intentionally differs from the fresh build; it is the historical deployed-mainnet provenance anchor",
+    "chainWritesPerformed": false,
+    "receipt": "docs/reports/aa-artifact-reproducibility-20260921.json"
+  }
+}

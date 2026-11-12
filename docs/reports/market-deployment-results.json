@@ -1,0 +1,467 @@
+{
+  "timestamp": "2026-03-31T12:34:01.406Z",
+  "deployTag": "market-mneku8bc",
+  "network": "testnet",
+  "networkMagic": 894710606,
+  "deployer": {
+    "address": "NLtL2v28d7TyMEaXcPqtekunkFRksJ7wxu",
+    "scriptHash": "0x13ef519c362973f9a34648a9eac5b71250b2a80a"
+  },
+  "contracts": {
+    "aaCore": {
+      "hash": "0x2818ce328d6a7a92ff2c0200fe7cb2c76bee8870"
+    },
+    "market": {
+      "hash": "0x8dbd4cf6fc47afc013e7fd7128d028db2985bddf"
+    },
+    "teeVerifier": {
+      "txid": "0x78f1834459223811a52f9284343566c7b882ce559d274be021ccf47ce44efc72",
+      "hash": "0x4e4c22eabbbe4881ca39ffe21a37fc19d8f350d2"
+    }
+  },
+  "totalAccounts": 55,
+  "registeredCount": 55,
+  "totalListings": 55,
+  "listings": [
+    {
+      "dbId": 1,
+      "pattern": "MIRROR:NR3E...R3E",
+      "address": "NR3EyRMHMoFCLb4rikD86yTuPLg8dsiR3E",
+      "accountIdHash": "7a69f3acd9dc10028f88588d29b9970cd420559f",
+      "priceGas": 50,
+      "txid": "0xc37954840cf68ceaeb5dc534c2e40156083d6e0cc61d817768c2043040b6e7dd"
+    },
+    {
+      "dbId": 2,
+      "pattern": "...Trump",
+      "address": "NdJm6UR9HEpoEmNuTFRBtYQQwMc7yTrump",
+      "accountIdHash": "e9bad7f81fdce3243e610988aeee4c109654ea96",
+      "priceGas": 100,
+      "txid": "0xcdd2b21929041e810f40c82f2c2fcd53d1708316dfb5318b9091c7326689e04b"
+    },
+    {
+      "dbId": 3,
+      "pattern": "NTrump",
+      "address": "NTrumpNeEikH7WQB4bu7GJhx9hJ3BCipss",
+      "accountIdHash": "2fd55c6ef7770524f9be5f75255fcd4b3bf7f536",
+      "priceGas": 100,
+      "txid": "0x6bb508450cfce7c7a096e5c99f70c2cb96e9e376d7bbebb4d87d61e536fb23f3"
+    },
+    {
+      "dbId": 4,
+      "pattern": "NNvidia",
+      "address": "NNvidiajn66YtzADaAkZ9orNHs8bTcxPv8",
+      "accountIdHash": "413e6f314b35ccdd8295a7ab33fc46ec647a3159",
+      "priceGas": 100,
+      "txid": "0xb0387334b464f3b8bb673f6aad27bd11f9ec608fb916818a2e91074e5209a7d4"
+    },
+    {
+      "dbId": 5,
+      "pattern": "NTrump",
+      "address": "NTrumptX3VVbDoSRAjMSht2oSTtqxuUznB",
+      "accountIdHash": "ee4abf72e030f90571a20df42d8a830a5019f793",
+      "priceGas": 100,
+      "txid": "0xe0c8e1d405ce60081639787920aa83c5c8b1005f9f7d2fbedbeb89e0eb51a921"
+    },
+    {
+      "dbId": 6,
+      "pattern": "...NeoVM",
+      "address": "NTJercPxgkcSDPEC11YqCCuWakSieNeoVM",
+      "accountIdHash": "daeacc6451939a7bcd569e5bff18fbe8c54ec2b5",
+      "priceGas": 25,
+      "txid": "0x1e6e044219d7924926087886122ea6239bfb9e0523c9e8f373755d5f2b33fa8c"
+    },
+    {
+      "dbId": 7,
+      "pattern": "NTrump",
+      "address": "NTrumpcBFjyqcoLH5LSohiquUZK58pRooJ",
+      "accountIdHash": "99949dc16813dac24d1b939e2695935a5262da24",
+      "priceGas": 100,
+      "txid": "0x66533c52c645bd7119f1986e165551a8efabb1dda6463da407007300da1ca51c"
+    },
+    {
+      "dbId": 8,
+      "pattern": "...NeoFS",
+      "address": "NeTZdywmpxgMW5QvoDJyRhkAbCAG1NeoFS",
+      "accountIdHash": "b45c2b3919dc0b443213460a3a0c112606f454c1",
+      "priceGas": 25,
+      "txid": "0xeb6065c0884c807549104d1a127a23f2f60de86d82c518afab18113a8cf60c7d"
+    },
+    {
+      "dbId": 9,
+      "pattern": "...Trump",
+      "address": "NZk8MkYqLrqmuGCm15wYDwY6kZ2CUTrump",
+      "accountIdHash": "f14275e2e797d5948713d7a0655d70b0d3f29150",
+      "priceGas": 100,
+      "txid": "0x6f9359009409fa123edf123dadb1a831942b4ed1a1141e75dbcc7728ed3d2cd2"
+    },
+    {
+      "dbId": 10,
+      "pattern": "NTrump",
+      "address": "NTrumpRrnaAfRBZgGMtvf7iP33ycUfSowi",
+      "accountIdHash": "69dc777e73e3a1e71c93a41667f3619e0066612a",
+      "priceGas": 100,
+      "txid": "0x1c3b8514a0ee094962b7e36281d45dc1e19b9356c4fa4c68ebd13d0b927a408c"
+    },
+    {
+      "dbId": 11,
+      "pattern": "NNeoVM",
+      "address": "NNeoVMb5jb5NJWr54fmWPAiqoz3nEmtfH2",
+      "accountIdHash": "3a926c77eff58de4dc4034778d8d3d42a3c7769e",
+      "priceGas": 25,
+      "txid": "0xcd7c52a3d5d4c0f3bf7eb53bd313f39d9bb1ea9e3b8b01fbb04a4a6794b7939a"
+    },
+    {
+      "dbId": 12,
+      "pattern": "ULTRA:7+repeat",
+      "address": "NMhhhhhhhYvGavpFffFfv6M7gy9f8yjZka",
+      "accountIdHash": "ce91c5045997c87d3cd3233103b86852e1c14d92",
+      "priceGas": 200,
+      "txid": "0x98e022623d01f8f76bbd47d4fde1eecc92f1f0affc27ba9890375736c80e1539"
+    },
+    {
+      "dbId": 13,
+      "pattern": "NTrump",
+      "address": "NTrumpELPi3nxKdCUJjhAoDwqNdNUZSUvC",
+      "accountIdHash": "19d2b6599a457ea1f0d0ba741f50a41e86907c1c",
+      "priceGas": 100,
+      "txid": "0x23a7e570273aacff5aea60f621a007b0adc3b428842474a7be3ff0aac1cf2aca"
+    },
+    {
+      "dbId": 14,
+      "pattern": "...Crypto",
+      "address": "NM7tAWoYbSjF8dMcKuyNcxdEQvVeCrypto",
+      "accountIdHash": "18ad9d6dbc0ca60e6c8ea68ce0604659bfe95f0b",
+      "priceGas": 25,
+      "txid": "0xb396c745fb22b9bfba18e6ceda6c367c223c3ef8849a2e378edd7b1f9e309c7b"
+    },
+    {
+      "dbId": 15,
+      "pattern": "NNGD...R3E",
+      "address": "NNGDfpgzsUqEmjdhTjRDeArWVhEJQGUR3E",
+      "accountIdHash": "e02469756e1cc3472c96f7a7c71ebb7e2c136585",
+      "priceGas": 25,
+      "txid": "0x3a9d4dbc0b07977b8c612bf29027204e6a9072ec623abe74523266a1053d3dd5"
+    },
+    {
+      "dbId": 16,
+      "pattern": "NNGD...BTC",
+      "address": "NNGDv2aewmrxyTuT2Y6fbKoHpuvkMsSBTC",
+      "accountIdHash": "ef25d6e935260f7630f5b8012d17163274ceaa86",
+      "priceGas": 25,
+      "txid": "0x6424dc81484df7326816c11574c7f0d134fa6ef042132029fb20c0a840aa84cc"
+    },
+    {
+      "dbId": 17,
+      "pattern": "NR3E...NNT",
+      "address": "NR3EbSvCoaQ22PL2cC1mrDNsVTF8CMgNNT",
+      "accountIdHash": "99e411dd6b9235ba2705ae1eb96a4c78f6d5a833",
+      "priceGas": 25,
+      "txid": "0x445a0bd330d8a07337d40b839a5c56809bbbecd9ee4d9642fb192bac1f43a424"
+    },
+    {
+      "dbId": 18,
+      "pattern": "NNeo...BTC",
+      "address": "NNeo2B1C2BjzJuiquq9bUzwNnUap8cgBTC",
+      "accountIdHash": "126d04fc0209401b8c2a2180522983d01d47f751",
+      "priceGas": 25,
+      "txid": "0x5792d4c114aaa94e55be33449007b272cf0d3363d49bbc46ec63d4585a7c374f"
+    },
+    {
+      "dbId": 19,
+      "pattern": "MIRROR:NNGD...NGD",
+      "address": "NNGDWTBZ6PHZ3KXDjmyCnixmCBGH2ZrNGD",
+      "accountIdHash": "fa59cf8fbc6daac35838a8c199c274c4285fbe36",
+      "priceGas": 50,
+      "txid": "0x97f250863674465752010d24eb63f53010c7afc7c0d63110c4d335b8c0a13531"
+    },
+    {
+      "dbId": 20,
+      "pattern": "NR3E...ETH",
+      "address": "NR3EkuvPepKmUfr5SRgKErtvLEAiRknETH",
+      "accountIdHash": "00359bf16594827c52f3e56280e6ad86b55d27b7",
+      "priceGas": 25,
+      "txid": "0x9fe5324d65865fff3e84945c54c64708f3c99ba3e2482a31edda5c724a3707d2"
+    },
+    {
+      "dbId": 21,
+      "pattern": "NR3E...NGD",
+      "address": "NR3E6peJEobrvdNbkXHqJwh2yh2MLqyNGD",
+      "accountIdHash": "71197e077244a19e48ce4c377674348d1cf03478",
+      "priceGas": 25,
+      "txid": "0xeb70cd5268e8f4bc6f1f69315ba16abe69b2372cf511a8f56fa68982453e82b5"
+    },
+    {
+      "dbId": 22,
+      "pattern": "NNeo...R3E",
+      "address": "NNeomPVWnz1WeSV89UbWG3oYdQJAwTER3E",
+      "accountIdHash": "aa5832cfab0ce5c140ede5174956005f1f3b1d31",
+      "priceGas": 25,
+      "txid": "0x17debb11ecd573fae29035c85b3591d815de07c0040428c7e7c510d6bc44bfe2"
+    },
+    {
+      "dbId": 23,
+      "pattern": "MIRROR:NR3E...R3E",
+      "address": "NR3EXEskc3N1NC38iMPwQD3TNgXPunjR3E",
+      "accountIdHash": "01a9577d3a45070a90ac07541b1116bf2a23b65d",
+      "priceGas": 50,
+      "txid": "0x25b1e8f464b6bc0882b97cefcb94421c52a412392eb034296d153d2e272e560c"
+    },
+    {
+      "dbId": 24,
+      "pattern": "NR3E...Neo",
+      "address": "NR3ETEC36YveXUetDobtaAGk2DP4KinNeo",
+      "accountIdHash": "a24b59ef2d55d3ce0e0e810faf25993e6720aee5",
+      "priceGas": 25,
+      "txid": "0x8f40fe5b0f8a5a8b6fef97461e8e1e66a6c5069e175892c4a685cee3fd76ccf7"
+    },
+    {
+      "dbId": 25,
+      "pattern": "NNGD...BTC",
+      "address": "NNGDtEynuMnRgNShfGrqdaDtPuXfF1WBTC",
+      "accountIdHash": "1db3eba97a54763251fee3619b1726f164bd417a",
+      "priceGas": 25,
+      "txid": "0xaf0a7e5198e57f15a521872ff90d50f003c5ae842f2c9b0954e2743bb9d8d161"
+    },
+    {
+      "dbId": 26,
+      "pattern": "NR3E...BTC",
+      "address": "NR3Es3y4QUeahrAuGHEsPS9jPESA4FXBTC",
+      "accountIdHash": "6bafedddfbade2996e6d9d6699db359ba2900dda",
+      "priceGas": 25,
+      "txid": "0xccce2daf7bbb650acd391b45002df75070ead0e6c8d9d9f117eb47a8b83cc189"
+    },
+    {
+      "dbId": 27,
+      "pattern": "MIRROR:NNGD...NGD",
+      "address": "NNGDBnjPizhxYw9ycVRBAnM9sWVZ6UHNGD",
+      "accountIdHash": "bc9d421a9fe50f9ffa9a9289c7da213e1605987b",
+      "priceGas": 50,
+      "txid": "0x878499c9e7ea0b9718cdc386e36cbeb3c3c6b9f1acaeac619fb57eb71f3aa011"
+    },
+    {
+      "dbId": 28,
+      "pattern": "NR3E...Neo",
+      "address": "NR3ETrvCCWbpUEKXZNh4f6YgFyv7QYKNeo",
+      "accountIdHash": "499ba6da6b585b45de3bd3abbc0b925386ddfcf2",
+      "priceGas": 25,
+      "txid": "0x576671d6e38eae18e0db02914b9c3a954c730f9d697761e40ec6ebc59c0036ae"
+    },
+    {
+      "dbId": 29,
+      "pattern": "NR3E...ETH",
+      "address": "NR3EitWne9c65ZLsJZ7qQEgv3Pz3E4rETH",
+      "accountIdHash": "85e47d0827243efd7dc3b7fe80360c4261cd5705",
+      "priceGas": 25,
+      "txid": "0xe880d2664b64b0eab5e3910d8d53ca3a060918fc35d34941a582015fa035d52f"
+    },
+    {
+      "dbId": 30,
+      "pattern": "MIRROR:NR3E...R3E",
+      "address": "NR3Ef27WYSHg9u8ZjBQ6JyYBCwKC7SwR3E",
+      "accountIdHash": "5d7e5ecb7684bc6840e931904bfe0ca1c528c53a",
+      "priceGas": 50,
+      "txid": "0x86323437cf81ff3dd7e375eb8d550eee5c1760bbb8c719f9bbfbe96f51b47ed2"
+    },
+    {
+      "dbId": 31,
+      "pattern": "NR3ER3E",
+      "address": "NR3ER3E1H9QnEzP7NMpPPemJXHgqVSFYL8",
+      "accountIdHash": "e17097967185f46dd444517a63c72828b23a6a7a",
+      "priceGas": 10,
+      "txid": "0xbf19e9246e167b7e0b545634056d0f4a7aa1b342c879a69bef4417bc37eff23a"
+    },
+    {
+      "dbId": 32,
+      "pattern": "...BTCR3E",
+      "address": "NLb46K5HMj7WroBfMDkzSBXkpc2NBTCR3E",
+      "accountIdHash": "eed1e30cb5610e9f7cf75341c360f4d9891c6072",
+      "priceGas": 25,
+      "txid": "0xb3a8a046ec5a6463a63c8f4265d7c87acc8607a37f75e7f8db44c40e46bcac01"
+    },
+    {
+      "dbId": 33,
+      "pattern": "NR3E...Neo",
+      "address": "NR3EivKAH2EReEp7ayhEGHHkFT2kXTRNeo",
+      "accountIdHash": "6c0e5016a81e919af21c0ee6b9ff38cfd8e91d2e",
+      "priceGas": 25,
+      "txid": "0x9fa14e4078fa0fa770b03d6ac5b0812eb6b3bc881cb9782fb73e6c3fdc68d813"
+    },
+    {
+      "dbId": 34,
+      "pattern": "NNeoR3E",
+      "address": "NNeoR3EpRjmijADC15myWUwLMs8yi5mXCY",
+      "accountIdHash": "f684699edf52a8d5abf9172ec4b86a2c31ca0a52",
+      "priceGas": 25,
+      "txid": "0x8ed661fd83f58faddc799dbb773fb1b54a2c393405058e949d108fab9be80cf6"
+    },
+    {
+      "dbId": 35,
+      "pattern": "NR3ECoz",
+      "address": "NR3ECoz2BuZ9RAwp4gRvEWod6B7DSJfB7T",
+      "accountIdHash": "ba1bc9ef6076c2677b12afc3313e6fd57e20f327",
+      "priceGas": 25,
+      "txid": "0x85b9962386431ee582a2de88c61edae52147ef4fce35d24c9623089aaf2c0c36"
+    },
+    {
+      "dbId": 36,
+      "pattern": "...BTCR3E",
+      "address": "NTRZCj581KnxWoYaMduFn1CVXE2ZBTCR3E",
+      "accountIdHash": "36b74cc16883a243ee26a4dca5c28f36609de6dd",
+      "priceGas": 25,
+      "txid": "0x2d45830221a613fab075785faf522ec8e0fe01737203b39aae3f07523c7851f4"
+    },
+    {
+      "dbId": 37,
+      "pattern": "NNeo...ETH",
+      "address": "NNeo3feGqKaMG2CMN38Z1fuX3nxCM6vETH",
+      "accountIdHash": "8b18f09068db73c250f932ea935b041125f57f95",
+      "priceGas": 25,
+      "txid": "0x150714005dfefb57fc176948d44a2a604d4a16f4c6af3671ebae00fe58a98ed9"
+    },
+    {
+      "dbId": 38,
+      "pattern": "Neox2+R3E",
+      "address": "NeoshwnkRRbFzM9uneoR3E4GzhJWDndLii",
+      "accountIdHash": "5930b192335e79cf3d8957ca8dcf09d8032e96b9",
+      "priceGas": 25,
+      "txid": "0xb695fb1d218bbcf576cf0323a8a7eea3e6c538526f19d87999806aecbbc76743"
+    },
+    {
+      "dbId": 39,
+      "pattern": "NR3E...NNT",
+      "address": "NR3EWXWp3zwbJAcN2kMe7rK3iSgwKBiNNT",
+      "accountIdHash": "bf5e9b067d9056970adc6adbe062daff142c8db5",
+      "priceGas": 25,
+      "txid": "0x44edad2735a9c07ba8e379bf84f9ec7e06f7cc71f51cb6349051b07518fd49bc"
+    },
+    {
+      "dbId": 40,
+      "pattern": "NNeoNNT",
+      "address": "NNeoNNTCWXtGtB4ynMnuRiBrLQXC37xVsW",
+      "accountIdHash": "df4c9f215a4d4c55c1a0d3a77c130496f6af2f5e",
+      "priceGas": 25,
+      "txid": "0x51df4aab8bc8c8c8132cb86120317fdf0cef2f59bbb442fe813a0541b136da98"
+    },
+    {
+      "dbId": 41,
+      "pattern": "NR3EBTC",
+      "address": "NR3EBTCNeZCL6KWuvCcyXSxWVGT5SRaeT6",
+      "accountIdHash": "57f205092e34360c4381a7d12ba231589f1360bc",
+      "priceGas": 25,
+      "txid": "0x25854b9eefd26c755c1ab89f97996cb68eef84af92b8a242db41b6dd40ff2184"
+    },
+    {
+      "dbId": 42,
+      "pattern": "NR3ENGD",
+      "address": "NR3ENGDoZDv4kTwrDDqYAhzWU6yaVSGqJD",
+      "accountIdHash": "f5f302032353418af114b3f12398311b7475610e",
+      "priceGas": 25,
+      "txid": "0xffb36b7c6c881833d40172a0105d8c29bf96c789d1bdd2bd53e28b1452318b9b"
+    },
+    {
+      "dbId": 43,
+      "pattern": "NR3ENGD",
+      "address": "NR3ENGDzyNfmhgNVhxvj6Wda11ZZwUsSCA",
+      "accountIdHash": "4e080d744c806df0d8e35bb940e5b34cab4b4964",
+      "priceGas": 25,
+      "txid": "0x89cae2fe681acf8422aff764b242e9e5e96906fdff1501ed1548625e42878214"
+    },
+    {
+      "dbId": 44,
+      "pattern": "NNeo...BTC",
+      "address": "NNeoeLFKatD3K2ezoZABgecdfhK3pDgBTC",
+      "accountIdHash": "cf0c36527dc0e2d6767543e15f4947322419d365",
+      "priceGas": 25,
+      "txid": "0xa039f4ec16469996730ba02b8a0bc7c6c2d75c95777a87266f2bb0b42a2c49c8"
+    },
+    {
+      "dbId": 45,
+      "pattern": "NNeoBTC",
+      "address": "NNeoBTCtW5FmCCReLfYxixoCGhkQhGk6uz",
+      "accountIdHash": "1a1633c64c5899b2c16ea8196de7b5c301aa7e4f",
+      "priceGas": 25,
+      "txid": "0x897a6bc6a26a624af9c8491abb217375312f88cd33714d8cbfe68f295389e9e1"
+    },
+    {
+      "dbId": 46,
+      "pattern": "NNNTNeo",
+      "address": "NNNTNeoWXHGX7abUPkH98vuHeAWeSq8iGm",
+      "accountIdHash": "fc10f079389db759a2539dcbbcb7c3a3d1038889",
+      "priceGas": 25,
+      "txid": "0x508d5147c06a54db61bc26ceafc6950d3b28d6b4ca94a53a7bd89d47cb004859"
+    },
+    {
+      "dbId": 47,
+      "pattern": "NNNT...Neo",
+      "address": "NNNTVB8wHjegUCuYEU5H762AjmkCEggNeo",
+      "accountIdHash": "abf2570910384eae6b1c3e1ce797d2a49155ada1",
+      "priceGas": 25,
+      "txid": "0x54ae88a2d9aca04adccb26bc240b6ffe07eaa339acbd16badf610024fbf09bd6"
+    },
+    {
+      "dbId": 48,
+      "pattern": "NNeoETH",
+      "address": "NNeoETHvjtWGUvmrJM3iknnBfrarLpNyUZ",
+      "accountIdHash": "5222f510c33721be3f88c5fb7ff77362d60218f4",
+      "priceGas": 25,
+      "txid": "0x8d6e1bff07e8e43126ed9d511b18752453ddae9c54501e4fb524f1b0b5496cb9"
+    },
+    {
+      "dbId": 49,
+      "pattern": "NNeoNGD",
+      "address": "NNeoNGDDbhYaj6ao29ft3PmZSAjieoPpr5",
+      "accountIdHash": "87478f2c9d74d32cd53b3eeb12a3349dc4dc67ea",
+      "priceGas": 25,
+      "txid": "0xad1b33e66e023da9e174d0ee06ec57fb3d56963073fbb650f491b6d82cfd146c"
+    },
+    {
+      "dbId": 50,
+      "pattern": "NNeoNGD",
+      "address": "NNeoNGDYS2BGudwBgUSZQCaK7EePZv2VgM",
+      "accountIdHash": "da0ff7b9e8ec47ff9db1462c6b65f790b92c9c41",
+      "priceGas": 25,
+      "txid": "0x005c7329d520e631f70d938971a141122ae915de73d6fceff1a4b8043d4ecc04"
+    },
+    {
+      "dbId": 51,
+      "pattern": "NNeoBTC",
+      "address": "NNeoBTCMrzzod6XixFFxfAKjyeKQ6gNtNB",
+      "accountIdHash": "aeea2dfe8bb3939c9c7f1a23f67bd893577e51cd",
+      "priceGas": 25,
+      "txid": "0xc538d8a0484eb2b1f165551a9296449437c2c59d1e7a2738a0c4e8838cf8a1c2"
+    },
+    {
+      "dbId": 52,
+      "pattern": "NNeoNGD",
+      "address": "NNeoNGDbFs67MMXKWy4rrzYfn6Fnh1orsn",
+      "accountIdHash": "11a958432772c09d50bc6d0d95c8dd03a8fc60cf",
+      "priceGas": 25,
+      "txid": "0x57c597a1175090dbbc725c0dc04c769c85502ab900efe4d3402a15de62108077"
+    },
+    {
+      "dbId": 53,
+      "pattern": "NNeoETH",
+      "address": "NNeoETHQ3u8UaLsTieCEBPmmkShK6CNArE",
+      "accountIdHash": "7ef62a38aa8b96b84a55396f496c45ff45d2cb3d",
+      "priceGas": 25,
+      "txid": "0x12118352d166ecce03c675357678a6853114c9fd6b045544bb7581551831ef1a"
+    },
+    {
+      "dbId": 54,
+      "pattern": "NNeoBTC",
+      "address": "NNeoBTCTuN5rZ8bsnAwTnRYgnjXzBKmPiY",
+      "accountIdHash": "9697646a04c966c7cc3346948580fdea326ca846",
+      "priceGas": 25,
+      "txid": "0xa585b3466b4c32b15a05037c54fb4cd51ee088b910feebe33bc4a9b54aaed249"
+    },
+    {
+      "dbId": 55,
+      "pattern": "NNeoNGD",
+      "address": "NNeoNGDAdjWjiRJPpdf5DAFaQfLKeE54Ch",
+      "accountIdHash": "eaf2a12866b2a5a668e665dc8710df6e17749141",
+      "priceGas": 25,
+      "txid": "0xa17089cc0b3753df83bd4b3c4decc5b6a2185978b596c458d1e6f6edd13b7425"
+    }
+  ]
+}

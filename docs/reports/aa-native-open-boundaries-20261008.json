@@ -1,0 +1,35 @@
+{
+  "schema": "aa-native-formal-open-boundaries/v1",
+  "date": "2026-10-08",
+  "profileVersion": 2,
+  "abiVersion": 2,
+  "status": "OPEN_BOUNDARIES_RETAINED",
+  "implementationVerified": false,
+  "boundaries": [
+    {
+      "id": "FORMAL-NEOVM-COMPILER-REFINEMENT",
+      "status": "OPEN",
+      "scope": "Handwritten models are not source/bytecode/VM refinement. Exact runtime tests and source/artifact provenance are separately required."
+    },
+    {
+      "id": "FORMAL-CRYPTO-WITNESS-ATTESTATION-ZK",
+      "status": "PARTIAL",
+      "scope": "Domain and witness predicates are modeled; crypto verification and arbitrary plugins remain external assumptions."
+    },
+    {
+      "id": "FORMAL-MULTISIG-FUTURE-PLUGIN",
+      "status": "PARTIAL",
+      "scope": "Finite topology and lifecycle models do not establish arbitrary-plugin behavior or operational liveness."
+    },
+    {
+      "id": "FORMAL-AUTHORITY-EPOCH-BYTE-STORAGE",
+      "status": "PARTIAL",
+      "scope": "Abstract account/epoch tuple separation assumes no future-generation writes. Concrete 0xA2 key encoding, exact native epoch reads and complete module use require source review and VM tests."
+    },
+    {
+      "id": "FORMAL-NATIVE-FEE-RESOURCE-REFINEMENT",
+      "status": "OPEN",
+      "scope": "Bounded callback charge models do not prove complete fee estimation, mempool policy, max-roster cost or resource liveness."
+    }
+  ]
+}

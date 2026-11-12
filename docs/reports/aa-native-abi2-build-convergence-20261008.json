@@ -1,0 +1,56 @@
+{
+  "schema": "aa-native-abi2-build-convergence/v1",
+  "date": "2026-10-08",
+  "status": "BUILD_AND_MODEL_GATES_PASS",
+  "profileDigest": "a55dfe56356cdb9f51d9139f7f6e617c8bf4bcaa3211fd69a53dc980d477c03e",
+  "sourceLockSha256": "f46d8673e2a6ce0527f128e5fd6dae5fc534802b774f982de2250da9fd1a96e2",
+  "finalHeadReadback": {
+    "core": "a898d728986a5679dbd7df50467972e68bf477b5",
+    "node": "6d011e3d231e5f27cfc7c8cd0c5f3d7f9d6189c6",
+    "express": "da143f8643ebca7841cc7f56e4e3e00293819fbc"
+  },
+  "runnerBuildStartedAtHeads": {
+    "core": "50ce131729db3b6babd57720b41da3de9a1292ac",
+    "node": "3ac2e3ed305d25996c6b4b4cf434ab41ee04d0ee",
+    "express": "da143f8643ebca7841cc7f56e4e3e00293819fbc"
+  },
+  "headReadbackNote": "Node formatting commit was created after the build snapshot. Current selected production source hashes match the build receipt; its original sourceCommits metadata is preserved. Core final formatting commit changed test files only.",
+  "reports": {
+    "aa-native-abi2-formal-20261008.json": "422f041fd30ec0ff2192ed757a665c7166710ee767be638f0063a2ff55bf1277",
+    "aa-native-abi2-module-build-20261008.json": "5e9cdc474573bcf7b0fbb27d2c0d5dba8bd94f3819a3a5a0ea5af741d42b8e3e",
+    "aa-native-abi2-runner-build-20261008.json": "48b0a6f172e0ca9845e2bcdb1ab249d466dd25b8d24eab1e525bd22cd71a7fb0",
+    "aa-native-abi2-public-platform-reproducibility-20261008.json": "5a30c38d66c36f83de2734a9b57bebb4900fc4da7a2abdf1b2ed68c8033cd00e",
+    "aa-native-abi2-public-tests-20261008.json": "93d3c21cbf4213e2294fa8383b5fc3b678c92ebf333c8ecacfe4b408a8a36dce"
+  },
+  "runtimeBuild": {
+    "independentBuilds": 2,
+    "files": 104,
+    "packageArchives": 50,
+    "sourceFileCounts": {
+      "core": 313,
+      "node": 122,
+      "express": 182
+    }
+  },
+  "nativeModules": {
+    "independentBuilds": 2,
+    "modules": 6,
+    "packagedFiles": 13
+  },
+  "publicProfiles": {
+    "artifactsCompared": 80,
+    "v3": 78,
+    "platform": 2,
+    "testsPassed": 396
+  },
+  "formal": {
+    "coqModules": 26,
+    "closedDeclarations": 409,
+    "semanticMutationsRejected": 222,
+    "tlcDistinctStates": 61460,
+    "smtObligations": 6,
+    "smtControls": 6,
+    "implementationVerified": false
+  },
+  "boundary": "Build reproducibility and manually related abstract proofs only. Native private-chain and SDK transaction receipts are separate; no public activation or deployment is implied."
+}

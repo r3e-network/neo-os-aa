@@ -1,0 +1,149 @@
+{
+  "schema": "neoos-aa-formal-gate/v1",
+  "observedOn": "2026-09-20T13:03:04Z",
+  "status": "PASS",
+  "readOnly": true,
+  "networkWritesPerformed": false,
+  "scope": "Fail-closed AA model-checking gate (formal/verify.py) executed on the current worktree with a real JDK: Rocq/Coq proofs with semantic mutation rejection, the MultiSig bounded model, the Z3 SMT core, the TLC model check of the UnifiedSmartWallet AA lifecycle with TLA+ mutation rejection, and the formal source-lock snapshot gate. No network access, no deployment, no chain writes.",
+  "commands": [
+    "JAVA_BIN=<homebrew-openjdk>/bin/java TLA_JAR=<tla2tools.jar> python3 formal/verify.py --output formal/.runs/revalidation-final-20260920",
+    "python3 -m unittest discover -s formal -p 'test_*.py'"
+  ],
+  "runnerTests": {
+    "ran": 20,
+    "status": "OK",
+    "durationSeconds": 2.062
+  },
+  "supersedes": {
+    "receipt": "docs/reports/aa-current-revalidation-20260920.json#formal_runner",
+    "previousStatus": "UNAVAILABLE",
+    "previousError": "Cannot read java version; /usr/bin/java is a macOS launcher without an installed Java runtime",
+    "resolution": "A Homebrew OpenJDK was already installed; only the macOS launcher stub at /usr/bin/java was probed. Pointing JAVA_BIN at the Homebrew JDK is sufficient; no software was installed."
+  },
+  "boundary": "Model-level evidence only. It proves the hand-written Coq, TLA+ and SMT abstractions and their correspondence snapshot against the pinned C# source hashes; it does not prove VM/NEF refinement, liveness, or deployed-artifact parity, which remain separate gates.",
+  "result": {
+    "modelChecksPassed": true,
+    "implementationVerified": false,
+    "boundary": "Hand-written abstractions; no VM/source/NEF refinement or liveness proof",
+    "multisigBoundedModel": {
+      "configCases": 104,
+      "acceptanceCases": 206846,
+      "sourceGuards": 6,
+      "sourceMutationsRejected": [
+        "non_empty",
+        "maximum_size",
+        "threshold_range",
+        "address_validity",
+        "no_duplicates",
+        "post_execute_threshold"
+      ]
+    },
+    "artifactSha256": {
+      "coq/CallbackPluginTopology.v": "8bf3695273f1dd7012741a7e6a438e2a2c226b7b8782ffd491f7529ae2346b41",
+      "coq/MultiSigPolicy.v": "62d6a62ebdf0ebfccbf27b593726d2fd279aacbc36d78387da0e191501a8919a",
+      "coq/ProxyWitnessScript.v": "a84f5dedaa60a5c652a3d9c507c163fdb55f78ba3aed41c84dff2764c58abf64",
+      "coq/UnifiedSmartWalletAA.v": "6f6c67b2f780b3a3d0c8413085be6225a6c10ef4599e130fd5630b5e10b0ee68",
+      "smt/aa_core.smt2": "49a2f207a175e07138f9ffd1d2b49200a3db1dd37394e188053cbc8d164b05e8",
+      "tla/UnifiedSmartWalletAA.cfg": "268386d69c8b18f3cbe464a300e16ca9ecba0abe635d609ee6e0e85ec91ef333",
+      "tla/UnifiedSmartWalletAA.tla": "226957a7a494545eed044a647a292f133be53376e7b717537169e6696e730766"
+    },
+    "sourceSha256": {
+      "contracts/UnifiedSmartWallet.Accounts.cs": "e96158d35d5b7df406004e2b03e777aff325b3a49fdf8e1bc1e9ecda54333c5b",
+      "contracts/UnifiedSmartWallet.Escape.cs": "8047ae50e4800c56d3410b5395833b27b8bd1af70c5a357a0f7f27c9827a16b2",
+      "contracts/UnifiedSmartWallet.Execution.cs": "d1563713b7e42e72f19674dfb77d168470ea39b5b8b58fb0e0f76d6625106195",
+      "contracts/UnifiedSmartWallet.Models.cs": "6043c12abac5799ab0923f30dfa59c1284c8818517e5497f1defcb126eafbe35",
+      "contracts/UnifiedSmartWallet.Paymaster.cs": "ff0b3c5391cedc91a10400066bed705bc571fdf8143698ab55a9c3f2d505b6a4",
+      "contracts/UnifiedSmartWallet.State.cs": "154095a5c2381aeef662a1d4b1231cb9d6b804a208907da97eec18e4e69fe49f",
+      "contracts/UnifiedSmartWallet.VerifyContext.cs": "c1d8cfefd95a2743b9795ef782f5ccd84c8113df5e7c88e236af76d2179289e7",
+      "contracts/hooks/MultiHook.cs": "b6f3de93710f9439df37a09df93f2f46ed62c0867552ce4aac745c421e07eeb7",
+      "contracts/paymaster/Paymaster.cs": "c04511d90eff0e97fabb94d17c38c80de4287186138dcdf01073ee2a16cada87",
+      "contracts/verifiers/MultiSigVerifier.cs": "6d06719afe686a91d68eba2a7bf0ba8d5a6f9e79fd0965cc64517ee65f03e314",
+      "contracts/verifiers/VerifierPayload.cs": "9366d6d24a0ad9be79b24756558bea6b89e165b91a6b4e24cca2e54147204f12"
+    },
+    "tlcJarSha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88",
+    "toolVersions": {
+      "java": "openjdk version \"26.0.2.1\" 2026-08-18",
+      "coq": "The Rocq Prover, version 9.2",
+      "z3": "Z3 version 5.1.0 - 64 bit",
+      "tlc": "TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)"
+    },
+    "coqDeclarations": {
+      "UnifiedSmartWalletAA.v": 23,
+      "MultiSigPolicy.v": 11,
+      "ProxyWitnessScript.v": 20,
+      "CallbackPluginTopology.v": 12
+    },
+    "coqMutationsRejected": {
+      "UnifiedSmartWalletAA.v": [
+        "authorization",
+        "nonce-check",
+        "nonce-increment",
+        "reentrancy",
+        "escape-owner",
+        "rollback",
+        "operation-shape",
+        "reject-all"
+      ],
+      "MultiSigPolicy.v": [
+        "multisig-threshold",
+        "multisig-signature-count",
+        "multisig-uniqueness"
+      ],
+      "ProxyWitnessScript.v": [
+        "witness-prefix-check",
+        "witness-account-binding",
+        "witness-core-binding",
+        "witness-flags-range",
+        "witness-syscall-tail",
+        "witness-unknown-opcode"
+      ],
+      "CallbackPluginTopology.v": [
+        "callback-target-binding",
+        "callback-signature-binding",
+        "callback-post-order",
+        "scope-entry-binding",
+        "cleanup-fail-closed"
+      ]
+    },
+    "tlc": {
+      "generated": 11859476,
+      "distinct": 61460,
+      "actions": {
+        "Init": 4,
+        "Tick": 24592,
+        "Begin": 11804160,
+        "CompleteSuccess": 120,
+        "CompleteFailure": 30600
+      }
+    },
+    "tlcMutationsRejected": [
+      "authorization",
+      "operation-shape",
+      "nonce-increment",
+      "rollback"
+    ],
+    "smt": {
+      "obligations": 6,
+      "controls": 6
+    }
+  },
+  "containerGate": {
+    "observedOn": "2026-09-20T13:03:04Z",
+    "status": "PASS",
+    "executionMode": "Docker BuildKit RUN stage",
+    "imageBuild": "PASS",
+    "formalRun": "PASS",
+    "runnerTests": "20/20 OK",
+    "commands": [
+      "docker build --no-cache --progress=plain --output type=local,dest=<output> -f <context>/Dockerfile <context>",
+      "RUN python3 formal/verify.py --output formal/.runs/docker-build",
+      "RUN python3 -m unittest discover -s formal -p 'test_*.py'"
+    ],
+    "imageSha256": "sha256:eae75dfa1262fe61bcd41fdab1718fbd9d0f08577df81b10c65ed503a6d69ecd",
+    "tlcJarSha256": "9d36716ffb5e49d1ba8fae4651eba59f3189887e12eb90e204a42d2e6e993fef",
+    "resultPath": "formal/.runs/docker-build-20260920",
+    "resultSha256": "59f6415a94d5e2df075930bbe0c6aad195fd9969f0cc35ebc16ae2d28e7f152f",
+    "runnerTestsSha256": "1b73381e74d5619386ecf399e2e6f3e7f18fed1130a8ecd32156c63f910b69b2",
+    "note": "The normal docker run wrapper still encountered a Docker Desktop start/API hang and was not used as evidence. The pinned image and the current source snapshot were instead executed in a clean BuildKit container stage; both commands exited successfully."
+  }
+}

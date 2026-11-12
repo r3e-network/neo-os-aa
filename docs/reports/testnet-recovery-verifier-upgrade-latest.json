@@ -1,0 +1,51 @@
+{
+  "network": "testnet",
+  "network_magic": 894710606,
+  "rpc_url": "https://testnet1.neo.coz.io:443",
+  "contract_hash": "0x198b3a9cec9bccc2110d19bd929b10374a9d034d",
+  "signer_hash": "0x6d0656f6dd91469db1c90cc1e574380613f43738",
+  "execute_requested": true,
+  "chain_writes_performed": true,
+  "candidate": {
+    "manifest_name": "SocialRecoveryVerifier",
+    "version": "1.1.0",
+    "nef_sha256_digest": "0x43caa3b617fe1bc2ea98bed294215557c1e1c3dc76d965b8f296ea8b0fdd3ca8",
+    "manifest_sha256_digest": "0x511bf381336022a5e54a1f2eb9b7b2d61cad155397d91b88daea35ef706f71d1",
+    "nef_hash256_canonical": "0xa83cdd0f8bea96f2b865d976dcc3e1c157552194d2be98eac21bfe17b6a3ca43",
+    "manifest_hash256_canonical": "0xd1716f70ef35eada881bd9975315ad1cd6b2b7b92e1f4ae5a522603381f31b51",
+    "required_methods": [
+      "supportsV3",
+      "validateSignature",
+      "postExecute",
+      "getPendingUpdateNefHash",
+      "getPendingUpdateManifestHash",
+      "getPendingUpdateAvailableAt"
+    ]
+  },
+  "live": {
+    "update_counter": 1,
+    "method_count": 51,
+    "supports_v3": false
+  },
+  "pending_before": {
+    "nefDigest": null,
+    "manifestDigest": null,
+    "proposedAtMs": "0",
+    "availableAtMs": "0"
+  },
+  "preview": {
+    "state": "HALT",
+    "gas_consumed": "307055"
+  },
+  "next_action": "after available_at, confirm the exact candidate and rerun the live recovery flow",
+  "generated_at_utc": "2026-08-30T22:18:29.212Z",
+  "transaction": {
+    "txid": "0xee9016cbdc95562fe4f56206f06a75b005cc05474b2ade1460816224b5a9280e"
+  },
+  "pending_after": {
+    "nefDigest": "0x43caa3b617fe1bc2ea98bed294215557c1e1c3dc76d965b8f296ea8b0fdd3ca8",
+    "manifestDigest": "0x511bf381336022a5e54a1f2eb9b7b2d61cad155397d91b88daea35ef706f71d1",
+    "proposedAtMs": "1788128312352",
+    "availableAtMs": "1788733112352"
+  }
+}

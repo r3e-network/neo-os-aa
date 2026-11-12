@@ -1,0 +1,41 @@
+{
+  "schema": "neoos-aa-formal-gate/v2",
+  "observedOn": "2026-09-21",
+  "status": "PASS",
+  "readOnly": true,
+  "networkWritesPerformed": false,
+  "scope": "Fail-closed AA formal gate on the current worktree: real Rocq/Coq proofs with semantic mutation rejection, bounded MultiSig model, Z3 SMT core, TLC lifecycle exploration with mutation rejection, source-lock checks, and the same source snapshot executed in a cached-base Docker BuildKit stage. No network access or chain writes.",
+  "hostGate": {
+    "status": "PASS",
+    "coqModules": 5,
+    "coqDeclarations": 72,
+    "coqSemanticMutationsRejected": 26,
+    "tlaSemanticMutationsRejected": 4,
+    "totalSemanticMutations": 30,
+    "tlcDistinctStates": 61460,
+    "smtObligations": 6,
+    "smtControls": 6,
+    "runnerTests": "20/20 OK",
+    "resultRelativePath": "formal/.runs/gas-cap-20260921-final4/result.json",
+    "resultSha256": "efe7d3436157f2e8a7b847aea9dfe73c576210f6722fff6698eb883d2dc5335b"
+  },
+  "containerGate": {
+    "status": "PASS",
+    "executionMode": "Docker BuildKit RUN stage from cached neo-os-aa-formal:local base",
+    "formalRun": "PASS",
+    "runnerTests": "20/20 OK",
+    "gateLogSha256": "7bd7ed4de346fcf16851c7bf9360e5d0f4afbea6652a593980aee2042c775802",
+    "runnerTestsLogSha256": "b9aea977427d0d6bb060517ca3a09f07c8239a0145d38fa51d0715988c98dca9",
+    "resultSha256": "a0e9222efc3fe372339b4075e97b77ffe10ba31ffea50b26df3751efb08bf5f9",
+    "resultRelativePath": "formal/.runs/docker-build-20260921-cached2/result.json",
+    "gateOutput": "PASS: AA model checks over 5 Coq modules, MultiSig bounded model, source snapshot gate and 30 semantic mutations",
+    "runnerOutput": "....................\n----------------------------------------------------------------------\nRan 20 tests in 0.199s\n\nOK",
+    "note": "The ordinary docker run wrapper remains unclaimed because Docker Desktop start/API handling hangs in this environment; the BuildKit stage is the executed in-container evidence."
+  },
+  "boundary": "The models are closed hand-written abstractions pinned to reviewed C# source hashes. They do not prove cryptography, witness-rule evaluation, complete NeoVM semantics, mechanized C# to NEF to deployed refinement, liveness, arbitrary plugin-cycle absence, or MultiSig key independence.",
+  "privacy": {
+    "credentialsIncluded": false,
+    "privateKeysIncluded": false,
+    "absoluteUserPathsIncluded": false
+  }
+}

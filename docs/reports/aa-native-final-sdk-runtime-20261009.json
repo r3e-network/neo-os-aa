@@ -1,0 +1,610 @@
+{
+  "schema": "native-sdk-private-runtime-summary/v1",
+  "status": "PASS",
+  "completedAtUtc": "2026-10-08T18:26:11.547572+00:00",
+  "profileParameterDigest": "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4",
+  "scope": "Final activated loopback native runtime and native module artifacts; actual JavaScript SDK signing, signed preflight, broadcast and persisted raw-byte readback. No public network or deployment.",
+  "publicNetworksTouched": false,
+  "evidence": {
+    "rawReceipt": "sdk-verifiers-final-attempt2.json",
+    "rawReceiptSha256": "30014c216f5b04552d4d9d0d72540693286808d7bf279cdf4ce963efe57ec2ae",
+    "log": "aa-native-sdk-final-runtime-attempt2.log",
+    "logSha256": "83bc6cd2923e7284ca0f6015d9356ca54554872dbee5302129c8d3541e5d8448",
+    "priorSuccessfulReceipt": "sdk-verifiers-final.json",
+    "priorSuccessfulReceiptSha256": "da271eaf7dd217d12f23b0b974cedcb198c5841838d985a3f2e0ee17cbd61b9c",
+    "priorReceiptPreserved": true
+  },
+  "provenance": {
+    "runtimeBuildReceipt": "source-build.json",
+    "runtimeBuildReceiptSha256": "0163cbf7de2884cbd3041a57682aa18db4c8ecb69dd289d963e081958ab7b345",
+    "moduleBuildReceipt": "module-build.json",
+    "moduleBuildReceiptSha256": "2f9f2dc15489dcc2ea9e5d319f32be2561401b3a9897f3aa35d8a04ab5c5b72e",
+    "sourceCommits": {
+      "core": "ff422d940a4722c361c32398c6f28c00fb7f0693",
+      "node": "fa35e69af130661e2ac60bffd43eb6c6c78aa7d5",
+      "express": "da143f8643ebca7841cc7f56e4e3e00293819fbc"
+    },
+    "independentRuntimeBuilds": 2,
+    "runtimeFiles": 104,
+    "runtimeByteIdentical": true,
+    "nativeModulesReproducible": true,
+    "currentProducerSha256": {
+      "sdk/js/tests/native-runtime-verifiers.py": "3856cdd00bdd725024f38dc7925ab4fce1247024dfe730df989809baf1a1b819",
+      "sdk/js/tests/native-runtime-driver.mjs": "7148732b34b8e69b87151a58db8d126769d00a0c6b1db8f2829d12b8f36d0ad4",
+      "shared/nativeSmartAccount.mjs": "b53b885f26740df922836644fb1dcc6f53a29735f213b5419c33235d5348f1db",
+      "shared/nativeSmartAccountClient.mjs": "349c3fd86c6441155422db8e4e42d9dfcd16fcf0d77b18efd126ba090f45504c",
+      "sdk/js/src/native.js": "353d7ff9aec8a656b2e83304133d70ccf4747423e79d5aab61b09d67a96fb07b",
+      "sdk/js/src/neonCompat.js": "a57ae946b0eac96aa62224783508d8a97357d95a936265e15167b1cbc676a88b",
+      "sdk/js/src/native/client.js": "5cb709a35a733a7dc078a095b13284d28161825a4005f86b301bae17cc26d62a",
+      "sdk/js/src/native/moduleIdentity.js": "87aaee57abb0dab5360ffdf1501a89d707dd6d6b1a6d0341ee12ca767a58e1bb",
+      "sdk/js/src/native/transaction.js": "0e348f6c37abdff44563029ad49e7d9b50a55eb21915912d2b337f4e22667125",
+      "sdk/js/src/native/verifierWitness.js": "8a300a538f9c82609649cb84ae7b78eb60d9fc4b2621c6a340f0bec7df8c9ba5",
+      "scripts/neoexpress_validate.py": "bd06c9a901e24f9aaea457f00db94776a6ca83188055acd4d4cf5c45f91e6e7a",
+      "scripts/neoexpress_activation_validate.py": "15b96afcc37f61c3f4fb1a735988e289d840562b4f44e08192dddc9bc51fd004",
+      "scripts/neoexpress_native_service_validate.py": "46d278944976c18ba1abe7f7a32d36092d6a1e6011e57fc050c269b315883cc8",
+      "scripts/neoexpress_native_modules_validate.py": "b9017e098d89505a0c3282c3859d504148ded6f0a8d8ee4216e0c4babdf1e3e4",
+      "scripts/neoexpress_native_proxy_validate.py": "e89dd35336da0d1b31ba6047675c40df22508d1d3f4be555e02f68c056f82256",
+      "scripts/neoexpress_reproducible_build.py": "2c85285d70b5ac67f58c38b4f141df3fd860d974df825b634c8d0c81f28ad28d",
+      "scripts/build_native_modules.py": "baf7e3b388e56fce82eb7a3bfcf9dd380df052ef7b4735b7734a80b6015847b3",
+      "scripts/native_module_profile.py": "41a01fec1ffc96a0077cfb889d3f641063784801bdd8f42be4e1b2cf64c18eb2"
+    },
+    "producerIdentityRule": "Exact file SHA-256 values, checked before and after execution and again when producing this summary, identify the actual producers; a Git revision alone is insufficient for modified helper text.",
+    "changedProducerFilesSincePriorReplay": [
+      "scripts/neoexpress_native_service_validate.py",
+      "scripts/neoexpress_native_proxy_validate.py"
+    ],
+    "changedRuntimeNotice": "Caller-supplied NeoExpress runtime; this runner does not establish build provenance. Verify the separate source-build receipt.",
+    "separateBuildReceiptsVerifiedBeforeAndAfter": true,
+    "currentCoreNodeExpressSourceSnapshotsMatched": true,
+    "currentSourceFileCounts": {
+      "core": 314,
+      "node": 123,
+      "express": 182
+    },
+    "currentRuntimeAndModuleConsumerRecheck": "PASS"
+  },
+  "counts": {
+    "confirmedSdkTransactions": 36,
+    "verificationSucceed": 36,
+    "applicationHalt": 36,
+    "expectedRejections": 3,
+    "deployedModuleInstances": 4
+  },
+  "matrix": [
+    "NeoNative root with explicit leaf-only witness scope and independent fee payer",
+    "Session root with chain getPayload equal to the SDK authorization preimage",
+    "Mixed Session and NeoNative 2-of-2",
+    "Two separately deployed Session verifiers with distinct keys, 2-of-2",
+    "Exact 4096-byte operation args",
+    "Maximum 191-bit nonce channel with nested argument depth 8",
+    "All three two-member quorums in the ordered 2-of-3 roster",
+    "Three valid proofs select the first two approved children only",
+    "Removed child policy cleared; delayed re-enrollment before adding it back",
+    "Unexpired retained signed transaction rejected after configuration; freshly signed operation succeeds"
+  ],
+  "selectedQuorum": {
+    "threshold": 2,
+    "providedProofs": 3,
+    "selectedIndices": [
+      0,
+      1
+    ],
+    "unselectedSessionSpentUnchanged": true
+  },
+  "checks": {
+    "exactSignedRawReadbackAllTransactions": true,
+    "independentBalanceAndNonceReadback": true,
+    "sessionPolicyReadback": true,
+    "strictSignerScopesAndDeployedCodePins": true,
+    "authorityKeysRemainZeroGas": true,
+    "runtimeAndProducerFilesMatchedAfterRun": true,
+    "ownedNodesStopped": true
+  },
+  "transactions": [
+    {
+      "step": "register-NeoNativeVerifier",
+      "txid": "0x3c95da763a8e274cb40f4c218af049c88ff6f698d08f17cfb76d60735fe9ddf6",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "253932817",
+      "networkFeeDatoshi": "2444040",
+      "gasConsumedDatoshi": "26335926",
+      "minimumRequiredFeeDatoshi": "253932817"
+    },
+    {
+      "step": "register-SessionKeyVerifier",
+      "txid": "0xbaeaf6b287deb825d8d5c36733e7ad34bed41b1044aa6e4ba190c3a35945aa4e",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "253932817",
+      "networkFeeDatoshi": "2444040",
+      "gasConsumedDatoshi": "26336823",
+      "minimumRequiredFeeDatoshi": "253932817"
+    },
+    {
+      "step": "register-MultiSigVerifier",
+      "txid": "0x66360197fbcd74e45632a1c6722404328190f35399306b0a1bb02285f12efada",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "253932817",
+      "networkFeeDatoshi": "2444040",
+      "gasConsumedDatoshi": "26335302",
+      "minimumRequiredFeeDatoshi": "253932817"
+    },
+    {
+      "step": "native-root-config-propose",
+      "txid": "0x5c64d3a0f55fd0d2c60ed13f23ce2b38f5fce3969c1b89047f4921aac36f0ab4",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "27650069",
+      "networkFeeDatoshi": "2379040",
+      "gasConsumedDatoshi": "27650069",
+      "minimumRequiredFeeDatoshi": "27650069"
+    },
+    {
+      "step": "native-root-config-confirm",
+      "txid": "0x4d0b34ad323803786aeaef6ef8d1d6e77ac72fd725fe456e3c1b908cf42f8d17",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "254916116",
+      "networkFeeDatoshi": "2379040",
+      "gasConsumedDatoshi": "40310781",
+      "minimumRequiredFeeDatoshi": "254916116"
+    },
+    {
+      "step": "native-root-transfer",
+      "txid": "0x4b78d37e53f78864061b4756a639e100226f6e95eb2afef7c3235650856ce736",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "129444597",
+      "networkFeeDatoshi": "106494154",
+      "gasConsumedDatoshi": "38352576",
+      "minimumRequiredFeeDatoshi": "129444597"
+    },
+    {
+      "step": "native-root-reconfigure-propose",
+      "txid": "0xc824c9414a4381dee7aad5d98782dac442606915a0415859b7910d0008a85431",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "27750069",
+      "networkFeeDatoshi": "2379040",
+      "gasConsumedDatoshi": "27750069",
+      "minimumRequiredFeeDatoshi": "27750069"
+    },
+    {
+      "step": "native-root-reconfigure-confirm",
+      "txid": "0x03937f53b3afc7d14f9ac6eb591fe5cba6b0e7bdeeee6b9e5df2f91ef423c2a0",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "254916116",
+      "networkFeeDatoshi": "2379040",
+      "gasConsumedDatoshi": "26710781",
+      "minimumRequiredFeeDatoshi": "254916116"
+    },
+    {
+      "step": "native-root-fresh-after-config",
+      "txid": "0x45e4049c1f1a39d871177cf0db184db67b61ba3cd1d968ce60ea80e7501bdc0c",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "124944597",
+      "networkFeeDatoshi": "106494154",
+      "gasConsumedDatoshi": "33852576",
+      "minimumRequiredFeeDatoshi": "124944597"
+    },
+    {
+      "step": "session-root-config-propose",
+      "txid": "0x52de518261dbf06a9f6641ea03f8ed8c48e1ade96be496c9607d91e907aa6c20",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "35950198",
+      "networkFeeDatoshi": "2464040",
+      "gasConsumedDatoshi": "35950198",
+      "minimumRequiredFeeDatoshi": "35950198"
+    },
+    {
+      "step": "session-root-config-confirm",
+      "txid": "0xdb4ff6a3f4df68a53cc57098b9328ad764fd1e3927207958c820c9e145405091",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "254916246",
+      "networkFeeDatoshi": "2464040",
+      "gasConsumedDatoshi": "65891706",
+      "minimumRequiredFeeDatoshi": "254916246"
+    },
+    {
+      "step": "session-root-transfer",
+      "txid": "0x874f222f9c4fea5359f8413aeba666cc941dd421a77a62df7e665a1742f0a2a8",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "140384648",
+      "networkFeeDatoshi": "106408154",
+      "gasConsumedDatoshi": "59151708",
+      "minimumRequiredFeeDatoshi": "140384648"
+    },
+    {
+      "step": "multisig-session-child-config-propose",
+      "txid": "0x9ae5e7bec78ca695f66d6d3c8bd9aa5ee7df8438b2777fa78d1d22bd89be9c76",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "257867841",
+      "networkFeeDatoshi": "2491040",
+      "gasConsumedDatoshi": "40871881",
+      "minimumRequiredFeeDatoshi": "257867841"
+    },
+    {
+      "step": "multisig-session-child-config-confirm",
+      "txid": "0x2d2d74fe0454820afbe9d278f5c3bdd7276f3521c3de7d051f8e004724449fea",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "274237895",
+      "networkFeeDatoshi": "2491040",
+      "gasConsumedDatoshi": "86196428",
+      "minimumRequiredFeeDatoshi": "274237895"
+    },
+    {
+      "step": "multisig-native-child-config-propose",
+      "txid": "0x5569a690062ffa5cdfea62baa2232b590bddd2252e8450addaaa8368fbdb06c3",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "257867712",
+      "networkFeeDatoshi": "2406040",
+      "gasConsumedDatoshi": "32670854",
+      "minimumRequiredFeeDatoshi": "257867712"
+    },
+    {
+      "step": "multisig-native-child-config-confirm",
+      "txid": "0x574001c9fde642bf351664060de672f666058a7ee71bca26e161c1ed05cfdefe",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "268736869",
+      "networkFeeDatoshi": "2406040",
+      "gasConsumedDatoshi": "55014606",
+      "minimumRequiredFeeDatoshi": "268736869"
+    },
+    {
+      "step": "multisig-root-config-propose",
+      "txid": "0xd464d0332bad541e4b00e84ba16383b8678fbd64cd1f3bdcc33705661ed0607d",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "29950125",
+      "networkFeeDatoshi": "2401040",
+      "gasConsumedDatoshi": "29950125",
+      "minimumRequiredFeeDatoshi": "29950125"
+    },
+    {
+      "step": "multisig-root-config-confirm",
+      "txid": "0xdd1a6f28d6bf8f263d3bfbd7b37583ed3b248acc02a1d6feff7b875795464a59",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "335696898",
+      "networkFeeDatoshi": "2401040",
+      "gasConsumedDatoshi": "103249366",
+      "minimumRequiredFeeDatoshi": "335696898"
+    },
+    {
+      "step": "multisig-active-native-leaf-transfer",
+      "txid": "0x5a0f67e099102c9dcb4c0b757717d3d151018b092e5977a48394238c4c006c44",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "180820602",
+      "networkFeeDatoshi": "108532234",
+      "gasConsumedDatoshi": "155680779",
+      "minimumRequiredFeeDatoshi": "180820602"
+    },
+    {
+      "step": "multisig-second-session-child-config-propose",
+      "txid": "0x653655fe8584c28bb90b3381aeed6e8c6c2be4a4648d6d6122c6d529cba9aa8a",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "257867841",
+      "networkFeeDatoshi": "2491040",
+      "gasConsumedDatoshi": "40971881",
+      "minimumRequiredFeeDatoshi": "257867841"
+    },
+    {
+      "step": "multisig-second-session-child-config-confirm",
+      "txid": "0x97b88513cce4523c772467b88940e4521352cd173376eb6483ffd485e1872c3f",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "345772040",
+      "networkFeeDatoshi": "2491040",
+      "gasConsumedDatoshi": "113324507",
+      "minimumRequiredFeeDatoshi": "345772040"
+    },
+    {
+      "step": "two-session-two-of-two-config-propose",
+      "txid": "0xec8f2d507b8273b8589e92cb70283fde1c8c5b84992969e754e6242c6073662a",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "29950125",
+      "networkFeeDatoshi": "2401040",
+      "gasConsumedDatoshi": "29950125",
+      "minimumRequiredFeeDatoshi": "29950125"
+    },
+    {
+      "step": "two-session-two-of-two-config-confirm",
+      "txid": "0xde06aff67355f799ddc4f16aaf299c3581ac800dd5ab9a76ffc1aa4a30bfdc12",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "339446998",
+      "networkFeeDatoshi": "2401040",
+      "gasConsumedDatoshi": "106996685",
+      "minimumRequiredFeeDatoshi": "339446998"
+    },
+    {
+      "step": "two-session-two-of-two-transfer",
+      "txid": "0x2b50b472dd492821b87aa5bb38747237f7cd6edee8bf901a62aa269f1fab8c3f",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "187257970",
+      "networkFeeDatoshi": "108446234",
+      "gasConsumedDatoshi": "168371764",
+      "minimumRequiredFeeDatoshi": "187257970"
+    },
+    {
+      "step": "two-session-maximum-argument-bytes",
+      "txid": "0x90ad4d1fda2ed6f05de9c0f6ad22ae701e7c1b62e042ca0b8c21e619edf578b6",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "187263423",
+      "networkFeeDatoshi": "112489234",
+      "gasConsumedDatoshi": "164777315",
+      "minimumRequiredFeeDatoshi": "187263423"
+    },
+    {
+      "step": "two-session-maximum-channel-and-depth",
+      "txid": "0xc9c03ece71702c473fa53980728087e81d98d6372861be339ed35ec674411b3c",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "191759354",
+      "networkFeeDatoshi": "108478234",
+      "gasConsumedDatoshi": "169273269",
+      "minimumRequiredFeeDatoshi": "191759354"
+    },
+    {
+      "step": "multisig-native-child-reenroll-propose",
+      "txid": "0xfa7df0c6e909963b0316acb15aa231c0916fcea76489561802d2cabbf89e0c95",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "257867712",
+      "networkFeeDatoshi": "2406040",
+      "gasConsumedDatoshi": "32670854",
+      "minimumRequiredFeeDatoshi": "257867712"
+    },
+    {
+      "step": "multisig-native-child-reenroll-confirm",
+      "txid": "0x30797a283ac10f29a8a88a53cae075aeda834129fe28342caf0b00e8036a7df8",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "320189231",
+      "networkFeeDatoshi": "2406040",
+      "gasConsumedDatoshi": "87738918",
+      "minimumRequiredFeeDatoshi": "320189231"
+    },
+    {
+      "step": "two-of-three-config-propose",
+      "txid": "0x991ed0d29d8fb156c56b3816495cf371471f9fa7f545b0ebbec51341ddf3d5c8",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "32150180",
+      "networkFeeDatoshi": "2423040",
+      "gasConsumedDatoshi": "32150180",
+      "minimumRequiredFeeDatoshi": "32150180"
+    },
+    {
+      "step": "two-of-three-config-confirm",
+      "txid": "0x0e1209538904f0ffd776eac886d1377eb61bd017aaf5144a2bbd7fbb7d23606b",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "357429233",
+      "networkFeeDatoshi": "2423040",
+      "gasConsumedDatoshi": "128993806",
+      "minimumRequiredFeeDatoshi": "357429233"
+    },
+    {
+      "step": "two-of-three-both-sessions",
+      "txid": "0x201eeee9cf5ca2cd6b1593fab4331e04d386761570de62c3eaa6a025783f45b0",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "194218616",
+      "networkFeeDatoshi": "109430274",
+      "gasConsumedDatoshi": "180736786",
+      "minimumRequiredFeeDatoshi": "194218616"
+    },
+    {
+      "step": "two-of-three-session-one-and-native",
+      "txid": "0x0ba9c21b5cb30a24c9bcb58373c5d5ac009b6cc0d6b130c10f397b7b125b8611",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "183279857",
+      "networkFeeDatoshi": "109516274",
+      "gasConsumedDatoshi": "163540297",
+      "minimumRequiredFeeDatoshi": "183279857"
+    },
+    {
+      "step": "two-of-three-session-two-and-native",
+      "txid": "0x2fa78235fc64ac6802fc6bdc2f77f12393f677562d9f9b32b127aac95d52f02e",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "183279857",
+      "networkFeeDatoshi": "109516274",
+      "gasConsumedDatoshi": "163540297",
+      "minimumRequiredFeeDatoshi": "183279857"
+    },
+    {
+      "step": "two-of-three-order-native-second-propose",
+      "txid": "0xa2c62a68a82ec35027aba86b83af17f5048adf0fed4b3773218b3cdc21de9121",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "32150180",
+      "networkFeeDatoshi": "2423040",
+      "gasConsumedDatoshi": "32150180",
+      "minimumRequiredFeeDatoshi": "32150180"
+    },
+    {
+      "step": "two-of-three-order-native-second-confirm",
+      "txid": "0x2c27044938b730b1664a4eb047b8b9553da79448197feb448cc0bd1caf1cc85e",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "354129233",
+      "networkFeeDatoshi": "2423040",
+      "gasConsumedDatoshi": "125693806",
+      "minimumRequiredFeeDatoshi": "354129233"
+    },
+    {
+      "step": "three-valid-proofs-select-first-two",
+      "txid": "0x9d5f04275eb184fe2144b42dd8dbc5b0edc396a94b79140c1f1b24d6b089e1fe",
+      "verification": "Succeed",
+      "application": "HALT",
+      "confirmed": true,
+      "exactSignedRawReadback": true,
+      "systemFeeDatoshi": "183278594",
+      "networkFeeDatoshi": "109581274",
+      "gasConsumedDatoshi": "163537714",
+      "minimumRequiredFeeDatoshi": "183278594"
+    }
+  ],
+  "rejections": [
+    {
+      "step": "native-root-missing-witness",
+      "layer": "SDK-before-broadcast",
+      "application": "FAULT",
+      "broadcastPreventedBySdk": true,
+      "boundedGasFailure": false
+    },
+    {
+      "step": "native-root-old-raw-after-config",
+      "layer": "real-signed-native-witness",
+      "verification": "Invalid",
+      "unchangedAccountAndNonce": true,
+      "unexpiredAtRejection": true,
+      "submissionRefused": true
+    },
+    {
+      "step": "two-of-three-insufficient-proof",
+      "layer": "SDK-before-broadcast",
+      "application": "FAULT",
+      "broadcastPreventedBySdk": true,
+      "boundedGasFailure": false
+    }
+  ],
+  "moduleArtifactReadback": [
+    {
+      "instance": "NeoNativeVerifier",
+      "artifact": "NeoNativeVerifier",
+      "nefSha256": "015a18eef74343cc2b9c06efc819d7d36bdb68216b66c1ede83e3906ae9be4a0",
+      "manifestSha256": "c159e1dbc0d8cde3ca48354a465847b2a95feee66c110076a10ecf4a03902520",
+      "fullArtifactReadbackMatched": true
+    },
+    {
+      "instance": "SessionKeyVerifier",
+      "artifact": "SessionKeyVerifier",
+      "nefSha256": "c67516ba7886943bd7c2bd6e827de9bdf04d472fdf8475a99da5ddddb6d94bc3",
+      "manifestSha256": "22b30c9ea84b7c28cbbd0511772179b0b973846442db581cfd9c13c93e54a4d2",
+      "fullArtifactReadbackMatched": true
+    },
+    {
+      "instance": "MultiSigVerifier",
+      "artifact": "MultiSigVerifier",
+      "nefSha256": "250fad484fbf0e07a4f7d6e0c32d4ab7c7dde12975f5b5693e40429e4cf1d1f1",
+      "manifestSha256": "95f744391ea6f09cab935bbac36c64d27752ce8c014d18a814db2cf45b1560df",
+      "fullArtifactReadbackMatched": true
+    },
+    {
+      "instance": "SessionKeyVerifier2",
+      "artifact": "SessionKeyVerifier",
+      "nefSha256": "c67516ba7886943bd7c2bd6e827de9bdf04d472fdf8475a99da5ddddb6d94bc3",
+      "manifestSha256": "22b30c9ea84b7c28cbbd0511772179b0b973846442db581cfd9c13c93e54a4d2",
+      "fullArtifactReadbackMatched": true
+    }
+  ],
+  "replay": {
+    "workingDirectory": "repository root",
+    "entryPoint": "sdk/js/tests/native-runtime-verifiers.py",
+    "dotnetSdk": "10.0.400",
+    "requiredInputs": [
+      "source-built NeoExpress runtime directory",
+      "source-build.json",
+      "native artifacts directory",
+      "module-build.json"
+    ],
+    "commandTemplate": "python3 sdk/js/tests/native-runtime-verifiers.py --runtime \"$NATIVE_RUNTIME\" --build-receipt \"$SOURCE_BUILD_RECEIPT\" --artifacts \"$NATIVE_MODULE_ARTIFACTS\" --module-receipt \"$MODULE_BUILD_RECEIPT\" --dotnet \"$DOTNET\" --output \"$NEW_SDK_RECEIPT\" --retain-on-failure",
+    "privateKeyHandling": "Fresh private fixture; keys enter the SDK bridge only through stdin. Temporary wallet files are mode 0600 in mode 0700 directories."
+  },
+  "redaction": "No private keys, wallet files, public keys, account addresses, operation payloads, signatures, raw signed transactions or machine-specific paths are included. Full local evidence is identified by filename and SHA-256; transaction IDs remain for correlation.",
+  "limits": [
+    "Private-chain execution proves the listed pinned scenarios, not public activation or deployment.",
+    "Signed preflight is a ledger-snapshot check, not mempool admission or nonce reservation.",
+    "Four runtimeMode notices were corrected globally; this SDK producer graph imports the service and proxy helpers. The separate private-runtime matrix covers the recovery and configuration runners."
+  ]
+}

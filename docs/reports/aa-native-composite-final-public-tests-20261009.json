@@ -1,0 +1,34 @@
+{
+  "schema": "smartaccount-public-contract-regression/v1",
+  "status": "PASS",
+  "publicNetworksTouched": false,
+  "profile": "v3",
+  "testCounters": {
+    "total": "396",
+    "executed": "396",
+    "passed": "396",
+    "failed": "0",
+    "error": "0",
+    "timeout": "0",
+    "aborted": "0",
+    "inconclusive": "0",
+    "passedButRunAborted": "0",
+    "notRunnable": "0",
+    "notExecuted": "0",
+    "disconnected": "0",
+    "warning": "0",
+    "completed": "0",
+    "inProgress": "0",
+    "pending": "0"
+  },
+  "command": "dotnet test neo-abstract-account.sln -c Release --no-restore --nologo",
+  "requiredServicesArtifacts": true,
+  "externalServicesArtifactsObservedAfterTest": {
+    "NeoDIDRegistry.manifest.json": "ab167914648628b97750118fac114387733d48d78beb9d3e5886f0d8d91d40de",
+    "NeoDIDRegistry.nef": "08eaca068431e3ecdbd61eaebb5b2a775faac3abc7eaa74d8cd6419ee81d0f0b"
+  },
+  "releaseArtifactsUnchangedSinceReproducibility": true,
+  "artifactCertificate": "aa-native-composite-final-public-platform-reproducibility-20261009.json",
+  "trxSha256": "8dce0b1d2d3fdc7b9722c2220fedd2bee24f59f06ba5c42300d4d28fca7c02d9",
+  "logSha256": "33452a363944daf2c536cdf58ad2548a86f12385af5c4ffe7c7e107574b5b695"
+}

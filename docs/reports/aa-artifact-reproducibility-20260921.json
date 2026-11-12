@@ -1,0 +1,21 @@
+{
+  "schema": "neoos-aa-artifact-reproducibility/v1",
+  "observedOn": "2026-09-21",
+  "status": "PASS",
+  "command": "NCCS_BIN=<matching compiler> node scripts/check-artifact-reproducibility.mjs --json",
+  "scope": "Fresh scratch copy of the current AA sources compiled with the matching private DevPack compiler and compared byte-for-byte against contracts/bin/v3. No chain writes.",
+  "artifactsCompared": 76,
+  "releaseMatchesFreshBuild": true,
+  "drifted": [],
+  "missing": [],
+  "trackedBuildAnchor": {
+    "status": "intentionally-different",
+    "reason": "contracts/build is the historical deployed-mainnet provenance anchor, not the current release output"
+  },
+  "chainWritesPerformed": false,
+  "privacy": {
+    "containsCredentials": false,
+    "containsPrivateKeys": false,
+    "containsAbsolutePaths": false
+  }
+}
