@@ -5,19 +5,23 @@ import { createHash } from 'node:crypto';
 import http from 'node:http';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { assertLocalchainProbe, clearLocalchainEnvironment, requireRelayPrivateKeyHex } from './probe_isolation.mjs';
 
 const AA = fileURLToPath(new URL('../../', import.meta.url));
 const fx = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+assertLocalchainProbe(fx.rpcUrl);
+clearLocalchainEnvironment();
+const relayPrivateKeyHex = requireRelayPrivateKeyHex();
 const sdkRequire = createRequire(`${AA}/sdk/js/package.json`);
 const { wallet } = sdkRequire('@cityofzion/neon-js');
-const relayAccount = new wallet.Account(process.env.RELAY_PRIVATE_KEY_HEX);
+const relayAccount = new wallet.Account(relayPrivateKeyHex);
 delete process.env.RELAY_PRIVATE_KEY_HEX;
 
 const { buildExecuteUserOpInvocation } = await import(`${AA}/frontend/src/features/operations/metaTx.js`);
 const relay = await import(`${AA}/frontend/api/relay-transaction.js`);
 
 function baseEnv() {
-  for (const k of Object.keys(process.env)) if (k.startsWith('AA_RELAY') || k.startsWith('MORPHEUS_PAYMASTER') || k.startsWith('AA_PAYMASTER')) delete process.env[k];
+  clearLocalchainEnvironment();
   process.env.AA_RELAY_RPC_URL = fx.rpcUrl;
   process.env.AA_RELAY_WIF = relayAccount.WIF;
   process.env.AA_RELAY_ALLOWED_HASH = fx.core;
@@ -121,6 +125,7 @@ async function waitForExecution(txid, timeoutMs = 30000) {
   while (Date.now() < deadline) {
     const reply = await fetch(fx.rpcUrl, {
       method: 'POST',
+      redirect: 'error',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getapplicationlog', params: [txid] }),
     }).then((r) => r.json()).catch(() => null);

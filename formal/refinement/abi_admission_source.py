@@ -93,7 +93,7 @@ UNPROVED = [
     'The wildcard container reader that turns the JSON string `*` into a wildcard; only the selector '
     'that consumes it is recorded.',
     'Gas, storage growth and every resource limit on the admission path; no cost is modelled.',
-    'Trusted C# extraction and compiler/CLR correspondence; all 100 public entrypoints.'
+    'Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.'
 ]
 TCB = ['Strict complete-method C# grammar and field/symbol binding.',
        'The tokenizer keeps string and character literals opaque; preprocessor lines carry no '

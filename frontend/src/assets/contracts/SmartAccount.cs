@@ -75,6 +75,8 @@ namespace SmartAccount
         // 0x22  Prefix_OwnerOnlyRecovery            Escape.cs                 +acctId
         // 0x23  Prefix_HookDependencies             Internal.cs               +acctId
         // 0x24  Prefix_VerifierDependencies         Internal.cs               +acctId
+        // 0x25  Prefix_DependencyMaintenance       Internal.cs               +acctId
+        // 0x26  Prefix_ConfigurationContextDepth   Internal.cs               bare
         //
         // ACTIVE LAYOUT: every prefix byte is globally unique. StoragePrefixMapTests pins this map
         // against the source and rejects any future active prefix reuse.

@@ -7,7 +7,7 @@ bytes; its expectations follow the build profile read from the compiled core (DE
 source still emits System.Contract.CallWithGasLimit every verifier-signed operation must fault on a
 published node, and once the public build profile lands the same operations must execute.
 """
-import argparse, base64, datetime as dt, hashlib, json, os, shutil, subprocess, sys, time, traceback
+import argparse, base64, datetime as dt, hashlib, json, os, re, shutil, subprocess, sys, time, traceback
 import signal, socket, tempfile, random
 from collections import Counter
 from pathlib import Path
@@ -254,9 +254,21 @@ def arm_session_and_whitelist(c, x):
 def _recovery_digest(x, c, account, proxy, new_owner, nonce_text, expires_text, action_id, master, action_nf):
     seg = lambda t: bytes([len(t)]) + t.encode()
     recovery = c.contracts["SocialRecoveryVerifier"]
-    payload = b"neodid-recovery-v1" + seg("neo3-local") + v.hash_le(x.core) + v.hash_le(recovery) + v.hash_le(proxy) + seg(account) \
-        + v.hash_le(new_owner) + seg(nonce_text) + seg(expires_text) + seg(action_id) + master + action_nf
+    domain = b"neodid-recovery-v2" if x.variant == "source" else b"neodid-recovery-v1"
+    payload = domain + seg("neo3-local") + v.hash_le(x.core)
+    if x.variant == "source":
+        payload += v.hash_le(account)
+    payload += v.hash_le(recovery) + v.hash_le(proxy) + seg(account) + v.hash_le(new_owner) \
+        + seg(nonce_text) + seg(expires_text) + seg(action_id) + master + action_nf
     return hashlib.sha256(payload).digest()
+
+
+def _recovery_action_id(x, account, new_owner, nonce_text):
+    if x.variant != "source":
+        return "recover-1"
+    material = b"neo3-local" + b"\x1f" + v.hash_le(x.core) + b"\x1f" \
+        + v.hash_le(account) + b"\x1f" + v.hash_le(new_owner) + b"\x1f" + nonce_text.encode()
+    return "aa_recovery:" + hashlib.sha256(material).hexdigest()
 
 
 def sc_recovery_phase1(c, x):
@@ -278,8 +290,9 @@ def sc_recovery_phase1(c, x):
     expires = str(c.now_ms() + 30 * DAY * 1000)
     nf = bytes([0x41]) * 32
     new_owner = c.hashes["buyer"]
-    ticket = lambda sig, nfv=nf, master=x.factor, new=new_owner: [H(account), H(new), S("0"), S(expires), S("recover-1"), B(master), B(nfv), B(sig)]
-    good = x.morpheus.sign(_recovery_digest(x, c, account, proxy, new_owner, "0", expires, "recover-1", x.factor, nf))
+    action_id = _recovery_action_id(x, account, new_owner, "0")
+    ticket = lambda sig, nfv=nf, master=x.factor, new=new_owner: [H(account), H(new), S("0"), S(expires), S(action_id), B(master), B(nfv), B(sig)]
+    good = x.morpheus.sign(_recovery_digest(x, c, account, proxy, new_owner, "0", expires, action_id, x.factor, nf))
     c.send("ticket signed by a wrong key", [{"w": "relay"}], recovery, "submitRecoveryTicket", ticket(v.P256Key(x.workdir, "wrongkey").sign(b"x" * 32)), expect="FAULT", expect_text="Invalid Morpheus recovery signature")
     c.send("ticket for an unknown recovery factor", [{"w": "relay"}], recovery, "submitRecoveryTicket", ticket(good, master=bytes([9]) * 32), expect="FAULT", expect_text="Unknown recovery factor")
     rec = c.send("relay submits the Morpheus-signed recovery ticket", [{"w": "relay"}], recovery, "submitRecoveryTicket", ticket(good))
@@ -1068,6 +1081,33 @@ def sc_timelock_boundaries(c, x):
     return {"chainTimeMs": allowed7, "boundaries": x.timelock_boundaries}
 
 
+def _neo_wif(private_key_hex):
+    private_key = bytes.fromhex(private_key_hex)
+    if len(private_key) != 32:
+        raise ValueError("a Neo private key is exactly 32 bytes")
+    payload = b"\x80" + private_key + b"\x01"
+    checked = payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4]
+    alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    value = int.from_bytes(checked, "big")
+    encoded = ""
+    while value:
+        value, digit = divmod(value, 58)
+        encoded = alphabet[digit] + encoded
+    return "1" * (len(checked) - len(checked.lstrip(b"\0"))) + encoded
+
+
+def _redact_relay_stderr(stderr, private_key_hex):
+    redacted = str(stderr or "")
+    raw = str(private_key_hex or "")
+    if raw:
+        redacted = re.sub(re.escape(raw), "[redacted-relay-key]", redacted, flags=re.IGNORECASE)
+    try:
+        wif = _neo_wif(raw)
+    except ValueError:
+        return redacted
+    return redacted.replace(wif, "[redacted-relay-key]")
+
+
 def sc_relay_route(c, x):
     """AA-09 the AA frontend's real relay route against the local chain."""
     c.records.append({"scenario": "AA-09 gasless submission through the AA relay route (frontend/api/relay-transaction.js)"})
@@ -1101,12 +1141,14 @@ def sc_relay_route(c, x):
     fx = x.workdir / "relay-fixture.json"
     fx.write_text(json.dumps(fixture))
     env = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG") if k in os.environ}
-    env["RELAY_PRIVATE_KEY_HEX"] = c.keys["relay"].der.read_bytes()[7:39].hex()  # raw scalar of the throwaway dev key
+    relay_key_hex = c.keys["relay"].der.read_bytes()[7:39].hex()  # raw scalar of the throwaway dev key
+    env["RELAY_PRIVATE_KEY_HEX"] = relay_key_hex
     env["NODE_ENV"] = "development"
     done = subprocess.run([shutil.which("node") or "node", str(Path(__file__).with_name("relay_probe.mjs")), str(fx)], capture_output=True, text=True, env=env, timeout=180)
-    c.records.append({"relayProbeExit": done.returncode, "stderrTail": done.stderr[-500:]})
+    stderr_tail = _redact_relay_stderr(done.stderr, relay_key_hex)[-500:]
+    c.records.append({"relayProbeExit": done.returncode, "stderrTail": stderr_tail})
     if done.returncode != 0:
-        raise Fail(f"relay probe failed: {done.stderr[-300:]}")
+        raise Fail(f"relay probe failed: {stderr_tail[-300:]}")
     results = json.loads(done.stdout.strip().splitlines()[-1])
     c.records.append({"relayResults": results})
     by = {r["case"].split()[0]: r for r in results}

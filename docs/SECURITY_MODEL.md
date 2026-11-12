@@ -295,7 +295,9 @@ The core passes hook callbacks a single canonical operation tuple in both phases
 callback argument. This prevents a hook from validating one operation representation and metering
 another. Post callbacks receive detached copies of the authenticated operation and target result,
 so a verifier or hook cannot rewrite the operation later used for the execution event or sponsored
-settlement. A real NeoVM regression vector confirms that `WhitelistHook` accepts the signed target,
+settlement. `MultiHook` also re-serializes the target result for each child post-hook, preventing
+one policy leaf from changing the result observed by the next leaf. A real NeoVM regression vector
+confirms that `WhitelistHook` accepts the signed target,
 rejects an unlisted target before dispatch, and rolls back the nonce on rejection.
 The callback result is required to cross the Neo StdLib serialization boundary: ordinary VM values
 such as Null, Boolean, Integer, ByteString, Buffer, Array, Struct and Map are copied, while
@@ -356,13 +358,13 @@ back target writes and nonce state on that fault; transaction fees remain charge
 
 | ID | Severity | Component | Description | Status |
 | --- | --- | --- | --- |
-| **VULN-001** | Critical | **Verifier Gas DoS** | Public `v3` permits lifecycle-compatible verifier callbacks through standard `Contract.Call` without a child budget | Open for public arbitrary-verifier sponsorship; historical private `PLATFORM` evidence only |
-| **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Mitigated in source; refinement/deployment unverified |
+| **VULN-001** | Critical | **Verifier Gas DoS** | Public `v3` permits lifecycle-compatible verifier callbacks through standard `Contract.Call` without a child budget | Open for public arbitrary-verifier sponsorship; current private `PLATFORM` artifact has bounded-callback NeoExpress evidence and RPC readback |
+| **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Source candidate, scoped Coq governance/recovery models, and private NeoExpress escape/market scenarios verified; TestNet/MainNet deployment parity remains pending |
 | **VULN-003** | Medium | **Session Key Ordering** | A signed operation can execute before a later revocation transaction is ordered | Defined execution-order semantics; residual pre-inclusion operational risk |
-| **VULN-004** | Medium | **MultiSig Composition Boundary** | Empty, oversized, invalid-threshold, duplicate, self-referential, incomplete-child, and signer-domain-reuse configurations | Bounded Coq policy + 368 VM tests + private NeoExpress child manifest/domain preflight and revalidation; shipped-profile cryptographic vectors are covered, while private-key independence is not inferable from public keys and arbitrary future plugins remain a declared trust boundary |
-| **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Core-owned leaf dependency registries, manifest lifecycle preflight, and fail-closed cleanup for MultiSig/MultiHook; arbitrary-plugin storage/refinement coverage remains open |
-| **VULN-006** | Low | **Nonce Collision** | Executable nonces use 191-bit channel + 64-bit sequence within the non-negative signed NeoVM Integer range | Replay/sequence properties verified within the representable domain; the pinned public foundation artifact may still admit wider non-executable channel queries until the ordinary upgrade is republished; the current source rejects them and remains separate from native-profile conformance |
-| **VULN-007** | High | **Platform Owner Rotation** | The pinned public ABI lets the trusted platform registrar change `BackupOwner` immediately | Source candidate adds delayed proposal/confirmation/cancellation with a new-owner witness; public closure still requires ABI migration, rebuilt artifact and independent readback |
+| **VULN-004** | Medium | **MultiSig Composition Boundary** | Empty, oversized, invalid-threshold, duplicate, self-referential, incomplete-child, and signer-domain-reuse configurations | Bounded Coq policy + 571 VM tests + private NeoExpress child manifest/domain preflight and revalidation; shipped-profile cryptographic vectors are covered, while private-key independence is not inferable from public keys and arbitrary future plugins remain a declared trust boundary |
+| **VULN-005** | Medium | **Plugin State Orphaning** | Settlement cleanup is finite and not proven for every plugin | Core-owned leaf dependency registries, manifest lifecycle preflight, and fail-closed cleanup close the shipped MultiSig/MultiHook leaf profiles; arbitrary future-plugin storage/refinement coverage remains open |
+| **VULN-006** | Low | **Nonce Channel Bounds** | Executable nonces use a 191-bit channel + 64-bit sequence within the non-negative signed NeoVM Integer range | The current source explicitly rejects negative and out-of-range channels at `IsNonceAcceptable` with `Invalid channel`. Replay/sequence properties and per-channel independence are verified by unit tests (`AAFormalCorrespondenceRuntimeTests.cs`) and the Coq model `NativeIntegerDomain.v`, which proves decomposition, cursor isolation and exhaustion properties. The private NeoExpress evidence (15 scenarios) does not exercise these negative/invariant checks directly, but they are covered by the test suite and formal model; public ABI migration and readback of the pinned public foundation artifact remain open. |
+| **VULN-007** | High | **Platform Owner Rotation** | The pinned public ABI lets the trusted platform registrar change `BackupOwner` immediately | Delayed proposal/confirmation/cancellation with current-owner cancellation and a new-owner witness implemented; the final source-built artifact passed private NeoExpress state-invariance, event, persistence and proxy-address checks; public ABI migration and public deployment readback remains pending |
 
 **VULN-001 closure gate:** a transaction-wide gas limit or voluntary
 `Runtime.GasLeft`/`BurnGas` accounting is insufficient. The current private
@@ -371,9 +373,11 @@ capability. Its 1,000,000,000-datoshi (10 GAS) budget is charged against the
 child and every ancestor before counters mutate; ordinary nested calls inherit
 the budget and fee whitelisting cannot bypass it. The matching core passes 9/9
 targeted vectors and 1,435/1,435 full unit tests. The matching AA artifact
-passes 292/292 contract tests, and the private NeoExpress receipt drives a
-burning verifier to `Contract call gas limit exceeded` with nonce rollback and
-25-artifact RPC readback parity. See
+passes 571/571 contract tests, and the current private NeoExpress receipt drives
+burning verifier and hook callbacks to the bounded gas fault with
+nonce/configuration rollback and 25-artifact RPC readback parity. See
+`docs/reports/aa-neoexpress-validation-20261031.json`,
+`docs/reports/aa-private-artifact-provenance-20261031.json`,
 `docs/reports/aa-platform-gas-cap-20260921.json` and
 `docs/reports/aa-neoexpress-gas-cap-20260921.json`. VULN-001 is mitigated for
 this private integrated artifact; public activation and deployment remain
@@ -393,6 +397,20 @@ An absent reviewed admission policy means arbitrary-module sponsorship is not re
 production. These operational controls reduce sponsor exposure without claiming the
 non-bypassable callback budget that only the private runtime supplies.
 
+**Composite lifecycle:** market settlement may clear dependencies while escrow remains
+active only under the exact installed-root configuration context for the same account
+and module kind, at global context depth one. Dependency replacement and unscoped root
+calls remain blocked by escrow. Cleanup faults roll back earlier leaf cleanup, seller
+payout and ownership changes. PLATFORM settlement uses the existing root maintenance
+budget; public v3 retains standard contract calls.
+MultiSig admits only children exposing a safe `supportsComposition` marker returning
+false and the safe signer-domain ABI. Domain values are read during execution so the
+owner can still publish a leaf roster before configuring its keys. Missing capability
+declarations and nested MultiSig instances are rejected. Already-stored unsupported
+nested rosters are not migrated by this admission fix; they remain fail-closed and
+require a separately reviewed recovery change. Dated artifact and private-chain reports
+do not attest source changes made after their recorded input snapshot.
+
 **Witness/callback evidence boundary:** the runtime suite now covers bounded proxy-script shape
 vectors (wrong account, arbitrary/non-data instructions, decoy/global signer, and fee-payer
 cases) and the shipped hook callback tuple, and the transaction-script shape parser itself has a
@@ -408,13 +426,15 @@ The isolated NeoExpress receipt now also drives the concrete boundary with indep
 bounded verifier and hook callbacks plus a hand-built,
 P-256-signed transaction: a real proxy verification script is carried by a `WitnessRules`
 signer scoped to both the AA core and `NeoDIDRegistry`, consumes an action ticket, and rejects
-same-nullifier replay and action-id retargeting. The receipt deploys 25 artifacts, runs 14
+same-nullifier replay and action-id retargeting. The receipt deploys 25 artifacts, runs 15
 scenarios, and reads every deployed artifact back with byte-identical NEF scripts, matching
 checksums, and semantically equal manifests over RPC. This is private-chain
 evidence only; it does not prove arbitrary witness rules, cryptography, full NeoVM semantics,
 or public deployment parity. The same receipt includes bare P-256 WebAuthn/TEE payload
-vectors, delegated ZkLogin provider/nullifier binding, and the disabled ZKEmail fail-closed
-path. The formal `NeoVmCallSubset.v` model closes only the proxy-relevant bounded instruction
+vectors, a real ephemeral-key Web3Auth EIP-712 and direct-digest secp256k1 path, delegated
+ZkLogin provider/nullifier binding, and the disabled ZKEmail fail-closed path. The Web3Auth
+result covers the shipped NeoVM/CryptoLib verification path, not a hosted OAuth ceremony.
+The formal `NeoVmCallSubset.v` model closes only the proxy-relevant bounded instruction
 shape; complete NeoVM/ApplicationEngine semantics remain outside this model.
 The core also rejects oversized verifier signatures and argument arrays before nonce
 consumption or external dispatch. This is input-amplification mitigation only; it cannot cap a
@@ -466,6 +486,7 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 
 - **SHA256:** Used for payload hashing in most verifiers
 - **Keccak256:** Used for `Web3AuthVerifier` EIP-712 compatibility
+- **Web3Auth ERC-1271:** Direct 32-byte digest recovery requires `HF_Huyao` or later. The pre-Huyao compatibility implementation does not enforce canonical `r`/`s` bounds and is outside the reviewed deployment profile.
 - **Nonce Storage:** Executable nonces have a 191-bit channel and 64-bit sequence. Native-profile keys reserve 24 bytes for the channel with the high bit clear; cursor `2^64` is an explicit exhaustion sentinel. The current ordinary source applies the signed-VM bound to channel reads; the pinned public foundation artifact may retain the wider legacy read boundary until republished.
 
 ### 7.3 Replay Protection Mechanisms

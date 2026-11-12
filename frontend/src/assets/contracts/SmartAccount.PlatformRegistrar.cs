@@ -128,6 +128,7 @@ namespace SmartAccount
             ExecutionEngine.Assert(
                 newBackupOwner != null && newBackupOwner != UInt160.Zero && newBackupOwner.IsValid,
                 "Invalid platform backup owner");
+            AssertAccountConfigurationIdle(accountId!);
 
             byte[] bindingKey = Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId);
             ByteString? storedBinding = Storage.Get(Storage.CurrentContext, bindingKey);
@@ -164,6 +165,7 @@ namespace SmartAccount
         {
             AssertPlatformRegistrar();
             ValidatePlatformAccountBinding(appBinding);
+            AssertAccountConfigurationIdle(accountId!);
             byte[] bindingKey = Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId);
             ByteString? storedBinding = Storage.Get(Storage.CurrentContext, bindingKey);
             ExecutionEngine.Assert(storedBinding != null, "Platform account binding not found");
@@ -197,6 +199,7 @@ namespace SmartAccount
         public static void CancelPlatformAccountOwnerRotation(UInt160 accountId, ByteString appBinding)
         {
             ValidatePlatformAccountBinding(appBinding);
+            AssertAccountConfigurationIdle(accountId!);
             byte[] bindingKey = Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId);
             ByteString? storedBinding = Storage.Get(Storage.CurrentContext, bindingKey);
             ExecutionEngine.Assert(storedBinding != null, "Platform account binding not found");
@@ -240,6 +243,7 @@ namespace SmartAccount
         public static void ProposePlatformRegistrar(UInt160 registrar)
         {
             ValidateAdmin();
+            AssertGlobalConfigurationIdle();
             ExecutionEngine.Assert(registrar != null && registrar != UInt160.Zero && registrar.IsValid, "Invalid platform registrar");
             ExecutionEngine.Assert(ContractManagement.GetContract(registrar!) != null, "platform registrar not deployed");
             ExecutionEngine.Assert(registrar != GetPlatformRegistrar(), "Platform registrar unchanged");
@@ -251,6 +255,7 @@ namespace SmartAccount
         public static void ConfirmPlatformRegistrar()
         {
             ValidateAdmin();
+            AssertGlobalConfigurationIdle();
             ByteString? pending = Storage.Get(Storage.CurrentContext, Prefix_PendingPlatformRegistrar);
             ExecutionEngine.Assert(pending != null, "No pending platform registrar");
             ByteString? proposedAt = Storage.Get(Storage.CurrentContext, Prefix_PlatformRegistrarTimelock);
@@ -267,6 +272,7 @@ namespace SmartAccount
         public static void CancelPlatformRegistrar()
         {
             ValidateAdmin();
+            AssertGlobalConfigurationIdle();
             Storage.Delete(Storage.CurrentContext, Prefix_PendingPlatformRegistrar);
             Storage.Delete(Storage.CurrentContext, Prefix_PlatformRegistrarTimelock);
             OnPlatformRegistrarCancelled(GetPlatformRegistrar());

@@ -13,16 +13,67 @@ import tempfile
 from unittest.mock import patch
 
 import method_proofs as method
+import nef_decode
+import verify as refinement_verify
 
 ROOT = Path(__file__).resolve().parents[2]
-# The lane binds the current build. The 20261013 fixture predates the
-# SmartAccount rename: its focusedMethods table names the old method ids, so it
-# can no longer bind the helper the runner pins and the binding fails before a
-# single test runs. The inventory is resolved from the environment first, so a
-# rebuild rebinds the lane without editing this file, and otherwise points at
-# the newest checked-in host inventory.
-DEFAULT_INVENTORY = ROOT / "docs/reports/aa-method-refinement-20261015/host/inventory.json.gz"
-INVENTORY = Path(os.environ.get("AA_METHOD_INVENTORY") or DEFAULT_INVENTORY)
+CURRENT_ARTIFACT_DIR = ROOT / "contracts/bin/v3"
+CURRENT_METADATA = ROOT / "formal/refinement/fixtures/current-initializer-source.json"
+
+
+def build_current_inventory():
+    """Build a portable inventory from the checked-in current V3 artifact.
+
+    This intentionally derives byte/instruction identity from the NEF and the
+    complete ABI from its manifest. The small metadata fixture supplies only
+    compiler-declared static slots and the focused helper range.
+    """
+    nef_path = CURRENT_ARTIFACT_DIR / "SmartAccountV3.nef"
+    manifest_path = CURRENT_ARTIFACT_DIR / "SmartAccountV3.manifest.json"
+    nef_raw = nef_path.read_bytes()
+    manifest_raw = manifest_path.read_bytes()
+    decoded = refinement_verify.decode_nef(nef_raw)
+    instructions = nef_decode.decode_script(decoded["script"], len(decoded["tokens"]))
+    tokens = [{"hash": "0x" + bytes.fromhex(token["hashLittleEndian"])[::-1].hex(),
+               "method": token["method"],
+               "parametersCount": token["parametersCount"],
+               "hasReturnValue": token["hasReturnValue"],
+               "callFlags": token["callFlags"]}
+              for token in decoded["tokens"]]
+    metadata = json.loads(CURRENT_METADATA.read_text())["fixtureOrigin"]
+    region = [item for item in instructions if method.START <= item["offset"] < method.END]
+    manifest = json.loads(manifest_raw)
+    return {
+        "schema": "neoos-aa-refinement-inventory/v1",
+        "status": "INVENTORY_ONLY",
+        "inputs": {str(nef_path): hashlib.sha256(nef_raw).hexdigest(),
+                   str(manifest_path): hashlib.sha256(manifest_raw).hexdigest()},
+        "nef": {"sha256": hashlib.sha256(nef_raw).hexdigest(),
+                "scriptHex": decoded["script"].hex(),
+                "scriptSha256": hashlib.sha256(decoded["script"]).hexdigest(),
+                "tokens": tokens,
+                "instructions": instructions},
+        "manifest": {"sha256": hashlib.sha256(manifest_raw).hexdigest(),
+                     "methods": manifest["abi"]["methods"]},
+        "source": json.loads((ROOT / "formal/refinement/fixtures/cap-method-source.json").read_text())["source"],
+        "sourceMap": {"exactByteMatch": True, "exactManifestMatch": True,
+                      "focusedMethods": [{"id": method.METHOD,
+                                          "range": f"{method.START}-{method.END - 1}",
+                                          "instructions": region}],
+                      "debug": {"static-variables": metadata["staticVariables"]}},
+    }
+
+
+def load_inventory():
+    configured = os.environ.get("AA_METHOD_INVENTORY")
+    if not configured:
+        return build_current_inventory()
+    path = Path(configured)
+    with gzip.open(path, "rt") as stream:
+        return json.load(stream)
+
+
+INVENTORY = Path(os.environ["AA_METHOD_INVENTORY"]) if os.environ.get("AA_METHOD_INVENTORY") else None
 
 
 def materialize_nef_fixture(inventory, directory):
@@ -62,8 +113,7 @@ def materialize_nef_fixture(inventory, directory):
 class MethodProofTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        with gzip.open(INVENTORY, "rt") as stream:
-            cls.inventory = json.load(stream)
+        cls.inventory = load_inventory()
         cls.fixture_directory = tempfile.TemporaryDirectory(prefix="aa-cap-nef-fixture-")
         cls.addClassCleanup(cls.fixture_directory.cleanup)
         nef = materialize_nef_fixture(cls.inventory, cls.fixture_directory.name)
@@ -120,8 +170,8 @@ class MethodProofTests(unittest.TestCase):
         self.assertEqual(bound["manifestSha256"], self.inventory["manifest"]["sha256"])
 
     def test_complete_method_is_bound(self):
-        self.assertEqual(self.program["start"], 13557)
-        self.assertEqual(self.program["end"], 13838)
+        self.assertEqual(self.program["start"], 17762)
+        self.assertEqual(self.program["end"], 18043)
         self.assertEqual(len(self.program["bytes"]), 281)
         self.assertEqual(len(self.program["instructions"]), 116)
 
@@ -163,8 +213,8 @@ class MethodProofTests(unittest.TestCase):
         result = method.execute(self.program["bytes"], requested=1, system_fee=0,
                                 network_fee=0, tx_hash=bytes([1])*32, stored=ledger)
         # The helper now asserts the remaining VM-integer headroom before the
-        # addition, so this input is rejected by that assertion at 13806 and the
-        # ADD at 13812 never runs. It is an abort, not an arithmetic fault.
+        # addition, so this input is rejected by that assertion at 18011 and the
+        # ADD at 18017 never runs. It is an abort, not an arithmetic fault.
         self.assertEqual(result["status"], "ABORT")
         self.assertEqual(result["error"], method.MARGIN_ERROR)
         self.assertEqual(result["stored"], ledger)
@@ -219,7 +269,7 @@ class MethodProofTests(unittest.TestCase):
     def test_wrong_static_slot_type_or_key_faults(self):
         for key in (b"\x21", bytearray(b"\x22")):
             with self.subTest(key=key):
-                self.assertEqual(self.execute(static_values={34:key})["status"], "FAULT")
+                self.assertEqual(self.execute(static_values={38:key})["status"], "FAULT")
 
     def test_malformed_storage_is_not_an_expected_result_oracle(self):
         for stored in ({"Reserved": 0}, b"garbage", method.Ledger(bytes(32), 0, "Map")):
@@ -257,13 +307,13 @@ class MethodProofTests(unittest.TestCase):
     def test_partial_helper_boundary_rejected(self):
         inventory = copy.deepcopy(self.inventory)
         entry = next(item for item in inventory["sourceMap"]["focusedMethods"] if item["id"] == method.METHOD)
-        entry["range"] = "13667-13688"
+        entry["range"] = "17872-17893"
         with self.assertRaisesRegex(ValueError, "boundary"):
             method.bind_method(inventory)
 
     def test_exported_instruction_drift_rejected(self):
         inventory = copy.deepcopy(self.inventory)
-        entry = next(item for item in inventory["nef"]["instructions"] if item["offset"] == 13667)
+        entry = next(item for item in inventory["nef"]["instructions"] if item["offset"] == 17872)
         entry["opcode"] = 255
         with self.assertRaisesRegex(ValueError, "inventory differs"):
             method.bind_method(inventory)
@@ -277,7 +327,7 @@ class MethodProofTests(unittest.TestCase):
 
     def test_min_to_max_control_has_observable_semantic_difference(self):
         mutated = list(self.program["bytes"])
-        mutated[13687-method.START] = 0xba
+        mutated[17892-method.START] = 0xba
         result = method.execute(mutated, requested=90, system_fee=50, network_fee=10,
                                 tx_hash=bytes([1])*32, stored=None)
         self.assertEqual((result["status"], result["result"], result["stored"].reserved), ("HALT", 90, 90))
@@ -320,7 +370,7 @@ class MethodProofTests(unittest.TestCase):
             self.assertIs(receipt["kernelChecked"], True)
             self.assertIs(receipt["referenceRefinementVerified"], True)
             self.assertIs(receipt["fullImplementationVerified"], False)
-            self.assertEqual(receipt["methodRange"], [13557, 13838])
+            self.assertEqual(receipt["methodRange"], [17762, 18043])
             self.assertEqual((receipt["byteCount"], receipt["instructionCount"]), (281, 116))
             self.assertEqual(len(receipt["semanticControls"]), 6)
             self.assertTrue(all(item["definitionsCompiled"] and item["certificateRejected"]

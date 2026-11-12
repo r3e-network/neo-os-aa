@@ -1,7 +1,8 @@
-// A package name is never a security exception. This one upstream advisory has
-// no patched elliptic release; see docs/FRONTEND_DEPENDENCY_SECURITY.md.
+// A package name is never a security exception. These two upstream advisories
+// have no patched release at review time; see docs/FRONTEND_DEPENDENCY_SECURITY.md.
 const REVIEWED_ADVISORIES = new Map([
   ['GHSA-848j-6mx2-7j84', 'elliptic'],
+  ['GHSA-gcqx-w48m-w2h4', 'deepmerge'],
 ]);
 const SEVERITIES = ['info', 'low', 'moderate', 'high', 'critical'];
 const isRecord = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);

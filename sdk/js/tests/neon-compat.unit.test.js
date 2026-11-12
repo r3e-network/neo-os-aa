@@ -186,3 +186,38 @@ test('RPCClient.send preserves JSON-RPC code and structured data for submission 
     await closeServer(server);
   }
 });
+
+test('RPCClient.send rejects 307 and 308 before the redirect target receives the POST body', async () => {
+  for (const status of [307, 308]) {
+    const targetBodies = [];
+    const target = await listen((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        targetBodies.push(body);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { hash: '0x' + 'ab'.repeat(32) } }));
+      });
+    });
+    const sourceBodies = [];
+    const source = await listen((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        sourceBodies.push(body);
+        res.writeHead(status, { location: target.url });
+        res.end();
+      });
+    });
+    try {
+      const client = new rpc.RPCClient(source.url, { timeoutMs: 2000 });
+      await assert.rejects(() => client.send('sendrawtransaction', ['AA==']));
+      assert.equal(sourceBodies.length, 1, 'the first loopback station received the RPC POST');
+      assert.equal(JSON.parse(sourceBodies[0]).method, 'sendrawtransaction');
+      assert.equal(targetBodies.length, 0, `HTTP ${status} forwarded the POST body to the redirect target`);
+    } finally {
+      await closeServer(source.server);
+      await closeServer(target.server);
+    }
+  }
+});

@@ -19,7 +19,7 @@ namespace Neo.SmartContract.Examples
             if (owner != UInt160.Zero && Runtime.CheckWitness(owner)) return true;
 
             ActiveSession session = GetActiveSession(accountId);
-            if (!session.Active || session.ExpiresAt < Runtime.Time) return false;
+            if (!session.Active || session.ExpiresAt <= Runtime.Time || !IsActiveActionSessionAuthorized(accountId)) return false;
             return session.Executor != UInt160.Zero && Runtime.CheckWitness(session.Executor);
         }
 
@@ -35,7 +35,7 @@ namespace Neo.SmartContract.Examples
             }
 
             ActiveSession session = GetActiveSession(accountId);
-            if (!session.Active || session.ExpiresAt < Runtime.Time) return false;
+            if (!session.Active || session.ExpiresAt <= Runtime.Time || !IsActiveActionSessionAuthorized(accountId)) return false;
             for (int i = 0; i < signerHashes.Length; i++)
             {
                 if (signerHashes[i] == session.Executor) return true;

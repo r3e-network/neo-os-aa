@@ -1,7 +1,7 @@
 # Complete reimbursement-helper reference refinement
 
 The certificate covers all **281 bytes / 116 instructions / 52 opcode names** at
-`[13557,13838)` of `CapReimbursementToActualCost`. It compares the complete
+`[17762,18043)` of `CapReimbursementToActualCost`. It compares the complete
 14-statement source program, independently projected from the typed source
 inventory, with an executable reference VM that decodes the actual NEF bytes.
 No expected settlement is passed to a native-call oracle or substituted for a
@@ -21,7 +21,7 @@ Inputs comprise a valid 32-byte transaction hash, two nonnegative signed-64-bit
 fees, a positive signed-256-bit request, and either no stored ledger or a
 well-formed two-field Array/Struct ledger. Its fields are a valid 32-byte hash
 and a nonnegative signed-256-bit reservation. The method-entry frame supplies
-one argument and an explicit static environment with slot 34 equal to
+one argument and an explicit static environment with slot 38 equal to
 `Buffer[0x21]`. LDSFLD performs a lookup in that environment.
 
 Let `r` be the stored reservation when the hashes match and zero otherwise,
@@ -67,7 +67,7 @@ nonfaulting getters. Their diagnostic call counts are tested in Python, but are
 projected out of the proved trace. This permits the compiler's reordering of a
 pure context read around serialization. Gas, call permissions, storage limits,
 resource failures, callbacks and transaction rollback are external obligations.
-The helper theorem does not prove `_initialize` establishes static slot 34.
+The helper theorem does not prove `_initialize` establishes static slot 38.
 
 ## Verification and negative controls
 
@@ -112,5 +112,5 @@ The receipt uses `scope: complete-helper-reference-refinement` and
 `fullImplementationVerified: false`. This is a complete private-helper reference
 proof under the stated contracts. It does not prove actual ApplicationEngine,
 native binary codecs, gas accounting, compiler correctness, caller composition
-or any of the **100 public ABI entrypoints**, all of which remain outside this
+or any of the **105 public ABI entrypoints**, all of which remain outside this
 certificate.

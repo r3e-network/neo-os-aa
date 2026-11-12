@@ -71,7 +71,18 @@ namespace Neo.SmartContract.Examples
             ExecutionEngine.Assert(expiresAt > Runtime.Time, "Session already expired");
             ExecutionEngine.Assert(Runtime.CheckWitness(executor), "Executor witness required");
 
-            ActivateActionSessionInternal(accountId, executor, actionId, expiresAt, actionNullifier, verificationSignature);
+            ActivateActionSessionInternal(accountId, executor, actionId, expiresAt, actionNullifier, verificationSignature, (ByteString)"", 0, true);
+        }
+
+        public static void SubmitActionTicketV4(
+            UInt160 accountId, UInt160 executor, string actionId, ulong expiresAt,
+            ByteString masterNullifier, BigInteger authorizationEpoch,
+            ByteString actionNullifier, ByteString verificationSignature)
+        {
+            ValidateAccountId(accountId, "accountId");
+            ExecutionEngine.Assert(Runtime.CheckWitness(executor), "Executor witness required");
+            ActivateActionSessionInternal(accountId, executor, actionId, expiresAt,
+                actionNullifier, verificationSignature, masterNullifier, authorizationEpoch, false);
         }
 
         public static void DepositOracleCredits(UInt160 accountId, BigInteger amount)
@@ -160,6 +171,9 @@ namespace Neo.SmartContract.Examples
                 ExecutionEngine.Assert(success, error == null || error == string.Empty ? "Action oracle request failed" : error);
 
                 CompactActionTicket ticket = DecodeCompactActionTicket(result);
+                ByteString? requestEpoch = Storage.Get(Storage.CurrentContext, ActionRequestEpochKey(requestId));
+                ExecutionEngine.Assert(requestEpoch != null && (BigInteger)requestEpoch == ticket.AuthorizationEpoch, "Stale action request epoch");
+                Storage.Delete(Storage.CurrentContext, ActionRequestEpochKey(requestId));
 
                 ActivateActionSessionInternal(
                     context.AccountId,
@@ -167,7 +181,10 @@ namespace Neo.SmartContract.Examples
                     context.ActionId,
                     context.ExpiresAt,
                     ticket.ActionNullifier,
-                    ticket.Signature);
+                    ticket.Signature,
+                    ticket.MasterNullifier,
+                    ticket.AuthorizationEpoch,
+                    false);
                 return;
             }
 
@@ -200,6 +217,8 @@ namespace Neo.SmartContract.Examples
             BigInteger currentNonce = GetRecoveryNonce(accountId);
             BigInteger ticketNonce = ParsePositiveDecimal(recoveryNonceText, "recoveryNonce");
             ExecutionEngine.Assert(ticketNonce == currentNonce, "Invalid recovery nonce");
+            ExecutionEngine.Assert(actionId == BuildRecoveryActionId(accountId, newOwner, recoveryNonceText),
+                "Recovery action does not match the account");
 
             BigInteger expiresAt = ParsePositiveDecimal(expiresAtText, "expiresAt");
             ExecutionEngine.Assert(expiresAt >= Runtime.Time, "Recovery ticket expired");
@@ -228,6 +247,7 @@ namespace Neo.SmartContract.Examples
             ByteString digest = ComputeRecoveryDigest(
                 GetNetwork(accountId),
                 GetAAContract(accountId),
+                accountId,
                 GetAccountAddress(accountId),
                 GetAccountIdText(accountId),
                 newOwner,
@@ -269,6 +289,7 @@ namespace Neo.SmartContract.Examples
             ExecutionEngine.Assert(Runtime.Time >= pending.ExecutableAt, "Recovery timelock not expired");
 
             UInt160 oldOwner = GetOwner(accountId);
+            ResetActionAuthorization(accountId);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_OWNER, accountId), pending.NewOwner);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_RECOVERY_NONCE, accountId), pending.RecoveryNonce + 1);
             DeletePendingRecovery(accountId);
@@ -298,6 +319,7 @@ namespace Neo.SmartContract.Examples
 
             ActiveSession session = GetActiveSession(accountId);
             ExecutionEngine.Assert(session.Active, "No active session");
+            AdvanceActionAuthorizationEpoch(accountId);
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_ACTIVE_SESSION, accountId));
             OnActionSessionRevoked(accountId, session.Executor, session.ActionId);
         }

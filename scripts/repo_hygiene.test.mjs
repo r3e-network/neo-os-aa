@@ -30,6 +30,84 @@ import { loadIgnoreRules } from "./lib/gitignore-rules.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+test("NeoDID cross-repo gate resolves the services vendor artifact path", () => {
+  const script = fs.readFileSync(path.join(repoRoot, "scripts", "verify_repo.sh"), "utf8");
+  assert.ok(
+    script.includes("${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/vendor/neo-os-did/contracts/build}"),
+    "verify_repo.sh must find the pinned NeoDIDRegistry artifact after the source moved",
+  );
+  assert.equal(
+    script.includes("$ROOT_DIR/../neo-os-services/contracts/build"),
+    false,
+    "the retired services contracts/build default must not return",
+  );
+  const integrationTest = fs.readFileSync(
+    path.join(repoRoot, "tests", "SmartAccount.Contracts.Tests", "NeoDidActionTicketIntegrationRuntimeTests.cs"),
+    "utf8",
+  );
+  assert.ok(integrationTest.includes('"neo-os-services", "vendor", "neo-os-did", "contracts", "build"'));
+  assert.equal(integrationTest.includes('"neo-os-services", "contracts", "build"'), false);
+  const validator = fs.readFileSync(path.join(repoRoot, "scripts", "neoexpress_validate.py"), "utf8");
+  assert.ok(validator.includes('"neo-os-services" / "vendor" / "neo-os-did" / "contracts" / "build"'));
+  assert.equal(validator.includes('"neo-os-services" / "contracts" / "build"'), false);
+});
+
+// AA stays on GitHub-hosted runners, including default-branch pushes and manual
+// runs. Require a literal runner: visibility, event, ref, fork and repository
+// variables must never be able to redirect this public repository's scanner.
+function assertHostedGitleaks(workflow) {
+  const sections = workflow.split(/^jobs:\s*\n/m);
+  assert.equal(sections.length, 2, "Gitleaks must have one jobs mapping");
+  assert.deepEqual(
+    sections[1].match(/^ {2}\S[^\r\n]*$/gm),
+    ["  scan:"],
+    "new Gitleaks jobs need an explicit hosted-runner policy review",
+  );
+  assert.deepEqual(
+    workflow.match(/^\s*runs-on[^\r\n]*$/gm)?.map((line) => line.trim()),
+    ["runs-on: ubuntu-latest"],
+    "Gitleaks must use the fixed GitHub-hosted ubuntu-latest runner",
+  );
+  assert.match(sections[1], /^ {4}runs-on: ubuntu-latest$/m, "the runner belongs to scan");
+}
+
+test("Gitleaks stays hosted for every event and repository context", () => {
+  assertHostedGitleaks(fs.readFileSync(path.join(repoRoot, ".github/workflows/gitleaks.yml"), "utf8"));
+});
+
+test("the Gitleaks policy rejects conditional and self-hosted routing", async (t) => {
+  const workflow = fs.readFileSync(path.join(repoRoot, ".github/workflows/gitleaks.yml"), "utf8");
+  const hosted = workflow.replace(/^ {4}runs-on:[^\r\n]*$/m, "    runs-on: ubuntu-latest");
+  assertHostedGitleaks(hosted);
+  const routes = {
+    "isolated label": "neoos-isolated-linux",
+    "self-hosted label": "self-hosted",
+    "self-hosted labels array": "[self-hosted, linux, x64]",
+    "runner group": "\n      group: neoos-isolated-linux",
+    "manual dispatch": "${{ github.event_name == 'workflow_dispatch' && 'neoos-isolated-linux' || 'ubuntu-latest' }}",
+    "default branch push": "${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'neoos-isolated-linux' || 'ubuntu-latest' }}",
+    "public visibility": "${{ github.event.repository.private == false && 'neoos-isolated-linux' || 'ubuntu-latest' }}",
+    "private visibility": "${{ github.event.repository.private && 'neoos-isolated-linux' || 'ubuntu-latest' }}",
+    "same-repository PR": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'self-hosted' || 'ubuntu-latest' }}",
+    "fork PR": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'self-hosted' || 'ubuntu-latest' }}",
+    "repository variable": "${{ vars.RUNNER || 'ubuntu-latest' }}",
+    "duplicate runner": "ubuntu-latest\n    runs-on: self-hosted",
+    "missing runner": "",
+  };
+  for (const [name, route] of Object.entries(routes)) {
+    await t.test(name, () => {
+      const mutant = hosted.replace("    runs-on: ubuntu-latest", `    runs-on: ${route}`);
+      assert.throws(() => assertHostedGitleaks(mutant), assert.AssertionError);
+    });
+  }
+  await t.test("additional reusable job", () => {
+    assert.throws(
+      () => assertHostedGitleaks(`${hosted}\n  other:\n    uses: ./.github/workflows/ci.yml\n`),
+      assert.AssertionError,
+    );
+  });
+});
+
 // Every entry stands for a class of file that must never be committed.
 const MUST_BE_IGNORED = [
   // Environment files: every variant, at any depth.
@@ -125,6 +203,19 @@ const MUST_NOT_BE_IGNORED = [
   "sdk/js/package.json",
   "scripts/verify_repo.sh",
   ".github/workflows/ci.yml",
+  "docs/reports/aa-artifact-reproducibility-20261030.json",
+  "docs/reports/aa-artifact-reproducibility-20261031.json",
+  "docs/reports/aa-formal-gate-20261030.json",
+  "docs/reports/aa-formal-gate-20261031.json",
+  "docs/reports/aa-neoexpress-validation-20261030.json",
+  "docs/reports/aa-neoexpress-validation-20261031.json",
+  "docs/reports/aa-private-artifact-provenance-20261030.json",
+  "docs/reports/aa-private-artifact-provenance-20261031.json",
+  "docs/reports/aa-ordinary-candidate-compatibility-20261030.json",
+  "docs/reports/aa-native-ci-probe-consistency-20261009.json",
+  "docs/reports/native-domain-copy-20261009/candidate-acceptance.json",
+  "docs/reports/native-usability-20261009/private-runtime.json",
+  "docs/reports/testnet-validation-v1v2-2026-03.md",
 ];
 
 // A developer's global excludes file must not decide the outcome: only the

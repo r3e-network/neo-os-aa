@@ -366,7 +366,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("proof-replay-freshness", verify.ATTESTATION_PROOF_COQ_MUTATIONS)
 
     def test_open_formal_boundary_ledger_remains_explicit(self):
-        ledger = json.loads((verify.ROOT.parent / "docs/reports/aa-native-open-boundaries-20261008.json").read_text())
+        ledger = json.loads((verify.ROOT.parent / "docs/AA-NATIVE-OPEN-BOUNDARIES.json").read_text())
         self.assertEqual("OPEN_BOUNDARIES_RETAINED", ledger["status"])
         statuses = {item["id"]: item["status"] for item in ledger["boundaries"]}
         self.assertEqual("OPEN", statuses["FORMAL-NEOVM-COMPILER-REFINEMENT"])

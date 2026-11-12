@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Private-chain validation of the AA protocol on NeoExpress.
 
-Creates a fresh single-node NeoExpress chain in a scratch directory, deploys every
-artifact under contracts/bin/v3 with the same deploy data the production tooling
-uses, drives the protocol through real transactions (native backup-owner path,
+Creates a fresh single-node NeoExpress chain in a scratch directory, deploys the
+private PLATFORM core from contracts/bin/platform and the public modules from
+contracts/bin/v3 with the same deploy data the production tooling uses. Each
+deployment records its profile so provenance cannot join the public core to a
+bounded-callback receipt. The validator drives real transactions (native backup-owner path,
 escape hatch, bounded hook callbacks, lifecycle-ABI pre-checks, session-key relay
 submission, paymaster settlement, recovery cleanup with credit refund, MultiSig
 and MultiHook child pre-checks, market escrow including the silent-market owner
-escape, subscription pulls), reads every deployed contract back over JSON-RPC
+escape, platform-account owner rotation, subscription pulls), reads every deployed contract back over JSON-RPC
 against the local NEF and manifest, and writes a dated receipt.
 
 Every assertion is fail-closed: the first mismatch aborts the run and the receipt
@@ -15,7 +17,7 @@ records the failure. Nothing here touches a public network, and the receipt neve
 contains wallet keys or absolute host paths.
 
 The final scenario composes AA with the NeoDID registry: it deploys
-NeoDIDRegistry.nef/.manifest.json from the sibling neo-os-services build
+NeoDIDRegistry.nef/.manifest.json from the sibling neo-os-services pinned vendor tree
 (override the directory with NEOOS_SERVICES_CONTRACT_BUILD; set
 NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to fail instead of recording a skip when the
 artifact is absent) and drives the AA proxy-witness path with hand-built,
@@ -30,6 +32,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -38,8 +41,13 @@ import time
 import urllib.request
 from pathlib import Path
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "contracts" / "bin" / "v3"
+PLATFORM_BIN = ROOT / "contracts" / "bin" / "platform"
 ZERO = "0x0000000000000000000000000000000000000000"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -75,20 +83,79 @@ ESCAPE_TIMELOCK = 2_592_000          # 30 days, seconds
 DAY = 86_400
 FAR_DEADLINE = 4_102_444_800_000     # 2100-01-01 in ms
 GAS = 100_000_000
+PRIVATE_WALLET_FUNDING_GAS = 10_000
+
+
+def services_build_directory():
+    configured = os.environ.get("NEOOS_SERVICES_CONTRACT_BUILD")
+    if configured:
+        return Path(configured)
+    return ROOT.parent / "neo-os-services" / "vendor" / "neo-os-did" / "contracts" / "build"
+
+
 # The deployed SmartAccountV3 prototype uses this application-trigger
 # callback budget. It is intentionally kept separate from the native profile:
 # native verifier callbacks are specified at 100,000,000 datoshi and Neo's
 # Verification-trigger envelope is 150,000,000 datoshi.
 APPLICATION_CALLBACK_GAS_LIMIT_DATOSHI = 1_000_000_000
 MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI = 250_000_000
+ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI = 11 * MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI
 NEO_MAX_VERIFICATION_GAS_DATOSHI = 150_000_000
 NATIVE_PROFILE_VERIFIER_BUDGET_DATOSHI = 100_000_000
 PRIVATE_EXECUTE_GAS_ENVELOPE = "200"       # NeoExpress-only execute transaction envelope
-PRIVATE_CORE_GAS_ENVELOPE = "10"           # NeoExpress-only lifecycle/discovery envelope
+PRIVATE_CORE_GAS_ENVELOPE = "40"           # Covers the bounded composite root and its nested leaf cleanups
+PRIVATE_EXECUTE_OPERATIONS = frozenset({
+    "executeUserOp",
+    "executeUserOps",
+    "executeSponsoredUserOp",
+})
 
 
 class ValidationFailure(Exception):
     pass
+
+
+def source_runtime_binding(runtime, build_receipt, dotnet, workdir):
+    """Bind the invoked runner to a reproducible, complete source build."""
+    from neoexpress_reproducible_build import (
+        BuildFailure,
+        check_runtime_receipt,
+        inventory,
+        sha256,
+    )
+
+    runtime = runtime.resolve()
+    build_receipt = build_receipt.resolve()
+    dotnet = dotnet.resolve()
+    try:
+        receipt = json.loads(build_receipt.read_text())
+        check_runtime_receipt(receipt, runtime)
+    except (BuildFailure, OSError, ValueError) as error:
+        raise ValidationFailure(f"source-built runner verification failed: {error}") from error
+
+    neoxp = runtime / "neoxp.dll"
+    if not neoxp.is_file() or not dotnet.is_file():
+        raise ValidationFailure("source-built runner or dotnet host is missing")
+
+    wrapper = workdir / "neoxp-source-runner"
+    wrapper.write_text(
+        "#!/bin/sh\n"
+        f"exec {shlex.quote(str(dotnet))} {shlex.quote(str(neoxp))} \"$@\"\n"
+    )
+    wrapper.chmod(0o700)
+    return wrapper, {
+        "sourceBuildReceiptSha256": sha256(build_receipt),
+        "sourceBuildStatus": receipt["status"],
+        "independentCleanBuilds": receipt["independentCleanBuilds"],
+        "sourceCommits": receipt["sourceCommits"],
+        "sdk": receipt["sdk"],
+        "runtimeFileCount": len(inventory(runtime)),
+        "neoxpDllSha256": sha256(neoxp),
+        "wrapperSha256": sha256(wrapper),
+        "runtimeFilesMatchedBefore": True,
+        "runtimeFilesMatchedAfter": False,
+        "pathsIncluded": False,
+    }
 
 
 FAULT_ALIASES = {
@@ -257,6 +324,9 @@ class RawKey:
         pub = subprocess.run(["openssl", "ec", "-inform", "DER", "-in", str(self.der), "-pubout",
                               "-conv_form", "compressed", "-outform", "DER"], check=True, capture_output=True).stdout
         self.compressed = pub[-33:]
+        self.pem = Path(workdir) / f"{name}.pem"
+        subprocess.run(["openssl", "ec", "-inform", "DER", "-in", str(self.der),
+                        "-outform", "PEM", "-out", str(self.pem)], check=True, capture_output=True)
         # Standard single-signature verification script: PUSHDATA1 33 <key> SYSCALL CheckSig.
         self.verification = b"\x0c\x21" + self.compressed + b"\x41\x56\xe7\xb3\x27"
         self.script_hash = hash160(self.verification)
@@ -266,7 +336,7 @@ class RawKey:
             handle.write(payload)
             path = handle.name
         try:
-            der = subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(self.pem), path],
+            der = subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(self.pem), "-keyform", "PEM", path],
                                  check=True, capture_output=True).stdout
         finally:
             os.unlink(path)
@@ -346,6 +416,110 @@ class P256Key:
         return der_to_rs(der)
 
 
+class Web3AuthSecp256k1Key:
+    """Ephemeral secp256k1 signer whose private key stays inside a Node child process."""
+
+    def __init__(self, workdir, name="web3auth"):
+        node = shutil.which("node")
+        helper = ROOT / "frontend" / "scripts" / "web3auth-signer.mjs"
+        if node is None:
+            raise ValidationFailure("Node.js is required for the Web3Auth secp256k1 vector")
+        if not helper.is_file():
+            raise ValidationFailure(f"Web3Auth signer helper is missing: {helper.name}")
+        self.name = name
+        self.process = subprocess.Popen(
+            [node, str(helper), "serve"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+            cwd=str(workdir),
+        )
+        try:
+            response = self._request({"op": "publicKey"})
+        except Exception:
+            self.close()
+            raise
+        public_key = bytes.fromhex(response["publicKey"][2:])
+        if len(public_key) != 65 or public_key[0] != 0x04:
+            self.close()
+            raise ValidationFailure("Web3Auth signer returned an invalid public key")
+        self.uncompressed = public_key
+
+    def _request(self, request):
+        if self.process.poll() is not None:
+            raise ValidationFailure("Web3Auth signer exited before the request")
+        self.process.stdin.write(json.dumps(request) + "\n")
+        self.process.stdin.flush()
+        line = self.process.stdout.readline()
+        if not line:
+            raise ValidationFailure("Web3Auth signer closed its response channel")
+        try:
+            response = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValidationFailure("Web3Auth signer returned malformed JSON") from error
+        if "error" in response:
+            raise ValidationFailure(f"Web3Auth signer rejected the request: {response['error']}")
+        return response
+
+    def sign(self, payload):
+        response = self._request({
+            "op": "sign",
+            "payload": base64.b64encode(payload).decode("ascii"),
+        })
+        signature = bytes.fromhex(response["signature"][2:])
+        if len(signature) != 64:
+            raise ValidationFailure("Web3Auth signer returned a non-canonical signature length")
+        return signature
+
+    def sign_digest(self, digest):
+        if len(digest) != 32:
+            raise ValidationFailure("Web3Auth message digest must be exactly 32 bytes")
+        response = self._request({
+            "op": "signDigest",
+            "digest": base64.b64encode(digest).decode("ascii"),
+        })
+        signature = bytes.fromhex(response["signature"][2:])
+        if len(signature) != 65:
+            raise ValidationFailure("Web3Auth signer returned a non-recoverable signature length")
+        return signature
+
+    def sign_digest_compact(self, digest):
+        if len(digest) != 32:
+            raise ValidationFailure("Web3Auth message digest must be exactly 32 bytes")
+        response = self._request({
+            "op": "signDigestCompact",
+            "digest": base64.b64encode(digest).decode("ascii"),
+        })
+        signature = bytes.fromhex(response["signature"][2:])
+        if len(signature) != 64:
+            raise ValidationFailure("Web3Auth signer returned an invalid compact signature length")
+        return signature
+
+    def close(self):
+        process = getattr(self, "process", None)
+        if process is None:
+            return
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        if process.stdin:
+            process.stdin.close()
+        if process.stdout:
+            process.stdout.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.close()
+
+
 def dotnet_root():
     """The neoxp tool is a framework-dependent app host that finds its runtime through
     DOTNET_ROOT. Homebrew installs the runtime under libexec, which the app host does not
@@ -417,7 +591,7 @@ class Chain:
                 if name == "genesis" or account.get("account-label") == "Default":
                     self.wallets[name] = account["script-hash"]
         for name in WALLETS:
-            self.nx("transfer", "5000", "GAS", "genesis", name)
+            self.nx("transfer", str(PRIVATE_WALLET_FUNDING_GAS), "GAS", "genesis", name)
         config = json.loads(self.file.read_text())
         # The custom Neo core used by this private validation adds the bounded
         # verifier syscall at HF_SmartAccountV1. Activate that hardfork from block zero;
@@ -430,7 +604,8 @@ class Chain:
     def deploy_all(self):
         core = None
         for name, relative, needs_core in ARTIFACTS:
-            nef = BIN / relative
+            profile = "platform" if name == "SmartAccountV3" else "v3"
+            nef = (PLATFORM_BIN if profile == "platform" else BIN) / relative
             manifest = nef.with_name(nef.name.replace(".nef", ".manifest.json"))
             args = ["contract", "deploy", str(nef), "genesis", "-j"]
             if needs_core:
@@ -447,6 +622,7 @@ class Chain:
                 core = result["contract-hash"]
             self.deployments.append({
                 "contractName": name,
+                "artifactProfile": profile,
                 "contractHash": result["contract-hash"],
                 "deploymentTransaction": result["tx-hash"],
                 "deployData": "core hash" if needs_core else None,
@@ -479,7 +655,7 @@ class Chain:
         command = ["contract", "invoke", str(path), account, "-r", "-j"]
         if contract == "SmartAccountV3":
             command += ["-g", (PRIVATE_EXECUTE_GAS_ENVELOPE
-                                if operation in {"executeUserOp", "executeUserOps", "executeSponsoredUserOp"}
+                                if operation in PRIVATE_EXECUTE_OPERATIONS
                                 else PRIVATE_CORE_GAS_ENVELOPE)]
         _, text = self.nx(*command)
         result = self.json_from(text)
@@ -504,7 +680,7 @@ class Chain:
         # NeoExpress-only and never funds a public-network transaction.
         if contract == "SmartAccountV3":
             command += ["-g", (PRIVATE_EXECUTE_GAS_ENVELOPE
-                                if operation in {"executeUserOp", "executeUserOps", "executeSponsoredUserOp"}
+                                if operation in PRIVATE_EXECUTE_OPERATIONS
                                 else PRIVATE_CORE_GAS_ENVELOPE)]
         if scope:
             command += ["-w", scope]
@@ -628,6 +804,14 @@ class Chain:
         return self.tx(step + " (execute)", "SmartAccountV3", "callVerifierChild", entry_args,
                        signer, expect_fault=expect_fault)
 
+    def two_phase_hook_child(self, step, account, child, method, args, signer="owner", expect_fault=None):
+        entry_args = [H(account), H(child), S(method), A(*args)]
+        first = self.tx(step + " (arm)", "SmartAccountV3", "callHookChild", entry_args, signer)
+        self.check(first["result"] is False, f"{step}: first call arms the child timelock and returns false")
+        self.fastfwd(DAY)
+        return self.tx(step + " (execute)", "SmartAccountV3", "callHookChild", entry_args,
+                       signer, expect_fault=expect_fault)
+
     # ---- RPC readback -------------------------------------------------------
     def rpc(self, method, params):
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
@@ -676,6 +860,115 @@ class Chain:
         stack = result.get("stack") or []
         value = decode(stack[0]) if stack and stack[0].get("type") not in ("Any",) else None
         return value, base64.b64decode(result["script"]), int(result["gasconsumed"])
+
+    def raw_tx(self, step, contract, operation, args, signer="owner",
+               system_fee=None, expect_fault=None):
+        """Build and broadcast an exact transaction with an explicit fee envelope.
+
+        NeoExpress's CLI adds --gas only after its pre-submission simulation. A
+        deliberately exhausting callback can therefore abort that simulation
+        before the requested envelope exists. This path constructs the same
+        transaction directly and broadcasts it with the caller-supplied private
+        system fee, so the node, not the CLI estimator, decides the VM result.
+        """
+        self.start_node()
+        try:
+            contract_label = contract
+            contract = self.contracts.get(contract, contract)
+            signer_row = {"account": self.wallets[signer], "scopes": "CalledByEntry"}
+            signers = [signer_row]
+            simulation = None
+            try:
+                _, script, gas = self.rpc_invoke(contract, operation, args, signers)
+            except ValidationFailure as failure:
+                simulation = str(failure)
+                probe = self.rpc("invokefunction", [contract, operation, list(args), signers])
+                script = base64.b64decode(probe["script"])
+                gas = int(probe.get("gasconsumed", 0))
+
+            sysfee = int(system_fee) if system_fee is not None else gas + GAS
+            height = self.rpc("getblockcount", [])
+            self.invoke_counter += 1
+            raw_key = RawKey(self.workdir, f"{signer}-raw-{self.invoke_counter}",
+                             self.wallet_private_key(signer))
+            if "0x" + raw_key.script_hash[::-1].hex() != self.wallets[signer]:
+                raise ValidationFailure(f"{signer}: raw key does not derive the wallet script hash")
+            nonce_value = int.from_bytes(os.urandom(4), "little")
+            dummy_witness = (b"\x0c\x40" + bytes(64), raw_key.verification)
+            fee_probe = serialize_unsigned(
+                nonce_value, sysfee, 0, height + 50, signers, script
+            )
+            fee = self.rpc("calculatenetworkfee", [
+                base64.b64encode(fee_probe + serialize_witnesses([dummy_witness])).decode()
+            ])
+            netfee = int(fee["networkfee"]) + GAS
+            unsigned = serialize_unsigned(
+                nonce_value, sysfee, netfee, height + 50, signers, script
+            )
+            tx_hash = hashlib.sha256(unsigned).digest()
+            signature = raw_key.sign(int(self.magic).to_bytes(4, "little") + tx_hash)
+            raw = base64.b64encode(unsigned + serialize_witnesses([
+                (b"\x0c\x40" + signature, raw_key.verification)
+            ])).decode()
+            sent = self.rpc("sendrawtransaction", [raw])
+            if sent["hash"].lower() != "0x" + tx_hash[::-1].hex():
+                raise ValidationFailure(f"{step}: node hash differs from the exact transaction")
+
+            txid = sent["hash"]
+            execution = None
+            for _ in range(40):
+                time.sleep(1)
+                try:
+                    execution = self.rpc("getapplicationlog", [txid])["executions"][0]
+                    break
+                except Exception:
+                    continue
+            if execution is None:
+                raise ValidationFailure(f"{step}: transaction {txid} was not executed")
+
+            record = {
+                "step": step,
+                "contract": contract_label,
+                "contractHash": contract,
+                "operation": operation,
+                "signer": signer,
+                "witnessScope": "CalledByEntry",
+                "txid": txid,
+                "outcome": execution["vmstate"],
+                "gasConsumed": int(execution["gasconsumed"]),
+                "systemFee": sysfee,
+                "networkFee": netfee,
+                "events": [notification["eventname"]
+                           for notification in execution.get("notifications", [])],
+            }
+            if simulation is not None:
+                record["simulation"] = simulation
+            if execution.get("exception"):
+                record["exception"] = execution["exception"]
+            stack = execution.get("stack") or []
+            if stack and stack[0].get("type") != "Any":
+                result = decode(stack[0])
+                record["result"] = result.hex() if isinstance(result, bytes) else result
+
+            if expect_fault is None:
+                if execution["vmstate"] != "HALT":
+                    raise ValidationFailure(
+                        f"{step}: vmstate {execution['vmstate']}: {execution.get('exception')}"
+                    )
+            else:
+                if execution["vmstate"] != "FAULT":
+                    raise ValidationFailure(f"{step}: expected fault but transaction halted")
+                if not fault_matches(expect_fault, execution.get("exception") or ""):
+                    raise ValidationFailure(
+                        f"{step}: expected fault containing {expect_fault!r}, "
+                        f"got {execution.get('exception')!r} "
+                        f"(gasConsumed={record['gasConsumed']}, systemFee={sysfee})"
+                    )
+                record["expectedFault"] = expect_fault
+            self.current["steps"].append(record)
+            return record
+        finally:
+            self.stop_node()
 
     def wallet_private_key(self, name):
         """The dev wallet's raw P-256 scalar from the express chain file (dev chain only)."""
@@ -877,8 +1170,10 @@ def scenario_profile_crypto(c, workdir):
 
     WebAuthn and TEE are deliberately named as bare P-256 payload verifiers by the
     contracts; this scenario does not pretend to validate a browser ceremony or remote
-    attestation. ZkLogin is the shipped P-256 delegated-signer profile with provider and
-    nullifier binding. ZKEmail is intentionally disabled and must fail closed.
+    attestation. Web3Auth verifies the shipped EIP-712-style secp256k1 payload through
+    a real ephemeral key, not a hosted Web3Auth login ceremony. ZkLogin is the shipped
+    P-256 delegated-signer profile with provider and nullifier binding. ZKEmail is
+    intentionally disabled and must fail closed.
     """
     c.scenario("cryptographic verifier profile vectors")
     target = c.contracts["MockTransferTarget"]
@@ -913,6 +1208,53 @@ def scenario_profile_crypto(c, workdir):
                             signature=webauthn_key.sign(payload)), "relay",
               expect_fault="Verifier rejected signature")
     c.check(c.nonce(account) == 1, "foreign TEE signature leaves the nonce unchanged")
+
+    with Web3AuthSecp256k1Key(workdir) as web3auth_key, \
+            Web3AuthSecp256k1Key(workdir, "web3auth-foreign") as foreign_key:
+        web3auth = c.contracts["Web3AuthVerifier"]
+        account, proxy = c.register("register EIP-712 Web3Auth profile", verifier=web3auth,
+                                    params=web3auth_key.uncompressed)
+        c.check(c.results("Web3AuthVerifier", "getPublicKey", H(account)) == web3auth_key.uncompressed,
+                "Web3Auth stores the 65-byte uncompressed secp256k1 key")
+        payload = c.results("Web3AuthVerifier", "getPayload", H(account), H(target), S("transfer"),
+                            args(proxy), I(0), I(FAR_DEADLINE))
+        signature = web3auth_key.sign(payload)
+        c.execute("valid EIP-712 Web3Auth secp256k1 payload", account,
+                  c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0,
+                                signature=signature), "relay")
+        c.check(c.nonce(account) == 1, "valid Web3Auth payload consumes nonce 0")
+        c.execute("retargeted EIP-712 Web3Auth payload", account,
+                  c.transfer_op(target, proxy, c.wallets["buyer"], 1001, 1,
+                                signature=signature), "relay",
+                  expect_fault="Verifier rejected signature")
+        c.check(c.nonce(account) == 1, "retargeted Web3Auth payload leaves the nonce unchanged")
+        c.execute("foreign EIP-712 Web3Auth key", account,
+                  c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 1,
+                                signature=foreign_key.sign(payload)), "relay",
+                  expect_fault="Verifier rejected signature")
+        c.check(c.nonce(account) == 1, "foreign Web3Auth key leaves the nonce unchanged")
+        message_hash = hashlib.sha256(b"neo-smartaccount-web3auth-message").digest()
+        message_signature = web3auth_key.sign_digest(message_hash)
+        result = c.results("SmartAccountV3", "isValidSignature", H(account), B(message_hash),
+                           B(message_signature))
+        c.check(result == bytes.fromhex("1626ba7e"),
+                "Web3Auth verifies the 32-byte digest directly and returns the ERC-1271 magic value")
+        compact_signature = web3auth_key.sign_digest_compact(message_hash)
+        compact_result = c.results("SmartAccountV3", "isValidSignature", H(account), B(message_hash),
+                                   B(compact_signature))
+        c.check(compact_result == bytes.fromhex("1626ba7e"),
+                "Web3Auth accepts EIP-2098 compact message signatures")
+        c.check(c.results("Web3AuthVerifier", "supportsMessageSignatures") is True,
+                "Web3Auth advertises the ERC-1271 message-signature capability")
+        other_digest = hashlib.sha256(b"neo-smartaccount-web3auth-other-message").digest()
+        invalid = c.results("SmartAccountV3", "isValidSignature", H(account), B(other_digest),
+                            B(message_signature))
+        c.check(invalid == bytes.fromhex("ffffffff"),
+                "Web3Auth rejects a message signature under a different digest")
+        malformed = c.results("SmartAccountV3", "isValidSignature", H(account), B(message_hash),
+                              B(bytes([0x11]) * 65))
+        c.check(malformed == bytes.fromhex("ffffffff"),
+                "Web3Auth fails closed on a malformed recoverable signature")
 
     zklogin = c.contracts["ZkLoginVerifier"]
     account, proxy = c.register("register delegated ZkLogin profile", verifier=zklogin)
@@ -975,6 +1317,31 @@ def scenario_verifier_gas_cap(c):
     c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
             "the NeoVM verifier post-budget fault is surfaced by the AA invocation")
     c.check(c.nonce(account) == 0, "a verifier post-budget fault rolls back nonce consumption")
+    c.tx("disable adversarial verifier post burn", "MockVerifierCore", "setBurnPostGas",
+         [BOOL(False)], "owner")
+    c.tx("enable adversarial message-signature burn", "MockVerifierCore", "setBurnGas",
+         [BOOL(True)], "owner")
+    record = c.raw_tx(
+        "ERC-1271 verifier callback exceeds its independent budget",
+        "SmartAccountV3",
+        "isValidSignature",
+        [H(account), B(bytes([0x11]) * 32), B(bytes([0x22]) * 65)],
+        signer="owner",
+        system_fee=20 * GAS,
+        expect_fault="The bounded contract call gas limit has been exhausted.")
+    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
+            "the ERC-1271 adapter surfaces the NeoVM verifier-budget fault")
+    c.tx("disable adversarial message-signature burn", "MockVerifierCore", "setBurnGas",
+         [BOOL(False)], "owner")
+    record = c.raw_tx(
+        "ERC-1271 verifier callback succeeds within its independent budget",
+        "SmartAccountV3",
+        "isValidSignature",
+        [H(account), B(bytes([0x11]) * 32), B(bytes([0x22]) * 65)],
+        signer="owner",
+        system_fee=20 * GAS)
+    c.check(record.get("result") == "1626ba7e",
+            "the ERC-1271 adapter returns the success selector after the budget path")
 
 
 def scenario_session_key_and_paymaster(c, workdir):
@@ -1063,9 +1430,12 @@ def scenario_recovery_cleanup(c, workdir):
 def scenario_multisig(c, workdir):
     c.scenario("MultiSig child pre-check")
     multisig = c.contracts["MultiSigVerifier"]
-    account, _ = c.register("register account with MultiSigVerifier", verifier=multisig)
+    account, proxy = c.register("register account with MultiSigVerifier", verifier=multisig)
     session_child = c.contracts["SessionKeyVerifier"]
     webauthn_child = c.contracts["WebAuthnVerifier"]
+    children = A(H(session_child), H(webauthn_child))
+    c.two_phase("initialize MultiSig topology", account, "verifier",
+                "setConfig", [H(account), children, I(2)])
     target = c.contracts["MockTransferTarget"]
     first_key = P256Key(workdir, "multisig-domain-first")
     valid_until = c.now() + 20 * DAY * 1000
@@ -1073,9 +1443,11 @@ def scenario_multisig(c, workdir):
                       [H(account), B(first_key.compressed), H(target), S("transfer"), I(valid_until), I(0), S("multisig")])
     c.two_phase_child("provision WebAuthn leaf with reused key", account, webauthn_child, "setPublicKey",
                       [H(account), B(first_key.compressed)])
-    children = A(H(session_child), H(webauthn_child))
-    c.two_phase("setConfig with duplicate signer domain", account, "verifier",
-                "setConfig", [H(account), children, I(2)], expect_fault="Duplicate signer domain")
+    duplicate_bundle = c.results("StdLib", "serialize", A(B(b"\x01" * 64), B(b"\x02" * 64)))
+    c.two_phase("record duplicate signer domain", account, "verifier", "setConfig", [H(account), children, I(2)])
+    c.execute("duplicate signer domain cannot execute", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1, 0, signature=duplicate_bundle), "owner",
+              expect_fault="Duplicate signer domain")
 
     second_key = P256Key(workdir, "multisig-domain-second")
     valid_until = c.now() + 20 * DAY * 1000
@@ -1086,13 +1458,14 @@ def scenario_multisig(c, workdir):
     config = c.results("MultiSigVerifier", "getConfig", H(account))
     c.check(len(config[0]) == 2 and config[1] == 2, "configuration stored")
 
-    # Change one configured leaf to reuse the other leaf's domain, then repeat the
-    # root configuration call. This is a private-chain revalidation of the same
-    # domain boundary that MultiSig applies immediately before signature checks.
+    # Change one configured leaf to reuse the other leaf's domain, then repeat
+    # the execution-time check with the same real core and root module.
     c.two_phase_child("rotate SessionKey leaf into the WebAuthn domain", account, session_child, "setSessionKey",
                       [H(account), B(second_key.compressed), H(target), S("transfer"), I(valid_until), I(0), S("collision")])
-    c.two_phase("revalidate duplicate signer domain", account, "verifier",
-                "setConfig", [H(account), children, I(2)], expect_fault="Duplicate signer domain")
+    c.two_phase("record repeated duplicate signer domain", account, "verifier", "setConfig", [H(account), children, I(2)])
+    c.execute("repeated duplicate signer domain cannot execute", account,
+              c.transfer_op(target, proxy, c.wallets["buyer"], 1, 0, signature=duplicate_bundle), "owner",
+              expect_fault="Duplicate signer domain")
 
     c.two_phase("setConfig with marker-only child", account, "verifier", "setConfig",
                 [H(account), A(H(c.contracts["MarkerOnlyModule"])), I(1)],
@@ -1102,13 +1475,21 @@ def scenario_multisig(c, workdir):
     c.two_phase("setConfig with undeployed child", account, "verifier", "setConfig",
                 [H(account), A(H("0x1111111111111111111111111111111111111111")), I(1)],
                 expect_fault="Child verifier is not deployed")
-    child = c.contracts["MockVerifierCore"]
-    c.tx("mark test child as composite", "MockVerifierCore", "setLeafMode", [BOOL(False)], "owner")
-    c.two_phase("setConfig with composite child", account, "verifier", "setConfig",
-                [H(account), A(H(child)), I(1)],
-                expect_fault="Composite verifier cannot be a child")
+    # The native-only supportsComposition marker and its negative vector live in
+    # neoexpress_native_multisig_validate.py, not the public-v3 module profile.
 
-    c.tx("restore test child leaf mode", "MockVerifierCore", "setLeafMode", [BOOL(True)], "owner")
+    c.check(c.results("SessionKeyVerifier", "getSessionKey", H(account)) is not None,
+            "SessionKey leaf has durable state before topology maintenance")
+    c.check(len(c.results("WebAuthnVerifier", "getPublicKey", H(account))) == 33,
+            "WebAuthn leaf has durable state before topology maintenance")
+    c.tx("reject non-root dependency mutation", "SmartAccountV3", "setVerifierDependencies",
+         [H(account), A(H(session_child))], "owner", expect_fault="Dependency caller is not installed root")
+    c.two_phase("remove WebAuthn from MultiSig", account, "verifier",
+                "setConfig", [H(account), A(H(session_child)), I(1)])
+    c.check(c.results("WebAuthnVerifier", "getPublicKey", H(account)) == b"",
+            "removing a MultiSig leaf clears its durable public key")
+    c.check(c.results("SessionKeyVerifier", "getSessionKey", H(account)) is not None,
+            "retaining a MultiSig leaf preserves its durable state")
 
     # The successful configuration above also exercises the core-owned
     # dependency registry. Detaching the composite must invoke every registered
@@ -1123,16 +1504,54 @@ def scenario_multisig(c, workdir):
          [H(account)], "owner")
     c.check(c.hash_result("SmartAccountV3", "getVerifier", H(account)) == ZERO,
             "composite verifier detached only after child cleanup")
+    c.check(c.results("SessionKeyVerifier", "getSessionKey", H(account)) is None,
+            "detaching MultiSig clears the remaining SessionKey leaf")
+    c.check(c.results("WebAuthnVerifier", "getPublicKey", H(account)) == b"",
+            "WebAuthn state remains cleared after MultiSig detach")
+    c.check(c.results("MultiSigVerifier", "getConfig", H(account)) is None,
+            "detaching MultiSig clears the root policy")
 
 
 def scenario_multihook(c):
     c.scenario("MultiHook child pre-check")
     account, _ = c.register("register account with MultiHook", hook=c.contracts["MultiHook"])
-    hooks = A(H(c.contracts["WhitelistHook"]), H(c.contracts["TokenRestrictedHook"]))
+    whitelist = c.contracts["WhitelistHook"]
+    target = c.contracts["MockTransferTarget"]
+    hooks = A(H(whitelist), H(c.contracts["TokenRestrictedHook"]))
     c.two_phase("setHooks", account, "hook", "setHooks", [H(account), hooks])
     c.check(len(c.results("MultiHook", "getHooks", H(account))) == 2, "two child hooks stored")
     c.two_phase("setHooks with marker-only child", account, "hook", "setHooks",
                 [H(account), A(H(c.contracts["MarkerOnlyModule"]))], expect_fault="Child hook pre ABI missing")
+    c.tx("reject non-root hook dependency mutation", "SmartAccountV3", "setHookDependencies",
+         [H(account), A(H(whitelist))], "owner", expect_fault="Dependency caller is not installed root")
+    c.tx("reject malformed child hook configuration", "SmartAccountV3", "callHookChild",
+         [H(account), H(whitelist), S("setWhitelist"), A(H(account), H(target))], "owner",
+         expect_fault="Invalid child hook configuration arguments")
+    c.two_phase_hook_child("provision Whitelist leaf", account, whitelist, "setWhitelist",
+                           [H(account), H(target), BOOL(True)])
+    c.check(c.results("WhitelistHook", "isWhitelisted", H(account), H(target)) is True,
+            "core provisioned the installed Whitelist leaf")
+    c.two_phase("remove Whitelist from MultiHook", account, "hook", "setHooks",
+                [H(account), A(H(c.contracts["TokenRestrictedHook"]))])
+    c.check(c.results("WhitelistHook", "isWhitelisted", H(account), H(target)) is False,
+            "removing a MultiHook leaf clears its whitelist state")
+    c.two_phase("restore Whitelist to MultiHook", account, "hook", "setHooks", [H(account), hooks])
+    c.two_phase_hook_child("reprovision Whitelist leaf", account, whitelist, "setWhitelist",
+                           [H(account), H(target), BOOL(True)])
+    c.check(c.results("WhitelistHook", "isWhitelisted", H(account), H(target)) is True,
+            "reprovisioned Whitelist leaf has durable state before detach")
+    c.tx("detach MultiHook", "SmartAccountV3", "updateHook", [H(account), H(ZERO)], "owner")
+    c.tx("confirm MultiHook cleanup before timelock", "SmartAccountV3", "confirmHookUpdate",
+         [H(account)], "owner", expect_fault="Timelock not elapsed")
+    c.fastfwd(DAY)
+    c.tx("confirm MultiHook cleanup after timelock", "SmartAccountV3", "confirmHookUpdate",
+         [H(account)], "owner")
+    c.check(c.hash_result("SmartAccountV3", "getHook", H(account)) == ZERO,
+            "MultiHook detached after child cleanup")
+    c.check(c.results("WhitelistHook", "isWhitelisted", H(account), H(target)) is False,
+            "detaching MultiHook clears the remaining Whitelist leaf")
+    c.check(len(c.results("MultiHook", "getHooks", H(account))) == 0,
+            "detaching MultiHook clears the root topology")
 
 
 def scenario_market(c):
@@ -1218,11 +1637,97 @@ def scenario_subscription(c):
               expect_fault="merchant authorization required")
 
 
+def scenario_platform_owner_rotation(c):
+    c.scenario("platform account owner rotation")
+    wallet = c.contracts["SmartAccountV3"]
+    registrar = c.contracts["PlatformRegistrarMock"]
+    binding = b"neo-miniapps-platform:owner-rotation"
+    owner = c.wallets["owner"]
+    rotated_owner = c.wallets["merchant"]
+
+    c.tx("propose platform registrar", "SmartAccountV3", "proposePlatformRegistrar", [H(registrar)], "genesis")
+    c.tx("confirm platform registrar before timelock", "SmartAccountV3", "confirmPlatformRegistrar", [],
+         "genesis", expect_fault="Platform registrar timelock not expired")
+    c.fastfwd(7 * DAY)
+    c.tx("confirm platform registrar", "SmartAccountV3", "confirmPlatformRegistrar", [], "genesis")
+    c.check(c.hash_result("SmartAccountV3", "getPlatformRegistrar") == registrar,
+            "platform registrar activated")
+
+    account_raw = c.results("SmartAccountV3", "computePlatformAccountId",
+                            B(binding), H(owner), I(ESCAPE_TIMELOCK))
+    account = "0x" + account_raw[::-1].hex()
+    c.tx("registrar creates platform account", "PlatformRegistrarMock", "register",
+         [H(wallet), B(binding), H(owner), I(ESCAPE_TIMELOCK)], "genesis")
+    proxy = c.hash_result("SmartAccountV3", "getProxyScriptHash", H(account))
+    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+            "platform account starts under the original owner")
+    c.check(c.hash_result("SmartAccountV3", "getAccountIdByProxy", H(proxy)) == account,
+            "platform proxy binding resolves to the account")
+
+    proposed = c.tx("registrar proposes owner rotation", "PlatformRegistrarMock", "rotate",
+                    [H(wallet), H(account), B(binding), H(rotated_owner)], "genesis")
+    c.check("PlatformOwnerRotationProposed" in proposed["events"],
+            "owner rotation proposal emits the expected event")
+    pending = c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account))
+    c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
+            "rotation is pending on the proposed owner")
+    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+            "proposal does not change the current owner")
+
+    c.tx("stranger cancels pending rotation", "SmartAccountV3",
+         "cancelPlatformAccountOwnerRotation", [H(account), B(binding)], "stranger",
+         expect_fault="Unauthorized platform owner rotation cancellation")
+    pending = c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account))
+    c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
+            "unauthorized cancellation preserves the pending rotation")
+    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+            "unauthorized cancellation preserves the current owner")
+
+    cancelled = c.tx("current owner cancels pending rotation", "SmartAccountV3",
+                     "cancelPlatformAccountOwnerRotation", [H(account), B(binding)], "owner")
+    c.check("PlatformOwnerRotationCancelled" in cancelled["events"],
+            "owner cancellation emits the expected event")
+    c.check(c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account)) is None,
+            "owner cancellation clears the pending rotation")
+    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+            "cancellation preserves the current owner")
+
+    c.tx("registrar re-proposes owner rotation", "PlatformRegistrarMock", "rotate",
+         [H(wallet), H(account), B(binding), H(rotated_owner)], "genesis")
+    c.tx("confirm rotation before timelock", "PlatformRegistrarMock", "confirmRotate",
+         [H(wallet), H(account), B(binding)], "merchant",
+         expect_fault="Platform owner rotation timelock not expired")
+    pending = c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account))
+    c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
+            "early confirmation preserves the pending rotation")
+    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+            "early confirmation preserves the current owner")
+    c.fastfwd(7 * DAY)
+    c.tx("confirm rotation without new-owner witness", "PlatformRegistrarMock", "confirmRotate",
+         [H(wallet), H(account), B(binding)], "genesis",
+         expect_fault="New platform owner witness required")
+    pending = c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account))
+    c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
+            "confirmation without the new-owner witness preserves the pending rotation")
+    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+            "confirmation without the new-owner witness preserves the current owner")
+    rotated = c.tx("confirm rotation with new-owner witness", "PlatformRegistrarMock", "confirmRotate",
+                   [H(wallet), H(account), B(binding)], "merchant", scope="Global")
+    c.check("PlatformAccountOwnerRotated" in rotated["events"],
+            "rotation confirmation emits the expected event")
+    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == rotated_owner,
+            "new owner is persisted")
+    c.check(c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account)) is None,
+            "successful rotation clears the pending record")
+    c.check(c.hash_result("SmartAccountV3", "getProxyScriptHash", H(account)) == proxy,
+            "owner rotation preserves the proxy address")
+
+
 def scenario_did_action_ticket(c, workdir):
     """AA proxy witness consuming a NeoDID action ticket with real transactions: the wallet's
     verification-trigger path (WitnessRules proxy signer scoped to the registry) that neoxp
     invoke cannot express, so the transactions are built, signed and broadcast by hand."""
-    build = Path(os.environ.get("NEOOS_SERVICES_CONTRACT_BUILD") or (ROOT.parent / "neo-os-services" / "contracts" / "build"))
+    build = services_build_directory()
     nef = build / "NeoDIDRegistry.nef"
     manifest = build / "NeoDIDRegistry.manifest.json"
     scenario = c.scenario("AA proxy witness consumes a NeoDID action ticket")
@@ -1242,7 +1747,7 @@ def scenario_did_action_ticket(c, workdir):
                           "deploymentTransaction": deployed["tx-hash"], "deployData": None,
                           "localNefSha256": hashlib.sha256(nef.read_bytes()).hexdigest(),
                           "localManifestSha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
-                          "source": "neo-os-services/contracts/build (sibling checkout)"})
+                          "source": "NEOOS_SERVICES_CONTRACT_BUILD or neo-os-services pinned vendor tree"})
     verifier = P256Key(workdir, "did-verifier")
     c.tx("registry admin sets the action verifier key", "NeoDIDRegistry", "setVerifier", [B(verifier.compressed)], "genesis")
     account, proxy = c.register("register native account for the ticket", owner="owner")
@@ -1389,31 +1894,51 @@ def scenario_did_action_ticket(c, workdir):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--neoxp", default=str(Path.home() / ".dotnet" / "tools" / "neoxp"))
+    parser.add_argument("--runtime-build-receipt", type=Path,
+                        help="PASS receipt for the complete source-built runner")
+    parser.add_argument("--runtime-dir", type=Path,
+                        help="complete source-built NeoExpress runtime directory")
+    parser.add_argument("--dotnet", type=Path, default=shutil.which("dotnet"),
+                        help="dotnet host used with --runtime-dir")
     parser.add_argument("--workdir", default=None, help="scratch directory for the chain (default: temp)")
     parser.add_argument("--output", default=None, help="receipt path (default: docs/reports/aa-neoexpress-validation-<date>.json)")
     parser.add_argument("--keep", action="store_true", help="keep the scratch chain after the run")
     args = parser.parse_args()
 
+    if (args.runtime_build_receipt is None) != (args.runtime_dir is None):
+        parser.error("--runtime-build-receipt and --runtime-dir must be supplied together")
+    if args.runtime_dir is not None and args.dotnet is None:
+        parser.error("--dotnet is required with a source-built runtime")
+
     today = dt.date.today().strftime("%Y%m%d")
     output = Path(args.output) if args.output else ROOT / "docs" / "reports" / f"aa-neoexpress-validation-{today}.json"
     workdir = Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="aa-neoxp-"))
     workdir.mkdir(parents=True, exist_ok=True)
-    chain = Chain(args.neoxp, workdir)
+    neoxp = Path(args.neoxp)
+    runtime_binding = None
+    if args.runtime_dir is not None:
+        neoxp, runtime_binding = source_runtime_binding(
+            args.runtime_dir, args.runtime_build_receipt, args.dotnet, workdir
+        )
+    chain = Chain(str(neoxp), workdir)
     receipt = {
         "schema": "neoos-aa-neoexpress-validation/v1",
         "observedOn": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "scope": "Fresh isolated single-node NeoExpress chain: deployment of every contracts/bin/v3 artifact plus the sibling "
-                 "NeoDIDRegistry build, a hand-signed AA proxy-witness transaction that consumes a NeoDID action ticket, "
+        "scope": "Fresh isolated single-node NeoExpress chain: deployment of the contracts/bin/platform core, every "
+                 "contracts/bin/v3 public module and the sibling NeoDIDRegistry build, a hand-signed AA proxy-witness "
+                 "transaction that consumes a NeoDID action ticket, "
                  "protocol flows driven by real transactions, and JSON-RPC readback of every deployed contract. "
                  "No public network, no production deployment, no signing or broadcast outside the private chain.",
         "status": "FAILED",
     }
     try:
-        version = subprocess.run([args.neoxp, "--version"], capture_output=True, text=True, env=chain.env)
+        version = subprocess.run([str(neoxp), "--version"], capture_output=True, text=True, env=chain.env)
         version = ANSI.sub("", version.stdout).strip()
         if not version:
             raise ValidationFailure("neoxp did not report a version; is the tool installed and its runtime reachable?")
         receipt["tool"] = {"name": "NeoExpress", "version": version}
+        if runtime_binding is not None:
+            receipt["sourceRuntime"] = runtime_binding
         chain.create()
         receipt["network"] = {"kind": "isolated-private-single-node", "networkMagic": chain.magic,
                               "rpcHost": "127.0.0.1", "publicNetwork": False}
@@ -1427,6 +1952,8 @@ def main():
             "applicationHookGasLimitGas": 250_000_000 / GAS,
             "moduleMaintenanceGasLimitDatoshi": MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI,
             "moduleMaintenanceGasLimitGas": MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI / GAS,
+            "rootModuleMaintenanceGasLimitDatoshi": ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI,
+            "rootModuleMaintenanceGasLimitGas": ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI / GAS,
             "neoMaxVerificationGasDatoshi": NEO_MAX_VERIFICATION_GAS_DATOSHI,
             "nativeProfileVerifierBudgetDatoshi": NATIVE_PROFILE_VERIFIER_BUDGET_DATOSHI,
             "executeGasEnvelopeGas": int(PRIVATE_EXECUTE_GAS_ENVELOPE),
@@ -1464,9 +1991,21 @@ def main():
             scenario_market(chain)
         if not only_did:
             scenario_subscription(chain)
+        if not only_did:
+            scenario_platform_owner_rotation(chain)
 
         scenario_did_action_ticket(chain, workdir)
         receipt["rpcReadback"] = chain.readback()
+        if runtime_binding is not None:
+            from neoexpress_reproducible_build import BuildFailure, check_runtime_receipt
+            try:
+                check_runtime_receipt(
+                    json.loads(args.runtime_build_receipt.read_text()),
+                    args.runtime_dir.resolve(),
+                )
+            except (BuildFailure, OSError, ValueError) as error:
+                raise ValidationFailure(f"source-built runner changed during validation: {error}") from error
+            receipt["sourceRuntime"]["runtimeFilesMatchedAfter"] = True
         receipt["status"] = "PASS"
     except ValidationFailure as failure:
         receipt["failure"] = str(failure)

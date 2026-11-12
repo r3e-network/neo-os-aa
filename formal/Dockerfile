@@ -15,7 +15,10 @@ FROM ubuntu:24.04
 ARG TLA_JAR_URL=https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
 # GitHub republished the v1.8.0 asset; this is the hash observed on
 # 2026-10-13 and is checked before the formal tools are used.
-ARG TLA_JAR_SHA256=7beec0f04818732a62fa193731711a99aa4f11279499b2360a7d156c519ea78d
+# The v1.8.0 release asset was republished again on 2026-10-28. This digest
+# was read from the official release asset listing on 2026-10-30. Keep the
+# digest fail-closed: a future republish must be reviewed and pinned explicitly.
+ARG TLA_JAR_SHA256=fc6878c603f0fdc18b9fe3e5bf51860cb90ab5b1154e3c371660c036d6bdd63e
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \

@@ -20,7 +20,7 @@ The ordinary source protocol is internally consistent for its executable nonce
 domain, operation-shape isolation, plugin lifecycle and bounded policy
 cardinality. The current source candidate is compiled and runtime-tested, while
 the pinned public artifact remains the separately verified deployment identity.
-The source candidate currently has a 100-entry ABI (99 unique method names because
+The source candidate currently has a 105-entry ABI (104 unique method names because
 of a retained overload entry); the pinned public artifact has 90 ABI entries.
 The current source also adds a shared per-transaction reimbursement ceiling within
 each core and callback-free `finalizeEscapeToOwner`: a permanent owner-only
@@ -32,7 +32,7 @@ Three release gates remain explicit:
 | Gate | Status | Required closure evidence |
 |---|---|---|
 | Public verifier/hook callback resource isolation | **NO-GO** | Neo core syscall or equivalent hardfork capability, public activation, rebuilt NEF/manifest, and RPC/runtime evidence |
-| Platform-account backup-owner rotation | **NO-GO** | The source candidate now has propose/confirm/cancel semantics with new-owner authorization; public closure still requires ABI migration, upgraded artifact and live readback |
+| Platform-account backup-owner rotation | **NO-GO** | The source candidate has delayed propose/confirm/cancel semantics with current-owner cancellation and new-owner authorization. The final source-built artifact passes the private NeoExpress state-invariance scenario, but public closure still requires ABI migration, upgraded artifact and live readback |
 | Source candidate versus pinned public artifact | **UPGRADE REVIEW** | Fresh artifact certificate, compatibility review, deployment transaction and independent RPC readback |
 
 The host and container formal model gates and the fresh ordinary source-chain
@@ -48,7 +48,12 @@ and independent readback remain required before claiming a deployed fix.
 
 The Neo N3 Abstract Account protocol is a **Neo-native account system inspired by ERC-4337/ERC-7579**, not a drop-in Ethereum implementation. It does not expose an EntryPoint, Ethereum UserOperation ABI, bundler RPC, ERC-7579 executor/module interface, or Ethereum paymaster staking lifecycle. Those differences are protocol boundaries and must be visible to integrators.
 
-The core now exposes a standards-friendly discovery surface (`getAccountImplementationId`, `supportsExecutionMode`, `supportsModuleType`, `isModuleInstalled`, and `previewUserOpValidation`) plus an ERC-1271-compatible result adapter. `isValidSignature` returns `0x1626ba7e` only when the installed verifier explicitly supports message signatures; UserOperation validation is never silently reused as message validation. The currently shipped Web3Auth verifier implements that adapter for compact 64-byte and recoverable 65-byte ECDSA signatures. Other verifiers advertise `false` and fail closed.
+The core now exposes a standards-friendly discovery surface (`getAccountImplementationId`, `supportsExecutionMode`, `supportsModuleType`, `isModuleInstalled`, and `previewUserOpValidation`) plus an ERC-1271-compatible result adapter. `isValidSignature` returns `0x1626ba7e` only when the installed verifier explicitly supports message signatures; UserOperation validation is never silently reused as message validation. The currently shipped Web3Auth verifier implements that adapter by recovering the configured secp256k1 key directly from the supplied 32-byte digest, using either EIP-2098 compact (64-byte) or recoverable `r || s || v` (65-byte) input. It does not hash the digest a second time. Other verifiers advertise `false` and fail closed.
+
+The reviewed Web3Auth ERC-1271 path requires `HF_Huyao` or later. That hardfork
+selects the `recoverSecp256K1` implementation that rejects out-of-range `r` and
+`s`; the pre-Huyao compatibility implementation does not enforce those bounds and
+must not be treated as the reviewed message-signature path.
 
 This is **interoperability at the adapter boundary**, not a claim of full ERC-4337/ERC-7579 conformance. Ethereum clients still need a Neo transport adapter, Neo RPC, Neo transaction witnesses, and the documented Neo UserOperation layout.
 
@@ -56,7 +61,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 |---|---|---|---|
 | 1 | Plugin Lifecycle (install/update/remove) | ✓ | Source-verified timelocks/events; public artifact and arbitrary-plugin cleanup remain separate gates |
 | 2 | 2D Nonce Management (191-bit channel + 64-bit sequence) | ✓ Neo equivalent | Every accepted nonce is a signed NeoVM Integer in `0 <= nonce < 2^255`, split into an independent channel and sequence; the surrounding UserOperation and transport remain Neo-specific |
-| 3 | Escape Hatch Mechanism (timelock, cooldown, finalization) | ✓ | Source-verified ordinary semantics; deployment/refinement evidence is still required |
+| 3 | Escape Hatch Mechanism (timelock, cooldown, finalization) | ✓ | Source, scoped governance/recovery models, and private NeoExpress scenarios verified; public deployment parity remains pending |
 | 4 | Storage Patterns (gas-efficient for Neo N3) | ✓ | Optimized prefix-key storage |
 | 5 | Account State Management (atomic) | ✓ | Atomic state updates |
 | 6 | Market Escrow (cancellation, expiry, dispute) | ✓ | Source-verified paths and tests; arbitrary-plugin cleanup and deployment remain bounded gates |
@@ -370,17 +375,18 @@ verifier/hook admission policy before funding transactions.
 **Known Limitations (as documented):**
 - **VULN-001:** The matching private AA artifact uses the non-bypassable
   platform bounded-call syscall and has a NeoExpress adversarial-callback
-  receipt; native SmartAccount activation and public deployment remain
-  pending.
+  receipt (`docs/reports/aa-neoexpress-validation-20261031.json`, PASS with
+  25 artifacts and 25 RPC readbacks); native SmartAccount activation and
+  public deployment remain pending.
 - **VULN-002:** Market/escape and settlement cleanup require deployed/refinement
   evidence; the current private artifact now has source-to-artifact certification,
-  368 VM tests and NeoExpress execution/readback. Public deployment parity is
+  571 VM tests and NeoExpress execution/readback. Public deployment parity is
   intentionally excluded.
 - **VULN-003:** Session-key revocation follows canonical execution order and
   cannot retroactively cancel an already ordered transaction.
 - **VULN-004:** MultiSig configuration guards include self-reference, child
   lifecycle-ABI/deployment preflight, and a safe leaf-only composition marker;
-  16 formal Coq modules, including the attestation/proof-envelope, exact signer-domain binding, and structural WitnessRule refinement models,
+  29 formal Coq modules, including the attestation/proof-envelope, exact signer-domain binding, and structural WitnessRule refinement models,
   private runtime vectors, and NeoExpress preflight/revalidation
   cover the shipped boundary. The concrete crypto vectors cover the shipped P-256
   profiles and fail-closed proof placeholder, but no public key test can prove
@@ -436,7 +442,10 @@ verifier/hook admission policy before funding transactions.
      `validateSignature()`; an ABI parameter alone cannot cap VM execution.
    - The matching private AA artifact already uses the versioned
      `System.Contract.CallWithGasLimit` capability and has a fresh NeoExpress
-   receipt. Native SmartAccount activation, target-node parity, and public
+   receipt at `docs/reports/aa-neoexpress-validation-20261031.json` (25
+   artifacts, 15 scenarios, 135 persisted transactions, 132 assertions).
+   Native SmartAccount
+   activation, target-node parity, and public
    deployment remain approval-gated deployment work and are intentionally outside
    this private validation closure.
 

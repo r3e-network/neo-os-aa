@@ -45,6 +45,22 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
+def portable_hashes(hashes):
+    """Return stable input identities without host-specific absolute paths."""
+    result = {}
+    root = REPO.resolve()
+    for path, expected in hashes.items():
+        candidate = Path(path).resolve()
+        try:
+            name = candidate.relative_to(root).as_posix()
+        except ValueError:
+            name = "external/" + candidate.name
+        if name in result:
+            name = name + "#" + sha(str(candidate).encode())[:12]
+        result[name] = expected
+    return result
+
+
 def declarations(source):
     return re.findall(r'^(?:Definition|Fixpoint|Inductive|Record|Lemma|Theorem|Example)\s+(\w+)', source, re.M)
 
@@ -66,7 +82,7 @@ def helper_inputs(report, report_directory):
     certificate = directory / 'CapMethodArtifact.v'
     if not certificate.is_file():
         candidates = []
-        for path in Path(report_directory).glob('proofs/**/CapMethodArtifact.v'):
+        for path in Path(report_directory).glob('**/CapMethodArtifact.v'):
             raw = path.read_bytes()
             if sha(raw) == report.get('certificateSha256'):
                 candidates.append((path, raw))
@@ -166,11 +182,11 @@ def proof_receipt(bundle):
       'helperCertificateSha256':report['certificateSha256'],'helperMethodSha256':report['methodSha256'],
       'actualApplicationEngineVerified':False,'fullImplementationVerified':False,
       'newClosedDeclarations':inventory[MODEL.stem],'closedAssumptionCount':count,
-      'assumptionDeclarations':inventory,'inputSha256':hashes,'outputDirectory':str(work),
+      'assumptionDeclarations':inventory,'inputSha256':portable_hashes(hashes),
       'toolVersion':version.splitlines()[0],
       'preconditions':['the supplied helper certificate has fresh source/NEF provenance from the aggregate gate',
           'Integer-typed request and fee fields, valid 32-byte hash and Array/Struct ledger',
-          'static slot34 is Buffer[0x21], with the helper native environment contracts',
+          'static slot 38 is Buffer[0x21], with the helper native environment contracts',
           'each invocation satisfies legal_inputs; zero-fee updated sum must fit signed256',
           'paid final ledger bound requires initial effective reserved <= transaction fee',
           'callbacks only affect this ledger through successful helper calls or an uncaught outer fault'],
@@ -210,7 +226,8 @@ def semantic_controls(bundle):
         details[name] = {'definitionsCompiled': True, 'certificateRejected': True, 'kernelExitCode': code}
     unchanged(inputs)
     return {'schema':'neoos-aa-reimbursement-composition-controls/v1','scope':'caller-ledger-composition',
-        'definitionsCompiled':True,'rejected':rejected,'controls':details,'inputSha256':hashes,'outputDirectory':str(work),
+        'definitionsCompiled':True,'rejected':rejected,'controls':details,
+        'inputSha256':portable_hashes(hashes),
         'actualApplicationEngineVerified':False,'fullImplementationVerified':False}
 
 

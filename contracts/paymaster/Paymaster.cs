@@ -164,7 +164,7 @@ namespace SmartAccount
 
             bool transferred = (bool)Contract.Call(
                 GAS.Hash, "transfer", CallFlags.All,
-                new object[] { Runtime.ExecutingScriptHash, sender, amount, null });
+                new object[] { Runtime.ExecutingScriptHash, sender, amount, null! });
             ExecutionEngine.Assert(transferred, "GAS transfer failed");
 
             OnWithdrawn(sender, amount);
@@ -366,7 +366,7 @@ namespace SmartAccount
             // Transfer GAS to relay
             bool transferred = (bool)Contract.Call(
                 GAS.Hash, "transfer", CallFlags.All,
-                new object[] { Runtime.ExecutingScriptHash, relay!, amount, null });
+                new object[] { Runtime.ExecutingScriptHash, relay!, amount, null! });
             ExecutionEngine.Assert(transferred, "Relay reimbursement failed");
 
             OnReimbursed(sponsor!, accountId, relay!, amount);

@@ -66,7 +66,7 @@ UNPROVED = [
     'declaration permits zero.',
     'The conversion itself, the handler body and its return value; those stay in the '
     'interop-conversion lane.',
-    'Trusted C# extraction and compiler/CLR correspondence; all 100 public entrypoints.'
+    'Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.'
 ]
 TCB = ['Strict complete-method C# grammar and field/symbol binding.',
        'C# init-only property semantics and the reflection call that builds Parameters.',

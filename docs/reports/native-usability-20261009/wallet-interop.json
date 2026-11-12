@@ -1,0 +1,501 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS",
+  "source": "threshold-public-vectors.json",
+  "sourceSha256": "ed076429f6f48894fa09e4424d717da6d4cc3671d3469be6da15ed7b9ade91dd",
+  "verifierSource": "nativeWalletWitness.mjs",
+  "verifierSourceSha256": "486ccdfd7f09e387a89c720910b836095429c8988203fe16de52275650c753f7",
+  "verifier": "Default WebCrypto P-256 ECDSA SHA-256 / IEEE P1363",
+  "scope": "Public verification of complete serialized transactions and their wallet witnesses; no new signatures, broadcast, or chain execution.",
+  "transactions": 20,
+  "walletWitnesses": 37,
+  "multisigWitnesses": 17,
+  "signaturesGenerated": false,
+  "validation": {
+    "rawTransactionRoundTrip": true,
+    "signDataRecomputed": true,
+    "txidsIndependentlyRecomputed": true,
+    "fieldTypesAndFormatsChecked": true
+  },
+  "results": [
+    {
+      "index": 0,
+      "notification": "AccountCreated",
+      "networkMagic": 860833102,
+      "txid": "0x90416ab4256875c04f34bd2731daec42c458232dd78f0a68685d16c916b22e83",
+      "rawTransactionSha256": "4cd887217b900b7b0221b314e5da23959c3bc74cbd313e9bec8edcf39c1bbaf8",
+      "applicationScriptSha256": "03a4ba3e2b64c4d03e1659c1dc4455c0284cb5a6c2c9c515eacf365ced985bbb",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0x90a5edc1dd60ae31fe2dd6cff7d109be71100474",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 2,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 1,
+      "notification": "AccountCreated",
+      "networkMagic": 860833102,
+      "txid": "0x90416ab4256875c04f34bd2731daec42c458232dd78f0a68685d16c916b22e83",
+      "rawTransactionSha256": "3e81ad0f1bd88ec7ad4578faa3bd00b1a1844f2c1e8f443bc9387ccc08c0f74e",
+      "applicationScriptSha256": "03a4ba3e2b64c4d03e1659c1dc4455c0284cb5a6c2c9c515eacf365ced985bbb",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0x90a5edc1dd60ae31fe2dd6cff7d109be71100474",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 2,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 2,
+      "notification": "AccountFrozen",
+      "networkMagic": 860833102,
+      "txid": "0xf02e1e3d5af5ba5a2555f580f327e864395da814b504ca1eefd907f4fdf75f39",
+      "rawTransactionSha256": "ef374f000b4a6ee0d820a1b5fec8ce5bba82a7ccf4213a6f16a9e577ce08dc18",
+      "applicationScriptSha256": "4b2d1fbd764bf03aa78e60df188bc64f5223e99c3f73cac8bd6d1c02046d9a79",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 3,
+      "notification": "RecoveryProposed",
+      "networkMagic": 860833102,
+      "txid": "0xd4af805228c9f862412c62e28aceb383a698645558fd79875a1923affe1d8da2",
+      "rawTransactionSha256": "3c5f7d2dc333d3cbd7e61e5005258487680b468ab320d033d30fc0bd52987911",
+      "applicationScriptSha256": "7c421dfcca766f6feb34363f98da888732710d359df22068694a646f95379125",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 4,
+      "notification": "RecoveryExecuted",
+      "networkMagic": 860833102,
+      "txid": "0x12366162d15c3321d91de13ddb3023dba093d6d2829ffb47765392ab02f279a5",
+      "rawTransactionSha256": "6a3057d44d6350f7b87692a3f9643304ed59024f04fc6f03e13bf60c0eed2e8c",
+      "applicationScriptSha256": "2d0a79adaf210f7122409ba0fb8229a3d23771b7346f3ab0cc62ba211acb90af",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 5,
+      "notification": "AccountUnfrozen",
+      "networkMagic": 860833102,
+      "txid": "0xf0cfbaac0a244f2970552c7db4d9d5c0c2d6272e8c0ca58be12037f16cc49bc2",
+      "rawTransactionSha256": "1509df03f9b3830f9412726295a09fc29c5b00fe3fb0aad7a1abaead27074bb2",
+      "applicationScriptSha256": "38b4d4f21d9375a623b05dedabbf58eb2ff90e015f94882ad4812239a7fd6e0e",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 6,
+      "notification": "AccountCreated",
+      "networkMagic": 860833102,
+      "txid": "0x90416ab4256875c04f34bd2731daec42c458232dd78f0a68685d16c916b22e83",
+      "rawTransactionSha256": "83c845822b44e213f2269c7335f3b54f4b7cfddee43f384dd87a2477bcee80f5",
+      "applicationScriptSha256": "03a4ba3e2b64c4d03e1659c1dc4455c0284cb5a6c2c9c515eacf365ced985bbb",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0x90a5edc1dd60ae31fe2dd6cff7d109be71100474",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 2,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 7,
+      "notification": "AccountCreated",
+      "networkMagic": 860833102,
+      "txid": "0x90416ab4256875c04f34bd2731daec42c458232dd78f0a68685d16c916b22e83",
+      "rawTransactionSha256": "f77b5be43290700a3382a36e9174f941624e12851f51c8930129774b9b6082e1",
+      "applicationScriptSha256": "03a4ba3e2b64c4d03e1659c1dc4455c0284cb5a6c2c9c515eacf365ced985bbb",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0x90a5edc1dd60ae31fe2dd6cff7d109be71100474",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 2,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 8,
+      "notification": "AccountFrozen",
+      "networkMagic": 860833102,
+      "txid": "0xf02e1e3d5af5ba5a2555f580f327e864395da814b504ca1eefd907f4fdf75f39",
+      "rawTransactionSha256": "5d8c79d1ed792bcdf43be5e6efef51f04efe5f03f8daf65ff85a332dcbee721d",
+      "applicationScriptSha256": "4b2d1fbd764bf03aa78e60df188bc64f5223e99c3f73cac8bd6d1c02046d9a79",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 9,
+      "notification": "RecoveryProposed",
+      "networkMagic": 860833102,
+      "txid": "0xd4af805228c9f862412c62e28aceb383a698645558fd79875a1923affe1d8da2",
+      "rawTransactionSha256": "63ba42a1addf354f228bd6ed5afba044330e84935d19e2544eefc01a17398255",
+      "applicationScriptSha256": "7c421dfcca766f6feb34363f98da888732710d359df22068694a646f95379125",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 10,
+      "notification": "RecoveryExecuted",
+      "networkMagic": 860833102,
+      "txid": "0x12366162d15c3321d91de13ddb3023dba093d6d2829ffb47765392ab02f279a5",
+      "rawTransactionSha256": "2833d72693e2493163099dd8e4459ff4e1ccbfd19b690fae316c99748d428420",
+      "applicationScriptSha256": "2d0a79adaf210f7122409ba0fb8229a3d23771b7346f3ab0cc62ba211acb90af",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 11,
+      "notification": "AccountUnfrozen",
+      "networkMagic": 860833102,
+      "txid": "0xf0cfbaac0a244f2970552c7db4d9d5c0c2d6272e8c0ca58be12037f16cc49bc2",
+      "rawTransactionSha256": "678aa42af6d05ac21932a3cbc4265665e03df9c8c48f6123d192afbc0e9fb0c2",
+      "applicationScriptSha256": "38b4d4f21d9375a623b05dedabbf58eb2ff90e015f94882ad4812239a7fd6e0e",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 12,
+      "notification": "AccountCreated",
+      "networkMagic": 860833102,
+      "txid": "0x90416ab4256875c04f34bd2731daec42c458232dd78f0a68685d16c916b22e83",
+      "rawTransactionSha256": "4011b6a847d54c5cfb96f186c142a8260335e02f4f93028994c2b975a1f14b0a",
+      "applicationScriptSha256": "03a4ba3e2b64c4d03e1659c1dc4455c0284cb5a6c2c9c515eacf365ced985bbb",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0x90a5edc1dd60ae31fe2dd6cff7d109be71100474",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 2,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 13,
+      "notification": "AccountCreated",
+      "networkMagic": 860833102,
+      "txid": "0x90416ab4256875c04f34bd2731daec42c458232dd78f0a68685d16c916b22e83",
+      "rawTransactionSha256": "fa018a4982ae17679d537be68956ca5d202559926075dee81642dc1ee53dad78",
+      "applicationScriptSha256": "03a4ba3e2b64c4d03e1659c1dc4455c0284cb5a6c2c9c515eacf365ced985bbb",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0x90a5edc1dd60ae31fe2dd6cff7d109be71100474",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 2,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 14,
+      "notification": "AccountCreated",
+      "networkMagic": 860833102,
+      "txid": "0x90416ab4256875c04f34bd2731daec42c458232dd78f0a68685d16c916b22e83",
+      "rawTransactionSha256": "569f2a190d39df6930bf3b8731d04f6ee60783734cf51ceb920a7bd785db3cef",
+      "applicationScriptSha256": "03a4ba3e2b64c4d03e1659c1dc4455c0284cb5a6c2c9c515eacf365ced985bbb",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0x90a5edc1dd60ae31fe2dd6cff7d109be71100474",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 2,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 15,
+      "notification": "AccountCreated",
+      "networkMagic": 860833102,
+      "txid": "0x90416ab4256875c04f34bd2731daec42c458232dd78f0a68685d16c916b22e83",
+      "rawTransactionSha256": "83c4db7bdde22d17aea9921eb50ef81838893fd9a18330a42ac449e9497c38d9",
+      "applicationScriptSha256": "03a4ba3e2b64c4d03e1659c1dc4455c0284cb5a6c2c9c515eacf365ced985bbb",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0x90a5edc1dd60ae31fe2dd6cff7d109be71100474",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 2,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 16,
+      "notification": "AccountFrozen",
+      "networkMagic": 860833102,
+      "txid": "0xf02e1e3d5af5ba5a2555f580f327e864395da814b504ca1eefd907f4fdf75f39",
+      "rawTransactionSha256": "e7b7e21ffc42ea621b443138d56d2612077836972b902751bbc06aa3c43c87ab",
+      "applicationScriptSha256": "4b2d1fbd764bf03aa78e60df188bc64f5223e99c3f73cac8bd6d1c02046d9a79",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 17,
+      "notification": "RecoveryProposed",
+      "networkMagic": 860833102,
+      "txid": "0xd4af805228c9f862412c62e28aceb383a698645558fd79875a1923affe1d8da2",
+      "rawTransactionSha256": "b975afa3f1066e959e085b3c5ad26ab7ca11e97e9b342c8db1039cf871ee223b",
+      "applicationScriptSha256": "7c421dfcca766f6feb34363f98da888732710d359df22068694a646f95379125",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 18,
+      "notification": "RecoveryExecuted",
+      "networkMagic": 860833102,
+      "txid": "0x12366162d15c3321d91de13ddb3023dba093d6d2829ffb47765392ab02f279a5",
+      "rawTransactionSha256": "a5297f477db438a484211edac65a9c787ec9e02786c34c6941b1b3698d0a9f90",
+      "applicationScriptSha256": "2d0a79adaf210f7122409ba0fb8229a3d23771b7346f3ab0cc62ba211acb90af",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    },
+    {
+      "index": 19,
+      "notification": "AccountUnfrozen",
+      "networkMagic": 860833102,
+      "txid": "0xf0cfbaac0a244f2970552c7db4d9d5c0c2d6272e8c0ca58be12037f16cc49bc2",
+      "rawTransactionSha256": "e063ff2854852a12cca9b7da3a8cda231ed1a075aeceacbea1f7e7047d1e9434",
+      "applicationScriptSha256": "38b4d4f21d9375a623b05dedabbf58eb2ff90e015f94882ad4812239a7fd6e0e",
+      "witnesses": [
+        {
+          "account": "0x4fea4d2b55bdbefeadcbf925726516e162469c16",
+          "kind": "signature",
+          "threshold": 1,
+          "memberCount": 1,
+          "result": "PASS"
+        },
+        {
+          "account": "0xf0c35a485243e62ddd5bae19adc822682a836f73",
+          "kind": "multisig",
+          "threshold": 2,
+          "memberCount": 3,
+          "result": "PASS"
+        }
+      ],
+      "result": "PASS"
+    }
+  ]
+}

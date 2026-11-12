@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import initializer_proofs as proof
-from test_method_proofs import INVENTORY, materialize_nef_fixture
+from test_method_proofs import load_inventory, materialize_nef_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -15,9 +15,13 @@ ROOT = Path(__file__).resolve().parents[2]
 class InitializerProofTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        with gzip.open(INVENTORY, "rt") as stream:
-            cls.inventory = json.load(stream)
-        cls.inventory["source"] = json.loads((Path(__file__).with_name("fixtures") / "initializer-source.json").read_text())["source"]
+        cls.inventory = load_inventory()
+        current = json.loads((Path(__file__).with_name("fixtures") / "current-initializer-source.json").read_text())["fixtureOrigin"]
+        if cls.inventory["nef"]["sha256"] == current["nefSha256"]:
+            cls.inventory["source"] = current["source"]
+            cls.inventory["sourceMap"]["debug"]["static-variables"] = current["staticVariables"]
+        else:
+            cls.inventory["source"] = json.loads((Path(__file__).with_name("fixtures") / "initializer-source.json").read_text())["source"]
         cls.directory = tempfile.TemporaryDirectory(prefix="aa-source-init-fixture-")
         cls.addClassCleanup(cls.directory.cleanup)
         nef = materialize_nef_fixture(cls.inventory, cls.directory.name)
@@ -31,9 +35,11 @@ class InitializerProofTests(unittest.TestCase):
         cls.inventory["inputs"][str(manifest)] = cls.inventory["manifest"]["sha256"]
 
     def test_exact_bijection_all_source_values(self):
+        fixture = (Path(__file__).with_name("fixtures") / "current-initializer-source.json").read_text()
+        self.assertNotRegex(fixture, r'/(?:Users|private|var|opt)/')
         bound = proof.bind(self.inventory)
-        self.assertEqual(len(bound["slots"]), 53)
-        self.assertEqual(bound["slots"]["Prefix_TransactionReimbursement"], 34)
+        self.assertEqual(len(bound["slots"]), len(self.inventory["sourceMap"]["debug"]["static-variables"]))
+        self.assertEqual(bound["slots"]["Prefix_TransactionReimbursement"], 38)
 
     def test_missing_duplicate_slot_and_wrong_type_rejected(self):
         for kind in ("missing", "duplicate", "type"):
@@ -48,7 +54,21 @@ class InitializerProofTests(unittest.TestCase):
     def test_actual_source_program_is_target_independent(self):
         before = proof.bind(self.inventory)
         changed = copy.deepcopy(self.inventory)
-        node = next(i for i in proof.initializer_source.nodes(changed["source"])
+        contract = next(t for t in changed["source"]["types"]
+                        if t["id"] == proof.initializer_source.TYPE_ID)
+        field_ids = {
+            field["id"] for field in contract["fields"]
+            if field["isStatic"] and field["isReadOnly"] and field["constant"] is None
+        }
+        initializer_operations = []
+        for initializer in changed["source"]["initializers"]:
+            for operation in initializer["operations"]:
+                initialized = operation.get("semanticCollections", {}).get(
+                    "IFieldInitializerOperation.InitializedFields", {}).get("items", [])
+                if any(item.get("id") in field_ids for item in initialized):
+                    initializer_operations.append(operation)
+        node = next(i for operation in initializer_operations
+                    for i in proof.initializer_source.nodes(operation)
                     if i["kind"] == "Literal" and i["type"] == "string")
         node["constant"]["value"]["value"] = "changed"
         after = proof.bind(changed)
@@ -59,7 +79,7 @@ class InitializerProofTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="aa-source-init-kernel-") as output:
             result = proof.run_proofs(self.inventory, output)
             self.assertTrue(result["kernelChecked"])
-            self.assertEqual(result["fieldCount"], 53)
+            self.assertEqual(result["fieldCount"], len(self.inventory["sourceMap"]["debug"]["static-variables"]))
             self.assertFalse(result["fullImplementationVerified"])
             self.assertEqual(len(result["semanticControls"]), 4)
 

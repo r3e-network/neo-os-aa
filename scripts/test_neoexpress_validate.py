@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 SPEC = importlib.util.spec_from_file_location(
     "neoexpress_validate", Path(__file__).with_name("neoexpress_validate.py"))
@@ -58,6 +58,116 @@ class SummaryTests(unittest.TestCase):
         self.assertTrue(validation.fault_matches(expected, "The bounded contract call gas limit has been exhausted."))
         self.assertFalse(validation.fault_matches(expected, "Contract call gas limit exceeded by another operation."))
 
+    def test_composite_root_and_leaf_budgets_fit_the_transaction_envelope(self):
+        self.assertEqual(validation.ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI,
+                         11 * validation.MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI)
+        self.assertGreater(int(validation.PRIVATE_CORE_GAS_ENVELOPE) * validation.GAS,
+                           validation.ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI)
+
+    def test_raw_key_signing_uses_a_libressl_compatible_key_file(self):
+        with tempfile.TemporaryDirectory() as temp:
+            key = validation.RawKey(Path(temp), "raw", bytes([7]) * 32)
+            self.assertEqual(len(key.compressed), 33)
+            self.assertEqual(len(key.sign(b"LibreSSL key encoding regression")), 64)
+
+    def test_web3auth_signer_keeps_the_key_in_process_and_returns_secp256k1_material(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with validation.Web3AuthSecp256k1Key(Path(temp)) as key:
+                self.assertEqual(len(key.uncompressed), 65)
+                self.assertEqual(key.uncompressed[0], 0x04)
+                first = key.sign(b"neo-smartaccount-web3auth-vector")
+                second = key.sign(b"neo-smartaccount-web3auth-vector")
+                self.assertEqual(len(first), 64)
+                self.assertEqual(first, second)
+                self.assertEqual(len(key.sign_digest(bytes([0x42]) * 32)), 65)
+                self.assertEqual(len(key.sign_digest_compact(bytes([0x42]) * 32)), 64)
+                self.assertNotIn(key.uncompressed.hex(), "".join(
+                    path.read_text(errors="ignore") for path in Path(temp).iterdir() if path.is_file()))
+
+    def test_source_runtime_binding_verifies_the_complete_runner_file_map(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            runtime = root / "runtime"
+            runtime.mkdir()
+            names = ("neoxp.dll", "bctklib.dll", "Neo.dll", "RpcServer.dll",
+                     "DBFTPlugin.dll", "RpcClient.dll", "MPTTrie.dll",
+                     "neoxp.deps.json", "neoxp.runtimeconfig.json")
+            hashes = {}
+            for name in names:
+                path = runtime / name
+                path.write_bytes(("runtime:" + name).encode())
+                hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+            build = {
+                "status": "PASS",
+                "independentCleanBuilds": 2,
+                "sourceCommits": {"core": "1" * 40, "node": "2" * 40, "express": "3" * 40},
+                "sdk": "10.0.400",
+                "builds": [
+                    {"runtime": hashes, "archives": {"dependency": "a" * 64},
+                     "locks": {"packages.lock.json": "b" * 64}},
+                    {"runtime": hashes, "archives": {"dependency": "a" * 64},
+                     "locks": {"packages.lock.json": "b" * 64}},
+                ],
+            }
+            receipt = root / "runner-build.json"
+            receipt.write_text(json.dumps(build))
+            dotnet = root / "dotnet"
+            dotnet.write_text("host")
+            wrapper, binding = validation.source_runtime_binding(
+                runtime, receipt, dotnet, root)
+
+            self.assertEqual(binding["sourceBuildStatus"], "PASS")
+            self.assertEqual(binding["runtimeFileCount"], len(names))
+            self.assertTrue(binding["runtimeFilesMatchedBefore"])
+            self.assertFalse(binding["runtimeFilesMatchedAfter"])
+            self.assertEqual(binding["neoxpDllSha256"], hashes["neoxp.dll"])
+            self.assertEqual(hashlib.sha256(wrapper.read_bytes()).hexdigest(),
+                             binding["wrapperSha256"])
+            self.assertNotIn(str(root), json.dumps(binding))
+
+            (runtime / "unexpected.dll").write_bytes(b"unexpected")
+            with self.assertRaisesRegex(validation.ValidationFailure,
+                                        "source-built runner verification failed"):
+                validation.source_runtime_binding(runtime, receipt, dotnet, root)
+
+
+class DeploymentArtifactTests(unittest.TestCase):
+    def test_private_core_and_public_modules_use_their_own_profiles(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for profile in ("v3", "platform"):
+                for name in ("SmartAccountV3", "MockTransferTarget"):
+                    directory = root / profile
+                    directory.mkdir(exist_ok=True)
+                    (directory / f"{name}.nef").write_bytes(f"{profile}:{name}".encode())
+                    (directory / f"{name}.manifest.json").write_text("{}")
+
+            chain = object.__new__(validation.Chain)
+            chain.contracts = {}
+            chain.local_artifacts = {}
+            chain.deployments = []
+
+            def deploy(*args):
+                nef = Path(args[2])
+                return 0, json.dumps({"contract-name": nef.stem, "contract-hash": "0x" + "01" * 20,
+                                      "tx-hash": "0x" + "02" * 32})
+
+            chain.nx = Mock(side_effect=deploy)
+            artifacts = [("SmartAccountV3", "SmartAccountV3.nef", False),
+                         ("MockTransferTarget", "MockTransferTarget.nef", False)]
+            with patch.object(validation, "BIN", root / "v3"), \
+                    patch.object(validation, "PLATFORM_BIN", root / "platform"), \
+                    patch.object(validation, "ARTIFACTS", artifacts):
+                chain.deploy_all()
+
+            self.assertEqual([Path(call.args[2]).parent.name for call in chain.nx.call_args_list],
+                             ["platform", "v3"])
+            self.assertEqual([row["artifactProfile"] for row in chain.deployments], ["platform", "v3"])
+            self.assertEqual(chain.deployments[0]["localNefSha256"],
+                             hashlib.sha256(b"platform:SmartAccountV3").hexdigest())
+            self.assertNotEqual(chain.deployments[0]["localNefSha256"],
+                                hashlib.sha256(b"v3:SmartAccountV3").hexdigest())
+
 
 class ReadbackTests(unittest.TestCase):
     def setUp(self):
@@ -72,7 +182,7 @@ class ReadbackTests(unittest.TestCase):
         self.chain.rpc = Mock(side_effect=self.rpc)
         self.add_artifact("SmartAccountV3")
         # This artifact is not in ARTIFACTS. It must receive the same complete
-        # readback checks as the contracts deployed from contracts/bin/v3.
+        # readback checks as the private core and public module artifacts.
         self.add_artifact("NeoDIDRegistry")
 
     def rpc(self, method, args):
@@ -159,6 +269,45 @@ class ReadbackTests(unittest.TestCase):
         self.chain.deployments.append(self.chain.deployments[-1].copy())
         with self.assertRaises(validation.ValidationFailure):
             self.chain.readback()
+
+
+class PrivateChainConfigurationTests(unittest.TestCase):
+    def test_create_funds_every_wallet_for_the_full_matrix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            chain = object.__new__(validation.Chain)
+            chain.file = Path(temp) / "aa-validation.neo-express"
+            chain.file.write_text(json.dumps({"magic": 519508, "consensus-nodes": [{"rpc-port": 10332}]}))
+            chain.wallets = {}
+            listing = {
+                "genesis": {"script-hash": "0x" + "00" * 20},
+                "owner": {"account-label": "Default", "script-hash": "0x" + "01" * 20},
+                "buyer": {"account-label": "Default", "script-hash": "0x" + "02" * 20},
+            }
+
+            def nx(*args):
+                if args[:2] == ("wallet", "list"):
+                    return 0, json.dumps(listing)
+                return 0, ""
+
+            chain.nx = Mock(side_effect=nx)
+            with patch.object(validation, "WALLETS", ["owner", "buyer"]):
+                chain.create()
+
+            transfers = [call.args for call in chain.nx.call_args_list if call.args[0] == "transfer"]
+            self.assertEqual(transfers, [
+                ("transfer", "10000", "GAS", "genesis", "owner"),
+                ("transfer", "10000", "GAS", "genesis", "buyer"),
+            ])
+
+    def test_services_build_directory_defaults_to_the_pinned_vendor_tree(self):
+        with patch.object(validation, "ROOT", Path("/workspace/neo-os-aa")), \
+                patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(validation.services_build_directory(), Path(
+                "/workspace/neo-os-services/vendor/neo-os-did/contracts/build"))
+
+    def test_services_build_directory_honors_an_explicit_override(self):
+        with patch.dict("os.environ", {"NEOOS_SERVICES_CONTRACT_BUILD": "/tmp/reviewed-neodid"}, clear=True):
+            self.assertEqual(validation.services_build_directory(), Path("/tmp/reviewed-neodid"))
 
 
 if __name__ == "__main__":

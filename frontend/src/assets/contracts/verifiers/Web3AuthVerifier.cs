@@ -187,8 +187,10 @@ namespace SmartAccount.Verifiers
 
         /// <summary>
         /// Validates a fixed 32-byte message digest for the ERC-1271 adapter.
-        /// Neo's verifier ABI uses the configured public key and a compact 64-byte
-        /// r||s signature; the core maps the result to ERC-1271's bytes4 magic.
+        /// The signature is either 64-byte EIP-2098 compact (r || yParityAndS)
+        /// or recoverable 65-byte r || s || v. The digest is verified directly;
+        /// it is not hashed a second time. The core maps the result to ERC-1271's
+        /// bytes4 magic.
         /// </summary>
         [Safe]
         public static bool IsValidSignature(UInt160 accountId, ByteString hash, ByteString signature)
@@ -199,22 +201,8 @@ namespace SmartAccount.Verifiers
             ExecutionEngine.Assert(
                 signature != null && (signature.Length == 64 || signature.Length == 65),
                 "Invalid message signature");
-            ByteString compactSignature = signature!;
-            if (signature!.Length == 65)
-            {
-                byte recoveryId = signature[64];
-                ExecutionEngine.Assert(
-                    recoveryId == 0 || recoveryId == 1 || recoveryId == 27 || recoveryId == 28,
-                    "Invalid recovery id");
-                byte[] compact = new byte[64];
-                for (int i = 0; i < 64; i++) compact[i] = signature[i];
-                compactSignature = (ByteString)compact;
-            }
-            return CryptoLib.VerifyWithECDsa(
-                hash,
-                CompressPubKey(pubKey),
-                compactSignature,
-                NamedCurveHash.secp256k1Keccak256);
+            ByteString? recovered = CryptoLib.RecoverSecp256K1(hash, signature!);
+            return recovered is not null && recovered == CompressPubKey(pubKey);
         }
 
         private static byte[] BuildMetaTxStructHash(UInt160 accountId, UserOperation op)

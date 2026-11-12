@@ -187,6 +187,9 @@ namespace SmartAccount.Hooks
             return (UInt160[])StdLib.Deserialize(data!);
         }
 
+        [Safe]
+        public static UInt160[] GetChildHookConfig(UInt160 accountId) => GetHooks(accountId);
+
         /// <summary>
         /// Forwards the pre-execution phase through each configured hook in order.
         /// </summary>
@@ -252,11 +255,19 @@ namespace SmartAccount.Hooks
             try
             {
                 UInt160[] hooks = GetHooks(accountId);
+                // Contract.Call exposes mutable VM containers by reference. Give
+                // every child a fresh result graph so one post-hook cannot change
+                // the value observed by the next hook or by later accounting.
+                ByteString resultSnapshot = StdLib.Serialize(result);
                 for (int i = hooks.Length - 1; i >= 0; i--)
                 {
                     object[] childParams = CloneHookParams(opParams);
                     ByteString snapshot = StdLib.Serialize(childParams);
-                    Contract.Call(hooks[i], "postExecute", CallFlags.All, new object[] { accountId, childParams, result });
+                    Contract.Call(
+                        hooks[i],
+                        "postExecute",
+                        CallFlags.All,
+                        new object[] { accountId, childParams, StdLib.Deserialize(resultSnapshot) });
                     ExecutionEngine.Assert(
                         StdLib.MemoryCompare(snapshot, StdLib.Serialize(childParams)) == 0,
                         "Child hook mutated authenticated operation");

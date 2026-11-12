@@ -63,7 +63,8 @@ its dynamic AddFee, and aggregate events do not encode that intermediate write.
 The independent runtime lane measures a gas failure after Put; it does not prove
 all possible fault schedules.
 
-Measured validation on 2026-10-17 after the helper grew to 281 bytes: **22/22
+Measured validation on 2026-10-30 after the account-recovery hardening moved
+the current script: **22/22
 Python tests PASS**, **real coqc/coqchk PASS**, **69 declarations closed under the
 global context** (29 imported GasSemantics, 21 HelperGasBound, 19 generated
 artifact), 12 enumerated CFG paths and **six valid-definition semantic controls
@@ -88,14 +89,14 @@ datoshi), `F` (pico per datoshi), the conservative universal price bound is:
 
 ```
 helper only:          177005 * E + 71 * S * F
-including initialize: 558542 * E + 71 * S * F
+including initialize: 591350 * E + 71 * S * F
 ```
 
 The actual default fixture has `E=300000`, `S=100000`, `F=10000`; including
-initialization the bound is `238562600000` picoGAS, or `23856260` datoshi.
+initialization the bound is `248405000000` picoGAS, or `24840500` datoshi.
 The independent maxima for execution and storage make this deliberately
-conservative. Actual canonical 39-byte paths measure 19343410 datoshi (missing),
-17264110 (same transaction) and 17756260 (reset). Those measurements are checks,
+conservative. Actual canonical 39-byte paths measure 20327650 datoshi (missing),
+18248350 (same transaction) and 18740500 (reset). Those measurements are checks,
 not the proof oracle. The model also proves admitted size times uint32 storage
 price fits signed Int64 before conversion to BigInteger.
 
@@ -118,7 +119,7 @@ NEF, so `gas_trace.crosscheck_runtime` refused them with `Runtime artifact
 mismatch` and the aggregate gate's helper lane failed closed instead of silently
 passing on stale bytes. No expectation was edited to make that refusal go away.
 
-The lane was re-established on 2026-10-17 by re-running the producer test, which
+The lane was re-established on 2026-10-30 by re-running the producer test, which
 executes the real `ApplicationEngine` against the reviewed NEF it asserts on
 disk:
 
@@ -133,11 +134,11 @@ assertion, which moved every observed offset again, so the producer was re-run a
 second time against the current build. All 9 cases passed and wrote the receipts
 archived as the hermetic fixture
 `formal/refinement/fixtures/helper-gas-runtime-live-receipts.json.gz`
-(SHA256 `2e4aa70b716fe3afcb774963404664be5a87d57b95560e4ae3f6c74f4226b6c7`,
-deterministic gzip), pinning NEF `4e5c8ae0…` / manifest `f7203fd8…` with Neo
+(SHA256 `a1dc30e500cc5f728c9a7da091a1aa57309bed70e18b153d103dbebca84772fd`,
+deterministic gzip), pinning NEF `6c347dac…` / manifest `8b6bd962…` with Neo
 `3.10.1+d10e9cee…` and Neo.VM `3.10.1+004cd607…`. Independent CFG cross-check raw
-totals: absent `193434100000`, same `172641100000`, reset `177562600000`,
-exhausted `139224600000`, zero `172641100000` picoGAS.
+totals: absent `203276500000`, same `182483500000`, reset `187405000000`,
+exhausted `149067000000`, zero `182483500000` picoGAS.
 
 The pre-rename receipts stay archived at
 `formal/refinement/fixtures/helper-gas-runtime-receipts.json.gz`, and

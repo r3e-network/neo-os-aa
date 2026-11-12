@@ -29,15 +29,15 @@ with this digest and verify deployed bytes. An older ABI 2 digest does not
 identify this revision. Historical receipts keep their original values and
 cannot substitute for that new build and readback evidence.
 
-## Current source-built NeoExpress authority validation (2026-10-30)
+## Historical source-built NeoExpress authority validation (2026-10-30)
 
-The current authority-admission revision was rebuilt into a complete source-built
-NeoExpress runtime. The native module build receipt is
+The 2026-10-30 authority-admission revision was rebuilt into a complete
+source-built NeoExpress runtime. The native module build receipt is
 [`smartaccount-native-module-build-20261030-authority.json`](../reports/smartaccount-native-module-build-20261030-authority.json),
 and the successful two-build runner receipt is
 [`smartaccount-native-runner-build-20261030-authority2.json`](../reports/smartaccount-native-runner-build-20261030-authority2.json).
 The earlier failed runner attempt remains recorded separately and is not used as
-current provenance.
+provenance for that revision.
 
 The aggregate receipt is
 [`summary.json`](../reports/smartaccount-native-source-runtime-20261030-authority/summary.json).
@@ -54,9 +54,64 @@ soundness, full NeoVM semantics, compiler refinement, public deployment, or
 public artifact parity. The aggregate therefore keeps
 `fullProtocolConformanceVerified` set to `false`.
 
-## Current extended native matrix (2026-10-30)
+## Final source-built runtime validation (2026-10-31)
 
-The extended source-built matrix is indexed by
+The final native identity and dispatch revision is bound to core
+`0b81b25601ba7e2ec0b0d9b9cb0ab79ed809af03`, node
+`b6bbeaf7deb8e2d821cd6f1ae8cbdb24117d5605`, and NeoExpress
+`59ee6e2d4315133a4521aed600dbe74f5b8ad307`. Two independent clean builds
+produced the same 104 runtime files and 50 dependency packages. The
+source-build receipt is
+[`smartaccount-native-runner-build-20261031.json`](../reports/smartaccount-native-runner-build-20261031.json),
+with SHA-256
+`d0c764fc2cc16f8671b4b3bc6548005a5b7a14eee9a1c8f339fd7b2f387f719d`.
+It records `runtimeByteIdentical: true`, `sourceInputsUnchanged: true`,
+`compilerRefinementProven: false`, and `publicNetworksTouched: false`.
+
+The aggregate source-runtime receipt is
+[`summary.json`](../reports/smartaccount-native-source-runtime-20261031-final/summary.json).
+All five matrices pass against that exact runtime: native service lifecycle,
+signed proxy and atomic rollback, configuration-root mutation, authority
+recovery, and activation-boundary validation. The runtime file map matched
+before and after every matrix, every owned node stopped, and the aggregate
+retains `fullProtocolConformanceVerified: false`.
+
+This supersedes the 2026-10-30 authority receipt as current provenance only.
+The earlier receipt remains historical evidence for its recorded source set.
+The final run exercises the renamed `SmartAccount` native contract at
+`0x398dc3f0227d7efac5533ed5ce9937390c158084` with profile digest
+`ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a`.
+It does not establish public deployment parity, full protocol conformance,
+compiler or NeoVM refinement, cryptographic soundness, arbitrary-plugin
+liveness, hosted Web3Auth ceremony, or MultiSig private-key independence.
+
+The final extended matrix is indexed by
+[`index.json`](../reports/smartaccount-native-extended-matrix-20261031-final/index.json).
+The six native modules were rebuilt twice with pinned `nccs` 3.9.1 after the
+final native identity change. The module receipt is
+[`smartaccount-native-module-build-20261031-final.json`](../reports/smartaccount-native-module-build-20261031-final.json);
+it pins 30 repository inputs, 13 packaged artifacts, the current profile
+digest, and the same compiler and framework archive used by prior native runs.
+
+All five extended matrices pass against the final runtime and module build:
+
+- MultiSig composition: 87 persisted executions;
+- SessionKey execution: 53 persisted executions;
+- SessionScope: 46 persisted executions;
+- DailyLimit fixed and rolling accounting: 116 persisted executions; and
+- TokenRestrictedHook policy: 64 persisted executions.
+
+Each receipt records `publicNetworksTouched: false`,
+`runtimeFilesMatched: true`, `ownedNodesStopped: true`, and the same source-build
+and module-build receipt hashes. The scopes remain scenario-specific. DailyLimit
+does not establish arbitrary-token honesty or complete compiler refinement;
+TokenRestrictedHook uses test-only router delegation; SessionKey and SessionScope
+do not establish cryptographic or compiler soundness; MultiSig does not establish
+private-key independence or arbitrary topology.
+
+## Historical extended native matrix (2026-10-30)
+
+The earlier extended source-built matrix is indexed by
 [`index.json`](../reports/smartaccount-native-extended-matrix-20261030-authority/index.json).
 It records `PASS` for five additional private NeoExpress scenarios:
 
@@ -70,8 +125,8 @@ It records `PASS` for five additional private NeoExpress scenarios:
 
 The accompanying packaging receipt covers the six shipped native profiles:
 `NeoNativeVerifier`, `WhitelistHook`, `SessionKeyVerifier`, `DailyLimitHook`,
-`TokenRestrictedHook`, and `MultiSigVerifier`. Every matrix is bound to the
-current source-built runner and module-build receipts, preserves runtime-file
+`TokenRestrictedHook`, and `MultiSigVerifier`. Every matrix is bound to that
+revision's source-built runner and module-build receipts, preserves runtime-file
 parity, stops its owned nodes, and records `publicNetworksTouched: false`.
 This is scenario evidence for the native protocol boundary. It does not close
 cryptographic correctness, arbitrary-plugin liveness, full NeoVM semantics,

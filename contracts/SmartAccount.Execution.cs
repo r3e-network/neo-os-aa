@@ -24,6 +24,9 @@ namespace SmartAccount
         // datoshi is 10 GAS, the maximum resource budget for each verifier callback,
         // including nested verifier calls; NeoVM enforces the ancestor budget transitively.
         private const long VerifierGasLimit = 1_000_000_000;
+        private const long ModuleMaintenanceGasLimit = 250_000_000;
+        // A root and its maximum of ten separately bounded leaf cleanups share this parent envelope.
+        private const long RootModuleMaintenanceGasLimit = 11 * ModuleMaintenanceGasLimit;
 
         // System.Contract.CallWithGasLimit is a platform syscall that no published
         // Neo.SmartContract.Framework declares, so this contract declares it. The attribute
@@ -34,6 +37,24 @@ namespace SmartAccount
             public static extern object CallWithGasLimit(
                 UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);
         }
+
+        private static object CallModuleWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            PlatformSyscalls.CallWithGasLimit(scriptHash, method, flags, ModuleMaintenanceGasLimit, args);
+        private static object CallRootWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            PlatformSyscalls.CallWithGasLimit(scriptHash, method, flags, RootModuleMaintenanceGasLimit, args);
+
+        private static object CallVerifierWithGasLimit(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            PlatformSyscalls.CallWithGasLimit(scriptHash, method, flags, VerifierGasLimit, args);
+#else
+        private static object CallModuleWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            Contract.Call(scriptHash, method, flags, args);
+        private static object CallRootWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            Contract.Call(scriptHash, method, flags, args);
 #endif
 
         // ========================================================================
@@ -133,7 +154,7 @@ namespace SmartAccount
                     {
                         object[] hookParams = BuildHookOperationParams(op, executionArgs);
                         ByteString hookSnapshot = StdLib.Serialize(hookParams);
-                        Contract.Call(
+                        CallModuleWithMaintenanceBudget(
                             state.HookId,
                             "preExecute",
                             CallFlags.All,
@@ -162,7 +183,7 @@ namespace SmartAccount
                     {
                         object[] hookParams = BuildHookOperationParams(op, executionArgs);
                         ByteString hookSnapshot = StdLib.Serialize(hookParams);
-                        Contract.Call(
+                        CallModuleWithMaintenanceBudget(
                             state.HookId,
                             "postExecute",
                             CallFlags.All,
@@ -366,6 +387,7 @@ namespace SmartAccount
             ExecutionEngine.Assert(op != null, "Operation required");
             ExecutionEngine.Assert(op!.TargetContract != null && op.TargetContract != UInt160.Zero && op.TargetContract.IsValid,
                 "Target contract required");
+            AssertTargetIsNotProtocolOwned(op.TargetContract);
             ExecutionEngine.Assert(op.Method != null && op.Method.Length > 0 && op.Method.Length <= MaxUserOperationMethodLength,
                 "Invalid method");
             ExecutionEngine.Assert(op.Args != null && op.Args.Length <= MaxUserOperationArgsLength,
@@ -385,6 +407,38 @@ namespace SmartAccount
             ExecutionEngine.Assert(op.Signature != null, "Signature required");
             ExecutionEngine.Assert(op.Signature!.Length <= MaxUserOperationSignatureLength,
                 "Signature exceeds protocol limit");
+        }
+
+        /// <summary>
+        /// Refuses operations whose target would be changed by the core's own identity.
+        /// </summary>
+        /// <remarks>
+        /// One core contract backs every virtual account, so a target always observes the same
+        /// <c>Runtime.CallingScriptHash</c> regardless of which account authorized the operation.
+        /// Protocol-management contracts act on their caller: <c>ContractManagement.update</c>
+        /// upgrades the calling contract and <c>destroy</c> removes it, while
+        /// <c>RoleManagement</c> and <c>PolicyContract</c> grant roles and network-wide policy.
+        /// Routing an operation to them would therefore let any single account owner rewrite or
+        /// destroy the shared core, or act as the core in protocol governance. Asset and utility
+        /// natives stay reachable because an account legitimately transfers NEO and GAS and reads
+        /// through <c>StdLib</c>/<c>CryptoLib</c>; those contracts never mutate state on their
+        /// caller's behalf. The core is excluded too so no operation can re-enter it with the
+        /// core as its own target.
+        /// </remarks>
+        private static void AssertTargetIsNotProtocolOwned(UInt160 target)
+        {
+            ExecutionEngine.Assert(target != Runtime.ExecutingScriptHash,
+                "Operation target cannot be the account core");
+            ExecutionEngine.Assert(target != ContractManagement.Hash,
+                "Operation target cannot be ContractManagement");
+            ExecutionEngine.Assert(target != RoleManagement.Hash,
+                "Operation target cannot be RoleManagement");
+            ExecutionEngine.Assert(target != Policy.Hash,
+                "Operation target cannot be Policy");
+            ExecutionEngine.Assert(target != Ledger.Hash,
+                "Operation target cannot be Ledger");
+            ExecutionEngine.Assert(target != Oracle.Hash,
+                "Operation target cannot be Oracle");
         }
 
         /// <summary>

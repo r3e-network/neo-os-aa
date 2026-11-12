@@ -53,8 +53,8 @@ const descriptor = (method) => ({
 });
 
 function assertCandidateEvidence(bytes = candidateBytes) {
-  const compatibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-candidate-compatibility-20261013.json')));
-  const reproducibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-artifact-reproducibility-20261013.json')));
+  const compatibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-candidate-compatibility-20261030.json')));
+  const reproducibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-artifact-reproducibility-20261031.json')));
   const manifestReceipt = reproducibility.profiles.v3.artifacts.filter((entry) => entry.artifact === 'SmartAccountV3.manifest.json');
   assert.equal(manifestReceipt.length, 1);
   assert.equal(reproducibility.release_matches_fresh_build, true);

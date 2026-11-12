@@ -48,6 +48,20 @@ framework. The script defines `PLATFORM` only in a disposable copy of the execut
 The two-profile reproducibility gate compares both output directories; byte identity alone
 does not establish runtime support or deployment parity.
 
+For private NeoExpress validation, `scripts/neoexpress_validate.py` deploys the core from
+`bin/platform` and the modules from `bin/v3`, and records the profile of every deployment.
+The provenance join independently selects the same profile; a public-core receipt cannot be
+joined to bounded-callback evidence. Set `NEOOS_NEOXP` to a source-built runner that registers
+`System.Contract.CallWithGasLimit` under `HF_SmartAccountV1`; an ordinary published `neoxp`
+does not satisfy this runtime requirement.
+
+For release-grade runner provenance, pass
+`--runtime-build-receipt <PASS-runner-build.json> --runtime-dir <complete-runtime-dir>`.
+The validator invokes `dotnet <runtime-dir>/neoxp.dll`, verifies the receipt's complete
+runtime file map before and after the chain run, and records only the build-receipt,
+`neoxp.dll`, runtime-file-count and wrapper hashes in the NeoExpress receipt. No host
+path is written to the evidence.
+
 Native modules are built separately by `scripts/build_native_modules.py`. Its
 six projects obey the same root `Directory.Build.props`, `nuget.config` and
 reviewed per-project locks; a missing or changed lock is a build failure. The

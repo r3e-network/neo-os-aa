@@ -131,6 +131,147 @@ public class ExecuteUserOpRuntimeTests
     }
 
     [TestMethod]
+    [DataRow("updateVerifier")]
+    [DataRow("updateHook")]
+    [DataRow("setMetadataUri")]
+    [DataRow("initiateEscape")]
+    public void ExecuteUserOp_TargetCannotReenterAccountConfiguration(string method)
+    {
+        WalletHarness h = new();
+        UInt160 accountId = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+        UInt160 newModule = method == "updateHook"
+            ? h.Fx.Deploy("hooks/WhitelistHook", h.Wallet.ToArray())
+            : h.Core;
+        object?[] configArgs = method switch
+        {
+            "updateVerifier" => new object?[] { accountId, newModule, Array.Empty<byte>() },
+            "updateHook" => new object?[] { accountId, newModule },
+            "setMetadataUri" => new object?[] { accountId, "https://attacker.invalid" },
+            _ => new object?[] { accountId },
+        };
+        h.Fx.Engine.SetTransactionSigners(new Signer
+        {
+            Account = BackupOwner,
+            Scopes = WitnessScope.CustomContracts,
+            AllowedContracts = new[] { h.Wallet },
+        });
+        object[] op = RuntimeFixture.UserOp(h.Core, "forward",
+            new object?[] { h.Wallet, method, configArgs },
+            BigInteger.Zero, h.Fx.Now() + 60_000, Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() => h.ExecuteUserOp(accountId, op));
+        StringAssert.Contains(rejected.Message, "Account configuration context active");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, 0));
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getHook", accountId));
+        Assert.AreEqual(string.Empty, h.Fx.Call(h.Wallet, "getMetadataUri", accountId).GetString());
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", accountId));
+
+        h.Fx.CallVoid(h.Wallet, method, configArgs);
+        if (method == "updateVerifier")
+            Assert.AreEqual(newModule, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        else if (method == "updateHook")
+            Assert.AreEqual(newModule, h.Fx.CallUInt160(h.Wallet, "getHook", accountId));
+        else if (method == "setMetadataUri")
+            Assert.AreEqual("https://attacker.invalid", h.Fx.Call(h.Wallet, "getMetadataUri", accountId).GetString());
+        else
+            Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+    }
+
+    [TestMethod]
+    public void ExecuteUserOp_TargetCannotConfigureAnotherAccountWithSharedOwnerWitness()
+    {
+        WalletHarness h = new();
+        UInt160 accountA = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+        UInt160 accountB = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds + 1);
+        object?[] configArgs = { accountB, h.Core, Array.Empty<byte>() };
+        h.Fx.Engine.SetTransactionSigners(new Signer
+        {
+            Account = BackupOwner,
+            Scopes = WitnessScope.CustomContracts,
+            AllowedContracts = new[] { h.Wallet },
+        });
+        object[] op = RuntimeFixture.UserOp(h.Core, "forward",
+            new object?[] { h.Wallet, "updateVerifier", configArgs },
+            BigInteger.Zero, h.Fx.Now() + 60_000, Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() => h.ExecuteUserOp(accountA, op));
+        StringAssert.Contains(rejected.Message, "Account configuration context active");
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountB));
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountA, 0));
+
+        h.Fx.CallVoid(h.Wallet, "updateVerifier", configArgs);
+        Assert.AreEqual(h.Core, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountB));
+    }
+
+    [TestMethod]
+    [DataRow("registerAccount")]
+    [DataRow("registerAccounts")]
+    public void ExecuteUserOp_TargetCannotRegisterAnotherAccountWithSharedOwnerWitness(string method)
+    {
+        WalletHarness h = new();
+        UInt160 accountA = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+        uint registrationTimelock = EscapeTimelockSeconds + 2;
+        UInt160 accountC = h.Fx.CallUInt160(h.Wallet, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, BackupOwner, registrationTimelock);
+        object?[] configArgs = method == "registerAccount"
+            ? new object?[] { accountC, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, BackupOwner, registrationTimelock }
+            : new object?[]
+            {
+                new object?[] { accountC }, UInt160.Zero, new object?[] { Array.Empty<byte>() },
+                UInt160.Zero, BackupOwner, registrationTimelock
+            };
+        h.Fx.Engine.SetTransactionSigners(new Signer
+        {
+            Account = BackupOwner,
+            Scopes = WitnessScope.CustomContracts,
+            AllowedContracts = new[] { h.Wallet },
+        });
+        object[] op = RuntimeFixture.UserOp(h.Core, "forward",
+            new object?[] { h.Wallet, method, configArgs },
+            BigInteger.Zero, h.Fx.Now() + 60_000, Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() => h.ExecuteUserOp(accountA, op));
+        StringAssert.Contains(rejected.Message, "Account configuration context active");
+        TestException missing = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallUInt160(h.Wallet, "getBackupOwner", accountC));
+        StringAssert.Contains(missing.Message, "Account not found");
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountA, 0));
+
+        h.Fx.CallVoid(h.Wallet, method, configArgs);
+        Assert.AreEqual(BackupOwner, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", accountC));
+    }
+
+    [TestMethod]
+    public void ExecuteUserOp_NestedAccountCleanupCannotClearOuterConfigurationDepth()
+    {
+        WalletHarness h = new();
+        UInt160 accountA = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+        UInt160 accountB = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds + 1);
+        BigInteger deadline = h.Fx.Now() + 60_000;
+        object[] innerOp = h.TransferOp(accountB, BigInteger.Zero, deadline);
+        object?[] updateA = { accountA, h.Core, Array.Empty<byte>() };
+        h.Fx.SetSigners(BackupOwner);
+        object[] outerOp = RuntimeFixture.UserOp(h.Core, "forwardAfter",
+            new object?[]
+            {
+                h.Wallet, "executeUserOp", new object?[] { accountB, innerOp },
+                h.Wallet, "updateVerifier", updateA
+            },
+            BigInteger.Zero, deadline, Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() => h.ExecuteUserOp(accountA, outerOp));
+        StringAssert.Contains(rejected.Message, "Account configuration context active");
+        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountA));
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountA, 0));
+        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountB, 0));
+
+        h.Fx.CallVoid(h.Wallet, "updateVerifier", updateA);
+        Assert.AreEqual(h.Core, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountA));
+    }
+
+    [TestMethod]
     public void ExecuteUserOp_WrongOwnerScopeDoesNotConsumeNonceOrLeaveAuthority()
     {
         WalletHarness h = new();

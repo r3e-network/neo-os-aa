@@ -15,17 +15,20 @@ fi
 # compiled with anything but the pinned nccs package are not the pinned build.
 node "$ROOT_DIR/scripts/check_neo_platform_packages.mjs" --compiler-only
 
-# nccs 3.9.1 does not read MSBuild DefineConstants. Define PLATFORM in a disposable
-# source copy; never mutate the public sources or write private bytes to bin/v3.
+# nccs 3.9.1 does not read MSBuild DefineConstants, and C# #define directives are
+# file-scoped. Define PLATFORM in every disposable source copy; never mutate the
+# public sources or write private bytes to bin/v3.
 if [[ "${1:-}" == "--platform" ]]; then
   profile_dir="$(mktemp -d "${TMPDIR:-/tmp}/aa-platform.XXXXXX")"
   trap 'rm -rf "$profile_dir"' EXIT
   mkdir -p "$profile_dir/contracts"
   cp "$ROOT_DIR/Directory.Build.props" "$ROOT_DIR/nuget.config" "$profile_dir/"
-  cp "$ROOT_DIR"/contracts/*.cs "$ROOT_DIR/contracts/SmartAccount.csproj" \
-    "$ROOT_DIR/contracts/packages.lock.json" "$profile_dir/contracts/"
-  { printf '#define PLATFORM\n'; cat "$ROOT_DIR/contracts/SmartAccount.Execution.cs"; } \
-    > "$profile_dir/contracts/SmartAccount.Execution.cs"
+  cp "$ROOT_DIR/contracts/SmartAccount.csproj" "$ROOT_DIR/contracts/packages.lock.json" \
+    "$profile_dir/contracts/"
+  for source in "$ROOT_DIR"/contracts/*.cs; do
+    { printf '#define PLATFORM\n'; cat "$source"; } \
+      > "$profile_dir/contracts/$(basename "$source")"
+  done
   cd "$profile_dir/contracts"
   "$NCCS_BIN" SmartAccount.csproj -o "$ROOT_DIR/contracts/bin/platform"
   exit 0

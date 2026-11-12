@@ -11,10 +11,11 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent
-# 20261013 receipt pins pre-timeout-fix proof-runner bytes; the 20261015 run
-# rebinds the identical certificate to the current tool bytes (coqchk/coqc
-# budget raised 2026-10-15 after loaded-host timeouts).
-DEFAULT_REPORT = ROOT.parent.parent / "docs/reports/aa-method-refinement-20261015/host/method-proof.json"
+# The checked-in fixture contains the current complete-helper certificate,
+# current semantic model copies and a path-free receipt.  It is copied from a
+# fresh current-NEF run, so the composition lane never depends on a historical
+# helper or a host-specific kernel directory.
+DEFAULT_REPORT = ROOT / "fixtures/current-method-proof/method-proof.json"
 
 
 class CompositionProofTests(unittest.TestCase):

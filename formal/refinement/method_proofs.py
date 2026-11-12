@@ -21,7 +21,7 @@ import nef_decode
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
-START, END = 13557, 13838
+START, END = 17762, 18043
 METHOD = "SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
 LIMIT = 1 << 255
 ERROR = b"Reimbursement exceeds actual gas cost"
@@ -39,6 +39,20 @@ def require(condition, message):
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def repo_relative_hashes(hashes):
+    """Keep stable repository identities without leaking host paths."""
+    result = {}
+    root = REPO.resolve()
+    for path, expected in hashes.items():
+        candidate = Path(path).resolve()
+        try:
+            relative = candidate.relative_to(root)
+        except ValueError:
+            continue
+        result[relative.as_posix()] = expected
+    return result
 
 
 def bind_method(inventory):
@@ -130,7 +144,7 @@ def execute(program, *, requested, system_fee, network_fee, tx_hash, stored, max
     effects, pcs = [], []
     storage, pc, status, result, error = stored, 0, "RUNNING", None, None
     context = object()
-    static_values = {34: bytearray(b"\x21")} if static_values is None else static_values
+    static_values = {38: bytearray(b"\x21")} if static_values is None else static_values
 
     def pop():
         if not stack:
@@ -386,7 +400,7 @@ Ltac drive sf nf q r Heq Hstatic := repeat (first [ progress norm
    end
  ]).
 Theorem vm_same_hash_classified : forall hash old sf nf q r kind static_values,
- static_values 34%nat = Some (VBuffer [33%nat]) ->
+ static_values 38%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q r ->
  integer_fits (r + charge_expression (sf+nf) q r) ->
  bytes_eqb old hash = true ->
@@ -409,7 +423,7 @@ Proof.
 Qed.
 Print Assumptions vm_same_hash_classified.
 Theorem vm_different_hash_classified : forall hash old sf nf q r kind static_values,
- static_values 34%nat = Some (VBuffer [33%nat]) ->
+ static_values 38%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  bytes_eqb old hash = false ->
@@ -438,7 +452,7 @@ Print Assumptions vm_different_hash_classified.
 
 VM_PROOFS += r"""
 Theorem vm_absent_classified : forall hash sf nf q static_values,
- static_values 34%nat = Some (VBuffer [33%nat]) ->
+ static_values 38%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q VNull static_values)) =
@@ -489,7 +503,7 @@ Qed.
 Print Assumptions source_method_classified.
 Theorem vm_method_classified : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 34%nat = Some (VBuffer [33%nat]) ->
+ static_values 38%nat = Some (VBuffer [33%nat]) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  contract_observation hash sf nf q input.
 Proof.
@@ -512,7 +526,7 @@ Proof.
 Qed.
 Theorem complete_helper_reference_refinement : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 34%nat = Some (VBuffer [33%nat]) ->
+ static_values 38%nat = Some (VBuffer [33%nat]) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  observe (run_source 48 source (initial_source hash sf nf q (stored_value input))).
 Proof. intros. rewrite vm_method_classified by assumption.
@@ -520,7 +534,7 @@ Proof. intros. rewrite vm_method_classified by assumption.
 
 Theorem complete_helper_no_fault_or_timeout : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 34%nat = Some (VBuffer [33%nat]) ->
+ static_values 38%nat = Some (VBuffer [33%nat]) ->
  exists s, (exists result, run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Halt result s)
         \/ (exists message, run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Aborted message s).
 Proof.
@@ -534,7 +548,7 @@ Proof.
 Qed.
 Theorem complete_helper_paid_exhaustion_aborts : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 34%nat = Some (VBuffer [33%nat]) ->
+ static_values 38%nat = Some (VBuffer [33%nat]) ->
  0 < sf+nf -> sf+nf <= effective_reserved hash input ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  Rejected method_error (stored_value input) (input_trace input).
@@ -547,7 +561,7 @@ Proof.
  rewrite E, Z.max_r by lia. rewrite Z.min_r by lia. reflexivity.
 Qed.
 
-Definition reviewed_statics (slot : nat) := if Nat.eqb slot 34 then Some (VBuffer [33%nat]) else None.
+Definition reviewed_statics (slot : nat) := if Nat.eqb slot 38 then Some (VBuffer [33%nat]) else None.
 Example actual_nonempty_success :
  observe (run_vm 130 artifact (initial_vm (repeat 1%nat 32) 50 10 90 VNull reviewed_statics)) =
  Returned (VInt 60) (VWire ArrayKind [VBytes (repeat 1%nat 32);VInt 60])
@@ -608,12 +622,12 @@ def semantic_controls(program, projection, work):
     """
     import copy
     mutants = []
-    for name, offset, opcode in [("MinToMax", 13687, 0xba),
-                                 ("ReverseAssertBranch", 13692, 0x26),
+    for name, offset, opcode in [("MinToMax", 17892, 0xba),
+                                 ("ReverseAssertBranch", 17897, 0x26),
                                  # The drop after the reservation write: replacing it with a
                                  # duplicate leaves the written value on the stack, so the
                                  # helper no longer halts with a single result.
-                                 ("DropReservationWrite", 13817, 0x4a)]:
+                                 ("DropReservationWrite", 18022, 0x4a)]:
         mutated = copy.deepcopy(program)
         mutated["bytes"][offset-START] = opcode
         mutants.append((name, mutated, projection))
@@ -646,7 +660,8 @@ def semantic_controls(program, projection, work):
                 not any(marker in failure for marker in ("Syntax error", "Cannot find", "not found", "Anomaly")),
                 "Semantic mutant was not rejected: " + name + "; see " + str(reject_log))
         reports.append(dict(name=name, definitionsCompiled=True, certificateRejected=True,
-                            definitionsSha256=digest(definitions.encode()), log=str(reject_log)))
+                            definitionsSha256=digest(definitions.encode()), log=reject_log.name,
+                            logSha256=digest(reject_log.read_bytes())))
     return reports
 
 
@@ -654,7 +669,7 @@ def run_proofs(inventory, output_dir, controls=False):
     from method_source import project_method
     require(shutil.which("coqc") and shutil.which("coqchk"), "coqc and coqchk are required")
     tool_paths = [ROOT / name for name in ("method_proofs.py", "method_source.py", "nef_decode.py", "verify.py")]
-    tool_hashes = {str(path):digest(path.read_bytes()) for path in tool_paths}
+    tool_hashes = {path.name:digest(path.read_bytes()) for path in tool_paths}
     bound = bind_method(inventory)
     projection = project_method(inventory)
     output = Path(output_dir)
@@ -700,26 +715,28 @@ def run_proofs(inventory, output_dir, controls=False):
         require(digest((ROOT / "coq" / (module + ".v")).read_bytes()) == expected,
                 "Semantic model changed during kernel verification")
     for path, expected in tool_hashes.items():
-        require(digest(Path(path).read_bytes()) == expected, "Proof tool changed during verification: " + path)
+        require(digest((ROOT / path).read_bytes()) == expected, "Proof tool changed during verification: " + path)
     return dict(scope="complete-helper-reference-refinement", kernelChecked=True,
                 referenceRefinementVerified=True, fullImplementationVerified=False,
                 methodRange=[START, END], byteCount=len(bound["bytes"]), instructionCount=len(bound["instructions"]),
                 nefSha256=bound["nefSha256"], scriptSha256=bound["scriptSha256"], methodSha256=bound["methodSha256"],
-                manifestSha256=bound["manifestSha256"], inputSha256=bound["inputSha256"],
+                manifestSha256=bound["manifestSha256"],
+                inputSha256=repo_relative_hashes(bound["inputSha256"]),
                 sourceProjectionSha256=projection["sourceProjectionSha256"],
                 sourceTreeSha256=projection["sourceTreeSha256"], certificateSha256=digest(certificate.encode()),
                 modelSha256=model_hashes, toolInputSha256=tool_hashes,
                 inventorySha256=digest(json.dumps(inventory, sort_keys=True, separators=(",", ":")).encode()),
-                kernelDirectory=str(work), coqchkLog=str(kernel_log),
-                assumptionDeclarations=declarations, closedAssumptionCount=closed_count, assumptionsLog=str(assumptions_log),
+                coqchkSha256=digest(kernel_log.read_bytes()),
+                assumptionDeclarations=declarations, closedAssumptionCount=closed_count,
+                assumptionsSha256=digest(assumptions_log.read_bytes()),
                 theoremNames=THEOREM_NAMES, nativeTokenContracts={str(i):inventory["nef"]["tokens"][i] for i in (3,4)},
                 traceProjection=["Storage.Get", "StdLib.Deserialize", "StdLib.Serialize(snapshot)", "Storage.Put(snapshot)"],
                 pureStableNonfaultingGetters=["GetScriptContainer", "GetContext"],
                 sourceDialect=projection["dialect"], environmentContracts=projection["frameworkContracts"],
-                staticEntryInvariant="Static slot 34 is Buffer[0x21]; _initialize is outside this theorem",
+                staticEntryInvariant="Static slot 38 is Buffer[0x21]; _initialize is outside this theorem",
                 excludedCorrespondence=["actual ApplicationEngine and resource/gas behavior", "native binary codec",
                                         "Roslyn/compiler/source frontend correctness", "arbitrary CLR reference equality",
-                                        "caller reachability and typed persisted-storage invariant", "all 100 public ABI entrypoints"],
+                                        "caller reachability and typed persisted-storage invariant", "all 105 public ABI entrypoints"],
                 semanticControls=control_results)
 
 

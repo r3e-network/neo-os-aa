@@ -11,13 +11,6 @@ function decodeBase64ToUtf8(value) {
   return globalThis.atob ? globalThis.atob(value) : '';
 }
 
-function decodeBase64ToHex(value) {
-  if (!value) return '';
-  if (typeof Buffer !== 'undefined') return Buffer.from(value, 'base64').toString('hex').toLowerCase();
-  const binary = globalThis.atob ? globalThis.atob(value) : '';
-  return Array.from(binary, (char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-}
-
 export function isMatrixDomain(value = '') {
   return String(value || '').trim().toLowerCase().endsWith(MATRIX_SUFFIX);
 }
@@ -27,22 +20,6 @@ export function normalizeMatrixDomain(value = '') {
   if (!normalized) return '';
   if (!normalized.endsWith(MATRIX_SUFFIX)) normalized += MATRIX_SUFFIX;
   return normalized;
-}
-
-function decodeAddressArray(item) {
-  if (!item || item.type !== 'Array' || !Array.isArray(item.value)) return [];
-  return item.value.map((entry) => {
-    let rawHex = '';
-    if (entry.type === 'Hash160' && entry.value) rawHex = sanitizeHex(entry.value);
-    if (entry.type === 'ByteString' && entry.value) rawHex = sanitizeHex(decodeBase64ToHex(entry.value));
-    if (!rawHex) return null;
-    try {
-      return getAddressFromScriptHash(sanitizeHex(reverseHex(rawHex)));
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('[matrixDomainService] getAddressFromScriptHash failed:', e?.message);
-      return null;
-    }
-  }).filter(Boolean);
 }
 
 async function invokeRead({ rpcUrl, scriptHash, operation, args = [], fetchImpl } = {}) {
@@ -82,29 +59,6 @@ export async function resolveMatrixDomain(domain, { rpcUrl = RUNTIME_CONFIG.rpcU
   // target. Validate the Base58 checksum before passing it to an invocation.
   getScriptHashFromAddress(decoded);
   return decoded;
-}
-
-export async function discoverAccountsForMatrixDomain(domain, { rpcUrl = RUNTIME_CONFIG.rpcUrl, aaContractHash = RUNTIME_CONFIG.abstractAccountHash, matrixContractHash = RUNTIME_CONFIG.matrixContractHash } = {}) {
-  const normalized = normalizeMatrixDomain(domain);
-  const ownerAddress = await resolveMatrixDomain(normalized, { rpcUrl, matrixContractHash });
-  if (!ownerAddress) {
-    return { domain: normalized, ownerAddress: '', accountAddresses: [] };
-  }
-  const ownerScriptHash = getScriptHashFromAddress(ownerAddress);
-  const adminResult = await invokeRead({
-    rpcUrl,
-    scriptHash: sanitizeHex(aaContractHash),
-    operation: 'getAccountAddressesByAdmin',
-    args: [{ type: 'Hash160', value: `0x${sanitizeHex(ownerScriptHash)}` }],
-  });
-  const managerResult = await invokeRead({
-    rpcUrl,
-    scriptHash: sanitizeHex(aaContractHash),
-    operation: 'getAccountAddressesByManager',
-    args: [{ type: 'Hash160', value: `0x${sanitizeHex(ownerScriptHash)}` }],
-  });
-  const accountAddresses = [...new Set([...decodeAddressArray(adminResult?.stack?.[0]), ...decodeAddressArray(managerResult?.stack?.[0])])];
-  return { domain: normalized, ownerAddress, accountAddresses };
 }
 
 export function buildMatrixRegistrationInvocation(domain, ownerAddress, { matrixContractHash = RUNTIME_CONFIG.matrixContractHash } = {}) {

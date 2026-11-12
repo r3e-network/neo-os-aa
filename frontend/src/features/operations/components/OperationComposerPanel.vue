@@ -29,8 +29,7 @@
       v-if="
         !resolvedContractHash &&
         !targetContract.trim() &&
-        preset !== 'nep17Transfer' &&
-        preset !== 'batchCreate'
+        preset !== 'nep17Transfer'
       "
     />
     <ComposerPresetSelector
@@ -52,17 +51,6 @@
       @update:transfer-recipient="$emit('update:transferRecipient', $event)"
       @update:transfer-amount="$emit('update:transferAmount', $event)"
       @update:transfer-data="$emit('update:transferData', $event)"
-    />
-
-    <ComposerBatchCreateForm
-      v-else-if="preset === 'batchCreate'"
-      :batch-account-ids="batchAccountIds"
-      :batch-signers="batchSigners"
-      :batch-threshold="batchThreshold"
-      :errors="batchCreateErrors"
-      @update:batch-account-ids="$emit('update:batchAccountIds', $event)"
-      @update:batch-signers="$emit('update:batchSigners', $event)"
-      @update:batch-threshold="$emit('update:batchThreshold', $event)"
     />
 
     <div v-else class="grid gap-4 md:grid-cols-3">
@@ -325,7 +313,6 @@ import { useI18n } from "@/i18n";
 import ComposerEmptyState from "./OperationComposerPanel/ComposerEmptyState.vue";
 import ComposerPresetSelector from "./OperationComposerPanel/ComposerPresetSelector.vue";
 import ComposerTransferForm from "./OperationComposerPanel/ComposerTransferForm.vue";
-import ComposerBatchCreateForm from "./OperationComposerPanel/ComposerBatchCreateForm.vue";
 import ComposerSummaryStrip from "./OperationComposerPanel/ComposerSummaryStrip.vue";
 
 defineProps({
@@ -340,9 +327,6 @@ defineProps({
   transferData: { type: String, default: "" },
   multisigTitle: { type: String, default: "" },
   multisigDescription: { type: String, default: "" },
-  batchAccountIds: { type: String, default: "[]" },
-  batchSigners: { type: String, default: "[]" },
-  batchThreshold: { type: String, default: "1" },
   summaryTitle: { type: String, default: "" },
   summaryDetail: { type: String, default: "" },
   contractLookupStatus: { type: String, default: "" },
@@ -388,9 +372,6 @@ defineEmits([
   "update:transferData",
   "update:multisigTitle",
   "update:multisigDescription",
-  "update:batchAccountIds",
-  "update:batchSigners",
-  "update:batchThreshold",
   "select-contract-suggestion",
   "update:parameterValue",
 ]);
@@ -425,48 +406,6 @@ const nep17TransferFieldsValid = computed(() => {
   );
 });
 
-// -- batchCreate validation --
-const batchCreateErrors = computed(() => {
-  const props = getCurrentInstance().props;
-  let batchAccountIdsJsonError = "";
-  let batchSignersJsonError = "";
-  try {
-    const parsed = JSON.parse(props.batchAccountIds || "[]");
-    if (!Array.isArray(parsed))
-      batchAccountIdsJsonError = t(
-        "operations.validationJsonArray",
-        "Must be a valid JSON array",
-      );
-  } catch {
-    batchAccountIdsJsonError = t(
-      "operations.validationJsonArray",
-      "Must be a valid JSON array",
-    );
-  }
-  try {
-    const parsed = JSON.parse(props.batchSigners || "[]");
-    if (!Array.isArray(parsed))
-      batchSignersJsonError = t(
-        "operations.validationJsonArray",
-        "Must be a valid JSON array",
-      );
-  } catch {
-    batchSignersJsonError = t(
-      "operations.validationJsonArray",
-      "Must be a valid JSON array",
-    );
-  }
-  return {
-    batchAccountIds: batchAccountIdsJsonError,
-    batchSigners: batchSignersJsonError,
-  };
-});
-
-const batchCreateFieldsValid = computed(() => {
-  const e = batchCreateErrors.value;
-  return !e.batchAccountIds && !e.batchSigners;
-});
-
 // -- invoke validation --
 const invokeErrors = computed(() => {
   const props = getCurrentInstance().props;
@@ -495,7 +434,6 @@ const invokeFieldsValid = computed(() => {
 const canStage = computed(() => {
   const props = getCurrentInstance().props;
   if (props.preset === "nep17Transfer") return nep17TransferFieldsValid.value;
-  if (props.preset === "batchCreate") return batchCreateFieldsValid.value;
   return invokeFieldsValid.value;
 });
 
@@ -506,10 +444,6 @@ const stageDisabledReason = computed(() => {
     return (
       e.transferTokenScriptHash || e.transferRecipient || e.transferAmount || ""
     );
-  }
-  if (props.preset === "batchCreate") {
-    const e = batchCreateErrors.value;
-    return e.batchAccountIds || e.batchSigners || "";
   }
   const e = invokeErrors.value;
   return e.targetContract || e.method || "";

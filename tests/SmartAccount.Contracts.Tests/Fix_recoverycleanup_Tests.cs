@@ -117,6 +117,10 @@ public class Fix_RecoveryCleanup_Tests
         UInt160 accountId = h.RegisterRecoveryBoundAccount();
         h.SetupRecovery(accountId, morpheusKey);
         h.FundOracleCredit(accountId, OracleCredit);
+        byte[] actionIdentity = new byte[32]; actionIdentity[0] = 0x71;
+        h.Fx.SetSigners(Owner);
+        h.Fx.CallVoid(h.Recovery, "setActionIdentity", accountId, actionIdentity, true);
+        BigInteger epochBefore = h.Fx.CallInteger(h.Recovery, "getActionAuthorizationEpoch", accountId);
         BigInteger ownerBefore = h.Fx.GasBalanceOf(Owner);
         BigInteger verifierBefore = h.Fx.GasBalanceOf(h.Recovery);
 
@@ -137,6 +141,9 @@ public class Fix_RecoveryCleanup_Tests
             "The core must be able to detach the recovery verifier");
         Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "hasPendingVerifierUpdate", accountId));
         h.AssertRecoveryStateCleared(accountId);
+        BigInteger epochAfterClear = h.Fx.CallInteger(h.Recovery, "getActionAuthorizationEpoch", accountId);
+        Assert.IsTrue(epochAfterClear > epochBefore, "clear must advance and retain the action epoch");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Recovery, "isAllowedActionIdentity", accountId, actionIdentity));
 
         // The earmarked oracle GAS goes back to the recovery owner instead of being orphaned.
         Assert.AreEqual(ownerBefore + OracleCredit, h.Fx.GasBalanceOf(Owner), "credit refunded to owner");
@@ -150,6 +157,10 @@ public class Fix_RecoveryCleanup_Tests
             new object?[] { accountId, AccountAddress, (BigInteger)1, null },
             0, h.Fx.Now() + 3_600_000, Array.Empty<byte>());
         Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "executeUserOp", accountId, op));
+        // Same core/raw account/owner setup must not reset authorization generation.
+        h.SetupRecovery(accountId, morpheusKey);
+        Assert.IsTrue(h.Fx.CallInteger(h.Recovery, "getActionAuthorizationEpoch", accountId) > epochAfterClear);
+        Assert.IsFalse(h.Fx.CallBoolean(h.Recovery, "isAllowedActionIdentity", accountId, actionIdentity));
     }
 
     [TestMethod]

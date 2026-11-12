@@ -56,7 +56,7 @@ function createResponse() {
 // genuinely hung upstream behaves behind an AbortController).
 function neverResolvingFetch(calls) {
   return (url, options) => new Promise((resolve, reject) => {
-    calls.push({ url, signal: Boolean(options?.signal) });
+    calls.push({ url, signal: Boolean(options?.signal), redirect: options?.redirect });
     options?.signal?.addEventListener('abort', () => {
       const err = new Error('This operation was aborted');
       err.name = 'AbortError';
@@ -81,11 +81,12 @@ async function withinBudget(promise, ms = 3000) {
 test('L1: apiFetch rejects a stalled upstream with EC_request_timed_out inside the budget', async () => {
   const calls = [];
   await assert.rejects(
-    () => apiFetch('https://upstream.example.invalid', { method: 'POST' }, { fetchImpl: neverResolvingFetch(calls), timeoutMs: 25 }),
+    () => apiFetch('https://upstream.example.invalid', { method: 'POST', redirect: 'follow' }, { fetchImpl: neverResolvingFetch(calls), timeoutMs: 25 }),
     /EC_request_timed_out/,
   );
   assert.equal(calls.length, 1);
   assert.equal(calls[0].signal, true, 'an abort signal is always attached');
+  assert.equal(calls[0].redirect, 'error', 'apiFetch callers cannot re-enable redirect following');
 });
 
 test('L1: the API timeout defaults to the shared default and honors AA_API_FETCH_TIMEOUT_MS', () => {

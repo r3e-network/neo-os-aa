@@ -17,7 +17,7 @@
     "morpheusPaymasterAppId": "ddff154546fe22d15b65667156dd4b7c611e6093",
     "paymasterAccountId": null,
     "skipPaymasterAllowlistUpdate": false,
-    "localPaymasterHandlerPath": "/Users/jinghuiliao/git/neo-morpheus-oracle/workers/phala-worker/src/worker.js",
+    "localPaymasterHandlerPath": "neo-morpheus-oracle/workers/phala-worker/src/worker.js",
     "hasPhalaCli": true,
     "phalaCommand": "phala"
   },

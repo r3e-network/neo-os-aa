@@ -1,0 +1,68 @@
+{
+  "schema": "smartaccount-native-extended-matrix-private/v1",
+  "status": "PASS",
+  "completedAtUtc": "2026-10-31",
+  "publicNetworksTouched": false,
+  "sourceBuildReceiptSha256": "d0c764fc2cc16f8671b4b3bc6548005a5b7a14eee9a1c8f339fd7b2f387f719d",
+  "moduleBuild": {
+    "status": "PASS",
+    "receipt": "../smartaccount-native-module-build-20261031-final.json",
+    "sha256": "2f886723bbf7b5692deda9ed227351790523e9c06eb3a66badc0a1aeaed1e642",
+    "reproducible": true,
+    "compilerVersion": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"
+  },
+  "packaging": {
+    "status": "PASS",
+    "sha256": "181a99789bff274135348d44f756a795e621fae218f0cce2035b40529c47b244",
+    "profileDigest": "ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a",
+    "profiles": [
+      "NeoNativeVerifier",
+      "WhitelistHook",
+      "SessionKeyVerifier",
+      "DailyLimitHook",
+      "TokenRestrictedHook",
+      "MultiSigVerifier"
+    ]
+  },
+  "matrices": {
+    "MultiSig": {
+      "status": "PASS",
+      "receipt": "multisig.json",
+      "sha256": "6aeedeebf24f7c99c5f2ee052f21eceef4b72b95871147e11ebf2309597403df",
+      "persistedExecutions": 87,
+      "scope": "Real P-256 and native witnesses; bounded composite topology and cleanup."
+    },
+    "SessionKey": {
+      "status": "PASS",
+      "receipt": "session.json",
+      "sha256": "2c4ad6c48c406fa9deeaac96a9fb8559e6bb7b86d77bb799efd754ffd7b42d6b",
+      "persistedExecutions": 53,
+      "scope": "Real P-256 session signatures, native GAS transfers and epoch cleanup."
+    },
+    "SessionScope": {
+      "status": "PASS",
+      "receipt": "session-scope.json",
+      "sha256": "24981942095e294059abe6affca05ae1ac461a915570d6b222e50829bb1a9721",
+      "persistedExecutions": 46,
+      "scope": "Zero-cap, exact-method and wildcard binding; explicit key regrant rejects retained signatures while fresh signatures succeed."
+    },
+    "DailyLimit": {
+      "status": "PASS",
+      "receipt": "daily.json",
+      "sha256": "d6ca685506a36a7240a139cacc022e5ebc34c47c8c746aa96ee244ae7bf771de",
+      "persistedExecutions": 116,
+      "scope": "Native GAS accounting, fixed and rolling limits, full-prefix cleanup, hostile balance responses and rollback."
+    },
+    "TokenRestrictedHook": {
+      "status": "PASS",
+      "receipt": "restricted.json",
+      "sha256": "076109e22718e1ba8844b9f1611b4d246ef9f2d9f603f48886ab7acb7ba6e598",
+      "persistedExecutions": 64,
+      "scope": "Direct and indirect restricted-token policy, hostile queries and rollback; test-only router delegation."
+    }
+  },
+  "runtimeFilesMatched": true,
+  "ownedNodesStopped": true,
+  "fullProtocolConformanceVerified": false,
+  "boundary": "Private NeoExpress evidence for the listed scenarios; not cryptographic soundness, arbitrary-plugin liveness, full NeoVM or compiler refinement, MultiSig private-key independence, hosted Web3Auth, or public deployment parity."
+}

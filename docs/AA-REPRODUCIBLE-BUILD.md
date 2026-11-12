@@ -129,6 +129,16 @@ The 2026-10-08 replay matched **80/80** files: **78** under `bin/v3` and **2** u
 `bin/platform`, with no drift or missing artifacts. Exact digests and the profile verdicts
 for the native integration source are in
 [`aa-native-abi2-public-platform-reproducibility-20261008.json`](reports/aa-native-abi2-public-platform-reproducibility-20261008.json).
+The current-source replay on 2026-10-31 again matched **80/80** files with the
+same **78 + 2** profile split, no drift and no missing artifacts. Its certificate
+is
+[`aa-artifact-reproducibility-20261031.json`](reports/aa-artifact-reproducibility-20261031.json);
+the private-chain join is
+[`aa-private-artifact-provenance-20261031.json`](reports/aa-private-artifact-provenance-20261031.json).
+The joined NeoExpress receipt is bound to a reviewed source-runtime build
+(`sourceRuntime`): its 104-file map, source-build receipt, `neoxp.dll` and
+wrapper hashes are checked before and after the private run, with host paths
+excluded from the receipt.
 The NEF carries no
 source path or URL, and the compiler string in its header is `Neo.Compiler.CSharp 3.9.1+5fa9566e...`, so the
 bytes depend only on the sources, the pinned packages and the pinned compiler.

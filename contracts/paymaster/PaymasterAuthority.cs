@@ -83,7 +83,7 @@ namespace SmartAccount
             ExecutionEngine.Assert(pending != null, "No pending core change");
             ByteString? timelockData = Storage.Get(Storage.CurrentContext, Prefix_CoreTimelock);
             ExecutionEngine.Assert(timelockData != null, "No timelock set");
-            ExecutionEngine.Assert(Runtime.Time >= (BigInteger)timelockData + AdminRotationTimelockMs, "Core change timelock not expired");
+            ExecutionEngine.Assert(Runtime.Time >= (BigInteger)timelockData! + AdminRotationTimelockMs, "Core change timelock not expired");
             ExecutionEngine.Assert((UInt160)pending! == coreContract, "Pending core mismatch");
             Storage.Put(Storage.CurrentContext, Prefix_AuthorizedCore, (byte[])coreContract);
             Storage.Delete(Storage.CurrentContext, Prefix_PendingCore);
@@ -128,7 +128,7 @@ namespace SmartAccount
             ExecutionEngine.Assert(pendingManifest != null, "No pending update");
             ByteString? timelockData = Storage.Get(Storage.CurrentContext, Prefix_UpdateTimelock);
             ExecutionEngine.Assert(timelockData != null, "No timelock set");
-            ExecutionEngine.Assert(Runtime.Time >= (BigInteger)timelockData + AdminRotationTimelockMs, "Update timelock not expired");
+            ExecutionEngine.Assert(Runtime.Time >= (BigInteger)timelockData! + AdminRotationTimelockMs, "Update timelock not expired");
             ExecutionEngine.Assert((UInt256)CryptoLib.Sha256(nef) == (UInt256)pendingNef!, "NEF hash mismatch");
             ExecutionEngine.Assert((UInt256)CryptoLib.Sha256(manifest) == (UInt256)pendingManifest!, "Manifest hash mismatch");
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
@@ -159,7 +159,7 @@ namespace SmartAccount
 
             ByteString? timelockData = Storage.Get(Storage.CurrentContext, Prefix_AdminRotationTimelock);
             ExecutionEngine.Assert(timelockData != null, "No timelock set");
-            BigInteger timelockStart = (BigInteger)timelockData;
+            BigInteger timelockStart = (BigInteger)timelockData!;
             ExecutionEngine.Assert(Runtime.Time >= timelockStart + AdminRotationTimelockMs, "Admin rotation timelock not expired");
 
             ExecutionEngine.Assert((UInt160)pending! == newAdmin, "Pending admin mismatch");

@@ -300,4 +300,151 @@ public class PlatformRegistrarRuntimeTests
 
         StringAssert.Contains(exception.Message, "platform registrar not deployed");
     }
+
+    [TestMethod]
+    [DataRow("proposePlatformRegistrar")]
+    [DataRow("confirmPlatformRegistrar")]
+    [DataRow("cancelPlatformRegistrar")]
+    public void ExecuteUserOp_TargetCannotReenterPlatformRegistrarConfiguration(string method)
+    {
+        RuntimeFixture fixture = new();
+        fixture.SetSigners(AppAdmin);
+        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 target = fixture.Deploy("MockVerifierCore");
+        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 accountId = fixture.CallUInt160(
+            wallet,
+            "computeRegistrationAccountId",
+            UInt160.Zero,
+            Array.Empty<byte>(),
+            UInt160.Zero,
+            AppAdmin,
+            EscapeTimelock);
+        fixture.CallVoid(
+            wallet,
+            "registerAccount",
+            accountId,
+            UInt160.Zero,
+            Array.Empty<byte>(),
+            UInt160.Zero,
+            AppAdmin,
+            EscapeTimelock);
+
+        if (method != "proposePlatformRegistrar")
+        {
+            fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
+            if (method == "confirmPlatformRegistrar") fixture.AdvanceTime(TimeSpan.FromDays(7));
+        }
+
+        object?[] configArgs = method == "proposePlatformRegistrar"
+            ? new object?[] { registrar }
+            : Array.Empty<object>();
+        object[] op = RuntimeFixture.UserOp(
+            target,
+            "forward",
+            new object?[] { wallet, method, configArgs },
+            0,
+            fixture.Now() + 60_000,
+            Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() =>
+            fixture.CallVoid(wallet, "executeUserOp", accountId, op));
+        StringAssert.Contains(rejected.Message, "Global configuration context active");
+        Assert.AreEqual(System.Numerics.BigInteger.Zero, fixture.CallInteger(wallet, "getNonce", accountId, 0));
+        Assert.IsFalse(fixture.CallBoolean(wallet, "isExecutionActive", accountId));
+        Assert.AreEqual(UInt160.Zero, fixture.CallUInt160(wallet, "getPlatformRegistrar"));
+        Assert.AreEqual(
+            method == "proposePlatformRegistrar" ? UInt160.Zero : registrar,
+            fixture.CallUInt160(wallet, "getPendingPlatformRegistrar"));
+
+        fixture.CallVoid(wallet, method, configArgs);
+        if (method == "confirmPlatformRegistrar")
+        {
+            Assert.AreEqual(registrar, fixture.CallUInt160(wallet, "getPlatformRegistrar"));
+            Assert.AreEqual(UInt160.Zero, fixture.CallUInt160(wallet, "getPendingPlatformRegistrar"));
+        }
+        else
+        {
+            Assert.AreEqual(
+                method == "proposePlatformRegistrar" ? registrar : UInt160.Zero,
+                fixture.CallUInt160(wallet, "getPendingPlatformRegistrar"));
+        }
+    }
+
+    [TestMethod]
+    [DataRow("confirmRotate")]
+    [DataRow("cancelRotate")]
+    public void ExecuteUserOp_TargetCannotReenterPlatformOwnerRotation(string method)
+    {
+        RuntimeFixture fixture = new();
+        fixture.SetSigners(AppAdmin);
+        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 target = fixture.Deploy("MockVerifierCore");
+        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        byte[] appBinding = System.Text.Encoding.UTF8.GetBytes(
+            "neo-miniapps-platform:reentrant-owner-rotation");
+
+        fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
+        fixture.AdvanceTime(TimeSpan.FromDays(7));
+        fixture.CallVoid(wallet, "confirmPlatformRegistrar");
+        UInt160 accountId = fixture.CallUInt160(
+            registrar,
+            "register",
+            wallet,
+            appBinding,
+            AppAdmin,
+            EscapeTimelock);
+        fixture.CallVoid(registrar, "rotate", wallet, accountId, appBinding, RotatedOwner);
+        fixture.AdvanceTime(TimeSpan.FromDays(7));
+
+        // Both signers are scoped to the core so the inner registrar call can
+        // satisfy the existing backup-owner and proposed-new-owner guards.
+        fixture.Engine.SetTransactionSigners(
+            new Neo.Network.P2P.Payloads.Signer
+            {
+                Account = AppAdmin,
+                Scopes = Neo.Network.P2P.Payloads.WitnessScope.CustomContracts,
+                AllowedContracts = new[] { wallet },
+            },
+            new Neo.Network.P2P.Payloads.Signer
+            {
+                Account = RotatedOwner,
+                Scopes = Neo.Network.P2P.Payloads.WitnessScope.CustomContracts,
+                AllowedContracts = new[] { wallet },
+            });
+        object[] op = RuntimeFixture.UserOp(
+            target,
+            "forward",
+            new object?[]
+            {
+                registrar,
+                method,
+                new object?[] { wallet, accountId, appBinding },
+            },
+            0,
+            fixture.Now() + 60_000,
+            Array.Empty<byte>());
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() =>
+            fixture.CallVoid(wallet, "executeUserOp", accountId, op));
+        StringAssert.Contains(rejected.Message, "Account configuration context active");
+        Assert.AreEqual(AppAdmin, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
+        Assert.AreEqual(
+            Neo.VM.Types.StackItemType.Array,
+            fixture.Call(wallet, "getPendingPlatformAccountOwnerRotation", accountId).Type);
+
+        fixture.SetSigners(RotatedOwner);
+        fixture.CallVoid(registrar, method, wallet, accountId, appBinding);
+        if (method == "confirmRotate")
+        {
+            Assert.AreEqual(RotatedOwner, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
+        }
+        else
+        {
+            Assert.AreEqual(AppAdmin, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
+            Assert.AreEqual(
+                Neo.VM.Types.StackItemType.Any,
+                fixture.Call(wallet, "getPendingPlatformAccountOwnerRotation", accountId).Type);
+        }
+    }
 }

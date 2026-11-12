@@ -1,0 +1,272 @@
+{
+  "scope": "complete-helper-reference-refinement",
+  "kernelChecked": true,
+  "referenceRefinementVerified": true,
+  "fullImplementationVerified": false,
+  "methodRange": [
+    17762,
+    18043
+  ],
+  "byteCount": 281,
+  "instructionCount": 116,
+  "nefSha256": "6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3",
+  "scriptSha256": "b7fa49f95cf7ba5fbc9676de60bc7917331687b6dd6d2dfc52a2fbcee1b95913",
+  "methodSha256": "85958117ca3b431b1bee439f7ab0fedc8e055444efdd797cd3b9efd064a25c84",
+  "manifestSha256": "8b6bd9623ab4ed293ad9b6fda27402aaf3100d0b2a9d5c44658edb7e83fb0c29",
+  "inputSha256": {
+    "contracts/bin/v3/SmartAccountV3.nef": "6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3",
+    "contracts/bin/v3/SmartAccountV3.manifest.json": "8b6bd9623ab4ed293ad9b6fda27402aaf3100d0b2a9d5c44658edb7e83fb0c29"
+  },
+  "sourceProjectionSha256": "73ed29357eb9821297c9c99d27149d081846fd83220ad7b76e88f1596e40a972",
+  "sourceTreeSha256": "6d3754d0c0625aba3393ea58ca6bfbc4a7115deaca8e151c1f32d2b02ddb3bb1",
+  "certificateSha256": "41e94585765a1436be26ad7dd793e63eb0f1bc0e57de67f3b3492a9aeed451af",
+  "modelSha256": {
+    "IntegerSemantics": "b2d8cfb443115bdda59c52abc04022ebd4b0bbea0a13f122f12ec7a0b891425c",
+    "CapArithmetic": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "CapMethodVm": "03beb30a746a5019a543c43a768b891323b72de5bf746ccbe46cdb9b99b1bb14"
+  },
+  "toolInputSha256": {
+    "method_proofs.py": "67b7a70c99accb772171a33ae7596be20f3a28b9e40793e5ea49492e1ebaee3c",
+    "method_source.py": "a4fd7ca807c96d3dbdd5a0b863b589071050bf9d64c289b9e7c3118f0af7052f",
+    "nef_decode.py": "a2044eadec06c0f65bf9fe303dd156b88f54106a76dc7f4afb302b4124e60848",
+    "verify.py": "d1dc8c3df9eb124c27a7d0e87969732280e7ae896bf89914952896638e6e2ec7"
+  },
+  "inventorySha256": "436fbf997f931715996a586c90eff80fdf11a7f36be18b875d23a860b0dd6947",
+  "coqchkSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "assumptionDeclarations": {
+    "IntegerSemantics": [
+      "integer_limit",
+      "integer_fits",
+      "integer_fitsb",
+      "checked_integer",
+      "BinaryOp",
+      "binary_value",
+      "checked_binary",
+      "integer_limit_positive",
+      "integer_fitsb_spec",
+      "checked_integer_in_range",
+      "checked_integer_result_is_representable",
+      "integer_overflow_faults",
+      "signed_maximum_addition_faults",
+      "signed_minimum_subtraction_faults"
+    ],
+    "CapArithmetic": [
+      "cap_domain",
+      "source_charge",
+      "option_bind",
+      "checked_cap",
+      "nonnegative_integer_fits",
+      "cost_minimum",
+      "difference_fits",
+      "remaining_range",
+      "cap_intermediates_representable",
+      "cap_all_inputs_preserved",
+      "paid_charge_bounded"
+    ],
+    "CapMethodVm": [
+      "Kind",
+      "vm_leb",
+      "vm_leb_spec",
+      "Value",
+      "Object",
+      "Effect",
+      "State",
+      "change",
+      "with_stack",
+      "with_local",
+      "with_heap",
+      "with_effect",
+      "with_storage",
+      "allocate",
+      "bytes_eqb",
+      "bytes_eqb_refl",
+      "bytes_eqb_true",
+      "value_eqb",
+      "read_field",
+      "scalar",
+      "write_field",
+      "deserialize",
+      "serialize",
+      "get_storage",
+      "put_storage",
+      "Instruction",
+      "signed_byte",
+      "signed_short",
+      "decode",
+      "Outcome",
+      "jump_target",
+      "vm_step",
+      "run_vm",
+      "run_vm_one_step",
+      "Expr",
+      "Stmt",
+      "bind",
+      "eval_expr",
+      "eval_args",
+      "run_source",
+      "run_source_one_step",
+      "Observation",
+      "observe",
+      "tx_object",
+      "initial_vm",
+      "initial_source",
+      "heap_update_preserves_alias_identity",
+      "native_serialize_reads_updated_fields",
+      "unsupported_instruction_faults",
+      "charge_expression",
+      "charge_expression_refines_charge",
+      "cap_updated_reservation_fits",
+      "method_error",
+      "vm_max",
+      "vm_max_is_top_half",
+      "vm_margin_fits",
+      "margin_error",
+      "classified",
+      "BudgetInput",
+      "stored_value",
+      "input_kind",
+      "effective_reserved",
+      "input_trace",
+      "valid_hash",
+      "valid_budget",
+      "legal_inputs",
+      "contract_observation",
+      "contract_observation_total",
+      "legal_cap_domain",
+      "legal_update_fits",
+      "classified_refines_contract"
+    ],
+    "CapMethodArtifact": [
+      "artifact",
+      "source",
+      "source_present_classified",
+      "source_absent_classified",
+      "vm_same_hash_classified",
+      "vm_different_hash_classified",
+      "vm_absent_classified",
+      "source_method_classified",
+      "vm_method_classified",
+      "complete_helper_reference_refinement",
+      "complete_helper_no_fault_or_timeout",
+      "complete_helper_paid_exhaustion_aborts",
+      "reviewed_statics",
+      "actual_nonempty_success",
+      "actual_zero_estimation_overflow_margin_rejected"
+    ]
+  },
+  "closedAssumptionCount": 111,
+  "assumptionsSha256": "4d22cbaec5b68f8fde358da36b9415732eae22cf7c99bf6a5c240f1b57a966eb",
+  "theoremNames": [
+    "source_present_classified",
+    "source_absent_classified",
+    "vm_same_hash_classified",
+    "vm_different_hash_classified",
+    "vm_absent_classified",
+    "source_method_classified",
+    "vm_method_classified",
+    "complete_helper_reference_refinement",
+    "complete_helper_no_fault_or_timeout",
+    "complete_helper_paid_exhaustion_aborts",
+    "actual_nonempty_success",
+    "actual_zero_estimation_overflow_margin_rejected"
+  ],
+  "nativeTokenContracts": {
+    "3": {
+      "hash": "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0",
+      "method": "serialize",
+      "parametersCount": 1,
+      "hasReturnValue": true,
+      "callFlags": 15
+    },
+    "4": {
+      "hash": "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0",
+      "method": "deserialize",
+      "parametersCount": 1,
+      "hasReturnValue": true,
+      "callFlags": 15
+    }
+  },
+  "traceProjection": [
+    "Storage.Get",
+    "StdLib.Deserialize",
+    "StdLib.Serialize(snapshot)",
+    "Storage.Put(snapshot)"
+  ],
+  "pureStableNonfaultingGetters": [
+    "GetScriptContainer",
+    "GetContext"
+  ],
+  "sourceDialect": "Neo framework immutable-byte equality and ordered scalar record intrinsics; unbounded BigInteger",
+  "environmentContracts": {
+    "transactionFields": {
+      "Hash": 0,
+      "SystemFee": 4,
+      "NetworkFee": 5
+    },
+    "transactionProjection": "Named external Neo transaction intrinsic; framework layout is not exported repository source",
+    "referenceEquality": "Immutable ByteString/UInt256 byte-value equality and null tests in the Neo contract dialect, not CLR object identity",
+    "recordRepresentation": "Source class ordered fields mapped to Neo Array; well-formed deserialized Array/Struct is an explicit precondition",
+    "storageKey": "Source readonly byte array denotes EKey Buffer [33]; initialization-to-static-slot correspondence requires separate evidence",
+    "codec": "StdLib scalar-record serialize/deserialize effect contracts; no native implementation theorem",
+    "zeroUInt256": "Framework UInt256.Zero denotes 32 zero bytes"
+  },
+  "staticEntryInvariant": "Static slot 38 is Buffer[0x21]; _initialize is outside this theorem",
+  "excludedCorrespondence": [
+    "actual ApplicationEngine and resource/gas behavior",
+    "native binary codec",
+    "Roslyn/compiler/source frontend correctness",
+    "arbitrary CLR reference equality",
+    "caller reachability and typed persisted-storage invariant",
+    "all 105 public ABI entrypoints"
+  ],
+  "semanticControls": [
+    {
+      "name": "MinToMax",
+      "definitionsCompiled": true,
+      "certificateRejected": true,
+      "definitionsSha256": "8aee13f5d1a9b2cf1300dd0a899ed18d6135ef2a71fd865eeed7a2127fa43c0d",
+      "log": "MutantMinToMax.log",
+      "logSha256": "cd18c5eb3419110ebfbe1e303082301d00922a55ddeff411512e82b7ee0c363a"
+    },
+    {
+      "name": "ReverseAssertBranch",
+      "definitionsCompiled": true,
+      "certificateRejected": true,
+      "definitionsSha256": "4c427028c1c2129942d917745b81c3eb101bf05f513be8584e561c007657b742",
+      "log": "MutantReverseAssertBranch.log",
+      "logSha256": "f4e8eaa4c8e48ba67776ca44784cadcba9ab16aac241889b6b9022f9a95968dd"
+    },
+    {
+      "name": "DropReservationWrite",
+      "definitionsCompiled": true,
+      "certificateRejected": true,
+      "definitionsSha256": "615889981a4e3de3ec69ddb07c48fe22d2b612d82c397a2f3815d869a6c34c55",
+      "log": "MutantDropReservationWrite.log",
+      "logSha256": "e75987967f46769477d18325fc502d3955d2270e8bd7db035b66cd0ef5346323"
+    },
+    {
+      "name": "SourceReturnsZero",
+      "definitionsCompiled": true,
+      "certificateRejected": true,
+      "definitionsSha256": "d5d4c1da2a691caff4abd9282492c019fa570f5a17ac4fac2bac1e09c02e8f87",
+      "log": "MutantSourceReturnsZero.log",
+      "logSha256": "c46ca6bf94660b9e28de1524b399c57d156474a670654af016782b5a728c3212"
+    },
+    {
+      "name": "SourceInitialReservationOne",
+      "definitionsCompiled": true,
+      "certificateRejected": true,
+      "definitionsSha256": "d53453b65c5c1b81f9c5c595dea6a9166b9861f164a82ab2255268684d2e8724",
+      "log": "MutantSourceInitialReservationOne.log",
+      "logSha256": "ac1fc5b488303dc78738f6a3ce9721c962ba917f2407936c110ae332fd29f2dd"
+    },
+    {
+      "name": "SourceDropsAssert",
+      "definitionsCompiled": true,
+      "certificateRejected": true,
+      "definitionsSha256": "1cd7e34cd89614f6a085b86b210f9da5d8f92d79ead88a5f8ba9c2b4c8a306ca",
+      "log": "MutantSourceDropsAssert.log",
+      "logSha256": "d6e839ab8bd941019c57152d58da58c0465c8bf490935cefcdd0452cade5449e"
+    }
+  ]
+}

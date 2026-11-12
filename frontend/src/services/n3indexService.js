@@ -47,6 +47,7 @@ async function fetchJson(url, { fetchImpl = globalThis.fetch } = {}) {
   const response = await fetchImpl(url, {
     method: "GET",
     headers: { Accept: "application/json" },
+    redirect: "error",
   });
 
   if (!response.ok) {

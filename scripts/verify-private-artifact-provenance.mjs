@@ -203,12 +203,31 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
   if (receipt.network?.publicNetwork !== false || receipt.privacy?.privateKeysIncluded !== false) {
     throw new Error("receipt is not private or contains key material");
   }
+  const runtime = receipt.sourceRuntime;
+  if (!runtime || runtime.sourceBuildStatus !== "PASS" ||
+      runtime.independentCleanBuilds !== 2 ||
+      runtime.runtimeFilesMatchedBefore !== true ||
+      runtime.runtimeFilesMatchedAfter !== true ||
+      runtime.pathsIncluded !== false ||
+      !Number.isInteger(runtime.runtimeFileCount) || runtime.runtimeFileCount <= 0 ||
+      !runtime.sourceCommits ||
+      !["core", "node", "express"].every((key) =>
+        typeof runtime.sourceCommits[key] === "string" &&
+        /^[0-9a-f]{40}$/.test(runtime.sourceCommits[key])) ||
+      typeof runtime.sdk !== "string" || runtime.sdk.trim() === "" ||
+      !/^[0-9a-f]{64}$/.test(runtime.sourceBuildReceiptSha256 ?? "") ||
+      !/^[0-9a-f]{64}$/.test(runtime.neoxpDllSha256 ?? "") ||
+      !/^[0-9a-f]{64}$/.test(runtime.wrapperSha256 ?? "")) {
+    throw new Error("private NeoExpress receipt is not bound to a complete source-built runner");
+  }
 
   const deployments = Object.fromEntries(receipt.deployments.map((row) => [row.contractName, row]));
   const readback = Object.fromEntries(receipt.rpcReadback.contracts.map((row) => [row.contractName, row]));
   const rows = [];
   for (const [name, relative] of Object.entries(LOCAL_ARTIFACTS)) {
-    const nefPath = path.join(releaseRoot, relative);
+    const profile = name === "SmartAccountV3" ? "platform" : "v3";
+    const artifactRoot = profile === "v3" ? releaseRoot : path.join(path.dirname(releaseRoot), profile);
+    const nefPath = path.join(artifactRoot, relative);
     const manifestPath = nefPath.replace(/\.nef$/, ".manifest.json");
     const nef = fs.readFileSync(nefPath);
     const manifest = fs.readFileSync(manifestPath);
@@ -218,6 +237,7 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
     if (!deployed || !chain) throw new Error(`receipt missing ${name}`);
     const row = {
       contractName: name,
+      artifactProfile: profile,
       artifact: relative,
       releaseNefSha256: sha256(nef),
       deploymentNefSha256: deployed.localNefSha256,
@@ -225,13 +245,14 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
       deploymentManifestSha256: deployed.localManifestSha256,
       releaseScriptSha256: sha256(script),
       rpcScriptSha256: chain.nefScriptSha256,
+      deploymentProfileMatch: deployed.artifactProfile === profile,
       nefFullHashMatch: sha256(nef) === deployed.localNefSha256,
       manifestFullHashMatch: sha256(manifest) === deployed.localManifestSha256,
       rpcScriptHashMatch: sha256(script) === chain.nefScriptSha256,
       rpcChecksumMatch: chain.nefChecksumEquality === true,
       rpcManifestSemanticMatch: chain.manifestSemanticEquality === true,
       rpcScriptByteMatch: chain.nefScriptByteEquality === true,
-      releaseCertificateHashMatch: repro.certificate.release_artifact_sha256?.[`v3/${relative}`] === sha256(nef),
+      releaseCertificateHashMatch: repro.certificate.release_artifact_sha256?.[`${profile}/${relative}`] === sha256(nef),
     };
     if (!Object.entries(row).filter(([key]) => key.endsWith("Match")).every(([, value]) => value === true)) {
       throw new Error(`private artifact provenance mismatch: ${name}`);
@@ -257,6 +278,19 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
       rows,
       externalArtifacts: external,
       externalArtifactNote: "NeoDIDRegistry is a sibling-repository input; it is read back but not part of this source certificate.",
+      sourceRuntime: {
+        sourceBuildReceiptSha256: runtime.sourceBuildReceiptSha256,
+        sourceBuildStatus: runtime.sourceBuildStatus,
+        independentCleanBuilds: runtime.independentCleanBuilds,
+        sourceCommits: runtime.sourceCommits,
+        sdk: runtime.sdk,
+        runtimeFileCount: runtime.runtimeFileCount,
+        neoxpDllSha256: runtime.neoxpDllSha256,
+        wrapperSha256: runtime.wrapperSha256,
+        runtimeFilesMatchedBefore: runtime.runtimeFilesMatchedBefore,
+        runtimeFilesMatchedAfter: runtime.runtimeFilesMatchedAfter,
+        pathsIncluded: runtime.pathsIncluded,
+      },
     },
     publicNetworkWritesPerformed: false,
     boundary: "Proves source-input rebuild, release-file identity and isolated NeoExpress RPC readback; not a compiler-correctness theorem, full NeoVM refinement proof or public deployment parity.",

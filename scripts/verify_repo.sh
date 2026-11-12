@@ -134,7 +134,7 @@ if [[ $run_contracts -eq 1 ]]; then
     # the private sibling repository neo-os-services, whose contracts/build output is
     # gitignored there. CI checks out this repository on its own, so state the gate's
     # reachability before the run instead of letting a bare "skipped" read as a pass.
-    services_build="${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/contracts/build}"
+    services_build="${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/vendor/neo-os-did/contracts/build}"
     if [[ -f "$services_build/NeoDIDRegistry.nef" && -f "$services_build/NeoDIDRegistry.manifest.json" ]]; then
       export NEOOS_REQUIRE_SERVICES_ARTIFACTS=1
       echo "cross-repo gate: NeoDIDRegistry integration proof ENABLED (artifact dir: $services_build)"

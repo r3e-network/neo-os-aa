@@ -5,7 +5,7 @@ import { DEFAULT_FETCH_TIMEOUT_MS, fetchWithTimeout } from '../src/utils/fetchWi
 import { invokeReadFunction } from '../src/utils/neo.js';
 import { computeArgsHash } from '../src/features/operations/metaTx.js';
 
-test('fetchWithTimeout resolves with the response and passes an abort signal', async () => {
+test('fetchWithTimeout resolves with the response, passes an abort signal and refuses redirect overrides', async () => {
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
@@ -13,11 +13,14 @@ test('fetchWithTimeout resolves with the response and passes an abort signal', a
   };
 
   const response = await fetchWithTimeout('https://rpc.example.org', { method: 'POST' }, { fetchImpl });
+  await fetchWithTimeout('https://rpc.example.org', { method: 'POST', redirect: 'follow' }, { fetchImpl });
 
   assert.equal(response.ok, true);
   assert.equal(calls[0].url, 'https://rpc.example.org');
   assert.equal(calls[0].options.method, 'POST');
   assert.ok(calls[0].options.signal instanceof AbortSignal);
+  assert.equal(calls[0].options.redirect, 'error');
+  assert.equal(calls[1].options.redirect, 'error', 'a caller cannot re-enable redirect following');
   assert.equal(DEFAULT_FETCH_TIMEOUT_MS, 15000);
 });
 

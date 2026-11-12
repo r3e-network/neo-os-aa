@@ -24,6 +24,9 @@ namespace SmartAccount
         // datoshi is 10 GAS, the maximum resource budget for each verifier callback,
         // including nested verifier calls; NeoVM enforces the ancestor budget transitively.
         private const long VerifierGasLimit = 1_000_000_000;
+        private const long ModuleMaintenanceGasLimit = 250_000_000;
+        // A root and its maximum of ten separately bounded leaf cleanups share this parent envelope.
+        private const long RootModuleMaintenanceGasLimit = 11 * ModuleMaintenanceGasLimit;
 
         // System.Contract.CallWithGasLimit is a platform syscall that no published
         // Neo.SmartContract.Framework declares, so this contract declares it. The attribute
@@ -34,6 +37,24 @@ namespace SmartAccount
             public static extern object CallWithGasLimit(
                 UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);
         }
+
+        private static object CallModuleWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            PlatformSyscalls.CallWithGasLimit(scriptHash, method, flags, ModuleMaintenanceGasLimit, args);
+        private static object CallRootWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            PlatformSyscalls.CallWithGasLimit(scriptHash, method, flags, RootModuleMaintenanceGasLimit, args);
+
+        private static object CallVerifierWithGasLimit(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            PlatformSyscalls.CallWithGasLimit(scriptHash, method, flags, VerifierGasLimit, args);
+#else
+        private static object CallModuleWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            Contract.Call(scriptHash, method, flags, args);
+        private static object CallRootWithMaintenanceBudget(
+            UInt160 scriptHash, string method, CallFlags flags, params object[] args) =>
+            Contract.Call(scriptHash, method, flags, args);
 #endif
 
         // ========================================================================
@@ -133,7 +154,7 @@ namespace SmartAccount
                     {
                         object[] hookParams = BuildHookOperationParams(op, executionArgs);
                         ByteString hookSnapshot = StdLib.Serialize(hookParams);
-                        Contract.Call(
+                        CallModuleWithMaintenanceBudget(
                             state.HookId,
                             "preExecute",
                             CallFlags.All,
@@ -162,7 +183,7 @@ namespace SmartAccount
                     {
                         object[] hookParams = BuildHookOperationParams(op, executionArgs);
                         ByteString hookSnapshot = StdLib.Serialize(hookParams);
-                        Contract.Call(
+                        CallModuleWithMaintenanceBudget(
                             state.HookId,
                             "postExecute",
                             CallFlags.All,

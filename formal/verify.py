@@ -65,6 +65,7 @@ NATIVE_CORE_REQUIRED_FILES = {
 
 SOURCE_FILES = {"contracts/compile.sh", "contracts/SmartAccount.csproj",
                 "contracts/SmartAccount.cs",
+                "contracts/SmartAccount.HookChildren.cs",
                 "contracts/SmartAccount.VerifierChildren.cs",
                 "contracts/SmartAccount.Execution.cs",
                 "contracts/SmartAccount.Accounts.cs",
@@ -98,7 +99,7 @@ SOURCE_FILES = {"contracts/compile.sh", "contracts/SmartAccount.csproj",
                 "contracts/native/profiles.json"}
 SOURCE_FILES.update({"Directory.Build.props", "nuget.config", "contracts/neo-platform-packages.json",
                      "scripts/verify_repo.sh", "scripts/check_neo_platform_packages.mjs",
-                     "formal/verify.py", "formal/verify-in-docker.sh",
+                     "formal/verify.py", "formal/verify-in-docker.sh", "formal/Dockerfile",
                      "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md",
@@ -945,6 +946,10 @@ def check_ordinary_recovery_correspondence(repo_root=ROOT.parent):
     end = source.index("public static void InitiateEscape(", begin)
     recovery = source[begin:end]
     require("Contract.Call(" not in recovery, "Owner-only recovery may not call old plugins")
+    require("GetConfigurationContextDepth() == 0" in source[
+                source.index("private static void AssertRecoveryIdle("):
+                source.index("public static void FinalizeEscapeToOwner(")],
+            "Ordinary recovery must reject every active global configuration context")
     for fragment in ("AssertNoMarketEscrow(accountId);", "AssertRecoveryIdle(accountId);",
                      "Runtime.CheckWitness(state.BackupOwner)", "state.Verifier = UInt160.Zero;",
                      "state.HookId = UInt160.Zero;", "Helper.Concat(Prefix_OwnerOnlyRecovery, (byte[])accountId), new byte[] { 1 }"):

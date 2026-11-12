@@ -1,15 +1,15 @@
 {
   "schema": "aa-abi-scenario-input/v1",
   "name": "platform-registrar-channel-market-escrow-and-the-guard-side-of-the-surface",
-  "contractAddress": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2",
-  "contractAddressNote": "The account under test. Deploying callers beside it does not move it: an address is a function of the NEF, the manifest name and the deploy signer, and none of those changed.",
+  "contractAddress": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640",
+  "contractAddressNote": "The receipt records the address the engine deployed for this exact artifact, manifest name and signer, and requires it to equal this one.",
   "note": [
     "The first three scenarios measured calls this contract makes on its own behalf, calls it makes through its timelocks, and calls into plugins it admitted. What was left falls into three groups, and this file does all three at once because each group owns its own account and they cannot interfere.",
     "Group one is the platform-registrar channel. Every entry there asserts that its caller is the registrar the contract recorded, so no step aimed at the account can run it: the caller has to be a contract. The registrar is set the way the contract sets it - propose, wait the seven-day window, confirm as admin - and the caller is a deployed registrar mock pinned by hash. The accounts it registers are then read back through their proxy index and their backup owner, so the claim is about who called the account and the artifact is what makes that claim checkable.",
     "Group two is the market escrow. enterMarketEscrow asserts that its caller is the market, and the owner-driven exits assert the same, so the market here is a deployed forwarder pinned by hash rather than the account's own user operation: the account refuses to execute a user operation while an escrow is open, and the same self-call that reaches the execution phase therefore cannot reach the settlement phase.",
     "Group three is the guard side of the rest of the surface. Some entries can only be measured refusing: canConfigureVerifier, canConfigureHook, canExecuteVerifier and canExecuteHook answer a question about a configuration context that exists only for the duration of a plugin call, so a call from outside must return false, and an outside call is the only kind a step can make. Recording those as true would be recording something impossible.",
     "Two entries are measured reaching work they cannot finish. callVerifierChild passes its own pre-flight - the installed verifier is bound to this core and does expose getChildVerifierConfig - and then refuses because the configuration the verifier returns has no children in it: the call that would put children there is gated on the core being the caller, and inside a child-configuration call the core is the one asking, not the one being asked. The sponsored paths stop where the paymaster they name refuses them. Those rows are declared faults with the reason measured, not passes.",
-    "One row is a defect rather than a control: cancelPlatformRegistrar aborts in the host with 'Event name size 34 exceeds maximum allowed size of 32 bytes', because the event it emits is named PlatformRegistrarProposalCancelled and Neo caps event names at 32 bytes. The declaration below pins the host detail that was recorded. The contract is wrong here, and no scenario can turn that into a pass.",
+    "cancelPlatformRegistrar completes at the configured timelock and emits the valid PlatformRegistrarCancelled event. The previous 34-byte event name was corrected to this 32-byte name, so the cancellation row is now a successful control instead of a declared defect.",
     "The update timelock is probed on both sides of the window: before it the call refuses on the timelock, after it on the pinned NEF hash, because a scenario cannot inline the real artifact and does not pretend to. confirmUpdate is the alias update, so covering one covers the entry, not the upgrade.",
     "Every account id and proxy address here is a literal, because a scenario may only push literal arguments. The compute entries that derive them are placed next to the calls that use them and linked forward to those arguments, so a literal that is not what the contract derives fails the run rather than being assumed.",
     "Not here, and not reachable by any scenario: _deploy/2 and _initialize/0 are in the manifest ABI but System.Contract.Call rejects any method name beginning with an underscore before a single instruction of the callee runs. They are the platform's deployment hooks, not entrypoints, and the inventory counts them as unreached."
@@ -20,7 +20,7 @@
   "modules": [
     {
       "name": "verifierA",
-      "address": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e",
+      "address": "0x17c28d21c86e07d95493149aca488a5146610996",
       "signer": "0x7777777777777777777777777777777777777777",
       "nef": "../plugins/MultiSigVerifier.nef",
       "manifest": "../plugins/MultiSigVerifier.manifest.json"
@@ -34,14 +34,14 @@
     },
     {
       "name": "hookB",
-      "address": "0xa8265514fef1c7be31201b899e1da2efd49eac4f",
+      "address": "0x20738cfadda0649a39989ffbecac0055eaf06109",
       "signer": "0x8889888888888888888888888888888888888888",
       "nef": "../plugins/MultiHook.nef",
       "manifest": "../plugins/MultiHook.manifest.json"
     },
     {
       "name": "market",
-      "address": "0x0b8af6160d58f47b2bc908e90459781005542f1b",
+      "address": "0xe2c2e8c73212102b61fec339c1c898b1a140d8a1",
       "signer": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "nef": "../plugins/MockVerifierCore.nef",
       "manifest": "../plugins/MockVerifierCore.manifest.json"
@@ -119,7 +119,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e"
+          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
         }
       ],
       "expect": "HALT",
@@ -151,11 +151,11 @@
         },
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "Hash160",
-          "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e"
+          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
         }
       ],
       "expect": "HALT",
@@ -171,7 +171,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "Hash160",
@@ -350,7 +350,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "target": "hookA",
@@ -383,7 +383,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0xa8265514fef1c7be31201b899e1da2efd49eac4f"
+          "value": "0x20738cfadda0649a39989ffbecac0055eaf06109"
         }
       ],
       "expect": "HALT"
@@ -536,7 +536,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "String",
@@ -551,7 +551,7 @@
             },
             {
               "type": "Hash160",
-              "value": "0x0b8af6160d58f47b2bc908e90459781005542f1b"
+              "value": "0xe2c2e8c73212102b61fec339c1c898b1a140d8a1"
             },
             {
               "type": "Integer",
@@ -663,7 +663,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "String",
@@ -678,7 +678,7 @@
             },
             {
               "type": "Hash160",
-              "value": "0x0b8af6160d58f47b2bc908e90459781005542f1b"
+              "value": "0xe2c2e8c73212102b61fec339c1c898b1a140d8a1"
             },
             {
               "type": "Integer",
@@ -697,7 +697,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "String",
@@ -740,7 +740,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "String",
@@ -755,7 +755,7 @@
             },
             {
               "type": "Hash160",
-              "value": "0x0b8af6160d58f47b2bc908e90459781005542f1b"
+              "value": "0xe2c2e8c73212102b61fec339c1c898b1a140d8a1"
             },
             {
               "type": "Integer",
@@ -774,7 +774,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "String",
@@ -877,7 +877,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "ByteString",
@@ -922,7 +922,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x70a079682065cad8cf9ee359b4c74f255906fcb7"
+          "value": "0xb3080c6436cb53181b9df5e8d5ca7c764cb44e5a"
         }
       ],
       "timestamp": 1700604800000,
@@ -958,7 +958,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "ByteString",
@@ -991,7 +991,11 @@
         }
       ],
       "timestamp": 1700604800000,
-      "expect": "HALT"
+      "expect": "HALT",
+      "readsForward": {
+        "step": "read-account-id-by-proxy-stable",
+        "arg": 0
+      }
     },
     {
       "id": "read-account-id-by-proxy-stable",
@@ -999,7 +1003,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x90913c0d53e1eeb277a49aa7bfefa0ce53993ac6"
+          "value": "0xce7a5342d18b98a2cf7726b833f8f8cdb52d8c31"
         }
       ],
       "timestamp": 1700604800000,
@@ -1031,7 +1035,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "Hash160",
@@ -1069,7 +1073,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "Hash160",
@@ -1091,7 +1095,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "Hash160",
@@ -1112,7 +1116,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "Hash160",
@@ -1134,7 +1138,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "Hash160",
@@ -1159,7 +1163,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         },
         {
           "type": "Hash160",
@@ -1196,8 +1200,7 @@
       "method": "cancelPlatformRegistrar",
       "args": [],
       "timestamp": 1701209600000,
-      "expect": "FAULT",
-      "detail": "exceeds maximum allowed size of 32 bytes"
+      "expect": "HALT"
     },
     {
       "id": "register-verifier-account",
@@ -1205,11 +1208,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x7b89dc3a3e42ffbaaede45284a3e477cb1c9c6c9"
+          "value": "0xb6b17120dc05455bce41c15252b1e491e5585dfe"
         },
         {
           "type": "Hash160",
-          "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e"
+          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
         },
         {
           "type": "ByteString",
@@ -1237,7 +1240,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "target": "verifierA",
@@ -1251,7 +1254,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x7b89dc3a3e42ffbaaede45284a3e477cb1c9c6c9"
+          "value": "0xb6b17120dc05455bce41c15252b1e491e5585dfe"
         },
         {
           "type": "Hash160",
@@ -1276,7 +1279,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x7b89dc3a3e42ffbaaede45284a3e477cb1c9c6c9"
+          "value": "0xb6b17120dc05455bce41c15252b1e491e5585dfe"
         },
         {
           "type": "ByteString",
@@ -1303,7 +1306,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+              "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
             },
             {
               "type": "String",
@@ -1350,7 +1353,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+              "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
             },
             {
               "type": "String",
@@ -1404,7 +1407,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+              "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
             },
             {
               "type": "String",
@@ -1461,7 +1464,7 @@
               "items": [
                 {
                   "type": "Hash160",
-                  "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+                  "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
                 },
                 {
                   "type": "String",
@@ -1520,7 +1523,7 @@
               "items": [
                 {
                   "type": "Hash160",
-                  "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+                  "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
                 },
                 {
                   "type": "String",
@@ -1569,7 +1572,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "target": "paymaster",
@@ -1590,7 +1593,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+              "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
             },
             {
               "type": "String",
@@ -1647,7 +1650,7 @@
               "items": [
                 {
                   "type": "Hash160",
-                  "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+                  "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
                 },
                 {
                   "type": "String",

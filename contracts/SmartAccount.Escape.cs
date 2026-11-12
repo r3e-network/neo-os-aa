@@ -47,7 +47,8 @@ namespace SmartAccount
             // A callback must not detach an account while its outer invocation can
             // still return and restore old authority or state. Check every context,
             // even if a previous implementation did not set the execution lock.
-            ExecutionEngine.Assert(!IsExecutionActive(accountId)
+            ExecutionEngine.Assert(GetConfigurationContextDepth() == 0
+                && !IsExecutionActive(accountId)
                 && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifyContext, (byte[])accountId)) == null
                 && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_VerifierConfigContext, (byte[])accountId)) == null
                 && Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_HookConfigContext, (byte[])accountId)) == null
@@ -111,6 +112,7 @@ namespace SmartAccount
         public static void InitiateEscape(UInt160 accountId)
         {
             AccountState state = GetAccountState(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             ExecutionEngine.Assert(state.BackupOwner != UInt160.Zero, "No backup owner");
             ExecutionEngine.Assert(Runtime.CheckWitness(state.BackupOwner), "Only backup owner can initiate");
@@ -155,6 +157,7 @@ namespace SmartAccount
             AssertPluginInstallationAllowed(accountId, newVerifier);
             AssertRecoveryIdle(accountId);
             AccountState state = GetAccountState(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             ExecutionEngine.Assert(state.EscapeTriggeredAt > 0, "Escape not initiated");
             ExecutionEngine.Assert(Runtime.Time >= state.EscapeTriggeredAt + ((BigInteger)state.EscapeTimelock * 1000), "Timelock active");
@@ -178,7 +181,7 @@ namespace SmartAccount
                 SetVerifierConfigContext(accountId, previousVerifier);
                 try
                 {
-                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -192,7 +195,7 @@ namespace SmartAccount
                 SetHookConfigContext(accountId, previousHook);
                 try
                 {
-                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -212,7 +215,7 @@ namespace SmartAccount
                 SetVerifierConfigContext(accountId, newVerifier);
                 try
                 {
-                    Contract.Call(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
+                    CallModuleWithMaintenanceBudget(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
                 }
                 finally
                 {

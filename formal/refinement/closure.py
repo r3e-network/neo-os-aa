@@ -53,7 +53,7 @@ ENTRY_DISPATCH_DOMAIN = {'preconditions': ['Entry is after interop flag admissio
               'ContextUnloaded and caller continuation.',
               'Gas, resources, all exceptions, transaction rollback, host callbacks and aliased '
               'mutable-object effects.',
-              'Whole ApplicationEngine execution and all 100 complete public entrypoints.'],
+              'Whole ApplicationEngine execution and all 105 complete public entrypoints.'],
  'tcb': ['Strict complete-method C# grammar and field/symbol binding.',
          'C# object allocation/default-field semantics and framework dictionary/stack APIs.',
          'Externally supplied successful noninterfering environment, freshness, immutable manifest and exact '
@@ -104,7 +104,7 @@ SYSCALL_DISPATCH_DOMAIN = {
               'Contract resolution, manifest/ABI storage reads, MethodToken deserialization at NEF load, policy '
               'whitelists and invocation counting.',
               'Trusted C# extraction and compiler/CLR correspondence; ApplicationEngine execution after the '
-              'handoff; all 100 public entrypoints.'],
+              'handoff; all 105 public entrypoints.'],
  'tcb': ['Strict complete-method C# grammar and field/symbol binding.',
          'C# object allocation, boxing and framework stack/dictionary APIs.',
          'Externally supplied successful noninterfering environment and exact virtual dispatch.']}
@@ -152,7 +152,7 @@ CONTRACT_HANDOFF_DOMAIN = {
               'EvaluationStack sharing, static-field sharing, reference counters and Dispose ordering inside '
               'LoadScript/CreateContext.',
               'Trusted C# extraction and compiler/CLR correspondence; ApplicationEngine execution after the '
-              'handoff; all 100 public entrypoints.'],
+              'handoff; all 105 public entrypoints.'],
  'tcb': ['Strict complete-method C# grammar and field/symbol binding.',
          'C# object allocation, reference vs copy semantics and framework dictionary APIs.',
          'Externally supplied successful noninterfering environment and exact virtual dispatch.']}
@@ -208,7 +208,7 @@ INTEROP_CONVERSION_DOMAIN = {
               'recorded.',
               'Reference counting, disposables added by Convert(object?), and payload aliasing between the '
               'caller and the handler.',
-              'Trusted C# extraction and compiler/CLR correspondence; all 100 public entrypoints.'],
+              'Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.'],
  'tcb': ['Strict complete-method C# grammar and field/symbol binding.',
          'C# switch-expression dispatch, reflection over the handler signature and LINQ OfType/Select.',
          'Externally supplied well-formed stack window and exact virtual dispatch of the handler.']}
@@ -257,7 +257,7 @@ INTEROP_FEE_DOMAIN = {
               'declaration permits zero.',
               'The conversion itself, the handler body and its return value; those stay in the '
               'interop-conversion lane.',
-              'Trusted C# extraction and compiler/CLR correspondence; all 100 public entrypoints.'],
+              'Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.'],
  'tcb': ['Strict complete-method C# grammar and field/symbol binding.',
          'C# init-only property semantics and the reflection call that builds Parameters.',
          'Externally supplied engine fee state and exact virtual dispatch of the handler.']}
@@ -308,7 +308,7 @@ EXCEPTION_IDENTITY_DOMAIN = {
               'The fault-message text and any client-visible diagnostic derived from it.',
               'Rollback of ledger and storage effects after a fault, and the transaction composition that '
               'decides whether a faulted execution is committed or discarded.',
-              'Trusted C# extraction and compiler/CLR correspondence; all 100 public entrypoints.'],
+              'Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.'],
  'tcb': ['C# catch-clause matching and exception-subtyping of `catch (T)` against a thrown value.',
          'The tokenizer keeps string and character literals opaque; preprocessor lines carry no '
          'state and are dropped before projection.',
@@ -384,7 +384,7 @@ LOAD_ADMISSION_DOMAIN = {
   'Every rejection message and any client-visible diagnostic derived from it.',
   'The wildcard container reader that turns the JSON string `*` into a wildcard; only the selector that consumes it is recorded.',
   'Gas, storage growth and every resource limit on the admission path; no cost is modelled.',
-  'Trusted C# extraction and compiler/CLR correspondence; all 100 public entrypoints.'
+  'Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.'
   ],
  'tcb': [
   'Strict complete-method C# grammar and field/symbol binding.',
@@ -1786,7 +1786,13 @@ def validate_provenance(name, report, snapshot, evidence_directory):
             if not candidate.is_absolute():
                 require(candidate.parts and candidate.as_posix() == path and '..' not in candidate.parts,
                         name + ' undeclared relative input path')
-                if candidate.name == path:
+                if candidate.parts[0] == 'external' and len(candidate.parts) == 2:
+                    evidence = Path(evidence_directory).resolve()
+                    search_paths = (evidence / candidate.name,
+                                    evidence.parent / 'base' / candidate.name)
+                    matches = [path for path in search_paths
+                               if path.is_file() and sha(path.read_bytes()) == expected]
+                elif candidate.name == path:
                     require(field == 'toolInputSha256', name + ' undeclared relative input path')
                     matches = [Path(item['copy']) for original,item in snapshot.items()
                                if Path(original).name == path and item['sha256'] == expected]

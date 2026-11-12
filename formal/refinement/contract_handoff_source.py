@@ -95,7 +95,7 @@ UNPROVED = [
     'EvaluationStack sharing, static-field sharing, reference counters and Dispose ordering inside '
     'LoadScript/CreateContext.',
     'Trusted C# extraction and compiler/CLR correspondence; ApplicationEngine execution after the '
-    'handoff; all 100 public entrypoints.',
+    'handoff; all 105 public entrypoints.',
 ]
 TCB = ['Strict complete-method C# grammar and field/symbol binding.',
        'C# object allocation, reference vs copy semantics and framework dictionary APIs.',

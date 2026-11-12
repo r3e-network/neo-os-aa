@@ -265,6 +265,46 @@
           <p class="mb-4 text-xs text-aa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-4">
+              <div class="space-y-2">
+                <span class="block text-sm font-semibold text-aa-text">{{
+                  t(
+                    "studioPanels.createVerifierPresets",
+                    "Published verifier presets",
+                  )
+                }}</span>
+                <div class="grid grid-cols-1 gap-2">
+                  <button
+                    v-for="preset in createVerifierPresets"
+                    :key="preset.id"
+                    type="button"
+                    class="rounded-lg border px-3 py-2 text-left transition-colors duration-200"
+                    :class="
+                      selectedVerifierPreset?.id === preset.id
+                        ? 'border-aa-orange bg-aa-orange/10'
+                        : 'border-aa-border bg-aa-dark hover:border-aa-orange/60'
+                    "
+                    :aria-pressed="selectedVerifierPreset?.id === preset.id"
+                    @click="applyCreateVerifierPreset(preset)"
+                  >
+                    <span class="block text-xs font-semibold text-aa-text">{{
+                      preset.label
+                    }}</span>
+                    <span class="block font-mono text-[10px] text-aa-muted">{{
+                      preset.verifierContract
+                    }}</span>
+                  </button>
+                </div>
+                <p class="text-xs text-aa-muted">
+                  {{
+                    selectedVerifierPreset
+                      ? selectedVerifierPreset.description
+                      : t(
+                          "studioPanels.createVerifierPresetsHint",
+                          "Presets come from the published Morpheus registry for this network. Choosing one fills the verifier address; the params rule follows the preset.",
+                        )
+                  }}
+                </p>
+              </div>
               <div>
                 <label
                   for="verifier-contract-input"
@@ -289,7 +329,7 @@
                   {{
                     t(
                       "studioPanels.verifierPluginExamples",
-                      "Examples: Web3AuthVerifier, TEEVerifier, SessionKeyVerifier, ZkLoginVerifier.",
+                      "Pick a published preset above, or paste any verifier contract hash.",
                     )
                   }}
                 </p>
@@ -550,6 +590,8 @@ const { copiedKey, markCopied, copyText } = useClipboard();
 const studio = inject("studio");
 const {
   createForm,
+  createVerifierPresets,
+  applyCreateVerifierPreset,
   computedAddress,
   computedAccountIdHash,
   computedScriptHex,
@@ -560,6 +602,20 @@ const {
   matrixCheckResult,
   registrationOwnerError,
 } = studio;
+
+const selectedVerifierPreset = computed(() => {
+  const address = String(createForm.value.verifierContract || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^0x/, "");
+  if (!address) return null;
+  return (
+    (createVerifierPresets.value || []).find(
+      (preset) =>
+        preset.verifierContract.toLowerCase().replace(/^0x/, "") === address,
+    ) || null
+  );
+});
 
 async function copyScript() {
   if (!computedScriptHex) return;

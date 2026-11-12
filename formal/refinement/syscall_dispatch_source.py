@@ -39,7 +39,7 @@ UNPROVED = [
  'Convert and the Array payload element list; the callee argument vector for System.Contract.Call is an opaque input, not a stack window.',
  'Exception identity: every Rejected constructor is a fault, and whether it surfaces as InvalidOperationException, ArgumentException, ArgumentOutOfRangeException, FormatException or IndexOutOfRangeException is not modelled.',
  'Contract resolution, manifest/ABI storage reads, MethodToken deserialization at NEF load, policy whitelists and invocation counting.',
- 'Trusted C# extraction and compiler/CLR correspondence; ApplicationEngine execution after the handoff; all 100 public entrypoints.',
+ 'Trusted C# extraction and compiler/CLR correspondence; ApplicationEngine execution after the handoff; all 105 public entrypoints.',
 ]
 TCB = ['Strict complete-method C# grammar and field/symbol binding.',
        'C# object allocation, boxing and framework stack/dictionary APIs.',

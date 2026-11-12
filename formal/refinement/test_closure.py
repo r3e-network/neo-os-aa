@@ -1874,6 +1874,30 @@ class ClosureTests(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError, 'relative'):
                             self.module.validate_provenance('arithmetic', report, snapshot, root)
 
+    def test_external_proof_input_resolves_only_inside_the_fresh_evidence_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve()
+            evidence = output / 'composition'
+            base = output / 'base'
+            evidence.mkdir()
+            base.mkdir()
+            helper = base / 'method-proof.json'
+            helper.write_bytes(b'fresh helper proof')
+            report = {'inputSha256': {
+                'external/method-proof.json': self.module.sha(helper.read_bytes())}}
+
+            self.module.validate_provenance('numeric', report, {}, evidence)
+
+            duplicate = evidence / helper.name
+            duplicate.write_bytes(helper.read_bytes())
+            with self.assertRaisesRegex(ValueError, 'relative tool/input identity'):
+                self.module.validate_provenance('numeric', report, {}, evidence)
+
+            duplicate.unlink()
+            report['inputSha256']['external/method-proof.json'] = self.module.sha(b'forged')
+            with self.assertRaisesRegex(ValueError, 'relative tool/input identity'):
+                self.module.validate_provenance('numeric', report, {}, evidence)
+
     def test_repository_relative_tools_reject_escaping_noncanonical_and_unbound_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve(); repo = root / 'repo'

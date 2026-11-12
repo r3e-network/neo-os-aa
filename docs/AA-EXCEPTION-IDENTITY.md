@@ -220,7 +220,7 @@ field and one field per control.
 - Rollback of ledger and storage effects after a fault, and the transaction
   composition that decides whether a faulted execution is committed or discarded
   — the remaining part of `GAS_RESOURCE_EXCEPTION_AND_TRANSACTION_COMPOSITION`.
-- Trusted C# extraction and compiler/CLR correspondence; all 100 public
+- Trusted C# extraction and compiler/CLR correspondence; all 105 public
   entrypoints.
 
 ## Running it

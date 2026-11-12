@@ -1,0 +1,3893 @@
+{
+  "schema": "neoos-aa-neoexpress-validation/v1",
+  "observedOn": "2026-10-31T11:47:17Z",
+  "scope": "Fresh isolated single-node NeoExpress chain: deployment of the contracts/bin/platform core, every contracts/bin/v3 public module and the sibling NeoDIDRegistry build, a hand-signed AA proxy-witness transaction that consumes a NeoDID action ticket, protocol flows driven by real transactions, and JSON-RPC readback of every deployed contract. No public network, no production deployment, no signing or broadcast outside the private chain.",
+  "status": "PASS",
+  "tool": {
+    "name": "NeoExpress",
+    "version": "3.10.1-native-source"
+  },
+  "sourceRuntime": {
+    "sourceBuildReceiptSha256": "d0c764fc2cc16f8671b4b3bc6548005a5b7a14eee9a1c8f339fd7b2f387f719d",
+    "sourceBuildStatus": "PASS",
+    "independentCleanBuilds": 2,
+    "sourceCommits": {
+      "core": "0b81b25601ba7e2ec0b0d9b9cb0ab79ed809af03",
+      "node": "b6bbeaf7deb8e2d821cd6f1ae8cbdb24117d5605",
+      "express": "59ee6e2d4315133a4521aed600dbe74f5b8ad307"
+    },
+    "sdk": "10.0.400",
+    "runtimeFileCount": 104,
+    "neoxpDllSha256": "f72aedb15d5f5c22b9e8678c894aa44cc4c4ace4c485668e510988491a44979b",
+    "wrapperSha256": "d6b4a7d7a29e6db3f3f5c62601f253119c5e3223f3e10e0d4adfa3648c91226a",
+    "runtimeFilesMatchedBefore": true,
+    "runtimeFilesMatchedAfter": true,
+    "pathsIncluded": false
+  },
+  "network": {
+    "kind": "isolated-private-single-node",
+    "networkMagic": 280334255,
+    "rpcHost": "127.0.0.1",
+    "publicNetwork": false
+  },
+  "privateValidation": {
+    "platformSyscall": "System.Contract.CallWithGasLimit",
+    "activationHardfork": "HF_SmartAccountV1",
+    "activationBlock": 0,
+    "applicationCallbackGasLimitDatoshi": 1000000000,
+    "applicationCallbackGasLimitGas": 10,
+    "applicationHookGasLimitDatoshi": 250000000,
+    "applicationHookGasLimitGas": 2.5,
+    "moduleMaintenanceGasLimitDatoshi": 250000000,
+    "moduleMaintenanceGasLimitGas": 2.5,
+    "rootModuleMaintenanceGasLimitDatoshi": 2750000000,
+    "rootModuleMaintenanceGasLimitGas": 27.5,
+    "neoMaxVerificationGasDatoshi": 150000000,
+    "nativeProfileVerifierBudgetDatoshi": 100000000,
+    "executeGasEnvelopeGas": 200,
+    "maintenanceTransactionGasEnvelopeGas": 40,
+    "scope": "private-chain-only; no public activation or broadcast"
+  },
+  "deployments": [
+    {
+      "contractName": "SmartAccountV3",
+      "artifactProfile": "platform",
+      "contractHash": "0x44d4df73bb427c5287389c8e585dce660cb6ec59",
+      "deploymentTransaction": "0x1062c080b176ac80fcb1f65a5ff9737aa449060b936cdd8e55c3ea615613a5bf",
+      "deployData": null,
+      "localNefSha256": "f94617267dbc552e20ecaad381e885d0ac8726e3a7d5fd89a7a6ce5caef5e34a",
+      "localManifestSha256": "72c59e24a2981e5ea3127dbfebb9f00b2ecc4a79773f674d8933fe2fe3e30bcd"
+    },
+    {
+      "contractName": "MockTransferTarget",
+      "artifactProfile": "v3",
+      "contractHash": "0x9528ffefca37c7e3f20c71dc0df97abe19b0a8d2",
+      "deploymentTransaction": "0x5b7f94b2dee65331400bc551221405ae4d5404f3181144ba19d007b835742a06",
+      "deployData": null,
+      "localNefSha256": "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
+      "localManifestSha256": "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c"
+    },
+    {
+      "contractName": "Web3AuthVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0xe88c36a37aefcd03bf53cb19fdf62ac44e6f6710",
+      "deploymentTransaction": "0xec423235c7ec79a982242e6ebb2b39ed08eadd1451b08fe82d3ce9cd9edaed90",
+      "deployData": "core hash",
+      "localNefSha256": "513ca7dd4bcbd0bbc7be93dbef8a7b40c226a11c9f83cbbd72fd3b754b039dc2",
+      "localManifestSha256": "df68663037718fe9104f24458bd8bf71e93f82be4b4ccc6d8d144216b8fc5623"
+    },
+    {
+      "contractName": "TEEVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0xf918ef7a7a35f889cce08741d6058db5738f3a9f",
+      "deploymentTransaction": "0xccb6a3cc8aab2609833bed443f3d4afb1a838c044a332d8e957cfdfd35661009",
+      "deployData": "core hash",
+      "localNefSha256": "468f73549e3c11b636ab90c08afbad970dbd3f6880181a949b9eac9e9d2990c2",
+      "localManifestSha256": "d09340122e1e3c7dd9bd85de6c6a0cce5de4cbba5c1384784c69d62d14ac9f77"
+    },
+    {
+      "contractName": "SessionKeyVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0x63502262731dc6b2c01fb6bf9f6f87b56413e9dc",
+      "deploymentTransaction": "0xd297844e6c449ccaabf48e8f859b5ae760022d31f8126bdcda8cf7dc53f4cded",
+      "deployData": "core hash",
+      "localNefSha256": "ee4250f07f8edbe9716433ec7991455813339889b664a9dae3f992bfe989323a",
+      "localManifestSha256": "a760d7ab8380485b9389ca8d03e8339e23a5576ea6bc188248335c78d5fdf0e4"
+    },
+    {
+      "contractName": "WebAuthnVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0x78dea6284f5e62ab8549304e989ac0f2d87fa104",
+      "deploymentTransaction": "0x06e0f9143ed89c3c11023a54e74060ac4c7d186bf3b4daf5fb2db3f9b1ad2455",
+      "deployData": "core hash",
+      "localNefSha256": "6e4721ea05174509249dccb2bf387e3b2e69ff4d92a0457c25b949c5ab0737db",
+      "localManifestSha256": "abd7a3c37d2241ddc566894d6aa4a96915c27a653702d1c74bc716942a70dab7"
+    },
+    {
+      "contractName": "ZKEmailVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0xe46d7952be90e689feeef8b16d9865e5120167eb",
+      "deploymentTransaction": "0x02996f04fec92d7e6a825a6dc8a62d79ac7ecae57867372d4034d455066e5f91",
+      "deployData": "core hash",
+      "localNefSha256": "56ee96a136ddcffaa1ad51b1752f44f8d76dbe1ae4f80f29b87bd75f3479ac45",
+      "localManifestSha256": "83274e6ac1256bf08b847e144c4573b340d336ef0a18f7dbeaaacdeed3780110"
+    },
+    {
+      "contractName": "ZkLoginVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0xf09ed15c70c401ebbfc66275b5a2e2d224d878dc",
+      "deploymentTransaction": "0x8b10d88886cafc28fb0c3525c7eeff01a147ea0e7b83e95b0f7f2cf1dabd830f",
+      "deployData": "core hash",
+      "localNefSha256": "1bd2f90ac64e4710e94e0d6414f60faa988473894841186050a52ba8d40f3e84",
+      "localManifestSha256": "0513f9e17e85872aafc7d298e8a9776bda9f29be6d9fecf2c9cfcc031ea090ac"
+    },
+    {
+      "contractName": "MultiSigVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0x0d8df687bded56fdb78587a5fb6e064d4cbbd18d",
+      "deploymentTransaction": "0x8933198017304798d5af15c73a26bebc4c91256d7d3deb14af649e8b296c899d",
+      "deployData": "core hash",
+      "localNefSha256": "6cf03c4d16f97fe7e3093d07b03b52c9829c3ad73e8b1a4fbc1935a7bb935a93",
+      "localManifestSha256": "f41347b8adffe17aa3017fbfb8a437ad3d610af1fe612651bd073d5419b2016d"
+    },
+    {
+      "contractName": "SubscriptionVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0x4bc114f16fdba32765cc04b10db73b1a2a582979",
+      "deploymentTransaction": "0xdb0c976651a23d6f3bae164c6c996335bf2e89c5a326b77ab061ff8fc6447dcd",
+      "deployData": "core hash",
+      "localNefSha256": "e42b3cf83e9039f1b6f54198b67b46de3007e6e6782d27e4d74b7ff4029692e6",
+      "localManifestSha256": "f82851941377fc00a86d2a5e3292f4d321d0a8b4dc48c399965d47ad8c3c5eff"
+    },
+    {
+      "contractName": "NeoNativeVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0x1cb0ad392ddb72837bde16d052eee9a2a5ae42d4",
+      "deploymentTransaction": "0xcafe44c386f6244e44517353a185aa99f1fff3c37b24498e0953a758be926d42",
+      "deployData": "core hash",
+      "localNefSha256": "7c450118896cad9ae9d6dbd64f65477f922ea0c51021a77712415c493ba0bfe2",
+      "localManifestSha256": "3e80fe8e3e69e7ada51fab33bfa3c138e48bf5d17d1deb43cc911573234f579f"
+    },
+    {
+      "contractName": "DailyLimitHook",
+      "artifactProfile": "v3",
+      "contractHash": "0x85f2716d48ad0e6724f644a73461140349193ee7",
+      "deploymentTransaction": "0x68b562a5ee1284b7111c6174acd523fcb5d504a062c5b8ddf7168f298eb4ec98",
+      "deployData": "core hash",
+      "localNefSha256": "31fe73c172ebc7a8022161191db5d2e9d40cf471a8f19b5ce3a3a557a82c7dd5",
+      "localManifestSha256": "3834528b9a776481279ab343415c9a27168b8a6c498b4777945e1bd9b6d791a0"
+    },
+    {
+      "contractName": "NeoDIDCredentialHook",
+      "artifactProfile": "v3",
+      "contractHash": "0x0e4205b36c4ece2f01d7763c558f10b43303b320",
+      "deploymentTransaction": "0x0eba78e77a5cc7e985c1851fa9c447c7a09fddb2cc49fe94b0af095a084ae8b7",
+      "deployData": "core hash",
+      "localNefSha256": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c",
+      "localManifestSha256": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8"
+    },
+    {
+      "contractName": "WhitelistHook",
+      "artifactProfile": "v3",
+      "contractHash": "0x62ea0f8fa59b1d7079c215e1010feff6393c1370",
+      "deploymentTransaction": "0xee1097f8db49df086eb66e2b173f1dd64bbf2ef2a92f9c94f2bb71c64f710d78",
+      "deployData": "core hash",
+      "localNefSha256": "8c4615dddf52b3c6fb4c508a32a6ce46450c0029a1c1bd5882dbb537f7dc709f",
+      "localManifestSha256": "1ce1c85c42c24195534c22c4b235a4ebd7c62b8f2290b51fcab2d60ec4690791"
+    },
+    {
+      "contractName": "MultiHook",
+      "artifactProfile": "v3",
+      "contractHash": "0xdb30c05091a3aaa932ca25edd77db0363bfa7f93",
+      "deploymentTransaction": "0x709171d259f4322133851ae3bd39dadb3402811e9a8212e71b2a9fb2cbb45706",
+      "deployData": "core hash",
+      "localNefSha256": "7262c3440540cc50b0b98304c4bb269787356624af5d8487e1e9e0f30c714629",
+      "localManifestSha256": "89f3c00d3ffc588ce1e9d0b25863d331aeb07b2b358bfda96ec1810a8467cb09"
+    },
+    {
+      "contractName": "TokenRestrictedHook",
+      "artifactProfile": "v3",
+      "contractHash": "0x304d2258307669db9035b2802d05a3254073b4eb",
+      "deploymentTransaction": "0xc663d976062c7ad111a794bdc554f166612ce51e09a68a5eb2aee7fb758c719a",
+      "deployData": "core hash",
+      "localNefSha256": "41716994c966832b69a91864e8bfd0bcf860faafac5336c20bac8e8e7c79d210",
+      "localManifestSha256": "ee8feb705fc945caadb59aee672736bb1a53bc3652646b78d166bf8e44539efa"
+    },
+    {
+      "contractName": "AAPaymaster",
+      "artifactProfile": "v3",
+      "contractHash": "0xd8ce8dcd3b1e48015db838c7c0b492fa9e348178",
+      "deploymentTransaction": "0xcf5a761f78bcddcf231006940e38eac6f92a82fc6d2192194f26baafb49d7ede",
+      "deployData": "core hash",
+      "localNefSha256": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
+      "localManifestSha256": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54"
+    },
+    {
+      "contractName": "AAAddressMarket",
+      "artifactProfile": "v3",
+      "contractHash": "0x39a3f3b98d061a23695d7cf319e3dd463c59bc53",
+      "deploymentTransaction": "0xa4a4d3143fccbd0baa018326a29063bd4678f02a555e0205834b4dcd9f929a1a",
+      "deployData": null,
+      "localNefSha256": "6cc8dd93ad96d79c81f02ebfada9bab28b8fe4f6eeb0c0ddff7a2a6516543328",
+      "localManifestSha256": "5a566e145e98a21a4d4fdcfb518772647f410b788fa23bc792836b3ae351861a"
+    },
+    {
+      "contractName": "SocialRecoveryVerifier",
+      "artifactProfile": "v3",
+      "contractHash": "0xabf1d96d7bebd85535ae2b5bd951c81a81f0f8c1",
+      "deploymentTransaction": "0x25c6293f0fcb8a61fe2ad1046c2f40b395ef393ae75e53b8d757d65b1be106ba",
+      "deployData": null,
+      "localNefSha256": "67a578ea4011c5398c3e96fd27cf9b1464d5af7ad618f6f00fd7c087404c0248",
+      "localManifestSha256": "d72c64614a70d24555d62b7ff6249e0777e1fbb4f74223d667ab42d17d791b87"
+    },
+    {
+      "contractName": "MockVerifierCore",
+      "artifactProfile": "v3",
+      "contractHash": "0xa0f10f69cc2dd5876d5bee996245e35627e9ba0b",
+      "deploymentTransaction": "0xc75f983a5526fa93d9cda2d26822b470de73a6b8a77b49f76ccc72977959a60b",
+      "deployData": null,
+      "localNefSha256": "343f88ba0e46cf2fa4b7f2dc59b4fe08aaa85d1b6ad5b829de0f24e16e70bcbd",
+      "localManifestSha256": "13a1a65f36132b8cc13a8759c166dfa09e4dc3c73933a621ff084f637ae8c957"
+    },
+    {
+      "contractName": "PlatformRegistrarMock",
+      "artifactProfile": "v3",
+      "contractHash": "0xe551ca3dfa1cd1d467d53ab0c3d0b5f3f587b848",
+      "deploymentTransaction": "0x2baece0b8c68f95ce805dabc2f4ec9ba5237d70d620110c13c8477c4993adc56",
+      "deployData": null,
+      "localNefSha256": "fdd56fe4ccd14f29dfb4527450b4a9dd8b18342fa1c60174626e90dbf9d36f42",
+      "localManifestSha256": "2c5b922ef308391f413b8aaa0a484ee85cfd29d0681647e16f0826b05594bb0a"
+    },
+    {
+      "contractName": "MarkerOnlyModule",
+      "artifactProfile": "v3",
+      "contractHash": "0x9f7c005292ec431790e632be1a62ba8b2acc01c6",
+      "deploymentTransaction": "0x9552c5cc429779b318bee54fc7299a94b704639624c2a91568adffefd6c38efa",
+      "deployData": null,
+      "localNefSha256": "aff6624a898dacdfc48355d4cd4fb07f61e40be4a2bdf935829ebcb9c834f9b9",
+      "localManifestSha256": "0ad3093b7f5bdada8319a9a13becef55b844e1af9a2ce5a58d4b542cd608b046"
+    },
+    {
+      "contractName": "WrongLifecycleAbiModule",
+      "artifactProfile": "v3",
+      "contractHash": "0xf3ee94bd2b33a11b6f44d69ec913dff24d63bb80",
+      "deploymentTransaction": "0x88141cc456c35d60989392de789353f95d4a40c2f86e5aad50d06c14fb0a00fe",
+      "deployData": null,
+      "localNefSha256": "dce2b08a7dd2c48d01c32254e00eac76d6bcbeb76bbbc2add831bace6c666fd5",
+      "localManifestSha256": "f9494bb848f0bbfcd6dde4cf52c1ba277b8d8e6902d02dd1ba313ea19a02570a"
+    },
+    {
+      "contractName": "WrongHookLifecycleAbiModule",
+      "artifactProfile": "v3",
+      "contractHash": "0xb4928bb6634233a499bf71fa634410b2a5d4b2d2",
+      "deploymentTransaction": "0xa5ed34f2ab3aa1595f56e0e2aa9b790330a9631636b23549d695048bedab0f72",
+      "deployData": null,
+      "localNefSha256": "2814d80eb1007765b8543b30c54e48782e5183d8f00345b85fdc5ddb7ed6ce3d",
+      "localManifestSha256": "48f582388ed626fd895980e6a426c8ac41447ed02333176efdf7f478e1f043ef"
+    },
+    {
+      "contractName": "NeoDIDRegistry",
+      "contractHash": "0xcd313552a2b628c32e7bb7ad367a75b6100095b7",
+      "deploymentTransaction": "0x59346595a4f3ce2cf7c35be40efbda5f2dfda7c752cac8c7e2c2091be939d9cd",
+      "deployData": null,
+      "localNefSha256": "08eaca068431e3ecdbd61eaebb5b2a775faac3abc7eaa74d8cd6419ee81d0f0b",
+      "localManifestSha256": "ab167914648628b97750118fac114387733d48d78beb9d3e5886f0d8d91d40de",
+      "source": "NEOOS_SERVICES_CONTRACT_BUILD or neo-os-services pinned vendor tree"
+    }
+  ],
+  "rpcReadback": {
+    "blockCountAtReadback": 202,
+    "contracts": [
+      {
+        "contractName": "SmartAccountV3",
+        "contractHash": "0x44d4df73bb427c5287389c8e585dce660cb6ec59",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "23a5d59c08c2ab5bcde803469ff1ff2f355ec47d2c87e16af5a6a06a687379d2",
+        "nefScriptLength": 30145,
+        "nefChecksum": 1222747805
+      },
+      {
+        "contractName": "MockTransferTarget",
+        "contractHash": "0x9528ffefca37c7e3f20c71dc0df97abe19b0a8d2",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "6fba9a44eb679eddd7001467991f064be284811c07cda152810c532ca40e2cf4",
+        "nefScriptLength": 737,
+        "nefChecksum": 1888357192
+      },
+      {
+        "contractName": "Web3AuthVerifier",
+        "contractHash": "0xe88c36a37aefcd03bf53cb19fdf62ac44e6f6710",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "d023b7a6ffe700fe0a4f317e25cad5b47c4679286c46dfbb05af3dce5d26544a",
+        "nefScriptLength": 4166,
+        "nefChecksum": 2467494584
+      },
+      {
+        "contractName": "TEEVerifier",
+        "contractHash": "0xf918ef7a7a35f889cce08741d6058db5738f3a9f",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "802c4d9bbf3e0dc49513530d15b31c0df9f033b689f9454480f1deb7163bb283",
+        "nefScriptLength": 3102,
+        "nefChecksum": 3848955001
+      },
+      {
+        "contractName": "SessionKeyVerifier",
+        "contractHash": "0x63502262731dc6b2c01fb6bf9f6f87b56413e9dc",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "c0046f2327f513792910c4e4b33b708d1ea5102d57fe988cd72ff3ce74ee7e84",
+        "nefScriptLength": 4921,
+        "nefChecksum": 4280612039
+      },
+      {
+        "contractName": "WebAuthnVerifier",
+        "contractHash": "0x78dea6284f5e62ab8549304e989ac0f2d87fa104",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "8c65f9beacc906c92d10a41541545d9dfd8766a4361b749a825bbd66b4f442a4",
+        "nefScriptLength": 3110,
+        "nefChecksum": 3352213890
+      },
+      {
+        "contractName": "ZKEmailVerifier",
+        "contractHash": "0xe46d7952be90e689feeef8b16d9865e5120167eb",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "e82d61ea043713667feb935907109f88841b9b3d093181aca73b4b5fad12f52d",
+        "nefScriptLength": 2352,
+        "nefChecksum": 1218695286
+      },
+      {
+        "contractName": "ZkLoginVerifier",
+        "contractHash": "0xf09ed15c70c401ebbfc66275b5a2e2d224d878dc",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "6c8bea2369b7eb16d62c9de5dc52401d70fdedd916a42bd1bdf5960f93ba0cb7",
+        "nefScriptLength": 5749,
+        "nefChecksum": 332262581
+      },
+      {
+        "contractName": "MultiSigVerifier",
+        "contractHash": "0x0d8df687bded56fdb78587a5fb6e064d4cbbd18d",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "b27df2e24f9175313a845a8f68973d40b05291bcec7c9c6950fad7c4c7e673d8",
+        "nefScriptLength": 5702,
+        "nefChecksum": 1903293928
+      },
+      {
+        "contractName": "SubscriptionVerifier",
+        "contractHash": "0x4bc114f16fdba32765cc04b10db73b1a2a582979",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "f6483c89802952dd29942dfe8b81978947b74aa736a78b4dc90bccc2393a83aa",
+        "nefScriptLength": 3590,
+        "nefChecksum": 1813983410
+      },
+      {
+        "contractName": "NeoNativeVerifier",
+        "contractHash": "0x1cb0ad392ddb72837bde16d052eee9a2a5ae42d4",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "f7db45c571c937e5112858d44e1d08d4e36ce5bedb33f760d9f4f62d8b71b7db",
+        "nefScriptLength": 3131,
+        "nefChecksum": 2265413503
+      },
+      {
+        "contractName": "DailyLimitHook",
+        "contractHash": "0x85f2716d48ad0e6724f644a73461140349193ee7",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "a7283e7222376bfb72c4db606089eb40eb3dd6a6882c4c31d661aa5411049f77",
+        "nefScriptLength": 5069,
+        "nefChecksum": 3072058330
+      },
+      {
+        "contractName": "NeoDIDCredentialHook",
+        "contractHash": "0x0e4205b36c4ece2f01d7763c558f10b43303b320",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "98461cd4a9bfa797a4c41c10e6bf2f7ede403fa2545c43101967ff37946c8f1d",
+        "nefScriptLength": 3929,
+        "nefChecksum": 478495945
+      },
+      {
+        "contractName": "WhitelistHook",
+        "contractHash": "0x62ea0f8fa59b1d7079c215e1010feff6393c1370",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "bc994bf5b02a26cf041a34dad24d60d7cd3f2a14745490265100a5bf4dca131f",
+        "nefScriptLength": 2765,
+        "nefChecksum": 3066284788
+      },
+      {
+        "contractName": "MultiHook",
+        "contractHash": "0xdb30c05091a3aaa932ca25edd77db0363bfa7f93",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "4ec673ef98e2287d43bc74c4c40889a9defbcdd8e3e1c9241741a13ca87a2857",
+        "nefScriptLength": 4752,
+        "nefChecksum": 1118810563
+      },
+      {
+        "contractName": "TokenRestrictedHook",
+        "contractHash": "0x304d2258307669db9035b2802d05a3254073b4eb",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "13dedd356804977378998fa97c8faa217b6e27c2616acd642d0ec0c4a1acc427",
+        "nefScriptLength": 3432,
+        "nefChecksum": 2961822273
+      },
+      {
+        "contractName": "AAPaymaster",
+        "contractHash": "0xd8ce8dcd3b1e48015db838c7c0b492fa9e348178",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "2745a5016dbbd8fcc4cdd3ef98dbf5f073dd35fe25810b4d85da6291898c5d6f",
+        "nefScriptLength": 5061,
+        "nefChecksum": 138753413
+      },
+      {
+        "contractName": "AAAddressMarket",
+        "contractHash": "0x39a3f3b98d061a23695d7cf319e3dd463c59bc53",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "71835123021d1fd107111e624adb933b804dedad78a17c75386751cf1c1a3494",
+        "nefScriptLength": 4149,
+        "nefChecksum": 2681367523
+      },
+      {
+        "contractName": "SocialRecoveryVerifier",
+        "contractHash": "0xabf1d96d7bebd85535ae2b5bd951c81a81f0f8c1",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "0d80d82fa57a058574fef7e7169f45f3887479463ef10b602e0ecf5fd80b8678",
+        "nefScriptLength": 17192,
+        "nefChecksum": 3499110746
+      },
+      {
+        "contractName": "MockVerifierCore",
+        "contractHash": "0xa0f10f69cc2dd5876d5bee996245e35627e9ba0b",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "646dd340a0d573da6ba8ed6a6f578bb3757f462b321046b3d5abc7473db94cfc",
+        "nefScriptLength": 1702,
+        "nefChecksum": 4240156089
+      },
+      {
+        "contractName": "PlatformRegistrarMock",
+        "contractHash": "0xe551ca3dfa1cd1d467d53ab0c3d0b5f3f587b848",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "383ba7f0d8ead7cc9a355f35ecbb5128f870ef2c9cba165847278524325528f7",
+        "nefScriptLength": 346,
+        "nefChecksum": 1879857957
+      },
+      {
+        "contractName": "MarkerOnlyModule",
+        "contractHash": "0x9f7c005292ec431790e632be1a62ba8b2acc01c6",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "8e8049e4ae6592ff4916dde0e7f12c83e26a5412ac9fe3f1bc078b0d89160bf4",
+        "nefScriptLength": 4,
+        "nefChecksum": 2543789819
+      },
+      {
+        "contractName": "WrongLifecycleAbiModule",
+        "contractHash": "0xf3ee94bd2b33a11b6f44d69ec913dff24d63bb80",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "d5676ac3c8c23cc3d51da257348195f445da52a65dff3372d327552f911c1dcf",
+        "nefScriptLength": 17,
+        "nefChecksum": 3823112650
+      },
+      {
+        "contractName": "WrongHookLifecycleAbiModule",
+        "contractHash": "0xb4928bb6634233a499bf71fa634410b2a5d4b2d2",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "833eee9cd39d3c338ab145cd17e7292fbb852e515992e4e671839f473bf7ac38",
+        "nefScriptLength": 17,
+        "nefChecksum": 4272197745
+      },
+      {
+        "contractName": "NeoDIDRegistry",
+        "contractHash": "0xcd313552a2b628c32e7bb7ad367a75b6100095b7",
+        "nefScriptByteEquality": true,
+        "nefChecksumEquality": true,
+        "manifestSemanticEquality": true,
+        "nefScriptSha256": "26784750909370451fa15959400ba5b245691602d460f3373ceea9abab318771",
+        "nefScriptLength": 4593,
+        "nefChecksum": 1831107108
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "core native backup-owner execution",
+      "steps": [
+        {
+          "step": "register native account",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x16745106092875eb6f424bd92d4d83a4767f9635a4a95ce74720354f0d90b3f8",
+          "outcome": "HALT",
+          "gasConsumed": 24792836,
+          "systemFee": 4024792836,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered"
+          ],
+          "result": null
+        },
+        {
+          "step": "executeUserOp nonce 0",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x87849e03bfc6e6948e78c46e73508957c975c55e8ab4a76b9bd83738a189b33c",
+          "outcome": "HALT",
+          "gasConsumed": 35860900,
+          "systemFee": 20035860900,
+          "networkFee": 1305520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "replay nonce 0",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Invalid sequence for channel",
+          "expectedFault": "Invalid sequence for channel"
+        },
+        {
+          "step": "executeUserOps batch nonces 1,2",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOps",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x7e7dfaa0735993097632925996755e82ece5a5e191fb4c77980686906a58c740",
+          "outcome": "HALT",
+          "gasConsumed": 66536038,
+          "systemFee": 20066536038,
+          "networkFee": 1407520,
+          "events": [
+            "UserOpExecuted",
+            "UserOpExecuted"
+          ],
+          "result": [
+            true,
+            true
+          ]
+        },
+        {
+          "step": "stranger witness",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "stranger",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Native witness failed",
+          "expectedFault": "Native witness failed"
+        },
+        {
+          "step": "expired deadline",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "UserOp expired",
+          "expectedFault": "UserOp expired"
+        },
+        {
+          "step": "65 arguments",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Arguments exceed protocol limit",
+          "expectedFault": "Arguments exceed protocol limit"
+        },
+        {
+          "step": "channel 1 sequence 0",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x40e5976a34f55cbc954d5cd62e18882b387bd652a5b61bb279e6060dfae5db46",
+          "outcome": "HALT",
+          "gasConsumed": 35963038,
+          "systemFee": 20035963038,
+          "networkFee": 1321520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        }
+      ],
+      "assertions": [
+        {
+          "check": "backup owner recorded",
+          "ok": true
+        },
+        {
+          "check": "channel 0 cursor advanced to 1",
+          "ok": true
+        },
+        {
+          "check": "replay leaves the cursor unchanged",
+          "ok": true
+        },
+        {
+          "check": "batch consumed two sequential nonces",
+          "ok": true
+        },
+        {
+          "check": "channels are independent lanes",
+          "ok": true
+        },
+        {
+          "check": "preview reports deadline, nonce, no verifier",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "escape hatch",
+      "steps": [
+        {
+          "step": "initiateEscape",
+          "contract": "SmartAccountV3",
+          "operation": "initiateEscape",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xc608aacce5d36f21b65aa44d6e8f793a9febfe6c00edff07a23bd25ef0072219",
+          "outcome": "HALT",
+          "gasConsumed": 20688149,
+          "systemFee": 4020688149,
+          "networkFee": 1209520,
+          "events": [
+            "EscapeInitiated"
+          ],
+          "result": null
+        },
+        {
+          "step": "owner execution cancels escape",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe04c9a0fffe8af81f0977ff3ab21c38bf21ae387f79c19f19f36800b7707cbd5",
+          "outcome": "HALT",
+          "gasConsumed": 37854469,
+          "systemFee": 20037854469,
+          "networkFee": 1305520,
+          "events": [
+            "EscapeCancelled",
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "initiateEscape inside cooldown",
+          "contract": "SmartAccountV3",
+          "operation": "initiateEscape",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Escape cooldown active",
+          "expectedFault": "Escape cooldown active"
+        },
+        {
+          "step": "fastfwd +3600s",
+          "outcome": "minted"
+        },
+        {
+          "step": "initiateEscape after cooldown",
+          "contract": "SmartAccountV3",
+          "operation": "initiateEscape",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x6a4f36f23ed6cba2adbbc75b91b34f623a1adb34e8d218169d4011ed81041e7f",
+          "outcome": "HALT",
+          "gasConsumed": 18188912,
+          "systemFee": 4018188912,
+          "networkFee": 1209520,
+          "events": [
+            "EscapeInitiated"
+          ],
+          "result": null
+        },
+        {
+          "step": "finalizeEscape before timelock",
+          "contract": "SmartAccountV3",
+          "operation": "finalizeEscape",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Timelock active",
+          "expectedFault": "Timelock active"
+        },
+        {
+          "step": "fastfwd +2592000s",
+          "outcome": "minted"
+        },
+        {
+          "step": "finalizeEscape after timelock",
+          "contract": "SmartAccountV3",
+          "operation": "finalizeEscape",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x957502f672589ceea4ab78e14b2026036634d75e02148fab456e3c85a1fb1606",
+          "outcome": "HALT",
+          "gasConsumed": 29199032,
+          "systemFee": 4029199032,
+          "networkFee": 1231520,
+          "events": [
+            "EscapeFinalized"
+          ],
+          "result": null
+        }
+      ],
+      "assertions": [
+        {
+          "check": "escape active",
+          "ok": true
+        },
+        {
+          "check": "EscapeCancelled emitted",
+          "ok": true
+        },
+        {
+          "check": "escape cleared",
+          "ok": true
+        },
+        {
+          "check": "EscapeFinalized emitted",
+          "ok": true
+        },
+        {
+          "check": "escape finalized",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "whitelist hook callback tuple",
+      "steps": [
+        {
+          "step": "register account with WhitelistHook",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe29a2549797621cae938cbb6c06f8a5854f968387d93735b73ddba17b5dbe8a1",
+          "outcome": "HALT",
+          "gasConsumed": 33823694,
+          "systemFee": 4271002282,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "setWhitelist (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x64573029a0cd22f42794258eaa36ee960f88e1b032f95c4add03c3e581f62c96",
+          "outcome": "HALT",
+          "gasConsumed": 29654323,
+          "systemFee": 4029654323,
+          "networkFee": 1264520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "setWhitelist (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x6b498a1e6f923af9579db63038e20a79a1cd49ab574bc2a122f5e6b41cb90147",
+          "outcome": "HALT",
+          "gasConsumed": 42634241,
+          "systemFee": 6779559417,
+          "networkFee": 1264520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "whitelisted target",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xb379bcbf499130c3d23901325b2bd3a09761aa83b5c539e59c18374650c6618f",
+          "outcome": "HALT",
+          "gasConsumed": 66888420,
+          "systemFee": 20298761427,
+          "networkFee": 1303520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "unlisted target",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Target contract not in whitelist",
+          "expectedFault": "Target contract not in whitelist"
+        }
+      ],
+      "assertions": [
+        {
+          "check": "hook bound",
+          "ok": true
+        },
+        {
+          "check": "setWhitelist: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "target whitelisted",
+          "ok": true
+        },
+        {
+          "check": "whitelisted op consumed nonce 0",
+          "ok": true
+        },
+        {
+          "check": "rejected pre-hook leaves the nonce unchanged",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "bounded hook callback gas",
+      "steps": [
+        {
+          "step": "register adversarial hook",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x120f5a570b50131f1946842b8c9bfbdaa4155307ea83f2de0a438fee0530b5da",
+          "outcome": "HALT",
+          "gasConsumed": 33771602,
+          "systemFee": 4270952184,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "enable adversarial hook burn",
+          "contract": "MockTransferTarget",
+          "operation": "setBurnGas",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe18c1f3e61201de87cc958cbf7fc8852f13d0f4b79f8532e777fa6b4166057ba",
+          "outcome": "HALT",
+          "gasConsumed": 3184421,
+          "systemFee": 3184421,
+          "networkFee": 1186580,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "hook callback exceeds its independent budget",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "zpuG6JVvT4UclYD+e8HhhUTMUwAwIdHJhbnNmZXIMFNKosBm+evkN3HEM8uPHN8rv/yiVFsAMFNCJGd7OhFSRLsI46dfOFlZd4c7IEsAfDA1leGVjdXRlVXNlck9wDBRZ7LYMZs5dWI6cOIdSfEK7c9/UREFifVtS'. The execution faulted and cannot be completed.\n\tInner InvalidOperationException: The bounded contract call gas limit has been exhausted.",
+          "expectedFault": "The bounded contract call gas limit has been exhausted."
+        },
+        {
+          "step": "enable adversarial post-hook burn",
+          "contract": "MockTransferTarget",
+          "operation": "setBurnPostGas",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x772957e769b0c2c345ac13abaac736dc1ea174d75ba3cce6a5a005e347c7aefd",
+          "outcome": "HALT",
+          "gasConsumed": 3184421,
+          "systemFee": 3184421,
+          "networkFee": 1190580,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "disable adversarial pre-hook burn",
+          "contract": "MockTransferTarget",
+          "operation": "setBurnGas",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xc5dcd3fac38a466d15b60c9840c44697f2ad1ea8a9cc0c057e793b930b059d0f",
+          "outcome": "HALT",
+          "gasConsumed": 3084389,
+          "systemFee": 3084389,
+          "networkFee": 1186580,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "post-hook callback exceeds its independent budget",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "zpuG6JVvT4UclYD+e8HhhUTMUwAwIdHJhbnNmZXIMFNKosBm+evkN3HEM8uPHN8rv/yiVFsAMFNCJGd7OhFSRLsI46dfOFlZd4c7IEsAfDA1leGVjdXRlVXNlck9wDBRZ7LYMZs5dWI6cOIdSfEK7c9/UREFifVtS'. The execution faulted and cannot be completed.\n\tInner InvalidOperationException: The bounded contract call gas limit has been exhausted.",
+          "expectedFault": "The bounded contract call gas limit has been exhausted."
+        },
+        {
+          "step": "register account for bounded module cleanup",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x0ae35baa9b1765c897ced25f820983303e34e41f3f3c89a27d969bcb1b3cdab6",
+          "outcome": "HALT",
+          "gasConsumed": 33771602,
+          "systemFee": 4270952184,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "enable adversarial module cleanup burn",
+          "contract": "MockTransferTarget",
+          "operation": "setBurnClearGas",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x29997a7c8d42d87b2d46e5eae99835070e98805c5cf1d8ce263806c9ff09a6e0",
+          "outcome": "HALT",
+          "gasConsumed": 3184421,
+          "systemFee": 3184421,
+          "networkFee": 1191580,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "propose bounded hook cleanup",
+          "contract": "SmartAccountV3",
+          "operation": "updateHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x1465f9ab050283aa2a38a9f7f4f1468e23dcdebd63fea77dac80509c6da38f03",
+          "outcome": "HALT",
+          "gasConsumed": 22535730,
+          "systemFee": 4022535730,
+          "networkFee": 1227520,
+          "events": [
+            "ModuleUpdateInitiated",
+            "HookUpdateInitiated"
+          ],
+          "result": null
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "module cleanup callback exceeds its independent budget",
+          "contract": "SmartAccountV3",
+          "operation": "confirmHookUpdate",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "dOperationException: Smart contract execution failed for script 'DBSir00iewpk6ITCLUkRnBK7aeZ14hHAHwwRY29uZmlybUhvb2tVcGRhdGUMFFnstgxmzl1Yjpw4h1J8Qrtz39REQWJ9W1I='. The execution faulted and cannot be completed.\n\tInner InvalidOperationException: The bounded contract call gas limit has been exhausted.",
+          "expectedFault": "The bounded contract call gas limit has been exhausted."
+        }
+      ],
+      "assertions": [
+        {
+          "check": "the NeoVM hook-budget fault is surfaced by the AA invocation",
+          "ok": true
+        },
+        {
+          "check": "a hook budget fault rolls back nonce consumption",
+          "ok": true
+        },
+        {
+          "check": "the NeoVM post-hook budget fault is surfaced by the AA invocation",
+          "ok": true
+        },
+        {
+          "check": "a post-hook budget fault rolls back nonce consumption",
+          "ok": true
+        },
+        {
+          "check": "the NeoVM maintenance-budget fault is surfaced by the hook transition",
+          "ok": true
+        },
+        {
+          "check": "maintenance-budget fault preserves the outgoing hook binding",
+          "ok": true
+        },
+        {
+          "check": "maintenance-budget fault preserves the pending hook transition",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "lifecycle ABI pre-check",
+      "steps": [
+        {
+          "step": "verifier with marker only",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Verifier V3 validation ABI missing",
+          "expectedFault": "Verifier V3 validation ABI missing"
+        },
+        {
+          "step": "verifier with wrong return type",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Verifier V3 validation ABI missing",
+          "expectedFault": "Verifier V3 validation ABI missing"
+        },
+        {
+          "step": "hook with marker only",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Hook V3 pre ABI missing",
+          "expectedFault": "Hook V3 pre ABI missing"
+        },
+        {
+          "step": "hook with wrong return type",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Hook V3 pre ABI missing",
+          "expectedFault": "Hook V3 pre ABI missing"
+        },
+        {
+          "step": "verifier Web3AuthVerifier passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x18c9b28347ac4c8cfd86643dcb5d14aee5e82c6bd5a112dfdb3c1f1b05a31688",
+          "outcome": "HALT",
+          "gasConsumed": 33822721,
+          "systemFee": 4271000482,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "verifier TEEVerifier passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x6db7aaac220fa263a83be8b2ac8d5ef28f8c61e7052191eaa43610cb8cc90700",
+          "outcome": "HALT",
+          "gasConsumed": 33823446,
+          "systemFee": 4271002057,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "verifier WebAuthnVerifier passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xbc852c0d39ad2230abb40504a56c58b99e5db6937ca09dcca5397a724605d0ac",
+          "outcome": "HALT",
+          "gasConsumed": 33823446,
+          "systemFee": 4271002057,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "verifier NeoNativeVerifier passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xed767fb04a08b350d05e0092450c8641702871d63a1c0441badfdb1e730c4ade",
+          "outcome": "HALT",
+          "gasConsumed": 33826803,
+          "systemFee": 4271005209,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "verifier MultiSigVerifier passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x23d7bb7403371b7b5d949a6149428fac32bb832c5f7256247655cbca75f323e0",
+          "outcome": "HALT",
+          "gasConsumed": 33821658,
+          "systemFee": 4271000482,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "verifier SubscriptionVerifier passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x546e40d0b6cadf3c4f0d537117d3e85b18a199cd7f41524d522134e049609118",
+          "outcome": "HALT",
+          "gasConsumed": 33817344,
+          "systemFee": 4270995755,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "verifier ZkLoginVerifier passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x5e2822772a3189271ae7390711bc1e56b841cc9ff11114443a93758b8e8e7441",
+          "outcome": "HALT",
+          "gasConsumed": 33839411,
+          "systemFee": 4271017813,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "verifier ZKEmailVerifier passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x3e39ae642abab834ff3fc9378544755fa4d09e45a40d437151550993544b858d",
+          "outcome": "HALT",
+          "gasConsumed": 33817143,
+          "systemFee": 4270995755,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "hook DailyLimitHook passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x00af0e6749db136f849e63d1925e70d05780788d25c5b1e8948202cdea139e18",
+          "outcome": "HALT",
+          "gasConsumed": 33837474,
+          "systemFee": 4271014887,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "hook TokenRestrictedHook passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xced720b370e796ac430b192ad832b2ee7ffb556bde48ee4803bb74926785d602",
+          "outcome": "HALT",
+          "gasConsumed": 33822324,
+          "systemFee": 4271000707,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "hook NeoDIDCredentialHook passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x9b0476a2be4021ae2e0900801d91e6760bd49f530e60409c86f5a405a8f22d08",
+          "outcome": "HALT",
+          "gasConsumed": 33846164,
+          "systemFee": 4271024340,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "hook MultiHook passes the pre-check",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xa043e2a2657729f7050f6e0ab3d0a6b0b02a7ae6d03ee0f907b5d946094bc9c0",
+          "outcome": "HALT",
+          "gasConsumed": 33831778,
+          "systemFee": 4271010160,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        }
+      ],
+      "assertions": []
+    },
+    {
+      "name": "cryptographic verifier profile vectors",
+      "steps": [
+        {
+          "step": "register bare P-256 WebAuthn profile",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe1d1d645dd5bb657a79608622c8b4753ebee88973afd657944216b556030273c",
+          "outcome": "HALT",
+          "gasConsumed": 56333687,
+          "systemFee": 4292059727,
+          "networkFee": 1316520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "valid bare P-256 WebAuthn payload",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x714f9c1b2bb3b4b87bd7e8d267a0d0fa24eefdd8f5e505fcc65afd39e67848ce",
+          "outcome": "HALT",
+          "gasConsumed": 66864093,
+          "systemFee": 21050828196,
+          "networkFee": 1369520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "retargeted bare P-256 WebAuthn payload",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Verifier rejected signature",
+          "expectedFault": "Verifier rejected signature"
+        },
+        {
+          "step": "register TEE P-256 profile",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xb613d04f2234b832eabe264b46bf84541fa9f760651f7aae019369c6d3172929",
+          "outcome": "HALT",
+          "gasConsumed": 56333687,
+          "systemFee": 4292059727,
+          "networkFee": 1316520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "valid TEE P-256 payload",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xa286fb44d7e48fe7d9c679302100a9d6f8e1d18e1e9a70b6314be6a9198b1217",
+          "outcome": "HALT",
+          "gasConsumed": 66864093,
+          "systemFee": 21050828196,
+          "networkFee": 1369520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "foreign TEE P-256 signature",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Verifier rejected signature",
+          "expectedFault": "Verifier rejected signature"
+        },
+        {
+          "step": "register EIP-712 Web3Auth profile",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe852ccf85d2e64fcc07fc84b0213f8d277f44939d6760ba876825bfb419f2412",
+          "outcome": "HALT",
+          "gasConsumed": 59533733,
+          "systemFee": 4292059023,
+          "networkFee": 1348520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "valid EIP-712 Web3Auth secp256k1 payload",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x6f26b7a4b6a42c88e07066a318b8917bc79d916bf156d44b93cdb310ce15911b",
+          "outcome": "HALT",
+          "gasConsumed": 73867515,
+          "systemFee": 21057830768,
+          "networkFee": 1369520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "retargeted EIP-712 Web3Auth payload",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Verifier rejected signature",
+          "expectedFault": "Verifier rejected signature"
+        },
+        {
+          "step": "foreign EIP-712 Web3Auth key",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Verifier rejected signature",
+          "expectedFault": "Verifier rejected signature"
+        },
+        {
+          "step": "register delegated ZkLogin profile",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x0144ea802cd62571f488cacce07c633d6ee3387a953ec0ed942db76008a75e0c",
+          "outcome": "HALT",
+          "gasConsumed": 33839411,
+          "systemFee": 4271017813,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "configure delegated ZkLogin key (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x367d2d87c78d303876d0a2a5085f5780dedad140f99d674e0ec341ebfae866cc",
+          "outcome": "HALT",
+          "gasConsumed": 40687812,
+          "systemFee": 4040687812,
+          "networkFee": 1319520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "configure delegated ZkLogin key (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xdd5677adc24f7e765cd22c12388332eb6e4ebd4e1457112cd71d0a5d625afb63",
+          "outcome": "HALT",
+          "gasConsumed": 60575338,
+          "systemFee": 6790592906,
+          "networkFee": 1319520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "valid delegated ZkLogin proof",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x7725ce9180965d362962f253a329b54629203c39200c4dafad42874299282169",
+          "outcome": "HALT",
+          "gasConsumed": 71436532,
+          "systemFee": 21055400425,
+          "networkFee": 1443520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "replayed delegated ZkLogin payload",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Verifier rejected signature",
+          "expectedFault": "Verifier rejected signature"
+        },
+        {
+          "step": "register disabled ZKEmail profile",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xd7ba7b28f9783d5e92c5e937ce3a7c07a1ab100f44853ab8c568acc5e2d97fa9",
+          "outcome": "HALT",
+          "gasConsumed": 33817143,
+          "systemFee": 4270995755,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "configure ZKEmail DKIM commitment (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x6d4b36a81027ae204760f53b7071bebf6f13ba621aaeb4bfaf47ae8839600009",
+          "outcome": "HALT",
+          "gasConsumed": 29658695,
+          "systemFee": 4029658695,
+          "networkFee": 1282520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "configure ZKEmail DKIM commitment (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x06232960b353238ad5fd98da007d767b94a619e2205eb2510984b2eacf2ed735",
+          "outcome": "HALT",
+          "gasConsumed": 43737318,
+          "systemFee": 6779563789,
+          "networkFee": 1282520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "disabled ZKEmail proof fails closed",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "ZKEmailVerifier disabled pending real proof verification",
+          "expectedFault": "disabled pending real proof verification"
+        }
+      ],
+      "assertions": [
+        {
+          "check": "retargeted P-256 signature leaves the nonce unchanged",
+          "ok": true
+        },
+        {
+          "check": "foreign TEE signature leaves the nonce unchanged",
+          "ok": true
+        },
+        {
+          "check": "Web3Auth stores the 65-byte uncompressed secp256k1 key",
+          "ok": true
+        },
+        {
+          "check": "valid Web3Auth payload consumes nonce 0",
+          "ok": true
+        },
+        {
+          "check": "retargeted Web3Auth payload leaves the nonce unchanged",
+          "ok": true
+        },
+        {
+          "check": "foreign Web3Auth key leaves the nonce unchanged",
+          "ok": true
+        },
+        {
+          "check": "Web3Auth verifies the 32-byte digest directly and returns the ERC-1271 magic value",
+          "ok": true
+        },
+        {
+          "check": "Web3Auth accepts EIP-2098 compact message signatures",
+          "ok": true
+        },
+        {
+          "check": "Web3Auth advertises the ERC-1271 message-signature capability",
+          "ok": true
+        },
+        {
+          "check": "Web3Auth rejects a message signature under a different digest",
+          "ok": true
+        },
+        {
+          "check": "Web3Auth fails closed on a malformed recoverable signature",
+          "ok": true
+        },
+        {
+          "check": "configure delegated ZkLogin key: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "replayed delegated proof leaves the nonce unchanged",
+          "ok": true
+        },
+        {
+          "check": "configure ZKEmail DKIM commitment: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "disabled ZKEmail verifier cannot consume a nonce",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "bounded verifier callback gas",
+      "steps": [
+        {
+          "step": "register adversarial verifier",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x7dde46db4fe3bb90a65ac6c2c0218ed9dbd3e229f0bc8d256dbc27d49aef274a",
+          "outcome": "HALT",
+          "gasConsumed": 33778926,
+          "systemFee": 4270957884,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "enable adversarial verifier burn",
+          "contract": "MockVerifierCore",
+          "operation": "setBurnGas",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x50288647a1e8cbc72a122f0c18c05132a8847de99bf37581dcc91888519d3c79",
+          "outcome": "HALT",
+          "gasConsumed": 2169772,
+          "systemFee": 2169772,
+          "networkFee": 1184520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "verifier callback exceeds its independent budget",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "wsDp9MPKnLrlJM7PB3AX8iIcUwAwIdHJhbnNmZXIMFNKosBm+evkN3HEM8uPHN8rv/yiVFsAMFBTZa4iwBFI8B/4av7IVVogbj5SmEsAfDA1leGVjdXRlVXNlck9wDBRZ7LYMZs5dWI6cOIdSfEK7c9/UREFifVtS'. The execution faulted and cannot be completed.\n\tInner InvalidOperationException: The bounded contract call gas limit has been exhausted.",
+          "expectedFault": "The bounded contract call gas limit has been exhausted."
+        },
+        {
+          "step": "disable adversarial verifier burn",
+          "contract": "MockVerifierCore",
+          "operation": "setBurnGas",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xb24b7da376015617bc8a111865c2d3261908ef252ac9d341f570c7135cf8c15a",
+          "outcome": "HALT",
+          "gasConsumed": 2069740,
+          "systemFee": 2069740,
+          "networkFee": 1184520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "enable adversarial verifier post burn",
+          "contract": "MockVerifierCore",
+          "operation": "setBurnPostGas",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x2e906e26f5c82407078474d0c8aec4840258f5d75e53dfd2ebfa1eadd7771ed0",
+          "outcome": "HALT",
+          "gasConsumed": 2169772,
+          "systemFee": 2169772,
+          "networkFee": 1188520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "verifier post callback exceeds its independent budget",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "wsDp9MPKnLrlJM7PB3AX8iIcUwAwIdHJhbnNmZXIMFNKosBm+evkN3HEM8uPHN8rv/yiVFsAMFBTZa4iwBFI8B/4av7IVVogbj5SmEsAfDA1leGVjdXRlVXNlck9wDBRZ7LYMZs5dWI6cOIdSfEK7c9/UREFifVtS'. The execution faulted and cannot be completed.\n\tInner InvalidOperationException: The bounded contract call gas limit has been exhausted.",
+          "expectedFault": "The bounded contract call gas limit has been exhausted."
+        },
+        {
+          "step": "disable adversarial verifier post burn",
+          "contract": "MockVerifierCore",
+          "operation": "setBurnPostGas",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x2cfd63e6d5270e93728f2934f730a2145be1ffdc0d280dcbb4bf211b8f114160",
+          "outcome": "HALT",
+          "gasConsumed": 2069740,
+          "systemFee": 2069740,
+          "networkFee": 1188520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "enable adversarial message-signature burn",
+          "contract": "MockVerifierCore",
+          "operation": "setBurnGas",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xf3742ba155d10d95886b7fd03d599e2c3d500a1f4d174f9cc0816477cc9ccb0c",
+          "outcome": "HALT",
+          "gasConsumed": 2069772,
+          "systemFee": 2069772,
+          "networkFee": 1184520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "ERC-1271 verifier callback exceeds its independent budget",
+          "contract": "SmartAccountV3",
+          "contractHash": "0x44d4df73bb427c5287389c8e585dce660cb6ec59",
+          "operation": "isValidSignature",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xbeef99e11420bf4d2603a51d48c6607d08442eb6219043f1d5e503acabeddd0f",
+          "outcome": "FAULT",
+          "gasConsumed": 1008698955,
+          "systemFee": 2000000000,
+          "networkFee": 101312520,
+          "events": [],
+          "simulation": "isValidSignature simulation faulted: The bounded contract call gas limit exceeds the remaining transaction budget.",
+          "exception": "The bounded contract call gas limit has been exhausted.",
+          "expectedFault": "The bounded contract call gas limit has been exhausted."
+        },
+        {
+          "step": "disable adversarial message-signature burn",
+          "contract": "MockVerifierCore",
+          "operation": "setBurnGas",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x07d032ce12af83b736256ddda674fd12fef04ad1ce958d2c097aa920765374fa",
+          "outcome": "HALT",
+          "gasConsumed": 2069740,
+          "systemFee": 2069740,
+          "networkFee": 1184520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "ERC-1271 verifier callback succeeds within its independent budget",
+          "contract": "SmartAccountV3",
+          "contractHash": "0x44d4df73bb427c5287389c8e585dce660cb6ec59",
+          "operation": "isValidSignature",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xd82b86e73eb29cd62f2b3d6eb0b499e0621beb2b4f77d9727a39cfad0525b912",
+          "outcome": "HALT",
+          "gasConsumed": 10373612,
+          "systemFee": 2000000000,
+          "networkFee": 101312520,
+          "events": [],
+          "simulation": "isValidSignature simulation faulted: The bounded contract call gas limit exceeds the remaining transaction budget.",
+          "result": "1626ba7e"
+        }
+      ],
+      "assertions": [
+        {
+          "check": "the NeoVM child-budget fault is surfaced by the AA invocation",
+          "ok": true
+        },
+        {
+          "check": "a verifier budget fault rolls back nonce consumption",
+          "ok": true
+        },
+        {
+          "check": "the NeoVM verifier post-budget fault is surfaced by the AA invocation",
+          "ok": true
+        },
+        {
+          "check": "a verifier post-budget fault rolls back nonce consumption",
+          "ok": true
+        },
+        {
+          "check": "the ERC-1271 adapter surfaces the NeoVM verifier-budget fault",
+          "ok": true
+        },
+        {
+          "check": "the ERC-1271 adapter returns the success selector after the budget path",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "session-key relay submission and paymaster settlement",
+      "steps": [
+        {
+          "step": "register account with SessionKeyVerifier",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x2c4fc5e22f51430583843b9174bd5b23cdbf43179af863b1e0afb27ae82d4cf9",
+          "outcome": "HALT",
+          "gasConsumed": 33844825,
+          "systemFee": 4271022540,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "setSessionKey (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x510e44d0e9a5778e1edfa1a963e98ce3bf98979ab71695d1339b8fd07afe3ccd",
+          "outcome": "HALT",
+          "gasConsumed": 29654616,
+          "systemFee": 4029654616,
+          "networkFee": 1335520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "setSessionKey (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x5776c94cafba3733bf2f4cc7dda60385cc9ad30d7c40ff9e0dbd6f57258ecdce",
+          "outcome": "HALT",
+          "gasConsumed": 61863599,
+          "systemFee": 6779559710,
+          "networkFee": 1335520,
+          "events": [
+            "SessionKeyGranted"
+          ],
+          "result": null
+        },
+        {
+          "step": "relay submits session-signed op",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xa55051d9c78f76d52385abeef34616ad768869891a3b028f3d3c4d8cd7da5f85",
+          "outcome": "HALT",
+          "gasConsumed": 88395538,
+          "systemFee": 21058227783,
+          "networkFee": 1369520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "relay submits zero signature",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Verifier rejected signature",
+          "expectedFault": "Verifier rejected signature"
+        },
+        {
+          "step": "sponsor deposits 100 GAS",
+          "contract": "GasToken",
+          "operation": "transfer",
+          "signer": "sponsor",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xb77b9e2e4fbec19de00eda43a7187fe2e6650a480cf1bd899dd9f71f354a754a",
+          "outcome": "HALT",
+          "gasConsumed": 14559778,
+          "systemFee": 14559778,
+          "networkFee": 1236520,
+          "events": [
+            "Transfer",
+            "Deposited"
+          ],
+          "result": true
+        },
+        {
+          "step": "sponsor sets policy",
+          "contract": "AAPaymaster",
+          "operation": "setPolicy",
+          "signer": "sponsor",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x8802b336c3d27d8b8826c2c04068ac34228cb351d50a37970bd7b22c328d4530",
+          "outcome": "HALT",
+          "gasConsumed": 11881786,
+          "systemFee": 11881786,
+          "networkFee": 1244520,
+          "events": [
+            "PolicyCreated"
+          ],
+          "result": null
+        },
+        {
+          "step": "relay executes sponsored op",
+          "contract": "SmartAccountV3",
+          "operation": "executeSponsoredUserOp",
+          "signer": "relay",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x37c4abbb76537253a120af425850de539e53b2631e022a25a48c2d1b420ec08a",
+          "outcome": "HALT",
+          "gasConsumed": 131675234,
+          "systemFee": 21066614431,
+          "networkFee": 1429520,
+          "events": [
+            "UserOpExecuted",
+            "Transfer",
+            "Reimbursed",
+            "SponsoredUserOpExecuted"
+          ],
+          "result": true,
+          "estimatedGas": 131675234
+        }
+      ],
+      "assertions": [
+        {
+          "check": "setSessionKey: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "session key stored",
+          "ok": true
+        },
+        {
+          "check": "relay-only submission accepted by the verifier",
+          "ok": true
+        },
+        {
+          "check": "deposit credited",
+          "ok": true
+        },
+        {
+          "check": "zero-fee estimation (131675234) equals the persisted gas (131675234) to the datoshi",
+          "ok": true
+        },
+        {
+          "check": "SponsoredUserOpExecuted emitted",
+          "ok": true
+        },
+        {
+          "check": "sponsor deposit reduced by the capped reimbursement 500000000",
+          "ok": true
+        },
+        {
+          "check": "relay net GAS change equals reimbursement minus the fees it paid",
+          "ok": true
+        },
+        {
+          "check": "sponsored op consumed nonce 1",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "recovery verifier rotation with cleanup and credit refund",
+      "steps": [
+        {
+          "step": "admin pins the core on the recovery verifier",
+          "contract": "SocialRecoveryVerifier",
+          "operation": "setAuthorizedCore",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xebc043c5eb976b592d14eb4b22bffd64a192ce210e4e7e9bd15afbda3d787b21",
+          "outcome": "HALT",
+          "gasConsumed": 6068695,
+          "systemFee": 6068695,
+          "networkFee": 1214580,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "register account with SocialRecoveryVerifier",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe8983836707b0ab84d02ab9cdb8064c07019fce6ee0c105564477f33ca1e6854",
+          "outcome": "HALT",
+          "gasConsumed": 34163566,
+          "systemFee": 4271344028,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "setupRecovery",
+          "contract": "SocialRecoveryVerifier",
+          "operation": "setupRecovery",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x042094b716a6a670afb266866839dce8c4d3e0243e24d2b3464c852903f82bd8",
+          "outcome": "HALT",
+          "gasConsumed": 68502480,
+          "systemFee": 68502480,
+          "networkFee": 1433520,
+          "events": [
+            "RecoverySetup"
+          ],
+          "result": null
+        },
+        {
+          "step": "owner earmarks oracle credit",
+          "contract": "GasToken",
+          "operation": "transfer",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x98638ae77ac7f2f6aac16fbef3edd3a93ecfc65e8f4f46a5345840c2fcfac851",
+          "outcome": "HALT",
+          "gasConsumed": 15371497,
+          "systemFee": 15371497,
+          "networkFee": 1252520,
+          "events": [
+            "Transfer"
+          ],
+          "result": true
+        },
+        {
+          "step": "updateVerifier to none",
+          "contract": "SmartAccountV3",
+          "operation": "updateVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x14197eec0cdf12e21a9623ff3bc6bb9d9a347d2729867fae0944be92ead54644",
+          "outcome": "HALT",
+          "gasConsumed": 22635623,
+          "systemFee": 4022635623,
+          "networkFee": 1233520,
+          "events": [
+            "ModuleUpdateInitiated",
+            "VerifierUpdateInitiated"
+          ],
+          "result": null
+        },
+        {
+          "step": "confirm before timelock",
+          "contract": "SmartAccountV3",
+          "operation": "confirmVerifierUpdate",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Timelock not elapsed",
+          "expectedFault": "Timelock not elapsed"
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "confirmVerifierUpdate",
+          "contract": "SmartAccountV3",
+          "operation": "confirmVerifierUpdate",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xbc61cf61075daed15e4a04f83f4df046e967fb40243edb8006f9dd35fc9d7d88",
+          "outcome": "HALT",
+          "gasConsumed": 76160897,
+          "systemFee": 6775499903,
+          "networkFee": 1216520,
+          "events": [
+            "Transfer",
+            "RecoveryCleared",
+            "ModuleRemoved",
+            "VerifierUpdateConfirmed"
+          ],
+          "result": null
+        }
+      ],
+      "assertions": [
+        {
+          "check": "recovery owner set",
+          "ok": true
+        },
+        {
+          "check": "oracle credit earmarked",
+          "ok": true
+        },
+        {
+          "check": "RecoveryCleared emitted by the outgoing verifier",
+          "ok": true
+        },
+        {
+          "check": "verifier detached",
+          "ok": true
+        },
+        {
+          "check": "recovery owner cleared",
+          "ok": true
+        },
+        {
+          "check": "credit record cleared",
+          "ok": true
+        },
+        {
+          "check": "owner received the credit refund net of the fees paid",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "MultiSig child pre-check",
+      "steps": [
+        {
+          "step": "register account with MultiSigVerifier",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xc2ab4ee2725a9707d38371b2847eeffea755e51840362125b4d2a2a4b60da023",
+          "outcome": "HALT",
+          "gasConsumed": 33821658,
+          "systemFee": 4271000482,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "initialize MultiSig topology (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xad035feb5e17e717995ee90b24d765be28c0d47db5dec0468b8b64c41873d4d4",
+          "outcome": "HALT",
+          "gasConsumed": 42646995,
+          "systemFee": 4275827523,
+          "networkFee": 1289520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "initialize MultiSig topology (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xc0a9be029f9ef1a546a08a9854a0ba2161661b18a33a2d5a6a5d541a61c7fa02",
+          "outcome": "HALT",
+          "gasConsumed": 98129372,
+          "systemFee": 6792552090,
+          "networkFee": 1289520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "provision SessionKey leaf (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifierChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x68e652b66df7036499c0b348c447b9c89abb35b128e81489e7bf7d233a958a3d",
+          "outcome": "HALT",
+          "gasConsumed": 59032882,
+          "systemFee": 4288118664,
+          "networkFee": 1360520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "provision SessionKey leaf (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifierChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xadfb96a81647c64b7e7d42f631aa467ffc2eaf9023f7efe080e3ba09278dd2d1",
+          "outcome": "HALT",
+          "gasConsumed": 91041550,
+          "systemFee": 4308937662,
+          "networkFee": 1360520,
+          "events": [
+            "SessionKeyGranted"
+          ],
+          "result": null
+        },
+        {
+          "step": "provision WebAuthn leaf with reused key (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifierChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x9a268353db6610b59b4522c739edc7190928a7b1a4e55fe7db70a9d13b5ac76f",
+          "outcome": "HALT",
+          "gasConsumed": 58998311,
+          "systemFee": 4288095115,
+          "networkFee": 1307520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "provision WebAuthn leaf with reused key (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifierChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xf555847d203e2d45dbbf7dca908d8a8c6be01dd317dc3b06c1b394bd97d16cd7",
+          "outcome": "HALT",
+          "gasConsumed": 73177003,
+          "systemFee": 4308903091,
+          "networkFee": 1307520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "record duplicate signer domain (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe14082cdda6df68289a92bb2b319076547396312b1e97497500568302e73bb40",
+          "outcome": "HALT",
+          "gasConsumed": 30641546,
+          "systemFee": 4030641546,
+          "networkFee": 1289520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "record duplicate signer domain (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xfa99cc2f6725b357cad4e820556cf59ad505790dbe7eec41244435f3bf39e6f1",
+          "outcome": "HALT",
+          "gasConsumed": 76204264,
+          "systemFee": 6780546640,
+          "networkFee": 1289520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "duplicate signer domain cannot execute",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Duplicate signer domain",
+          "expectedFault": "Duplicate signer domain"
+        },
+        {
+          "step": "rotate WebAuthn leaf to distinct key (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifierChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x15fc3bd1328d5a28b03672e03a54cc56297af6592329a021cbd04ee7d053a56a",
+          "outcome": "HALT",
+          "gasConsumed": 58998311,
+          "systemFee": 4288095115,
+          "networkFee": 1307520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "rotate WebAuthn leaf to distinct key (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifierChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x64aad47ada5ec7928abfc8ab7ea9532b4664b5028a08bd03c3f883f7ea589c7d",
+          "outcome": "HALT",
+          "gasConsumed": 68677003,
+          "systemFee": 4308903091,
+          "networkFee": 1307520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "setConfig with independently committed domains (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xbc29c21cb135a513f4602e8f1d214105644453000d4e362aec6e7595b7cbe0b9",
+          "outcome": "HALT",
+          "gasConsumed": 30641546,
+          "systemFee": 4030641546,
+          "networkFee": 1289520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "setConfig with independently committed domains (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xbe3b799ffa5066a4f3548da4099833a54f154f35060ac5bd78861dc1173405c4",
+          "outcome": "HALT",
+          "gasConsumed": 76204264,
+          "systemFee": 6780546640,
+          "networkFee": 1289520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "rotate SessionKey leaf into the WebAuthn domain (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifierChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xd2aaae9b74bc75694d58a4c2591c71a2807929e38b7f7752bced3ca6bd2f8b6e",
+          "outcome": "HALT",
+          "gasConsumed": 59032882,
+          "systemFee": 4288118664,
+          "networkFee": 1361520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "rotate SessionKey leaf into the WebAuthn domain (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifierChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x5fe74862b99db26635abba08721428389bcc55fe7a8b3eb95722e33e5e4a92e8",
+          "outcome": "HALT",
+          "gasConsumed": 76942314,
+          "systemFee": 4308937662,
+          "networkFee": 1361520,
+          "events": [
+            "SessionKeyGranted"
+          ],
+          "result": null
+        },
+        {
+          "step": "record repeated duplicate signer domain (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x9d1c103aa48e68d334b1c97955580a79399dffe47a8c2ee47bdf0dda49949238",
+          "outcome": "HALT",
+          "gasConsumed": 30641546,
+          "systemFee": 4030641546,
+          "networkFee": 1289520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "record repeated duplicate signer domain (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xf2c03ac82ec18fc828f7a1a8459d0bc5b142a903351131a35287b991e440b6fa",
+          "outcome": "HALT",
+          "gasConsumed": 76204264,
+          "systemFee": 6780546640,
+          "networkFee": 1289520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "repeated duplicate signer domain cannot execute",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Duplicate signer domain",
+          "expectedFault": "Duplicate signer domain"
+        },
+        {
+          "step": "setConfig with marker-only child (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x56f687e283fe795ad15cbf1caf53fba11c32c15cbcee9d5236b6b8889867f0fc",
+          "outcome": "HALT",
+          "gasConsumed": 30641490,
+          "systemFee": 4030641490,
+          "networkFee": 1267520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "setConfig with marker-only child (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Child verifier validation ABI missing",
+          "expectedFault": "Child verifier validation ABI missing"
+        },
+        {
+          "step": "setConfig containing itself (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x8ac302ae45b65b028e3599a81605b896bd647eb2fb0f3025f71e1e3dbd527048",
+          "outcome": "HALT",
+          "gasConsumed": 25116846,
+          "systemFee": 4025116846,
+          "networkFee": 1267520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "setConfig containing itself (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "MultiSig verifier cannot contain itself",
+          "expectedFault": "MultiSig verifier cannot contain itself"
+        },
+        {
+          "step": "setConfig with undeployed child (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xcad8715ac156f1f20ce17e3ebd867a46a60709b84554c56792d200e4734f32e7",
+          "outcome": "HALT",
+          "gasConsumed": 25116846,
+          "systemFee": 4025116846,
+          "networkFee": 1267520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "setConfig with undeployed child (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Child verifier is not deployed",
+          "expectedFault": "Child verifier is not deployed"
+        },
+        {
+          "step": "reject non-root dependency mutation",
+          "contract": "SmartAccountV3",
+          "operation": "setVerifierDependencies",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Dependency caller is not installed root",
+          "expectedFault": "Dependency caller is not installed root"
+        },
+        {
+          "step": "remove WebAuthn from MultiSig (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xa4a7cd9dd71426ed493f2c529395294bfd7cc5b5f353fa72dcadfa8b1ada7598",
+          "outcome": "HALT",
+          "gasConsumed": 25116846,
+          "systemFee": 4025116846,
+          "networkFee": 1267520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "remove WebAuthn from MultiSig (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x628ec4cadd30df2e347fd07c1966f50422047c1083d81c9dc4e578fab20ff618",
+          "outcome": "HALT",
+          "gasConsumed": 89578470,
+          "systemFee": 6780546584,
+          "networkFee": 1267520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "update MultiSig verifier to native fallback",
+          "contract": "SmartAccountV3",
+          "operation": "updateVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x8c3bcf7156aca18a92dab308e8bbf1d4dc722d83ce5ad247c2c08a65e7dcfbcc",
+          "outcome": "HALT",
+          "gasConsumed": 22635623,
+          "systemFee": 4022635623,
+          "networkFee": 1233520,
+          "events": [
+            "ModuleUpdateInitiated",
+            "VerifierUpdateInitiated"
+          ],
+          "result": null
+        },
+        {
+          "step": "confirm MultiSig cleanup before timelock",
+          "contract": "SmartAccountV3",
+          "operation": "confirmVerifierUpdate",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Timelock not elapsed",
+          "expectedFault": "Timelock not elapsed"
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "confirm MultiSig cleanup after timelock",
+          "contract": "SmartAccountV3",
+          "operation": "confirmVerifierUpdate",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xb85261463b632cedb2fe03ced154e440f36f802bc1366f265f2492d3edb48d38",
+          "outcome": "HALT",
+          "gasConsumed": 83959991,
+          "systemFee": 6775499903,
+          "networkFee": 1216520,
+          "events": [
+            "SessionKeyRevoked",
+            "ModuleRemoved",
+            "VerifierUpdateConfirmed"
+          ],
+          "result": null
+        }
+      ],
+      "assertions": [
+        {
+          "check": "initialize MultiSig topology: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "provision SessionKey leaf: first call arms the child timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "provision WebAuthn leaf with reused key: first call arms the child timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "record duplicate signer domain: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "rotate WebAuthn leaf to distinct key: first call arms the child timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "setConfig with independently committed domains: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "configuration stored",
+          "ok": true
+        },
+        {
+          "check": "rotate SessionKey leaf into the WebAuthn domain: first call arms the child timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "record repeated duplicate signer domain: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "setConfig with marker-only child: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "setConfig containing itself: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "setConfig with undeployed child: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "SessionKey leaf has durable state before topology maintenance",
+          "ok": true
+        },
+        {
+          "check": "WebAuthn leaf has durable state before topology maintenance",
+          "ok": true
+        },
+        {
+          "check": "remove WebAuthn from MultiSig: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "removing a MultiSig leaf clears its durable public key",
+          "ok": true
+        },
+        {
+          "check": "retaining a MultiSig leaf preserves its durable state",
+          "ok": true
+        },
+        {
+          "check": "composite verifier detached only after child cleanup",
+          "ok": true
+        },
+        {
+          "check": "detaching MultiSig clears the remaining SessionKey leaf",
+          "ok": true
+        },
+        {
+          "check": "WebAuthn state remains cleared after MultiSig detach",
+          "ok": true
+        },
+        {
+          "check": "detaching MultiSig clears the root policy",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "MultiHook child pre-check",
+      "steps": [
+        {
+          "step": "register account with MultiHook",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x62059e3bc09167b65bb2d2fc0e87489c5e44859d294c39927b8188f346e6aa6e",
+          "outcome": "HALT",
+          "gasConsumed": 33831778,
+          "systemFee": 4271010160,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "setHooks (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xd7d75917b260673e2dafb8758abd8baa5a83561b0a245bd224614ef3149ff81c",
+          "outcome": "HALT",
+          "gasConsumed": 42652985,
+          "systemFee": 4275832607,
+          "networkFee": 1283520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "setHooks (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xdd269400de6c526404c39d15b50fb4b36b48155860e59a3636f737dba2e87486",
+          "outcome": "HALT",
+          "gasConsumed": 97547684,
+          "systemFee": 6792558080,
+          "networkFee": 1283520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "setHooks with marker-only child (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x54f9ad6ec7f7d07bdb64b10c2dd7eb4b1619956d89e6b141db34c6a08683dbab",
+          "outcome": "HALT",
+          "gasConsumed": 30643592,
+          "systemFee": 4030643592,
+          "networkFee": 1261520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "setHooks with marker-only child (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Child hook pre ABI missing",
+          "expectedFault": "Child hook pre ABI missing"
+        },
+        {
+          "step": "reject non-root hook dependency mutation",
+          "contract": "SmartAccountV3",
+          "operation": "setHookDependencies",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Dependency caller is not installed root",
+          "expectedFault": "Dependency caller is not installed root"
+        },
+        {
+          "step": "reject malformed child hook configuration",
+          "contract": "SmartAccountV3",
+          "operation": "callHookChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Invalid child hook configuration arguments",
+          "expectedFault": "Invalid child hook configuration arguments"
+        },
+        {
+          "step": "provision Whitelist leaf (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callHookChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x69704de391604b8089d8edef700abdfe74aa061ddfe8709bd3a4f238b976dec6",
+          "outcome": "HALT",
+          "gasConsumed": 50524271,
+          "systemFee": 4285140955,
+          "networkFee": 1291520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "provision Whitelist leaf (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callHookChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x1ae8e419309f188ffc90f9f71237eba5bd8ba7d209a531ffac03e1604791a3e2",
+          "outcome": "HALT",
+          "gasConsumed": 69028518,
+          "systemFee": 4305953694,
+          "networkFee": 1291520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "remove Whitelist from MultiHook (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x4900d97228cb424a6dd1f1dac37df4b336261ee3f0982a2dbc7122856df37270",
+          "outcome": "HALT",
+          "gasConsumed": 30643592,
+          "systemFee": 4030643592,
+          "networkFee": 1261520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "remove Whitelist from MultiHook (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xaa6d3e6bacc4c876bf1e7a22845b931aeb2c02170425c9a93ff0db07b60ae766",
+          "outcome": "HALT",
+          "gasConsumed": 92270155,
+          "systemFee": 6780548687,
+          "networkFee": 1261520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "restore Whitelist to MultiHook (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x550d4c4dd52c43f06f2930bdd850c5800e88a5bfdcb6cab1077eeceebf264088",
+          "outcome": "HALT",
+          "gasConsumed": 30643648,
+          "systemFee": 4030643648,
+          "networkFee": 1283520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "restore Whitelist to MultiHook (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x0a4f829037c53e905288a74a67ac449c0f2cb8995f83ba08144768ecf480eaa7",
+          "outcome": "HALT",
+          "gasConsumed": 79216692,
+          "systemFee": 6780548742,
+          "networkFee": 1283520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "reprovision Whitelist leaf (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callHookChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x301a33853c303c4529458242abfe946e5a2fe6b83e1530e1307b0380db807175",
+          "outcome": "HALT",
+          "gasConsumed": 56048914,
+          "systemFee": 4285140955,
+          "networkFee": 1291520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "reprovision Whitelist leaf (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callHookChild",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x45cf154ffb3e5a5ef0b5dc91f0dd3c0aa57eab70ef96ef7cedd8b1a2ce35d8e2",
+          "outcome": "HALT",
+          "gasConsumed": 69028518,
+          "systemFee": 4305953694,
+          "networkFee": 1291520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "detach MultiHook",
+          "contract": "SmartAccountV3",
+          "operation": "updateHook",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xcb3f5e16e2d7a91a10f4a534e4b891e8e83474b154bccdd0d134032f6febec90",
+          "outcome": "HALT",
+          "gasConsumed": 22535730,
+          "systemFee": 4022535730,
+          "networkFee": 1227520,
+          "events": [
+            "ModuleUpdateInitiated",
+            "HookUpdateInitiated"
+          ],
+          "result": null
+        },
+        {
+          "step": "confirm MultiHook cleanup before timelock",
+          "contract": "SmartAccountV3",
+          "operation": "confirmHookUpdate",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Timelock not elapsed",
+          "expectedFault": "Timelock not elapsed"
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "confirm MultiHook cleanup after timelock",
+          "contract": "SmartAccountV3",
+          "operation": "confirmHookUpdate",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xc912251464cba2e6a160ed7a50cd7829a47c45db8ce4c3d0cc627faf245f6087",
+          "outcome": "HALT",
+          "gasConsumed": 107435845,
+          "systemFee": 6775499903,
+          "networkFee": 1212520,
+          "events": [
+            "ModuleRemoved",
+            "HookUpdateConfirmed"
+          ],
+          "result": null
+        }
+      ],
+      "assertions": [
+        {
+          "check": "setHooks: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "two child hooks stored",
+          "ok": true
+        },
+        {
+          "check": "setHooks with marker-only child: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "provision Whitelist leaf: first call arms the child timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "core provisioned the installed Whitelist leaf",
+          "ok": true
+        },
+        {
+          "check": "remove Whitelist from MultiHook: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "removing a MultiHook leaf clears its whitelist state",
+          "ok": true
+        },
+        {
+          "check": "restore Whitelist to MultiHook: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "reprovision Whitelist leaf: first call arms the child timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "reprovisioned Whitelist leaf has durable state before detach",
+          "ok": true
+        },
+        {
+          "check": "MultiHook detached after child cleanup",
+          "ok": true
+        },
+        {
+          "check": "detaching MultiHook clears the remaining Whitelist leaf",
+          "ok": true
+        },
+        {
+          "check": "detaching MultiHook clears the root topology",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "market escrow: sale, owner escape, silent market",
+      "steps": [
+        {
+          "step": "admin allowlists the core",
+          "contract": "AAAddressMarket",
+          "operation": "setAllowedAA",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x4d7ba1fd424b28d33a33bf5796f773fde62214a4ba40010a50ad8578b10b70a6",
+          "outcome": "HALT",
+          "gasConsumed": 5187078,
+          "systemFee": 5187078,
+          "networkFee": 1210580,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "register account for sale",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xf138d35b895275389e31e7e2661e9a9ae112cdc3a2373a8adb711b355473cf24",
+          "outcome": "HALT",
+          "gasConsumed": 24792836,
+          "systemFee": 4024792836,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered"
+          ],
+          "result": null
+        },
+        {
+          "step": "createListing",
+          "contract": "AAAddressMarket",
+          "operation": "createListing",
+          "signer": "owner",
+          "witnessScope": "Global",
+          "txid": "0x640bdb2c38d9fe0825824290992804ce9bdd782adce4b4749f575eb0ff2368ca",
+          "outcome": "HALT",
+          "gasConsumed": 42819626,
+          "systemFee": 42819626,
+          "networkFee": 1249520,
+          "events": [
+            "MarketEscrowEntered"
+          ],
+          "result": null
+        },
+        {
+          "step": "execution while escrowed",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Account locked in market escrow",
+          "expectedFault": "Account locked in market escrow"
+        },
+        {
+          "step": "buyer pays the price",
+          "contract": "GasToken",
+          "operation": "transfer",
+          "signer": "buyer",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x2ed0e41ace06d82f20d576a71a4473ce632a53404d98f1868f29b0feec84c89e",
+          "outcome": "HALT",
+          "gasConsumed": 19218664,
+          "systemFee": 19218664,
+          "networkFee": 1231520,
+          "events": [
+            "Transfer"
+          ],
+          "result": true
+        },
+        {
+          "step": "settleListing",
+          "contract": "AAAddressMarket",
+          "operation": "settleListing",
+          "signer": "buyer",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xbf6e30a74dc4bfb623ad20ebc3898428d6ccd5c757cedab4c7c962538660e0f1",
+          "outcome": "HALT",
+          "gasConsumed": 49922897,
+          "systemFee": 49922897,
+          "networkFee": 1231520,
+          "events": [
+            "Transfer",
+            "MarketEscrowSettled"
+          ],
+          "result": null
+        },
+        {
+          "step": "buyer controls the account",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "buyer",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x33d3b469d990da5a285b94edb463d96f15c1a7003fb2ee225e9f643780697394",
+          "outcome": "HALT",
+          "gasConsumed": 35860880,
+          "systemFee": 20035860880,
+          "networkFee": 1303520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "register account for owner escape",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xf14b216d09d5657a11792c3d4fefe97aebb3f40d6ad394849cb8b4cb2c130187",
+          "outcome": "HALT",
+          "gasConsumed": 24792836,
+          "systemFee": 4024792836,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered"
+          ],
+          "result": null
+        },
+        {
+          "step": "createListing (stuck)",
+          "contract": "AAAddressMarket",
+          "operation": "createListing",
+          "signer": "owner",
+          "witnessScope": "Global",
+          "txid": "0x5a68cac7e608f027525793501f157a41033689acb3ae35599c727fb36cafb8b9",
+          "outcome": "HALT",
+          "gasConsumed": 42219723,
+          "systemFee": 42219723,
+          "networkFee": 1244520,
+          "events": [
+            "MarketEscrowEntered"
+          ],
+          "result": null
+        },
+        {
+          "step": "initiateMarketEscrowCancel",
+          "contract": "SmartAccountV3",
+          "operation": "initiateMarketEscrowCancel",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x1cc59fc72852ade3831c6c9e562f8dae8e8a64371eba038227e9ff07379894b9",
+          "outcome": "HALT",
+          "gasConsumed": 19543124,
+          "systemFee": 4019543124,
+          "networkFee": 1221520,
+          "events": [
+            "MarketEscrowOwnerCancelInitiated"
+          ],
+          "result": null
+        },
+        {
+          "step": "forceCancel before timelock",
+          "contract": "SmartAccountV3",
+          "operation": "forceCancelMarketEscrow",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Owner cancel timelock active",
+          "expectedFault": "Owner cancel timelock active"
+        },
+        {
+          "step": "fastfwd +604800s",
+          "outcome": "minted"
+        },
+        {
+          "step": "forceCancelMarketEscrow",
+          "contract": "SmartAccountV3",
+          "operation": "forceCancelMarketEscrow",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xc49cf776711dccbff94f9abc44c72eed3b46898b0c94b38c8e2a77283273738a",
+          "outcome": "HALT",
+          "gasConsumed": 30033545,
+          "systemFee": 4030033545,
+          "networkFee": 1218520,
+          "events": [
+            "MarketEscrowOwnerCancelled"
+          ],
+          "result": null
+        },
+        {
+          "step": "register account for silent market",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x9a65f89c5040d3beea2cf9b7be3a23844da31a4fe4193a7b07c11a50ca5ed9c8",
+          "outcome": "HALT",
+          "gasConsumed": 24792836,
+          "systemFee": 4024792836,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered"
+          ],
+          "result": null
+        },
+        {
+          "step": "silent market arms the escrow",
+          "contract": "MockVerifierCore",
+          "operation": "forward",
+          "signer": "owner",
+          "witnessScope": "Global",
+          "txid": "0x865913675f55c661f1cf0e9175320995b9bae321ef7196593a062ce02bf94571",
+          "outcome": "HALT",
+          "gasConsumed": 20685727,
+          "systemFee": 20685727,
+          "networkFee": 1268520,
+          "events": [
+            "MarketEscrowEntered"
+          ],
+          "result": null
+        },
+        {
+          "step": "initiateMarketEscrowCancel (silent)",
+          "contract": "SmartAccountV3",
+          "operation": "initiateMarketEscrowCancel",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x3307a42a0e6e8c6e25e3abba01b457543fda2baa900c7523d0039ea9327c4ac1",
+          "outcome": "HALT",
+          "gasConsumed": 19543124,
+          "systemFee": 4019543124,
+          "networkFee": 1221520,
+          "events": [
+            "MarketEscrowOwnerCancelInitiated"
+          ],
+          "result": null
+        },
+        {
+          "step": "fastfwd +604800s",
+          "outcome": "minted"
+        },
+        {
+          "step": "forceCancelMarketEscrow (silent market lacks abandonListing)",
+          "contract": "SmartAccountV3",
+          "operation": "forceCancelMarketEscrow",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xa6779ac6b2a75d128a10f4ba1f3e717deaad60e5d7ec18cbc9bc299512568753",
+          "outcome": "HALT",
+          "gasConsumed": 21309517,
+          "systemFee": 4021309517,
+          "networkFee": 1218520,
+          "events": [
+            "MarketEscrowOwnerCancelled"
+          ],
+          "result": null
+        }
+      ],
+      "assertions": [
+        {
+          "check": "escrow armed",
+          "ok": true
+        },
+        {
+          "check": "payment escrowed by the market",
+          "ok": true
+        },
+        {
+          "check": "MarketEscrowSettled emitted",
+          "ok": true
+        },
+        {
+          "check": "buyer owns the shell",
+          "ok": true
+        },
+        {
+          "check": "escrow cleared",
+          "ok": true
+        },
+        {
+          "check": "owner reclaimed the account",
+          "ok": true
+        },
+        {
+          "check": "market listing flipped to Cancelled",
+          "ok": true
+        },
+        {
+          "check": "silent escrow armed",
+          "ok": true
+        },
+        {
+          "check": "owner escaped a market without abandonListing",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "subscription pull from the proxy asset address",
+      "steps": [
+        {
+          "step": "register account with SubscriptionVerifier",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x019365ca253627cd9fd5816c99fe3c60fd2ff6ef22f92eef3ca9c8bbeb480919",
+          "outcome": "HALT",
+          "gasConsumed": 33817344,
+          "systemFee": 4270995755,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered",
+            "ModuleInstalled"
+          ],
+          "result": null
+        },
+        {
+          "step": "createSubscription (arm)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe6c1181890f432a878e6478b5452bcbd339429e50e09086f760fcc6b7d6d1be1",
+          "outcome": "HALT",
+          "gasConsumed": 29657885,
+          "systemFee": 4029657885,
+          "networkFee": 1309520,
+          "events": [],
+          "result": false
+        },
+        {
+          "step": "fastfwd +86400s",
+          "outcome": "minted"
+        },
+        {
+          "step": "createSubscription (execute)",
+          "contract": "SmartAccountV3",
+          "operation": "callVerifier",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xd164add58074e08f887324c485471d0406f68f135383c48b108f08630d60fb00",
+          "outcome": "HALT",
+          "gasConsumed": 47743392,
+          "systemFee": 6779562980,
+          "networkFee": 1309520,
+          "events": [],
+          "result": null
+        },
+        {
+          "step": "merchant pulls with CalledByEntry scope",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "merchant",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "merchant authorization required",
+          "expectedFault": "merchant authorization required"
+        },
+        {
+          "step": "merchant pulls the charge",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "merchant",
+          "witnessScope": "Global",
+          "txid": "0x87a1899fcf85cbc257435e1a48df2fba1137c599363dcf1526c9648159f4d718",
+          "outcome": "HALT",
+          "gasConsumed": 88756393,
+          "systemFee": 21057816844,
+          "networkFee": 1325520,
+          "events": [
+            "UserOpExecuted"
+          ],
+          "result": true
+        },
+        {
+          "step": "second pull in the same period",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "merchant",
+          "witnessScope": "Global",
+          "outcome": "FAULT",
+          "exception": "Subscription already charged this period",
+          "expectedFault": "Subscription already charged this period"
+        },
+        {
+          "step": "pull sourced from the account id",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "merchant",
+          "witnessScope": "Global",
+          "outcome": "FAULT",
+          "exception": "Transfer source must be the account asset address",
+          "expectedFault": "Transfer source must be the account asset address"
+        },
+        {
+          "step": "stranger pulls",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "stranger",
+          "witnessScope": "Global",
+          "outcome": "FAULT",
+          "exception": "merchant authorization required",
+          "expectedFault": "merchant authorization required"
+        }
+      ],
+      "assertions": [
+        {
+          "check": "createSubscription: first call arms the timelock and returns false",
+          "ok": true
+        },
+        {
+          "check": "subscription lane advanced",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "platform account owner rotation",
+      "steps": [
+        {
+          "step": "propose platform registrar",
+          "contract": "SmartAccountV3",
+          "operation": "proposePlatformRegistrar",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x8665c637e5ca4dfba159d4ee3f1a4638b4cfe778732ba04e63d600a9699b58f2",
+          "outcome": "HALT",
+          "gasConsumed": 10784708,
+          "systemFee": 4010784708,
+          "networkFee": 1221580,
+          "events": [
+            "PlatformRegistrarProposed"
+          ],
+          "result": null
+        },
+        {
+          "step": "confirm platform registrar before timelock",
+          "contract": "SmartAccountV3",
+          "operation": "confirmPlatformRegistrar",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Platform registrar timelock not expired",
+          "expectedFault": "Platform registrar timelock not expired"
+        },
+        {
+          "step": "fastfwd +604800s",
+          "outcome": "minted"
+        },
+        {
+          "step": "confirm platform registrar",
+          "contract": "SmartAccountV3",
+          "operation": "confirmPlatformRegistrar",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0xe992daff41b7faeb7f5362ccf8b14565550f4a9d8ff4e2e9cf6de81cf645d11c",
+          "outcome": "HALT",
+          "gasConsumed": 11069005,
+          "systemFee": 4011069005,
+          "networkFee": 1198580,
+          "events": [
+            "PlatformRegistrarChanged"
+          ],
+          "result": null
+        },
+        {
+          "step": "registrar creates platform account",
+          "contract": "PlatformRegistrarMock",
+          "operation": "register",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x98a4764ce16d21ef04f8b29b8f7c275cfa18e21e9420aa22697274253e40d0df",
+          "outcome": "HALT",
+          "gasConsumed": 48546464,
+          "systemFee": 48546464,
+          "networkFee": 1270580,
+          "events": [
+            "AccountRegistered"
+          ],
+          "result": "fbab89118239013ed3c7706ab06bd5a881c6a774"
+        },
+        {
+          "step": "registrar proposes owner rotation",
+          "contract": "PlatformRegistrarMock",
+          "operation": "rotate",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x9c5ff1661dc90d74d144d25d2c45aa0c978a86fa8f127e8b78d3002765ceb54f",
+          "outcome": "HALT",
+          "gasConsumed": 23714064,
+          "systemFee": 23714064,
+          "networkFee": 1285580,
+          "events": [
+            "PlatformOwnerRotationProposed"
+          ],
+          "result": null
+        },
+        {
+          "step": "stranger cancels pending rotation",
+          "contract": "SmartAccountV3",
+          "operation": "cancelPlatformAccountOwnerRotation",
+          "signer": "stranger",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Unauthorized platform owner rotation cancellation",
+          "expectedFault": "Unauthorized platform owner rotation cancellation"
+        },
+        {
+          "step": "current owner cancels pending rotation",
+          "contract": "SmartAccountV3",
+          "operation": "cancelPlatformAccountOwnerRotation",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x55f3728a2b6889fb8c5cab62a62f2f9cc0e696046c771e8d36177916e9c3b341",
+          "outcome": "HALT",
+          "gasConsumed": 16349675,
+          "systemFee": 4016349675,
+          "networkFee": 1267520,
+          "events": [
+            "PlatformOwnerRotationCancelled"
+          ],
+          "result": null
+        },
+        {
+          "step": "registrar re-proposes owner rotation",
+          "contract": "PlatformRegistrarMock",
+          "operation": "rotate",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x07becc7a676ca33a716f7a57621296377876fbcfb720cc0fc02a32dd542e28fa",
+          "outcome": "HALT",
+          "gasConsumed": 23714064,
+          "systemFee": 23714064,
+          "networkFee": 1285580,
+          "events": [
+            "PlatformOwnerRotationProposed"
+          ],
+          "result": null
+        },
+        {
+          "step": "confirm rotation before timelock",
+          "contract": "PlatformRegistrarMock",
+          "operation": "confirmRotate",
+          "signer": "merchant",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "Platform owner rotation timelock not expired",
+          "expectedFault": "Platform owner rotation timelock not expired"
+        },
+        {
+          "step": "fastfwd +604800s",
+          "outcome": "minted"
+        },
+        {
+          "step": "confirm rotation without new-owner witness",
+          "contract": "PlatformRegistrarMock",
+          "operation": "confirmRotate",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "outcome": "FAULT",
+          "exception": "New platform owner witness required",
+          "expectedFault": "New platform owner witness required"
+        },
+        {
+          "step": "confirm rotation with new-owner witness",
+          "contract": "PlatformRegistrarMock",
+          "operation": "confirmRotate",
+          "signer": "merchant",
+          "witnessScope": "Global",
+          "txid": "0xe6f5b9bdd4586687d4f560e262ca5e36025ed22014bc8bca37d8e565cacb5275",
+          "outcome": "HALT",
+          "gasConsumed": 22802466,
+          "systemFee": 22802466,
+          "networkFee": 1268520,
+          "events": [
+            "PlatformAccountOwnerRotated"
+          ],
+          "result": null
+        }
+      ],
+      "assertions": [
+        {
+          "check": "platform registrar activated",
+          "ok": true
+        },
+        {
+          "check": "platform account starts under the original owner",
+          "ok": true
+        },
+        {
+          "check": "platform proxy binding resolves to the account",
+          "ok": true
+        },
+        {
+          "check": "owner rotation proposal emits the expected event",
+          "ok": true
+        },
+        {
+          "check": "rotation is pending on the proposed owner",
+          "ok": true
+        },
+        {
+          "check": "proposal does not change the current owner",
+          "ok": true
+        },
+        {
+          "check": "unauthorized cancellation preserves the pending rotation",
+          "ok": true
+        },
+        {
+          "check": "unauthorized cancellation preserves the current owner",
+          "ok": true
+        },
+        {
+          "check": "owner cancellation emits the expected event",
+          "ok": true
+        },
+        {
+          "check": "owner cancellation clears the pending rotation",
+          "ok": true
+        },
+        {
+          "check": "cancellation preserves the current owner",
+          "ok": true
+        },
+        {
+          "check": "early confirmation preserves the pending rotation",
+          "ok": true
+        },
+        {
+          "check": "early confirmation preserves the current owner",
+          "ok": true
+        },
+        {
+          "check": "confirmation without the new-owner witness preserves the pending rotation",
+          "ok": true
+        },
+        {
+          "check": "confirmation without the new-owner witness preserves the current owner",
+          "ok": true
+        },
+        {
+          "check": "rotation confirmation emits the expected event",
+          "ok": true
+        },
+        {
+          "check": "new owner is persisted",
+          "ok": true
+        },
+        {
+          "check": "successful rotation clears the pending record",
+          "ok": true
+        },
+        {
+          "check": "owner rotation preserves the proxy address",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "AA proxy witness consumes a NeoDID action ticket",
+      "steps": [
+        {
+          "step": "registry admin sets the action verifier key",
+          "contract": "NeoDIDRegistry",
+          "operation": "setVerifier",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x29605ec4a546016d5272f94e6765e1fd4cd2a664bc682a20c028dd520bb4a41a",
+          "outcome": "HALT",
+          "gasConsumed": 7441111,
+          "systemFee": 7441111,
+          "networkFee": 1221580,
+          "events": [
+            "VerifierChanged"
+          ],
+          "result": null
+        },
+        {
+          "step": "register native account for the ticket",
+          "contract": "SmartAccountV3",
+          "operation": "registerAccount",
+          "signer": "owner",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x68fdd4bfe742cdb2e0bae275c0d9c168a79ac5a61404f4324d6070c7b6a353c5",
+          "outcome": "HALT",
+          "gasConsumed": 24792836,
+          "systemFee": 4024792836,
+          "networkFee": 1283520,
+          "events": [
+            "AccountRegistered"
+          ],
+          "result": null
+        },
+        {
+          "step": "wallet admin binds the account's verify scope to the registry",
+          "contract": "SmartAccountV3",
+          "operation": "setVerifyScopeTarget",
+          "signer": "genesis",
+          "witnessScope": "CalledByEntry",
+          "txid": "0x283f833a8aa40c74f156b7c2d8483d133733dc2d73d6eb34c523a4966731b424",
+          "outcome": "HALT",
+          "gasConsumed": 15038070,
+          "systemFee": 4015038070,
+          "networkFee": 1239580,
+          "events": [
+            "VerifyScopeTargetSet"
+          ],
+          "result": null
+        },
+        {
+          "step": "proxy witness consumes the ticket",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "owner CalledByEntry + proxy WitnessRules(CalledByContract wallet|registry)",
+          "nestedCall": "NeoDIDRegistry.useActionTicket",
+          "sendAttempts": [
+            "accepted"
+          ],
+          "txHashAlgorithm": "sha256",
+          "txid": "0x5cf790f58e93f50a308d4ba8da75537fb8d2dbd02c19184e03e3872ee9611f7f",
+          "systemFee": 48811373,
+          "networkFee": 101417520,
+          "outcome": "HALT",
+          "gasConsumed": 46811373,
+          "events": [
+            "ActionTicketUsed",
+            "UserOpExecuted"
+          ]
+        },
+        {
+          "step": "replaying the same nullifier",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "owner CalledByEntry + proxy WitnessRules(CalledByContract wallet|registry)",
+          "nestedCall": "NeoDIDRegistry.useActionTicket",
+          "simulation": "executeUserOp simulation faulted: ABORTMSG is executed. Reason: action nullifier already used",
+          "sendAttempts": [
+            "accepted"
+          ],
+          "txHashAlgorithm": "sha256",
+          "txid": "0x461ec22c853d929f28a1bb679449665a82e4b7e289e715fca1067be6a651932b",
+          "systemFee": 28736828,
+          "networkFee": 101417520,
+          "outcome": "FAULT",
+          "gasConsumed": 26736828,
+          "events": [],
+          "exception": "ABORTMSG is executed. Reason: action nullifier already used",
+          "expectedFault": "action nullifier already used"
+        },
+        {
+          "step": "retargeting the signature to another action id",
+          "contract": "SmartAccountV3",
+          "operation": "executeUserOp",
+          "signer": "owner",
+          "witnessScope": "owner CalledByEntry + proxy WitnessRules(CalledByContract wallet|registry)",
+          "nestedCall": "NeoDIDRegistry.useActionTicket",
+          "simulation": "executeUserOp simulation faulted: ABORTMSG is executed. Reason: invalid verification signature",
+          "sendAttempts": [
+            "accepted"
+          ],
+          "txHashAlgorithm": "sha256",
+          "txid": "0x0a1c677f791313250ef2188c7eaa73cc5f9aaa6fe947f812cbc3bb437ac4dd2b",
+          "systemFee": 33711329,
+          "networkFee": 101425520,
+          "outcome": "FAULT",
+          "gasConsumed": 31711329,
+          "events": [],
+          "exception": "ABORTMSG is executed. Reason: invalid verification signature",
+          "expectedFault": "invalid verification signature"
+        }
+      ],
+      "assertions": [
+        {
+          "check": "verify scope target recorded",
+          "ok": true
+        },
+        {
+          "check": "owner key derives the wallet script hash",
+          "ok": true
+        },
+        {
+          "check": "locally built proxy verification script hashes to the core's proxy hash",
+          "ok": true
+        },
+        {
+          "check": "registry emitted ActionTicketUsed for the proxy account",
+          "ok": true
+        },
+        {
+          "check": "action nullifier is recorded as used",
+          "ok": true
+        },
+        {
+          "check": "user operation nonce advanced through the composed call",
+          "ok": true
+        },
+        {
+          "check": "a retargeted ticket leaves its nullifier unused",
+          "ok": true
+        },
+        {
+          "check": "deployed NeoDIDRegistry bytes equal the sibling build artifact",
+          "ok": true
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "artifactsDeployed": 25,
+    "scenarios": 15,
+    "scenariosSkipped": 0,
+    "transactionsPersisted": 135,
+    "transactionsHalted": 132,
+    "transactionsFaulted": 3,
+    "expectedFaults": 48,
+    "expectedPreflightFaults": 45,
+    "assertions": 132,
+    "simulatedTimeAdvancedSeconds": 7347600
+  },
+  "releaseEvidenceEligible": true,
+  "parityBoundary": {
+    "localNefToPrivateChainRpc": "byte-identical NEF script, checksum and semantically equal manifest for every artifact",
+    "witnessScopes": "neoxp signs with wallet accounts under CalledByEntry or Global; the proxy verification-trigger witness path (WitnessRules proxy signer scoped to a target contract) is exercised here only by the hand-built NeoDID action-ticket transactions, and otherwise by ProxyWitnessRuntimeTests and the ProxyWitnessScript Coq model",
+    "publicNetwork": "not touched"
+  },
+  "privacy": {
+    "credentialsIncluded": false,
+    "privateKeysIncluded": false,
+    "absoluteUserPathsIncluded": false
+  }
+}

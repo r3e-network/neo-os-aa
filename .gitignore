@@ -17,6 +17,10 @@ settings.local.json
 graphify-out/
 .vercel
 .turbo/
+.lia.cache
+.nia.cache
+.runs/
+.codex/
 # CodeGraph writes a tracked, self-ignoring .codegraph/.gitignore. Ignore the
 # rest of every .codegraph/ directory without hiding that file.
 **/.codegraph/*
@@ -86,4 +90,46 @@ mainnet-aa-*-results.json
 *.aux
 *.out
 missfont.log
+
+# Verification reports are local by default. The explicitly reviewed
+# SmartAccount evidence below is versioned because protocol documents cite it.
 docs/reports/
+!docs/reports/
+docs/reports/*
+!docs/reports/aa-artifact-reproducibility-20261025.json
+!docs/reports/aa-neoexpress-validation-20261025.json
+!docs/reports/aa-private-artifact-provenance-20261025.json
+!docs/reports/aa-artifact-reproducibility-20261030.json
+!docs/reports/aa-artifact-reproducibility-20261031.json
+!docs/reports/aa-closure-gate-20261031.json
+!docs/reports/aa-formal-gate-20261030.json
+!docs/reports/aa-formal-gate-20261031.json
+!docs/reports/aa-neoexpress-validation-20261030.json
+!docs/reports/aa-neoexpress-validation-20261031.json
+!docs/reports/aa-private-artifact-provenance-20261030.json
+!docs/reports/aa-private-artifact-provenance-20261031.json
+!docs/reports/aa-ordinary-candidate-compatibility-20261030.json
+!docs/reports/aa-native-ci-probe-consistency-20261009.json
+!docs/reports/testnet-validation-v1v2-2026-03.md
+!docs/reports/native-domain-copy-20261009/
+docs/reports/native-domain-copy-20261009/*
+!docs/reports/native-domain-copy-20261009/*.json
+!docs/reports/native-usability-20261009/
+docs/reports/native-usability-20261009/*
+!docs/reports/native-usability-20261009/*.json
+!docs/reports/smartaccount-native-module-build-20261030-authority.json
+!docs/reports/smartaccount-native-runner-build-20261030-authority2.json
+!docs/reports/smartaccount-native-extended-matrix-20261030-authority/
+docs/reports/smartaccount-native-extended-matrix-20261030-authority/*
+!docs/reports/smartaccount-native-extended-matrix-20261030-authority/*.json
+!docs/reports/smartaccount-native-source-runtime-20261030-authority/
+docs/reports/smartaccount-native-source-runtime-20261030-authority/*
+!docs/reports/smartaccount-native-source-runtime-20261030-authority/*.json
+!docs/reports/smartaccount-native-runner-build-20261031.json
+!docs/reports/smartaccount-native-module-build-20261031-final.json
+!docs/reports/smartaccount-native-source-runtime-20261031-final/
+docs/reports/smartaccount-native-source-runtime-20261031-final/*
+!docs/reports/smartaccount-native-source-runtime-20261031-final/*.json
+!docs/reports/smartaccount-native-extended-matrix-20261031-final/
+docs/reports/smartaccount-native-extended-matrix-20261031-final/*
+!docs/reports/smartaccount-native-extended-matrix-20261031-final/*.json

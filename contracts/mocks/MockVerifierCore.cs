@@ -46,6 +46,9 @@ namespace SmartAccount.Mocks
         }
 
         [Safe]
+        public static bool SupportsMessageSignatures() => true;
+
+        [Safe]
         public static ByteString[] GetSignerDomains(UInt160 accountId)
         {
             return new ByteString[] { (ByteString)new byte[] {
@@ -64,6 +67,13 @@ namespace SmartAccount.Mocks
 
         [Safe]
         public static bool ValidateSignature(UInt160 accountId, object op)
+        {
+            BurnIfEnabled(Prefix_BurnGas);
+            return true;
+        }
+
+        [Safe]
+        public static bool IsValidSignature(UInt160 accountId, ByteString hash, ByteString signature)
         {
             BurnIfEnabled(Prefix_BurnGas);
             return true;
@@ -257,6 +267,12 @@ namespace SmartAccount.Mocks
         /// </summary>
         public static object Forward(UInt160 target, string method, object[] args)
         {
+            return Contract.Call(target, method, CallFlags.All, args);
+        }
+
+        public static object ForwardAfter(UInt160 firstTarget, string firstMethod, object[] firstArgs, UInt160 target, string method, object[] args)
+        {
+            Contract.Call(firstTarget, firstMethod, CallFlags.All, firstArgs);
             return Contract.Call(target, method, CallFlags.All, args);
         }
 

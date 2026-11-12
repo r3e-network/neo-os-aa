@@ -18,6 +18,7 @@
     <Compile Include="SmartAccount.Internal.cs" />
     <Compile Include="SmartAccount.Events.cs" />
     <Compile Include="SmartAccount.Accounts.cs" />
+    <Compile Include="SmartAccount.HookChildren.cs" />
     <Compile Include="SmartAccount.VerifierChildren.cs" />
     <Compile Include="SmartAccount.PlatformRegistrar.cs" />
     <Compile Include="SmartAccount.Proxy.cs" />

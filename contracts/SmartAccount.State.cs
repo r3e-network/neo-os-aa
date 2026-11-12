@@ -86,18 +86,34 @@ namespace SmartAccount
                     ContractParameterType.Hash160, ContractParameterType.ByteArray, ContractParameterType.ByteArray))
                 return (ByteString)ERC1271_INVALID_VALUE;
 
+#if PLATFORM
+            bool supported = (bool)CallVerifierWithGasLimit(
+                state.Verifier,
+                "supportsMessageSignatures",
+                CallFlags.ReadOnly,
+                new object[] { });
+#else
             bool supported = (bool)Contract.Call(
                 state.Verifier,
                 "supportsMessageSignatures",
                 CallFlags.ReadOnly,
                 new object[] { });
+#endif
             if (!supported) return (ByteString)ERC1271_INVALID_VALUE;
 
+#if PLATFORM
+            bool valid = (bool)CallVerifierWithGasLimit(
+                state.Verifier,
+                "isValidSignature",
+                CallFlags.ReadOnly,
+                new object[] { accountId, hash!, signature! });
+#else
             bool valid = (bool)Contract.Call(
                 state.Verifier,
                 "isValidSignature",
                 CallFlags.ReadOnly,
                 new object[] { accountId, hash!, signature! });
+#endif
             return valid ? (ByteString)ERC1271_MAGIC_VALUE : (ByteString)ERC1271_INVALID_VALUE;
         }
 
@@ -326,6 +342,8 @@ namespace SmartAccount
         public static void CancelVerifierUpdate(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertPluginConfigurationAllowed(accountId);
+            AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             Storage.Delete(Storage.CurrentContext, key);
@@ -343,6 +361,8 @@ namespace SmartAccount
         public static void CancelHookUpdate(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertPluginConfigurationAllowed(accountId);
+            AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             Storage.Delete(Storage.CurrentContext, key);
@@ -360,6 +380,8 @@ namespace SmartAccount
         public static void SetMetadataUri(UInt160 accountId, string metadataUri)
         {
             AssertBackupOwner(accountId);
+            AssertPluginConfigurationAllowed(accountId);
+            AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_MetadataUri, (byte[])accountId);
             if (metadataUri == null || metadataUri.Length == 0)
             {

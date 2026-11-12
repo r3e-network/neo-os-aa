@@ -232,6 +232,7 @@ async function readProxyScopeStateWith({ rpcUrl, coreHash, accountId, fetchImpl 
     const response = await fetchImpl(rpcUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      redirect: 'error',
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1,

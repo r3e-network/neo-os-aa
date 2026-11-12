@@ -64,7 +64,7 @@ const MODULES = {
   recovery: {
     artifact: 'SocialRecoveryVerifier',
     publicArtifact: 'SocialRecoveryVerifier',
-    version: '2.0.0',
+    version: '3.0.0',
     requiredMethods: [
       'supportsV3',
       'authorizedCore',

@@ -38,6 +38,7 @@ namespace SmartAccount
         public static void EnterMarketEscrow(UInt160 accountId, UInt160 marketContract, BigInteger listingId)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             ExecutionEngine.Assert(marketContract != null && marketContract != UInt160.Zero, "Market contract required");
             ExecutionEngine.Assert(listingId > 0, "Listing id required");
@@ -65,6 +66,7 @@ namespace SmartAccount
         public static void CancelMarketEscrow(UInt160 accountId, BigInteger listingId)
         {
             AssertEscrowMarket(accountId, listingId);
+            AssertAccountConfigurationIdle(accountId);
             UInt160 market = GetMarketEscrowContract(accountId);
             ClearMarketEscrow(accountId);
             NotifyMarketListingAbandoned(market, accountId, listingId);
@@ -78,6 +80,7 @@ namespace SmartAccount
         public static void SettleMarketEscrow(UInt160 accountId, BigInteger listingId, UInt160 newBackupOwner)
         {
             AssertEscrowMarket(accountId, listingId);
+            AssertAccountConfigurationIdle(accountId);
             ExecutionEngine.Assert(newBackupOwner != null && newBackupOwner != UInt160.Zero, "New backup owner required");
 
             AccountState state = GetAccountState(accountId);
@@ -93,7 +96,7 @@ namespace SmartAccount
                 SetVerifierConfigContext(accountId, previousVerifier);
                 try
                 {
-                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -105,7 +108,7 @@ namespace SmartAccount
                 SetHookConfigContext(accountId, previousHook);
                 try
                 {
-                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -159,6 +162,7 @@ namespace SmartAccount
         public static void InitiateMarketEscrowCancel(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             ExecutionEngine.Assert(IsMarketEscrowActive(accountId), "Market escrow not active");
 
             byte[] key = Helper.Concat(Prefix_MarketEscrowCancelInitiated, (byte[])accountId);
@@ -180,6 +184,7 @@ namespace SmartAccount
         public static void ForceCancelMarketEscrow(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             ExecutionEngine.Assert(IsMarketEscrowActive(accountId), "Market escrow not active");
 
             ByteString? initiated = GetMarketEscrowOwnerCancelInitiated(accountId);

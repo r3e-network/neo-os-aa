@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
@@ -36,13 +38,56 @@ public class CompositeArgumentIsolationRuntimeTests
         }
         Method("supportsV3", ContractParameterType.Boolean, true);
         script.EmitPush(true).Emit(OpCode.RET);
+        Method("supportsComposition", ContractParameterType.Boolean, true);
+        script.EmitPush(false).Emit(OpCode.RET);
         Method("validateSignature", ContractParameterType.Boolean, true, ContractParameterType.Hash160, ContractParameterType.Any);
         validate(script); script.Emit(OpCode.RET);
         Method("postExecute", ContractParameterType.Void, false, ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any);
         post(script); script.Emit(OpCode.RET);
         Method("clearAccount", ContractParameterType.Void, false, ContractParameterType.Hash160);
         script.Emit(OpCode.DROP).Emit(OpCode.RET);
+        Method("getSignerDomains", ContractParameterType.Array, true, ContractParameterType.Hash160);
+        script.Emit(OpCode.DROP).EmitPush(SHA256.HashData(Encoding.UTF8.GetBytes(name))).EmitPush(1).Emit(OpCode.PACK).Emit(OpCode.RET);
         NefFile nef = new() { Compiler = "Composite aliasing test fixture", Source = "", Tokens = [], Script = script.ToArray() };
+        nef.CheckSum = NefFile.ComputeChecksum(nef);
+        ContractManifest manifest = new()
+        {
+            Name = name,
+            Groups = [],
+            SupportedStandards = [],
+            Permissions = [],
+            Trusts = WildcardContainer<ContractPermissionDescriptor>.Create(),
+            Abi = new ContractAbi { Methods = methods.ToArray(), Events = [] }
+        };
+        return fx.DeployArtifact(nef.ToArray(), manifest.ToJson().ToString());
+    }
+
+    private static UInt160 HookLeaf(RuntimeFixture fx, string name, Action<ScriptBuilder> pre, Action<ScriptBuilder> post)
+    {
+        using ScriptBuilder script = new();
+        List<ContractMethodDescriptor> methods = new();
+        void Method(string method, ContractParameterType result, bool safe, params ContractParameterType[] parameters)
+        {
+            methods.Add(new ContractMethodDescriptor
+            {
+                Name = method,
+                Offset = script.Length,
+                ReturnType = result,
+                Safe = safe,
+                Parameters = parameters.Select((type, index) => new ContractParameterDefinition { Name = "p" + index, Type = type }).ToArray()
+            });
+        }
+        Method("supportsV3", ContractParameterType.Boolean, true);
+        script.EmitPush(true).Emit(OpCode.RET);
+        Method("supportsComposition", ContractParameterType.Boolean, true);
+        script.EmitPush(false).Emit(OpCode.RET);
+        Method("preExecute", ContractParameterType.Void, false, ContractParameterType.Hash160, ContractParameterType.Array);
+        pre(script); script.Emit(OpCode.RET);
+        Method("postExecute", ContractParameterType.Void, false, ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any);
+        post(script); script.Emit(OpCode.RET);
+        Method("clearAccount", ContractParameterType.Void, false, ContractParameterType.Hash160);
+        script.Emit(OpCode.DROP).Emit(OpCode.RET);
+        NefFile nef = new() { Compiler = "Composite hook aliasing test fixture", Source = "", Tokens = [], Script = script.ToArray() };
         nef.CheckSum = NefFile.ComputeChecksum(nef);
         ContractManifest manifest = new()
         {
@@ -58,6 +103,7 @@ public class CompositeArgumentIsolationRuntimeTests
 
     private static void Approve(ScriptBuilder script) => script.Emit(OpCode.DROP).Emit(OpCode.DROP).EmitPush(true);
     private static void NoPost(ScriptBuilder script) => script.Emit(OpCode.DROP).Emit(OpCode.DROP).Emit(OpCode.DROP);
+    private static void NoHookPre(ScriptBuilder script) => script.Emit(OpCode.DROP).Emit(OpCode.DROP);
     private static void Arguments(ScriptBuilder script, bool nested)
     {
         script.Emit(OpCode.DROP).EmitPush(2).Emit(OpCode.PICKITEM); // Drop account; op.Args.
@@ -168,5 +214,29 @@ public class CompositeArgumentIsolationRuntimeTests
         fx.CallVoid(core, "forward", root, "postExecute", new object?[] { Account, Op(1), Result() });
         Configure(mutator, observer);
         fx.CallVoid(core, "forward", root, "postExecute", new object?[] { Account, Op(2), Result() });
+    }
+
+    [TestMethod]
+    public void MultiHookPostCallbackCannotChangeTheNextChildsBusinessResult()
+    {
+        RuntimeFixture fx = new();
+        UInt160 core = fx.Deploy("MockVerifierCore");
+        UInt160 mutator = HookLeaf(fx, "HookPostResultMutator", NoHookPre, s =>
+            s.Emit(OpCode.DROP).Emit(OpCode.DROP).EmitPush(0).Emit(OpCode.PICKITEM)
+                .EmitPush(0).EmitPush(1).Emit(OpCode.SETITEM));
+        UInt160 observer = HookLeaf(fx, "HookPostResultObserver", NoHookPre, s =>
+            s.Emit(OpCode.DROP).Emit(OpCode.DROP).EmitPush(0).Emit(OpCode.PICKITEM)
+                .EmitPush(0).Emit(OpCode.PICKITEM).EmitPush(1000).Emit(OpCode.EQUAL).Emit(OpCode.ASSERT));
+        UInt160 root = fx.Deploy("hooks/MultiHook", core.ToArray());
+        void Configure(params UInt160[] children) =>
+            fx.CallVoid(core, "forward", root, "setHooks",
+                new object?[] { Account, children.Cast<object?>().ToArray() });
+        object?[] Op() => new object?[] { core, "business", Array.Empty<object?>(), BigInteger.Zero, BigInteger.Zero, Array.Empty<byte>() };
+        object?[] Result() => new object?[] { new object?[] { 1000 } };
+
+        Configure(observer);
+        fx.CallVoid(core, "forward", root, "postExecute", new object?[] { Account, Op(), Result() });
+        Configure(observer, mutator);
+        fx.CallVoid(core, "forward", root, "postExecute", new object?[] { Account, Op(), Result() });
     }
 }

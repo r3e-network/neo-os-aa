@@ -38,6 +38,7 @@ public class SourceInvariantTests
     private static string ReadCombined() => string.Join("\n\n", new[]
     {
         "SmartAccount.Accounts.cs",
+        "SmartAccount.HookChildren.cs",
         "SmartAccount.Execution.cs",
         "SmartAccount.Internal.cs",
         "SmartAccount.State.cs",
@@ -261,13 +262,62 @@ public class SourceInvariantTests
 
         // Verify both authorization paths exist
         StringAssert.Contains(executionSource, "state.Verifier != UInt160.Zero", "Verifier path check");
-        StringAssert.Contains(executionSource, "PlatformSyscalls.CallWithGasLimit(", "Verifier bounded delegate call");
+        StringAssert.Contains(executionSource, "CallVerifierWithGasLimit(", "Verifier bounded delegate call");
         StringAssert.Contains(executionSource, "\"validateSignature\"", "Verifier method");
         StringAssert.Contains(executionSource, "VerifierGasLimit", "Verifier gas cap");
         StringAssert.Contains(executionSource, "Runtime.CheckWitness(state.BackupOwner!)", "Native fallback CheckWitness");
         StringAssert.Contains(executionSource, "Reentrant call rejected", "Reentrancy guard");
         StringAssert.Contains(executionSource, "SetExecutionLock(accountId)", "Lock set");
         StringAssert.Contains(executionSource, "ClearExecutionLock(accountId)", "Lock cleared in finally");
+    }
+
+    [TestMethod, Timeout(120_000)]
+    public void SourceInvariant_ModuleLifecycleCallbacksUseMaintenanceBudget()
+    {
+        var executionSource = Read("SmartAccount.Execution.cs");
+        StringAssert.Contains(executionSource, "ModuleMaintenanceGasLimit = 250_000_000", "Module maintenance gas cap");
+        StringAssert.Contains(executionSource, "RootModuleMaintenanceGasLimit = 11 * ModuleMaintenanceGasLimit",
+            "The composite root budget includes its own call and at most ten leaf cleanups");
+        StringAssert.Contains(executionSource, "CallModuleWithMaintenanceBudget", "Shared bounded module entrypoint");
+        Assert.IsFalse(executionSource.Contains("Contract.Call(\n                            state.HookId", StringComparison.Ordinal),
+            "Hook callbacks must use the independent maintenance budget");
+
+        foreach (string name in new[] { "SmartAccount.Accounts.cs", "SmartAccount.Escape.cs", "SmartAccount.VerifierChildren.cs" })
+        {
+            string source = Read(name);
+            Assert.IsFalse(source.Contains("Contract.Call(", StringComparison.Ordinal),
+                $"{name} must route every plugin lifecycle call through the independent maintenance budget");
+            StringAssert.Contains(source, "CallModuleWithMaintenanceBudget", $"{name} bounded module calls");
+            if (name != "SmartAccount.VerifierChildren.cs")
+                StringAssert.Contains(source, "CallRootWithMaintenanceBudget", $"{name} bounded composite-root calls");
+        }
+    }
+
+    [TestMethod, Timeout(120_000)]
+    public void SourceInvariant_MessageSignatureAdapterUsesVerifierBudget()
+    {
+        var stateSource = Read("SmartAccount.State.cs");
+        int start = stateSource.IndexOf("public static ByteString IsValidSignature", StringComparison.Ordinal);
+        int end = stateSource.IndexOf("public static UInt160 GetVerifier", start, StringComparison.Ordinal);
+        Assert.IsTrue(start >= 0 && end > start, "ERC-1271 adapter must remain present and bounded");
+        string methodSource = stateSource.Substring(start, end - start);
+
+        Assert.AreEqual(2, CountOccurrences(methodSource, "CallVerifierWithGasLimit("),
+            "Both ERC-1271 verifier calls must use the bounded verifier entrypoint");
+        Assert.AreEqual(2, CountOccurrences(methodSource, "Contract.Call("),
+            "The public profile deliberately preserves both original unbounded calls");
+        StringAssert.Contains(methodSource, "#if PLATFORM\n            bool supported = (bool)CallVerifierWithGasLimit(",
+            "ERC-1271 capability discovery uses the PLATFORM bounded path");
+        StringAssert.Contains(methodSource, "#else\n            bool supported = (bool)Contract.Call(",
+            "The public capability-discovery branch remains explicit");
+        StringAssert.Contains(methodSource, "#if PLATFORM\n            bool valid = (bool)CallVerifierWithGasLimit(",
+            "ERC-1271 signature validation uses the PLATFORM bounded path");
+        StringAssert.Contains(methodSource, "#else\n            bool valid = (bool)Contract.Call(",
+            "The public signature-validation branch remains explicit");
+        StringAssert.Contains(methodSource, "\"supportsMessageSignatures\"",
+            "ERC-1271 capability discovery remains explicit");
+        StringAssert.Contains(methodSource, "\"isValidSignature\"",
+            "ERC-1271 signature validation remains explicit");
     }
 
     // ========================================================================
@@ -888,6 +938,8 @@ public class SourceInvariantTests
             "Web3Auth struct hash must bind the authorized AA core");
         StringAssert.Contains(web3Auth, "UserOperationTypeHash",
             "Web3Auth struct hash must use the core-bound type hash");
+        StringAssert.Contains(web3Auth, "CryptoLib.RecoverSecp256K1(hash, signature!)",
+            "Web3Auth ERC-1271 verification must consume the supplied digest directly");
 
         string zkLogin = ReadRepo("contracts", "verifiers", "ZkLoginVerifier.cs");
         StringAssert.Contains(zkLogin, "(byte[])VerifierAuthority.AuthorizedCore()",

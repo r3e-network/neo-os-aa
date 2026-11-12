@@ -17,6 +17,7 @@ test('repo README describes the current frontend audit baseline honestly', () =>
   assert.match(readme, /0 high\/critical production vulnerabilities/i);
   assert.match(readme, /frontend and JavaScript SDK/i);
   assert.match(readme, /GHSA-848j-6mx2-7j84/i);
+  assert.match(readme, /GHSA-gcqx-w48m-w2h4/i);
   assert.match(readme, /at most low severity/i);
   assert.match(readme, /Web3Auth\/Torus dependency chain/i);
   assert.match(readme, /SDK runs a separate production-only audit/i);

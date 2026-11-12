@@ -664,6 +664,20 @@
               :placeholder="t('operations.hexPlaceholder', '0x...')"
             />
           </label>
+          <div class="rounded-xl border border-aa-border p-3 space-y-2">
+            <p class="text-sm">Action identities require a separate owner-wallet enrollment. Recovery factors do not grant session access.</p>
+            <label for="did-panel-action-identity" class="block text-sm">Action master nullifier (32 bytes)</label>
+            <input id="did-panel-action-identity" v-model="actionMasterNullifier" class="input-field" :placeholder="zkloginMasterNullifier || '0x...'" />
+            <div class="flex gap-3">
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="manageActionIdentity(true)">Enroll action identity — owner signature</button>
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="manageActionIdentity(false)">Revoke action identity — owner signature</button>
+            </div>
+            <div v-if="proxyVerifierState?.activeSession?.active" class="text-sm">
+              <p v-if="!proxyVerifierState.actionSessionAuthorized">Stored session requires current-owner approval or a new session from an enrolled identity.</p>
+              <p>Stored executor: {{ proxyVerifierState.activeSession.executor }}; expiry: {{ proxyVerifierState.activeSession.expiresAt }}</p>
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="reauthorizeActionSession">Reauthorize this displayed session — owner signature</button>
+            </div>
+          </div>
           <label for="did-panel-proxy-executor" class="block text-sm">
             <span class="text-aa-muted">{{
               t("didPanel.executorAddress", "Executor Address / Script Hash")
@@ -889,6 +903,9 @@ const canSmsNotice = computed(() =>
 );
 const resolvedAccountId = ref("");
 const verifierState = ref(null);
+const verifierStateContext = ref(null);
+const proxyVerifierState = ref(null);
+const proxyVerifierStateContext = ref(null);
 const maintenanceState = ref(null);
 const busy = ref("");
 const resultJson = ref("");
@@ -925,6 +942,7 @@ const recoveryExpiryMinutes = ref(30);
 const proxyVerifierHash = ref("");
 const proxyExecutor = ref("");
 const proxyExpiryMinutes = ref(15);
+const actionMasterNullifier = ref("");
 const bindStatusLabel = computed(() =>
   didConnected.value
     ? t("didPanel.statusReady", "(ready)")
@@ -936,7 +954,7 @@ const recoveryStatusLabel = computed(() =>
     : t("didPanel.statusReady", "(ready)"),
 );
 const sessionStatusLabel = computed(() =>
-  verifierState.value?.activeSession?.active
+  proxyVerifierState.value?.activeSession?.active && proxyVerifierState.value?.actionSessionAuthorized
     ? t("didPanel.statusActive", "(active)")
     : t("didPanel.statusReady", "(ready)"),
 );
@@ -1041,21 +1059,39 @@ function normalizeHashOrAddress(value) {
   return sanitizeHex(raw);
 }
 
+function hasNonZeroHash160(value) {
+  try {
+    const normalized = normalizeHashOrAddress(value);
+    return /^[0-9a-f]{40}$/.test(normalized) && normalized !== "00".repeat(20);
+  } catch {
+    return false;
+  }
+}
+
+function hasRequiredText(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 function toExpiry(minutes) {
   return Date.now() + Math.max(Number(minutes) || 0, 1) * 60 * 1000;
 }
 
 let accountContextRequestId = 0;
 let verifierStateRequestId = 0;
+let proxyVerifierStateRequestId = 0;
 async function refreshAccountContext() {
   const requestId = ++accountContextRequestId;
   // Invalidate all earlier reads before clearing context, including an in-flight
   // verifier response from another core with the same account-ID prefill.
   ++verifierStateRequestId;
+  ++proxyVerifierStateRequestId;
   resolvedAccountId.value = "";
   recoveryVerifierHash.value = "";
   proxyVerifierHash.value = "";
   verifierState.value = null;
+  verifierStateContext.value = null;
+  proxyVerifierState.value = null;
+  proxyVerifierStateContext.value = null;
   maintenanceState.value = null;
   if (!props.accountIdPrefill && !props.accountAddressScriptHash) return;
   try {
@@ -1111,32 +1147,64 @@ watch(
   { immediate: true },
 );
 
-watch(
-  [resolvedAccountId, recoveryVerifierHash],
-  ([accountId, verifier]) => { void refreshVerifierState(accountId, verifier); },
+const effectiveProxyVerifierHash = computed(
+  () => proxyVerifierHash.value || recoveryVerifierHash.value,
 );
 
-async function refreshVerifierState(accountId, verifier) {
+function getVerifierContext(verifier) {
+  const contextHash = (value) => hasNonZeroHash160(value) ? normalizeHashOrAddress(value) : "";
+  return {
+    rpcUrl: RUNTIME_CONFIG.rpcUrl,
+    aaContractHash: contextHash(props.aaContractHash || getAbstractAccountHash()),
+    accountIdHex: contextHash(resolvedAccountId.value),
+    verifierHash: contextHash(verifier),
+  };
+}
+
+function sameVerifierContext(left, right) {
+  return Boolean(left && right &&
+    left.rpcUrl === right.rpcUrl &&
+    left.aaContractHash === right.aaContractHash &&
+    left.accountIdHex === right.accountIdHex &&
+    left.verifierHash === right.verifierHash);
+}
+
+watch(
+  () => getVerifierContext(recoveryVerifierHash.value),
+  (context) => { void refreshVerifierState(context); },
+  { flush: "sync" },
+);
+
+watch(
+  () => getVerifierContext(effectiveProxyVerifierHash.value),
+  (context) => { void refreshProxyVerifierState(context); },
+  { flush: "sync" },
+);
+
+async function refreshVerifierState(context) {
   const requestId = ++verifierStateRequestId;
   verifierState.value = null;
+  verifierStateContext.value = null;
   maintenanceState.value = null;
-  if (!accountId) return false;
+  if (!context.accountIdHex || !context.aaContractHash) return false;
   try {
     const [maintenance, state] = await Promise.all([
       fetchAccountMaintenanceState({
-        rpcUrl: RUNTIME_CONFIG.rpcUrl,
-        aaContractHash: props.aaContractHash || getSmartAccountHash(),
-        accountIdHex: accountId,
+        rpcUrl: context.rpcUrl,
+        aaContractHash: context.aaContractHash,
+        accountIdHex: context.accountIdHex,
       }),
-      verifier ? fetchUnifiedVerifierState({
-        rpcUrl: RUNTIME_CONFIG.rpcUrl,
-        verifierHash: verifier,
-        accountIdHex: accountId,
+      context.verifierHash ? fetchUnifiedVerifierState({
+        rpcUrl: context.rpcUrl,
+        verifierHash: context.verifierHash,
+        accountIdHex: context.accountIdHex,
       }) : Promise.resolve(null),
     ]);
-    if (requestId !== verifierStateRequestId) return false;
+    if (requestId !== verifierStateRequestId ||
+        !sameVerifierContext(context, getVerifierContext(recoveryVerifierHash.value))) return false;
     maintenanceState.value = maintenance;
     verifierState.value = state;
+    verifierStateContext.value = context;
     return true;
   } catch (error) {
     if (requestId !== verifierStateRequestId) return false;
@@ -1147,13 +1215,40 @@ async function refreshVerifierState(accountId, verifier) {
   }
 }
 
+async function refreshProxyVerifierState(context) {
+  const requestId = ++proxyVerifierStateRequestId;
+  proxyVerifierState.value = null;
+  proxyVerifierStateContext.value = null;
+  if (!context.accountIdHex || !context.aaContractHash || !context.verifierHash) return false;
+  try {
+    const state = await fetchUnifiedVerifierState({
+      rpcUrl: context.rpcUrl,
+      verifierHash: context.verifierHash,
+      accountIdHex: context.accountIdHex,
+    });
+    if (requestId !== proxyVerifierStateRequestId ||
+        !sameVerifierContext(context, getVerifierContext(effectiveProxyVerifierHash.value))) return false;
+    if (!hasVerifierPreviewContext(state, context, effectiveProxyVerifierHash.value)) return false;
+    proxyVerifierState.value = state;
+    proxyVerifierStateContext.value = context;
+    return true;
+  } catch (error) {
+    if (requestId !== proxyVerifierStateRequestId) return false;
+    if (import.meta.env.DEV)
+      console.error("[DidIdentityPanel] refreshProxyVerifierState failed:", error?.message);
+    toast.error(translateError(error?.message, t));
+    return false;
+  }
+}
+
 async function refreshVerifierStateAction() {
   busy.value = "refreshState";
   try {
-    if (await refreshVerifierState(
-      resolvedAccountId.value,
-      recoveryVerifierHash.value || proxyVerifierHash.value,
-    )) {
+    const [recoveryRefreshed, proxyRefreshed] = await Promise.all([
+      refreshVerifierState(getVerifierContext(recoveryVerifierHash.value)),
+      refreshProxyVerifierState(getVerifierContext(effectiveProxyVerifierHash.value)),
+    ]);
+    if (recoveryRefreshed || proxyRefreshed) {
       publishStatus(t("didPanel.refreshChainState", "Refresh Chain State"));
     }
   } finally {
@@ -1179,26 +1274,58 @@ watch(
   { immediate: true },
 );
 
-const canPreviewRecovery = computed(
+function hasVerifierPreviewContext(state, context, verifier) {
+  const expected = getVerifierContext(verifier);
+  return Boolean(
+    state &&
+    sameVerifierContext(context, expected) &&
+    hasNonZeroHash160(state.verifierHash) &&
+    hasNonZeroHash160(state.aaContract) &&
+    normalizeHashOrAddress(state.verifierHash) === expected.verifierHash &&
+    normalizeHashOrAddress(state.aaContract) === expected.aaContractHash &&
+    hasRequiredText(state.network) &&
+    hasRequiredText(state.accountIdText) &&
+    hasNonZeroHash160(state.accountAddress) &&
+    hasNonZeroHash160(resolvedAccountId.value),
+  );
+}
+const hasPreviewContext = computed(() => hasVerifierPreviewContext(
+  verifierState.value, verifierStateContext.value, recoveryVerifierHash.value,
+));
+const hasProxyPreviewContext = computed(() => hasVerifierPreviewContext(
+  proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value,
+));
+const canInvokeRecovery = computed(
   () =>
     didConnected.value &&
     recoveryVerifierHash.value &&
     recoveryNewOwner.value &&
     resolvedAccountId.value,
 );
-const canInvokeRecovery = computed(() => canPreviewRecovery.value);
-const canPreviewProxy = computed(
-  () => didConnected.value && proxyExecutor.value,
-);
-const effectiveProxyVerifierHash = computed(
-  () => proxyVerifierHash.value || recoveryVerifierHash.value,
+const canPreviewRecovery = computed(
+  () =>
+    canInvokeRecovery.value &&
+    hasPreviewContext.value &&
+    hasNonZeroHash160(recoveryVerifierHash.value) &&
+    hasNonZeroHash160(recoveryNewOwner.value),
 );
 const canInvokeProxy = computed(
   () =>
     didConnected.value &&
     effectiveProxyVerifierHash.value &&
     proxyExecutor.value &&
-    resolvedAccountId.value,
+    resolvedAccountId.value &&
+    Number(proxyVerifierState.value?.actionProtocolVersion) === 4 &&
+    /^[1-9][0-9]*$/.test(String(proxyVerifierState.value?.actionAuthorizationEpoch || "")),
+);
+const canPreviewProxy = computed(
+  () =>
+    canInvokeProxy.value &&
+    hasProxyPreviewContext.value &&
+    Number(proxyVerifierState.value?.actionProtocolVersion) === 4 &&
+    /^[1-9][0-9]*$/.test(String(proxyVerifierState.value?.actionAuthorizationEpoch || "")) &&
+    hasNonZeroHash160(effectiveProxyVerifierHash.value) &&
+    hasNonZeroHash160(proxyExecutor.value),
 );
 
 watch(
@@ -1323,14 +1450,21 @@ async function resolveServiceDidAction() {
 }
 
 async function previewRecoveryAction() {
+  if (!canPreviewRecovery.value || !hasVerifierPreviewContext(
+    verifierState.value, verifierStateContext.value, recoveryVerifierHash.value,
+  )) return;
   busy.value = "previewRecovery";
   try {
     const response = await morpheusDidService.previewRecoveryTicket({
-      aaContract: props.aaContractHash || getSmartAccountHash(),
+      network: verifierState.value?.network,
+      aaContract: verifierState.value?.aaContract,
       verifierContract: recoveryVerifierHash.value,
       accountId: resolvedAccountId.value,
+      accountIdText: verifierState.value?.accountIdText,
+      accountIdRaw: resolvedAccountId.value,
+      accountAddress: verifierState.value?.accountAddress,
       newOwner: recoveryNewOwner.value,
-      recoveryNonce: 0,
+      recoveryNonce: verifierState.value?.recoveryNonce || 0,
       expiresAt: toExpiry(recoveryExpiryMinutes.value),
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1368,11 +1502,22 @@ async function invokeRecoveryAction() {
 }
 
 async function previewProxyAction() {
+  if (!canPreviewProxy.value || !hasVerifierPreviewContext(
+    proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value,
+  )) return;
   busy.value = "previewProxy";
   try {
     const response = await morpheusDidService.previewActionTicket({
+      network: proxyVerifierState.value?.network,
+      aaContract: proxyVerifierState.value?.aaContract,
+      verifierContract: effectiveProxyVerifierHash.value,
+      accountId: resolvedAccountId.value,
+      accountIdText: proxyVerifierState.value?.accountIdText,
+      accountIdRaw: resolvedAccountId.value,
       executor: proxyExecutor.value,
-      actionId: `aa_proxy:${props.aaContractHash || getSmartAccountHash()}:${resolvedAccountId.value || "unresolved"}:${normalizeHashOrAddress(proxyExecutor.value)}:${toExpiry(proxyExpiryMinutes.value)}`,
+      sessionNonce: proxyVerifierState.value?.sessionNonce || 0,
+      authorizationEpoch: proxyVerifierState.value?.actionAuthorizationEpoch,
+      expiresAt: toExpiry(proxyExpiryMinutes.value),
     });
     resultJson.value = JSON.stringify(response, null, 2);
     publishStatus(t("didPanel.previewTicket", "Preview Ticket"));
@@ -1384,6 +1529,7 @@ async function previewProxyAction() {
 }
 
 async function invokeProxyAction() {
+  if (!canInvokeProxy.value || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
   busy.value = "invokeProxy";
   try {
     const response = await morpheusDidService.invokeProxySessionRequest({
@@ -1406,6 +1552,34 @@ async function invokeProxyAction() {
   } finally {
     busy.value = "";
   }
+}
+
+// Every management operation is an explicit owner-wallet transaction. The
+// read provenance guard is UX protection; current-owner witness is enforced on-chain.
+async function manageActionIdentity(enabled) {
+  if (Number(proxyVerifierState.value?.actionProtocolVersion) !== 4 || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
+  const masterNullifier = actionMasterNullifier.value || zkloginMasterNullifier.value;
+  if (!/^[0-9a-f]{64}$/i.test(sanitizeHex(masterNullifier))) return;
+  busy.value = "actionEnrollment";
+  try {
+    const response = await morpheusDidService.setActionIdentity({ verifierHash: effectiveProxyVerifierHash.value,
+      accountIdHex: resolvedAccountId.value, masterNullifier, enabled });
+    resultJson.value = JSON.stringify(response, null, 2);
+  } catch (err) { toast.error(translateError(err?.message, t)); }
+  finally { busy.value = ""; }
+}
+
+async function reauthorizeActionSession() {
+  if (Number(proxyVerifierState.value?.actionProtocolVersion) !== 4 || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
+  const session = proxyVerifierState.value?.activeSession;
+  if (!session?.active) return;
+  busy.value = "reauthorizeAction";
+  try {
+    const response = await morpheusDidService.reauthorizeActiveActionSession({ verifierHash: effectiveProxyVerifierHash.value,
+      accountIdHex: resolvedAccountId.value, session: { ...session } });
+    resultJson.value = JSON.stringify(response, null, 2);
+  } catch (err) { toast.error(translateError(err?.message, t)); }
+  finally { busy.value = ""; }
 }
 
 async function finalizeRecoveryAction() {

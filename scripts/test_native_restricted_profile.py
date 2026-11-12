@@ -29,7 +29,9 @@ class NativeRestrictedProfileTests(unittest.TestCase):
         self.assertIn('"getAccountAddress"',source)
         self.assertIn('"Missing restricted balance snapshot"',source)
         self.assertIn('value is BigInteger && (BigInteger)value >= 0',source)
-        self.assertIn('ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId))',source)
+        snapshot_prefix='HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId)'
+        self.assertIn('Helper.Concat('+snapshot_prefix+', (byte[])token)',source)
+        self.assertIn('ClearPrefix('+snapshot_prefix+')',source)
 
 
 if __name__=='__main__':unittest.main()

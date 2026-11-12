@@ -4,7 +4,7 @@ This lane certifies the complete bodies of three public ABI methods in the
 ordinary candidate under declared reference semantics. It independently
 projects their typed source, decodes their exact NEF bytes, and kernel-checks
 source results, terminal behavior and frame preservation. It does not certify
-ApplicationEngine, ABI dispatch, gas or public deployment. All 100 ABI entries
+ApplicationEngine, ABI dispatch, gas or public deployment. All 105 ABI entries
 remain unproved for full implementation acceptance.
 
 | Public method | Exact byte range, end exclusive | Bytes / instructions |

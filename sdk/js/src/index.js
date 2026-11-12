@@ -966,9 +966,9 @@ class SmartAccountClient {
     const messageHash = sanitizeHex(hash || '');
     const messageSignature = sanitizeHex(signature || '');
     validateHexString(messageHash, { byteLength: 32 });
-    // ERC-1271 callers commonly provide either compact r||s (64 bytes) or
-    // recoverable r||s||v (65 bytes). The Neo verifier validates the recovery
-    // id when present and strips it before secp256k1 verification.
+    // ERC-1271 callers commonly provide either EIP-2098 compact (64 bytes) or
+    // recoverable r||s||v (65 bytes). The verifier-specific adapter determines
+    // which form it supports.
     validateHexString(messageSignature, { minLength: 64, maxLength: 65 });
 
     const script = sc.createScript({

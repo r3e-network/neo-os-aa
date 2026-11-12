@@ -482,6 +482,7 @@ class RPCClient {
     try {
       response = await fetch(this.rpcUrl, {
         method: 'POST',
+        redirect: 'error',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
         signal: AbortSignal.timeout(this.timeoutMs),

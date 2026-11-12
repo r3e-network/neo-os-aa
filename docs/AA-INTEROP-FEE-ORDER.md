@@ -159,7 +159,7 @@ reviewed value would mean the field is decorative.
   declaration permits zero.
 - The conversion, the handler body and its return value — those stay in
   `AA-INTEROP-CONVERSION.md`.
-- Trusted C# extraction and compiler/CLR correspondence; all 100 public
+- Trusted C# extraction and compiler/CLR correspondence; all 105 public
   entrypoints.
 
 ## Running it

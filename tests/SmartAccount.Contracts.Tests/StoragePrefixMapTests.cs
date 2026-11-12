@@ -44,12 +44,14 @@ public class StoragePrefixMapTests
         "SmartAccount.Escape.cs",
         "SmartAccount.Events.cs",
         "SmartAccount.Execution.cs",
+        "SmartAccount.HookChildren.cs",
         "SmartAccount.Internal.cs",
         "SmartAccount.MarketEscrow.cs",
         "SmartAccount.Models.cs",
         "SmartAccount.Paymaster.cs",
         "SmartAccount.PlatformRegistrar.cs",
         "SmartAccount.State.cs",
+        "SmartAccount.VerifierChildren.cs",
         "SmartAccount.VerifyContext.cs",
     };
 

@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { toMultiSigRpcParameter } from '../../shared/multiSigCore.mjs';
+import { assertLocalchainProbe } from './probe_isolation.mjs';
 
 const AA = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
 
@@ -28,6 +29,7 @@ process.on('uncaughtException', (error) => {
 });
 
 const request = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+assertLocalchainProbe(request.rpcUrl);
 
 // ---------------------------------------------------------------- Neo wire encoding
 // N3 serialization is not expressed by any dependency on this path, and a byte that is one off is
@@ -176,6 +178,7 @@ function signDigest(key, magic, unsigned) {
 async function rpc(method, params) {
   const response = await fetch(request.rpcUrl, {
     method: 'POST',
+    redirect: 'error',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   });

@@ -6,20 +6,26 @@ const advisory = () => ({
   name: 'elliptic', dependency: 'elliptic', severity: 'low',
   url: 'https://github.com/advisories/GHSA-848j-6mx2-7j84',
 });
+const deepmergeAdvisory = () => ({
+  name: 'deepmerge', dependency: 'deepmerge', severity: 'low',
+  url: 'https://github.com/advisories/GHSA-gcqx-w48m-w2h4',
+});
 const entry = (name, via) => ({ name, severity: 'low', via });
 function report() {
   return {
     auditReportVersion: 2,
     vulnerabilities: {
       elliptic: entry('elliptic', [advisory()]),
-      '@web3auth/modal': entry('@web3auth/modal', ['elliptic']),
+      deepmerge: entry('deepmerge', [deepmergeAdvisory()]),
+      '@web3auth/modal': entry('@web3auth/modal', ['elliptic', 'deepmerge']),
     },
-    metadata: { vulnerabilities: { info: 0, low: 2, moderate: 0, high: 0, critical: 0, total: 2 } },
+    metadata: { vulnerabilities: { info: 0, low: 3, moderate: 0, high: 0, critical: 0, total: 3 } },
   };
 }
 
-test('accepts only the reviewed advisory and resolves propagated dependency findings', () => {
-  assert.deepEqual(validateAuditReport(report()).advisories, ['GHSA-848j-6mx2-7j84']);
+test('accepts only the two reviewed advisories and resolves propagated dependency findings', () => {
+  assert.deepEqual(validateAuditReport(report()).advisories,
+    ['GHSA-848j-6mx2-7j84', 'GHSA-gcqx-w48m-w2h4']);
 });
 
 test('a new advisory on the same accepted package fails', () => {

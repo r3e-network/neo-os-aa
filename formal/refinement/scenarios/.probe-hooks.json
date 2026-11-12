@@ -1,7 +1,7 @@
 {
  "schema": "aa-abi-scenario-input/v1",
  "name": "probe-hook-addresses",
- "contractAddress": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2",
+ "contractAddress": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640",
  "blockTimestamp": 1700000000000,
  "defaultSigner": "0x1111111111111111111111111111111111111111",
  "deploySigner": "0x1111111111111111111111111111111111111111",

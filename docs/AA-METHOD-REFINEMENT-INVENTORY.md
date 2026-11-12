@@ -2,7 +2,25 @@
 
 This is a structural inventory and implementation plan. It proves no VM, ApplicationEngine, compiler, storage, or whole-method semantics. The current arithmetic certificate remains a region certificate; it cannot establish a whole-method certificate.
 
-## Exact candidate and scope
+## Current artifact summary (2026-10-30)
+
+The current SmartAccount V3 NEF is
+`6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3`
+with script SHA256
+`b7fa49f95cf7ba5fbc9676de60bc7917331687b6dd6d2dfc52a2fbcee1b95913`.
+Its `CapReimbursementToActualCost` helper is the complete interval
+`[17762,18043)`: 281 bytes, 116 instructions, and 52 distinct opcode names.
+The initializer is `[29415,30097)`: 682 bytes and 182 instructions. The helper
+reads static slot 38; the initializer stores the reimbursement key with
+`PUSHDATA1 21` at 29909, `CONVERT Buffer` at 29912, and `STSFLD 38` at 29914.
+The current compiler artifact has 105 ABI entries, not the historical 100.
+
+## Historical candidate and scope
+
+The detailed table below records the earlier 2026-10-13 candidate and its
+`[13557,13838)` layout. It is retained as provenance for the historical
+inventory lane; its offsets and slot 34 must not be applied to the current
+artifact.
 
 The public ordinary candidate NEF has SHA256 `4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`. Its reviewed debug mapping identifies `CapReimbursementToActualCost(BigInteger)` at inclusive offsets **13557–13837**: **281 bytes, 116 instructions, 52 distinct opcodes**. All 116 instructions are listed below, including the prefix, assertion fault path, reservation update, serialization, storage write, and return. Debug/source identity and source locations are bound exporter evidence, not a compiler-refinement theorem.
 

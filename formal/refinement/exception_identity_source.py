@@ -92,7 +92,7 @@ UNPROVED = [
     'The fault-message text and any client-visible diagnostic derived from it.',
     'Rollback of ledger and storage effects after a fault, and the transaction composition that '
     'decides whether a faulted execution is committed or discarded.',
-    'Trusted C# extraction and compiler/CLR correspondence; all 100 public entrypoints.'
+    'Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.'
 ]
 TCB = ['C# catch-clause matching and exception-subtyping of `catch (T)` against a thrown value.',
        'The tokenizer keeps string and character literals opaque; preprocessor lines carry no '

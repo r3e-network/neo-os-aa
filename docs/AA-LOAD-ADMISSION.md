@@ -176,7 +176,7 @@ Examples: `accept-a-foreign-magic` (`!= Magic` → `!= 0`), `compare-the-checksu
 - The wildcard container reader that turns the JSON string `*` into a wildcard.
 - Gas, storage growth and every resource limit on the admission path.
 - The permission table's runtime decision (modelled by `contract-handoff`).
-- Trusted C# extraction and compiler/CLR correspondence; all 100 public entrypoints.
+- Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.
 
 ## Running it
 

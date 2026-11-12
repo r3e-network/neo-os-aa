@@ -30,16 +30,16 @@ alone is for already bound data and fixtures; use the CLI for artifact evidence:
 
 ```sh
 python3 formal/refinement/entrypoint_inventory.py \
-  --inventory /tmp/aa-refinement-integrated-final-20261013/inventory.json \
-  --json-report /tmp/aa-entrypoint-closure-20261013.json
+  --inventory "$AA_CURRENT_INVENTORY" \
+  --json-report /tmp/aa-entrypoint-closure-current.json
 ```
 
 The current artifact identity is NEF SHA256
-`4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`
-(script `cd1ef3375d65844e896fab0b69191640e10328ae188993da3c65fa0cfe53366d`,
-manifest `f7203fd84f6d132119df839a13249d73e4fe67644ca7a2e1c4ad6b9a1f6b21ed`),
+`6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3`
+(script `b7fa49f95cf7ba5fbc9676de60bc7917331687b6dd6d2dfc52a2fbcee1b95913`,
+manifest `8b6bd9623ab4ed293ad9b6fda27402aaf3100d0b2a9d5c44658edb7e83fb0c29`),
 accounted against inventory SHA256
-`a19a3fac91914deea3b1454f01b751e6c1c929b5241c91ba14436337d1171a8b`.
+`6a812ee15e3ae92452081b30423526b43cf13342fcd6d2ec8e0265d4de788144`.
 This targets ordinary Neo 3.10.1 source commit
 `d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d` and Neo.VM source commit
 `004cd6070a940405818d9357638277dd44407e2e`.
@@ -53,34 +53,28 @@ unstable across rebuilds of a byte-identical artifact because
 `compiler.loadedAssemblies` entry) moves. Compare those fields, not the inventory
 digest, when deciding whether two builds are the same artifact.
 
-This artifact is 10 script bytes shorter than the pre-rename build described in
-earlier revisions of this file, because `getAccountImplementationId` returns a
-shorter implementation-id literal (33 bytes / 3 instructions now, 43 before). The
-body still starts at 17906, but it now ends at 17939, so its own end boundary and
-every interval after it shift down by 10, while every interval strictly before it
-is unchanged. The reimbursement helper `CapReimbursementToActualCost` then grew by
-73 bytes when it gained its explicit VM-integer-range margin guard, so it is now
-`[13557,13838)` instead of `[13557,13765)`, and every interval at or after 13734
-moves down another 73 (net +63 against the pre-rename build). The initializer's
-key setup is therefore at `25432/25435/25437` (was `25359/25362/25364` in the
-rename build and `25369/25372/25374` before the rename).
+The current result accounts for 105 manifest entries, 188 byte methods, 863
+typed source methods, 350 exported source initializers and all 10,462
+instructions / 30,097 script bytes. All 188 debug identities uniquely match
+typed method display names, and 104 source-backed ABI descriptors match their
+manifest descriptors. The remaining manifest entry, `_initialize/0`, has no
+typed/debug method mapping. Its exact interval is `[29415,30097)`: 682 bytes and
+182 instructions, and remains source-unbound.
 
-The result accounts for 100 manifest entries, 164 byte methods, 815 typed source
-methods, 331 exported source initializers and all 8,833 instructions / 25,620
-script bytes. All 164 debug identities uniquely match typed method display names;
-all 99 source-backed ABI descriptors exactly match their manifest descriptors.
-The remaining manifest entry, `_initialize/0`, has no typed/debug method mapping.
-Its exact interval is `[24966,25620)`, 654 bytes, and remains source-unbound.
-
-There are 278 direct-call sites, 581 external-effect sites (69 token calls and 512
-syscalls), 14 local control-flow cycle components, no call recursion components,
-no `CALLA`, and no `PUSHA`. The 962 bytes outside source/debug method intervals
-are kept in distinct generated/unmapped ranges. The initializer accounts for 654
-structurally reachable bytes; the remaining 308 bytes in 36 ranges have no path
+There are 405 direct-call sites, 633 external-effect sites (75 token calls and
+558 syscalls), 21 local control-flow cycle components, one call-recursion
+component, no `CALLA`, and no `PUSHA`. The 990 bytes outside source/debug method
+intervals are kept in 38 generated/unmapped ranges. The initializer accounts for
+682 structurally reachable bytes; the other 308 bytes in 37 ranges have no path
 from the conservative root set through explicit decoded edges. They are marked
 `structurallyUnreachable`, with `semanticDead:false`. Future indirect calls disable
 this conclusion. This result makes no claim about execution introduced by an
 external host bypassing the normal manifest dispatch rules.
+
+The former artifact with NEF
+`4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`
+and its `[13557,13838)` helper interval is historical. That layout, its slot 34,
+and its 100-entry count must not be applied to the current artifact.
 
 The source graph is separate from the byte graph: it records bound method,
 constructor, operator and conversion references, property/field references,
@@ -88,7 +82,7 @@ source loops and unexported metadata. Compiler inlining or intrinsic lowering
 does not justify equating those graphs. Missing external source bodies and
 unexported metadata stay open. Each ABI closure contains its body/callee byte
 ranges, transitively referenced source members and the common initializer
-dependency. The full count remains `fullUnprovedCount:100`.
+dependency. The full count remains `fullUnprovedCount:105`.
 External/static/indirect effects are explicitly reported for the full body plus
 initializer scope; separate `body*` and `initialization*` fields preserve their
 origin without letting pure body selection hide common initialization effects.
@@ -107,7 +101,7 @@ entry bodies its selected lanes refine, in the non-overlapping
 `entrypointCoverage` buckets `fullyClosed`, `bodyLevelRefined` and
 `dispatchLevelOnly`. Those buckets describe the gate's own selected scopes only.
 This inventory still requires every manifest entry to retain all of its
-obligations, and its `fullUnprovedCount` stays `100`.
+obligations, and its current `fullUnprovedCount` is `105`.
 
 The automatic first public candidates are:
 
@@ -185,20 +179,19 @@ stays `0` and `fullImplementationVerified` stays `false`.
 
 The same dump also answers the negative half of the dispatch question, which none
 of the numbers above can: what the engine does with a call the manifest does not
-describe. 185 probes carry a parameter count no overload of that name declares, and
-all 185 are refused by `ContractManagement` before a single instruction of this
+describe. In the current remeasurement, 195 probes carry a parameter count no
+overload of that name declares, and all 195 are refused by `ContractManagement`
+before a single instruction of this
 contract runs — `Method "computeRegistrationAccountId" with 4 parameter(s) doesn't
 exist in the contract`, with `entered: false` and a dozen steps instead of the
 control's two hundred. The one name nobody declares is refused the same way. The
 two counts that *are* declared for `finalizeEscape` each enter a different offset,
-8514 and 8526, which is the only place on this artifact where name-plus-arity
-selection can be shown rather than read. And 86 arguments of a shape the manifest
-says cannot arrive are all accepted at the boundary: 79 fail inside the contract,
+10988 and 11000, which is the only place on this artifact where name-plus-arity
+selection can be shown rather than read. And 91 arguments of a shape the manifest
+says cannot arrive are all accepted at the boundary: 84 fail inside the contract,
 7 answer, so the declared parameter types turn out to be documentation for tooling
 and not an admission rule — recorded as `shapeEnforcedAtBoundary: false` rather
-than as a defect in the artifact. Gate 37 is the run that carries this: the
-dispatch receipt moved from `24aac44d…` to `f9429279…`, while the footprint
-(`48556e2a…`) and all four scenario receipts did not move at all.
+than as a defect in the artifact.
 
 ### The same graph, with arguments
 
@@ -220,36 +213,36 @@ manifest. The fourth, eighty-two calls, deploys the *other party* rather than a
 plugin: the platform-registrar channel and the market escrow both assert that their
 caller is a contract, so a registrar mock, a forwarder and a paymaster are installed
 and the account's own registrar-gated and market-gated entries run behind them.
-Together on the pinned artifact: 227 calls, 183 halted and 44 faults with the
+Together on the pinned artifact: 227 calls, 185 halted and 42 faults with the
 reasons the files predict, 227 of 227 frames byte-identical to an encoder written
 against the opcode table, 227 of 227 at their declared time and signer,
-thirty-seven read links holding byte for byte, and every declared integer, boolean
+thirty-eight read links holding byte for byte, and every declared integer, boolean
 and array length matching.
 
-Two of the 100 entries' declared return types — `Any` and `Array` — are declared
+Two of the 105 entries' declared return types — `Any` and `Array` — are declared
 only by methods that fault on zero arguments, so no zero-argument face could ever
 apply their mapping. After this layer none is left: the union of the five faces
 covers all eight declared return types, and the gate refuses to pass until it does.
-That is eight return types, not eight behaviours. Of the 100 entries, 89 are named
+That is eight return types, not eight behaviours. Of the 105 entries, 89 are named
 by a step in one of the four files, 8 more execute behind a caller and are evidenced
 by the state they change (the platform registrations, the owner rotations and the
-three escrow transitions), and 3 are declared unreached: `_deploy/2` and
+three escrow transitions), 5 more are reached through the plugin-facing callback
+paths, and 3 are declared unreached: `_deploy/2` and
 `_initialize/0`, which `System.Contract.Call` refuses to invoke at all because their
 names begin with an underscore, and `rotatePlatformAccountOwner/3`, a one-line alias
 whose target the mock calls instead. A shape that matches still says nothing about
 which value it carried. The boundary pairs are the same kind of statement about time
 — the receipt shows the harness was at two instants and the endings differ, and it
-says nothing about what a chain would have stamped. And the fourth file's one
-unexplained fault is a finding rather than a gap in the harness: `cancelPlatformRegistrar`
-emits an event whose name is 34 bytes, and Neo caps event names at 32, so the call
-reverts in the host before it can delete anything. That one is a contract defect,
-declared in the scenario with the host's own message, and left unfixed because
-renaming the event changes the manifest and therefore every hash this project pins.
+says nothing about what a chain would have stamped. The current scenario also
+drives the corrected registrar cancellation path: `cancelPlatformRegistrar`
+completes at the configured timelock and emits the 32-byte
+`PlatformRegistrarCancelled` event. The former 34-byte event name was a contract
+defect; it is no longer present in the current artifact or scenario.
 
 Gate 35 is the run that carries the third file. It snapshotted 121 tool files, ran
 26 jobs with none non-zero, and returned `NO-GO` with `fullUnprovedCount 100` and
 all four obligations open. The plugin face reads 62 of 62 frames byte-identical,
-62 of 62 at their declared block time and signer, 51 halts and 11 faults with the
+62 of 62 at their declared block time and signer, 52 halts and 10 faults with the
 declared reasons, 16 of 16 read links holding, four plugins deployed at the declared
 addresses from the declared bytes by the declared signers, ten steps landing on a
 plugin, and sixteen of sixteen mutations caught (`bced9fbd…`). The two faces that
@@ -260,7 +253,7 @@ while the first scenario's own sha256 stayed at `ecd68d8e…`, and the dispatch 
 Gate 36 is the run that carries the fourth file. It snapshots 128 tool files (the
 fourth scenario and six artifacts more than gate 35), runs 27 jobs with none
 non-zero, and the registrar face reads 82 of 82 frames byte-identical, 82 of 82 at
-their declared time and signer, 64 halts and 18 faults with the declared reasons,
+their declared time and signer, 65 halts and 17 faults with the declared reasons,
 10 of 10 read links holding, six modules deployed at the declared addresses from the
 declared bytes by the declared signers, sixteen steps landing on one, and sixteen of
 sixteen mutations caught (`c2ad13ef…`). Nothing else moved: the first scenario's
@@ -290,7 +283,7 @@ That leaves two coherent programmes, and they claim different things:
   what `implementationVerified` means today, and it is research-scale: a
   semantics for the subset of C# the compiler accepts, plus its code generation.
 - **Route B (bytecode-trust).** Drop the compiler obligation from the claim and
-  prove refinement from the NEF bytes and the reviewed debug mapping for all 100
+  prove refinement from the NEF bytes and the reviewed debug mapping for all 105
   entrypoints. The existing lanes already work this way — they decode the pinned
   script and never trust the source for semantics — so this route is reachable by
   repetition rather than by a new theory. It yields a *weaker* statement about the

@@ -1,7 +1,7 @@
 """What the engine does with declared arguments over state the scenario built.
 
 `abi_dispatch` calls every ABI name once with arity-matched zeros. That answers
-"does the dispatcher resolve the name", and it stops there: 61 of the 100 methods
+"does the dispatcher resolve the name", and it stops there: 65 of the 105 methods
 halt at their first argument guard, so neither their bodies nor their declared
 return types are ever reached.
 

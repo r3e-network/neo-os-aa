@@ -1,8 +1,11 @@
 # Frontend dependency security assessment
 
-Reviewed on 2026-10-09. The frontend's remaining low-severity audit entries
-originate from one Elliptic advisory, including findings propagated to dependent
-packages. They are a known upstream risk, not a zero-vulnerability result.
+Reviewed on 2026-10-30. The frontend's remaining low-severity audit entries
+originate from two upstream advisories, Elliptic and deepmerge, including findings
+propagated to dependent packages. They are known upstream risks, not a
+zero-vulnerability result. The current production audit reports 22 affected
+packages at low severity; the complete tree reports 27, with no moderate, high,
+or critical finding after the Vite and qs patches below.
 
 ## Patched renderers
 
@@ -71,14 +74,36 @@ them under older callers is not a verified compatible replacement. The separate
 polyfill path also remains. No Web3Auth major migration, custom cryptography patch,
 or audit-suggested polyfill downgrade is included in this change.
 
+## Remaining deepmerge risk
+
+[GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4)
+affects `deepmerge` 4.2.0 through 4.3.1. At review time, 4.3.1 was the latest
+published release and the advisory listed no patched version. The issue is
+prototype poisoning through `mergeObject()` in the returned object graph.
+
+Deepmerge is loaded by the deferred Web3Auth/Torus identity path and is used to
+merge application, dashboard and login configuration. This is client-local
+JavaScript: a successful poisoning would affect the page that loaded the
+attacker-controlled value, not another origin or the Neo chain. The application
+does not accept arbitrary object graphs as identity configuration, and its CSP
+does not permit the dependency to be introduced by an unrelated script. Those
+constraints reduce exposure but do not prove the dependency harmless. A forced
+Web3Auth downgrade is not an acceptable fix, and no compatible patched release
+exists at this review point.
+
+Vite is updated to 6.4.5 for GHSA-8g5g-mxqh-grgj and qs to 6.17.1 for
+GHSA-6pq8-jhm2-2vcw. Neither advisory is allowed at moderate severity; both are
+fixed in the lockfile rather than accepted by the audit policy.
+
 ## Audit policy and validation
 
 `npm run audit:prod` and `npm run audit:all` resolve every reported dependency
-finding to its advisory leaves. Only **GHSA-848j-6mx2-7j84 for Elliptic, at most
-low severity**, is accepted. There is no package-name or moderate-severity
-exception. A new advisory on an already known package also fails. Invalid JSON,
-registry error objects, missing or unknown severity, incomplete reports,
-inconsistent counts, and unresolved advisory paths fail closed.
+finding to its advisory leaves. Only **GHSA-848j-6mx2-7j84 for Elliptic** and
+**GHSA-gcqx-w48m-w2h4 for deepmerge**, each at no more than low severity, are
+accepted. There is no package-name or moderate-severity exception. A new advisory
+on an already known package also fails. Invalid JSON, registry error objects,
+missing or unknown severity, incomplete reports, inconsistent counts, and
+unresolved advisory paths fail closed.
 
 The gate requires a fresh successful npm audit report. Exceptions must be removed
 when a compatible upstream fix exists; broadening the accepted advisory set

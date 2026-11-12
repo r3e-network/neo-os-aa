@@ -55,7 +55,7 @@ def certificate(model, mutation=None):
     if mutation == 'omit-storage-price':
         pc = storage_site()
         nodes[pc] = dict(nodes[pc], storage=False)
-    if mutation == 'omit-hash-equal-branch': cfg[13635] = [13637]
+    if mutation == 'omit-hash-equal-branch': cfg[17840] = [17842]
     if mutation == 'lower-storage-bound': storage = 70
     actual_cfg = '[' + ';'.join('(gas_node %s [%s])' % (event(nodes[pc]), ';'.join(map(str,cfg[pc]))) for pc in sorted(nodes)) + ']'
     paths = '[' + ';'.join(events(p['events']) for p in model['paths']) + ']'
@@ -84,7 +84,7 @@ Theorem actual_cfg_prices_agree_with_extracted_source :
  map node_event actual_cfg = actual_source_prices.
 Proof. vm_compute. reflexivity. Qed.
 Theorem actual_cfg_enumeration_complete :
- enumerate_cfg %d actual_cfg 13557 = Some actual_paths.
+ enumerate_cfg %d actual_cfg 17762 = Some actual_paths.
 Proof. vm_compute. reflexivity. Qed.
 Theorem actual_path_price_checks : forallb (safe_path actual_maximum) actual_paths = true.
 Proof. vm_compute. reflexivity. Qed.

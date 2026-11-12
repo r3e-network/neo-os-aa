@@ -63,6 +63,15 @@ const CURRENT_DOCS = [
   // of the historical dead-entrypoint ratchet.
   'docs/ORDINARY_ACCOUNT_WORKSPACE.md',
   'docs/PENDING_CONFIG_UPDATE_READ_ABI.md',
+  // Current protocol and refinement documents introduced with the
+  // SmartAccount rename. They describe the source ABI directly, so the
+  // historical V2 dead-name ratchet must not classify their reviewed terms as
+  // legacy deployment debt.
+  'docs/AA-CONTRACT-HANDOFF.md',
+  'docs/AA-ENTRYPOINT-CLOSURE.md',
+  'docs/AA-FRONTEND-CORRESPONDENCE.md',
+  'docs/AA-INTEROP-CONVERSION.md',
+  'docs/AA-SYSCALL-ADMISSION.md',
 ];
 
 // The ordinary delivery track has two additive reads in source that are deliberately not copied
@@ -78,6 +87,57 @@ const SOURCE_ONLY_ORDINARY_READS = new Map([
     names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
     caveat: /newly compiled source|Existing deployments|not evidence of a deployed upgrade/i,
   }],
+]);
+
+// Current protocol and refinement documents can describe three different namespaces in one file:
+// ABI members of the public artifact, symbols in the current C# source, and members of the pinned
+// Neo Core/VM source that are not contracts in this repository. Treating every one as a deployed
+// ABI claim produced false drift in both directions: it rejected reviewed C# source spelling while
+// also skipping the rest of the current-runtime checks. This explicit document class keeps those
+// checks on, but resolves a name against the correct source:
+//
+//   * a source-only name must be defined in contracts/**;
+//   * an external runtime name must be one of the exact, reviewed symbols below;
+//   * any other name still fails the current-runtime scan.
+//
+// The class is not a suppression list. Every entry names a current document and a visible pinned-
+// source scope, and the source/external sets are derived or exact rather than inferred from shape.
+const SOURCE_BRIDGE_DOCS = new Map([
+  ['docs/AA-CONTRACT-HANDOFF.md', {
+    reason: 'Projects the pinned Neo Core contract-handoff path and records the current AA source implementation boundary beside its ABI consequences.',
+    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
+  }],
+  ['docs/AA-ENTRYPOINT-CLOSURE.md', {
+    reason: 'Maps current AA source entrypoints and helpers to the pinned NEF/VM dispatch corpus; helper names are source identities, not public ABI names.',
+    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
+  }],
+  ['docs/AA-FRONTEND-CORRESPONDENCE.md', {
+    reason: 'Records source-to-artifact correspondence across the current AA tree, the pinned compiler, Neo Core and Neo VM, including private source members and runtime APIs.',
+    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
+  }],
+  ['docs/AA-INTEROP-CONVERSION.md', {
+    reason: 'Projects the pinned Neo Core interop argument conversion and names fields of the pinned runtime descriptor rather than AA ABI methods.',
+    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
+  }],
+  ['docs/AA-SYSCALL-ADMISSION.md', {
+    reason: 'Projects the pinned Neo Core System.Contract.Call/CALLT admission paths and names their registration, fields and local state rather than AA ABI methods.',
+    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
+  }],
+]);
+
+// Exact external symbols reviewed in the pinned Neo Core/VM source. They are not imported as a
+// broad framework vocabulary: a source-bridge document still cannot mention a new runtime method
+// until this map and its rationale are reviewed. Fields and locals are included because the formal
+// projections read them directly; they are never contracts in this repository.
+const PINNED_RUNTIME_SYMBOLS = new Map([
+  ['CallFromNativeContractAsync', 'ApplicationEngine native-contract call used by the pinned contract-handoff projection.'],
+  ['HasReturnValue', 'MethodToken field consumed by the pinned CALLT admission path.'],
+  ['IsArray', 'InteropParameterDescriptor member evaluated by the pinned interop-conversion projection.'],
+  ['IsDynamicCall', 'ExecutionContextState member set by the pinned System.Contract.Call path.'],
+  ['Register', 'ApplicationEngine interop registration method projected by the syscall-admission lane.'],
+  ['callFlags', 'Pinned contract-call argument and validation local, not an AA ABI member.'],
+  ['executeNext', 'ApplicationEngine instruction loop projected by the exception-identity lane.'],
+  ['hasReturnValue', 'Pinned contract-handoff local derived from the selected ABI descriptor.'],
 ]);
 
 // A snapshot audit: its method names are the ones that existed when it was written, so it is not
@@ -229,6 +289,19 @@ for (const file of tracked) {
 const deployedSpellingOfSource = (name) => (name.startsWith('_')
   ? `_${name.slice(1, 2).toLowerCase()}${name.slice(2)}`
   : `${name.slice(0, 1).toLowerCase()}${name.slice(1)}`);
+const currentContractSourceNames = new Set();
+for (const name of sourceDefinitions) {
+  currentContractSourceNames.add(name);
+  currentContractSourceNames.add(deployedSpellingOfSource(name));
+}
+
+// A source-bridge document may name a current contract-source identity or one exact pinned runtime
+// symbol. It does not turn arbitrary current source into public ABI, and it does not apply outside
+// the documents that declare the pinned-source scope.
+function isSourceBridgeName(file, name) {
+  return SOURCE_BRIDGE_DOCS.has(file)
+    && (currentContractSourceNames.has(name) || PINNED_RUNTIME_SYMBOLS.has(name));
+}
 
 // THE DIVERGENT CLASS (DS-CU-212, DEC-DS-6): every C# definition the compiler exports under a
 // DIFFERENT spelling than the source writes. This is the set of names the `ENTRYPOINT` prefix list
@@ -797,6 +870,7 @@ function failures() {
       const markedRemoved = REMOVED.test(line) || historical[index];
       if (/^\s*```/.test(line)) { fence = !fence; return; }
       if (nameRules) for (const { name } of callableNames(line)) {
+        if (isSourceBridgeName(file, name)) continue;
         if (deployedAbi.has(name)) continue;
         if (deployedAbiLower.has(name.toLowerCase())) {
           problems.push(`${where}: ${name} is not a deployed ABI name; the artifact spells it ${deployedAbiLower.get(name.toLowerCase())}`);
@@ -919,6 +993,15 @@ test('CU-202: the ratchet reads inline-code spans and declares the boundary it d
 // are compared by value, so reformatting or re-quoting the configuration is free.
 // ---------------------------------------------------------------------------------------------
 const GITLEAKS_CONFIG = '.gitleaks.toml';
+// These 37 historical findings are public source/build digests in one immutable
+// report commit. Pin the entire fingerprint file, never the report path or rule.
+const REVIEWED_GITLEAKS_IGNORE = {
+  path: '.gitleaksignore',
+  sha256: '2e665bb7444285dcddb0fe507bd3a9a4e852fc22a1b8ab773fa13f3473cc82c3',
+  commit: 'da74a6f1870f2749899e60b5ec1b1f22476c6bc4',
+  report: 'docs/reports/aa-artifact-reproducibility-20261025.json',
+  findings: 37,
+};
 // Every file name gitleaks resolves a configuration or an ignore set from, anywhere in the tree.
 const GITLEAKS_CONFIG_FILES = ['.gitleaks.toml', '.gitleaksignore'];
 // The keys the reviewed form of an allowance carries. Any other suppression key (`commits`,
@@ -1047,7 +1130,7 @@ const reviewedAllowlists = () => [
     matchOf: (line) => line,
     accepts: null,
     rejects: digestInventoryControls,
-    inventory: { lines: 6, sha256: '191917ca34fd1d5ba12872ba739a33d3f2ed71ca9d72a96b4c1606643125150b' },
+    inventory: { lines: 6, sha256: '4e21ff6af5575be1acd44fd5ecb53d30b13c233ec29f22b0d5fbf531e9fee237' },
   },
   {
     id: 'native-usability-private-runtime-session-verifier-hashes',
@@ -1073,7 +1156,54 @@ const reviewedAllowlists = () => [
     ],
     inventory: { lines: 2, sha256: '611a3495cf8bb7a3158fa60d06cbcb518f0b218e7a93b4b19775aa150e6facb0' },
   },
+  // The 2026-10 reports add 93 findings of the same non-secret class: a file-shaped
+  // JSON member whose value is the SHA-256 of a public source, model or artifact.
+  // The allowance is still per artifact and per value class; the inventory binds
+  // every matched line and the exact receipt bytes.
+  ...digestReportInventoryAllowances(),
 ];
+
+function digestReportInventoryAllowances() {
+  const fieldsFor = (literalPath) => ({
+    targetRules: ['generic-api-key'],
+    condition: 'AND',
+    paths: [`^${escapeRegex(literalPath)}$`],
+    regexTarget: 'line',
+    regexes: ['^[[:space:]]*"[A-Za-z0-9._/-]+\\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$'],
+  });
+  const entry = (id, literalPath, lines, sha256) => ({
+    id,
+    fields: fieldsFor(literalPath),
+    literalPath,
+    matchOf: (line) => line,
+    accepts: null,
+    rejects: digestInventoryControls,
+    inventory: { lines, sha256 },
+  });
+  return [
+    entry('aa-formal-source-lock-content-digests',
+      'formal/source-lock.json', 347,
+      '63e25d5ebdd62f5d16cb91690381bb2a46228e31e3254244db71d5cd983e15f3'),
+    entry('aa-artifact-reproducibility-20261025-content-digests',
+      'docs/reports/aa-artifact-reproducibility-20261025.json', 281,
+      '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
+    entry('aa-artifact-reproducibility-20261030-content-digests',
+      'docs/reports/aa-artifact-reproducibility-20261030.json', 281,
+      'a4dab5e934898c42c2944ba0ebc16fce3bd25598e33bf17c72fb2c955bc06da4'),
+    entry('aa-artifact-reproducibility-20261031-content-digests',
+      'docs/reports/aa-artifact-reproducibility-20261031.json', 281,
+      '1b38295dfc9f13ffab795615864ff3903c7c706616691358e7b63789444d3053'),
+    entry('aa-formal-gate-20261030-content-digests',
+      'docs/reports/aa-formal-gate-20261030.json', 346,
+      '6c467afc4865c0ce091f9683772704a8d1b1faf42e9181dee4b65e50fbd32f07'),
+    entry('aa-formal-gate-20261031-content-digests',
+      'docs/reports/aa-formal-gate-20261031.json', 347,
+      '0e4d67450a326c318f971ddd7c31c6c5383fe097d5aa9a33ef48b2e814088198'),
+    entry('aa-native-ci-probe-consistency-20261009-content-digests',
+      'docs/reports/aa-native-ci-probe-consistency-20261009.json', 14,
+      '55c58d6989b3da94bc151b68e0ac43d090cba6121a697a3a04347f3afe79e198'),
+  ];
+}
 
 // The controls for a digest-inventory allowance, derived from a line the artefact itself carries so
 // this guard holds no copy of the artefact: a digest one character short, the same digest in upper
@@ -1087,11 +1217,18 @@ function digestInventoryControls(line) {
   ];
 }
 
-// The population this row classified, by artefact: the files and per-file counts the canonical scan
-// of the default head reports (WS-CU-231-20261012.md, measurement 1 - 37 findings over
-// `be06b8f..3dc7d8a`, symmetric difference zero against the 21-commit range the row measured). The
-// scanner-level test below holds both directions against these numbers.
+// The population this row classified, by artefact: the files and per-file counts the canonical
+// scan of the default head reports. The original 2026-10-12 row classified 37 findings over
+// `be06b8f..3dc7d8a`; the 2026-10 artifact refresh adds 93 findings of the same digest-map class.
+// The scanner-level test below holds both directions against every count.
 const CU231_CLASSIFIED = new Map([
+  ['formal/source-lock.json', 18],
+  ['docs/reports/aa-artifact-reproducibility-20261025.json', 37],
+  ['docs/reports/aa-artifact-reproducibility-20261030.json', 37],
+  ['docs/reports/aa-artifact-reproducibility-20261031.json', 37],
+  ['docs/reports/aa-formal-gate-20261030.json', 18],
+  ['docs/reports/aa-formal-gate-20261031.json', 18],
+  ['docs/reports/aa-native-ci-probe-consistency-20261009.json', 1],
   ['docs/reports/native-domain-copy-20261009/runner-build.json', 32],
   ['docs/reports/native-domain-copy-20261009/candidate-acceptance.json', 1],
   ['docs/reports/native-domain-copy-20261009/comparison.json', 2],
@@ -1221,9 +1358,8 @@ const describeAllowlist = (block) => `${block.fields.has('paths') ? `paths ${JSO
   + `${block.fields.has('regexes') ? `, regexes ${JSON.stringify(block.fields.get('regexes'))}` : ', no regex'}`
   + `${block.fields.has('description') ? `, "${String(block.fields.get('description')).slice(0, 60)}"` : ''}`;
 
-// Every configuration or ignore file in the tree that is not the reviewed one. A nested
-// .gitleaks.toml is inert only while every scan is rooted at the repository; the guard refuses it
-// rather than depending on how a scan is invoked.
+// Return every carrier outside the primary config for validation. Only the exact
+// pinned root fingerprint file is also reviewed; nested configurations stay refused.
 function otherGitleaksFiles() {
   const found = [];
   (function walk(dir) {
@@ -1240,7 +1376,8 @@ function otherGitleaksFiles() {
 // The reported set. An empty array is the only accepting verdict; every entry names the carrier it
 // refuses and the line it sits on. Nothing here reports a boolean or an exit code, so a mutant can
 // only be killed by a violation that names it.
-function configurationViolations(text, files = otherGitleaksFiles()) {
+function configurationViolations(text, files = otherGitleaksFiles(),
+  ignoreText = exists(REVIEWED_GITLEAKS_IGNORE.path) ? read(REVIEWED_GITLEAKS_IGNORE.path) : '') {
   const problems = [];
   const add = (kind, detail) => problems.push(`${kind}: ${detail}`);
   if (!text.trim()) {
@@ -1289,7 +1426,9 @@ function configurationViolations(text, files = otherGitleaksFiles()) {
     add('missing-allowlist', `${GITLEAKS_CONFIG} does not carry the reviewed ${entry.id} allowance as reviewed; every suppression the scanner applies must be one the review triaged`);
   }
   for (const file of files) {
-    add('extra-configuration', `${file} is a gitleaks configuration or ignore file outside the reviewed ${GITLEAKS_CONFIG}`);
+    if (file === REVIEWED_GITLEAKS_IGNORE.path
+      && createHash('sha256').update(ignoreText).digest('hex') === REVIEWED_GITLEAKS_IGNORE.sha256) continue;
+    add('extra-configuration', `${file} is outside the reviewed configuration/fingerprint set or has unreviewed contents`);
   }
   return problems;
 }
@@ -1302,6 +1441,17 @@ const configurationProblems = () => configurationViolations(exists(GITLEAKS_CONF
 // boundary asserted. DS-CU-163 section 12.4 established the shape with planted secrets in a clone;
 // here it runs against the repository copy itself, for every entry rather than for one.
 test('CU-202: every reviewed allowance stays attached to the one value it triaged', () => {
+  const ignoreText = read(REVIEWED_GITLEAKS_IGNORE.path);
+  assert.equal(createHash('sha256').update(ignoreText).digest('hex'), REVIEWED_GITLEAKS_IGNORE.sha256,
+    'the historical ignore file must contain only the exact reviewed fingerprint bytes');
+  const fingerprints = ignoreText.trimEnd().split('\n');
+  assert.equal(fingerprints.length, REVIEWED_GITLEAKS_IGNORE.findings);
+  assert.equal(new Set(fingerprints).size, REVIEWED_GITLEAKS_IGNORE.findings);
+  for (const fingerprint of fingerprints) {
+    const prefix = `${REVIEWED_GITLEAKS_IGNORE.commit}:${REVIEWED_GITLEAKS_IGNORE.report}:generic-api-key:`;
+    assert.ok(fingerprint.startsWith(prefix) && /^\d+$/.test(fingerprint.slice(prefix.length)),
+      'every reviewed fingerprint must bind the exact historical commit, report, rule and line');
+  }
   assert.ok(reviewedAllowlists().length > 0, 'the reviewed allowance inventory must not be empty');
   for (const entry of reviewedAllowlists()) {
     const where = entry.id;
@@ -1400,7 +1550,10 @@ test('CU-202: every widening of the gitleaks configuration is refused by the sha
     { name: 'a rule-scoped allowance under a new rule', text: appended("\n[[rules]]\nid = \"mutant-rule\"\ndescription = \"mutant: rule scope\"\nregex = '''apiKey'''\n[[rules.allowlists]]\nregexes = ['''.*''']\n"), kinds: ['rule-override', 'rule-scoped-allowlist'], names: '[rules.allowlists]' },
     { name: 'a configuration reached through [extend] path', text: replaced('useDefault = true', 'path = "cu202-extra.toml"'), kinds: ['defaults-missing', 'extend-path'], names: '[extend] path' },
     { name: 'the default rules switched off', text: replaced('useDefault = true', 'useDefault = false'), kinds: ['defaults-disabled'], names: 'useDefault' },
-    { name: 'an .gitleaksignore file', text: base, files: ['.gitleaksignore'], kinds: ['extra-configuration'], names: '.gitleaksignore' },
+    { name: 'the exact reviewed historical ignore file', text: base, files: ['.gitleaksignore'], kinds: [] },
+    { name: 'an unreviewed .gitleaksignore entry', text: base, files: ['.gitleaksignore'], ignoreText: 'unreviewed\n', kinds: ['extra-configuration'], names: '.gitleaksignore' },
+    { name: 'an extra fingerprint beside the reviewed set', text: base, files: ['.gitleaksignore'], ignoreText: `${read(REVIEWED_GITLEAKS_IGNORE.path)}unreviewed\n`, kinds: ['extra-configuration'], names: '.gitleaksignore' },
+    { name: 'a nested ignore file with reviewed contents', text: base, files: ['frontend/.gitleaksignore'], kinds: ['extra-configuration'], names: 'frontend/.gitleaksignore' },
     { name: 'a nested configuration', text: base, files: ['frontend/.gitleaks.toml'], kinds: ['extra-configuration'], names: 'frontend/.gitleaks.toml' },
     { name: 'an unknown top-level key', text: replaced('minVersion = "v8.30.1"', 'minVersion = "v8.30.1"\nkeywords = ["mutant"]'), kinds: ['unreviewed-key'], names: 'keywords' },
     { name: 'an unknown table', text: appended("\n[[mutant-table]]\ndescription = \"mutant: unknown table\"\n"), kinds: ['unknown-table'], names: 'mutant-table' },
@@ -1412,7 +1565,7 @@ test('CU-202: every widening of the gitleaks configuration is refused by the sha
     { name: 'the reviewed block without its value regex', text: withoutSdkField('regexes'), kinds: ['missing-allowlist', 'unreviewed-allowlist'], names: 'no regex' },
   ];
   for (const shape of shapes) {
-    const problems = configurationViolations(shape.text, shape.files || []);
+    const problems = configurationViolations(shape.text, shape.files || [], shape.ignoreText);
     const kinds = violationKinds(problems);
     assert.deepEqual(kinds, [...shape.kinds].sort(), `${shape.name}: the configuration must be refused for the shapes it adds, and for nothing else:\n${problems.join('\n') || '(nothing reported)'}`);
     if (shape.names) {
@@ -1498,16 +1651,42 @@ test('CU-202: a planted secret survives the reviewed configuration, and the wide
     const problems = configurationViolations(widened, []);
     assert.equal(violationKinds(problems).includes('unreviewed-allowlist'), true,
       `the guard must refuse the configuration that silences the scan:\n${problems.join('\n') || '(nothing reported)'}`);
+
+    // Historical fingerprints cannot authorize a new credential in the same
+    // report path: its new commit produces a different finding identity.
+    write(GITLEAKS_CONFIG, reviewedConfig);
+    const historicalIgnore = read(REVIEWED_GITLEAKS_IGNORE.path);
+    write(REVIEWED_GITLEAKS_IGNORE.path, historicalIgnore);
+    write(REVIEWED_GITLEAKS_IGNORE.report, `${JSON.stringify({ apiKey: probeSecret })}\n`);
+    git('add', '-A');
+    git('commit', '--quiet', '-m', 'new report credential control');
+    const newCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: scratch, encoding: 'utf8' }).trim();
+    const newReport = path.join(scratch, 'new-report-credential.json');
+    try {
+      execFileSync('gitleaks', ['git', '--redact=100', '--no-banner', '--exit-code', '1',
+        `--log-opts=${plant}..${newCommit}`, '--report-format', 'json', `--report-path=${newReport}`, '.'],
+      { cwd: scratch, stdio: 'pipe' });
+    } catch { /* the new credential must still be reported */ }
+    assert.ok(fs.existsSync(newReport), 'the new-commit control must produce an actual scanner report');
+    const newFindings = JSON.parse(fs.readFileSync(newReport, 'utf8')).map((found) => ({
+      rule: found.RuleID, file: found.File, commit: found.Commit, fingerprint: found.Fingerprint,
+    }));
+    assert.deepEqual(newFindings.map(({ rule, file }) => `${rule} ${file}`),
+      [`generic-api-key ${REVIEWED_GITLEAKS_IGNORE.report}`],
+      'the historical ignore set must not hide a new credential in the same report path');
+    assert.equal(newFindings[0].commit, newCommit);
+    assert.ok(!historicalIgnore.split('\n').includes(newFindings[0].fingerprint),
+      'a new commit must not borrow a reviewed historical fingerprint');
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
 });
 
-// The acceptance of CU-231, at the scanner rather than at the guard: the four generated reports the
+// The acceptance of CU-231, at the scanner rather than at the guard: the generated reports the
 // default head's canonical scan reports are committed into a throwaway repository with the reviewed
 // configuration, and the canonical range scan must be clean. The control is the half that gives
-// "clean" a meaning - with the four classified allowances removed, the same range must report the
-// same 37 findings, by artefact and by count. Without it a clean scan could mean the scanner never
+// "clean" a meaning - with the classified allowances removed, the same range must report the same
+// 130 findings, by artefact and by count. Without it a clean scan could mean the scanner never
 // looked. Skipped, explicitly, where gitleaks is absent.
 test('CU-231: the reviewed allowances are what clears the classified report findings', (t) => {
   let available = true;
@@ -1558,7 +1737,7 @@ test('CU-231: the reviewed allowances are what clears the classified report find
     const reviewedConfig = read(GITLEAKS_CONFIG);
     assert.deepEqual(perFile('reviewed', reviewedConfig), new Map(),
       'the reviewed configuration must leave the canonical scan of these artefacts clean');
-    // The same range with the four classified allowances dropped, addressed by the path clause each
+    // The same range with the classified allowances dropped, addressed by the path clause each
     // one carries so the control cannot silently remove a different block.
     const withoutClassified = reviewedConfig.split('[[allowlists]]')
       .filter((block, index) => index === 0 || !classified.some((entry) => block.includes(entry.fields.paths[0])))
@@ -1577,6 +1756,55 @@ test('CU-163: the current-runtime documents state only what the code and the dep
   assert.deepEqual(problems, [], `documentation drift:\n${problems.join('\n')}`);
 });
 
+test('CU-163: source-bridge scope is explicit and admits only current source or pinned runtime names', () => {
+  const used = new Set();
+  for (const [file, entry] of SOURCE_BRIDGE_DOCS) {
+    assert.ok(CURRENT_DOCS.includes(file), `${file}: source-bridge class is not attached to a current document`);
+    assert.ok(exists(file), `${file}: source-bridge document does not exist`);
+    assert.ok(entry.reason.length >= 40, `${file}: source-bridge entry needs a reason it must stay`);
+    assert.ok(entry.marker.test(read(file)),
+      `${file}: source-bridge entry must keep a visible pinned-source scope declaration`);
+    for (const line of read(file).split('\n')) {
+      for (const { name } of callableNames(line)) used.add(name);
+    }
+  }
+
+  assert.ok(currentContractSourceNames.has('ClearAccount'));
+  assert.ok(currentContractSourceNames.has('clearAccount'));
+  assert.ok(currentContractSourceNames.has('IsOwnerOnlyRecovery'));
+  assert.ok(currentContractSourceNames.has('isOwnerOnlyRecovery'));
+  for (const [name, reason] of PINNED_RUNTIME_SYMBOLS) {
+    assert.ok(reason.length >= 40, `${name}: pinned runtime symbol needs a reviewed rationale`);
+    assert.ok(used.has(name), `${name}: pinned runtime symbol is no longer cited by a source-bridge document`);
+  }
+
+  assert.ok(isSourceBridgeName('docs/AA-SYSCALL-ADMISSION.md', 'Register'));
+  assert.ok(isSourceBridgeName('docs/AA-FRONTEND-CORRESPONDENCE.md', 'ClearAccount'));
+  assert.ok(!isSourceBridgeName('docs/architecture.md', 'Register'),
+    'a source-bridge name escaped into a deployed-ABI document');
+  assert.ok(!isSourceBridgeName('docs/AA-SYSCALL-ADMISSION.md', 'ExecuteInjectedBridgeOp'),
+    'the source-bridge class admitted a name from neither permitted oracle');
+
+  // The rule itself must be able to fail in the real scanner. Plant a call that exists in neither the
+  // current contract source nor the reviewed pinned-runtime set and require the current-runtime gate
+  // to report it, then restore the document for every later test.
+  const target = 'docs/AA-SYSCALL-ADMISSION.md';
+  const absolute = path.join(repoRoot, target);
+  const original = fs.readFileSync(absolute, 'utf8');
+  const marker = '## Pinned inputs\n';
+  assert.ok(original.includes(marker), 'the planted-drift document lost its pinned-source marker');
+  fs.writeFileSync(absolute,
+    original.replace(marker, `${marker}\n\`ExecuteInjectedBridgeOp()\` is not in either oracle.\n`));
+  try {
+    const problems = failures();
+    assert.ok(problems.some((problem) => problem.includes(`${target}:`)
+      && problem.includes('ExecuteInjectedBridgeOp is not defined in any contract, manifest or SDK source')),
+    `the source-bridge allowance suppressed an unknown name:\n${problems.join('\n')}`);
+  } finally {
+    fs.writeFileSync(absolute, original);
+  }
+});
+
 // The ledger, not a document's prose, is the current VULN-001 state. While the deployed artifact
 // carries no bounded call site the ledger must say the public state is open; if the artifact ever
 // gains the bounded call, this fails until the ledger is updated too.
@@ -1586,6 +1814,125 @@ test('CU-163: the VULN-001 ledger agrees with the deployed artifact', () => {
   if (gasBoundedSites.length === 0) {
     assert.match(row, /open|not\b|pending/i,
       `the deployed core has no ${GAS_BOUNDED_SYSCALL} call site, so the ledger must not close VULN-001 for the public build`);
+  }
+});
+
+// VULN-002 has local source, scoped formal and private-chain evidence, but no public deployment.
+// Keep the ledger from collapsing those three states into an unsupported public-closure claim.
+test('CU-163: VULN-002 records local evidence without claiming public deployment', () => {
+  const row = read('docs/SECURITY_MODEL.md').split('\n').find((line) => /\*\*VULN-002\*\*/.test(line));
+  assert.ok(row, 'docs/SECURITY_MODEL.md has no VULN-002 row');
+  assert.match(row, /source candidate/i);
+  assert.match(row, /scoped Coq governance\/recovery models/i);
+  assert.match(row, /private NeoExpress escape\/market scenarios verified/i);
+  assert.match(row, /TestNet\/MainNet deployment parity remains pending/i);
+
+  for (const file of ['formal/coq/OrdinaryGovernance.v', 'formal/coq/OrdinaryRecovery.v']) {
+    assert.ok(exists(file), `VULN-002 cites a missing formal model: ${file}`);
+  }
+
+  const receipt = JSON.parse(read('docs/reports/aa-neoexpress-validation-20261031.json'));
+  assert.equal(receipt.status, 'PASS');
+  assert.equal(receipt.network.publicNetwork, false);
+  assert.ok(receipt.scenarios.some((scenario) => scenario.name === 'escape hatch'));
+  assert.ok(receipt.scenarios.some((scenario) => /^market escrow:/.test(scenario.name)));
+});
+
+// ERC-1271 direct-digest verification has a hardfork-dependent CryptoLib implementation.
+// The reviewed path is the Huyao implementation with r/s bounds; the pre-Huyao compatibility
+// implementation remains outside the deployment profile even though it exposes the same method.
+test('CU-163: Web3Auth ERC-1271 documents its Huyao deployment requirement', () => {
+  const web3auth = read('contracts/verifiers/Web3AuthVerifier.cs');
+  assert.match(web3auth, /CryptoLib\.RecoverSecp256K1\(hash, signature!\)/,
+    'the message adapter no longer consumes the supplied digest directly');
+
+  for (const file of [
+    'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
+    'docs/SECURITY_MODEL.md',
+    'docs/AA-FORMAL-VERIFICATION.md',
+  ]) {
+    const text = read(file).replace(/\s+/g, ' ');
+    assert.match(text, /Web3Auth\s+ERC-1271.*`?HF_Huyao`? or later/i,
+      `${file} does not pin the reviewed ERC-1271 hardfork profile`);
+    assert.match(text, /pre-Huyao compatibility implementation does not enforce.*bounds/i,
+      `${file} does not disclose the pre-Huyao compatibility boundary`);
+  }
+});
+
+// The remaining security rows have finite shipped-profile evidence and explicit open boundaries.
+// Bind each row to the model and private-chain scenario it cites so a later edit cannot widen a
+// bounded claim into arbitrary-plugin, private-key or public-deployment closure.
+test('CU-163: bounded security claims retain their explicit open boundaries', () => {
+  const ledger = read('docs/SECURITY_MODEL.md');
+  const row = (id) => ledger.split('\n').find((line) => new RegExp(`\\*\\*${id}\\*\\*`).test(line));
+
+  const multisig = row('VULN-004');
+  assert.ok(multisig, 'docs/SECURITY_MODEL.md has no VULN-004 row');
+  assert.match(multisig, /571 VM tests/i);
+  assert.match(multisig, /private-key independence/i);
+  assert.match(multisig, /arbitrary future plugins/i);
+
+  const orphan = row('VULN-005');
+  assert.ok(orphan, 'docs/SECURITY_MODEL.md has no VULN-005 row');
+  assert.match(orphan, /shipped MultiSig\/MultiHook/i);
+  assert.match(orphan, /arbitrary future-plugin/i);
+  assert.match(orphan, /remains open/i);
+
+  const rotation = row('VULN-007');
+  assert.ok(rotation, 'docs/SECURITY_MODEL.md has no VULN-007 row');
+  assert.match(rotation, /delayed proposal\/confirmation\/cancellation/i);
+  assert.match(rotation, /final source-built artifact passed private NeoExpress/i);
+  assert.match(rotation, /new-owner witness/i);
+  assert.match(rotation, /public ABI migration/i);
+  assert.match(rotation, /public deployment readback remains pending/i);
+
+  for (const file of [
+    'formal/coq/MultiSigPolicy.v',
+    'formal/coq/CallbackPluginTopology.v',
+    'formal/coq/OrdinaryGovernance.v',
+  ]) {
+    assert.ok(exists(file), `bounded security evidence is missing ${file}`);
+  }
+
+  const receipt = JSON.parse(read('docs/reports/aa-neoexpress-validation-20261031.json'));
+  assert.equal(receipt.status, 'PASS');
+  assert.equal(receipt.network.publicNetwork, false);
+  for (const prefix of ['MultiSig child pre-check', 'MultiHook child pre-check']) {
+    assert.ok(receipt.scenarios.some((scenario) => scenario.name === prefix),
+      `private-chain evidence is missing ${prefix}`);
+  }
+
+  const rotationScenario = receipt.scenarios.find(
+    (scenario) => scenario.name === 'platform account owner rotation');
+  assert.ok(rotationScenario, 'private-chain evidence is missing platform account owner rotation');
+  assert.equal(rotationScenario.assertions.length, 19,
+    'platform owner rotation must retain all state-invariance assertions');
+  for (const check of [
+    'owner rotation proposal emits the expected event',
+    'proposal does not change the current owner',
+    'unauthorized cancellation preserves the pending rotation',
+    'unauthorized cancellation preserves the current owner',
+    'owner cancellation emits the expected event',
+    'owner cancellation clears the pending rotation',
+    'early confirmation preserves the pending rotation',
+    'early confirmation preserves the current owner',
+    'confirmation without the new-owner witness preserves the pending rotation',
+    'confirmation without the new-owner witness preserves the current owner',
+    'new owner is persisted',
+    'successful rotation clears the pending record',
+    'owner rotation preserves the proxy address',
+  ]) {
+    assert.ok(rotationScenario.assertions.some((assertion) => assertion.check === check && assertion.ok),
+      `platform owner rotation is missing assertion: ${check}`);
+  }
+  for (const expectedFault of [
+    'Unauthorized platform owner rotation cancellation',
+    'Platform owner rotation timelock not expired',
+    'New platform owner witness required',
+  ]) {
+    assert.ok(rotationScenario.steps.some(
+      (step) => step.expectedFault === expectedFault && step.outcome === 'FAULT'),
+    `platform owner rotation is missing expected fault: ${expectedFault}`);
   }
 });
 
@@ -2660,4 +3007,49 @@ test('CU-212 R2: a call the sentence punctuates is read, and its drift is report
   assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 7, 'the entrypoint bucket changed size');
   assert.equal(Object.keys(found).length, 7, 'the ledger no longer covers 7 files');
   assert.ok(!entries.includes(`entrypoint:InitiateEscape`), 'the punctuated call was recorded in both buckets');
+});
+
+// The integrated closure receipt is deliberately NO-GO: it records a scoped PASS without
+// promoting any public entrypoint or the whole implementation to verified. Keep that distinction
+// machine-checked, and keep every dated evidence reference byte-identical to its cited receipt.
+test('AA integrated closure remains scoped, fail-closed, and bound to current evidence', () => {
+  const receiptPath = 'docs/reports/aa-closure-gate-20261031.json';
+  const gate = JSON.parse(read(receiptPath));
+
+  assert.equal(gate.schema, 'neoos-aa-closure-gate/v1');
+  assert.equal(gate.status, 'NO-GO');
+  assert.equal(gate.selectedScopeStatus, 'PASS');
+  assert.equal(gate.wholeContractStatus, 'NO-GO');
+  assert.equal(gate.readOnly, true);
+  assert.equal(gate.networkWritesPerformed, false);
+  assert.equal(gate.selection.scopeCount, 22);
+  assert.equal(gate.selection.scopeCount, gate.selection.scopes.length);
+  assert.equal(gate.selection.commandRecords, 27);
+  assert.equal(gate.selection.commandsExitedZero, gate.selection.commandRecords);
+  assert.equal(gate.selection.commandsTimedOut, 0);
+  assert.equal(gate.entrypointCoverage.total, 105);
+  assert.equal(gate.entrypointCoverage.fullyClosed, 0);
+  assert.equal(gate.entrypointCoverage.bodyLevelRefined, 34);
+  assert.equal(gate.entrypointCoverage.dispatchLevelOnly, 71);
+  assert.equal(gate.entrypointCoverage.fullUnprovedCount, 105);
+  assert.equal(gate.entrypointCoverage.fullImplementationVerified, false);
+  assert.deepEqual(gate.openObligations, [
+    'SOURCE_FRONTEND_AND_COMPILER_CORRESPONDENCE',
+    'ACTUAL_VM_APPLICATION_ENGINE_ABI_DISPATCH',
+    'GAS_RESOURCE_EXCEPTION_AND_TRANSACTION_COMPOSITION',
+    'ALL_PUBLIC_ENTRYPOINT_DEPENDENCY_CLOSURES',
+  ]);
+
+  for (const evidence of Object.values(gate.evidence)) {
+    const digest = createHash('sha256').update(fs.readFileSync(path.join(repoRoot, evidence.path))).digest('hex');
+    assert.equal(digest, evidence.sha256, `${evidence.path} no longer matches the closure receipt`);
+  }
+
+  assert.deepEqual(gate.privacy, {
+    hostPathsIncluded: false,
+    privateKeysIncluded: false,
+    credentialsIncluded: false,
+  });
+  assert.doesNotMatch(read(receiptPath), /\/(?:Users|private|tmp)\//);
+  assert.match(read('docs/AA-CLOSURE-GATE.md'), /2f0cd672/);
 });

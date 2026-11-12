@@ -39,6 +39,12 @@ const REQUIRED_METHODS = [
   "proposePlatformRegistrar",
   "confirmPlatformRegistrar",
   "cancelPlatformRegistrar",
+  "callVerifierChild",
+  "callHookChild",
+  "setVerifierDependencies",
+  "clearVerifierDependencies",
+  "setHookDependencies",
+  "clearHookDependencies",
 ];
 
 function candidateArtifact() {

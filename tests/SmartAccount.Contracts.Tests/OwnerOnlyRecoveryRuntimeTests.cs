@@ -39,17 +39,12 @@ public class OwnerOnlyRecoveryRuntimeTests
             Fx.CallVoid(Core, "registerAccount", Account, Root, Array.Empty<byte>(), Hook, Owner, Delay);
             var record = (Neo.VM.Types.Array)Fx.Call(UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", Core);
             CoreId = (int)record[0].GetInteger();
-            if (composite)
-            {
-                object[] args = { Account, new[] { Faulting }, 1 };
-                Assert.IsFalse(Fx.CallBoolean(Core, "callVerifier", Account, "setConfig", args));
-                Fx.AdvanceTime(ConfigDelay);
-                Fx.CallVoid(Core, "callVerifier", Account, "setConfig", args);
-            }
         }
 
         public StorageKey Key(byte prefix) => new() { Id = CoreId, Key = new[] { prefix }.Concat(Account.ToArray()).ToArray() };
         public void Seed(byte prefix, byte[] value) => Fx.Engine.Storage.Snapshot.Add(Key(prefix), new StorageItem(value));
+        public StorageKey GlobalKey(byte prefix) => new() { Id = CoreId, Key = new[] { prefix } };
+        public void SeedGlobal(byte prefix, byte[] value) => Fx.Engine.Storage.Snapshot.Add(GlobalKey(prefix), new StorageItem(value));
         public void Mature()
         {
             Fx.SetSigners(Owner);
@@ -163,6 +158,20 @@ public class OwnerOnlyRecoveryRuntimeTests
         Assert.AreEqual(h.Root, h.Fx.CallUInt160(h.Core, "getVerifier", h.Account));
         Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isEscapeActive", h.Account));
         Assert.IsNotNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key((byte)prefix)));
+    }
+
+    [TestMethod]
+    public void OwnerOnlyRecovery_RejectsGlobalConfigurationContext()
+    {
+        Harness h = new();
+        h.Mature();
+        h.SeedGlobal(0x26, new byte[] { 1 });
+        TestException locked = Assert.ThrowsExactly<TestException>(() => h.Recover());
+        StringAssert.Contains(locked.Message, "Recovery context active");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", h.Account));
+        Assert.AreEqual(h.Root, h.Fx.CallUInt160(h.Core, "getVerifier", h.Account));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isEscapeActive", h.Account));
+        Assert.IsNotNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.GlobalKey(0x26)));
     }
 
     [TestMethod]

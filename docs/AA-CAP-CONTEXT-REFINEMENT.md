@@ -7,16 +7,16 @@ after checking their composition and the bridge to the isolated helper. It keeps
 `fullImplementationVerified` false: this is not an ApplicationEngine
 correspondence proof or full implementation acceptance.
 
-The initializer certificate executes the entire raw NEF range `[24966,25620)`:
-654 bytes and 170 instructions. It decodes `INITSSLOT`, all constant pushes,
+The initializer certificate executes the entire raw NEF range `[29415,30097)`:
+682 bytes and 182 instructions. It decodes `INITSSLOT`, all constant pushes,
 `CONVERT Buffer`, both `PACK` instructions, all static stores and `RET`; the
 expected reimbursement key is a theorem conclusion, never a decoder shortcut.
 `INITSSLOT` requires uninitialized statics and rejects a second initialization.
 
 For every preexisting heap and evaluation-stack suffix, six artifact theorems
-establish termination, 53 static slots, slot 34 equal to `Buffer([0x21])`, exact
-preservation of the stack suffix, and two appended arrays. Static slots 10 and
-12 point to those fresh array indices. Every preexisting heap object is
+establish termination, 57 static slots, slot 38 equal to `Buffer([0x21])`, exact
+preservation of the stack suffix, and two appended arrays. Static slots 18 and
+20 point to those fresh array indices. Every preexisting heap object is
 unchanged, and the new array indices are distinct and outside the old heap.
 Disjointness from caller references presupposes valid references into that old
 heap; dangling caller references are not a legal aliasing invariant.
@@ -33,7 +33,7 @@ Source-initializer equivalence is a
 separate certificate, rather than a consequence of byte execution alone.
 
 The helper certificate executes all 116 instructions in the raw NEF range
-`[13557,13838)` (281 bytes). Its contextual interpreter reuses the frozen ordinary
+`[17762,18043)` (281 bytes). Its contextual interpreter reuses the frozen ordinary
 instruction semantics, allocates a fresh transaction Array for each of the three
 `Runtime.GetScriptContainer` calls, and preserves the shared evaluation stack at the
 returning helper's `RET`. This is an explicit reference extension; it does not
@@ -52,7 +52,7 @@ the following frame properties:
   preserves that stack and the original stored ledger.
 - Observations agree with the earlier isolated raw-byte helper execution, which
   has its own separate source-refinement certificate.
-- Executing the actual initializer first supplies the helper's slot-34
+- Executing the actual initializer first supplies the helper's slot-38
   precondition and preserves the original heap while appending six model objects
   across initialization and the helper.
 
@@ -60,11 +60,9 @@ The frame and observation theorems are stated under the helper's own VM-integer
 headroom assertion, the check that the new reservation stays inside the signed
 range before the addition runs. That assertion is not an added caller
 obligation: `legal_update_fits` derives it from the legal domain, and
-`complete_context_frame` discharges it there. The refusal branch is a separate
-abort whose caller frame and heap the certificate does not claim. The 73-byte
-assertion is why the helper is 281 bytes and 116 instructions instead of the
-earlier 208 bytes and 96 instructions; every later script offset moved by the
-same amount while the 654-byte initializer kept its length.
+`complete_context_frame` discharges it there. The refusal branch is a separate abort whose caller frame and heap the
+certificate does not claim. The current helper is 281 bytes and 116
+instructions; the initializer is 682 bytes and 182 instructions.
 
 The legal domain is explicit: 32-byte hashes, nonnegative signed-64-bit fee
 components, a positive representable requested reimbursement, and an absent or
@@ -104,4 +102,4 @@ not an assertion about the runtime's complete heap or garbage collector. The
 suspended caller's locals, arguments and exception frames, actual CALL/RET
 dispatch, mutable Buffer identity, real native codec and storage handlers,
 resource limits and gas still need their respective runtime correspondences.
-All 100 public ABI entrypoints remain outside this helper-context certificate.
+All 105 public ABI entrypoints remain outside this helper-context certificate.

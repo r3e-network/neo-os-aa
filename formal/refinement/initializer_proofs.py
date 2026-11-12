@@ -50,7 +50,7 @@ Import ListNotations. Open Scope Z_scope.
 Definition source_assignments : list (nat * SourceStaticExpression) := [%s].
 Theorem all_static_source_values_refine_initializer : forall hp st,
  exists target source,
- run_init 171 initializer_code (initializer_entry hp st) = InitReturned target /\
+ run_init 182 initializer_code (initializer_entry hp st) = InitReturned target /\
  source_initialize source_assignments (source_entry %d hp) = Some source /\
  init_heap target = source_heap source /\
  init_slots target = Some (source_slots source) /\
@@ -58,9 +58,9 @@ Theorem all_static_source_values_refine_initializer : forall hp st,
 Proof.
  intros hp st. vm_compute. eexists. eexists. repeat split; reflexivity.
 Qed.
-Theorem source_initializer_field_count : length source_assignments = 53%%nat.
+Theorem source_initializer_field_count : length source_assignments = %d%%nat.
 Proof. reflexivity. Qed.
-""" % (";".join(values), len(values))
+""" % (";".join(values), len(values), len(values))
 
 
 def command(arguments, directory, log, success=True):

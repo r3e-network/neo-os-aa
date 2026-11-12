@@ -8,7 +8,9 @@ import { encryptJsonWithMorpheusOracleKey } from '@/utils/morpheusEncryption';
 import { walletService, getSmartAccountHash } from '@/services/walletService';
 import { buildZkLoginVerifierParamsHex, formatZkLoginTicket, normalizeZkLoginProvider } from '@/services/zkLoginVerifierService.js';
 import { connectedDidProfile } from '@/utils/did';
+import { decodeStackHash160 } from '@/features/studio/helpers';
 import { createAccountIdentityReader } from './aaIdentityReadService.js';
+import { buildAaActionId, requireAaSigningText, toNeoInternalHex } from './aaTicketService.js';
 
 function trim(value) {
   return String(value || '').trim();
@@ -17,13 +19,6 @@ function trim(value) {
 function toHash160Param(value) {
   return {
     type: 'Hash160',
-    value: `0x${sanitizeHex(value || '')}`,
-  };
-}
-
-function toByteArrayParam(value) {
-  return {
-    type: 'ByteArray',
     value: `0x${sanitizeHex(value || '')}`,
   };
 }
@@ -51,13 +46,41 @@ function normalizeScriptHash(value) {
   return sanitizeHex(raw);
 }
 
-function decodeBase64ToHex(value) {
-  if (!value) return '';
+function requireNonZeroHash160(value, fieldName) {
+  const normalized = normalizeScriptHash(value);
+  if (!/^[0-9a-f]{40}$/.test(normalized) || normalized === '00'.repeat(20)) {
+    throw new Error(`${fieldName} must be a non-zero 20-byte Hash160`);
+  }
+  return normalized;
+}
+
+function toRequiredNeoInternalHex(value, fieldName) {
+  return toNeoInternalHex(requireNonZeroHash160(value, fieldName));
+}
+
+function decodeBase64ToBytes(value) {
+  if (!value) return new Uint8Array();
   if (typeof Buffer !== 'undefined') {
-    return Buffer.from(value, 'base64').toString('hex').toLowerCase();
+    return Uint8Array.from(Buffer.from(value, 'base64'));
   }
   const binary = globalThis.atob ? globalThis.atob(value) : '';
-  return Array.from(binary, (char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function decodeBase64ToHex(value) {
+  return Array.from(decodeBase64ToBytes(value), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function decodeStackText(item) {
+  if (!item || typeof item !== 'object') return '';
+  if (item.type === 'String') return typeof item.value === 'string' ? item.value : '';
+  if (item.type !== 'ByteString') return '';
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(decodeBase64ToBytes(item.value || ''));
+  } catch (e) {
+    if (import.meta.env.DEV) console.error('[morpheusDidService] UTF-8 stack decode failed:', e?.message);
+    return '';
+  }
 }
 
 function decodeStackItem(item) {
@@ -117,6 +140,18 @@ async function readVerifierMethod({ rpcUrl, verifierHash, operation, args = [] }
     const err = new Error(EC.rpcFault);
     err.rpcDetail = result?.exception || null;
     throw err;
+  }
+  if (operation === 'getNetwork' || operation === 'getAccountIdText') {
+    return decodeStackText(result?.stack?.[0]);
+  }
+  if (operation === 'getAAContract' || operation === 'getAccountAddress') {
+    return decodeStackHash160(result?.stack?.[0]);
+  }
+  if (operation === 'getActiveSession') {
+    const item = result?.stack?.[0];
+    const decoded = decodeStackItem(item);
+    if (Array.isArray(decoded) && item?.value?.[0]) decoded[0] = decodeStackHash160(item.value[0]);
+    return decoded;
   }
   return decodeStackItem(result?.stack?.[0]);
 }
@@ -189,31 +224,49 @@ export async function fetchAccountMaintenanceState({ rpcUrl, aaContractHash, acc
 
 export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountIdHex } = {}) {
   const normalizedVerifier = sanitizeHex(verifierHash);
-  const accountIdParam = toByteArrayParam(accountIdHex);
+  const accountIdParam = toHash160Param(accountIdHex);
   const [
     owner,
     morpheusOracle,
+    network,
+    aaContract,
+    accountIdText,
+    accountAddress,
     recoveryNonce,
     sessionNonce,
     threshold,
     timelock,
     pendingRecovery,
     activeSession,
+    actionProtocolVersion,
+    actionAuthorizationEpoch,
+    actionSessionAuthorized,
   ] = await Promise.all([
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getOwner', args: [accountIdParam] }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getMorpheusOracle', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getMorpheusOracle failed:', error?.message); return ''; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getNetwork', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getNetwork failed:', error?.message); return ''; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAAContract', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAAContract failed:', error?.message); return ''; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAccountIdText', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAccountIdText failed:', error?.message); return ''; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAccountAddress', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAccountAddress failed:', error?.message); return ''; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getRecoveryNonce', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getRecoveryNonce failed:', error?.message); return '0'; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getSessionNonce', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getSessionNonce failed:', error?.message); return '0'; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getThreshold', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getThreshold failed:', error?.message); return '0'; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getTimelock', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getTimelock failed:', error?.message); return '0'; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getPendingRecovery', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getPendingRecovery failed:', error?.message); return []; }),
     readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActiveSession', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getActiveSession failed:', error?.message); return []; }),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActionProtocolVersion', args: [] }).catch(() => '0'),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActionAuthorizationEpoch', args: [accountIdParam] }).catch(() => '0'),
+    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'isActionSessionAuthorized', args: [accountIdParam] }).catch(() => false),
   ]);
 
   return {
     verifierHash: `0x${normalizedVerifier}`,
     owner,
     morpheusOracle,
+    network,
+    aaContract,
+    accountIdText,
+    accountAddress,
     recoveryNonce,
     sessionNonce,
     threshold,
@@ -226,6 +279,9 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
       executableAt: pendingRecovery[4] || '0',
       active: Boolean(pendingRecovery[5]),
     } : null,
+    actionProtocolVersion,
+    actionAuthorizationEpoch,
+    actionSessionAuthorized: actionSessionAuthorized === true,
     activeSession: Array.isArray(activeSession) ? {
       executor: activeSession[0] || '',
       actionId: activeSession[1] || '',
@@ -345,7 +401,14 @@ class MorpheusDidService {
     });
   }
 
-  async previewRecoveryTicket({ aaContract, verifierContract, accountId, newOwner, recoveryNonce, expiresAt } = {}) {
+  async previewRecoveryTicket({ network, aaContract, verifierContract, accountId, accountIdText, accountIdRaw, accountAddress, newOwner, recoveryNonce, expiresAt } = {}) {
+    const networkText = requireAaSigningText(network, 'network');
+    const accountText = requireAaSigningText(accountIdText, 'accountIdText');
+    const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
+    const recoveryVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
+    const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');
+    const accountAddressInternal = toRequiredNeoInternalHex(accountAddress, 'accountAddress');
+    const newOwnerInternal = toRequiredNeoInternalHex(newOwner, 'newOwner');
     const profile = getDidProfile();
     const subjectPatch = await buildEncryptedSubjectPatch({
       linked_accounts: profile?.linkedAccounts || [],
@@ -354,26 +417,46 @@ class MorpheusDidService {
     });
     return callNeoDid('recovery-ticket', {
       ...subjectPatch,
-      network: 'neo_n3',
-      aa_contract: `0x${sanitizeHex(aaContract || getSmartAccountHash())}`,
-      verifier_contract: `0x${sanitizeHex(verifierContract)}`,
-      account_id: trim(accountId),
-      new_owner: `0x${normalizeScriptHash(newOwner)}`,
+      network: networkText,
+      aa_contract: core,
+      verifier_contract: recoveryVerifier,
+      account_id_raw: account,
+      account_id: accountText,
+      account_address: accountAddressInternal,
+      new_owner: newOwnerInternal,
       recovery_nonce: String(recoveryNonce ?? '0'),
       expires_at: String(expiresAt),
+      callback_encoding: 'neo_n3_recovery_v3',
     });
   }
 
-  async previewActionTicket({ executor, actionId } = {}) {
+  async previewActionTicket({ aaContract, verifierContract, accountId, accountIdText, accountIdRaw, executor, sessionNonce = 0, authorizationEpoch, expiresAt, network } = {}) {
+    const networkText = requireAaSigningText(network, 'network');
+    const accountText = requireAaSigningText(accountIdText, 'accountIdText');
+    const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
+    const actionVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
+    const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');
+    const disposable = toRequiredNeoInternalHex(executor, 'executor');
+    const epoch = String(authorizationEpoch ?? '');
+    if (!/^[1-9][0-9]*$/.test(epoch)) throw new Error('Current action authorization epoch required');
+    const actionId = await buildAaActionId({ network: networkText, aaContractInternal: core, accountIdRawInternal: account, executorInternal: disposable, sessionNonce, expiresAt });
     const profile = getDidProfile();
     const subjectPatch = await buildEncryptedSubjectPatch({
       linked_accounts: profile?.linkedAccounts || [],
     });
     return callNeoDid('action-ticket', {
       ...subjectPatch,
-      disposable_account: `0x${normalizeScriptHash(executor)}`,
-      action_id: trim(actionId),
-      callback_encoding: 'neo_n3_action_v3',
+      network: networkText,
+      aa_contract: core,
+      verifier_contract: actionVerifier,
+      account_id_raw: account,
+      account_id: accountText,
+      disposable_account: disposable,
+      action_id: actionId,
+      expires_at: String(expiresAt),
+      session_nonce: String(sessionNonce),
+      authorization_epoch: epoch,
+      callback_encoding: 'neo_n3_action_v4',
     });
   }
 
@@ -422,7 +505,7 @@ class MorpheusDidService {
       phone: profile?.phone || undefined,
     });
     const params = [
-      toByteArrayParam(accountIdHex),
+      toHash160Param(accountIdHex),
       toStringParam(provider),
       toHash160Param(normalizeScriptHash(newOwner)),
       toStringParam(String(expiresAt)),
@@ -467,7 +550,7 @@ class MorpheusDidService {
       scriptHash: sanitizeHex(verifierHash),
       operation: 'requestActionSession',
       args: [
-        toByteArrayParam(accountIdHex),
+        toHash160Param(accountIdHex),
         toStringParam(provider),
         toHash160Param(normalizeScriptHash(executor)),
         toIntegerParam(expiresAt),
@@ -476,12 +559,33 @@ class MorpheusDidService {
     });
   }
 
+  // Normal explicit user wallet actions. The contract checks its current
+  // owner witness; a DID login or a self-reported owner does not authorize them.
+  async setActionIdentity({ verifierHash, accountIdHex, masterNullifier, enabled } = {}) {
+    const master = sanitizeHex(masterNullifier);
+    if (!/^[0-9a-f]{64}$/.test(master) || typeof enabled !== 'boolean') throw new Error('Invalid action enrollment');
+    return walletService.invoke({
+      scriptHash: requireNonZeroHash160(verifierHash, 'verifierHash'), operation: 'setActionIdentity',
+      args: [toHash160Param(requireNonZeroHash160(accountIdHex, 'accountId')), { type: 'ByteArray', value: master }, { type: 'Boolean', value: enabled }],
+    });
+  }
+
+  async reauthorizeActiveActionSession({ verifierHash, accountIdHex, session } = {}) {
+    const nullifier = sanitizeHex(session?.actionNullifier);
+    if (!session?.active || !/^[0-9a-f]{64}$/.test(nullifier) || !session.actionId || !/^[0-9]+$/.test(String(session.expiresAt))) throw new Error('Invalid active session');
+    return walletService.invoke({
+      scriptHash: requireNonZeroHash160(verifierHash, 'verifierHash'), operation: 'reauthorizeActiveActionSession',
+      args: [toHash160Param(requireNonZeroHash160(accountIdHex, 'accountId')), toHash160Param(requireNonZeroHash160(session.executor, 'executor')),
+        toStringParam(session.actionId), toIntegerParam(session.expiresAt), { type: 'ByteArray', value: nullifier }],
+    });
+  }
+
   async finalizeRecovery({ verifierHash, accountIdHex } = {}) {
     return walletService.invoke({
       scriptHash: sanitizeHex(verifierHash),
       operation: 'finalizeRecovery',
       args: [
-        toByteArrayParam(accountIdHex),
+        toHash160Param(accountIdHex),
       ],
     });
   }
@@ -491,7 +595,7 @@ class MorpheusDidService {
       scriptHash: sanitizeHex(verifierHash),
       operation: 'cancelRecovery',
       args: [
-        toByteArrayParam(accountIdHex),
+        toHash160Param(accountIdHex),
       ],
     });
   }
@@ -501,7 +605,7 @@ class MorpheusDidService {
       scriptHash: sanitizeHex(verifierHash),
       operation: 'revokeActionSession',
       args: [
-        toByteArrayParam(accountIdHex),
+        toHash160Param(accountIdHex),
       ],
     });
   }

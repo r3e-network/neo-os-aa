@@ -1,3 +1,4 @@
+using System.Numerics;
 using Neo;
 using Neo.SmartContract;
 using Neo.SmartContract.Framework;
@@ -70,6 +71,7 @@ namespace SmartAccount
         {
             ExecutionEngine.Assert(accountId != null && accountId != UInt160.Zero, "Account id required");
             ExecutionEngine.Assert(backupOwner != null && backupOwner != UInt160.Zero, "Backup owner required");
+            AssertAccountConfigurationIdle(accountId!);
             if (requireBackupOwnerWitness)
             {
                 ExecutionEngine.Assert(Runtime.CheckWitness(backupOwner!), "Backup owner witness required");
@@ -115,7 +117,7 @@ namespace SmartAccount
                 SetVerifierConfigContext(accountId!, verifier);
                 try
                 {
-                    Contract.Call(verifier, "setPublicKey", CallFlags.All, new object[] { accountId!, verifierParams });
+                    CallModuleWithMaintenanceBudget(verifier, "setPublicKey", CallFlags.All, new object[] { accountId!, verifierParams });
                 }
                 finally
                 {
@@ -136,6 +138,8 @@ namespace SmartAccount
             ByteString[] paramList = verifierParamsList!;
             ExecutionEngine.Assert(ids.Length > 0 && ids.Length <= 64, "Account batch size must be 1-64");
             ExecutionEngine.Assert(ids.Length == paramList.Length, "Account batch params mismatch");
+            ExecutionEngine.Assert(ids[0] != null && ids[0] != UInt160.Zero, "Account id required");
+            AssertAccountConfigurationIdle(ids[0]);
 
             for (int i = 0; i < ids.Length; i++)
             {
@@ -152,6 +156,7 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginInstallationAllowed(accountId, newHookId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             if (newHookId != UInt160.Zero)
             {
@@ -193,6 +198,8 @@ namespace SmartAccount
         public static void ConfirmHookUpdate(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertPluginConfigurationAllowed(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
             byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
@@ -218,7 +225,7 @@ namespace SmartAccount
                 SetHookConfigContext(accountId, previousHook);
                 try
                 {
-                    Contract.Call(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -252,6 +259,7 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginInstallationAllowed(accountId, newVerifier);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
             AccountState state = GetAccountState(accountId);
@@ -272,7 +280,7 @@ namespace SmartAccount
                     SetVerifierConfigContext(accountId, newVerifier);
                     try
                     {
-                        Contract.Call(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
+                        CallModuleWithMaintenanceBudget(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
                     }
                     finally
                     {
@@ -308,6 +316,8 @@ namespace SmartAccount
         public static void ConfirmVerifierUpdate(UInt160 accountId)
         {
             AssertBackupOwner(accountId);
+            AssertPluginConfigurationAllowed(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
             byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
@@ -333,7 +343,7 @@ namespace SmartAccount
                 SetVerifierConfigContext(accountId, previousVerifier);
                 try
                 {
-                    Contract.Call(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
+                    CallRootWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
                 }
                 finally
                 {
@@ -350,7 +360,7 @@ namespace SmartAccount
                 SetVerifierConfigContext(accountId, pending.NewVerifier);
                 try
                 {
-                    Contract.Call(pending.NewVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, pending.VerifierParams });
+                    CallModuleWithMaintenanceBudget(pending.NewVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, pending.VerifierParams });
                 }
                 finally
                 {
@@ -398,82 +408,195 @@ namespace SmartAccount
         // check. Nobody else can write another account's dependency list.
         // =====================================================================================
 
-        private const int MaxModuleDependencies = 16;
+        private static byte[] DependencyKey(UInt160 accountId, bool verifier) =>
+            verifier
+                ? Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId)
+                : Helper.Concat(Prefix_HookDependencies, (byte[])accountId);
 
-        private static void SetModuleDependencies(byte[] key, UInt160 accountId, UInt160[] children)
+        public static void SetHookDependencies(UInt160 accountId, UInt160[] children) =>
+            SetDependencies(accountId, children, false);
+
+        public static void ClearHookDependencies(UInt160 accountId) =>
+            ClearDependencies(accountId, false);
+
+        public static void SetVerifierDependencies(UInt160 accountId, UInt160[] children) =>
+            SetDependencies(accountId, children, true);
+
+        public static void ClearVerifierDependencies(UInt160 accountId) =>
+            ClearDependencies(accountId, true);
+
+        private static void SetDependencies(UInt160 accountId, UInt160[] children, bool verifier)
         {
-            ExecutionEngine.Assert(children != null && children.Length <= MaxModuleDependencies,
-                $"At most {MaxModuleDependencies} module dependencies");
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data != null)
+            UInt160 root = ValidateDependencyCall(accountId, verifier, false);
+            ValidateDependencyChildren(children, root, verifier);
+            byte[] lockKey = Helper.Concat(Prefix_DependencyMaintenance, (byte[])accountId);
+            AcquireDependencyMaintenance(lockKey, accountId);
+            try
             {
-                UInt160[] previous = (UInt160[])StdLib.Deserialize(data!);
-                for (int i = 0; i < previous.Length; i++)
+                byte[] key = DependencyKey(accountId, verifier);
+                ByteString? data = Storage.Get(Storage.CurrentContext, key);
+                if (data != null)
                 {
-                    bool retained = false;
-                    for (int j = 0; j < children.Length; j++)
+                    UInt160[] previous = (UInt160[])StdLib.Deserialize(data!);
+                    for (int i = 0; i < previous.Length; i++)
                     {
-                        if (previous[i] == children[j])
+                        bool retained = false;
+                        for (int j = 0; j < children.Length; j++)
                         {
-                            retained = true;
-                            break;
+                            if (previous[i] == children[j])
+                            {
+                                retained = true;
+                                break;
+                            }
                         }
-                    }
-                    if (!retained)
-                    {
-                        Contract.Call(previous[i], "clearAccount", CallFlags.All, new object[] { accountId });
+                        if (!retained) CleanupDependency(accountId, previous[i], verifier);
                     }
                 }
+                Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
             }
-            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
-        }
-
-        private static void ClearModuleDependencies(byte[] key, UInt160 accountId)
-        {
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return;
-            UInt160[] children = (UInt160[])StdLib.Deserialize(data!);
-            for (int i = 0; i < children.Length; i++)
+            finally
             {
-                Contract.Call(children[i], "clearAccount", CallFlags.All, new object[] { accountId });
+                Storage.Delete(Storage.CurrentContext, lockKey);
             }
-            Storage.Delete(Storage.CurrentContext, key);
         }
 
-        public static void SetHookDependencies(UInt160 accountId, UInt160[] children)
+        private static void ClearDependencies(UInt160 accountId, bool verifier)
         {
-            ValidateAccountId(accountId);
-            AccountState state = GetAccountState(accountId);
-            ExecutionEngine.Assert(state.HookId != UInt160.Zero && Runtime.CallingScriptHash == state.HookId,
-                "Only the installed hook may set its dependencies");
-            SetModuleDependencies(Helper.Concat(Prefix_HookDependencies, (byte[])accountId), accountId, children);
+            UInt160 root = ValidateDependencyCall(accountId, verifier, true);
+            byte[] lockKey = Helper.Concat(Prefix_DependencyMaintenance, (byte[])accountId);
+            AcquireDependencyMaintenance(lockKey, accountId);
+            try
+            {
+                UInt160[] children = ReadDependencyChildren(accountId, root, verifier);
+                ValidateDependencyChildren(children, root, verifier);
+                for (int i = 0; i < children.Length; i++)
+                {
+                    CleanupDependency(accountId, children[i], verifier);
+                }
+                Storage.Delete(Storage.CurrentContext, DependencyKey(accountId, verifier));
+            }
+            finally
+            {
+                Storage.Delete(Storage.CurrentContext, lockKey);
+            }
         }
 
-        public static void ClearHookDependencies(UInt160 accountId)
+        private static void EnsureLegacyDependencies(UInt160 accountId, UInt160 root, bool verifier)
         {
-            ValidateAccountId(accountId);
-            AccountState state = GetAccountState(accountId);
-            ExecutionEngine.Assert(state.HookId != UInt160.Zero && Runtime.CallingScriptHash == state.HookId,
-                "Only the installed hook may clear its dependencies");
-            ClearModuleDependencies(Helper.Concat(Prefix_HookDependencies, (byte[])accountId), accountId);
+            byte[] key = DependencyKey(accountId, verifier);
+            if (Storage.Get(Storage.CurrentContext, key) != null) return;
+            byte[] lockKey = Helper.Concat(Prefix_DependencyMaintenance, (byte[])accountId);
+            AcquireDependencyMaintenance(lockKey, accountId);
+            try
+            {
+                UInt160[] children = ReadDependencyChildren(accountId, root, verifier);
+                if (children.Length == 0) return;
+                ValidateDependencyChildren(children, root, verifier);
+                Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
+            }
+            finally
+            {
+                Storage.Delete(Storage.CurrentContext, lockKey);
+            }
         }
 
-        public static void SetVerifierDependencies(UInt160 accountId, UInt160[] children)
+        private static UInt160[] ReadDependencyChildren(UInt160 accountId, UInt160 root, bool verifier)
         {
-            ValidateAccountId(accountId);
-            AccountState state = GetAccountState(accountId);
-            ExecutionEngine.Assert(state.Verifier != UInt160.Zero && Runtime.CallingScriptHash == state.Verifier,
-                "Only the installed verifier may set its dependencies");
-            SetModuleDependencies(Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId), accountId, children);
+            byte[] key = DependencyKey(accountId, verifier);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data != null) return (UInt160[])StdLib.Deserialize(data!)!;
+
+            string method = verifier ? "getChildVerifierConfig" : "getChildHookConfig";
+            ContractParameterType result = verifier ? ContractParameterType.Any : ContractParameterType.Array;
+            if (!ModuleExposesSafeMethod(root, method, result, ContractParameterType.Hash160))
+            {
+                return new UInt160[0];
+            }
+            if (verifier)
+            {
+                VerifierChildConfiguration config = (VerifierChildConfiguration)CallModuleWithMaintenanceBudget(
+                    root, method, CallFlags.ReadOnly, new object[] { accountId });
+                if (config == null || config.Verifiers == null) return new UInt160[0];
+                return config.Verifiers!;
+            }
+            object[] raw = (object[])CallModuleWithMaintenanceBudget(
+                root, method, CallFlags.ReadOnly, new object[] { accountId })!;
+            UInt160[] children = new UInt160[raw!.Length];
+            for (int i = 0; i < raw.Length; i++) children[i] = (UInt160)raw[i]!;
+            return children;
         }
 
-        public static void ClearVerifierDependencies(UInt160 accountId)
+        private static UInt160 ValidateDependencyCall(UInt160 accountId, bool verifier, bool clearing)
         {
             ValidateAccountId(accountId);
+            ExecutionEngine.Assert(!IsExecutionActive(accountId)
+                && Storage.Get(Storage.CurrentContext,
+                    Helper.Concat(Prefix_VerifyContext, (byte[])accountId)) == null,
+                "Cannot maintain dependencies during execution");
             AccountState state = GetAccountState(accountId);
-            ExecutionEngine.Assert(state.Verifier != UInt160.Zero && Runtime.CallingScriptHash == state.Verifier,
-                "Only the installed verifier may clear its dependencies");
-            ClearModuleDependencies(Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId), accountId);
+            UInt160 root = (verifier ? state.Verifier : state.HookId)!;
+            ExecutionEngine.Assert(root != null && root != UInt160.Zero
+                && Runtime.CallingScriptHash == root, "Dependency caller is not installed root");
+            byte[] configKey = Helper.Concat(
+                verifier ? Prefix_VerifierConfigContext : Prefix_HookConfigContext, (byte[])accountId);
+            ByteString? configuredRoot = Storage.Get(Storage.CurrentContext, configKey);
+            BigInteger depth = GetConfigurationContextDepth();
+            bool rootContext = depth == 1 && configuredRoot != null && (UInt160)configuredRoot! == root;
+            ExecutionEngine.Assert(depth == 0 || rootContext,
+                "Cannot maintain dependencies during execution");
+            // The authenticated settlement path may clear dependencies during
+            // escrow, but replacement always requires an idle account.
+            if (!clearing || !rootContext) AssertNoMarketEscrow(accountId);
+            return root!;
+        }
+
+        private static void ValidateDependencyChildren(UInt160[] children, UInt160 root, bool verifier)
+        {
+            ExecutionEngine.Assert(children != null && children.Length <= 10, "Invalid dependency count");
+            for (int i = 0; i < children!.Length; i++)
+            {
+                UInt160 child = children[i]!;
+                ExecutionEngine.Assert(child != null && child!.IsValid && child != UInt160.Zero
+                    && child != root && child != Runtime.ExecutingScriptHash, "Invalid dependency child");
+                for (int j = i + 1; j < children.Length; j++)
+                {
+                    ExecutionEngine.Assert(child != children[j], "Duplicate dependency child");
+                }
+                ExecutionEngine.Assert(ModuleExposesMethod(child!, "clearAccount",
+                    ContractParameterType.Void, ContractParameterType.Hash160),
+                    "Child cleanup ABI missing");
+            }
+        }
+
+        private static void CleanupDependency(UInt160 accountId, UInt160 child, bool verifier)
+        {
+            byte[] configKey = Helper.Concat(
+                verifier ? Prefix_VerifierConfigContext : Prefix_HookConfigContext,
+                (byte[])accountId);
+            ByteString? previousContext = Storage.Get(Storage.CurrentContext, configKey);
+            if (verifier) SetVerifierConfigContext(accountId, child);
+            else SetHookConfigContext(accountId, child);
+            try
+            {
+                CallModuleWithMaintenanceBudget(
+                    child, "clearAccount", CallFlags.All, new object[] { accountId });
+            }
+            finally
+            {
+                if (verifier) ClearVerifierConfigContext(accountId);
+                else ClearHookConfigContext(accountId);
+                if (previousContext != null && GetConfigurationContextDepth() > 0)
+                {
+                    Storage.Put(Storage.CurrentContext, configKey, previousContext);
+                }
+            }
+        }
+
+        private static void AcquireDependencyMaintenance(byte[] lockKey, UInt160 accountId)
+        {
+            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, lockKey) == null,
+                "Dependency maintenance already active");
+            Storage.Put(Storage.CurrentContext, lockKey, (byte[])accountId);
         }
 
         private static void AssertV3Verifier(UInt160 verifier)
@@ -488,7 +611,7 @@ namespace SmartAccount
                 ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any), "Verifier V3 post ABI missing");
             ExecutionEngine.Assert(ModuleExposesMethod(verifier, "clearAccount", ContractParameterType.Void,
                 ContractParameterType.Hash160), "Verifier V3 cleanup ABI missing");
-            bool supported = (bool)Contract.Call(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            bool supported = (bool)CallModuleWithMaintenanceBudget(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Verifier does not implement V3 interface");
         }
 
@@ -501,7 +624,7 @@ namespace SmartAccount
                 ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any), "Hook V3 post ABI missing");
             ExecutionEngine.Assert(ModuleExposesMethod(hook, "clearAccount", ContractParameterType.Void,
                 ContractParameterType.Hash160), "Hook V3 cleanup ABI missing");
-            bool supported = (bool)Contract.Call(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
+            bool supported = (bool)CallModuleWithMaintenanceBudget(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
             ExecutionEngine.Assert(supported, "Hook does not implement V3 interface");
         }
 
@@ -638,10 +761,12 @@ namespace SmartAccount
             AssertPluginConfigurationAllowed(accountId);
             ExecutionEngine.Assert(IsMethodAllowed(method, AllowedVerifierMethods), "Verifier method not allowed");
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.Verifier != null && state.Verifier != UInt160.Zero, "Verifier not configured");
 
+            if (method == "setConfig") EnsureLegacyDependencies(accountId, state.Verifier!, true);
             byte[] pendingKey = Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId);
             if (!TryConfirmPendingModuleCall(pendingKey, state.Verifier!, method, args))
             {
@@ -651,7 +776,7 @@ namespace SmartAccount
             SetVerifierConfigContext(accountId, state.Verifier!);
             try
             {
-                return Contract.Call(state.Verifier!, method, CallFlags.All, args);
+                return CallRootWithMaintenanceBudget(state.Verifier!, method, CallFlags.All, args);
             }
             finally
             {
@@ -668,10 +793,12 @@ namespace SmartAccount
             AssertPluginConfigurationAllowed(accountId);
             ExecutionEngine.Assert(IsMethodAllowed(method, AllowedHookMethods), "Hook method not allowed");
             AssertBackupOwner(accountId);
+            AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.HookId != null && state.HookId != UInt160.Zero, "Hook not configured");
 
+            if (method == "setHooks") EnsureLegacyDependencies(accountId, state.HookId!, false);
             byte[] pendingKey = Helper.Concat(Prefix_PendingHookCall, (byte[])accountId);
             if (!TryConfirmPendingModuleCall(pendingKey, state.HookId!, method, args))
             {
@@ -681,7 +808,7 @@ namespace SmartAccount
             SetHookConfigContext(accountId, state.HookId!);
             try
             {
-                return Contract.Call(state.HookId!, method, CallFlags.All, args);
+                return CallRootWithMaintenanceBudget(state.HookId!, method, CallFlags.All, args);
             }
             finally
             {

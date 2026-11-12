@@ -138,7 +138,7 @@ record, not the reviewed one.
 - Stack/static-field sharing, reference counters and `Dispose` ordering inside
   `LoadScript`/`CreateContext`.
 - Trusted C# extraction and compiler/CLR correspondence; execution inside the
-  constructed context; all 100 public entrypoints.
+  constructed context; all 105 public entrypoints.
 
 ## Running it
 

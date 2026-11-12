@@ -190,6 +190,7 @@ public class ContractTests
         Assert.IsFalse(executionSource.Contains("op.CallFlags", StringComparison.Ordinal));
         StringAssert.Contains(executionSource, "ConsumeNonce(accountId, op.Nonce);");
         StringAssert.Contains(executionSource, "PlatformSyscalls.CallWithGasLimit(");
+        StringAssert.Contains(executionSource, "CallVerifierWithGasLimit(");
         StringAssert.Contains(executionSource, "state.Verifier,");
         StringAssert.Contains(executionSource, "\"validateSignature\"");
         StringAssert.Contains(executionSource, "CallFlags.ReadOnly");
@@ -247,6 +248,7 @@ public class ContractTests
         StringAssert.Contains(
             executionSource,
             "PlatformSyscalls.CallWithGasLimit(");
+        StringAssert.Contains(executionSource, "CallVerifierWithGasLimit(");
         StringAssert.Contains(executionSource, "\"postExecute\"");
         StringAssert.Contains(executionSource, "private const long VerifierGasLimit = 1_000_000_000;");
         Assert.IsFalse(executionSource.Contains("Contract.Call(state.Verifier", StringComparison.Ordinal));
@@ -267,9 +269,9 @@ public class ContractTests
             executionSource,
             "UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);");
         Assert.AreEqual(
-            2,
+            5,
             CountOccurrences(executionSource, "PlatformSyscalls.CallWithGasLimit("),
-            "validateSignature and postExecute are the two verifier callbacks");
+            "Two verifier callbacks plus bounded verifier, leaf-maintenance and composite-root-maintenance helpers");
         Assert.IsFalse(
             executionSource.Contains("Contract.CallWithGasLimit(", StringComparison.Ordinal),
             "the framework-declared form does not exist in any published framework");
@@ -329,6 +331,9 @@ public class ContractTests
         StringAssert.Contains(source, "private static object[] CloneHookParams(object[] opParams)");
         Assert.AreEqual(2, CountOccurrences(source, "CloneHookParams(opParams)"));
         Assert.AreEqual(2, CountOccurrences(source, "Child hook mutated authenticated operation"));
+        StringAssert.Contains(source, "ByteString resultSnapshot = StdLib.Serialize(result)");
+        Assert.AreEqual(1, CountOccurrences(source, "StdLib.Deserialize(resultSnapshot)"));
+        Assert.IsFalse(source.Contains("new object[] { accountId, childParams, result }", StringComparison.Ordinal));
     }
 
     [TestMethod]

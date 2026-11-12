@@ -12,7 +12,7 @@ namespace Neo.SmartContract.Examples
 {
     [ManifestExtra("Author", "R3E Network")]
     [ManifestExtra("Description", "Morpheus NeoDID-powered social recovery verifier for Neo Abstract Account")]
-    [ManifestExtra("Version", "2.0.0")]
+    [ManifestExtra("Version", "3.0.0")]
     // AA-03: least-privilege method-scoped grants replacing the former wildcard.
     // Call surface (verified by source sweep):
     //   1. ContractManagement.Update          — the 7-day-timelocked self-upgrade
@@ -83,20 +83,22 @@ namespace Neo.SmartContract.Examples
         private const int FIXED_HASH_LENGTH = 32;
         private const int FIXED_SIGNATURE_LENGTH = 64;
         private const int COMPACT_TICKET_VERSION = 3;
-        private const int COMPACT_ACTION_VERSION = 3;
+        private const int COMPACT_ACTION_VERSION = 4;
 
         // 7-day window shared by the timelocked upgrade (H5) and admin rotation (AA-04),
         // matching the VerifierAuthority window used across the rest of the repo.
         private static readonly BigInteger AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000;
 
-        // ASCII("neodid-recovery-v1")
+        // ASCII("neodid-recovery-v2") and ASCII("neodid-action-v2").
+        // Compact result encoding remains v3; these signing domains are not
+        // backward-compatible with tickets issued before raw account binding.
         private static readonly byte[] RECOVERY_DOMAIN = new byte[]
         {
-            110, 101, 111, 100, 105, 100, 45, 114, 101, 99, 111, 118, 101, 114, 121, 45, 118, 49
+            110, 101, 111, 100, 105, 100, 45, 114, 101, 99, 111, 118, 101, 114, 121, 45, 118, 50
         };
         private static readonly byte[] ACTION_DOMAIN = new byte[]
         {
-            110, 101, 111, 100, 105, 100, 45, 97, 99, 116, 105, 111, 110, 45, 118, 49
+            110, 101, 111, 100, 105, 100, 45, 97, 99, 116, 105, 111, 110, 45, 118, 50
         };
 
         public class PendingRecovery
@@ -144,6 +146,8 @@ namespace Neo.SmartContract.Examples
 
         private class CompactActionTicket
         {
+            public ByteString MasterNullifier = (ByteString)"";
+            public BigInteger AuthorizationEpoch;
             public ByteString ActionNullifier = (ByteString)"";
             public ByteString Signature = (ByteString)"";
         }
@@ -190,7 +194,7 @@ namespace Neo.SmartContract.Examples
         public static event RecoveryClearedHandler OnRecoveryCleared = default!;
 
         [Safe]
-        public static string Version() => "2.0.0";
+        public static string Version() => "3.0.0";
 
         public static void _deploy(object data, bool update)
         {

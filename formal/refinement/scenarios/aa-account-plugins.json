@@ -1,14 +1,14 @@
 {
   "schema": "aa-abi-scenario-input/v1",
   "name": "plugin-admission-update-timelock-and-two-phase-module-calls",
-  "contractAddress": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2",
-  "contractAddressNote": "The account under test. Deploying extra contracts does not move it: an address is a function of the NEF, the manifest name and the deploy signer, and none of those changed.",
+  "contractAddress": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640",
+  "contractAddressNote": "The receipt records the address the engine deployed for this exact artifact, manifest name and signer, and requires it to equal this one.",
   "note": [
     "The first two scenarios could only measure this contract talking to itself and to the VM. Most of what is left is unreachable for a structural reason: a verifier body cannot run without a verifier, and AssertV3Verifier reads the deployed plugin's manifest rather than a source file, so the admission check itself is a claim about an artifact that has to exist.",
     "The modules below are real compiled contracts, not stand-ins. MultiSigVerifier, NeoDIDCredentialHook and MultiHook are built from contracts/verifiers and contracts/hooks with the pinned nccs 3.9.1, and their bytes live in formal/refinement/plugins with the sha256 recorded in the receipt. The artifact is pinned by hash; that the pinned compiler turns those sources into those bytes is a recorded build step (plugins/provenance.json), not something this run re-derives - the same standing the main contract's NEF has.",
     "verifierA and verifierB are the same bytes deployed by different signers, which is what gives two distinct verifier addresses to rotate between. A rotation needs somewhere to rotate to.",
     "Each plugin trusts one AA core and refuses to be re-pointed instantly, so the first steps set that core. After that the account can call into a real plugin: the plugin checks that its core is this contract, that the caller is this contract, and that this contract says the caller is currently its verifier or hook - three checks the account has to satisfy in the right order before a plugin body will run at all.",
-    "hookA is NeoDIDCredentialHook and hookB is MultiHook, and having both is the point of the second half. Their ClearAccount bodies are written to the same shape and differ in one respect: MultiHook calls back into the core's clearHookDependencies unconditionally, while NeoDIDCredentialHook only clears its own storage. This build of the account has no clearHookDependencies, so MultiHook's two-phase cleanup cannot complete and its confirmed call faults inside the plugin. That is measured and declared rather than avoided - the account is the same artifact in both cases and only the plugin differs, so the pair says the incompatibility is between two artifacts and not a property of either one alone.",
+    "hookA is NeoDIDCredentialHook and hookB is MultiHook, and having both is the point of the second half. Their ClearAccount bodies are written to the same shape and differ in one respect: MultiHook calls back into the core's clearHookDependencies unconditionally, while NeoDIDCredentialHook only clears its own storage. This core exposes clearHookDependencies, so both two-phase cleanup calls complete: the first records the pending call and the second executes it after the timelock. Keeping the pair makes the callback binding visible rather than hiding it behind a single plugin.",
     "Two windows are exercised with a millisecond on either side: the 24-hour module-configuration update, and the 24-hour two-phase plugin call where the first identical call only records a pending request and the second, a day later, is the one that executes.",
     "Times: T0 is the base. T1 = T0 + 86400000 (one configuration window). T2 = T1 + 86400000. T3 = T2 + 86400000. T4 = T3 + 86400000. A step declared one millisecond before a window must fault; a step declared exactly at it must halt."
   ],
@@ -21,7 +21,7 @@
       "nef": "../plugins/MultiSigVerifier.nef",
       "manifest": "../plugins/MultiSigVerifier.manifest.json",
       "signer": "0x7777777777777777777777777777777777777777",
-      "address": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e",
+      "address": "0x17c28d21c86e07d95493149aca488a5146610996",
       "addressNote": "A function of the NEF, the manifest name and the deploy signer. The receipt records the address the engine deployed and requires it to equal this one."
     },
     {
@@ -29,7 +29,7 @@
       "nef": "../plugins/MultiSigVerifier.nef",
       "manifest": "../plugins/MultiSigVerifier.manifest.json",
       "signer": "0x7777777777777777777777777777777777777778",
-      "address": "0xd1cc3497cce69208bfaa588e9c2f535a71d181cb"
+      "address": "0x242baece475a77e797f93d0d333ccab91b31581b"
     },
     {
       "name": "hookA",
@@ -43,7 +43,7 @@
       "nef": "../plugins/MultiHook.nef",
       "manifest": "../plugins/MultiHook.manifest.json",
       "signer": "0x8888888888888888888888888888888888888889",
-      "address": "0xb0a34b495120a60ff129c7b54167a770c997847a"
+      "address": "0xce31c3a45268e33613372d7f5eef7972a7046a2d"
     }
   ],
   "steps": [
@@ -55,7 +55,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "expect": "HALT"
@@ -79,7 +79,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "expect": "FAULT",
@@ -93,7 +93,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "expect": "HALT"
@@ -106,7 +106,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "expect": "HALT"
@@ -130,7 +130,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "expect": "FAULT",
@@ -144,7 +144,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "expect": "HALT"
@@ -168,7 +168,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9a97e9c3c624798c26fe73b71939f69a71d12fd2"
+          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
         }
       ],
       "expect": "FAULT",
@@ -180,7 +180,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e"
+          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
         },
         {
           "type": "ByteString",
@@ -250,7 +250,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0xb0a34b495120a60ff129c7b54167a770c997847a"
+          "value": "0xce31c3a45268e33613372d7f5eef7972a7046a2d"
         },
         {
           "type": "Hash160",
@@ -274,11 +274,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "Hash160",
-          "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e"
+          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
         },
         {
           "type": "ByteString",
@@ -305,7 +305,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -320,7 +320,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "String",
@@ -328,7 +328,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e"
+          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
         }
       ],
       "expect": "HALT",
@@ -340,7 +340,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "String",
@@ -360,7 +360,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -377,11 +377,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "Hash160",
-          "value": "0xd1cc3497cce69208bfaa588e9c2f535a71d181cb"
+          "value": "0x242baece475a77e797f93d0d333ccab91b31581b"
         },
         {
           "type": "ByteString",
@@ -396,7 +396,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -409,7 +409,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -423,11 +423,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "Hash160",
-          "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e"
+          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
         },
         {
           "type": "ByteString",
@@ -445,7 +445,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "FAULT",
@@ -458,7 +458,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -475,7 +475,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT"
@@ -487,7 +487,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -503,7 +503,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -517,7 +517,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "String",
@@ -528,7 +528,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+              "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
             }
           ]
         }
@@ -543,7 +543,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -556,7 +556,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -572,7 +572,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT"
@@ -584,7 +584,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -598,7 +598,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "String",
@@ -609,7 +609,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+              "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
             }
           ]
         }
@@ -625,7 +625,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "String",
@@ -636,7 +636,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+              "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
             }
           ]
         }
@@ -650,7 +650,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -664,11 +664,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "Hash160",
-          "value": "0xf2ee958fc64278d11aa63e86de741e439bc4e33e"
+          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
         },
         {
           "type": "ByteString",
@@ -685,7 +685,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT"
@@ -697,7 +697,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -713,7 +713,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         }
       ],
       "expect": "HALT",
@@ -727,7 +727,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "String",
@@ -797,7 +797,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x2896229c5dc4cb04dff8eae6beb1e99c835bb920"
+          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
         },
         {
           "type": "String",
@@ -992,7 +992,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0xb0a34b495120a60ff129c7b54167a770c997847a"
+          "value": "0xce31c3a45268e33613372d7f5eef7972a7046a2d"
         }
       ],
       "expect": "HALT"
@@ -1060,7 +1060,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xf583844a6adee89c787101de1adcf0f3c747db25"
+          "value": "0x096a31e1a4589128d2f24817f01a3316eef3429a"
         },
         {
           "type": "Hash160",
@@ -1072,7 +1072,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0xb0a34b495120a60ff129c7b54167a770c997847a"
+          "value": "0xce31c3a45268e33613372d7f5eef7972a7046a2d"
         },
         {
           "type": "Hash160",
@@ -1092,7 +1092,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xf583844a6adee89c787101de1adcf0f3c747db25"
+          "value": "0x096a31e1a4589128d2f24817f01a3316eef3429a"
         }
       ],
       "expect": "HALT",
@@ -1109,7 +1109,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xf583844a6adee89c787101de1adcf0f3c747db25"
+          "value": "0x096a31e1a4589128d2f24817f01a3316eef3429a"
         },
         {
           "type": "String",
@@ -1120,7 +1120,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0xf583844a6adee89c787101de1adcf0f3c747db25"
+              "value": "0x096a31e1a4589128d2f24817f01a3316eef3429a"
             }
           ]
         }
@@ -1136,7 +1136,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xf583844a6adee89c787101de1adcf0f3c747db25"
+          "value": "0x096a31e1a4589128d2f24817f01a3316eef3429a"
         },
         {
           "type": "String",
@@ -1147,7 +1147,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0xf583844a6adee89c787101de1adcf0f3c747db25"
+              "value": "0x096a31e1a4589128d2f24817f01a3316eef3429a"
             }
           ]
         }
@@ -1163,7 +1163,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xf583844a6adee89c787101de1adcf0f3c747db25"
+          "value": "0x096a31e1a4589128d2f24817f01a3316eef3429a"
         },
         {
           "type": "String",
@@ -1174,15 +1174,12 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0xf583844a6adee89c787101de1adcf0f3c747db25"
+              "value": "0x096a31e1a4589128d2f24817f01a3316eef3429a"
             }
           ]
         }
       ],
-      "expect": "FAULT",
-      "reason": "Exception has been thrown by the target",
-      "detail": "clearHookDependencies",
-      "detailNote": "Measured, not expected. MultiHook.ClearAccount calls the core's clearHookDependencies unconditionally and this build of SmartAccountV3 has no such method, so the confirmed two-phase call faults inside the plugin. The reason is the generic message the target threw; the detail is what it threw. The matching call-hook-a-confirmed differs only in which plugin is installed and halts, which is what makes this a fact about the pair of artifacts rather than about either one alone."
+      "expect": "HALT"
     }
   ]
 }

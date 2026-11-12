@@ -42,7 +42,7 @@ class PublicPureProofTests(unittest.TestCase):
                     for suffix in ['oversized_fault_preserves_frame', 'missing_argument_fault',
                                    'non_string_returns_false']:
                         self.assertIn(name+'_'+suffix, declared)
-            self.assertEqual(result['fullUnprovedEntrypointCount'], 100)
+            self.assertEqual(result['fullUnprovedEntrypointCount'], 105)
 
     def test_actual_manifest_drift_is_rejected(self):
         changed = copy.deepcopy(self.inventory)

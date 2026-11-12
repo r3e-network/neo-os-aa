@@ -11,15 +11,14 @@ import subprocess
 import sys
 
 import context_proofs as context
-from test_method_proofs import INVENTORY, materialize_nef_fixture
+from test_method_proofs import load_inventory, materialize_nef_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 
 class ContextProofTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        with gzip.open(INVENTORY, 'rt') as stream:
-            cls.inventory = json.load(stream)
+        cls.inventory = load_inventory()
         cls.directory = tempfile.TemporaryDirectory(prefix='aa-context-fixture-')
         cls.addClassCleanup(cls.directory.cleanup)
         nef = materialize_nef_fixture(cls.inventory, cls.directory.name)
@@ -33,13 +32,9 @@ class ContextProofTests(unittest.TestCase):
         cls.program = context.bind_initializer(cls.inventory)
 
     def test_full_initializer_identity(self):
-        # Current build: the initializer ABI offset and the total script length,
-        # both moved by the 73-byte helper growth (24893/25547 before it). The
-        # byte and instruction counts are unaffected, because the growth only
-        # shifts the terminal range without changing its contents.
-        self.assertEqual((self.program['start'],self.program['end']), (24966,25620))
-        self.assertEqual(len(self.program['bytes']),654)
-        self.assertEqual(len(self.program['instructions']),170)
+        self.assertEqual((self.program['start'],self.program['end']), (29415,30097))
+        self.assertEqual(len(self.program['bytes']),682)
+        self.assertEqual(len(self.program['instructions']),182)
 
     def test_wrong_entry_descriptor_rejected(self):
         changed=copy.deepcopy(self.inventory)
@@ -48,13 +43,13 @@ class ContextProofTests(unittest.TestCase):
 
     def test_missing_static_descriptor_rejected(self):
         changed=copy.deepcopy(self.inventory)
-        changed['sourceMap']['debug']['static-variables'].remove('Prefix_TransactionReimbursement,ByteArray,34')
+        changed['sourceMap']['debug']['static-variables'].remove('Prefix_TransactionReimbursement,ByteArray,38')
         with self.assertRaises(ValueError): context.bind_initializer(changed)
 
     def test_forged_initializer_bytes_rejected(self):
         changed=copy.deepcopy(self.inventory)
         code=bytearray.fromhex(changed['nef']['scriptHex'])
-        code[25361]=34
+        code[29899]=34
         changed['nef']['scriptHex']=code.hex()
         with self.assertRaises(ValueError): context.bind_initializer(changed)
 
@@ -107,9 +102,7 @@ class ContextProofTests(unittest.TestCase):
             self.assertTrue(receipt['initializerReferenceVerified'])
             self.assertTrue(receipt['helperContextVerified'])
             self.assertFalse(receipt['fullImplementationVerified'])
-            # The helper grew by 73 bytes for the VM-integer headroom assertion,
-            # so the complete-context certificate now covers 13557..13838.
-            self.assertEqual(receipt['methodRange'],[13557,13838])
+            self.assertEqual(receipt['methodRange'],[17762,18043])
             self.assertEqual((receipt['methodByteCount'],receipt['methodInstructionCount']),(281,116))
             self.assertEqual(len(receipt['semanticControls']),6)
             self.assertTrue(all(c['refutationKernelChecked'] for c in receipt['semanticControls'][3:]))

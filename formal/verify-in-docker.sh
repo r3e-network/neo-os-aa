@@ -34,7 +34,7 @@ if [[ -z "${NEOOS_NATIVE_CORE_SOURCE:-}" || ! -d "$NEOOS_NATIVE_CORE_SOURCE" ]];
 fi
 native_core_root="$(cd "$NEOOS_NATIVE_CORE_SOURCE" && pwd)"
 
-docker build "${build_args[@]}" -f "$ROOT_DIR/formal/Dockerfile" -t "$IMAGE" "$ROOT_DIR/formal"
+docker build ${build_args[@]+"${build_args[@]}"} -f "$ROOT_DIR/formal/Dockerfile" -t "$IMAGE" "$ROOT_DIR/formal"
 mkdir -p "$ROOT_DIR/formal/.runs/docker"
 
 echo "formal gate (docker): running formal/verify.py in $IMAGE"

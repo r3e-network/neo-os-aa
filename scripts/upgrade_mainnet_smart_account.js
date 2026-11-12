@@ -48,6 +48,12 @@ const REQUIRED_METHODS = [
   "proposeAdminTransfer",
   "confirmAdminTransfer",
   "executeUserOp",
+  "callVerifierChild",
+  "callHookChild",
+  "setVerifierDependencies",
+  "clearVerifierDependencies",
+  "setHookDependencies",
+  "clearHookDependencies",
 ];
 const REMOVED_METHODS = ["transferAdmin"];
 

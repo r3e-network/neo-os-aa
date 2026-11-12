@@ -2,25 +2,27 @@
 
 ## Status
 
-### Current private validation refresh (2026-10-30)
+### Current private validation refresh (2026-10-31)
 
 The current SmartAccount/native-core source snapshot passes the pinned Docker
 formal gate. The receipt at
-`formal/.runs/docker-20261030-authority/result.json` records 29 Coq modules,
+`docs/reports/aa-formal-gate-20261031.json` records 29 Coq modules,
 554 closed declarations, 311 rejected Coq mutations, four rejected TLC
 mutations, 315 semantic mutations in total, 61,460 TLC distinct states, and
 7/7 SMT obligations. The formal runner regression suite independently passes
 72/72 tests on the current worktree. The .NET contract suite independently
-passes 508/508 tests, with no failures or skips.
+passes 571/571 tests, with no failures or skips.
 
 The gate reports `modelChecksPassed: true` and
 `implementationVerified: false`. Its scope is the reviewed abstract protocol
 and native-state models; it does not claim a complete C# to NEF to NeoVM
 refinement, full NeoVM/ApplicationEngine semantics, cryptographic soundness,
 complete WitnessRule decoding/evaluation, or arbitrary-plugin liveness.
+The committed receipt is byte-identical to the Docker run output at
+`formal/.runs/docker/result.json`.
 
 The current source-built NeoExpress authority validation is recorded under
-`docs/reports/smartaccount-native-source-runtime-20261030-authority/`. Its
+`docs/reports/smartaccount-native-source-runtime-20261031-final/`. Its
 aggregate receipt and all five matrix receipts report `PASS`: native service
 lifecycle, signed proxy and atomic rollback, configuration-root mutation,
 authority recovery, and activation-boundary validation. The runtime file map
@@ -30,25 +32,72 @@ matched before and after the matrices, all owned nodes stopped, and
 checks, not a claim that every possible plugin, proof system, or production
 deployment is covered.
 
-The same source-built runtime has now been exercised against the extended
+The same final source-built runtime has been exercised against the extended
 native matrix recorded in
-`docs/reports/smartaccount-native-extended-matrix-20261030-authority/index.json`.
+`docs/reports/smartaccount-native-extended-matrix-20261031-final/index.json`.
 The receipt reports `PASS` for MultiSig composition, DailyLimit accounting,
 SessionKey execution, session scope admission, and TokenRestrictedHook policy;
-the six packaged native profiles also pass the profile packaging check. These
-receipts are bound to the current source-built runner and module-build receipt,
-report `publicNetworksTouched: false`, and retain the same bounded scope:
-shipped scenarios and persisted private-chain readback only. They do not prove
-cryptographic soundness, arbitrary-plugin liveness, full NeoVM/compiler
-refinement, or public deployment parity.
+the six packaged native profiles also pass the current profile packaging check
+after two reproducible builds with pinned `nccs` 3.9.1. These receipts are bound
+to the current source-built runner and module-build receipt, report
+`publicNetworksTouched: false`, and retain the same bounded scope: shipped
+scenarios and persisted private-chain readback only. They do not prove
+cryptographic soundness, MultiSig private-key independence, arbitrary-plugin
+liveness, full NeoVM/compiler refinement, or public deployment parity.
 
-The current native authority-admission profile remains ABI 2. The source-built
-module receipt is
-`docs/reports/smartaccount-native-module-build-20261030-authority.json`, and
-the successful source-built runner receipt is
-`docs/reports/smartaccount-native-runner-build-20261030-authority2.json`.
-The earlier failed runner receipt is retained as failure evidence and must not
-be used as current provenance.
+The current native authority-admission profile remains ABI 2. The final
+source-built runner receipt is
+`docs/reports/smartaccount-native-runner-build-20261031.json`. It binds core
+`0b81b25601ba7e2ec0b0d9b9cb0ab79ed809af03`, two byte-identical clean builds,
+104 runtime files, and 50 dependency packages. The earlier 2026-10-30 module
+and runner receipts remain historical evidence for their recorded source set
+and must not be used as current provenance.
+
+Separately, the ordinary AA protocol suite was rerun end to end with the same
+source-built NeoExpress runtime. The current receipt at
+`docs/reports/aa-neoexpress-validation-20261031.json` reports `PASS` and is
+release-evidence eligible for the private chain: 25 deployed artifacts
+(24 local artifacts plus the sibling `NeoDIDRegistry`), 15 scenarios, 135
+persisted transactions (132 HALT and 3 FAULT), 48 expected negative cases
+(45 refused before persistence), 132 on-chain assertions, and 25 byte-identical
+RPC NEF readbacks with matching checksums and semantically equal manifests.
+The source-to-artifact-to-chain join at
+`docs/reports/aa-private-artifact-provenance-20261031.json` compares all 80
+current release artifacts with a fresh build and joins the 24 local artifacts
+to their deployed bytes. The run reports `publicNetworksTouched: false` and
+does not establish public deployment or public artifact parity.
+
+The platform-account owner-rotation scenario uses the final source-built
+runtime to verify delayed registrar activation, rejection of cancellation by a
+stranger, current-owner cancellation, rejection of early confirmation,
+rejection of confirmation without the proposed new owner's witness, proposal
+and cancellation events, persistence of the rotated owner, clearing of the
+pending record, and preservation of the proxy address. This is private-chain
+evidence for the shipped source; public ABI migration and public deployment
+readback remain pending.
+
+That receipt now includes a real ephemeral secp256k1 path for
+`Web3AuthVerifier`: account registration with a 65-byte uncompressed public
+key, a successful EIP-712-style UserOperation, retarget and foreign-key
+rejection with unchanged nonce, and direct 32-byte ERC-1271 digest validation
+in both 65-byte recoverable and 64-byte EIP-2098 compact forms, with a
+different-digest negative case. This exercises the shipped
+NeoVM/CryptoLib path, not a hosted Web3Auth OAuth ceremony. The Web3Auth
+ERC-1271 direct-digest path requires `HF_Huyao` or later. The pre-Huyao compatibility
+implementation does not enforce canonical `r`/`s` bounds and is outside the
+reviewed deployment profile.
+
+The NeoExpress receipt is also source-runtime-bound: it records the PASS
+source-build receipt hash, the three source commits, the 104-file runtime map
+matched before and after execution, the `neoxp.dll` hash and the wrapper hash,
+while explicitly setting `pathsIncluded: false`. This binds the chain run to
+the reviewed runner build without publishing host paths.
+
+A host-side discovery run of
+`python3 -m unittest discover -s formal/refinement -p 'test_*.py'` completed
+790 tests with 50 environment-gated skips and no failures on 2026-10-31. The
+skips are not counted as proof, and this discovery run does not replace the
+fail-closed closure gate or move `implementationVerified`.
 
 The remaining boundary is explicit: ordinary public v3 still calls verifiers
 through `System.Contract.Call` without an independent child gas cap. Public
@@ -162,9 +211,12 @@ host receipt. It ran immutable image
 with the same exact TLA jar pin. The image build used the reviewed cached
 `/tmp/tla2tools.jar` through the existing `TLA_JAR_URL` argument and a temporary
 localhost server, which was stopped after the build. The default GitHub release
-URL currently serves different bytes and fails the unchanged SHA-256 guard;
+URL at that time served different bytes and failed the unchanged SHA-256 guard;
 this run does not claim a successful rebuild from that mutable URL. Neither the
-Dockerfile nor wrapper was modified to bypass the pin. The build-input and
+Dockerfile nor wrapper was modified to bypass the pin. The 2026-10-30 refresh
+reviews the official `fc6878c6...` asset digest, updates the declared pin, and
+rebuilds the image; this does not retroactively alter the historical receipt.
+The build-input and
 native-contract cleanup evidence is
 [`aa-formal-container-build-20261013.json`](reports/aa-formal-container-build-20261013.json)
 (SHA-256 `d17b6b6d61568bdad038adf19baa3615d7fce00f1fad9fa9de82cda1e9891a8c`).
@@ -837,7 +889,8 @@ models under `verified/` for its own `verify.sh`.
 
 ### Source-pin refresh after the rename and the headroom assertion
 
-`formal/source-lock.json` pins 59 source files. Thirty-five of those pins were
+`formal/source-lock.json` currently pins 61 source files. The historical
+rename refresh below pinned 59 source files. Thirty-five of those pins were
 stale against the working tree and `formal/verify.py` failed closed at
 `Source drift: Directory.Build.props` before running any Coq or TLC lane. The
 pins were refreshed only after classifying every one of the 35:
@@ -960,7 +1013,10 @@ threshold-supported; this remains separate from concrete callback refinement.
 Its lists and callback fields are abstract values. The concrete protection against a
 child mutating another child's arguments or result depends on the implementation's
 deep snapshots and the NeoVM regression vectors; the model does not prove serialization
-or reference-isolation behavior.
+or reference-isolation behavior. `MultiHook` applies the same result-snapshot boundary
+to each leaf post-hook, and a dedicated NeoVM vector verifies that one hook cannot change
+the business result observed by the next; this remains runtime evidence, not a formal
+serialization or callback-refinement proof.
 The local runtime suite does check the concrete session-key ordering rule:
 after `clearSessionKey` executes, a later `validateSignature` faults with no
 active key, and the clear emits `SessionKeyRevoked`. This does not cancel a
@@ -1164,8 +1220,8 @@ The automatic gate was retried on 2026-10-05 with the installed NeoExpress
 not release evidence: it lacks the bounded-call syscall and faults with
 `KeyNotFoundException` for the `System.Contract.CallWithGasLimit` interop hash.
 The full run was then repeated with the matching private NeoExpress
-3.10.1.20+59ee6e2d43 build. It passed all 14 scenarios, and the current
-release-eligible receipt is
+3.10.1.20+59ee6e2d43 build. It passed all 14 scenarios, and the
+release-eligible receipt for that dated run was
 `docs/reports/aa-neoexpress-validation-20261006.json`; the equivalent callback
 fault wording from that runner is normalized by the validator without widening
 any other expected-fault match.
@@ -1198,8 +1254,8 @@ not an established deployed-contract exploit. The provenance suite passes
 suite was also rerun with 1,453 passes. Detailed scope and source hashes are
 in `docs/reports/aa-parser-audit-20261006.json`.
 
-The current AA solution test run passed **368/368** with the sibling artifact
-supplied. In a standalone checkout it passes **366/368** and explicitly skips
+The current AA solution test run passed **571/571** with the sibling artifact
+supplied. In a standalone checkout it passes **569/571** and explicitly skips
 the two DID cases; the two modes remain intentionally distinct.
 
 The historical 2026-09-21 standalone checkout without the sibling `NeoDIDRegistry` artifact passed

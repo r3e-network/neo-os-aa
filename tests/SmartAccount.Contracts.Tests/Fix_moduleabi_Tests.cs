@@ -1,6 +1,9 @@
+using System.IO;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
+using Neo.SmartContract.Manifest;
 using Neo.SmartContract.Testing.Exceptions;
 
 namespace SmartAccount.Contracts.Tests;
@@ -84,7 +87,14 @@ public class Fix_ModuleAbi_Tests
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccountV3");
-        UInt160 verifier = fx.Deploy("MockVerifierCore");
+        string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+        string verifierDir = Path.Combine(root, "contracts", "bin", "v3", "verifiers");
+        byte[] nef = File.ReadAllBytes(Path.Combine(verifierDir, "NeoNativeVerifier.nef"));
+        ContractManifest manifest = ContractManifest.Parse(
+            File.ReadAllText(Path.Combine(verifierDir, "NeoNativeVerifier.manifest.json")));
+        manifest.Abi.Methods = manifest.Abi.Methods.Where(method =>
+            method.Name is not ("supportsMessageSignatures" or "isValidSignature")).ToArray();
+        UInt160 verifier = fx.DeployArtifact(nef, manifest.ToJson().ToString(), wallet);
 
         UInt160 account = fx.CallUInt160(
             wallet,
@@ -316,8 +326,8 @@ public class Fix_ModuleAbi_Tests
         fx.AdvanceTime(TimeSpan.FromDays(1));
         fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
 
-        // Public V3 rejects duplicate child identities; signer-domain uniqueness belongs
-        // to the native profile and is covered by that profile's state-machine suite.
+        // Root provisioning may precede leaf key configuration. Duplicate signer
+        // domains are rejected when validating or posting an execution instead.
         object[] invalidRootArgs = { account, new UInt160[] { child, child }, 2 };
         Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
         var failedRootProposedAt = fx.CallInteger(wallet, "getPendingVerifierCallTime", account);
