@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>Neo.UnitTests</AssemblyName>
+    <RootNamespace>Neo.UnitTests</RootNamespace>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <MSTestAnalysisMode>Recommended</MSTestAnalysisMode>
+    <NeoTestsRoot Condition="'$(NeoTestsRoot)' == ''">$(MSBuildThisFileDirectory)../../../../../neo-native-core/tests/Neo.UnitTests</NeoTestsRoot>
+    <NeoSourceRoot Condition="'$(NeoSourceRoot)' == ''">$(MSBuildThisFileDirectory)../../../../../neo-native-core/src</NeoSourceRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(NeoTestsRoot)/**/*.cs"
+             Exclude="$(NeoTestsRoot)/SmartContract/Native/UT_AccountManagement*.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountModulePolicy.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountProtocol.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountEnvelope.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountState.cs" />
+    <Compile Include="*.cs" />
+    <Compile Include="$(NeoTestsRoot)/../AssemblyInfo.cs" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(NeoTestsRoot)/SmartContract/Manifest/TestFile/**/*" Link="SmartContract/Manifest/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NeoTestsRoot)/SmartContract/Native/TestFile/**/*"
+          Exclude="$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-envelope-v2.json;$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-authorization-v2.json;$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-state-v2.json"
+          Link="SmartContract/Native/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="TestFile/**/*" Link="SmartContract/Native/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NeoTestsRoot)/GasTests/Fixtures/**/*" Link="GasTests/Fixtures/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NeoTestsRoot)/test.config.json" Link="test.config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka.TestKit" Version="1.5.70" />
+    <PackageReference Include="Akka.TestKit.MSTest" Version="1.5.67" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="MSTest" Version="4.3.2" />
+    <PackageReference Include="Namotion.Reflection" Version="3.5.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../core/Neo.csproj" />
+    <ProjectReference Include="$(NeoSourceRoot)/Neo.Extensions/Neo.Extensions.csproj" />
+  </ItemGroup>
+</Project>
