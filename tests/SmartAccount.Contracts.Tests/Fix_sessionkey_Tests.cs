@@ -153,16 +153,38 @@ public class Fix_SessionKey_Tests
     }
 
     [TestMethod]
-    public void BackupOwner_CanConfigureAndClearSessionKeyDirectly()
+    public void DirectSessionKeyConfiguration_IsRejectedEvenForBackupOwner()
     {
         Harness h = new();
         using P256SessionKey key = new();
         UInt160 verifier = h.DeployVerifier();
 
-        h.SetSessionKeyDirect(verifier, key.CompressedPublicKey);
+        // Audit fix M-1: the backup-owner direct-call bypass is removed. setSessionKey /
+        // clearSessionKey only accept the bound AA core as their caller (the 24h
+        // pending-call timelock path), so even the backup owner's own witness is
+        // rejected on a direct invocation.
+        TestException configureRejected = Assert.ThrowsExactly<TestException>(
+            () => h.SetSessionKeyDirect(verifier, key.CompressedPublicKey));
+        StringAssert.Contains(configureRejected.Message, "Unauthorized caller");
+        Assert.AreEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", AccountId));
+
+        TestException clearRejected = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(verifier, "clearSessionKey", AccountId));
+        StringAssert.Contains(clearRejected.Message, "Unauthorized caller");
+        Assert.AreEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", AccountId));
+    }
+
+    [TestMethod]
+    public void CoreMediatedConfigureAndClearSessionKey_StillWork()
+    {
+        Harness h = new();
+        using P256SessionKey key = new();
+        UInt160 verifier = h.DeployVerifier();
+
+        h.SetSessionKey(verifier, key.CompressedPublicKey, "transfer", spendingLimit: 1000);
         Assert.AreNotEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", AccountId));
 
-        h.Fx.CallVoid(verifier, "clearSessionKey", AccountId);
+        h.Fx.CallVoid(h.Core, "forward", verifier, "clearSessionKey", new object?[] { AccountId });
         Neo.VM.Types.Array state = h.Fx.SingleNotificationState(verifier, "SessionKeyRevoked");
         Assert.AreEqual(AccountId, (UInt160)Neo.SmartContract.Testing.Extensions.TestExtensions.ConvertTo(
             state[0], typeof(UInt160))!);
@@ -177,12 +199,14 @@ public class Fix_SessionKey_Tests
         UInt160 verifier = h.DeployVerifier();
         h.Fx.SetSigners(h.Attacker);
 
+        // Audit fix M-1: the direct path now rejects every caller (including the backup
+        // owner) with the same core-caller assertion the attacker sees.
         TestException configureRejected = Assert.ThrowsExactly<TestException>(
             () => h.SetSessionKeyDirect(verifier, key.CompressedPublicKey));
-        StringAssert.Contains(configureRejected.Message, "Backup owner witness required");
+        StringAssert.Contains(configureRejected.Message, "Unauthorized caller");
 
         TestException clearRejected = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(verifier, "clearSessionKey", AccountId));
-        StringAssert.Contains(clearRejected.Message, "Backup owner witness required");
+        StringAssert.Contains(clearRejected.Message, "Unauthorized caller");
     }
 }

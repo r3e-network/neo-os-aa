@@ -91,8 +91,13 @@ public class ContractTests
         return count;
     }
 
-    private static string ReadContractFile(string fileName) =>
-        File.ReadAllText(Path.Combine(ContractsDir, fileName));
+        // Contract source pins use "\n" line endings; the repository may be checked out
+        // with CRLF on Windows, so normalize every read before pattern matching.
+        private static string NormalizeLineEndings(string text) =>
+            text.Replace("\r\n", "\n").Replace("\r", "\n");
+
+        private static string ReadContractFile(string fileName) =>
+            NormalizeLineEndings(File.ReadAllText(Path.Combine(ContractsDir, fileName)));
 
     private static string ReadCombinedSource() =>
         string.Join("\n\n", SmartAccountFiles.Select(ReadContractFile));

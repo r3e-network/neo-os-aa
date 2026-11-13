@@ -34,12 +34,13 @@ public class MultiSigSdkVectorTests
         public UInt160[] Children { get; }
         public object?[] Args { get; }
         public BigInteger Deadline { get; }
-        public byte[][] Signatures { get; }
+        private readonly bool reuseSigner;
         private readonly P256SessionKey firstKey = new();
         private readonly P256SessionKey secondKey = new();
 
         public Harness(int threshold, bool reuseSigner = false)
         {
+            this.reuseSigner = reuseSigner;
             Core = Fx.Deploy("SmartAccountV3");
             Target = Fx.Deploy("MockTransferTarget");
             UInt160 first = Fx.Deploy("verifiers/SessionKeyVerifier", Core.ToArray());
@@ -58,20 +59,46 @@ public class MultiSigSdkVectorTests
             Fx.AdvanceTime(TimeSpan.FromHours(24));
             Fx.CallVoid(Core, "callVerifier", Account, "setConfig", configArgs);
             byte[] secondPublicKey = reuseSigner ? firstKey.CompressedPublicKey : secondKey.CompressedPublicKey;
-            // Each SessionKey child supports direct backup-owner configuration; no mock authority.
-            Fx.CallVoid(first, "setSessionKey", Account, firstKey.CompressedPublicKey, Target, "transfer", Fx.Now() + 600000, 100, "first child");
-            Fx.CallVoid(second, "setSessionKey", Account, secondPublicKey, Target, "transfer", Fx.Now() + 600000, 100, "second child");
+            // Audit fix M-1: each SessionKey child is configured through the core's timelocked
+            // callVerifierChild path (stage, 24h, confirm); direct child configuration is
+            // rejected. The key must outlive the two timelock advances below.
+            BigInteger sessionValidUntil = Fx.Now() + 25L * 24 * 60 * 60 * 1000;
+            ConfigureChildSessionKey(first, firstKey.CompressedPublicKey, sessionValidUntil);
+            ConfigureChildSessionKey(second, secondPublicKey, sessionValidUntil);
             UInt160 asset = Fx.CallUInt160(Core, "getProxyScriptHash", Account);
             Args = new object?[] { asset, Recipient, 25, null };
             Deadline = Fx.Now() + 600000;
-            byte[] payload1 = Fx.CallBytes(first, "getPayload", Account, Target, "transfer", Args, 0, Deadline);
-            byte[] payload2 = Fx.CallBytes(second, "getPayload", Account, Target, "transfer", Args, 0, Deadline);
+            byte[] payload1 = Fx.CallBytes(Children[0], "getPayload", Account, Target, "transfer", Args, 0, Deadline);
+            byte[] payload2 = Fx.CallBytes(Children[1], "getPayload", Account, Target, "transfer", Args, 0, Deadline);
             CollectionAssert.AreNotEqual(payload1, payload2, "The same operation must remain domain-separated by child verifier identity.");
-            Signatures = new[] { firstKey.Sign(payload1), reuseSigner ? firstKey.Sign(payload2) : secondKey.Sign(payload2) };
         }
 
-        public bool Validate(byte[] bundle) => Fx.CallBoolean(MultiSig, "validateSignature", Account,
-            RuntimeFixture.UserOp(Target, "transfer", Args, 0, Deadline, bundle));
+        public BigInteger Nonce() => Fx.CallInteger(Core, "getNonce", Account, 0);
+
+        /// <summary>Signs each child's canonical transfer payload at the given sequence.</summary>
+        public byte[][] SignChildren(BigInteger nonce)
+        {
+            byte[] payload1 = Fx.CallBytes(Children[0], "getPayload", Account, Target, "transfer", Args, nonce, Deadline);
+            byte[] payload2 = Fx.CallBytes(Children[1], "getPayload", Account, Target, "transfer", Args, nonce, Deadline);
+            return new[] { firstKey.Sign(payload1), reuseSigner ? firstKey.Sign(payload2) : secondKey.Sign(payload2) };
+        }
+
+        /// <summary>
+        /// Routes the bundle through the real core's executeUserOp. Direct
+        /// MultiSig.validateSignature invocations are rejected by the audit fix M-6
+        /// execution gate: only the core's execution context may validate.
+        /// </summary>
+        public bool Execute(byte[] bundle) => Fx.CallBoolean(Core, "executeUserOp", Account,
+            RuntimeFixture.UserOp(Target, "transfer", Args, Nonce(), Deadline, bundle));
+
+        private void ConfigureChildSessionKey(UInt160 child, byte[] pubKey, BigInteger validUntil)
+        {
+            object?[] config = { Account, pubKey, Target, "transfer", validUntil, 100, "child session key" };
+            Assert.IsFalse(Fx.CallBoolean(Core, "callVerifierChild", Account, child, "setSessionKey", config),
+                "The first callVerifierChild invocation must only stage the pending child call");
+            Fx.AdvanceTime(TimeSpan.FromHours(24));
+            Fx.CallVoid(Core, "callVerifierChild", Account, child, "setSessionKey", config);
+        }
 
         public byte[] Bundle(params byte[]?[] slots)
         {
@@ -92,36 +119,65 @@ public class MultiSigSdkVectorTests
     public void JavaScriptBundle_ThresholdTwoAcceptsOrderedProofsAndRejectsShiftedOrDuplicateProofs()
     {
         using Harness h = new(threshold: 2);
-        Assert.IsTrue(h.Validate(h.Bundle(h.Signatures[0], h.Signatures[1])));
-        Assert.IsFalse(h.Validate(h.Bundle(h.Signatures[1], h.Signatures[0])), "Moving valid proofs into different child slots must fail.");
-        Assert.IsFalse(h.Validate(h.Bundle(h.Signatures[0], h.Signatures[0])), "One child's proof cannot satisfy two independent keys.");
-        Assert.IsFalse(h.Validate(h.Bundle(h.Signatures[0], null)), "One proof cannot meet a two-child threshold.");
+        byte[][] proofs = h.SignChildren(h.Nonce());
+        Assert.IsTrue(h.Execute(h.Bundle(proofs[0], proofs[1])));
+
+        // Every rejected bundle faults at the current sequence without consuming it.
+        byte[][] next = h.SignChildren(h.Nonce());
+        TestException shifted = Assert.ThrowsExactly<TestException>(() =>
+            h.Execute(h.Bundle(next[1], next[0])));
+        StringAssert.Contains(shifted.Message, "Verifier rejected signature");
+
+        TestException duplicate = Assert.ThrowsExactly<TestException>(() =>
+            h.Execute(h.Bundle(next[0], next[0])));
+        StringAssert.Contains(duplicate.Message, "Verifier rejected signature");
+
+        TestException partial = Assert.ThrowsExactly<TestException>(() =>
+            h.Execute(h.Bundle(next[0], null)));
+        StringAssert.Contains(partial.Message, "Verifier rejected signature");
+
+        Assert.AreEqual(BigInteger.One, h.Nonce(), "Rejected bundles must not consume the sequence.");
     }
 
     [TestMethod]
     public void JavaScriptBundle_ReusedSignerAcrossChildrenCannotMeetThreshold()
     {
         using Harness h = new(threshold: 2, reuseSigner: true);
+        byte[][] proofs = h.SignChildren(h.Nonce());
         TestException failure = Assert.ThrowsExactly<TestException>(() =>
-            h.Validate(h.Bundle(h.Signatures[0], h.Signatures[1])));
+            h.Execute(h.Bundle(proofs[0], proofs[1])));
         StringAssert.Contains(failure.Message, "Duplicate signer domain");
+        Assert.AreEqual(BigInteger.Zero, h.Nonce(), "A rejected bundle must not consume the sequence.");
     }
 
     [TestMethod]
     public void JavaScriptBundle_ThresholdOnePreservesEmptyChildSlots()
     {
         using Harness h = new(threshold: 1);
-        Assert.IsTrue(h.Validate(h.Bundle(h.Signatures[0], null)));
-        Assert.IsTrue(h.Validate(h.Bundle(null, h.Signatures[1])));
-        Assert.IsFalse(h.Validate(h.Bundle(null, null)), "Empty slots are abstentions, not approval proofs.");
-        Assert.IsFalse(h.Validate(h.Bundle(null, h.Signatures[0])), "An empty earlier slot must not shift the remaining proof to another verifier.");
+        byte[][] first = h.SignChildren(h.Nonce());
+        Assert.IsTrue(h.Execute(h.Bundle(first[0], null)));
+
+        byte[][] second = h.SignChildren(h.Nonce());
+        Assert.IsTrue(h.Execute(h.Bundle(null, second[1])));
+
+        // Empty slots are abstentions, not approval proofs, and a proof placed in the
+        // wrong child slot must fail as well. Both faults leave the sequence untouched.
+        TestException empty = Assert.ThrowsExactly<TestException>(() => h.Execute(h.Bundle(null, null)));
+        StringAssert.Contains(empty.Message, "Verifier rejected signature");
+
+        byte[][] third = h.SignChildren(h.Nonce());
+        TestException shifted = Assert.ThrowsExactly<TestException>(() => h.Execute(h.Bundle(null, third[0])));
+        StringAssert.Contains(shifted.Message, "Verifier rejected signature");
+
+        Assert.AreEqual(new BigInteger(2), h.Nonce());
     }
 
     [TestMethod]
     public void JavaScriptBundle_ExecutesThroughRealCoreAndUpdatesBothChildSpendMeters()
     {
         using Harness h = new(threshold: 2);
-        byte[] bundle = h.Bundle(h.Signatures[0], h.Signatures[1]);
+        byte[][] proofs = h.SignChildren(0);
+        byte[] bundle = h.Bundle(proofs[0], proofs[1]);
         h.Fx.SetSigners(Recipient); // The backup owner does not sign this execution.
         object[] op = RuntimeFixture.UserOp(h.Target, "transfer", h.Args, 0, h.Deadline, bundle);
         Assert.IsTrue(h.Fx.CallBoolean(h.Core, "executeUserOp", h.Account, op));

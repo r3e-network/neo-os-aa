@@ -72,17 +72,24 @@ public class ExecuteUserOpRuntimeTests
         /// <summary>
         /// Deploys a SessionKeyVerifier bound to the real AA core, registers a wallet account
         /// using it, and authorizes <paramref name="key"/> for transfer calls on the mock target.
+        /// Audit fix M-1: session-key configuration goes through the core's timelocked
+        /// callVerifier path (stage, 24h, confirm); the verifier rejects direct calls.
         /// </summary>
         public UInt160 RegisterSessionKeyAccount(P256SessionKey key, out UInt160 verifier)
         {
             verifier = Fx.Deploy("verifiers/SessionKeyVerifier", Wallet.ToArray());
             UInt160 accountId = RegisterAccount(verifier, BackupOwner, EscapeTimelockSeconds);
 
-            BigInteger validUntil = Fx.Now() + 86_400_000; // 24h
-            Fx.CallVoid(verifier, "setSessionKey", new object?[]
+            // The session key must outlive the 24h pending-call timelock advance below.
+            BigInteger validUntil = Fx.Now() + 25L * 24 * 60 * 60 * 1000;
+            object?[] config =
             {
                 accountId, key.CompressedPublicKey, Target, "transfer", validUntil, BigInteger.Zero, "runtime suite"
-            });
+            };
+            Assert.IsFalse(Fx.CallBoolean(Wallet, "callVerifier", accountId, "setSessionKey", config),
+                "The first callVerifier invocation must only stage the pending session-key call");
+            Fx.AdvanceTime(TimeSpan.FromHours(24));
+            Fx.CallVoid(Wallet, "callVerifier", accountId, "setSessionKey", config);
             return accountId;
         }
 

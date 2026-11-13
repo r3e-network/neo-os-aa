@@ -330,10 +330,10 @@ public class ImplementationRefinementPublicRuntimeTests
         public UInt160 Account { get; }
         public Harness()
         {
-            VerifyArtifact("SmartAccountV3", "6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3",
-                "8b6bd9623ab4ed293ad9b6fda27402aaf3100d0b2a9d5c44658edb7e83fb0c29");
-            VerifyArtifact("AAPaymaster", "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a",
-                "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54");
+            VerifyArtifact("SmartAccountV3", "8faca1113b8b2e7386643b3086be372e15f67651e462c04e96dea49c16a18d28",
+                "2cabbdb72bb8be1f4062ff41ba3ecb1fe8a2a4f88c94d48d1efe1db4fcb9ae3c");
+            VerifyArtifact("AAPaymaster", "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1",
+                "a066faf3ee31e9c1e716bf26f0ccfab74f1c9639adacb1adab0502b20918ca54");
             VerifyArtifact("MockTransferTarget", "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
                 "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c");
             core = fx.Deploy("SmartAccountV3");

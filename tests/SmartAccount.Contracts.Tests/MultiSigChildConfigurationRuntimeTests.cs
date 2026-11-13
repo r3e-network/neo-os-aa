@@ -292,6 +292,9 @@ public class MultiSigChildConfigurationRuntimeTests
         Harness h = new();
         Assert.IsFalse(h.Stage(h.Web, "setPublicKey", h.KeyArgs()));
         byte[] before = h.Fx.CallBytes(h.Core, "getPendingVerifierCallHash", h.Account);
+        // Let the pending setPublicKey timelock elapse so SetTopology may replace
+        // the expired pending call; the pending slot stays single-occupancy (L-1).
+        h.Fx.AdvanceTime(Window);
         h.SetTopology(reverseOrder ? new[] { h.Native, h.Web } : new[] { h.Web, h.Native }, reverseOrder ? 1 : 2);
 
         Assert.IsFalse(h.Stage(h.Web, "setPublicKey", h.KeyArgs()));

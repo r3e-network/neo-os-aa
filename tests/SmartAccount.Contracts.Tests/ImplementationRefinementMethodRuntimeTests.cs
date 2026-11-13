@@ -28,9 +28,9 @@ public class ImplementationRefinementMethodRuntimeTests
 
     private sealed class Harness
     {
-        private const int MethodPc = 17762;
-        private const string NefHash = "6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3";
-        private const string ManifestHash = "8b6bd9623ab4ed293ad9b6fda27402aaf3100d0b2a9d5c44658edb7e83fb0c29";
+        private const int MethodPc = 19039;
+        private const string NefHash = "8faca1113b8b2e7386643b3086be372e15f67651e462c04e96dea49c16a18d28";
+        private const string ManifestHash = "2cabbdb72bb8be1f4062ff41ba3ecb1fe8a2a4f88c94d48d1efe1db4fcb9ae3c";
         private readonly RuntimeFixture fx = new();
         private readonly ContractState core;
         private readonly StorageKey key;
@@ -129,10 +129,10 @@ public class ImplementationRefinementMethodRuntimeTests
             {
                 Assert.AreEqual(VMState.HALT, state);
                 Assert.IsNotNull(methodContext.StaticFields);
-                Assert.AreEqual(StackItemType.Buffer, methodContext.StaticFields![38].Type,
+                Assert.AreEqual(StackItemType.Buffer, methodContext.StaticFields![40].Type,
                     "Actual readonly byte[] initializer uses a Buffer, not an invented integer/byte value");
-                CollectionAssert.AreEqual(new byte[] { 0x21 }, methodContext.StaticFields![38].GetSpan().ToArray(),
-                    "Original initializer must bind static slot 38 to the actual storage key");
+                CollectionAssert.AreEqual(new byte[] { 0x21 }, methodContext.StaticFields![40].GetSpan().ToArray(),
+                    "Original initializer must bind static slot 40 to the actual storage key");
                 value = app.ResultStack.Pop().GetInteger();
                 // Explicit outer persistence policy, matching pinned HALT-only
                 // application snapshot commit. Native block fee burning is absent.

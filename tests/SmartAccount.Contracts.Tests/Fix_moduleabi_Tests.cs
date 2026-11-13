@@ -354,4 +354,45 @@ public class Fix_ModuleAbi_Tests
             fx.Call(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
         StringAssert.Contains(stillInvalid.Message, "Duplicate verifier");
     }
+
+    [TestMethod]
+    public void PendingModuleCallCannotBeOverwrittenWhileInFlight()
+    {
+        RuntimeFixture fx = new();
+        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
+        UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
+        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,
+            Array.Empty<byte>(), UInt160.Zero, Owner, EscapeTimelockSeconds);
+        fx.SetSigners(Owner);
+        fx.CallVoid(wallet, "registerAccount", account, root, Array.Empty<byte>(),
+            UInt160.Zero, Owner, EscapeTimelockSeconds);
+
+        object[] rootArgs = { account, new UInt160[] { child }, 1 };
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", rootArgs));
+        fx.AdvanceTime(TimeSpan.FromDays(1));
+        fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
+
+        // Stage a leaf configuration, then try to stage a DIFFERENT module call while the
+        // original 24h window is still running. Audit fix L-1: the single pending slot must
+        // not be silently overwritten (which previously also reset the timelock).
+        object[] leafArgs = { account, new UInt160[] { Owner }, 1 };
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
+        var pendingAt = fx.CallInteger(wallet, "getPendingVerifierCallTime", account);
+
+        object[] otherRootArgs = { account, new UInt160[] { child, child }, 2 };
+        TestException overwritten = Assert.ThrowsExactly<TestException>(() =>
+            fx.Call(wallet, "callVerifier", account, "setConfig", otherRootArgs));
+        StringAssert.Contains(overwritten.Message, "Pending module call in flight");
+        Assert.AreEqual(pendingAt, fx.CallInteger(wallet, "getPendingVerifierCallTime", account),
+            "The rejected overwrite must not reset the original pending-call window.");
+        Assert.IsTrue(fx.CallBoolean(wallet, "hasPendingVerifierCall", account),
+            "The original pending call must survive the rejected overwrite attempt.");
+
+        // Once the original pending call expires, a different call may take the slot
+        // (expiry is the implicit cancellation; the slot itself stays single).
+        fx.AdvanceTime(TimeSpan.FromDays(1));
+        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", otherRootArgs));
+        Assert.IsTrue(fx.CallInteger(wallet, "getPendingVerifierCallTime", account) > pendingAt);
+    }
 }

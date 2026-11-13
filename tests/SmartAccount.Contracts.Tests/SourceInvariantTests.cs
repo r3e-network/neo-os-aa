@@ -34,7 +34,11 @@ public class SourceInvariantTests
 
     private static readonly string ContractsDir = Path.Combine(RepoRoot, "contracts");
 
-    private static string Read(string fileName) => File.ReadAllText(Path.Combine(ContractsDir, fileName));
+    // Source pins use "\n" line endings; the repository may be checked out with
+    // CRLF on Windows, so normalize every read before pattern matching.
+    private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n").Replace("\r", "\n");
+
+    private static string Read(string fileName) => NormalizeLineEndings(File.ReadAllText(Path.Combine(ContractsDir, fileName)));
     private static string ReadCombined() => string.Join("\n\n", new[]
     {
         "SmartAccount.Accounts.cs",
@@ -49,13 +53,13 @@ public class SourceInvariantTests
     }.Select(Read));
 
     private static string ReadPaymaster(string fileName) =>
-        File.ReadAllText(Path.Combine(ContractsDir, "paymaster", fileName));
+        NormalizeLineEndings(File.ReadAllText(Path.Combine(ContractsDir, "paymaster", fileName)));
 
     private static string ReadHook(string fileName) =>
-        File.ReadAllText(Path.Combine(ContractsDir, "hooks", fileName));
+        NormalizeLineEndings(File.ReadAllText(Path.Combine(ContractsDir, "hooks", fileName)));
 
     private static string ReadRepo(params string[] relativeSegments) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot }.Concat(relativeSegments).ToArray()));
+        NormalizeLineEndings(File.ReadAllText(Path.Combine(new[] { RepoRoot }.Concat(relativeSegments).ToArray())));
 
     private static Random Rng() => new(Seed);
 
@@ -362,8 +366,8 @@ public class SourceInvariantTests
         StringAssert.Contains(internalSource, "ConfigUpdateTimelockMs = 24L * 60 * 60 * 1000", "24 hours config timelock in Runtime.Time milliseconds");
 
         // Verify both verifier and hook use the same timelock constant
-        Assert.AreEqual(3, CountOccurrences(accountsSource, "ConfigUpdateTimelockMs"),
-            "ConfigUpdateTimelockMs should be used three times in accounts source (verifier + hook + module call replay)");
+        Assert.AreEqual(4, CountOccurrences(accountsSource, "ConfigUpdateTimelockMs"),
+            "ConfigUpdateTimelockMs should be used four times in accounts source (verifier + hook + module call replay + pending-call overwrite guard)");
 
         Assert.AreEqual(1, CountOccurrences(internalSource, "ConfigUpdateTimelockMs"),
             "ConfigUpdateTimelockMs should be defined once in internal source");

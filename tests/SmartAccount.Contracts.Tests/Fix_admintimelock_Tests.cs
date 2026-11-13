@@ -175,6 +175,54 @@ public class Fix_AdminTimelock_Tests
     }
 
     [TestMethod]
+    public void UpgradeLifecycle_EmitsProposedConfirmedAndCancelledEvents()
+    {
+        RuntimeFixture fx = new();
+        UInt160 wallet = fx.Deploy(WalletArtifact);
+        (byte[] nef, string manifest) = ReadArtifact(WalletArtifact);
+        byte[] nefHash = Sha256(nef);
+        byte[] manifestHash = Sha256(manifest);
+
+        // Audit fix M-3: proposeUpdate publishes the pinned artifact pair plus the exact
+        // timelock expiry so off-chain monitors can observe the upgrade window.
+        fx.CallVoid(wallet, "proposeUpdate", nefHash, manifestHash);
+        Neo.VM.Types.Array proposed = fx.SingleNotificationState(wallet, "ContractUpdateProposed");
+        CollectionAssert.AreEqual(nefHash, proposed[0].GetSpan().ToArray());
+        CollectionAssert.AreEqual(manifestHash, proposed[1].GetSpan().ToArray());
+        Assert.AreEqual(fx.Now() + 7L * 24 * 60 * 60 * 1000, proposed[2].GetInteger(),
+            "availableAt must be Runtime.Time + the 7-day upgrade window");
+
+        // update emits the pair that was actually applied.
+        fx.AdvanceTime(Window);
+        fx.CallVoid(wallet, "update", nef, manifest);
+        Neo.VM.Types.Array confirmed = fx.SingleNotificationState(wallet, "UpdateConfirmed");
+        CollectionAssert.AreEqual(nefHash, confirmed[0].GetSpan().ToArray());
+        CollectionAssert.AreEqual(manifestHash, confirmed[1].GetSpan().ToArray());
+        Assert.AreEqual(BigInteger.One, UpdateCounter(fx, wallet), "update applied after the window");
+    }
+
+    [TestMethod]
+    public void CancelUpdate_EmitsCancelledEventWithThePinnedHashes()
+    {
+        RuntimeFixture fx = new();
+        UInt160 wallet = fx.Deploy(WalletArtifact);
+        (byte[] nef, string manifest) = ReadArtifact(WalletArtifact);
+
+        fx.CallVoid(wallet, "proposeUpdate", Sha256(nef), Sha256(manifest));
+        fx.CallVoid(wallet, "cancelUpdate");
+        Neo.VM.Types.Array cancelled = fx.SingleNotificationState(wallet, "UpdateCancelled");
+        CollectionAssert.AreEqual(Sha256(nef), cancelled[0].GetSpan().ToArray());
+        CollectionAssert.AreEqual(Sha256(manifest), cancelled[1].GetSpan().ToArray());
+
+        // Cancelling with no pending proposal still emits the event, with zero hashes —
+        // indexers can converge on the canonical ordering of the command.
+        fx.CallVoid(wallet, "cancelUpdate");
+        Neo.VM.Types.Array empty = fx.SingleNotificationState(wallet, "UpdateCancelled");
+        CollectionAssert.AreEqual(new byte[32], empty[0].GetSpan().ToArray());
+        CollectionAssert.AreEqual(new byte[32], empty[1].GetSpan().ToArray());
+    }
+
+    [TestMethod]
     public void ProposeAndUpdate_RequireAdminWitness()
     {
         RuntimeFixture fx = new();

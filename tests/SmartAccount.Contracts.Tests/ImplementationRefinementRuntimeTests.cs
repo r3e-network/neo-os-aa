@@ -19,15 +19,15 @@ namespace SmartAccount.Contracts.Tests;
 [TestClass]
 public class ImplementationRefinementRuntimeTests
 {
-    private const string NefHash = "6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3";
+    private const string NefHash = "8faca1113b8b2e7386643b3086be372e15f67651e462c04e96dea49c16a18d28";
     private const string RegionHex = "11116bb99f74106b6a11ce9fba6c78a09e756d78b976";
-    private const int MethodEntry = 17762;
-    private const int RegionStart = 17872;
-    private const int RegionEnd = 17894;
-    private const int AssertionEnd = 17939;
+    private const int MethodEntry = 19039;
+    private const int RegionStart = 19149;
+    private const int RegionEnd = 19171;
+    private const int AssertionEnd = 19216;
     // The explicit VM-range guard is emitted after AssertionEnd; this is the
     // offset just past the reservation SETITEM/DROP it protects.
-    private const int ReservationEnd = 18023;
+    private const int ReservationEnd = 19300;
     private static readonly BigInteger VmMax = (BigInteger.One << 255) - 1;
     private static readonly BigInteger VmMin = -(BigInteger.One << 255);
     private static readonly BigInteger ChainFeeMax = 2 * (BigInteger)long.MaxValue;
@@ -157,7 +157,7 @@ public class ImplementationRefinementRuntimeTests
                 Assert.AreEqual(requested, result.Settled);
                 Assert.AreEqual(BigInteger.One, result.Flag);
                 Assert.AreEqual(reserved, result.Reserved);
-                Assert.IsFalse(result.Trace.Contains(17938), "Positive estimation must bypass real ABORTMSG");
+                Assert.IsFalse(result.Trace.Contains(19215), "Positive estimation must bypass real ABORTMSG");
             }
     }
 
@@ -171,7 +171,7 @@ public class ImplementationRefinementRuntimeTests
             Assert.AreEqual(BigInteger.Zero, arithmetic.Settled);
             Outcome assertion = Run(5, reserved, 10, AssertionEnd);
             Assert.IsTrue(assertion.Fault);
-            Assert.AreEqual(17938, assertion.Pc, "The actual ABORTMSG must execute, not a host-side substitute");
+            Assert.AreEqual(19215, assertion.Pc, "The actual ABORTMSG must execute, not a host-side substitute");
             Assert.AreEqual(reserved, assertion.Reserved);
         }
         Assert.IsTrue(Run(1, 0, 0, AssertionEnd).Fault, "Zero requests fail the same actual suffix");
@@ -188,7 +188,7 @@ public class ImplementationRefinementRuntimeTests
         // The overflow is rejected by the explicit margin assertion, before the
         // signed-256 ADD is reached, so the failure is a contract rejection and
         // not a CLR integer-size exception escaping the accumulator.
-        Assert.AreEqual(18011, update.Pc, "The margin ABORTMSG must reject the overflow before the ADD");
+        Assert.AreEqual(19288, update.Pc, "The margin ABORTMSG must reject the overflow before the ADD");
         Assert.AreEqual(VmMax, update.Reserved, "Rejection occurs before SETITEM");
         Outcome boundary = Run(0, VmMax - 1, 1, ReservationEnd);
         Assert.IsFalse(boundary.Fault);
@@ -200,9 +200,9 @@ public class ImplementationRefinementRuntimeTests
     public void SignedInputsOutsideProofDomainHaveConcreteOverflowAndNegativeBehavior()
     {
         foreach (var (cost, reserved, requested, pc) in new[] {
-            (VmMin, BigInteger.One, BigInteger.One, 17876),
-            (VmMax, VmMin, BigInteger.One, 17883),
-            (-BigInteger.One, BigInteger.Zero, VmMax, 17887) })
+            (VmMin, BigInteger.One, BigInteger.One, 19153),
+            (VmMax, VmMin, BigInteger.One, 19160),
+            (-BigInteger.One, BigInteger.Zero, VmMax, 19164) })
         {
             Outcome result = Run(cost, reserved, requested);
             Assert.IsTrue(result.Fault);
@@ -228,17 +228,17 @@ public class ImplementationRefinementRuntimeTests
     public void ValidOpcodeMutationsAreExecutedAndSemanticallyRejected()
     {
         foreach (var (pc, opcode, cost, reserved, requested) in new[] {
-            (17875, OpCode.MAX, 5, 0, 10),
-            (17876, OpCode.ADD, 5, 0, 10),
-            (17883, OpCode.ADD, 11, 2, 13),
-            (17884, OpCode.MIN, 5, 2, 10),
-            (17887, OpCode.ADD, 5, 0, 10),
-            (17888, OpCode.SUB, 0, 0, 7),
-            (17892, OpCode.MAX, 5, 0, 10),
-            (17881, OpCode.PUSH2, 5, 0, 10),
-            (17893, OpCode.STLOC5, 5, 0, 10),
-            (17891, OpCode.LDLOC3, 7, 2, 3),
-            (17879, OpCode.LDLOC4, 5, 0, 10) })
+            (19152, OpCode.MAX, 5, 0, 10),
+            (19153, OpCode.ADD, 5, 0, 10),
+            (19160, OpCode.ADD, 11, 2, 13),
+            (19161, OpCode.MIN, 5, 2, 10),
+            (19164, OpCode.ADD, 5, 0, 10),
+            (19165, OpCode.SUB, 0, 0, 7),
+            (19169, OpCode.MAX, 5, 0, 10),
+            (19158, OpCode.PUSH2, 5, 0, 10),
+            (19170, OpCode.STLOC5, 5, 0, 10),
+            (19168, OpCode.LDLOC3, 7, 2, 3),
+            (19156, OpCode.LDLOC4, 5, 0, 10) })
         {
             Outcome original = Run(cost, reserved, requested);
             Assert.IsFalse(original.Fault);

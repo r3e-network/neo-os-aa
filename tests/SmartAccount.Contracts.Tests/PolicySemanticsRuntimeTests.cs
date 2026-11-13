@@ -196,7 +196,15 @@ public class PolicySemanticsRuntimeTests
         }
         else
         {
-            fx.CallVoid(verifier, "setSessionKey", account, key.CompressedPublicKey, token, "transfer", fx.Now() + 600000, 100, "real core");
+            // Audit fix M-1: session-key configuration is routed through the core's 24h
+            // pending-call timelock; the verifier no longer accepts direct configuration.
+            object?[] configuration =
+            {
+                account, key.CompressedPublicKey, token, "transfer", fx.Now() + 25L * 24 * 60 * 60 * 1000, 100, "real core"
+            };
+            Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setSessionKey", configuration));
+            fx.AdvanceTime(System.TimeSpan.FromHours(24));
+            fx.CallVoid(wallet, "callVerifier", account, "setSessionKey", configuration);
         }
         fx.SetSigners(Merchant); // The backup owner is absent; the configured verifier authorizes.
         BigInteger nonce = subscription ? SubscriptionNonce() : BigInteger.Zero;
@@ -218,6 +226,29 @@ public class PolicySemanticsRuntimeTests
         Assert.AreEqual(BigInteger.One, fx.CallInteger(wallet, "getNonce", account, nonce >> 64));
         Assert.IsFalse(fx.CallBoolean(wallet, "isExecutionActive", account));
         if (!subscription) Assert.AreEqual(new BigInteger(30), fx.CallInteger(verifier, "getSpentAmount", account));
+    }
+
+    [TestMethod]
+    public void SessionKey_LoweredCapRejectsZeroValueOperationOnceOverspent()
+    {
+        Harness h = new();
+        using P256SessionKey key = new();
+        UInt160 verifier = Session(h, key, cap: 100);
+        h.Fx.Call(h.Token, "executeVerifier", h.Core, verifier, Account, Sign(h, verifier, key, h.Args(30, 30, true)));
+        Assert.AreEqual(new BigInteger(30), h.Fx.CallInteger(verifier, "getSpentAmount", Account));
+
+        // Audit fix M-2: lower the cap below what is already spent. A zero-value
+        // operation must still be rejected — the ordinary build previously only
+        // enforced the cap when operationValue > 0, letting a lowered cap be bypassed
+        // by zero-value calls (e.g. approve).
+        h.Fx.AdvanceTime(System.TimeSpan.FromHours(24)); // key-rotation cooldown
+        h.Forward(verifier, "setSessionKey", Account, key.CompressedPublicKey, h.Token, "transfer", h.Fx.Now() + 600000, 20, "lowered cap");
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.Call(h.Token, "executeVerifier", h.Core, verifier, Account, Sign(h, verifier, key, h.Args(0, 0, true))));
+        StringAssert.Contains(rejected.Message, "Session key spending limit exceeded");
+        Assert.AreEqual(new BigInteger(30), h.Fx.CallInteger(verifier, "getSpentAmount", Account),
+            "The rejected zero-value operation must not change the spent amount.");
     }
 
     private static UInt160 Subscription(Harness h)
