@@ -658,6 +658,14 @@ as exactly 64 lowercase hexadecimal characters equal to the native contract's
 JSON Boolean. The latter is `true` only for a verifier using the composite receipt
 callbacks; verifier `supportsComposition()` MUST return the same value. Hooks
 MUST declare `false`; their independent hook-composition discovery is unchanged.
+A composite root MUST additionally declare its profile by name through
+`extra.smartAccount.compositeProfile` as a nonempty string; admission reads this
+manifest declaration and never hardcodes module contract names such as
+`MultiSigVerifier` or `MultiHook` in chain code. A composite verifier's
+declaration MUST agree with its `compositeVerifier` capability marker; a
+non-composite verifier MUST NOT declare a composite profile. Leaf modules
+MUST NOT publish dependencies, and a missing or empty declaration faults any
+dependency publication.
 Missing, mismatched or incorrectly typed declarations MUST fail admission. The
 packager computes the fingerprint from the canonical parameter JSON; it MUST NOT
 infer compatibility from a compiler label or silently supply an old fingerprint.
@@ -1582,6 +1590,12 @@ RecoveryExecuted(accountId, oldCustodyAddress, newCustodyAddress,
 AccountFrozen(accountId)
 AccountUnfrozen(accountId)
 UserOpExecuted(accountId, targetContract, method, nonce)
+ModuleCallPending(accountId, moduleType, module, method, matureAt,
+                 configurationNonce)
+ModuleCallSettled(accountId, moduleType, configurationNonce)
+ModuleCallCancelled(accountId, moduleType, configurationNonce)
+ModuleDependenciesChanged(accountId, moduleType, activeChildren,
+                          configurationNonce)
 ```
 
 The event field order and types MUST be published in the native manifest and
@@ -1607,6 +1621,10 @@ The normative event parameter types and order are:
 | `AccountFrozen` | `Hash160` |
 | `AccountUnfrozen` | `Hash160` |
 | `UserOpExecuted` | `Hash160, Hash160, String, Integer` |
+| `ModuleCallPending` | `Hash160, String, Hash160, String, Integer, Integer` |
+| `ModuleCallSettled` | `Hash160, String, Integer` |
+| `ModuleCallCancelled` | `Hash160, String, Integer` |
+| `ModuleDependenciesChanged` | `Hash160, String, Array, Integer` |
 
 Unknown-account queries for `getAccountAddress`, `getNonce`, and
 `getOperationDigest`, `getAuthorizationDomain`, and `getAuthorityEpoch` MUST fault.
@@ -1614,6 +1632,17 @@ Unknown-account queries for `getAccountAddress`, `getNonce`, and
 ABI value, invalid authority, stale delayed transition, missing module, blocked
 module, callback budget exhaustion, target fault, and wrong callback result
 type MUST fault and MUST preserve the outer application-state rollback rule.
+
+### Fees (provisional)
+
+Every native ABI method currently declares the same flat base CPU fee
+(32768 units before the execution-fee factor). This flat schedule is
+provisional: a differentiated per-method fee model remains an explicitly
+tracked open item (the "openGate" fee-model TODO) and MAY be revisited before
+mainnet activation. Fee values are not covered by the profile parameter digest,
+so revising the schedule does not invalidate any published vector, manifest
+identity or module admission; clients MUST read actual fees from the native
+manifest instead of hardcoding them.
 
 ## 14. Conformance vectors
 

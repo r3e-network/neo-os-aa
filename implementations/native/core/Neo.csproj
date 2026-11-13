@@ -18,17 +18,26 @@
     <NeoSourceRoot Condition="'$(NeoSourceRoot)' == ''">$(MSBuildThisFileDirectory)../../../../neo-native-core/src</NeoSourceRoot>
   </PropertyGroup>
 
+  <!-- The overlay consumes the pinned native core exclusively: every source
+       file (including the canonical SmartAccount native contract and its
+       runtime dispatch) is compiled straight out of $(NeoCoreRoot), so the
+       core repository stays the single source of truth and this project is a
+       thin, fork-free build wrapper. Both roots are regular MSBuild
+       properties and can be overridden by environment variables of the same
+       name (NeoCoreRoot / NeoSourceRoot). -->
   <ItemGroup>
     <Compile Include="$(NeoCoreRoot)/**/*.cs"
-             Exclude="$(NeoCoreRoot)/SmartContract/ApplicationEngine.Runtime.cs;$(NeoCoreRoot)/SmartContract/Native/NativeContract.cs;$(NeoCoreRoot)/SmartContract/Native/AccountManagement*.cs;$(NeoCoreRoot)/SmartContract/Native/SmartAccount*.cs" />
-    <Compile Include="Runtime/ApplicationEngine.Runtime.cs" />
-    <Compile Include="SmartAccount/*.cs" />
+             Exclude="$(NeoCoreRoot)/obj/**;$(NeoCoreRoot)/bin/**" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The core wordlist resources live outside this project directory, so the
+         manifest resource name must be pinned explicitly to the name the core's
+         generated Resources.Designer.cs looks up (Neo.Properties.Resources). -->
     <EmbeddedResource Include="$(NeoCoreRoot)/Properties/Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <LogicalName>Neo.Properties.Resources.resources</LogicalName>
     </EmbeddedResource>
     <None Include="$(NeoCoreRoot)/Resources/**/*" />
   </ItemGroup>

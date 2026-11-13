@@ -5,7 +5,8 @@
     "configurationMethods": [
       "setConfig"
     ],
-    "compositeVerifier": false
+    "compositeVerifier": false,
+    "compositeProfile": ""
   },
   "WhitelistHook": {
     "project": "WhitelistHook.Native.csproj",
@@ -13,7 +14,8 @@
     "configurationMethods": [
       "setWhitelist"
     ],
-    "compositeVerifier": false
+    "compositeVerifier": false,
+    "compositeProfile": ""
   },
   "SessionKeyVerifier": {
     "project": "SessionKeyVerifier.Native.csproj",
@@ -22,7 +24,8 @@
       "setSessionKey",
       "clearSessionKey"
     ],
-    "compositeVerifier": false
+    "compositeVerifier": false,
+    "compositeProfile": ""
   },
   "DailyLimitHook": {
     "project": "DailyLimitHook.Native.csproj",
@@ -30,7 +33,8 @@
     "configurationMethods": [
       "setDailyLimit"
     ],
-    "compositeVerifier": false
+    "compositeVerifier": false,
+    "compositeProfile": ""
   },
   "TokenRestrictedHook": {
     "project": "TokenRestrictedHook.Native.csproj",
@@ -38,7 +42,8 @@
     "configurationMethods": [
       "setRestrictedToken"
     ],
-    "compositeVerifier": false
+    "compositeVerifier": false,
+    "compositeProfile": ""
   },
   "MultiSigVerifier": {
     "project": "MultiSigVerifier.Native.csproj",
@@ -46,6 +51,7 @@
     "configurationMethods": [
       "setConfig"
     ],
-    "compositeVerifier": true
+    "compositeVerifier": true,
+    "compositeProfile": "MultiSigVerifier"
   }
 }

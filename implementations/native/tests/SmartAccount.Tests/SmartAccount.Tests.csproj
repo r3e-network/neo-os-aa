@@ -17,19 +17,22 @@
     <NeoSourceRoot Condition="'$(NeoSourceRoot)' == ''">$(MSBuildThisFileDirectory)../../../../../neo-native-core/src</NeoSourceRoot>
   </PropertyGroup>
 
+  <!-- Like the core wrapper, the test wrapper consumes the pinned native core
+       repository exclusively: the canonical UT_SmartAccount* suite and every
+       fixture (including the three *-v2.json vector files) are compiled and
+       copied straight out of $(NeoTestsRoot), so this directory carries no
+       duplicated sources. NeoTestsRoot / NeoSourceRoot are regular MSBuild
+       properties and can be overridden by environment variables of the same
+       name. -->
   <ItemGroup>
     <Compile Include="$(NeoTestsRoot)/**/*.cs"
-             Exclude="$(NeoTestsRoot)/SmartContract/Native/UT_AccountManagement*.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountModulePolicy.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountProtocol.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountEnvelope.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountState.cs" />
-    <Compile Include="*.cs" />
+             Exclude="$(NeoTestsRoot)/obj/**;$(NeoTestsRoot)/bin/**" />
     <Compile Include="$(NeoTestsRoot)/../AssemblyInfo.cs" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="$(NeoTestsRoot)/SmartContract/Manifest/TestFile/**/*" Link="SmartContract/Manifest/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="$(NeoTestsRoot)/SmartContract/Native/TestFile/**/*"
-          Exclude="$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-envelope-v2.json;$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-authorization-v2.json;$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-state-v2.json"
-          Link="SmartContract/Native/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="TestFile/**/*" Link="SmartContract/Native/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NeoTestsRoot)/SmartContract/Native/TestFile/**/*" Link="SmartContract/Native/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NeoTestsRoot)/GasTests/Fixtures/**/*" Link="GasTests/Fixtures/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NeoTestsRoot)/test.config.json" Link="test.config.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

@@ -81,7 +81,7 @@ jobs:
         shell: bash
     env:
       # Updated only after the matching core changes have a reviewed immutable SHA.
-      NATIVE_CORE_COMMIT: ff422d940a4722c361c32398c6f28c00fb7f0693
+      NATIVE_CORE_COMMIT: 1cd0bbda5bbf303d69440aab43f2f660fa476f4b
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
     steps:

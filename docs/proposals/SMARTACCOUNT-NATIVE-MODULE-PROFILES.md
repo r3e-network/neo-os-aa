@@ -83,16 +83,32 @@ implementation, descriptor entry, packaging tests and private-chain validation.
 Compiler output is not hand-edited to hide an ABI mismatch. Native projects use
 source-level Array callback declarations. The current compiler only supports
 string-valued manifest extras, so the native packaging stage adds the structured
-`extra.smartAccount.configurationMethods`, `compositeVerifier` and exact profile
-parameter digest from checked-in descriptors and the single parameter source. It must reject missing, duplicate, safe, reserved or incorrectly
+`extra.smartAccount.configurationMethods`, `compositeVerifier`, `compositeProfile`
+and exact profile parameter digest from checked-in descriptors and the single
+parameter source. Composite roots declare their profile by name through
+`extra.smartAccount.compositeProfile`; chain code never hardcodes module
+contract names such as `MultiSigVerifier` or `MultiHook` for admission. It must reject missing, duplicate, safe, reserved or incorrectly
 account-scoped ABI methods. Both original compiler bytes and packaged manifest
 bytes, the descriptor, linked source files, compiler identity and packaging
 recipe must be hashed. The deployed code identity uses the packaged manifest.
 No opaque NEF rewriting is permitted. A fresh replay must reproduce every native
 artifact byte; ordinary-profile artifacts remain separately checked.
 
+M-5 output-directory convention: `contracts/build/` is the ordinary-track
+build output directory and is exclusively reserved for ordinary-profile
+artifacts (its byte pins live in `tests/localchain/expected-deployed.json`).
+Native-track packaged artifacts — the NEF plus the packaged manifest carrying
+the `extra.smartAccount` declarations — are produced only by the isolated
+native module build into its separate packaging output directory, and MUST
+NOT be copied into `contracts/build/`. A deployment loader therefore can never
+mistake an ordinary-profile build of the same source for a packaged native-v2
+module, and a native packaging failure can never be masked by an ordinary
+artifact sitting at the expected path.
+
 The descriptor must be a nonempty object with simple artifact and project names,
-an explicit role and a nonempty array of unique configuration names. Inputs must
+an explicit role, a nonempty array of unique configuration names and an explicit
+`compositeProfile` declaration (empty for leaf modules, the profile name for
+composite roots; a composite verifier must always declare its profile). Inputs must
 remain inside the contract tree; symbolic links and aliasing an existing output
 are rejected. A failed build or package operation must leave a failure receipt,
 never a success inherited from an earlier invocation. Empty descriptors and

@@ -14,11 +14,21 @@ namespace SmartAccount
 
         // ABI 2 policy state belongs to one recovery authority generation. The
         // leading tag makes prefix scans disjoint from old account-only keys.
+        // L-3: an entrypoint that touches several epoch-scoped slots should read
+        // the authority epoch once per invocation and reuse the encoded suffix
+        // through the epoch-parameterized overload, instead of paying the
+        // cross-contract getAuthorityEpoch call for every single key. The
+        // two-argument convenience overload keeps the fresh per-key read for
+        // entrypoints that touch only one slot.
         internal static byte[] AccountKey(byte[] prefix, UInt160 accountId)
         {
             object raw = Contract.Call(SmartAccount, "getAuthorityEpoch", CallFlags.ReadOnly, new object[] { accountId });
             ExecutionEngine.Assert(raw is BigInteger, "Invalid authority epoch type");
-            BigInteger epoch = (BigInteger)raw;
+            return AccountKey(prefix, accountId, (BigInteger)raw);
+        }
+
+        internal static byte[] AccountKey(byte[] prefix, UInt160 accountId, BigInteger epoch)
+        {
             ExecutionEngine.Assert(epoch >= 0 && epoch < (BigInteger.One << 64), "Invalid authority epoch range");
             byte[] encoded = new byte[8];
             for (int i = 0; i < 8; i++)
