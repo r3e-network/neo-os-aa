@@ -21,6 +21,9 @@ namespace SmartAccount
     [ContractPermission("*", "cancelMarketEscrow")]
     [ContractPermission("*", "settleMarketEscrow")]
     [ContractPermission("*", "transfer")]
+    // Confused-deputy closure: listing retirement reads the core's escrow marker so it can
+    // tell the core's own escrow unwind from an ordinary operation routed to this contract.
+    [ContractPermission("*", "isMarketEscrowActive")]
     public class AAAddressMarket : SmartContract
     {
         private static readonly byte[] Prefix_NextListingId = new byte[] { 0x01 };
@@ -316,6 +319,15 @@ namespace SmartAccount
             Listing listing = GetExistingListing(listingId);
             ExecutionEngine.Assert(Runtime.CallingScriptHash == listing.AAContract, "Only listed AA contract");
             ExecutionEngine.Assert(accountId != null && listing.AccountId == accountId, "Account mismatch");
+            // Confused-deputy closure: one core backs every virtual account, so "the caller is
+            // the listed AA contract" is also true for any account owner's ordinary user
+            // operation whose target is this entry. The core only retires a listing while
+            // unwinding its own escrow, and it clears its escrow marker before notifying the
+            // market; an account still marked as escrowed therefore cannot have its listing
+            // abandoned through an operation.
+            bool escrowActive = (bool)Contract.Call(
+                listing.AAContract, "isMarketEscrowActive", CallFlags.ReadOnly, new object[] { accountId! });
+            ExecutionEngine.Assert(!escrowActive, "Account is still locked in market escrow");
             if (listing.Status != StatusActive) return;
 
             listing.Status = StatusCancelled;

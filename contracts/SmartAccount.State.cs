@@ -343,6 +343,8 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginConfigurationAllowed(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
@@ -362,6 +364,8 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginConfigurationAllowed(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
@@ -381,6 +385,8 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginConfigurationAllowed(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             byte[] key = Helper.Concat(Prefix_MetadataUri, (byte[])accountId);
             if (metadataUri == null || metadataUri.Length == 0)

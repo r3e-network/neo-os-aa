@@ -51,6 +51,24 @@ namespace SmartAccount
         [DisplayName("AdminTransferCancelled")]
         public static event AccountOnlyDelegate OnAdminTransferCancelled = null!;
 
+        // Audit fix M-3: the contract-upgrade lifecycle previously mutated its pending
+        // proposal state silently. The three events below make propose/confirm/cancel
+        // observable to off-chain monitors, mirroring the admin-transfer events above.
+        public delegate void ContractUpdateProposedDelegate(UInt256 nefHash, UInt256 manifestHash, BigInteger availableAt);
+
+        [DisplayName("ContractUpdateProposed")]
+        public static event ContractUpdateProposedDelegate OnContractUpdateProposed = null!;
+
+        public delegate void ContractUpdateConfirmedDelegate(UInt256 nefHash, UInt256 manifestHash);
+
+        [DisplayName("UpdateConfirmed")]
+        public static event ContractUpdateConfirmedDelegate OnUpdateConfirmed = null!;
+
+        public delegate void ContractUpdateCancelledDelegate(UInt256 nefHash, UInt256 manifestHash);
+
+        [DisplayName("UpdateCancelled")]
+        public static event ContractUpdateCancelledDelegate OnUpdateCancelled = null!;
+
         public static void _deploy(object data, bool update)
         {
             if (update) return;
@@ -73,17 +91,23 @@ namespace SmartAccount
             Storage.Put(Storage.CurrentContext, Prefix_PendingUpdateNefHash, (byte[])nefHash);
             Storage.Put(Storage.CurrentContext, Prefix_PendingUpdateManifestHash, (byte[])manifestHash);
             Storage.Put(Storage.CurrentContext, Prefix_UpdateTimelock, Runtime.Time);
+            OnContractUpdateProposed(nefHash, manifestHash, Runtime.Time + MinUpgradeDelayMs);
         }
 
         /// <summary>Clears the pending upgrade proposal without applying it.</summary>
         public static void CancelUpdate()
         {
             ValidateAdmin();
+            ByteString? cancelledNefData = GetPendingUpdateNefHash();
+            UInt256 cancelledNef = cancelledNefData == null ? UInt256.Zero : (UInt256)cancelledNefData!;
+            ByteString? cancelledManifestData = GetPendingUpdateManifestHash();
+            UInt256 cancelledManifest = cancelledManifestData == null ? UInt256.Zero : (UInt256)cancelledManifestData!;
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
             Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix12);
             Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix13);
             Storage.Delete(Storage.CurrentContext, Prefix_UpdateTimelock);
+            OnUpdateCancelled(cancelledNef, cancelledManifest);
         }
 
         /// <summary>
@@ -109,17 +133,29 @@ namespace SmartAccount
             Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix12);
             Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix13);
             Storage.Delete(Storage.CurrentContext, Prefix_UpdateTimelock);
+            OnUpdateConfirmed((UInt256)pendingNef!, (UInt256)pendingManifest!);
             ContractManagement.Update(nef, manifest);
         }
 
         private static ByteString? GetPendingUpdateNefHash()
         {
+            // Audit fix L-5 (documentation): the 0x12 read fallback covers contracts
+            // deployed before the AA-D-01 re-keying, whose pending NEF hash still
+            // lives under LegacyStoragePrefix12. The pinned public artifact still
+            // runs the pre-split build (implementations/ordinary/profile.json:
+            // release boundary "PINNED-ARTIFACT-UPGRADE-REVIEW", abiMethodCount 90
+            // pinned vs 100 in source), so a legacy proposal can still be confirmed.
+            // Remove this fallback only after every public deployment has upgraded
+            // through a proposal written under Prefix_PendingUpdateNefHash (0x1A).
             ByteString? value = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
             return value ?? Storage.Get(Storage.CurrentContext, LegacyStoragePrefix12);
         }
 
         private static ByteString? GetPendingUpdateManifestHash()
         {
+            // Audit fix L-5 (documentation): same removal condition as the 0x12 fallback
+            // above — delete this 0x13 read only after the pinned artifact upgrade has
+            // been applied on every public deployment.
             ByteString? value = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
             return value ?? Storage.Get(Storage.CurrentContext, LegacyStoragePrefix13);
         }

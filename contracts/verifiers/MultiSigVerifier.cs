@@ -378,6 +378,9 @@ namespace SmartAccount.Verifiers
 #else
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
 #endif
             byte[] key = VerifierAuthority.AccountKey(Prefix_Config, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);

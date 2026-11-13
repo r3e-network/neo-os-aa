@@ -32,8 +32,10 @@ namespace SmartAccount.Verifiers
     /// </remarks>
     [DisplayName("WebAuthnVerifier")]
     [ContractPermission("*", "canConfigureVerifier")]
+    [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ManifestExtra("Description", "secp256r1 (P-256) signature verifier; no WebAuthn ceremony or origin binding")]
+    [ManifestExtra("Capabilities", "rawP256")]
     public class WebAuthnVerifier : SmartContract
     {
         private static readonly byte[] Prefix_AccountPubKey = new byte[] { 0x01 };
@@ -121,13 +123,16 @@ namespace SmartAccount.Verifiers
         /// </summary>
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
             ByteString pubKey = GetPublicKey(accountId);
             ExecutionEngine.Assert(pubKey.Length > 0, "No WebAuthn pubkey configured");
 
             ExecutionEngine.Assert(op.Signature != null && op.Signature.Length == 64, "Invalid signature length");
             ByteString signature = op.Signature!;
             byte[] payload = VerifierPayload.BuildPayload(accountId, op.TargetContract, op.Method, op.Args, op.Nonce, op.Deadline);
-            
+
             return CryptoLib.VerifyWithECDsa((ByteString)payload, (ECPoint)pubKey, signature, NamedCurveHash.secp256r1SHA256);
         }
     }

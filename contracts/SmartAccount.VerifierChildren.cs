@@ -26,6 +26,8 @@ namespace SmartAccount
         {
             AssertPluginConfigurationAllowed(accountId);
             AssertBackupOwner(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             ExecutionEngine.Assert(!IsExecutionActive(accountId), "Cannot configure child during execution");
             ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext,
                 Helper.Concat(Prefix_VerifierConfigContext, (byte[])accountId)) == null,

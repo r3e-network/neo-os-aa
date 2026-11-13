@@ -88,7 +88,7 @@ namespace SmartAccount.Verifiers
                 PeriodSeconds = periodSeconds,
                 LastChargeTime = 0
             };
-            
+
             byte[] key = Helper.Concat(Helper.Concat(Prefix_Subscription, (byte[])accountId), (byte[])subId);
             Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(config));
         }
@@ -98,6 +98,9 @@ namespace SmartAccount.Verifiers
         /// </summary>
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
             // Signature field acts as the Subscription ID being claimed by the merchant
             ByteString subId = op.Signature;
             byte[] key = Helper.Concat(Helper.Concat(Prefix_Subscription, (byte[])accountId), (byte[])subId);

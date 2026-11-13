@@ -79,7 +79,10 @@ namespace SmartAccount.Hooks
 #else
             HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
 #endif
-            if (opParams.Length < 1) return;
+            // Audit fix L-2: fail-closed. The core always passes the fixed 6-element
+            // operation shape (target, method, args, nonce, deadline, signature); a
+            // shorter array previously made this hook silently allow everything.
+            ExecutionEngine.Assert(opParams.Length == 6, "Invalid hook operation params");
             UInt160 targetContract = (UInt160)opParams[0];
 
             ExecutionEngine.Assert(IsWhitelisted(accountId, targetContract), "Target contract not in whitelist");

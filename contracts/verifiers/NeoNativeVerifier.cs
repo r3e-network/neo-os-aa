@@ -20,6 +20,7 @@ namespace SmartAccount.Verifiers
     [ManifestExtra("SmartAccountProfile", "native-v2")]
 #else
     [ContractPermission("*", "canConfigureVerifier")]
+    [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
 #endif
     [ManifestExtra("Description", "Neo N3 Native Witness Verifier Plugin")]
@@ -188,10 +189,14 @@ namespace SmartAccount.Verifiers
         }
 
         private static bool ValidateNativeWitnesses(UInt160 accountId)
+        {
 #else
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
-#endif
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+#endif
             byte[] key = VerifierAuthority.AccountKey(Prefix_AuthorizedSigners, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
             ExecutionEngine.Assert(data != null, "No NeoNativeVerifier config");

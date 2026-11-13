@@ -16,6 +16,9 @@ namespace SmartAccount
     /// </summary>
     [DisplayName("AAPaymaster")]
     [ContractPermission("0xd2a4cff31913016155e38e474a2c06d08be276cf", "transfer")]
+    // Confused-deputy closure: settlement reads the core's execution-in-flight marker so it
+    // can tell the sponsored unwind from an ordinary operation routed to this contract.
+    [ContractPermission("*", "isUserOpExecutionActive")]
     [ManifestExtra("Description", "On-Chain Paymaster for Sponsored Transactions on Neo N3 AA")]
     public class Paymaster : SmartContract
     {
@@ -310,6 +313,20 @@ namespace SmartAccount
             BigInteger amount)
         {
             PaymasterAuthority.ValidateCoreCaller();
+
+            // Confused-deputy closure: one core backs every virtual account, so "the caller is
+            // the AA core" is also true for any account owner's ordinary user operation whose
+            // target is this settlement entry. Settlement is only valid after a sponsored
+            // execution completed, which is exactly when the core reports no user operation in
+            // flight; the check is account-independent, so it also rejects a settlement that
+            // names another account while some operation executes. The core address is read
+            // through the internal authority helper rather than this contract's own ABI
+            // method so the settlement frame does not re-enter the "authorizedCore" entry.
+            UInt160 core = PaymasterAuthority.AuthorizedCore();
+            bool executionInFlight = (bool)Contract.Call(
+                core, "isUserOpExecutionActive", CallFlags.ReadOnly, new object[] { });
+            ExecutionEngine.Assert(!executionInFlight,
+                "Settlement must follow a completed sponsored execution");
 
             ExecutionEngine.Assert(sponsor != null && sponsor != UInt160.Zero, "Invalid sponsor");
             ExecutionEngine.Assert(relay != null && relay != UInt160.Zero, "Invalid relay");

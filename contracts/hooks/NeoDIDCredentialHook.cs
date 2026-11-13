@@ -107,7 +107,10 @@ namespace SmartAccount.Hooks
         public static void PreExecute(UInt160 accountId, object[] opParams)
         {
             HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
-            if (opParams.Length < 1) return;
+            // Audit fix L-2: fail-closed. The core always passes the fixed 6-element
+            // operation shape (target, method, args, nonce, deadline, signature); a
+            // shorter array previously made this hook silently allow everything.
+            ExecutionEngine.Assert(opParams.Length == 6, "Invalid hook operation params");
             UInt160 targetContract = (UInt160)opParams[0];
 
             string provider = ReadRequiredString(Prefix_RequiredProvider, accountId, targetContract);

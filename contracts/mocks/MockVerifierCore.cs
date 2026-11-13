@@ -164,6 +164,13 @@ namespace SmartAccount.Mocks
         [Safe]
         public static bool CanExecuteHook(UInt160 accountId, UInt160 caller, UInt160 hook) => true;
 
+        // The production core exposes this marker so protocol paymasters can close the
+        // confused-deputy window on settlement (settlement is only valid after a sponsored
+        // execution completed). This stub plays the core for paymaster harnesses, which call
+        // the marker during settlement, and reports that no user operation is in flight.
+        [Safe]
+        public static bool IsUserOpExecutionActive() => false;
+
         // Test-only dependency registry used to exercise the same composite cleanup
         // contract as SmartAccount without deploying a full account fixture.
         public static void SetVerifierDependencies(UInt160 accountId, UInt160[] children)

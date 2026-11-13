@@ -156,6 +156,8 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginInstallationAllowed(accountId, newHookId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             if (newHookId != UInt160.Zero)
@@ -199,6 +201,8 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginConfigurationAllowed(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
@@ -259,6 +263,8 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginInstallationAllowed(accountId, newVerifier);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
@@ -317,6 +323,8 @@ namespace SmartAccount
         {
             AssertBackupOwner(accountId);
             AssertPluginConfigurationAllowed(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 
@@ -743,6 +751,14 @@ namespace SmartAccount
             PendingModuleCall pending = (PendingModuleCall)StdLib.Deserialize(data!);
             if (pending.ModuleHash != moduleHash || pending.CallHash != callHash)
             {
+                // Audit fix L-1: a different pending call must no longer silently overwrite
+                // the stored one and restart its 24h window — that allowed a caller to keep
+                // swapping in a new call (or repeatedly resetting the timer) so a malicious
+                // change could perpetually ride just behind the confirmation horizon. The
+                // pending slot stays single: a replacement is only accepted once the previous
+                // pending call has expired (or the account escaped, which clears the slot).
+                ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + ConfigUpdateTimelockMs,
+                    "Pending module call in flight");
                 StorePendingModuleCall(pendingKey, moduleHash, callHash);
                 return false;
             }
@@ -761,6 +777,8 @@ namespace SmartAccount
             AssertPluginConfigurationAllowed(accountId);
             ExecutionEngine.Assert(IsMethodAllowed(method, AllowedVerifierMethods), "Verifier method not allowed");
             AssertBackupOwner(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             AccountState state = GetAccountState(accountId);
@@ -793,6 +811,8 @@ namespace SmartAccount
             AssertPluginConfigurationAllowed(accountId);
             ExecutionEngine.Assert(IsMethodAllowed(method, AllowedHookMethods), "Hook method not allowed");
             AssertBackupOwner(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
             AccountState state = GetAccountState(accountId);
