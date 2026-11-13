@@ -18,6 +18,14 @@ namespace SmartAccount
         // The active layout is globally unique; reads and deletes also cover the legacy 0x13 key.
         private static readonly byte[] Prefix_MarketEscrowCancelInitiated = new byte[] { 0x1D };
 
+        // Registered market-service allowlist. EnterMarketEscrow requires BOTH the
+        // caller to be the named market contract AND that market to be admin-registered
+        // here: caller identity alone cannot stop an arbitrary deployed contract from
+        // arming a fake escrow and settling the account to an attacker-chosen owner
+        // without payment. The core admin therefore vets market services explicitly,
+        // mirroring the market-side setAllowedAA allowlist of trusted AA cores.
+        private static readonly byte[] Prefix_MarketServiceRegistration = new byte[] { 0x29 };
+
         // Delay the backup owner must wait between requesting and forcing an escrow
         // cancellation. Gives an honest market its full opportunity to settle while still
         // guaranteeing the owner can always reclaim a stuck/abandoned escrow.
@@ -30,6 +38,11 @@ namespace SmartAccount
 
         [DisplayName("MarketEscrowOwnerCancelled")]
         public static event AccountOnlyDelegate OnMarketEscrowOwnerCancelled = null!;
+
+        public delegate void MarketServiceChangedDelegate(UInt160 marketContract, bool allowed);
+
+        [DisplayName("MarketServiceChanged")]
+        public static event MarketServiceChangedDelegate OnMarketServiceChanged = null!;
 
         /// <summary>
         /// Locks an account into a market-controlled escrow state so it can be sold atomically.
@@ -52,6 +65,13 @@ namespace SmartAccount
             // keeps the binding honest: the only on-chain path is the market's own CreateListing,
             // which calls in passing itself (Runtime.ExecutingScriptHash) as marketContract.
             ExecutionEngine.Assert(Runtime.CallingScriptHash == marketContract!, "Caller is not the market");
+
+            // Registration gate (Phase 1b service extraction): the market driving this
+            // escrow must be one the core admin registered. Listing on an unregistered
+            // market would hand that contract unconditional settle authority over the
+            // account without any payment guarantee, so the combination of an explicit
+            // registration and the caller identity keeps the escrow binding honest.
+            ExecutionEngine.Assert(IsRegisteredMarketService(marketContract!), "Market service not registered");
 
             byte[] marketKey = Helper.Concat(Prefix_MarketEscrowContract, (byte[])accountId);
             byte[] listingKey = Helper.Concat(Prefix_MarketEscrowListing, (byte[])accountId);
@@ -130,7 +150,9 @@ namespace SmartAccount
             // not locked out of InitiateEscape), and the seller's off-chain metadata URI.
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId));
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingPlatformOwnerRotation, (byte[])accountId));
+            // Phase 1b: a pre-sale pending platform owner rotation lives in the registrar
+            // service; its previousOwner no longer matches the buyer, so the core's
+            // staleness guard in ApplyPlatformAccountOwnerRotation can never confirm it.
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookCall, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_EscapeLastInitiated, (byte[])accountId));
@@ -228,6 +250,47 @@ namespace SmartAccount
             ByteString? value = Storage.Get(Storage.CurrentContext, key);
             if (value != null) return value;
             return Storage.Get(Storage.CurrentContext, Helper.Concat(LegacyStoragePrefix13, (byte[])accountId));
+        }
+
+        /// <summary>
+        /// Registers or unregisters a market service contract that may drive escrow locks.
+        /// Admin-gated: only the core admin vets which deployed markets are trustworthy
+        /// enough to hold settle authority over escrowed accounts. Registering an already
+        /// registered market with the same flag is idempotent; unregistering revokes the
+        /// market's ability to arm new escrows (existing escrows still unwind normally
+        /// through cancel/settle/force-cancel).
+        /// </summary>
+        public static void SetMarketService(UInt160 marketContract, bool allowed)
+        {
+            ValidateAdmin();
+            ExecutionEngine.Assert(marketContract != null && marketContract != UInt160.Zero, "Market contract required");
+            byte[] key = Helper.Concat(Prefix_MarketServiceRegistration, (byte[])marketContract!);
+            if (allowed)
+            {
+                ExecutionEngine.Assert(ContractManagement.GetContract(marketContract!) != null,
+                    "Market service not deployed");
+                Storage.Put(Storage.CurrentContext, key, new byte[] { 1 });
+            }
+            else
+            {
+                Storage.Delete(Storage.CurrentContext, key);
+            }
+            OnMarketServiceChanged(marketContract!, allowed);
+        }
+
+        /// <summary>Returns whether <paramref name="marketContract"/> is a registered market service.</summary>
+        [Safe]
+        public static bool IsMarketService(UInt160 marketContract)
+        {
+            if (marketContract == null || marketContract == UInt160.Zero) return false;
+            return IsRegisteredMarketService(marketContract);
+        }
+
+        private static bool IsRegisteredMarketService(UInt160 marketContract)
+        {
+            return Storage.Get(
+                Storage.CurrentContext,
+                Helper.Concat(Prefix_MarketServiceRegistration, (byte[])marketContract)) != null;
         }
 
         private static void AssertNoMarketEscrow(UInt160 accountId)

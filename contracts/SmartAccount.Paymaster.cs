@@ -9,8 +9,20 @@ namespace SmartAccount
     public partial class SmartAccount
     {
         // ========================================================================
-        // 8. Paymaster: Sponsored / Gasless Transactions
+        // 8. Paymaster: Sponsored / Gasless Transactions (service boundary, Phase 1b)
         // ========================================================================
+
+        // SERVICE BOUNDARY: this partial is the execution-side half of the sponsored
+        // path only. All settlement policy — sponsor deposits, per-op/daily/total
+        // budgets, spending counters and the relay payout — lives in the independent
+        // AAPaymaster service contract (contracts/paymaster/Paymaster.cs), which the
+        // core reaches through a single `settleReimbursement` callback after the user
+        // operation succeeded. The core deliberately retains one primitive here: the
+        // transaction-global reimbursement reservation below. It must be a single
+        // record shared across ALL paymasters settling in one transaction, so a
+        // per-paymaster move would re-open audit MEDIUM-a for multi-paymaster
+        // transactions (pinned by
+        // Fix_paymaster_Tests.SameTransaction_DifferentAccountsAndPaymastersShareCoreBudget).
 
         // Neo N3 on-chain paymaster flow:
         // 1. Relay calls ExecuteSponsoredUserOp with paymaster + sponsor details

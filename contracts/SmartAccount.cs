@@ -17,9 +17,28 @@ namespace SmartAccount
     /// Security-sensitive configuration changes are always gated by the backup owner witness.
     /// </remarks>
     [DisplayName("SmartAccountV3")]
-    // Wildcard permission is required because ExecuteUserOp dynamically dispatches
-    // Contract.Call(op.TargetContract, op.Method, ...) to arbitrary user-chosen contracts.
-    // All plugins (verifiers, hooks) use least-privilege manifests; only the core needs this.
+    // Outbound-permission audit (converged with the Phase 1b service extraction):
+    // the wildcard pair is required for exactly ONE axis — ExecuteUserOp
+    // dispatches Contract.Call(op.TargetContract, op.Method, ...) to arbitrary
+    // user-chosen contracts, so any fixed enumeration here would cap the
+    // protocol's user-op target surface. Every other outbound axis of this
+    // contract is fixed-shape and enumerated below for review:
+    //   * verifier callbacks       : validateSignature / postExecute on the
+    //                                account's configured verifier child
+    //   * hook callbacks           : preExecute / postExecute (maintenance-budget
+    //                                call) on the account's configured hook child
+    //   * module-call allowlists   : callVerifierChild / callHookChild execute a
+    //                                user-allowlisted (child, method) pair
+    //   * paymaster settlement     : authorizedCore (read) + settleReimbursement
+    //                                on the authorized AAPaymaster
+    //   * market escape path       : abandonListing on the bound AAAddressMarket
+    //   * registrar migration      : ingestPendingPlatformOwnerRotation on the
+    //                                authorized AAPlatformRegistrar
+    //   * governed self-upgrade    : ContractManagement.Update; user-op targets
+    //                                are explicitly barred from it
+    // The extracted service contracts (AAPaymaster, AAAddressMarket,
+    // AAPlatformRegistrar) and all plugins (verifiers, hooks) use
+    // least-privilege manifests; only the core needs the wildcard.
     [ContractPermission("*", "*")]
     [ManifestExtra("Description", "ERC-4337 Aligned Minimalist AA Engine for Neo N3")]
     public partial class SmartAccount : SmartContract
@@ -69,7 +88,6 @@ namespace SmartAccount
         // 0x19  Prefix_PlatformRegistrarTimelock   PlatformRegistrar.cs      bare
         // 0x1E  Prefix_PlatformAccountBinding     PlatformRegistrar.cs      +acctId
         // 0x1F  Prefix_PlatformProxyAccount      PlatformRegistrar.cs      +acctId(proxy)
-        // 0x20  Prefix_PendingPlatformOwnerRotation PlatformRegistrar.cs   +acctId
         //
         // 0x21  Prefix_TransactionReimbursement     Paymaster.cs              bare
         // 0x22  Prefix_OwnerOnlyRecovery            Escape.cs                 +acctId
@@ -79,14 +97,20 @@ namespace SmartAccount
         // 0x26  Prefix_ConfigurationContextDepth   Internal.cs               bare
         // 0x27  Prefix_AccountFrozen              Escape.cs                 +acctId
         // 0x28  Prefix_UserOperationInFlight      Internal.cs               bare
+        // 0x29  Prefix_MarketServiceRegistration   MarketEscrow.cs           +acctId(market)
+        // 0x2A  Prefix_PlatformOwnerRotationsMigrated PlatformRegistrar.cs   bare
         //
         // ACTIVE LAYOUT: every prefix byte is globally unique. StoragePrefixMapTests pins this map
         // against the source and rejects any future active prefix reuse.
         //
-        // LEGACY COMPATIBILITY: LegacyStoragePrefix12 and LegacyStoragePrefix13 below are used only
-        // to read and delete keys written by the pre-renumbered layout. They are not active prefixes,
+        // LEGACY COMPATIBILITY: LegacyStoragePrefix12, LegacyStoragePrefix13 and
+        // LegacyStoragePrefix20 below are used only
+        // to read and delete keys written by the pre-renumbered / pre-extraction layout. They are not active prefixes,
         // and all new writes use the unique 0x1A-0x1D allocation above. This keeps ContractManagement
         // upgrades state-compatible without carrying the old shape-based allocation forward.
+        // LegacyStoragePrefix20 (pending platform owner rotations) is read exactly once by
+        // MigratePlatformOwnerRotations, which moves those rows into the AAPlatformRegistrar
+        // service contract and then never reads them again.
         // =====================================================================================
 
         private static readonly byte[] LegacyStoragePrefix12 = new byte[] { 0x12 };

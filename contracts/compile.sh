@@ -63,19 +63,20 @@ pushd hooks >/dev/null
 popd >/dev/null
 
 # Test-support mocks. The contract test suite deploys all seven from bin/v3
-# (MockTransferTarget in the execution/market/escrow suites, PlatformRegistrarMock
-# in the platform-registrar suite, MockVerifierCore in the verifier suites, and
+# (MockTransferTarget in the execution/market/escrow suites, MockVerifierCore in the
+# verifier suites, and
 # MarkerOnlyModule, WrongLifecycleAbiModule and WrongHookLifecycleAbiModule in
 # the lifecycle-ABI negative suite, plus PolicyExecutionProbe for policy enforcement), so they
 # are always compiled: a clean checkout that skipped them could not run
 # `dotnet test`. bin/v3 is gitignored and the deploy scripts select artifacts by
 # name, so the mocks never reach a network. INCLUDE_VALIDATION_MOCKS is accepted
 # for compatibility with older runbooks but no longer changes the output.
+# Phase 1b: PlatformRegistrarMock was removed — the registrar suites now deploy the
+# real AAPlatformRegistrar service contract built below.
 echo "Compiling test-support mocks..."
 pushd mocks >/dev/null
 "$NCCS_BIN" ./MockVerifierCore.csproj -o ../bin/v3
 "$NCCS_BIN" ./MockTransferTarget.csproj -o ../bin/v3
-"$NCCS_BIN" ./PlatformRegistrarMock.csproj -o ../bin/v3
 "$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../bin/v3
 "$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../bin/v3
 "$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../bin/v3
@@ -85,6 +86,22 @@ popd >/dev/null
 echo "Compiling Market Contracts..."
 pushd market >/dev/null
 "$NCCS_BIN" ./AAAddressMarket.csproj -o ../bin/v3
+popd >/dev/null
+
+# Phase 1b: the paymaster service contract settles sponsored reimbursements and is
+# deployed by the runtime test suite from bin/v3 (AAPaymaster.nef), so it is built
+# alongside the other service contracts instead of relying on a manual nccs run.
+echo "Compiling Paymaster Contracts..."
+pushd paymaster >/dev/null
+"$NCCS_BIN" ./Paymaster.csproj -o ../bin/v3
+popd >/dev/null
+
+# Phase 1b: the platform registrar service owns pending platform-account owner
+# rotations and is deployed by the runtime test suite from bin/v3
+# (AAPlatformRegistrar.nef) with the core hash as deploy data.
+echo "Compiling Registrar Contracts..."
+pushd registrar >/dev/null
+"$NCCS_BIN" ./PlatformRegistrar.csproj -o ../bin/v3
 popd >/dev/null
 
 echo "Compiling Recovery Contracts..."

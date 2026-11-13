@@ -13,12 +13,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="PlatformRegistrarMock.cs" />
+    <Compile Include="PlatformRegistrarAuthority.cs" />
+    <Compile Include="PlatformRegistrar.cs" />
   </ItemGroup>
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
-    <Message Text="Compiling Neo smart contract: PlatformRegistrarMock.cs" Importance="high" />
-    <Exec Command="nccs ./PlatformRegistrarMock.csproj -o ../bin/v3" WorkingDirectory="$(ProjectDir)" />
+    <Message Text="Compiling Neo smart contract: PlatformRegistrar.cs" Importance="high" />
+    <Exec Command="nccs ./PlatformRegistrar.csproj -o ../bin/v3/registrar" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>
