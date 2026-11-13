@@ -55,7 +55,8 @@ def record(*values):
 def check_module_profile(manifest, composite):
     metadata = (manifest.get('extra') or {}).get('smartAccount') or {}
     require(type(metadata.get('abiVersion')) is int and metadata['abiVersion'] == 2 and
-            metadata.get('profileDigest') == DIGEST and metadata.get('compositeVerifier') is composite,
+            metadata.get('profileDigest') == DIGEST and metadata.get('compositeVerifier') is composite and
+            metadata.get('compositeProfile') == ('MultiSigVerifier' if composite else None),
             'Native module profile digest or composition capability mismatch')
 
 

@@ -26,7 +26,7 @@ class NativeBuildTests(unittest.TestCase):
         parameters.write_bytes((Path(__file__).resolve().parents[1] / "docs/proposals/smartaccount-native-profile-v2-parameters.json").read_bytes())
         (root / "Directory.Build.props").write_text("<Project><PropertyGroup><NeoSmartContractFrameworkVersion>3.10.1</NeoSmartContractFrameworkVersion><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><RestoreLockedMode>true</RestoreLockedMode></PropertyGroup></Project>")
         (root / "nuget.config").write_text('<configuration><packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources></configuration>')
-        (native / "profiles.json").write_text(json.dumps({"NeoNativeVerifier": {"project": "Verifier.Native.csproj", "role": "verifier", "configurationMethods": ["setConfig"], "compositeVerifier": False}}))
+        (native / "profiles.json").write_text(json.dumps({"NeoNativeVerifier": {"project": "Verifier.Native.csproj", "role": "verifier", "configurationMethods": ["setConfig"], "compositeVerifier": False, "compositeProfile": ""}}))
         project = '<Project><ItemGroup><Compile Include="../module.cs" /></ItemGroup></Project>'
         (native / "Verifier.Native.csproj").write_text(project)
         (native / "Second.Native.csproj").write_text(project)

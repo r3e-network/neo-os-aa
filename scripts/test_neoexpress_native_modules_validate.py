@@ -49,7 +49,7 @@ class NativeModuleMatrixTests(unittest.TestCase):
             parameters.parent.mkdir(parents=True)
             parameters.write_bytes((Path(__file__).resolve().parent.parent / parameters.relative_to(root)).read_bytes())
             profiles = {'NeoNativeVerifier': {'project': 'NeoNativeVerifier.Native.csproj', 'role': 'verifier',
-                'configurationMethods': ['setConfig'], 'compositeVerifier': False}}
+                'configurationMethods': ['setConfig'], 'compositeVerifier': False, 'compositeProfile': ''}}
             descriptor = contracts / 'native/profiles.json'; descriptor.write_text(json.dumps(profiles))
             raw = root / 'raw'; raw.mkdir(); artifacts = root / 'artifacts'
             body = b'NEF3' + bytes(64) + bytes(5) + b'\x01\x40'
@@ -91,7 +91,8 @@ class NativeModuleMatrixTests(unittest.TestCase):
 
     def test_forged_packaged_metadata_rejected_even_with_rehashed_receipt(self):
         for field, value in [('profileDigest', '00' * 32), ('compositeVerifier', 0),
-                ('compositeVerifier', True), ('abiVersion', 1), ('configurationMethods', ['postExecute'])]:
+                ('compositeVerifier', True), ('abiVersion', 1), ('configurationMethods', ['postExecute']),
+                ('compositeProfile', 'MultiSigVerifier')]:
             with self.subTest(field=field, value=value), self.module_fixture() as (receipt, artifacts, contracts, repin):
                 path = artifacts / 'NeoNativeVerifier.manifest.json'; manifest = json.loads(path.read_text())
                 manifest['extra']['smartAccount'][field] = value; path.write_text(json.dumps(manifest))

@@ -54,10 +54,14 @@ def module_fixture(hook, root, destroy_target=None):
     if root: method("destroySelf", "Void", False, [], call_script(MANAGEMENT, "destroy", []) + b"\x45")
     name = ("MultiHook" if hook else "MultiSigVerifier") if root else ("NativeLeafHook" if hook else "NativeLeafVerifier")
     if destroy_target: name += "Destructive"
+    declaration = {"abiVersion": 2, "profileDigest": DIGEST,
+        "compositeVerifier": root and not hook, "configurationMethods": ["configure"]}
+    # M-3: composite roots declare their profile name in the manifest; chain
+    # code no longer hardcodes module contract names for admission.
+    if root: declaration["compositeProfile"] = "MultiHook" if hook else "MultiSigVerifier"
     manifest = {"name": name, "groups": [], "features": {}, "supportedstandards": [], "abi": {"methods": methods, "events": []},
                 "permissions": [{"contract": "*", "methods": "*"}], "trusts": [],
-                "extra": {"smartAccount": {"abiVersion": 2, "profileDigest": DIGEST,
-                    "compositeVerifier": root and not hook, "configurationMethods": ["configure"]}}}
+                "extra": {"smartAccount": declaration}}
     script = bytes(script)
     body = b"NEF3" + b"Native configuration diagnostic".ljust(64, b"\x00") + bytes(5) + varint(len(script)) + script
     return script, body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4], manifest

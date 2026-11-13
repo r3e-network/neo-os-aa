@@ -23,13 +23,14 @@ def manifest():
 
 
 class NativeModuleProfileTests(unittest.TestCase):
-    def package_manifest(self, value, role, capabilities, composite=False, digest=PROFILE_DIGEST):
-        return profile.package_manifest(value, role, capabilities, composite, digest)
+    def package_manifest(self, value, role, capabilities, composite=False, digest=PROFILE_DIGEST, composite_profile=""):
+        return profile.package_manifest(value, role, capabilities, composite, digest, composite_profile)
 
     def test_digest_and_composite_marker_are_explicit_and_strict(self):
         result = self.package_manifest(manifest(), "verifier", ["setConfig"])
         self.assertEqual(PROFILE_DIGEST, result["extra"]["smartAccount"]["profileDigest"])
         self.assertIs(False, result["extra"]["smartAccount"]["compositeVerifier"])
+        self.assertNotIn("compositeProfile", result["extra"]["smartAccount"])
         for digest in ("", "AB" * 32, "12" * 31, 123):
             with self.assertRaises(ValueError):
                 self.package_manifest(manifest(), "verifier", ["setConfig"], digest=digest)
@@ -37,13 +38,38 @@ class NativeModuleProfileTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.package_manifest(manifest(), "verifier", ["setConfig"], composite=composite)
 
+    def test_composite_profile_declaration_is_explicit_and_fail_closed(self):
+        # M-3: the composite profile is a manifest declaration, not a chain
+        # code contract-name special case.
+        for bad in (None, 1, "1MultiSig", "Multi Sig", "MultiSigVerifier "):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                self.package_manifest(manifest(), "verifier", ["setConfig"], composite_profile=bad)
+        with self.assertRaisesRegex(ValueError, "composite verifier must declare"):
+            self.package_manifest(manifest(), "verifier", ["setConfig"], composite=True)
+        with self.assertRaisesRegex(ValueError, "composite verifiers may declare"):
+            self.package_manifest(manifest(), "verifier", ["setConfig"], composite_profile="MultiSigVerifier")
+        hook = copy.deepcopy(manifest()); hook["name"] = "WhitelistHook"
+        hook["abi"]["methods"] = [
+            method for method in hook["abi"]["methods"]
+            if method["name"] not in ("getSignerDomains", "validateSignature", "setConfig")
+        ]
+        hook["abi"]["methods"].extend([
+            {"name": "preExecute", "returntype": "Void", "safe": False,
+             "parameters": [{"name": "p", "type": "Hash160"}, {"name": "p", "type": "Array"}], "offset": 0},
+            {"name": "setWhitelist", "returntype": "Void", "safe": False,
+             "parameters": [{"name": "p", "type": "Hash160"}, {"name": "p", "type": "Array"}], "offset": 0},
+        ])
+        # Composite hook roots (MultiHook) declare their profile explicitly.
+        result = self.package_manifest(hook, "hook", ["setWhitelist"], composite_profile="MultiHook")
+        self.assertEqual("MultiHook", result["extra"]["smartAccount"]["compositeProfile"])
+
     def test_composite_requires_exact_non_safe_receipt_callbacks(self):
         composite = manifest()
         for name, result, types in (("validateCompositeSignature", "Array", ["Hash160", "Array"]),
                 ("postExecuteComposite", "Void", ["Hash160", "Array", "Any", "Array"])):
             composite["abi"]["methods"].append({"name":name,"returntype":result,"safe":False,
                 "parameters":[{"name":"p","type":t} for t in types],"offset":0})
-        self.assertIs(True, self.package_manifest(composite, "verifier", ["setConfig"], True)["extra"]["smartAccount"]["compositeVerifier"])
+        self.assertIs(True, self.package_manifest(composite, "verifier", ["setConfig"], True, composite_profile="MultiSigVerifier")["extra"]["smartAccount"]["compositeVerifier"])
         for variant in ("missing", "safe", "wrong-result", "wrong-arity", "wrong-type"):
             wrong = copy.deepcopy(composite)
             if variant == "missing": wrong["abi"]["methods"].pop()
@@ -52,7 +78,7 @@ class NativeModuleProfileTests(unittest.TestCase):
             elif variant == "wrong-arity": wrong["abi"]["methods"][-1]["parameters"].pop()
             else: wrong["abi"]["methods"][-1]["parameters"][-1]["type"] = "Any"
             with self.subTest(variant=variant), self.assertRaises(ValueError):
-                self.package_manifest(wrong, "verifier", ["setConfig"], True)
+                self.package_manifest(wrong, "verifier", ["setConfig"], True, composite_profile="MultiSigVerifier")
         for name in ("validateCompositeSignature", "postExecuteComposite", "validateSignatureForPostExecute"):
             wrong = copy.deepcopy(composite)
             wrong["abi"]["methods"] = [m for m in wrong["abi"]["methods"] if m["name"] != name]
@@ -125,11 +151,13 @@ class NativeModuleProfileTests(unittest.TestCase):
         self.assertNotIn("CallFlags.ReadOnly", native_block)
 
     def test_descriptor_is_nonempty_and_path_bounded(self):
-        valid = {"NeoNativeVerifier": {"project":"NeoNativeVerifier.Native.csproj", "role":"verifier", "configurationMethods":["setConfig"], "compositeVerifier":False}}
+        valid = {"NeoNativeVerifier": {"project":"NeoNativeVerifier.Native.csproj", "role":"verifier", "configurationMethods":["setConfig"], "compositeVerifier":False, "compositeProfile":""}}
         self.assertEqual(valid, profile.validate_descriptor(valid))
         for bad in ({}, [], {"../escape":valid["NeoNativeVerifier"]}, {"Name":{**valid["NeoNativeVerifier"], "project":"../escape.csproj"}},
                     {"Name":{**valid["NeoNativeVerifier"], "configurationMethods":"setConfig"}},
-                    {"Name":{**valid["NeoNativeVerifier"], "role":"unknown"}}):
+                    {"Name":{**valid["NeoNativeVerifier"], "role":"unknown"}},
+                    {"Name":{**valid["NeoNativeVerifier"], "compositeProfile":"MultiSigVerifier"}},
+                    {"Name":{k: v for k, v in valid["NeoNativeVerifier"].items() if k != "compositeProfile"}}):
             with self.assertRaises(ValueError): profile.validate_descriptor(bad)
 
     def test_packaging_failure_invalidates_receipt_and_success_preserves_nef(self):
@@ -139,7 +167,7 @@ class NativeModuleProfileTests(unittest.TestCase):
             descriptor.write_text('{}')
             with self.assertRaises(ValueError):profile.package(raw,output,descriptor,parameters)
             self.assertEqual("FAIL",json.loads((output/"native-profile-packaging.json").read_text())["status"])
-            descriptor.write_text(json.dumps({"NeoNativeVerifier":{"project":"Verifier.Native.csproj","role":"verifier","configurationMethods":["setConfig"], "compositeVerifier":False}}))
+            descriptor.write_text(json.dumps({"NeoNativeVerifier":{"project":"Verifier.Native.csproj","role":"verifier","configurationMethods":["setConfig"], "compositeVerifier":False, "compositeProfile":""}}))
             # Well-shaped diagnostic NEF with a RET script; production bytes are produced by the compiler.
             body=b'NEF3'+bytes(64)+bytes(5)+b'\x01\x40'
             nef=body+hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4]

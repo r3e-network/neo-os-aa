@@ -27,6 +27,8 @@ class NativeConfigurationTests(unittest.TestCase):
                 metadata = manifest['extra']['smartAccount']
                 self.assertEqual(DIGEST, metadata['profileDigest'])
                 self.assertIs(root and not hook, metadata['compositeVerifier'])
+                self.assertEqual(("MultiHook" if hook else "MultiSigVerifier") if root else None,
+                                 metadata.get('compositeProfile'))
                 methods = {m['name']:m for m in manifest['abi']['methods']}
                 callbacks = {'validateCompositeSignature':('Array',['Hash160','Array']),
                              'postExecuteComposite':('Void',['Hash160','Array','Any','Array'])}

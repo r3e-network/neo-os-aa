@@ -106,7 +106,7 @@ def check_module_build(compiled, artifacts, contracts):
         del raw_manifest["extra"]["smartAccount"]
         try:
             expected = package_manifest(raw_manifest, spec["role"], spec["configurationMethods"],
-                                        spec["compositeVerifier"], parameter_digest)
+                                        spec["compositeVerifier"], parameter_digest, spec["compositeProfile"])
         except (KeyError, TypeError, ValueError) as error:
             raise ValidationFailure("Native packaged lifecycle ABI is invalid: " + str(error)) from error
         require(manifest == expected, "Native packaged capability metadata differs from the current profile")

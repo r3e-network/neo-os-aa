@@ -51,6 +51,19 @@ class NativeContractReceiptTests(unittest.TestCase):
     def test_valid_native_identity(self):
         native.check_native(self.manifest())
 
+    def test_activation_profile_storage_readback_is_exact(self):
+        record = b"\x80\x02\x03\x02\x00\x20" + bytes.fromhex(native.DIGEST)
+        chain = Mock(); chain.rpc.return_value = base64.b64encode(record).decode("ascii")
+        native.check_profile_storage_readback(chain)
+        chain.rpc.assert_called_once_with("getstorage", [native.CORE, "00"])
+        for bad in (None, "",
+                    base64.b64encode(b"\x80\x02\x03\x02\x00\x20" + b"\x00" * 32).decode("ascii"),
+                    base64.b64encode(b"\x80\x02\x03\x01\x00\x20" + bytes.fromhex(native.DIGEST)).decode("ascii"),
+                    base64.b64encode(b"\x80\x02\x03\x02\x00\x20" + bytes.fromhex(native.DIGEST)[:-1]).decode("ascii")):
+            chain = Mock(); chain.rpc.return_value = bad
+            with self.assertRaises(ValidationFailure):
+                native.check_profile_storage_readback(chain)
+
     def test_prior_abi2_digest_does_not_identify_authority_admission_revision(self):
         legacy = self.manifest()
         legacy["manifest"]["extra"]["smartAccount"]["profileParameterDigest"] = "4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4"

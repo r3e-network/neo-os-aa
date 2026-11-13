@@ -58,6 +58,6 @@ test("native discovery catalogue matches every normative method and event descri
       },
     ),
   );
-  assert.equal(Object.keys(events).length, 16);
+  assert.equal(Object.keys(events).length, 20);
   assert.deepEqual(NATIVE_REQUIRED_EVENTS, events);
 });

@@ -276,6 +276,30 @@ export const NATIVE_REQUIRED_EVENTS = {
     ["method", "String"],
     ["nonce", "Integer"],
   ]),
+  ModuleCallPending: parameters([
+    ["accountId", "Hash160"],
+    ["moduleType", "String"],
+    ["module", "Hash160"],
+    ["method", "String"],
+    ["matureAt", "Integer"],
+    ["configurationNonce", "Integer"],
+  ]),
+  ModuleCallSettled: parameters([
+    ["accountId", "Hash160"],
+    ["moduleType", "String"],
+    ["configurationNonce", "Integer"],
+  ]),
+  ModuleCallCancelled: parameters([
+    ["accountId", "Hash160"],
+    ["moduleType", "String"],
+    ["configurationNonce", "Integer"],
+  ]),
+  ModuleDependenciesChanged: parameters([
+    ["accountId", "Hash160"],
+    ["moduleType", "String"],
+    ["activeChildren", "Array"],
+    ["configurationNonce", "Integer"],
+  ]),
 };
 for (const [prefix, parameter] of [
   ["Verifier", "verifier"],

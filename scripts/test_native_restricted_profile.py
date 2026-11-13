@@ -15,6 +15,7 @@ class NativeRestrictedProfileTests(unittest.TestCase):
                 'role': 'hook',
                 'configurationMethods': ['setRestrictedToken'],
                 'compositeVerifier': False,
+                'compositeProfile': '',
             },
             profiles['TokenRestrictedHook'],
         )

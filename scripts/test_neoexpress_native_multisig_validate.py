@@ -127,13 +127,15 @@ class NativeMultiSigMatrixTests(unittest.TestCase):
     def test_module_metadata_requires_current_profile_and_exact_composite_boolean(self):
         m = self.module()
         for composite in (False, True):
-            manifest = {'extra': {'smartAccount': {'abiVersion': 2, 'profileDigest': m.DIGEST, 'compositeVerifier': composite}}}
+            manifest = {'extra': {'smartAccount': {'abiVersion': 2, 'profileDigest': m.DIGEST, 'compositeVerifier': composite,
+                                                  **({'compositeProfile': 'MultiSigVerifier'} if composite else {})}}}
             m.check_module_profile(manifest, composite)
             for field, bad in (('abiVersion', True), ('abiVersion', 1), ('profileDigest', '00' * 32),
-                               ('compositeVerifier', int(composite)), ('compositeVerifier', not composite)):
+                               ('compositeVerifier', int(composite)), ('compositeVerifier', not composite),
+                               ('compositeProfile', 'MultiHook'), ('compositeProfile', '')):
                 wrong = copy.deepcopy(manifest); wrong['extra']['smartAccount'][field] = bad
                 with self.assertRaises(ValidationFailure): m.check_module_profile(wrong, composite)
-            for field in ('abiVersion', 'profileDigest', 'compositeVerifier'):
+            for field in ('abiVersion', 'profileDigest', 'compositeVerifier', *(('compositeProfile',) if composite else ())):
                 wrong = copy.deepcopy(manifest); del wrong['extra']['smartAccount'][field]
                 with self.assertRaises(ValidationFailure): m.check_module_profile(wrong, composite)
 

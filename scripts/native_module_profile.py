@@ -19,10 +19,19 @@ def validate_descriptor(profiles):
     for name, spec in profiles.items():
         if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name) or type(spec) is not dict:
             raise ValueError("Invalid native artifact descriptor")
-        if set(spec) != {"project", "role", "configurationMethods", "compositeVerifier"} or spec["role"] not in ("verifier", "hook"):
+        if set(spec) != {"project", "role", "configurationMethods", "compositeVerifier", "compositeProfile"} or spec["role"] not in ("verifier", "hook"):
             raise ValueError("Invalid native role or descriptor fields")
         if type(spec["compositeVerifier"]) is not bool or spec["role"] == "hook" and spec["compositeVerifier"]:
             raise ValueError("Native compositeVerifier must be an explicit verifier-only Boolean")
+        # M-3: composite admission is declared by an explicit manifest profile
+        # name instead of hardcoding "MultiSigVerifier"/"MultiHook" contract
+        # names in chain code. Only composite roots may declare one.
+        if type(spec["compositeProfile"]) is not str or (spec["compositeProfile"] and not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", spec["compositeProfile"])):
+            raise ValueError("Native compositeProfile must be a profile name or an empty string")
+        if spec["compositeVerifier"] and not spec["compositeProfile"]:
+            raise ValueError("A composite verifier must declare an explicit composite profile name")
+        if spec["role"] == "verifier" and not spec["compositeVerifier"] and spec["compositeProfile"]:
+            raise ValueError("Only composite verifiers may declare a native composite profile")
         if type(spec["project"]) is not str or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*\.csproj", spec["project"]):
             raise ValueError("Invalid native project name")
         names = spec["configurationMethods"]
@@ -63,11 +72,17 @@ NATIVE_CONTRACT_METHODS = {
 }
 
 
-def package_manifest(original, role, capabilities, composite_verifier, parameter_digest):
+def package_manifest(original, role, capabilities, composite_verifier, parameter_digest, composite_profile=""):
     if role not in ("verifier", "hook") or original.get("extra", {}).get("SmartAccountProfile") != "native-v2":
         raise ValueError("Explicit native-v2 profile marker and role required")
     if type(composite_verifier) is not bool or role == "hook" and composite_verifier:
         raise ValueError("Explicit verifier-only compositeVerifier Boolean required")
+    if type(composite_profile) is not str or (composite_profile and not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", composite_profile)):
+        raise ValueError("Native compositeProfile must be a profile name or an empty string")
+    if composite_verifier and not composite_profile:
+        raise ValueError("A composite verifier must declare an explicit composite profile name")
+    if role == "verifier" and not composite_verifier and composite_profile:
+        raise ValueError("Only composite verifiers may declare a native composite profile")
     if type(parameter_digest) is not str or not re.fullmatch(r"[0-9a-f]{64}", parameter_digest):
         raise ValueError("Explicit canonical profile digest required")
     name = original.get("name")
@@ -117,9 +132,12 @@ def package_manifest(original, role, capabilities, composite_verifier, parameter
     manifest = copy.deepcopy(original)
     if "smartAccount" in manifest["extra"]:
         raise ValueError("Compiler metadata already contains a native capability declaration")
-    manifest["extra"]["smartAccount"] = {"abiVersion": 2, "profileDigest": parameter_digest,
-                                         "compositeVerifier": composite_verifier,
-                                         "configurationMethods": list(capabilities)}
+    declaration = {"abiVersion": 2, "profileDigest": parameter_digest,
+                   "compositeVerifier": composite_verifier,
+                   "configurationMethods": list(capabilities)}
+    if composite_profile:
+        declaration["compositeProfile"] = composite_profile
+    manifest["extra"]["smartAccount"] = declaration
     return manifest
 
 
@@ -140,7 +158,7 @@ def package(raw, output, descriptor, parameters):
             nef = raw / (name + ".nef"); original = raw / (name + ".manifest.json")
             m = json.loads(original.read_text())
             if m["name"] != name: raise ValueError("Manifest name mismatch")
-            final = package_manifest(m, spec["role"], spec["configurationMethods"], spec["compositeVerifier"], report["profileDigest"])
+            final = package_manifest(m, spec["role"], spec["configurationMethods"], spec["compositeVerifier"], report["profileDigest"], spec["compositeProfile"])
             data = nef.read_bytes()
             if len(data) < 79 or data[:4] != b"NEF3" or data[-4:] != hashlib.sha256(hashlib.sha256(data[:-4]).digest()).digest()[:4]:
                 raise ValueError("Invalid compiler NEF checksum")

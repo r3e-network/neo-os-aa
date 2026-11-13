@@ -23,7 +23,8 @@ class NativeMultiSigProfileTests(unittest.TestCase):
     def test_explicit_profile_and_sources(self):
         profiles = json.loads((ROOT / 'contracts/native/profiles.json').read_text())
         self.assertEqual({'project': 'MultiSigVerifier.Native.csproj', 'role': 'verifier',
-                          'configurationMethods': ['setConfig'], 'compositeVerifier': True},
+                          'configurationMethods': ['setConfig'], 'compositeVerifier': True,
+                          'compositeProfile': 'MultiSigVerifier'},
                          profiles.get('MultiSigVerifier'))
         project = ET.parse(ROOT / 'contracts/native/MultiSigVerifier.Native.csproj')
         self.assertEqual({'NativeAuthority.cs', '../verifiers/NativeOperation.cs', '../verifiers/VerifierAuthority.cs',

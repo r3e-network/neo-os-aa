@@ -132,6 +132,22 @@ def check_native(state):
                 f"Native event ABI mismatch: {name}")
 
 
+def check_profile_storage_readback(chain):
+    """External readback of the activation-time profile record at storage key 0x00.
+
+    The native service intentionally exposes no ABI getter for this record;
+    external consumers close the identity loop through the raw storage readback.
+    """
+    value = chain.rpc("getstorage", [CORE, "00"])
+    require(type(value) is str, "Native activation profile storage record is missing")
+    record = base64.b64decode(value, validate=True)
+    # Neo BinarySerializer layout of Array[Integer(2), ByteString(32)]:
+    # array header 0x80, count 2, integer header 0x03 plus minimal value 2,
+    # byte-string header 0x00 plus length 32, then the profile digest bytes.
+    require(record == b"\x80\x02\x03\x02\x00\x20" + bytes.fromhex(DIGEST),
+            "Native activation profile storage readback mismatch")
+
+
 def canonical_p256_readback(chain):
     """Read-only public vectors with no account argument, signer or call capability."""
     compressed = bytes.fromhex('036b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296')
@@ -379,6 +395,7 @@ def validate(runtime, dotnet, output):
                 chain.start_node(); version = chain.rpc("getversion", [])
                 require(version["protocol"]["network"] == chain.magic, "Wrong loopback network")
                 native = chain.rpc("getcontractstate", [CORE]); check_native(native)
+                check_profile_storage_readback(chain)
                 check_readback(chain.rpc("getcontractstate", [diagnostic]), probe_script, probe_nef, probe_manifest)
                 report["witnessDiagnostic"] = {"contractHash": diagnostic, "readbackMatched": True,
                     "nefSha256": hashlib.sha256(probe_nef).hexdigest(), "scriptHex": probe_script.hex()}
@@ -393,6 +410,7 @@ def validate(runtime, dotnet, output):
                 report["readback"] = {"nativeId": native["id"], "nativeHash": CORE, "nativeManifestVerified": True, "authorityEpoch": state[13],
                     "nativeManifestSha256": hashlib.sha256(json.dumps(native["manifest"], sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
                     "accountStateMatched": True, "status": "Frozen", "configurationNonce": state[8], "nextSequence": nonce,
+                    "profileStorageReadbackMatched": True,
                     "blockCount": chain.rpc("getblockcount", []), "nodeVersion": version["useragent"]}
                 # Re-read the actual persisted logs via RPC, not just CLI summaries.
                 for row in report["transactions"]:
