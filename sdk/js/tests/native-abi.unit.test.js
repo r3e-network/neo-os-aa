@@ -14,7 +14,7 @@ test("native discovery catalogue matches every normative method and event descri
       "../../../docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
     ),
     "utf8",
-  );
+  ).replace(/\r\n?/g, "\n");
   const section = draft
     .split("## 13. Required ABI surface\n")[1]
     .split("## 14.")[0];

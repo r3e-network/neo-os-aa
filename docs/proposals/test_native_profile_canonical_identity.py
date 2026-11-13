@@ -17,16 +17,16 @@ class CanonicalIdentityDocumentTests(unittest.TestCase):
                          "smartaccount-native-profile-v2-vectors.json",
                          "smartaccount-native-profile-v2-parameters.json",
                          "validate-native-smartaccount-profile.py"):
-                text = (ROOT / name).read_text()
+                text = (ROOT / name).read_text(encoding="utf-8")
                 if name.endswith(".md") and before is not None:
                     self.assertEqual(text.count(before), 1)
                     text = text.replace(before, after)
-                (target / name).write_text(text)
+                (target / name).write_text(text, encoding="utf-8")
             return subprocess.run([sys.executable, str(target / "validate-native-smartaccount-profile.py")],
                                   capture_output=True, text=True, timeout=15)
 
     def test_cleanup_uses_the_distinct_cleanup_phase(self):
-        text = (ROOT / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md").read_text()
+        text = (ROOT / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md").read_text(encoding="utf-8")
         self.assertIn("Cleanup runs only\nunder the authenticated `cleanup` context", text)
         self.assertIn("under that child's authenticated `cleanup` context", text)
         self.assertNotIn("cleared by escape, market settlement,", text)

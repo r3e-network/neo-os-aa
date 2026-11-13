@@ -7,8 +7,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parent
-DOCUMENT = (ROOT / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md").read_text()
-VECTORS = json.loads((ROOT / "smartaccount-native-profile-v2-vectors.json").read_text())
+DOCUMENT = (ROOT / "SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md").read_text(encoding="utf-8")
+VECTORS = json.loads((ROOT / "smartaccount-native-profile-v2-vectors.json").read_text(encoding="utf-8"))
 
 
 def hash160(value: bytes) -> bytes:
@@ -159,7 +159,7 @@ def exact_json_equal(actual, expected):
     return json.dumps(actual, sort_keys=True, separators=(",", ":")) == json.dumps(expected, sort_keys=True, separators=(",", ":"))
 
 
-PARAMETERS = json.loads((ROOT / "smartaccount-native-profile-v2-parameters.json").read_text())
+PARAMETERS = json.loads((ROOT / "smartaccount-native-profile-v2-parameters.json").read_text(encoding="utf-8"))
 profile_json = json.dumps(PARAMETERS, sort_keys=True, separators=(",", ":"))
 assert PARAMETERS["abiVersion"] == PARAMETERS["accountRecordVersion"] == PARAMETERS["authorizationVersion"] == PARAMETERS["profileVersion"] == 2
 assert PARAMETERS["identityVersion"] == 1

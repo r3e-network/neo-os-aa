@@ -192,6 +192,17 @@ class NativeModuleProfileTests(unittest.TestCase):
             self.assertEqual(original,source.read_bytes())
             self.assertEqual(b"#define SMARTACCOUNT_NATIVE\n"+original,destination.read_bytes())
 
+    def test_native_source_preparation_preserves_crlf_and_removes_utf8_bom(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            original = (b"\xef\xbb\xbf#if SMARTACCOUNT_NATIVE\r\n"
+                        b"class Native {}\r\n#endif\r\n")
+            source = Path(tmp) / "source.cs"
+            source.write_bytes(original)
+            destination = Path(tmp) / "prepared.cs"
+            profile.prepare_native_source(source, destination)
+            self.assertEqual(original, source.read_bytes())
+            self.assertEqual(b"#define SMARTACCOUNT_NATIVE\n" + original[3:], destination.read_bytes())
+
     def test_profile_digest_definitions_match_canonical_parameters(self):
         """Client and service literals must fail closed when profile parameters change."""
         parameters = ROOT / "docs/proposals/smartaccount-native-profile-v2-parameters.json"

@@ -32,7 +32,10 @@ def validate_descriptor(profiles):
 
 
 def prepare_native_source(source, destination):
-    destination.write_text("#define SMARTACCOUNT_NATIVE\n" + source.read_text(encoding="utf-8-sig"))
+    data = source.read_bytes()
+    if data.startswith(b"\xef\xbb\xbf"):
+        data = data[3:]
+    destination.write_bytes(b"#define SMARTACCOUNT_NATIVE\n" + data)
 
 
 def profile_digest(parameters):
