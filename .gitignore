@@ -38,6 +38,11 @@ test-results/
 # .NET build outputs
 bin/
 obj/
+# Isolated NuGet restore cache (README: Restoring with an isolated package cache)
+nuget-isolated/
+
+# Python bytecode
+__pycache__/
 
 # Dependencies
 node_modules/
