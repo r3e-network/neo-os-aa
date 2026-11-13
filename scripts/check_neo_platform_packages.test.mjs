@@ -358,9 +358,11 @@ test("CI installs exactly the pinned compiler and names the pinned versions", ()
 });
 
 test("verify_repo.sh runs the package and compiler gates before the first contract build", () => {
-  const script = read("scripts/verify_repo.sh");
-  const gate = script.indexOf("node scripts/check_neo_platform_packages.mjs\n");
-  const compiler = script.indexOf("node scripts/check_neo_platform_packages.mjs --compiler-only");
+  // Windows checkouts (core.autocrlf) hand us CRLF and the gate calls are nested inside the
+  // native/ordinary if/else, so match the invocation itself on a line, not a whole bare line.
+  const script = read("scripts/verify_repo.sh").replace(/\r\n?/g, "\n");
+  const gate = script.search(/^.*node scripts\/check_neo_platform_packages\.mjs[ \t]*$/m);
+  const compiler = script.search(/^.*node scripts\/check_neo_platform_packages\.mjs --compiler-only[ \t]*$/m);
   assert.notEqual(gate, -1);
   assert.notEqual(compiler, -1);
   for (const first of ["dotnet build contracts/SmartAccount.csproj", "bash contracts/compile.sh", "dotnet test SmartAccount.sln"]) {
