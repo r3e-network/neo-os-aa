@@ -342,7 +342,7 @@
       "Neo.Cryptography.BLS12_381": {
         "type": "Transitive",
         "resolved": "3.9.0",
-        "contentHash": "dAuYTGAN1aWVbvy9cWDrL47wFHzovzADg3tY24E1hfcXh4sRm8SgHyzaIV/TribmZCIDM/FAG1E/AV0NH9aMvA=="
+        "contentHash": "/SE5BJndqRcbk4ri4p6dvttgg3uuQ8Wi5viGxx+Qhs4oRETXG7OM9M5hPQweGcwpErEqK8Qc1Nbx/K37qPxIpw=="
       },
       "Neo.VM": {
         "type": "Transitive",
