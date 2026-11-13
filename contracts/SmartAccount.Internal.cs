@@ -2,6 +2,7 @@ using System.Numerics;
 using Neo;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
+using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 
 namespace SmartAccount
@@ -40,6 +41,9 @@ namespace SmartAccount
         // identity — paymaster settlement, market listing retirement — query
         // IsUserOpExecutionActive() and refuse to run meanwhile, because one core backs every
         // virtual account and "the caller is the AA core" alone cannot identify an authorization.
+        // The marker is a depth counter (audit Low 6): the value records the transaction hash
+        // plus the number of active execution frames, so the unwind of a nested frame decrements
+        // it instead of deleting the slot while an outer frame still executes.
         private static readonly byte[] Prefix_UserOperationInFlight = new byte[] { 0x28 };
 
         private static readonly BigInteger MaxMetadataUriLength = 240;
@@ -119,26 +123,63 @@ namespace SmartAccount
         /// The marker is written and cleared inside a single <c>ExecuteUserOp</c> invocation and a
         /// faulting transaction rolls storage back, so a persisted marker can only be a leftover
         /// of an earlier transaction; its recorded hash no longer matches and it therefore
-        /// reports "not in flight".
+        /// reports "not in flight". The recorded value carries a depth counter: a nested
+        /// <c>executeUserOp</c> for a different account (the per-account lock only rejects
+        /// same-account re-entry) increments it and its unwind decrements it, so the slot is
+        /// deleted only when the outermost execution frame closes.
         /// </remarks>
         [Safe]
         public static bool IsUserOpExecutionActive()
         {
             ByteString? marker = Storage.Get(Storage.CurrentContext, Prefix_UserOperationInFlight);
             if (marker == null) return false;
-            UInt256 recorded = (UInt256)(byte[])marker;
+            object[] record = (object[])StdLib.Deserialize(marker);
+            UInt256 recorded = (UInt256)(byte[])(ByteString)record[0];
             return recorded == Runtime.Transaction.Hash;
         }
 
+        // Depth invariants: 0 (absent) -> 1 marks the outermost execution; a nested frame
+        // for another account increments; each unwind decrements; 0 clears the slot. A
+        // single-slot write would let a nested frame's unwind delete the marker while the
+        // outer frame still executes, silently re-opening the deputy window for the rest
+        // of that outer operation (audit Low 6, defense-in-depth: no direct exploit).
         private static void MarkUserOperationInFlight()
         {
-            Storage.Put(Storage.CurrentContext, Prefix_UserOperationInFlight, (byte[])Runtime.Transaction.Hash);
+            BigInteger depth = BigInteger.Zero;
+            ByteString? marker = Storage.Get(Storage.CurrentContext, Prefix_UserOperationInFlight);
+            if (marker != null)
+            {
+                object[] record = (object[])StdLib.Deserialize(marker);
+                // A leftover from an earlier transaction does not count: the new
+                // transaction's outermost frame restarts the depth at one.
+                if ((UInt256)(byte[])(ByteString)record[0] == Runtime.Transaction.Hash)
+                {
+                    depth = (BigInteger)record[1];
+                }
+            }
+            Storage.Put(Storage.CurrentContext, Prefix_UserOperationInFlight,
+                StdLib.Serialize(new object[] { Runtime.Transaction.Hash, depth + 1 }));
         }
 
         private static void UnmarkUserOperationInFlight()
         {
-            if (Storage.Get(Storage.CurrentContext, Prefix_UserOperationInFlight) == null) return;
-            Storage.Delete(Storage.CurrentContext, Prefix_UserOperationInFlight);
+            ByteString? marker = Storage.Get(Storage.CurrentContext, Prefix_UserOperationInFlight);
+            if (marker == null) return;
+            object[] record = (object[])StdLib.Deserialize(marker);
+            // A stale leftover (an earlier transaction's fault) is simply dropped.
+            if ((UInt256)(byte[])(ByteString)record[0] != Runtime.Transaction.Hash)
+            {
+                Storage.Delete(Storage.CurrentContext, Prefix_UserOperationInFlight);
+                return;
+            }
+            BigInteger depth = (BigInteger)record[1];
+            if (depth <= BigInteger.One)
+            {
+                Storage.Delete(Storage.CurrentContext, Prefix_UserOperationInFlight);
+                return;
+            }
+            Storage.Put(Storage.CurrentContext, Prefix_UserOperationInFlight,
+                StdLib.Serialize(new object[] { Runtime.Transaction.Hash, depth - 1 }));
         }
 
         private static void SetVerifierConfigContext(UInt160 accountId, UInt160 verifierContract)

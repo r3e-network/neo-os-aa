@@ -60,12 +60,15 @@ namespace SmartAccount
             OnAccountUnfrozen(accountId);
         }
 
-        /// <summary>Returns true while the account-level freeze latch is set.</summary>
+        /// <summary>
+        /// Returns true while the account-level freeze latch is set. An account with no state
+        /// row reports false, matching the zero-value convention of the other safe queries
+        /// (audit Low 5): a read-only probe must never fault on an unknown account.
+        /// </summary>
         [Safe]
         public static bool IsAccountFrozen(UInt160 accountId)
         {
             ValidateAccountId(accountId);
-            GetAccountState(accountId);
             return HasAccountFrozen(accountId);
         }
 

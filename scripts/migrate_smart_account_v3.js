@@ -7,7 +7,10 @@
 //   2. --enroll-market      : core.setMarketService(market, true)
 //   3. --propose-registrar  : core.proposePlatformRegistrar(registrar)  -> 7-day timelock
 //      --confirm-registrar  : core.confirmPlatformRegistrar(registrar)
-//   4. --migrate-rotations  : core.migratePlatformOwnerRotations(accountIds) (one-time)
+//   4. --migrate-rotations  : core.migratePlatformOwnerRotations(accountIds), batched;
+//      the core writes the 0x2A seal only after a prefix scan proves the legacy 0x20
+//      family is empty, so every batch before the last leaves the seal unset and
+//      no legacy row can be stranded behind an early seal
 // Default run is a read-only precondition audit that never writes chain.
 
 const fs = require("fs");
@@ -36,6 +39,7 @@ const REQUIRED_MIGRATION_METHODS = [
   "setMarketService",
   "isMarketService",
   "migratePlatformOwnerRotations",
+  "isPlatformOwnerRotationsMigrated",
   "getPlatformRegistrar",
   "getPendingPlatformRegistrar",
   "getPlatformRegistrarAvailableAt",
@@ -44,7 +48,9 @@ const REQUIRED_MIGRATION_METHODS = [
   "getPlatformAccountBinding",
 ];
 // migratePlatformOwnerRotations takes a UInt160[]; batch the array so a single
-// invocation stays well inside block gas limits.
+// invocation stays well inside block gas limits. Batching is safe under the
+// scan-based seal: an intermediate batch that leaves legacy rows behind returns
+// unsealed, and the batch that empties the 0x20 family writes the one-time flag.
 const DEFAULT_BATCH_SIZE = 50;
 
 function migrationPhases() {
@@ -314,8 +320,19 @@ async function main() {
       report.post_conditions = { platform_registrar: registrarHash };
     }
     if (migrateRotations) {
-      report.post_conditions = { rotations_migrated: report.migration.account_count };
-      report.next_action = "verify each account via registrar getPendingPlatformOwnerRotation; the legacy 0x20 rows are gone";
+      // Scan-based seal post-condition: the final batch must have drained the legacy
+      // 0x20 family and written the one-time 0x2A seal. A false readback means rows
+      // remain (or the account list under-covered the family), so the run must fail
+      // closed instead of reporting a migration that stranded legacy rows.
+      const sealed = await invokeRead(client, coreHash, "isPlatformOwnerRotationsMigrated");
+      if (!isHalt(sealed) || String(stackValue(sealed)).toLowerCase() !== "true") {
+        throw new Error("post-migrate isPlatformOwnerRotationsMigrated did not read back true; legacy 0x20 rows remain");
+      }
+      report.post_conditions = {
+        rotations_migrated: report.migration.account_count,
+        rotations_seal_written: true,
+      };
+      report.next_action = "verify each account via registrar getPendingPlatformOwnerRotation; the legacy 0x20 rows are gone and the migration is sealed";
     }
   } else if (operation || batches) {
     report.next_action = "preview only; pass --execute with the admin witness to write chain";

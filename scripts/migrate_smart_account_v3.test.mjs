@@ -18,7 +18,13 @@ test("account id parsing normalizes, rejects malformed input and duplicates", ()
   assert.throws(() => script.parseAccountIds(`${a},${a}`), /duplicate account ids/);
 });
 
-test("rotation migration batches account ids without splitting or losing rows", () => {
+test("rotation migration batches account ids safely under the scan-based seal", () => {
+  // Batching is the correct orchestration under the scan-based seal: intermediate
+  // batches leave the 0x2A seal unset (a prefix scan still finds their rows), and the
+  // batch that empties the legacy 0x20 family writes the one-time flag. Under the old
+  // unconditional seal the second of these batches would have faulted forever and
+  // stranded every remaining legacy row, so the pin here is that batching is retained
+  // without splitting or losing rows, and the driver verifies the seal afterwards.
   const ids = Array.from({ length: 121 }, (_, index) =>
     `0x${String(index).padStart(40, "0")}`.slice(0, 42),
   ).map((id) => id.replace(/^0x/, "0x"));
@@ -28,6 +34,18 @@ test("rotation migration batches account ids without splitting or losing rows", 
   assert.equal(batches[2].length, 21);
   assert.throws(() => script.chunkAccountIds(ids, 0), /positive integer/);
   assert.throws(() => script.chunkAccountIds(ids, 1.5), /positive integer/);
+});
+
+test("the migration driver pins and verifies the scan-based seal", () => {
+  // The driver requires the seal readback entry on the live core and fails closed
+  // unless the final batch actually wrote the one-time flag.
+  assert.ok(script.REQUIRED_MIGRATION_METHODS.includes("isPlatformOwnerRotationsMigrated"));
+  const source = fs.readFileSync(new URL("./migrate_smart_account_v3.js", import.meta.url), "utf8");
+  assert.match(source, /isPlatformOwnerRotationsMigrated did not read back true; legacy 0x20 rows remain/);
+  assert.match(source, /only after a prefix scan proves the legacy 0x20\n\/\/      family is empty/);
+  assert.match(source, /an intermediate batch that leaves legacy rows behind returns\n\/\/ unsealed/);
+  // The migration must no longer be documented as a single one-shot invocation.
+  assert.doesNotMatch(source, /migratePlatformOwnerRotations\(accountIds\) \(one-time\)/);
 });
 
 test("registrar deploy data is the core hash in VM byte order", () => {

@@ -83,6 +83,8 @@ namespace SmartAccount
             SetExecutionLock(accountId);
             // Transaction-scoped confused-deputy marker: while this is set, an operation's
             // target observes the core itself as its caller (see IsUserOpExecutionActive).
+            // The marker is depth-counted, so a nested frame's unwind cannot clear it while
+            // this outer execution is still in flight (audit Low 6).
             MarkUserOperationInFlight();
             if (state.Verifier != UInt160.Zero)
             {

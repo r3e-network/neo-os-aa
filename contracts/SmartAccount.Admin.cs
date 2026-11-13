@@ -144,7 +144,7 @@ namespace SmartAccount
             // lives under LegacyStoragePrefix12. The pinned public artifact still
             // runs the pre-split build (implementations/ordinary/profile.json:
             // release boundary "PINNED-ARTIFACT-UPGRADE-REVIEW", abiMethodCount 90
-            // pinned vs 100 in source), so a legacy proposal can still be confirmed.
+            // pinned vs 109 in source), so a legacy proposal can still be confirmed.
             // Remove this fallback only after every public deployment has upgraded
             // through a proposal written under Prefix_PendingUpdateNefHash (0x1A).
             ByteString? value = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
