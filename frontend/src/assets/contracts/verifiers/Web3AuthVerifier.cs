@@ -27,6 +27,7 @@ namespace SmartAccount.Verifiers
     /// </remarks>
     [DisplayName("Web3AuthVerifier")]
     [ContractPermission("*", "canConfigureVerifier")]
+    [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ContractPermission("*", "keccak256")]
     [ManifestExtra("Description", "EIP-712 MetaTransaction Verifier Plugin for Neo N3")]
@@ -140,6 +141,9 @@ namespace SmartAccount.Verifiers
         /// </summary>
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
             ByteString pubKey = GetPublicKey(accountId);
             ExecutionEngine.Assert(pubKey.Length == 65, "No pubkey configured");
 
@@ -147,12 +151,12 @@ namespace SmartAccount.Verifiers
             ByteString signature = op.Signature!;
 
             byte[] structHash = BuildMetaTxStructHash(accountId, op);
-            
+
             byte[] domainSeparator = BuildDomainSeparator(Runtime.GetNetwork(), Runtime.ExecutingScriptHash);
-            
+
             // 0x19 0x01 ...
             byte[] typedDataPayload = Helper.Concat(Helper.Concat(new byte[] { 0x19, 0x01 }, domainSeparator), structHash);
-            
+
             ECPoint compressedPubKey = CompressPubKey(pubKey);
             return CryptoLib.VerifyWithECDsa(
                 (ByteString)typedDataPayload,

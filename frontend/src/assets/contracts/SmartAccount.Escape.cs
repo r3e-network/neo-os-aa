@@ -14,8 +14,71 @@ namespace SmartAccount
         // deployed five-field serialization layout. No transition clears this key.
         private static readonly byte[] Prefix_OwnerOnlyRecovery = new byte[] { 0x22 };
 
+        // Audit fix M-4: account-level freeze latch, also kept outside AccountState to
+        // preserve its deployed five-field serialization layout (same rationale as
+        // Prefix_OwnerOnlyRecovery above). While the key exists, user-operation execution
+        // and every plugin configuration path are rejected; only the escape path
+        // (initiate/finalize) and UnfreezeAccount remain reachable so the backup owner
+        // always retains an unconditional recovery route. Finalizing an escape (either
+        // variant) clears the freeze and emits AccountUnfrozen.
+        private static readonly byte[] Prefix_AccountFrozen = new byte[] { 0x27 };
+
         [DisplayName("OwnerOnlyRecoveryFinalized")]
         public static event AccountOnlyDelegate OnOwnerOnlyRecoveryFinalized = null!;
+
+        [DisplayName("AccountFrozen")]
+        public static event AccountOnlyDelegate OnAccountFrozen = null!;
+
+        [DisplayName("AccountUnfrozen")]
+        public static event AccountOnlyDelegate OnAccountUnfrozen = null!;
+
+        /// <summary>
+        /// Freezes the account (audit fix M-4): <see cref="ExecuteUserOp"/>/
+        /// <see cref="ExecuteUserOps"/> and every plugin configuration path are rejected
+        /// while frozen. Only the backup owner can freeze. The escape path deliberately
+        /// stays reachable — the backup owner may initiate and finalize an escape on a
+        /// frozen account, and finalization clears the freeze.
+        /// </summary>
+        public static void FreezeAccount(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            AssertBackupOwner(accountId);
+            ExecutionEngine.Assert(!HasAccountFrozen(accountId), "Account already frozen");
+            Storage.Put(Storage.CurrentContext, Helper.Concat(Prefix_AccountFrozen, (byte[])accountId), new byte[] { 1 });
+            OnAccountFrozen(accountId);
+        }
+
+        /// <summary>
+        /// Removes the account-level freeze latch. Only the backup owner can unfreeze.
+        /// </summary>
+        public static void UnfreezeAccount(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            AssertBackupOwner(accountId);
+            ExecutionEngine.Assert(HasAccountFrozen(accountId), "Account not frozen");
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_AccountFrozen, (byte[])accountId));
+            OnAccountUnfrozen(accountId);
+        }
+
+        /// <summary>Returns true while the account-level freeze latch is set.</summary>
+        [Safe]
+        public static bool IsAccountFrozen(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            GetAccountState(accountId);
+            return HasAccountFrozen(accountId);
+        }
+
+        private static bool HasAccountFrozen(UInt160 accountId)
+        {
+            return Storage.Get(Storage.CurrentContext,
+                Helper.Concat(Prefix_AccountFrozen, (byte[])accountId)) != null;
+        }
+
+        private static void AssertNotFrozen(UInt160 accountId)
+        {
+            ExecutionEngine.Assert(!HasAccountFrozen(accountId), "Account frozen");
+        }
 
         [Safe]
         public static bool IsOwnerOnlyRecovery(UInt160 accountId)
@@ -96,10 +159,16 @@ namespace SmartAccount
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_MetadataUri, (byte[])accountId));
             ClearMarketEscrow(accountId);
 
+            // Audit fix M-4: the escape path is reachable while frozen and its
+            // finalization restores a clean, unfrozen account.
+            bool wasFrozen = HasAccountFrozen(accountId);
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_AccountFrozen, (byte[])accountId));
+
             if (oldVerifier != UInt160.Zero) OnModuleRemoved(accountId, ModuleTypeVerifier, oldVerifier);
             if (oldHook != UInt160.Zero) OnModuleRemoved(accountId, ModuleTypeHook, oldHook);
             OnEscapeFinalized(accountId, UInt160.Zero);
             OnOwnerOnlyRecoveryFinalized(accountId);
+            if (wasFrozen) OnAccountUnfrozen(accountId);
         }
 
         // ========================================================================
@@ -237,6 +306,11 @@ namespace SmartAccount
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookCall, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_MetadataUri, (byte[])accountId));
 
+            // Audit fix M-4: escape finalization is the backup owner's unconditional
+            // recovery route — it stays reachable while frozen and clears the freeze.
+            bool wasFrozen = HasAccountFrozen(accountId);
+            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_AccountFrozen, (byte[])accountId));
+
             // The old hook is unconditionally removed on escape.
             if (previousHook != UInt160.Zero)
             {
@@ -262,6 +336,7 @@ namespace SmartAccount
                 }
             }
             OnEscapeFinalized(accountId, newVerifier);
+            if (wasFrozen) OnAccountUnfrozen(accountId);
         }
     }
 }

@@ -72,7 +72,7 @@ namespace SmartAccount.Hooks
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
             byte[] key = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
             key = Helper.Concat(key, (byte[])token);
-            
+
             if (isRestricted)
             {
                 ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid restricted token");
@@ -106,6 +106,10 @@ namespace SmartAccount.Hooks
                 "Invalid native operation shape");
 #else
             HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+            // Audit fix L-2: fail-closed, matching the native shape check above. The core
+            // always passes the fixed 6-element operation shape; a shorter array previously
+            // skipped the restricted-target check entirely.
+            ExecutionEngine.Assert(opParams.Length == 6, "Invalid hook operation params");
 #endif
 
             // Audit fix M-5: snapshot every restricted token's balance BEFORE the op runs. The
@@ -115,7 +119,6 @@ namespace SmartAccount.Hooks
             // reverts on any net outflow, enforcing the restriction by effect regardless of path.
             SnapshotRestrictedBalances(accountId);
 
-            if (opParams.Length < 2) return;
             UInt160 targetContract = (UInt160)opParams[0];
 
             byte[] key = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
@@ -163,8 +166,15 @@ namespace SmartAccount.Hooks
             return (BigInteger)value;
         }
 #else
-        private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account) =>
-            (BigInteger)Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
+        private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account)
+        {
+            // Audit fix L-4: align with the native build — a restricted token must report
+            // a non-negative integer balance; the previous blind cast let a malformed or
+            // attacker-controlled return value poison the M-5 outflow comparison.
+            object value = Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
+            ExecutionEngine.Assert(value is BigInteger && (BigInteger)value >= 0, "Invalid restricted token balance");
+            return (BigInteger)value;
+        }
 #endif
 
         /// <summary>
@@ -218,22 +228,19 @@ namespace SmartAccount.Hooks
 #else
             HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
 
-            byte[] prefix = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
-            Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly);
-            while (iterator.Next())
-            {
-                Storage.Delete(Storage.CurrentContext, (ByteString)iterator.Value);
-            }
+            // Audit fix L-4: the ordinary build previously cleared only the restricted-token
+            // entries, leaving the M-5 balance-snapshot keys behind (the native build cleared
+            // both). Stale snapshots could then poison a later PostExecute comparison.
+            ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId));
+            ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId));
 #endif
         }
 
-#if SMARTACCOUNT_NATIVE
         private static void ClearPrefix(byte[] prefix)
         {
             Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly);
             while (iterator.Next())
                 Storage.Delete(Storage.CurrentContext, (ByteString)iterator.Value);
         }
-#endif
     }
 }

@@ -11,6 +11,8 @@ namespace SmartAccount
         public static object CallHookChild(UInt160 accountId, UInt160 childHook, string method, object[] args)
         {
             AssertBackupOwner(accountId);
+            // Audit fix M-4: frozen accounts reject every plugin configuration path.
+            AssertNotFrozen(accountId);
             AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
 

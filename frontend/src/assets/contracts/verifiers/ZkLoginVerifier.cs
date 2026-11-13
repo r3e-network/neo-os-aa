@@ -34,6 +34,7 @@ namespace SmartAccount.Verifiers
 
     [DisplayName("ZkLoginVerifier")]
     [ContractPermission("*", "canConfigureVerifier")]
+    [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ContractPermission("*", "keccak256")]
     [ContractPermission("*", "sha256")]
@@ -149,6 +150,9 @@ namespace SmartAccount.Verifiers
         [Safe]
         public static bool ValidateSignature(UInt160 accountId, ZkLoginUserOperation op)
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
             ZkLoginConfig config = GetConfig(accountId);
             ZkLoginProof proof = ParseProofBlob(op.Signature);
 

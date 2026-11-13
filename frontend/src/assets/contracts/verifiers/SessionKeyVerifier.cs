@@ -24,7 +24,6 @@ namespace SmartAccount.Verifiers
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
-    [ContractPermission("*", "getBackupOwner")]
     [ContractPermission("*", "getProxyScriptHash")]
 #endif
     [ManifestExtra("Description", "Temporary Session Key Verifier for High Frequency Actions")]
@@ -341,6 +340,9 @@ namespace SmartAccount.Verifiers
 #else
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
 #endif
             SessionKeyData? sk = GetSessionKey(accountId);
             ExecutionEngine.Assert(sk != null, "No session key active");
@@ -377,16 +379,11 @@ namespace SmartAccount.Verifiers
                 BigInteger spent = GetSpentAmount(accountId);
 #if SMARTACCOUNT_NATIVE
                 BigInteger operationValue = NativeTransferValue(accountId, op);
-                // A lowered cap can already be below historical spending. Zero value
-                // must not bypass that policy boundary merely because it adds no debit.
-                ExecutionEngine.Assert(spent + operationValue <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
-#else
-                if (operationValue > 0)
-                {
-                    BigInteger newSpent = spent + operationValue;
-                    ExecutionEngine.Assert(newSpent <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
-                }
 #endif
+                // Audit fix M-2: a lowered cap can already be below historical spending.
+                // Zero value must not bypass that policy boundary merely because it adds
+                // no debit; both builds now enforce the identical unconditional check.
+                ExecutionEngine.Assert(spent + operationValue <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
             }
 
             return isValid;
@@ -474,13 +471,15 @@ namespace SmartAccount.Verifiers
                 if (operationValue > 0)
                     Storage.Put(Storage.CurrentContext, spentKey, newSpent);
 #else
+                // Audit fix M-2: enforce the cap unconditionally (zero-value operations
+                // included) so both builds share identical policy semantics; only the
+                // debit write itself stays conditional on an actual balance change.
+                BigInteger spent = GetSpentAmount(accountId);
+                ExecutionEngine.Assert(spent + operationValue <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
                 if (operationValue > 0)
                 {
-                    BigInteger spent = GetSpentAmount(accountId);
-                    BigInteger newSpent = spent + operationValue;
-                    ExecutionEngine.Assert(newSpent <= sessionKey.SpendingLimit, "Session key spending limit exceeded");
                     byte[] spentKey = VerifierAuthority.AccountKey(Prefix_SpentAmount, accountId);
-                    Storage.Put(Storage.CurrentContext, spentKey, newSpent);
+                    Storage.Put(Storage.CurrentContext, spentKey, spent + operationValue);
                 }
 #endif
             }
@@ -505,22 +504,11 @@ namespace SmartAccount.Verifiers
 #if SMARTACCOUNT_NATIVE
             NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "configuration");
 #else
-            UInt160 core = VerifierAuthority.AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
-
-            if (Runtime.CallingScriptHash == core)
-            {
-                VerifierAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
-                return;
-            }
-
-            UInt160 backupOwner = (UInt160)Contract.Call(
-                core,
-                "getBackupOwner",
-                CallFlags.ReadOnly,
-                new object[] { accountId });
-            ExecutionEngine.Assert(backupOwner != UInt160.Zero && backupOwner.IsValid, "AA account not found");
-            ExecutionEngine.Assert(Runtime.CheckWitness(backupOwner), "Backup owner witness required");
+            // Audit fix M-1: the backup-owner direct-call branch is removed. Session
+            // key configuration is only accepted through the AA core, which enforces
+            // the 24h pending-call timelock (callVerifier / callVerifierChild); a
+            // direct setSessionKey / clearSessionKey invocation is rejected here.
+            VerifierAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
 #endif
         }
     }

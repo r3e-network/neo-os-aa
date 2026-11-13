@@ -76,8 +76,14 @@ namespace SmartAccount
 
             AccountState state = GetAccountState(accountId);
             AssertNoMarketEscrow(accountId);
+            // Audit fix M-4: a frozen account executes nothing (ExecuteUserOps routes
+            // through here as well). Escape and unfreeze stay reachable elsewhere.
+            AssertNotFrozen(accountId);
 
             SetExecutionLock(accountId);
+            // Transaction-scoped confused-deputy marker: while this is set, an operation's
+            // target observes the core itself as its caller (see IsUserOpExecutionActive).
+            MarkUserOperationInFlight();
             if (state.Verifier != UInt160.Zero)
             {
                 SetVerifierExecutionContext(accountId, state.Verifier);
@@ -229,6 +235,7 @@ namespace SmartAccount
                     ClearVerifierExecutionContext(accountId);
                 }
                 ClearExecutionLock(accountId);
+                UnmarkUserOperationInFlight();
             }
         }
 
@@ -387,6 +394,7 @@ namespace SmartAccount
             ExecutionEngine.Assert(op != null, "Operation required");
             ExecutionEngine.Assert(op!.TargetContract != null && op.TargetContract != UInt160.Zero && op.TargetContract.IsValid,
                 "Target contract required");
+            AssertTargetIsNotProtocolOwned(op!.TargetContract!);
             ExecutionEngine.Assert(op.Method != null && op.Method.Length > 0 && op.Method.Length <= MaxUserOperationMethodLength,
                 "Invalid method");
             ExecutionEngine.Assert(op.Args != null && op.Args.Length <= MaxUserOperationArgsLength,
@@ -406,6 +414,44 @@ namespace SmartAccount
             ExecutionEngine.Assert(op.Signature != null, "Signature required");
             ExecutionEngine.Assert(op.Signature!.Length <= MaxUserOperationSignatureLength,
                 "Signature exceeds protocol limit");
+        }
+
+        /// <summary>
+        /// Refuses operations whose target is a native contract that would be changed by the
+        /// core's own identity.
+        /// </summary>
+        /// <remarks>
+        /// One core contract backs every virtual account, so a target always observes the same
+        /// <c>Runtime.CallingScriptHash</c> regardless of which account authorized the operation.
+        /// Protocol-management contracts act on their caller: <c>ContractManagement.update</c>
+        /// upgrades the calling contract and <c>destroy</c> removes it, while
+        /// <c>RoleManagement</c> and <c>PolicyContract</c> grant roles and network-wide policy.
+        /// Routing an operation to them would therefore let any single account owner rewrite or
+        /// destroy the shared core, or act as the core in protocol governance. Asset and utility
+        /// natives stay reachable because an account legitimately transfers NEO and GAS and reads
+        /// through <c>StdLib</c>/<c>CryptoLib</c>; those contracts never mutate state on their
+        /// caller's behalf.
+        /// The core itself remains a legitimate target: its entry points are individually
+        /// defended — the per-account execution lock rejects re-entrant execution, module
+        /// configuration entries assert an idle configuration context, ownership and admin
+        /// entries are witness-gated, and escrow entries require the recorded escrow market as
+        /// their caller, which a core-routed operation is not. Callees that authorize on the
+        /// core's calling identity close their own deputy window by querying
+        /// <see cref="IsUserOpExecutionActive"/> or the core's escrow state, exactly as the
+        /// paymaster settlement and the market listing retirement do.
+        /// </remarks>
+        private static void AssertTargetIsNotProtocolOwned(UInt160 target)
+        {
+            ExecutionEngine.Assert(target != ContractManagement.Hash,
+                "Operation target cannot be ContractManagement");
+            ExecutionEngine.Assert(target != RoleManagement.Hash,
+                "Operation target cannot be RoleManagement");
+            ExecutionEngine.Assert(target != Policy.Hash,
+                "Operation target cannot be Policy");
+            ExecutionEngine.Assert(target != Ledger.Hash,
+                "Operation target cannot be Ledger");
+            ExecutionEngine.Assert(target != Oracle.Hash,
+                "Operation target cannot be Oracle");
         }
 
         /// <summary>

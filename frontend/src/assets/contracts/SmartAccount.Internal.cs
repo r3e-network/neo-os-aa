@@ -34,6 +34,13 @@ namespace SmartAccount
         private static readonly byte[] Prefix_VerifierDependencies = new byte[] { 0x24 };
         private static readonly byte[] Prefix_DependencyMaintenance = new byte[] { 0x25 };
         private static readonly byte[] Prefix_ConfigurationContextDepth = new byte[] { 0x26 };
+        // Transaction-scoped marker for the confused-deputy boundary: while present, the core
+        // is mid-execution of a user operation for some account, so the operation's target
+        // observes the core itself as Runtime.CallingScriptHash. Callees that act on that
+        // identity — paymaster settlement, market listing retirement — query
+        // IsUserOpExecutionActive() and refuse to run meanwhile, because one core backs every
+        // virtual account and "the caller is the AA core" alone cannot identify an authorization.
+        private static readonly byte[] Prefix_UserOperationInFlight = new byte[] { 0x28 };
 
         private static readonly BigInteger MaxMetadataUriLength = 240;
 
@@ -100,6 +107,38 @@ namespace SmartAccount
             if (Storage.Get(Storage.CurrentContext, key) == null) return;
             Storage.Delete(Storage.CurrentContext, key);
             ExitConfigurationContext();
+        }
+
+        /// <summary>
+        /// True while the core is executing a user operation for any account in this transaction.
+        /// Sponsored settlement and market escrow unwind happen outside that window, so a callee
+        /// that observes the core as its caller can distinguish the protocol's own callbacks from
+        /// an ordinary operation routed to it through <c>executeUserOp</c>.
+        /// </summary>
+        /// <remarks>
+        /// The marker is written and cleared inside a single <c>ExecuteUserOp</c> invocation and a
+        /// faulting transaction rolls storage back, so a persisted marker can only be a leftover
+        /// of an earlier transaction; its recorded hash no longer matches and it therefore
+        /// reports "not in flight".
+        /// </remarks>
+        [Safe]
+        public static bool IsUserOpExecutionActive()
+        {
+            ByteString? marker = Storage.Get(Storage.CurrentContext, Prefix_UserOperationInFlight);
+            if (marker == null) return false;
+            UInt256 recorded = (UInt256)(byte[])marker;
+            return recorded == Runtime.Transaction.Hash;
+        }
+
+        private static void MarkUserOperationInFlight()
+        {
+            Storage.Put(Storage.CurrentContext, Prefix_UserOperationInFlight, (byte[])Runtime.Transaction.Hash);
+        }
+
+        private static void UnmarkUserOperationInFlight()
+        {
+            if (Storage.Get(Storage.CurrentContext, Prefix_UserOperationInFlight) == null) return;
+            Storage.Delete(Storage.CurrentContext, Prefix_UserOperationInFlight);
         }
 
         private static void SetVerifierConfigContext(UInt160 accountId, UInt160 verifierContract)

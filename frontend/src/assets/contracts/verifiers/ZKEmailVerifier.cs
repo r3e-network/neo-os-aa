@@ -18,6 +18,7 @@ namespace SmartAccount.Verifiers
     /// </remarks>
     [DisplayName("ZKEmailVerifier")]
     [ContractPermission("*", "canConfigureVerifier")]
+    [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ManifestExtra("Description", "ZK-SNARK Email Proof Verifier")]
     public class ZKEmailVerifier : SmartContract
@@ -83,6 +84,9 @@ namespace SmartAccount.Verifiers
         /// </summary>
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
             byte[] key = Helper.Concat(Prefix_AccountDKIM, (byte[])accountId);
             ByteString? dkim = Storage.Get(Storage.CurrentContext, key);
             ExecutionEngine.Assert(dkim != null, "No DKIM configured");
@@ -90,7 +94,7 @@ namespace SmartAccount.Verifiers
             // This verifier was previously a placeholder that accepted any
             // non-empty proof blob, which is unsafe for production use.
             ExecutionEngine.Assert(false, "ZKEmailVerifier disabled pending real proof verification");
-            return false; 
+            return false;
         }
 
         public static void ClearAccount(UInt160 accountId)

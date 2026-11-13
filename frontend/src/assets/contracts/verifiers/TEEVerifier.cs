@@ -19,6 +19,7 @@ namespace SmartAccount.Verifiers
     /// </remarks>
     [DisplayName("TEEVerifier")]
     [ContractPermission("*", "canConfigureVerifier")]
+    [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
     [ManifestExtra("Description", "TEE Hardware Signature Verifier")]
     public class TEEVerifier : SmartContract
@@ -109,13 +110,16 @@ namespace SmartAccount.Verifiers
         /// </summary>
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
+            // Audit fix M-6: the ordinary-build validation entry is only reachable
+            // through the AA core's execution context; direct callers are rejected.
+            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
             ByteString teePubKey = GetPublicKey(accountId);
             ExecutionEngine.Assert(teePubKey.Length > 0, "No TEE pubkey configured");
 
             ExecutionEngine.Assert(op.Signature != null && op.Signature.Length == 64, "Invalid signature");
             ByteString signature = op.Signature!;
             byte[] payload = VerifierPayload.BuildPayload(accountId, op.TargetContract, op.Method, op.Args, op.Nonce, op.Deadline);
-            
+
             // Verify secp256r1 (P-256) with SHA-256, the Neo N3 curve: the registered TEE key must be one.
             return CryptoLib.VerifyWithECDsa((ByteString)payload, (ECPoint)teePubKey, signature, NamedCurveHash.secp256r1SHA256);
         }
