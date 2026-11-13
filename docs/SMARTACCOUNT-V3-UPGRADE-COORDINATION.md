@@ -19,8 +19,8 @@ The upgrade rides `ContractManagement.Update`, so the deployed contract
 | --- | --- | --- |
 | Mainnet core script hash | `0x0268a387913b250166ddec032b03332690a1ef78` | unchanged (update path) |
 | Testnet core script hash | `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2` | unchanged (update path) |
-| Candidate NEF sha256 | `4e9046335c5cfdab2f5ecd84c55ce8b66156ae88cd4e6b25429ec080104d7b3b` | new (Phase 1b build) |
-| Candidate manifest sha256 | `8b76f39ed5b4e5167be3dc6d5ca6c442eb4e28648140061b02e8a15f182215c0` | new (Phase 1b build) |
+| Candidate NEF sha256 | `c4210d650f1efad431d38c7797776b6c41f698689838bbdf557ddb418c5195a5` | new (Phase 1b build + 20261113 CodeReview closeout) |
+| Candidate manifest sha256 | `7953c5135886bf0a6aac862e9f203f8c5520bddfa52b99327e98d260ff36433a` | new (Phase 1b build + 20261113 CodeReview closeout) |
 
 Newly deployed service contracts (deploy fresh, hash assigned at deploy):
 

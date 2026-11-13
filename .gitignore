@@ -40,6 +40,7 @@ bin/
 obj/
 # Isolated NuGet restore cache (README: Restoring with an isolated package cache)
 nuget-isolated/
+nuget-isolated1/
 
 # Python bytecode
 __pycache__/
