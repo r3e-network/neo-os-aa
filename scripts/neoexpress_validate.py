@@ -73,7 +73,7 @@ ARTIFACTS = [
     ("AAAddressMarket", "AAAddressMarket.nef", False),
     ("SocialRecoveryVerifier", "SocialRecoveryVerifier.nef", False),
     ("MockVerifierCore", "MockVerifierCore.nef", False),
-    ("PlatformRegistrarMock", "PlatformRegistrarMock.nef", False),
+    ("AAPlatformRegistrar", "AAPlatformRegistrar.nef", True),
     ("MarkerOnlyModule", "MarkerOnlyModule.nef", False),
     ("WrongLifecycleAbiModule", "WrongLifecycleAbiModule.nef", False),
     ("WrongHookLifecycleAbiModule", "WrongHookLifecycleAbiModule.nef", False),
@@ -1639,8 +1639,7 @@ def scenario_subscription(c):
 
 def scenario_platform_owner_rotation(c):
     c.scenario("platform account owner rotation")
-    wallet = c.contracts["SmartAccountV3"]
-    registrar = c.contracts["PlatformRegistrarMock"]
+    registrar = c.contracts["AAPlatformRegistrar"]
     binding = b"neo-miniapps-platform:owner-rotation"
     owner = c.wallets["owner"]
     rotated_owner = c.wallets["merchant"]
@@ -1656,68 +1655,70 @@ def scenario_platform_owner_rotation(c):
     account_raw = c.results("SmartAccountV3", "computePlatformAccountId",
                             B(binding), H(owner), I(ESCAPE_TIMELOCK))
     account = "0x" + account_raw[::-1].hex()
-    c.tx("registrar creates platform account", "PlatformRegistrarMock", "register",
-         [H(wallet), B(binding), H(owner), I(ESCAPE_TIMELOCK)], "genesis")
+    c.tx("registrar creates platform account", "AAPlatformRegistrar", "registerPlatformAccount",
+         [B(binding), H(owner), I(ESCAPE_TIMELOCK)], "genesis")
     proxy = c.hash_result("SmartAccountV3", "getProxyScriptHash", H(account))
     c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
             "platform account starts under the original owner")
     c.check(c.hash_result("SmartAccountV3", "getAccountIdByProxy", H(proxy)) == account,
             "platform proxy binding resolves to the account")
 
-    proposed = c.tx("registrar proposes owner rotation", "PlatformRegistrarMock", "rotate",
-                    [H(wallet), H(account), B(binding), H(rotated_owner)], "genesis")
+    proposed = c.tx("registrar proposes owner rotation", "AAPlatformRegistrar",
+                    "proposePlatformAccountOwnerRotation",
+                    [H(account), B(binding), H(rotated_owner)], "genesis")
     c.check("PlatformOwnerRotationProposed" in proposed["events"],
             "owner rotation proposal emits the expected event")
-    pending = c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account))
+    pending = c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
     c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
             "rotation is pending on the proposed owner")
     c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
             "proposal does not change the current owner")
 
-    c.tx("stranger cancels pending rotation", "SmartAccountV3",
+    c.tx("stranger cancels pending rotation", "AAPlatformRegistrar",
          "cancelPlatformAccountOwnerRotation", [H(account), B(binding)], "stranger",
          expect_fault="Unauthorized platform owner rotation cancellation")
-    pending = c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account))
+    pending = c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
     c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
             "unauthorized cancellation preserves the pending rotation")
     c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
             "unauthorized cancellation preserves the current owner")
 
-    cancelled = c.tx("current owner cancels pending rotation", "SmartAccountV3",
+    cancelled = c.tx("current owner cancels pending rotation", "AAPlatformRegistrar",
                      "cancelPlatformAccountOwnerRotation", [H(account), B(binding)], "owner")
     c.check("PlatformOwnerRotationCancelled" in cancelled["events"],
             "owner cancellation emits the expected event")
-    c.check(c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account)) is None,
+    c.check(c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account)) is None,
             "owner cancellation clears the pending rotation")
     c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
             "cancellation preserves the current owner")
 
-    c.tx("registrar re-proposes owner rotation", "PlatformRegistrarMock", "rotate",
-         [H(wallet), H(account), B(binding), H(rotated_owner)], "genesis")
-    c.tx("confirm rotation before timelock", "PlatformRegistrarMock", "confirmRotate",
-         [H(wallet), H(account), B(binding)], "merchant",
+    c.tx("registrar re-proposes owner rotation", "AAPlatformRegistrar",
+         "proposePlatformAccountOwnerRotation",
+         [H(account), B(binding), H(rotated_owner)], "genesis")
+    c.tx("confirm rotation before timelock", "AAPlatformRegistrar",
+         "confirmPlatformAccountOwnerRotation", [H(account), B(binding)], "merchant",
          expect_fault="Platform owner rotation timelock not expired")
-    pending = c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account))
+    pending = c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
     c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
             "early confirmation preserves the pending rotation")
     c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
             "early confirmation preserves the current owner")
     c.fastfwd(7 * DAY)
-    c.tx("confirm rotation without new-owner witness", "PlatformRegistrarMock", "confirmRotate",
-         [H(wallet), H(account), B(binding)], "genesis",
+    c.tx("confirm rotation without new-owner witness", "AAPlatformRegistrar",
+         "confirmPlatformAccountOwnerRotation", [H(account), B(binding)], "genesis",
          expect_fault="New platform owner witness required")
-    pending = c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account))
+    pending = c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
     c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
             "confirmation without the new-owner witness preserves the pending rotation")
     c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
             "confirmation without the new-owner witness preserves the current owner")
-    rotated = c.tx("confirm rotation with new-owner witness", "PlatformRegistrarMock", "confirmRotate",
-                   [H(wallet), H(account), B(binding)], "merchant", scope="Global")
+    rotated = c.tx("confirm rotation with new-owner witness", "AAPlatformRegistrar",
+                   "confirmPlatformAccountOwnerRotation", [H(account), B(binding)], "merchant", scope="Global")
     c.check("PlatformAccountOwnerRotated" in rotated["events"],
             "rotation confirmation emits the expected event")
     c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == rotated_owner,
             "new owner is persisted")
-    c.check(c.results("SmartAccountV3", "getPendingPlatformAccountOwnerRotation", H(account)) is None,
+    c.check(c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account)) is None,
             "successful rotation clears the pending record")
     c.check(c.hash_result("SmartAccountV3", "getProxyScriptHash", H(account)) == proxy,
             "owner rotation preserves the proxy address")

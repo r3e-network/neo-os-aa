@@ -23,6 +23,14 @@ test("candidate artifact exposes the complete platform registrar surface", () =>
   assert.match(artifact.manifestSha256, /^0x[0-9a-f]{64}$/);
 });
 
+test("candidate artifact drops the pre-extraction core-side rotation ABI", () => {
+  const artifact = script.candidateArtifact();
+  assert.deepEqual(
+    script.REMOVED_METHODS.filter((method) => artifact.methods.includes(method)),
+    [],
+  );
+});
+
 test("signer parsing accepts a script hash and rejects arbitrary text", () => {
   assert.equal(
     script.normalizeSignerInput(`0x${"11".repeat(20)}`),

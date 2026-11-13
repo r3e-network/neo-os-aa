@@ -27,24 +27,33 @@ const CONFIRMATION = "I_UNDERSTAND_THIS_WRITES_CHAIN";
 const REQUIRED_METHODS = [
   "computePlatformAccountId",
   "registerPlatformAccount",
-  "rotatePlatformAccountOwner",
-  "proposePlatformAccountOwnerRotation",
-  "confirmPlatformAccountOwnerRotation",
-  "cancelPlatformAccountOwnerRotation",
-  "getPendingPlatformAccountOwnerRotation",
-  "getPlatformAccountOwnerRotationAvailableAt",
+  "applyPlatformAccountOwnerRotation",
+  "migratePlatformOwnerRotations",
+  "getPlatformAccountBinding",
   "getPlatformRegistrar",
   "getPendingPlatformRegistrar",
   "getPlatformRegistrarAvailableAt",
   "proposePlatformRegistrar",
   "confirmPlatformRegistrar",
   "cancelPlatformRegistrar",
+  "setMarketService",
+  "isMarketService",
   "callVerifierChild",
   "callHookChild",
   "setVerifierDependencies",
   "clearVerifierDependencies",
   "setHookDependencies",
   "clearHookDependencies",
+];
+// Phase 1b moved owner rotation to the AAPlatformRegistrar service contract:
+// the upgraded core must no longer expose the legacy core-side rotation ABI.
+const REMOVED_METHODS = [
+  "rotatePlatformAccountOwner",
+  "proposePlatformAccountOwnerRotation",
+  "confirmPlatformAccountOwnerRotation",
+  "cancelPlatformAccountOwnerRotation",
+  "getPendingPlatformAccountOwnerRotation",
+  "getPlatformAccountOwnerRotationAvailableAt",
 ];
 
 function candidateArtifact() {
@@ -56,6 +65,12 @@ function candidateArtifact() {
   const missingMethods = REQUIRED_METHODS.filter((method) => !methods.has(method));
   if (missingMethods.length > 0) {
     throw new Error(`candidate artifact is missing registrar methods: ${missingMethods.join(", ")}`);
+  }
+  const removedMethodsStillPresent = REMOVED_METHODS.filter((method) => methods.has(method));
+  if (removedMethodsStillPresent.length > 0) {
+    throw new Error(
+      `candidate artifact still carries pre-extraction rotation methods: ${removedMethodsStillPresent.join(", ")}`,
+    );
   }
   return {
     manifest,
@@ -291,6 +306,7 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_CORE_HASH,
   REQUIRED_METHODS,
+  REMOVED_METHODS,
   assertLiveUpdateSurface,
   candidateArtifact,
   isHalt,

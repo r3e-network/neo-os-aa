@@ -38,6 +38,9 @@ const receiptPath = latestDatedReport("aa-neoexpress-validation");
 // Keep this list identical to scripts/neoexpress_validate.py::ARTIFACTS for the
 // 24 artifacts produced by this repository. NeoDIDRegistry is an external sibling
 // artifact and is checked by the NeoExpress receipt but not by this source tree.
+// Phase 1b replaced the PlatformRegistrarMock fixture with the real
+// AAPlatformRegistrar service contract; a fresh reproducibility certificate and
+// NeoExpress receipt cycle is required before this verifier passes again.
 export const LOCAL_ARTIFACTS = {
   SmartAccountV3: "SmartAccountV3.nef",
   MockTransferTarget: "MockTransferTarget.nef",
@@ -59,7 +62,7 @@ export const LOCAL_ARTIFACTS = {
   AAAddressMarket: "AAAddressMarket.nef",
   SocialRecoveryVerifier: "SocialRecoveryVerifier.nef",
   MockVerifierCore: "MockVerifierCore.nef",
-  PlatformRegistrarMock: "PlatformRegistrarMock.nef",
+  AAPlatformRegistrar: "AAPlatformRegistrar.nef",
   MarkerOnlyModule: "MarkerOnlyModule.nef",
   WrongLifecycleAbiModule: "WrongLifecycleAbiModule.nef",
   WrongHookLifecycleAbiModule: "WrongHookLifecycleAbiModule.nef",

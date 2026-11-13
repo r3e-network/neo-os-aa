@@ -34,8 +34,11 @@ test("mainnet candidate removes the instant admin transfer surface", () => {
   assert.equal(script.REMOVED_METHODS.includes("transferAdmin"), true);
   assert.equal(artifact.methodCount > 0, true);
   // The ordinary source candidate remains release-gated until deployment
-  // review publishes a new manifest and updates the digest pin.
-  assert.equal(artifact.methodCount, 105);
+  // review publishes a new manifest and updates the digest pin. Phase 1b
+  // extracted the platform services, so the candidate now also carries the
+  // market/registrar delegation surface (finalizeEscape is overloaded, so the
+  // raw entry count is one above the unique method-name count).
+  assert.equal(artifact.methodCount, 108);
   const manifest = JSON.parse(artifact.manifestText);
   for (const name of ['callVerifierChild', 'callHookChild']) {
     const childConfiguration = manifest.abi.methods.find((method) => method.name === name);
