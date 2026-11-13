@@ -77,6 +77,8 @@ public class Fix_CleanShell_Tests
             NewVerifier = Fx.Deploy("verifiers/TEEVerifier", Wallet.ToArray());
             Hook = Fx.Deploy("hooks/WhitelistHook", Wallet.ToArray());
             Fx.CallVoid(Market, "setAllowedAA", Wallet, true);
+            // Phase 1b: the core admin registers the market as an approved escrow service.
+            Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
 
         public UInt160 RegisterAccount(byte[] verifierParams)

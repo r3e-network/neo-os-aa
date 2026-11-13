@@ -126,14 +126,15 @@ public class OwnerOnlyRecoveryRuntimeTests
         h.Fx.CallVoid(h.Core, "updateHook", h.Account, h.Hook);
         h.Fx.CallBoolean(h.Core, "callVerifier", h.Account, "clearAccount", new object[] { h.Account });
         h.Fx.CallBoolean(h.Core, "callHook", h.Account, "clearAccount", new object[] { h.Account });
-        h.Seed(0x20, new byte[] { 1 });
+        // Phase 1b: pending platform owner rotations moved to the registrar service's
+        // storage, so a raw 0x20 row is no longer core-owned state to sweep.
         h.Seed(0x06, UInt160.Zero.ToArray());
         h.Seed(0x07, new byte[] { 1 });
         h.Seed(0x1D, new byte[] { 1 });
         h.Seed(0x13, new byte[] { 1 });
         h.Mature();
         h.Recover();
-        foreach (byte prefix in new byte[] { 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x1D, 0x13, 0x20 })
+        foreach (byte prefix in new byte[] { 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x1D, 0x13 })
             Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key(prefix)), $"Stale account marker {prefix:X2}");
         TestException repeat = Assert.ThrowsExactly<TestException>(() => h.Recover());
         StringAssert.Contains(repeat.Message, "Already recovered to owner-only");
@@ -202,6 +203,9 @@ public class OwnerOnlyRecoveryRuntimeTests
         h.Mature();
         UInt160 market = h.Fx.Deploy("AAAddressMarket");
         h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        // Phase 1b: the core admin (the deploying validators account) registers the
+        // market as an approved escrow service.
+        h.Fx.CallVoid(h.Core, "setMarketService", market, true);
         h.Fx.CallVoid(market, "createListing", h.Core, h.Account, 100000000, "account", "");
         TestException locked = Assert.ThrowsExactly<TestException>(() => h.Recover());
         StringAssert.Contains(locked.Message, "Account locked in market escrow");
@@ -262,6 +266,9 @@ public class OwnerOnlyRecoveryRuntimeTests
         h.Recover();
         UInt160 market = h.Fx.Deploy("AAAddressMarket");
         h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        // Phase 1b: the core admin (the deploying validators account) registers the
+        // market as an approved escrow service.
+        h.Fx.CallVoid(h.Core, "setMarketService", market, true);
         h.Fx.CallVoid(market, "createListing", h.Core, h.Account, 100000000, "account", "");
         BigInteger listing = h.Fx.CallInteger(market, "getListingCount");
         h.Fx.FundGasFromValidators(Stranger, 200000000);
@@ -293,33 +300,35 @@ public class OwnerOnlyRecoveryRuntimeTests
     }
 
     [TestMethod]
-    public void OwnerOnlyRecovery_PlatformRotationClearsOldIntentAndInheritsRestriction()
+    public void OwnerOnlyRecovery_PlatformRotationSurvivesEscapeAndInheritsRestriction()
     {
         Harness h = new();
-        UInt160 registrar = h.Fx.Deploy("PlatformRegistrarMock");
+        UInt160 registrar = h.Fx.Deploy("AAPlatformRegistrar", h.Core.ToArray());
         byte[] binding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:owner-only-recovery");
         h.Fx.CallVoid(h.Core, "proposePlatformRegistrar", registrar);
         h.Fx.AdvanceTime(TimeSpan.FromDays(7));
         h.Fx.CallVoid(h.Core, "confirmPlatformRegistrar");
-        UInt160 account = h.Fx.CallUInt160(registrar, "registerStable", h.Core, binding, h.Owner, Delay);
+        UInt160 account = h.Fx.CallUInt160(registrar, "registerStablePlatformAccount", binding, h.Owner, Delay);
         h.Fx.CallVoid(h.Core, "updateVerifier", account, h.Faulting, Array.Empty<byte>());
         UInt160 proxy = h.Fx.CallUInt160(h.Core, "getProxyScriptHash", account);
-        h.Fx.CallVoid(registrar, "rotate", h.Core, account, binding, Stranger);
+        h.Fx.CallVoid(registrar, "proposePlatformAccountOwnerRotation", account, binding, Stranger);
         h.Fx.CallVoid(h.Core, "initiateEscape", account);
         h.Fx.AdvanceTime(TimeSpan.FromSeconds(Delay));
         h.Fx.CallVoid(h.Core, "finalizeEscapeToOwner", account);
-        Assert.AreEqual(Neo.VM.Types.StackItemType.Any,
-            h.Fx.Call(h.Core, "getPendingPlatformAccountOwnerRotation", account).Type);
-        h.Fx.CallVoid(registrar, "rotate", h.Core, account, binding, Stranger);
+        // Phase 1b: the registrar service owns the pending rotation record, so escape
+        // finalization no longer clears it; completing it still needs the new owner's
+        // witness through the core's registrar-gated apply.
+        Assert.AreEqual(Neo.VM.Types.StackItemType.Array,
+            h.Fx.Call(registrar, "getPendingPlatformOwnerRotation", account).Type);
         h.Fx.AdvanceTime(TimeSpan.FromDays(7));
         h.Fx.SetSigners(Stranger);
-        h.Fx.CallVoid(registrar, "confirmRotate", h.Core, account, binding);
+        h.Fx.CallVoid(registrar, "confirmPlatformAccountOwnerRotation", account, binding);
         Assert.AreEqual(Stranger, h.Fx.CallUInt160(h.Core, "getBackupOwner", account));
         Assert.AreEqual(proxy, h.Fx.CallUInt160(h.Core, "getProxyScriptHash", account));
         Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", account));
         TestException denied = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "updateHook", account, h.Hook));
         StringAssert.Contains(denied.Message, "Owner-only recovery is permanent");
-        Assert.ThrowsExactly<TestException>(() => h.Fx.CallUInt160(registrar, "registerStable", h.Core, binding, Stranger, Delay));
+        Assert.ThrowsExactly<TestException>(() => h.Fx.CallUInt160(registrar, "registerStablePlatformAccount", binding, Stranger, Delay));
         Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", account));
     }
 

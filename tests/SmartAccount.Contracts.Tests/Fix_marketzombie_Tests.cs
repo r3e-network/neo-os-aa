@@ -55,6 +55,8 @@ public class Fix_MarketZombie_Tests
             Wallet = Fx.Deploy("SmartAccountV3");
             Market = Fx.Deploy("AAAddressMarket");
             Fx.CallVoid(Market, "setAllowedAA", Wallet, true);
+            // Phase 1b: the core admin registers the market as an approved escrow service.
+            Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
 
         public UInt160 RegisterAccount(UInt160 backupOwner, uint escapeTimelock)

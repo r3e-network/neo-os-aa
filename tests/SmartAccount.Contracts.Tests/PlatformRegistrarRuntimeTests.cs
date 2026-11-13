@@ -1,6 +1,7 @@
 using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
+using Neo.Extensions;
 using Neo.SmartContract.Testing.Exceptions;
 using VmArray = Neo.VM.Types.Array;
 
@@ -25,7 +26,9 @@ public class PlatformRegistrarRuntimeTests
     {
         RuntimeFixture fixture = new();
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        // Phase 1b: the real registrar service is deployed with the core hash as deploy
+        // data (its authorized core), replacing the former PlatformRegistrarMock.
+        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
         UInt160 verifier = fixture.Deploy("verifiers/NeoNativeVerifier");
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:miniapp-jump-rush");
 
@@ -45,8 +48,7 @@ public class PlatformRegistrarRuntimeTests
             EscapeTimelock);
         UInt160 accountId = fixture.CallUInt160(
             registrar,
-            "register",
-            wallet,
+            "registerPlatformAccount",
             appBinding,
             AppAdmin,
             EscapeTimelock);
@@ -58,33 +60,31 @@ public class PlatformRegistrarRuntimeTests
 
         Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
             registrar,
-            "rotate",
-            wallet,
+            "proposePlatformAccountOwnerRotation",
             accountId,
             System.Text.Encoding.UTF8.GetBytes("wrong-binding"),
             RotatedOwner));
-        fixture.CallVoid(registrar, "rotate", wallet, accountId, appBinding, RotatedOwner);
+        fixture.CallVoid(registrar, "proposePlatformAccountOwnerRotation", accountId, appBinding, RotatedOwner);
         Assert.AreEqual(AppAdmin, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
-        VmArray pendingRotation = (VmArray)fixture.Call(wallet,
-            "getPendingPlatformAccountOwnerRotation", accountId);
+        VmArray pendingRotation = (VmArray)fixture.Call(registrar,
+            "getPendingPlatformOwnerRotation", accountId);
         Assert.AreEqual(Neo.VM.Types.StackItemType.ByteString, pendingRotation[0].Type);
         Assert.AreEqual(RotatedOwner, new UInt160(pendingRotation[0].GetSpan().ToArray()));
+        Assert.AreEqual(AppAdmin, new UInt160(pendingRotation[1].GetSpan().ToArray()));
         Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
             registrar,
-            "confirmRotate",
-            wallet,
+            "confirmPlatformAccountOwnerRotation",
             accountId,
             appBinding));
         fixture.AdvanceTime(TimeSpan.FromDays(7));
         fixture.SetSigners(AppAdmin);
         Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
             registrar,
-            "confirmRotate",
-            wallet,
+            "confirmPlatformAccountOwnerRotation",
             accountId,
             appBinding));
         fixture.SetSigners(RotatedOwner);
-        fixture.CallVoid(registrar, "confirmRotate", wallet, accountId, appBinding);
+        fixture.CallVoid(registrar, "confirmPlatformAccountOwnerRotation", accountId, appBinding);
         Assert.AreEqual(RotatedOwner, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
 
         fixture.SetSigners(Stranger);
@@ -113,7 +113,7 @@ public class PlatformRegistrarRuntimeTests
     {
         RuntimeFixture fixture = new();
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:rotation-cancel");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -121,26 +121,25 @@ public class PlatformRegistrarRuntimeTests
         fixture.CallVoid(wallet, "confirmPlatformRegistrar");
         UInt160 accountId = fixture.CallUInt160(
             registrar,
-            "register",
-            wallet,
+            "registerPlatformAccount",
             appBinding,
             AppAdmin,
             EscapeTimelock);
 
-        fixture.CallVoid(registrar, "rotate", wallet, accountId, appBinding, RotatedOwner);
+        fixture.CallVoid(registrar, "proposePlatformAccountOwnerRotation", accountId, appBinding, RotatedOwner);
         fixture.SetSigners(AppAdmin);
-        fixture.CallVoid(wallet, "cancelPlatformAccountOwnerRotation", accountId, appBinding);
+        fixture.CallVoid(registrar, "cancelPlatformAccountOwnerRotation", accountId, appBinding);
         Assert.AreEqual(Neo.VM.Types.StackItemType.Any,
-            fixture.Call(wallet, "getPendingPlatformAccountOwnerRotation", accountId).Type);
+            fixture.Call(registrar, "getPendingPlatformOwnerRotation", accountId).Type);
         Assert.AreEqual(AppAdmin, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
     }
 
     [TestMethod]
-    public void EscapeFinalizationClearsPendingPlatformOwnerRotation()
+    public void EscapeBlocksRotationConfirmUntilFinalized()
     {
         RuntimeFixture fixture = new();
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:rotation-escape");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -148,19 +147,37 @@ public class PlatformRegistrarRuntimeTests
         fixture.CallVoid(wallet, "confirmPlatformRegistrar");
         UInt160 accountId = fixture.CallUInt160(
             registrar,
-            "register",
-            wallet,
+            "registerPlatformAccount",
             appBinding,
             AppAdmin,
             EscapeTimelock);
 
-        fixture.CallVoid(registrar, "rotate", wallet, accountId, appBinding, RotatedOwner);
+        fixture.CallVoid(registrar, "proposePlatformAccountOwnerRotation", accountId, appBinding, RotatedOwner);
+        fixture.AdvanceTime(TimeSpan.FromDays(7));
         fixture.SetSigners(AppAdmin);
         fixture.CallVoid(wallet, "initiateEscape", accountId);
         fixture.AdvanceTime(TimeSpan.FromSeconds(EscapeTimelock));
+
+        // While the escape is active the core rejects the registrar's apply outright.
+        fixture.SetSigners(RotatedOwner);
+        TestException active = Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
+            registrar,
+            "confirmPlatformAccountOwnerRotation",
+            accountId,
+            appBinding));
+        StringAssert.Contains(active.Message, "Platform account escape active");
+
+        // Phase 1b: escape finalization no longer deletes a registrar-owned pending
+        // record (the core stopped touching storage it does not own); after
+        // finalization the rotation can still complete, and only with the new
+        // owner's witness.
+        fixture.SetSigners(AppAdmin);
         fixture.CallVoid(wallet, "finalizeEscape", accountId, UInt160.Zero);
-        Assert.AreEqual(Neo.VM.Types.StackItemType.Any,
-            fixture.Call(wallet, "getPendingPlatformAccountOwnerRotation", accountId).Type);
+        Assert.AreEqual(Neo.VM.Types.StackItemType.Array,
+            fixture.Call(registrar, "getPendingPlatformOwnerRotation", accountId).Type);
+        fixture.SetSigners(RotatedOwner);
+        fixture.CallVoid(registrar, "confirmPlatformAccountOwnerRotation", accountId, appBinding);
+        Assert.AreEqual(RotatedOwner, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
     }
 
     [TestMethod]
@@ -168,15 +185,10 @@ public class PlatformRegistrarRuntimeTests
     {
         RuntimeFixture fixture = new();
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
         byte[] appId = System.Text.Encoding.UTF8.GetBytes("miniapp-jump-rush");
         byte[] appBinding = new byte[PlatformRegistryBindingPrefix.Length + appId.Length];
         Buffer.BlockCopy(PlatformRegistryBindingPrefix, 0, appBinding, 0, PlatformRegistryBindingPrefix.Length);
         Buffer.BlockCopy(appId, 0, appBinding, PlatformRegistryBindingPrefix.Length, appId.Length);
-
-        fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
-        fixture.AdvanceTime(TimeSpan.FromDays(7));
-        fixture.CallVoid(wallet, "confirmPlatformRegistrar");
 
         UInt160 accountId = fixture.CallUInt160(
             wallet,
@@ -195,7 +207,7 @@ public class PlatformRegistrarRuntimeTests
     {
         RuntimeFixture fixture = new();
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:stable-app");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -216,8 +228,7 @@ public class PlatformRegistrarRuntimeTests
 
         UInt160 accountId = fixture.CallUInt160(
             registrar,
-            "registerStable",
-            wallet,
+            "registerStablePlatformAccount",
             appBinding,
             RotatedOwner,
             EscapeTimelock);
@@ -230,7 +241,7 @@ public class PlatformRegistrarRuntimeTests
     {
         RuntimeFixture fixture = new();
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:proxy-index");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -239,8 +250,7 @@ public class PlatformRegistrarRuntimeTests
 
         UInt160 accountId = fixture.CallUInt160(
             registrar,
-            "registerStable",
-            wallet,
+            "registerStablePlatformAccount",
             appBinding,
             RotatedOwner,
             EscapeTimelock);
@@ -255,7 +265,7 @@ public class PlatformRegistrarRuntimeTests
     {
         RuntimeFixture fixture = new();
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:miniapp-sheep-solitaire");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -279,11 +289,14 @@ public class PlatformRegistrarRuntimeTests
 
         StringAssert.Contains(exception.Message, "Unauthorized platform registrar");
 
+        // Phase 1b: the rotation write moved behind applyPlatformAccountOwnerRotation;
+        // a direct (non-registrar) caller is still rejected by the pointer gate.
         Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
             wallet,
-            "rotatePlatformAccountOwner",
+            "applyPlatformAccountOwnerRotation",
             accountId,
             appBinding,
+            AppAdmin,
             AppAdmin));
     }
 
@@ -311,7 +324,7 @@ public class PlatformRegistrarRuntimeTests
         fixture.SetSigners(AppAdmin);
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
         UInt160 target = fixture.Deploy("MockVerifierCore");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
         UInt160 accountId = fixture.CallUInt160(
             wallet,
             "computeRegistrationAccountId",
@@ -380,7 +393,7 @@ public class PlatformRegistrarRuntimeTests
         fixture.SetSigners(AppAdmin);
         UInt160 wallet = fixture.Deploy("SmartAccountV3");
         UInt160 target = fixture.Deploy("MockVerifierCore");
-        UInt160 registrar = fixture.Deploy("PlatformRegistrarMock");
+        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes(
             "neo-miniapps-platform:reentrant-owner-rotation");
 
@@ -389,16 +402,15 @@ public class PlatformRegistrarRuntimeTests
         fixture.CallVoid(wallet, "confirmPlatformRegistrar");
         UInt160 accountId = fixture.CallUInt160(
             registrar,
-            "register",
-            wallet,
+            "registerPlatformAccount",
             appBinding,
             AppAdmin,
             EscapeTimelock);
-        fixture.CallVoid(registrar, "rotate", wallet, accountId, appBinding, RotatedOwner);
+        fixture.CallVoid(registrar, "proposePlatformAccountOwnerRotation", accountId, appBinding, RotatedOwner);
         fixture.AdvanceTime(TimeSpan.FromDays(7));
 
-        // Both signers are scoped to the core so the inner registrar call can
-        // satisfy the existing backup-owner and proposed-new-owner guards.
+        // Both signers are scoped to the core so the inner registrar call can satisfy
+        // the existing backup-owner and proposed-new-owner guards on the core side.
         fixture.Engine.SetTransactionSigners(
             new Neo.Network.P2P.Payloads.Signer
             {
@@ -418,8 +430,8 @@ public class PlatformRegistrarRuntimeTests
             new object?[]
             {
                 registrar,
-                method,
-                new object?[] { wallet, accountId, appBinding },
+                method == "confirmRotate" ? "confirmPlatformAccountOwnerRotation" : "cancelPlatformAccountOwnerRotation",
+                new object?[] { accountId, appBinding },
             },
             0,
             fixture.Now() + 60_000,
@@ -427,14 +439,24 @@ public class PlatformRegistrarRuntimeTests
 
         TestException rejected = Assert.ThrowsExactly<TestException>(() =>
             fixture.CallVoid(wallet, "executeUserOp", accountId, op));
-        StringAssert.Contains(rejected.Message, "Account configuration context active");
+        // Phase 1b: confirm reaches the core's apply entry and is stopped by the
+        // account-configuration guard; cancel is stopped earlier because neither the
+        // registrar admin nor the current owner witness is in scope for the target.
+        StringAssert.Contains(
+            rejected.Message,
+            method == "confirmRotate" ? "Account configuration context active" : "Unauthorized platform owner rotation cancellation");
         Assert.AreEqual(AppAdmin, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
         Assert.AreEqual(
             Neo.VM.Types.StackItemType.Array,
-            fixture.Call(wallet, "getPendingPlatformAccountOwnerRotation", accountId).Type);
+            fixture.Call(registrar, "getPendingPlatformOwnerRotation", accountId).Type);
 
-        fixture.SetSigners(RotatedOwner);
-        fixture.CallVoid(registrar, method, wallet, accountId, appBinding);
+        if (method == "confirmRotate") fixture.SetSigners(RotatedOwner);
+        else fixture.SetSigners(AppAdmin);
+        fixture.CallVoid(
+            registrar,
+            method == "confirmRotate" ? "confirmPlatformAccountOwnerRotation" : "cancelPlatformAccountOwnerRotation",
+            accountId,
+            appBinding);
         if (method == "confirmRotate")
         {
             Assert.AreEqual(RotatedOwner, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
@@ -444,7 +466,7 @@ public class PlatformRegistrarRuntimeTests
             Assert.AreEqual(AppAdmin, fixture.CallUInt160(wallet, "getBackupOwner", accountId));
             Assert.AreEqual(
                 Neo.VM.Types.StackItemType.Any,
-                fixture.Call(wallet, "getPendingPlatformAccountOwnerRotation", accountId).Type);
+                fixture.Call(registrar, "getPendingPlatformOwnerRotation", accountId).Type);
         }
     }
 }

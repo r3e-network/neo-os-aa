@@ -28,9 +28,9 @@ public class ImplementationRefinementMethodRuntimeTests
 
     private sealed class Harness
     {
-        private const int MethodPc = 19039;
-        private const string NefHash = "8faca1113b8b2e7386643b3086be372e15f67651e462c04e96dea49c16a18d28";
-        private const string ManifestHash = "2cabbdb72bb8be1f4062ff41ba3ecb1fe8a2a4f88c94d48d1efe1db4fcb9ae3c";
+        private const int MethodPc = 19279;
+        private const string NefHash = "4e9046335c5cfdab2f5ecd84c55ce8b66156ae88cd4e6b25429ec080104d7b3b";
+        private const string ManifestHash = "8b76f39ed5b4e5167be3dc6d5ca6c442eb4e28648140061b02e8a15f182215c0";
         private readonly RuntimeFixture fx = new();
         private readonly ContractState core;
         private readonly StorageKey key;

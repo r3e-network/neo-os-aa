@@ -187,6 +187,8 @@ public class MultiSigChildConfigurationRuntimeTests
         Harness h = new();
         UInt160 market = h.Fx.Deploy("AAAddressMarket");
         h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        // Phase 1b: the core admin registers the market as an approved escrow service.
+        h.Fx.CallVoid(h.Core, "setMarketService", market, true);
         h.Fx.CallVoid(market, "createListing", h.Core, h.Account, 100000000, "child configuration test", "");
 
         TestException escrow = Assert.ThrowsExactly<TestException>(() => h.Stage(h.Web, "setPublicKey", h.KeyArgs()));
@@ -467,6 +469,8 @@ public class MultiSigChildConfigurationRuntimeTests
         h.Fx.CallVoid(h.Core, "registerAccount", account, root, Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
         UInt160 market = h.Fx.Deploy("AAAddressMarket");
         h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        // Phase 1b: the core admin registers the market as an approved escrow service.
+        h.Fx.CallVoid(h.Core, "setMarketService", market, true);
         h.Fx.CallVoid(market, "createListing", h.Core, account, 100000000, "dependency guard", "");
         object[] args = method == "setVerifierDependencies" ? new object[] { account, new[] { h.Native } } : new object[] { account };
         TestException denied = Assert.ThrowsExactly<TestException>(() =>

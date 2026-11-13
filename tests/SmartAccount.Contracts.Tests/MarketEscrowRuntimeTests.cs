@@ -46,6 +46,9 @@ public class MarketEscrowRuntimeTests
             // The market admin (the deploying validators account) allowlists the genuine AA core
             // so escrow listings backed by it are accepted. Signers are the validators by default.
             Fx.CallVoid(Market, "setAllowedAA", Wallet, true);
+            // Phase 1b: the core admin (the same validators account) must also register the
+            // market as an approved escrow service before it can arm escrows.
+            Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
 
         public UInt160 RegisterAccount(UInt160 backupOwner, uint escapeTimelock)

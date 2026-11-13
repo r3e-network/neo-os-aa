@@ -54,6 +54,9 @@ public class Fix_MarketNotify_Tests
             Wallet = Fx.Deploy("SmartAccountV3");
             SilentMarket = Fx.Deploy("MockVerifierCore");
             Target = Fx.Deploy("MockTransferTarget");
+            // Phase 1b: the core admin (the deploying validators account) registers the
+            // forwarding market stand-in as an approved escrow service.
+            Fx.CallVoid(Wallet, "setMarketService", SilentMarket, true);
         }
 
         public UInt160 RegisterAccount()

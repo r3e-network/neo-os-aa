@@ -181,6 +181,9 @@ public class Fix_confuseddeputy_Tests
         Harness h = new();
         UInt160 market = h.Fx.Deploy("AAAddressMarket");
         h.Fx.CallVoid(market, "setAllowedAA", h.Wallet, true);
+        // Phase 1b: the core admin (the deploying validators account) registers the
+        // market as an approved escrow service.
+        h.Fx.CallVoid(h.Wallet, "setMarketService", market, true);
 
         UInt160 victimAccount = h.RegisterAccount(Victim);
         h.Fx.SetSigners(Victim);

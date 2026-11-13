@@ -28,7 +28,8 @@ public class ContractTests
         "SmartAccount.Escape.cs",
         "SmartAccount.MarketEscrow.cs",
         "SmartAccount.Admin.cs",
-        "SmartAccount.Paymaster.cs"
+        "SmartAccount.Paymaster.cs",
+        "SmartAccount.PlatformRegistrar.cs"
     };
 
     private static readonly string[] HookFiles =
@@ -66,6 +67,7 @@ public class ContractTests
         "mocks/MarkerOnlyModule.csproj",
         "mocks/MockTransferTarget.csproj",
         "paymaster/Paymaster.csproj",
+        "registrar/PlatformRegistrar.csproj",
         "verifiers/MultiSigVerifier.csproj",
         "verifiers/SessionKeyVerifier.csproj",
         "verifiers/SubscriptionVerifier.csproj",
@@ -156,6 +158,12 @@ public class ContractTests
             "EnterMarketEscrow",
             "CancelMarketEscrow",
             "SettleMarketEscrow",
+            // Phase 1b service-boundary entries.
+            "SetMarketService",
+            "IsMarketService",
+            "ApplyPlatformAccountOwnerRotation",
+            "MigratePlatformOwnerRotations",
+            "GetPlatformAccountBinding",
             "_deploy",
             "Update",
             "GetContractAdmin",
@@ -665,6 +673,64 @@ public class ContractTests
     // ========================================================================
     // Paymaster Contract Tests
     // ========================================================================
+
+    // ========================================================================
+    // Registrar Contract Tests (Phase 1b service extraction)
+    // ========================================================================
+
+    [TestMethod]
+    public void RegistrarContractHasCorrectMetadata()
+    {
+        string source = ReadContractFile("registrar/PlatformRegistrar.cs");
+
+        StringAssert.Contains(source, "[DisplayName(\"AAPlatformRegistrar\")]");
+        StringAssert.Contains(source, "Platform Account Registrar Service for Neo N3 AA");
+        StringAssert.Contains(source, "[ContractPermission(\"*\", \"applyPlatformAccountOwnerRotation\")]");
+    }
+
+    [TestMethod]
+    public void RegistrarExposesAllRequiredEntrypoints()
+    {
+        string source = ReadContractFile("registrar/PlatformRegistrar.cs");
+
+        string[] requiredMethods =
+        {
+            "_deploy",
+            "RegisterPlatformAccount",
+            "RegisterStablePlatformAccount",
+            "ProposePlatformAccountOwnerRotation",
+            "ConfirmPlatformAccountOwnerRotation",
+            "CancelPlatformAccountOwnerRotation",
+            "IngestPendingPlatformOwnerRotation",
+            "GetPendingPlatformOwnerRotation",
+            "GetPlatformOwnerRotationAvailableAt",
+            "AuthorizedCore",
+            "Admin",
+            "SetAuthorizedCore",
+            "ProposeAuthorizedCore",
+            "ConfirmAuthorizedCore",
+            "CancelAuthorizedCoreChange",
+            "RotateAdmin",
+            "ConfirmAdminRotation",
+            "CancelAdminRotation",
+            "Update",
+        };
+
+        foreach (string method in requiredMethods)
+        {
+            StringAssert.Contains(source, method, $"Missing entrypoint: {method}");
+        }
+    }
+
+    [TestMethod]
+    public void RegistrarIngestIsCoreCallerGated()
+    {
+        string source = ReadContractFile("registrar/PlatformRegistrar.cs");
+
+        StringAssert.Contains(source, "PlatformRegistrarAuthority.ValidateCoreCaller();");
+        // The migration ingest must not be reachable by ordinary callers.
+        StringAssert.Contains(source, "public static void IngestPendingPlatformOwnerRotation(");
+    }
 
     [TestMethod]
     public void PaymasterContractHasCorrectMetadata()

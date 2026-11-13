@@ -330,8 +330,8 @@ public class ImplementationRefinementPublicRuntimeTests
         public UInt160 Account { get; }
         public Harness()
         {
-            VerifyArtifact("SmartAccountV3", "8faca1113b8b2e7386643b3086be372e15f67651e462c04e96dea49c16a18d28",
-                "2cabbdb72bb8be1f4062ff41ba3ecb1fe8a2a4f88c94d48d1efe1db4fcb9ae3c");
+            VerifyArtifact("SmartAccountV3", "4e9046335c5cfdab2f5ecd84c55ce8b66156ae88cd4e6b25429ec080104d7b3b",
+                "8b76f39ed5b4e5167be3dc6d5ca6c442eb4e28648140061b02e8a15f182215c0");
             VerifyArtifact("AAPaymaster", "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1",
                 "a066faf3ee31e9c1e716bf26f0ccfab74f1c9639adacb1adab0502b20918ca54");
             VerifyArtifact("MockTransferTarget", "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
