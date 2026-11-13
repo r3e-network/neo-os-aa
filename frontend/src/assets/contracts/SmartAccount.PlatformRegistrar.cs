@@ -10,22 +10,39 @@ namespace SmartAccount
 {
     public partial class SmartAccount
     {
+        // ========================================================================
+        // 9. Platform Registrar boundary (service extraction, Phase 1b)
+        // ========================================================================
+        // Pending platform-account owner rotations moved to the AAPlatformRegistrar
+        // service contract (contracts/registrar/). The core keeps the platform account
+        // STATE: deterministic id computation, the registrar-gated registration entry
+        // points, the registrar pointer with its 7-day timelock, the app binding, and
+        // the proxy index. The authoritative ownership write happens only through
+        // ApplyPlatformAccountOwnerRotation, gated on the registrar pointer and fully
+        // re-validated here.
+
         private static readonly byte[] Prefix_PlatformRegistrar = new byte[] { 0x17 };
         private static readonly byte[] Prefix_PendingPlatformRegistrar = new byte[] { 0x18 };
         private static readonly byte[] Prefix_PlatformRegistrarTimelock = new byte[] { 0x19 };
         private static readonly byte[] Prefix_PlatformAccountBinding = new byte[] { 0x1E };
-        private static readonly byte[] Prefix_PendingPlatformOwnerRotation = new byte[] { 0x20 };
         // Reverse index for platform virtual-account witnesses.  The proxy hash
         // is the address that holds the account's assets and appears as the
         // witness/caller at platform contracts; accountId is the AA core's
         // authorization subject.  Only the platform registrar may create this
         // binding, and it is immutable for the lifetime of the account.
         private static readonly byte[] Prefix_PlatformProxyAccount = new byte[] { 0x1F };
+        // Phase 1b migration: written once by MigratePlatformOwnerRotations after the
+        // legacy pending-rotation rows are ingested into the registrar service.
+        private static readonly byte[] Prefix_PlatformOwnerRotationsMigrated = new byte[] { 0x2A };
         private static readonly byte[] StablePlatformAccountOwnerDomain = new byte[] { 0xAA, 0x52, 0x47, 0x02 };
+        // Legacy compatibility: pending platform owner rotations under 0x20 were moved to
+        // the AAPlatformRegistrar service. This prefix is read-only — consumed exactly once
+        // by MigratePlatformOwnerRotations — and never written by the current layout.
+        private static readonly byte[] LegacyStoragePrefix20 = new byte[] { 0x20 };
 
         public delegate void PlatformRegistrarProposalDelegate(UInt160 registrar, BigInteger availableAt);
         public delegate void PlatformAccountOwnerRotationDelegate(UInt160 accountId, UInt160 previousOwner, UInt160 newOwner);
-        public delegate void PlatformAccountOwnerRotationProposedDelegate(UInt160 accountId, UInt160 previousOwner, UInt160 newOwner, BigInteger availableAt);
+        public delegate void PlatformOwnerRotationsMigratedDelegate(BigInteger accountCount);
 
         [DisplayName("PlatformRegistrarProposed")]
         public static event PlatformRegistrarProposalDelegate OnPlatformRegistrarProposed = null!;
@@ -42,14 +59,14 @@ namespace SmartAccount
         [DisplayName("PlatformRegistrarCancelled")]
         public static event AccountOnlyDelegate OnPlatformRegistrarCancelled = null!;
 
+        // The proposed/cancelled rotation notifications now live in the registrar
+        // service contract (same display names); the core only emits the final
+        // ownership change once ApplyPlatformAccountOwnerRotation succeeds.
         [DisplayName("PlatformAccountOwnerRotated")]
         public static event PlatformAccountOwnerRotationDelegate OnPlatformAccountOwnerRotated = null!;
 
-        [DisplayName("PlatformOwnerRotationProposed")]
-        public static event PlatformAccountOwnerRotationProposedDelegate OnPlatformAccountOwnerRotationProposed = null!;
-
-        [DisplayName("PlatformOwnerRotationCancelled")]
-        public static event AccountOnlyDelegate OnPlatformAccountOwnerRotationCancelled = null!;
+        [DisplayName("PlatformOwnerRotationsMigrated")]
+        public static event PlatformOwnerRotationsMigratedDelegate OnPlatformOwnerRotationsMigrated = null!;
 
         [Safe]
         public static UInt160 ComputePlatformAccountId(ByteString appBinding, UInt160 backupOwner, uint escapeTimelock)
@@ -112,16 +129,20 @@ namespace SmartAccount
             IndexPlatformProxy(accountId);
         }
 
-        public static void RotatePlatformAccountOwner(UInt160 accountId, ByteString appBinding, UInt160 newBackupOwner)
-        {
-            ProposePlatformAccountOwnerRotation(accountId, appBinding, newBackupOwner);
-        }
-
         /// <summary>
-        /// Starts a delayed platform-account owner rotation. The legacy rotate ABI now
-        /// enters this proposal path as well; it never changes BackupOwner immediately.
+        /// Applies a platform-account owner rotation proposed by the registrar service.
+        /// This is the only state-changing platform entry besides registration: the
+        /// registrar holds the timelock record, and the core re-validates everything it
+        /// owns before writing — binding match, configuration idleness, no market escrow,
+        /// escape idleness, the <paramref name="previousOwner"/> staleness guard, and the
+        /// new owner's witness. A pre-sale rotation therefore can never be confirmed
+        /// against a sold account.
         /// </summary>
-        public static void ProposePlatformAccountOwnerRotation(UInt160 accountId, ByteString appBinding, UInt160 newBackupOwner)
+        public static void ApplyPlatformAccountOwnerRotation(
+            UInt160 accountId,
+            ByteString appBinding,
+            UInt160 newBackupOwner,
+            UInt160 previousOwner)
         {
             AssertPlatformRegistrar();
             ValidatePlatformAccountBinding(appBinding);
@@ -137,107 +158,100 @@ namespace SmartAccount
                 StdLib.MemoryCompare(storedBinding!, appBinding!) == 0,
                 "Platform account binding mismatch");
             AssertNoMarketEscrow(accountId);
-            AccountState state = GetAccountState(accountId);
-            ExecutionEngine.Assert(state.EscapeTriggeredAt == 0, "Platform account escape active");
-
-            UInt160 previousOwner = state.BackupOwner;
-            ExecutionEngine.Assert(previousOwner != newBackupOwner, "Platform backup owner unchanged");
-            byte[] pendingKey = Helper.Concat(Prefix_PendingPlatformOwnerRotation, (ByteString)accountId);
-            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, pendingKey) == null,
-                "Platform owner rotation already pending");
-            Storage.Put(Storage.CurrentContext, pendingKey, StdLib.Serialize(new PendingPlatformOwnerRotation
-            {
-                NewBackupOwner = newBackupOwner!,
-                InitiatedAt = Runtime.Time
-            }));
-            OnPlatformAccountOwnerRotationProposed(
-                accountId,
-                previousOwner,
-                newBackupOwner!,
-                Runtime.Time + MinUpgradeDelayMs);
-        }
-
-        /// <summary>
-        /// Applies a pending platform-account owner rotation after the seven-day delay.
-        /// The proposed new owner must witness the confirmation transaction.
-        /// </summary>
-        public static void ConfirmPlatformAccountOwnerRotation(UInt160 accountId, ByteString appBinding)
-        {
-            AssertPlatformRegistrar();
-            ValidatePlatformAccountBinding(appBinding);
-            AssertAccountConfigurationIdle(accountId!);
-            byte[] bindingKey = Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId);
-            ByteString? storedBinding = Storage.Get(Storage.CurrentContext, bindingKey);
-            ExecutionEngine.Assert(storedBinding != null, "Platform account binding not found");
-            ExecutionEngine.Assert(StdLib.MemoryCompare(storedBinding!, appBinding!) == 0,
-                "Platform account binding mismatch");
-            AssertNoMarketEscrow(accountId);
-
-            byte[] pendingKey = Helper.Concat(Prefix_PendingPlatformOwnerRotation, (ByteString)accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, pendingKey);
-            ExecutionEngine.Assert(data != null, "No pending platform owner rotation");
-            PendingPlatformOwnerRotation pending = (PendingPlatformOwnerRotation)StdLib.Deserialize(data!);
-            ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + MinUpgradeDelayMs,
-                "Platform owner rotation timelock not expired");
-            ExecutionEngine.Assert(Runtime.CheckWitness(pending.NewBackupOwner),
-                "New platform owner witness required");
 
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.EscapeTriggeredAt == 0, "Platform account escape active");
-            UInt160 previousOwner = state.BackupOwner;
-            ExecutionEngine.Assert(previousOwner != pending.NewBackupOwner, "Platform backup owner unchanged");
-            state.BackupOwner = pending.NewBackupOwner;
+            ExecutionEngine.Assert(
+                previousOwner != null && previousOwner == state.BackupOwner,
+                "Platform owner rotation stale");
+            ExecutionEngine.Assert(state.BackupOwner != newBackupOwner, "Platform backup owner unchanged");
+            ExecutionEngine.Assert(Runtime.CheckWitness(newBackupOwner!), "New platform owner witness required");
+            state.BackupOwner = newBackupOwner!;
             Storage.Put(
                 Storage.CurrentContext,
                 Helper.Concat(Prefix_AccountState, (ByteString)accountId),
                 StdLib.Serialize(state));
-            Storage.Delete(Storage.CurrentContext, pendingKey);
-            OnPlatformAccountOwnerRotated(accountId, previousOwner, pending.NewBackupOwner);
+            OnPlatformAccountOwnerRotated(accountId, previousOwner!, newBackupOwner!);
         }
 
-        /// <summary> Cancels a pending rotation by the registrar or current owner. </summary>
-        public static void CancelPlatformAccountOwnerRotation(UInt160 accountId, ByteString appBinding)
+        /// <summary>
+        /// One-time migration of the legacy core-side pending platform owner rotations
+        /// (prefix 0x20) into the registrar service's storage. Admin-gated; the
+        /// <c>0x2A</c> flag makes it strictly one-shot. Migrated records keep their
+        /// original <c>InitiatedAt</c>, so an in-flight rotation cannot be re-armed by
+        /// the migration. Accounts without a pending row are skipped, but a listed
+        /// account whose binding row is missing aborts the whole run.
+        /// </summary>
+        public static void MigratePlatformOwnerRotations(UInt160[] accountIds)
         {
-            ValidatePlatformAccountBinding(appBinding);
-            AssertAccountConfigurationIdle(accountId!);
-            byte[] bindingKey = Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId);
-            ByteString? storedBinding = Storage.Get(Storage.CurrentContext, bindingKey);
-            ExecutionEngine.Assert(storedBinding != null, "Platform account binding not found");
-            ExecutionEngine.Assert(StdLib.MemoryCompare(storedBinding!, appBinding!) == 0,
-                "Platform account binding mismatch");
-            AccountState state = GetAccountState(accountId);
-            bool registrar = GetPlatformRegistrar() != UInt160.Zero
-                && Runtime.CallingScriptHash == GetPlatformRegistrar();
-            bool owner = state.BackupOwner != UInt160.Zero && Runtime.CheckWitness(state.BackupOwner);
-            ExecutionEngine.Assert(registrar || owner, "Unauthorized platform owner rotation cancellation");
-            byte[] pendingKey = Helper.Concat(Prefix_PendingPlatformOwnerRotation, (ByteString)accountId);
-            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, pendingKey) != null,
-                "No pending platform owner rotation");
-            Storage.Delete(Storage.CurrentContext, pendingKey);
-            OnPlatformAccountOwnerRotationCancelled(accountId);
+            ValidateAdmin();
+            ExecutionEngine.Assert(
+                Storage.Get(Storage.CurrentContext, Prefix_PlatformOwnerRotationsMigrated) == null,
+                "Platform owner rotations already migrated");
+            UInt160 registrar = GetPlatformRegistrar();
+            ExecutionEngine.Assert(registrar != UInt160.Zero, "Platform registrar not set");
+            ExecutionEngine.Assert(accountIds != null && accountIds.Length > 0, "No accounts to migrate");
+
+            BigInteger migrated = 0;
+            foreach (UInt160 accountId in accountIds!)
+            {
+                byte[] pendingKey = Helper.Concat(LegacyStoragePrefix20, (byte[])accountId);
+                ByteString? data = Storage.Get(Storage.CurrentContext, pendingKey);
+                if (data == null) continue;
+                PendingPlatformOwnerRotation pending = (PendingPlatformOwnerRotation)StdLib.Deserialize(data!);
+                ByteString? binding = Storage.Get(
+                    Storage.CurrentContext,
+                    Helper.Concat(Prefix_PlatformAccountBinding, (byte[])accountId));
+                ExecutionEngine.Assert(binding != null, "Platform account binding not found");
+                UInt160 previousOwner = GetAccountState(accountId).BackupOwner;
+                Contract.Call(
+                    registrar,
+                    "ingestPendingPlatformOwnerRotation",
+                    CallFlags.All,
+                    new object[]
+                    {
+                        accountId,
+                        binding!,
+                        pending.NewBackupOwner,
+                        previousOwner,
+                        pending.InitiatedAt
+                    });
+                Storage.Delete(Storage.CurrentContext, pendingKey);
+                migrated++;
+            }
+            Storage.Put(Storage.CurrentContext, Prefix_PlatformOwnerRotationsMigrated, new byte[] { 1 });
+            OnPlatformOwnerRotationsMigrated(migrated);
         }
 
+        /// <summary>
+        /// Resolves a platform virtual-account witness address to its AA
+        /// account identifier.  The result is only populated by the trusted
+        /// platform registrar during account creation; callers cannot register
+        /// or overwrite an index row.
+        /// </summary>
         [Safe]
-        public static object[]? GetPendingPlatformAccountOwnerRotation(UInt160 accountId)
+        public static UInt160 GetAccountIdByProxy(UInt160 proxy)
+        {
+            ExecutionEngine.Assert(proxy != null && proxy.IsValid && proxy != UInt160.Zero,
+                "Invalid platform proxy");
+            ByteString? value = Storage.Get(
+                Storage.CurrentContext,
+                Helper.Concat(Prefix_PlatformProxyAccount, (ByteString)(byte[])proxy!));
+            return value == null ? UInt160.Zero : (UInt160)value;
+        }
+
+        /// <summary>
+        /// Returns the app binding of a platform account, or null when the account id is
+        /// not a platform account. Read by the registrar service to scope rotation
+        /// proposals without trusting the caller-supplied binding.
+        /// </summary>
+        [Safe]
+        public static ByteString? GetPlatformAccountBinding(UInt160 accountId)
         {
             ValidateAccountId(accountId);
-            byte[] pendingKey = Helper.Concat(Prefix_PendingPlatformOwnerRotation, (ByteString)accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, pendingKey);
-            if (data == null) return null;
-            PendingPlatformOwnerRotation pending = (PendingPlatformOwnerRotation)StdLib.Deserialize(data!);
-            return new object[]
-            {
-                pending.NewBackupOwner,
-                pending.InitiatedAt,
-                pending.InitiatedAt + MinUpgradeDelayMs
-            };
-        }
-
-        [Safe]
-        public static BigInteger GetPlatformAccountOwnerRotationAvailableAt(UInt160 accountId)
-        {
-            object[]? pending = GetPendingPlatformAccountOwnerRotation(accountId);
-            return pending == null ? 0 : (BigInteger)pending[2];
+            return Storage.Get(
+                Storage.CurrentContext,
+                Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId));
         }
 
         public static void ProposePlatformRegistrar(UInt160 registrar)
@@ -282,23 +296,6 @@ namespace SmartAccount
         public static UInt160 GetPlatformRegistrar()
         {
             ByteString? value = Storage.Get(Storage.CurrentContext, Prefix_PlatformRegistrar);
-            return value == null ? UInt160.Zero : (UInt160)value;
-        }
-
-        /// <summary>
-        /// Resolves a platform virtual-account witness address to its AA
-        /// account identifier.  The result is only populated by the trusted
-        /// platform registrar during account creation; callers cannot register
-        /// or overwrite an index row.
-        /// </summary>
-        [Safe]
-        public static UInt160 GetAccountIdByProxy(UInt160 proxy)
-        {
-            ExecutionEngine.Assert(proxy != null && proxy.IsValid && proxy != UInt160.Zero,
-                "Invalid platform proxy");
-            ByteString? value = Storage.Get(
-                Storage.CurrentContext,
-                Helper.Concat(Prefix_PlatformProxyAccount, (ByteString)(byte[])proxy!));
             return value == null ? UInt160.Zero : (UInt160)value;
         }
 
