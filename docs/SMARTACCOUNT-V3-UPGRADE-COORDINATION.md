@@ -33,8 +33,9 @@ Newly deployed service contracts (deploy fresh, hash assigned at deploy):
 
 ## 2. Core ABI delta (candidate vs. the previously verified surfaces)
 
-Live mainnet core: 90 raw manifest methods. Phase 1b candidate: 108 raw
-manifest methods (`finalizeEscape` is overloaded, so unique names are 107).
+Live mainnet core: 90 raw manifest methods. Phase 1b candidate (with the
+2026-11-13 seal revision): 109 raw
+manifest methods (`finalizeEscape` is overloaded, so unique names are 108).
 
 Removed from the core (rotation now lives in the registrar service):
 
@@ -53,6 +54,7 @@ Added to the core (delegation + migration surface):
 - `setMarketService`, `isMarketService`
 - `isUserOpExecutionActive`
 - `migratePlatformOwnerRotations`
+- `isPlatformOwnerRotationsMigrated` (added with the 2026-11-13 seal revision; candidate ABI, not part of the pinned public artifact)
 
 Registrar-owned replacements (on `AAPlatformRegistrar`):
 `registerPlatformAccount`, `proposePlatformAccountOwnerRotation`,
@@ -98,7 +100,7 @@ Authoritative source-side pinners (hand-maintained; update on evidence):
 - `neo-os-aa` — already synced in Phase 1b:
   - `implementations/ordinary/profile.json` — `verifiedArtifact.coreHash`
     unchanged (hash survives `update`); `currentSourceCandidate.abiMethodCount`
-    now 108.
+    now 109.
   - `scripts/upgrade_testnet_smart_account.js` / `upgrade_mainnet_smart_account.js`
     — REQUIRED/REMOVED method lists match the new ABI; fail-closed candidate
     checks updated.
@@ -166,7 +168,7 @@ change sets.
 
 `node --test scripts/*.test.mjs` shows 13 failures on this Windows machine;
 12 are pre-existing environmental issues (the 13th — the mainnet candidate
-count pin — was updated to 108 in Phase 1b and passes):
+count pin — was re-pinned to 109 with the revised candidate and passes):
 
 - `implementation_profiles.test.mjs` (3): `path.resolve(URL.pathname)`
   doubles the drive (`D:\D:\Git\...`) on Windows.

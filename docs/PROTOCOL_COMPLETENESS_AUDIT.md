@@ -20,7 +20,7 @@ The ordinary source protocol is internally consistent for its executable nonce
 domain, operation-shape isolation, plugin lifecycle and bounded policy
 cardinality. The current source candidate is compiled and runtime-tested, while
 the pinned public artifact remains the separately verified deployment identity.
-The source candidate currently has a 105-entry ABI (104 unique method names because
+The source candidate currently has a 109-entry ABI (108 unique method names because
 of a retained overload entry); the pinned public artifact has 90 ABI entries.
 The current source also adds a shared per-transaction reimbursement ceiling within
 each core and callback-free `finalizeEscapeToOwner`: a permanent owner-only

@@ -133,8 +133,9 @@ platform-account registration plus the owner-rotation timelocks on the new
 standalone `AAPlatformRegistrar` (`contracts/registrar/`), applied to the core
 through the one-time admin-gated `migratePlatformOwnerRotations` migration. On
 top of the 2026-11-13 security remediation, the candidate adds the admin-gated
-freeze surface. The candidate-only freeze ABI (`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`, not part of the pinned public artifact) brings the candidate
-manifest to 108 raw methods (107 unique names; `finalizeEscape`
+freeze surface and the migration-seal read. The candidate-only freeze ABI and seal read
+(`freezeAccount` / `unfreezeAccount` / `isAccountFrozen` / `isPlatformOwnerRotationsMigrated`, not part of the pinned public artifact) bring the candidate
+manifest to 109 raw methods (108 unique names; `finalizeEscape`
 is overloaded) against the 90 methods of the pinned public artifact.
 
 The public deployments still run the 90-method artifact, so the extraction,
