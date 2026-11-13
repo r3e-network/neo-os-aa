@@ -18,16 +18,22 @@
     <NeoSourceRoot Condition="'$(NeoSourceRoot)' == ''">$(MSBuildThisFileDirectory)../../../../neo-native-core/src</NeoSourceRoot>
   </PropertyGroup>
 
-  <!-- The overlay consumes the pinned native core exclusively: every source
-       file (including the canonical SmartAccount native contract and its
-       runtime dispatch) is compiled straight out of $(NeoCoreRoot), so the
-       core repository stays the single source of truth and this project is a
-       thin, fork-free build wrapper. Both roots are regular MSBuild
-       properties and can be overridden by environment variables of the same
-       name (NeoCoreRoot / NeoSourceRoot). -->
+  <!-- The overlay compiles the pinned native core in full and replaces exactly
+       three groups of its files with AA-owned true source:
+         1. Native/NativeContract.cs      - the overlay variant registers SmartAccount
+            and gates its HF_SmartAccountV1 activation;
+         2. Native/SmartAccount*.cs       - generated sync copies of the editable true
+            source in SmartAccount/ (scripts/sync_native_smartaccount.py);
+         3. ApplicationEngine.Runtime.cs - the overlay engine gates permissionless
+            native dispatch.
+       Core build outputs (obj/bin) are never compile inputs. NeoCoreRoot and
+       NeoSourceRoot are regular MSBuild properties and can be overridden by
+       environment variables of the same name. -->
   <ItemGroup>
     <Compile Include="$(NeoCoreRoot)/**/*.cs"
-             Exclude="$(NeoCoreRoot)/obj/**;$(NeoCoreRoot)/bin/**" />
+             Exclude="$(NeoCoreRoot)/obj/**;$(NeoCoreRoot)/bin/**;$(NeoCoreRoot)/SmartContract/Native/NativeContract.cs;$(NeoCoreRoot)/SmartContract/Native/SmartAccount*.cs;$(NeoCoreRoot)/SmartContract/ApplicationEngine.Runtime.cs" />
+    <Compile Include="Runtime/ApplicationEngine.Runtime.cs" />
+    <Compile Include="SmartAccount/*.cs" />
   </ItemGroup>
 
   <ItemGroup>
