@@ -81,7 +81,7 @@ jobs:
         shell: bash
     env:
       # Updated only after the matching core changes have a reviewed immutable SHA.
-      NATIVE_CORE_COMMIT: 1cd0bbda5bbf303d69440aab43f2f660fa476f4b
+      NATIVE_CORE_COMMIT: e7fcc132f6546c55ad7342f26d69081a71357be5
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_NOLOGO: '1'
     steps:
@@ -116,6 +116,12 @@ jobs:
           test "$(dotnet --version)" = '10.0.400'
           printf 'NUGET_PACKAGES=%s\n' "$RUNNER_TEMP/native-profile-packages" >> "$GITHUB_ENV"
           printf 'NCCS_BIN=%s\n' "$RUNNER_TEMP/native-profile-tools/nccs" >> "$GITHUB_ENV"
+      - name: Gate the core SmartAccount copies on the true source
+        # implementations/native/core/SmartAccount/ is the only editable copy;
+        # the pinned core must carry exactly its regenerated copies or the lane
+        # fails here, before any build or test work is spent.
+        run: |
+          python3 scripts/sync_native_smartaccount.py --check --core "$GITHUB_WORKSPACE/native-core"
       - name: Check profile, metadata and evidence guards
         run: |
           python3 docs/proposals/validate-native-smartaccount-profile.py
