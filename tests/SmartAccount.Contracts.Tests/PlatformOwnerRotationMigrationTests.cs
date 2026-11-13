@@ -14,7 +14,9 @@ namespace SmartAccount.Contracts.Tests;
 /// rotations (prefix 0x20) move into the AAPlatformRegistrar service through
 /// migratePlatformOwnerRotations. The legacy rows are written directly into engine
 /// storage, migrated, asserted gone, and a second run is rejected by the one-time
-/// 0x2A flag.
+/// 0x2A flag. The seal is scan-based (audit High 1 / Medium 2): the flag is written
+/// only after a prefix scan over the legacy family finds no row, so a batched
+/// orchestration can never strand legacy rows behind an early seal.
 /// </summary>
 [TestClass]
 public class PlatformOwnerRotationMigrationTests
@@ -156,6 +158,85 @@ public class PlatformOwnerRotationMigrationTests
         TestException empty = Assert.ThrowsExactly<TestException>(() =>
             fixture.CallVoid(wallet, "migratePlatformOwnerRotations", new object[] { new UInt160[] { } }));
         StringAssert.Contains(empty.Message, "No accounts to migrate");
+    }
+
+    [TestMethod]
+    public void MigratePlatformOwnerRotations_SealsOnlyWhenTheScanFindsNoLegacyRow()
+    {
+        Harness h = new();
+        byte[] firstBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:migration-batch-a");
+        byte[] secondBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:migration-batch-b");
+        UInt160 first = h.RegisterPlatformAccount(firstBinding);
+        UInt160 second = h.RegisterPlatformAccount(secondBinding);
+        BigInteger initiatedAt = h.Fx.Now();
+        h.SeedPendingRotation(first, RotatedOwner, initiatedAt);
+        h.SeedPendingRotation(second, RotatedOwner, initiatedAt);
+
+        // The orchestration batches ~50 accounts per invocation (block gas limits). The
+        // first batch migrates its own row but MUST NOT write the 0x2A seal while the
+        // scan still finds the second account's row: under the old unconditional seal
+        // every later batch faulted on entry and the remaining rows were stranded
+        // forever, because the upgraded core never reads 0x20 again.
+        h.Fx.SetSigners(h.Fx.Engine.ValidatorsAddress);
+        h.Fx.CallVoid(h.Core, "migratePlatformOwnerRotations", new object[] { new UInt160[] { first } });
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key(0x20, first)));
+        Assert.IsNotNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key(0x20, second)),
+            "A later batch must still be able to pick up the remaining legacy row");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isPlatformOwnerRotationsMigrated"),
+            "An intermediate batch must not seal while legacy rows remain");
+        Assert.AreEqual(Neo.VM.Types.StackItemType.Any,
+            h.Fx.Call(h.Registrar, "getPendingPlatformOwnerRotation", second).Type);
+
+        // The batch that empties the legacy family writes the one-time flag.
+        h.Fx.CallVoid(h.Core, "migratePlatformOwnerRotations", new object[] { new UInt160[] { second } });
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key(0x20, second)));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isPlatformOwnerRotationsMigrated"));
+        Assert.IsNotNull(h.Fx.Engine.Storage.Snapshot.TryGet(
+            new StorageKey { Id = h.CoreId, Key = new byte[] { 0x2A } }),
+            "The seal row must exist under the bare 0x2A key");
+
+        // The seal stays strictly one-shot: no further run is accepted.
+        TestException repeat = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallVoid(h.Core, "migratePlatformOwnerRotations", new object[] { new UInt160[] { second } }));
+        StringAssert.Contains(repeat.Message, "Platform owner rotations already migrated");
+    }
+
+    [TestMethod]
+    public void MigratePlatformOwnerRotations_UnlistedRowsBlockTheSealUntilMigrated()
+    {
+        Harness h = new();
+        byte[] listedBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:migration-unlisted");
+        byte[] unlistedBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:migration-unlisted-other");
+        UInt160 listed = h.RegisterPlatformAccount(listedBinding);
+        UInt160 unlisted = h.RegisterPlatformAccount(unlistedBinding);
+        h.SeedPendingRotation(listed, RotatedOwner, h.Fx.Now());
+        h.SeedPendingRotation(unlisted, RotatedOwner, h.Fx.Now());
+
+        // A batch whose list does not cover the remaining rows returns unsealed, so an
+        // under-covering account list cannot strand what it did not name.
+        h.Fx.SetSigners(h.Fx.Engine.ValidatorsAddress);
+        h.Fx.CallVoid(h.Core, "migratePlatformOwnerRotations", new object[] { new UInt160[] { listed } });
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isPlatformOwnerRotationsMigrated"));
+
+        // The catch-up batch migrates the remaining row and seals.
+        h.Fx.CallVoid(h.Core, "migratePlatformOwnerRotations", new object[] { new UInt160[] { unlisted } });
+        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key(0x20, unlisted)));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isPlatformOwnerRotationsMigrated"));
+    }
+
+    [TestMethod]
+    public void MigratePlatformOwnerRotations_SealsWhenNoLegacyRowExistsAtAll()
+    {
+        Harness h = new();
+        byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:migration-empty");
+        UInt160 accountId = h.RegisterPlatformAccount(appBinding);
+
+        // The seal is derived from storage, not from the amount of work this batch did:
+        // with the legacy family already empty, even a batch that migrates nothing
+        // writes the flag, which keeps the flag exactly equivalent to "0x20 is drained".
+        h.Fx.SetSigners(h.Fx.Engine.ValidatorsAddress);
+        h.Fx.CallVoid(h.Core, "migratePlatformOwnerRotations", new object[] { new UInt160[] { accountId } });
+        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isPlatformOwnerRotationsMigrated"));
     }
 
     [TestMethod]

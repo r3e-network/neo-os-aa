@@ -98,6 +98,29 @@ public class Fix_AccountFreeze_Tests
     }
 
     [TestMethod]
+    public void IsAccountFrozen_ReportsFalseForUnknownAccounts()
+    {
+        // Audit Low 5: a [Safe] query reports a zero value for an unknown account
+        // instead of faulting, matching the read-only convention of the other safe
+        // entries. Format validation still applies to the account id itself.
+        Harness h = new();
+        UInt160 unknown = UInt160.Parse("0x5555555555555555555555555555555555555555");
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isAccountFrozen", unknown),
+            "An unknown account must report not frozen");
+
+        TestException invalid = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallBoolean(h.Wallet, "isAccountFrozen", UInt160.Zero));
+        StringAssert.Contains(invalid.Message, "Account id required");
+
+        // Registered accounts keep the same observable behavior as before.
+        UInt160 account = h.RegisterAccount();
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isAccountFrozen", account));
+        h.Fx.SetSigners(BackupOwner);
+        h.Fx.CallVoid(h.Wallet, "freezeAccount", account);
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isAccountFrozen", account));
+    }
+
+    [TestMethod]
     public void OnlyBackupOwner_CanFreezeAndUnfreeze()
     {
         Harness h = new();

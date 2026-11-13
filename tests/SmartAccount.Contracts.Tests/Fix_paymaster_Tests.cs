@@ -439,8 +439,14 @@ public class FixPaymasterTests
     }
 
     [TestMethod]
-    public void NestedSponsoredExecution_ObservesOuterReservation()
+    public void NestedSponsoredExecution_SettlementRefusedWhileOuterFrameInFlight()
     {
+        // Audit Low 6 (depth-counted in-flight marker): a nested executeSponsoredUserOp
+        // unwinds to depth 1, not to an absent marker, while the outer operation still
+        // executes. IsUserOpExecutionActive therefore stays true and the paymaster's
+        // deputy guard refuses the nested settlement instead of reimbursing a fee from
+        // inside another account's operation. The whole invocation faults and every
+        // nested effect (nonce, transfer, reservation) rolls back.
         SponsoredHarness h = new(50 * OneGas);
         h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
         UInt160 second = RegisterSecondAccount(h);
@@ -472,12 +478,14 @@ public class FixPaymasterTests
         UInt160 target = h.Fx.DeployArtifact(nef.ToArray(), manifest.ToJson().ToString());
         BigInteger before = h.Deposit(), relayBefore = h.RelayBalance();
         SetFees(h);
-        h.Fx.CallVoid(h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
+        TestException refused = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
             RuntimeFixture.UserOp(target, "run", Array.Empty<object?>(), 0, deadline, Array.Empty<byte>()),
-            h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
-        Assert.AreEqual((BigInteger)(5 * OneGas), before - h.Deposit());
-        Assert.AreEqual((BigInteger)(5 * OneGas), h.RelayBalance() - relayBefore);
-        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
-        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Wallet, "getNonce", second, BigInteger.Zero));
+            h.Paymaster, Sponsor, (BigInteger)(3 * OneGas)));
+        StringAssert.Contains(refused.Message, "Settlement must follow a completed sponsored execution");
+        Assert.AreEqual(before, h.Deposit(),
+            "The refused nested settlement must not spend sponsor deposit");
+        Assert.AreEqual(relayBefore, h.RelayBalance());
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getNonce", second, BigInteger.Zero));
     }
 }

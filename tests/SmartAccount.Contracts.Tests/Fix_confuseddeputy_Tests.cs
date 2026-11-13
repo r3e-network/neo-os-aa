@@ -201,4 +201,56 @@ public class Fix_confuseddeputy_Tests
             "The victim's listing must stay Active");
         Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", victimAccount));
     }
+
+    [TestMethod]
+    public void NestedExecution_KeepsTheInFlightMarkerUntilTheOuterFrameCloses()
+    {
+        // Audit Low 6: the confused-deputy marker is depth-counted. A nested
+        // executeUserOp for a different account (the per-account lock only rejects
+        // same-account re-entry) must not clear the marker while the outer frame
+        // still executes, or the callee-side deputy checks would silently re-open for
+        // the remainder of the outer operation. The probe runs the nested frame and
+        // then reads the marker inside one operation target, so the returned value
+        // observes the state after the nested unwind.
+        Harness h = new();
+        UInt160 probe = h.Fx.Deploy("MockVerifierCore");
+        UInt160 outerAccount = h.Fx.CallUInt160(
+            h.Wallet, "computeRegistrationAccountId",
+            UInt160.Zero, new byte[] { 0x01 }, UInt160.Zero, Victim, EscapeTimelockSeconds);
+        UInt160 innerAccount = h.Fx.CallUInt160(
+            h.Wallet, "computeRegistrationAccountId",
+            UInt160.Zero, new byte[] { 0x02 }, UInt160.Zero, Victim, EscapeTimelockSeconds);
+        h.Fx.SetSigners(Victim);
+        h.Fx.CallVoid(
+            h.Wallet, "registerAccount",
+            outerAccount, UInt160.Zero, new byte[] { 0x01 }, UInt160.Zero, Victim, EscapeTimelockSeconds);
+        h.Fx.CallVoid(
+            h.Wallet, "registerAccount",
+            innerAccount, UInt160.Zero, new byte[] { 0x02 }, UInt160.Zero, Victim, EscapeTimelockSeconds);
+
+        // The inner operation is a benign read on the core itself; the outer
+        // operation's target (MockVerifierCore.forwardAfter) first triggers that
+        // nested execution and afterwards queries the marker.
+        object[] innerOp = RuntimeFixture.UserOp(
+            h.Wallet, "isEscapeActive", new object?[] { innerAccount },
+            BigInteger.Zero, h.Fx.Now() + 3_600_000, Array.Empty<byte>());
+        object[] outerOp = RuntimeFixture.UserOp(
+            probe, "forwardAfter",
+            new object?[]
+            {
+                h.Wallet, "executeUserOp", new object?[] { innerAccount, innerOp },
+                h.Wallet, "isUserOpExecutionActive", Array.Empty<object>()
+            },
+            BigInteger.Zero, h.Fx.Now() + 3_600_000, Array.Empty<byte>());
+
+        h.Fx.SetSigners(Victim);
+        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "executeUserOp", outerAccount, outerOp),
+            "The marker must still report in-flight after the nested frame unwinds");
+
+        // Once the outermost frame closes, the marker is cleared and both sequences
+        // are consumed exactly once.
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isUserOpExecutionActive"));
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Wallet, "getNonce", outerAccount, BigInteger.Zero));
+        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Wallet, "getNonce", innerAccount, BigInteger.Zero));
+    }
 }

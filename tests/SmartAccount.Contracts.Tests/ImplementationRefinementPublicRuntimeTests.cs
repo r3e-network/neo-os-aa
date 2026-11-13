@@ -108,12 +108,18 @@ public class ImplementationRefinementPublicRuntimeTests
         UInt160 second = h.SecondAccount();
         UInt160 callback = h.Callback(second, h.Transfer(0, second), 3 * Gas);
         RunResult r = h.Run([(false, h.Account, h.CallbackOp(callback), 3 * Gas)]);
-        Assert.IsFalse(r.Fault, r.Error);
-        AssertDiscovery(r, 3 * Gas, 5 * Gas);
-        h.CheckCommitted(r, 5 * Gas, 1);
-        Assert.AreEqual(BigInteger.One, h.Nonce(second));
-        CollectionAssert.AreEqual(new BigInteger[] { 2 * Gas, 3 * Gas }, r.Notifications
-            .Where(n => n.EventName == "SponsoredUserOpExecuted").Select(n => n.State[^1].GetInteger()).ToArray());
+        // Audit Low 6 (depth-counted in-flight marker): the nested sponsored
+        // execution unwinds to depth 1, not to an absent marker, so its settlement
+        // is invoked while the outer execution frame is still in flight and the
+        // paymaster's deputy guard refuses it instead of reimbursing a fee from
+        // inside another account's operation. The whole transaction faults and
+        // no nested reimbursement is committed anywhere.
+        Assert.IsTrue(r.Fault);
+        StringAssert.Contains(r.Error!, "Settlement must follow a completed sponsored execution");
+        h.CheckUnchanged(r);
+        Assert.AreEqual(BigInteger.Zero, h.Nonce(second),
+            "The faulted nested execution must not consume the second account's nonce");
+        Assert.AreEqual(0, r.Notifications.Where(n => n.EventName == "SponsoredUserOpExecuted").Count());
     }
 
     [TestMethod]
@@ -330,8 +336,8 @@ public class ImplementationRefinementPublicRuntimeTests
         public UInt160 Account { get; }
         public Harness()
         {
-            VerifyArtifact("SmartAccountV3", "4e9046335c5cfdab2f5ecd84c55ce8b66156ae88cd4e6b25429ec080104d7b3b",
-                "8b76f39ed5b4e5167be3dc6d5ca6c442eb4e28648140061b02e8a15f182215c0");
+            VerifyArtifact("SmartAccountV3", "c4210d650f1efad431d38c7797776b6c41f698689838bbdf557ddb418c5195a5",
+                "7953c5135886bf0a6aac862e9f203f8c5520bddfa52b99327e98d260ff36433a");
             VerifyArtifact("AAPaymaster", "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1",
                 "a066faf3ee31e9c1e716bf26f0ccfab74f1c9639adacb1adab0502b20918ca54");
             VerifyArtifact("MockTransferTarget", "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",

@@ -314,4 +314,77 @@ public class MarketEscrowRuntimeTests
             () => h.Fx.CallVoid(h.Wallet, "settleMarketEscrow", accountId, listingId, Buyer));
         StringAssert.Contains(settleBlocked.Message, "Only escrow market");
     }
+
+    [TestMethod]
+    public void MarketEscrow_Enter_RejectsMarketNeverRegisteredByTheCoreAdmin()
+    {
+        // Audit Medium 3: the 0x29 registration gate must be reachable as a rejection.
+        // Every other fixture registers its market first, so this vector deploys a
+        // genuine AAAddressMarket, allowlists the core on the market side, and never
+        // calls setMarketService: the market's own createListing must be refused
+        // before any escrow state is armed.
+        RuntimeFixture fx = new();
+        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 market = fx.Deploy("AAAddressMarket");
+        fx.CallVoid(market, "setAllowedAA", wallet, true);
+
+        UInt160 accountId = fx.CallUInt160(
+            wallet, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, Seller, 2_592_000u);
+        fx.SetSigners(Seller);
+        fx.CallVoid(
+            wallet, "registerAccount",
+            accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, Seller, 2_592_000u);
+
+        TestException unregistered = Assert.ThrowsExactly<TestException>(() =>
+            fx.CallVoid(market, "createListing", wallet, accountId, Price, "AA address", ""));
+        StringAssert.Contains(unregistered.Message, "Market service not registered");
+        Assert.IsFalse(fx.CallBoolean(wallet, "isMarketEscrowActive", accountId),
+            "An unregistered market must not be able to arm an escrow");
+        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(market, "getListingCount"));
+    }
+
+    [TestMethod]
+    public void MarketEscrow_Enter_RejectsCoreAsMarketContractRoutedByUserOp()
+    {
+        // Audit Medium 3: an ordinary user operation cannot lend the core's calling
+        // identity to arm an escrow naming the core itself as the market contract.
+        // The gates stack, and the first one to see the attempt is the configuration
+        // boundary: executeUserOp pins the account configuration context for the
+        // whole operation, so enterMarketEscrow is refused there before any escrow
+        // state can be written — the caller and 0x29 registration gates behind it
+        // never even need to fire on this path.
+        RuntimeFixture fx = new();
+        UInt160 wallet = fx.Deploy("SmartAccountV3");
+
+        UInt160 accountId = fx.CallUInt160(
+            wallet, "computeRegistrationAccountId",
+            UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, Seller, 2_592_000u);
+        fx.SetSigners(Seller);
+        fx.CallVoid(
+            wallet, "registerAccount",
+            accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, Seller, 2_592_000u);
+
+        object[] op = RuntimeFixture.UserOp(
+            wallet, "enterMarketEscrow",
+            new object?[] { accountId, wallet, (BigInteger)1 },
+            0, fx.Now() + 3_600_000, Array.Empty<byte>());
+        TestException routed = Assert.ThrowsExactly<TestException>(() =>
+            fx.CallVoid(wallet, "executeUserOp", accountId, op));
+        StringAssert.Contains(routed.Message, "Account configuration context active",
+            "A user operation is mid-execution and must not be able to arm an escrow on its own account");
+        Assert.IsFalse(fx.CallBoolean(wallet, "isMarketEscrowActive", accountId),
+            "The core itself must never be armable as an escrow market");
+        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", accountId, BigInteger.Zero),
+            "A rejected escrow arm must not consume the sequence");
+
+        // On the idle-configuration path (a direct invocation, no user op in
+        // flight) the caller gate refuses the same payload: the invocation's
+        // caller is not the core, so nobody can impersonate a market that
+        // happens to be the core itself.
+        TestException direct = Assert.ThrowsExactly<TestException>(() =>
+            fx.CallVoid(wallet, "enterMarketEscrow", accountId, wallet, (BigInteger)1));
+        StringAssert.Contains(direct.Message, "Caller is not the market");
+        Assert.IsFalse(fx.CallBoolean(wallet, "isMarketEscrowActive", accountId));
+    }
 }

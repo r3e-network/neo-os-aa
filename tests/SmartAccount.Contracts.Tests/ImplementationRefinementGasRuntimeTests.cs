@@ -27,7 +27,7 @@ namespace SmartAccount.Contracts.Tests;
 public class ImplementationRefinementGasRuntimeTests
 {
     private const long HostingGas = 100_00000000;
-    private const int HelperEntry = 19279, HelperEnd = 19560, InitializeEntry = 30499;
+    private const int HelperEntry = 19437, HelperEnd = 19718, InitializeEntry = 30718;
     private sealed record Charge(int Sequence, string ScriptHash, int Pc, string OpCode, string InstructionHex,
         string Method, string BeforePico, string AfterPico, string OpcodePico, string AdditionalPico, bool Completed,
         string? StorageKeyHex = null, int? StorageValueLength = null);
@@ -51,14 +51,14 @@ public class ImplementationRefinementGasRuntimeTests
         Assert.AreEqual(shape == "exhausted", r.Fault, r.Error);
         if (r.Fault)
         {
-            Assert.AreEqual(19455, helper[^1].Pc);
+            Assert.AreEqual(19613, helper[^1].Pc);
             Assert.IsFalse(helper[^1].Completed);
-            Assert.IsFalse(helper.Any(c => c.Pc == 19551));
+            Assert.IsFalse(helper.Any(c => c.Pc == 19709));
         }
         else
         {
-            Assert.AreEqual(19559, helper[^1].Pc);
-            Assert.IsTrue(helper.Any(c => c.Pc == 19551 && c.Completed));
+            Assert.AreEqual(19717, helper[^1].Pc);
+            Assert.IsTrue(helper.Any(c => c.Pc == 19709 && c.Completed));
             Assert.AreEqual(new BigInteger(shape == "same" ? 6 : 7), r.Value!.GetInteger());
         }
         bool deserialize = r.Trace.Any(c => c.ScriptHash == NativeContract.StdLib.Hash.ToString() && c.Method == "deserialize");
@@ -75,7 +75,7 @@ public class ImplementationRefinementGasRuntimeTests
             uint hash = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(Convert.FromHexString(syscall.InstructionHex).AsSpan(1));
             InteropDescriptor descriptor = ApplicationEngine.Services[hash];
             BigInteger expectedFee = descriptor.FixedPrice * r.ExecPico;
-            if (syscall.Pc == 19551)
+            if (syscall.Pc == 19709)
             {
                 // Actual value is a 39-byte canonical ledger. The new key is
                 // one byte; same-length overwrite charges ceil(39/4)=10 bytes.
@@ -151,8 +151,8 @@ public class ImplementationRefinementGasRuntimeTests
             name,
             artifacts = new
             {
-                nefSha256 = "4e9046335c5cfdab2f5ecd84c55ce8b66156ae88cd4e6b25429ec080104d7b3b",
-                manifestSha256 = "8b76f39ed5b4e5167be3dc6d5ca6c442eb4e28648140061b02e8a15f182215c0"
+                nefSha256 = "c4210d650f1efad431d38c7797776b6c41f698689838bbdf557ddb418c5195a5",
+                manifestSha256 = "7953c5135886bf0a6aac862e9f203f8c5520bddfa52b99327e98d260ff36433a"
             },
             runtime = new { neo = RuntimeIdentity(typeof(ApplicationEngine)), vm = RuntimeIdentity(typeof(ExecutionEngine)) },
             priceTable = ApplicationEngine.OpCodePriceTable,
@@ -215,7 +215,7 @@ public class ImplementationRefinementGasRuntimeTests
             active = new Charge(rows.Count, hash.ToString(), pc, instruction.OpCode.ToString(),
                 Convert.ToHexString(Enumerable.Range(pc, instruction.Size).Select(i => (byte)context.Script[i]).ToArray()).ToLowerInvariant(),
                 Method(hash, pc), Raw(app).ToString(), "", opcode.ToString(), "", false);
-            if (hash == core && pc == 19551)
+            if (hash == core && pc == 19709)
             {
                 // Read the actual outgoing native Storage.Put arguments; never
                 // mutate the stack, contract state, fee amount or fee counter.
@@ -245,8 +245,8 @@ public class ImplementationRefinementGasRuntimeTests
         string dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/v3"));
         byte[] rawNef = File.ReadAllBytes(Path.Combine(dir, "SmartAccountV3.nef"));
         byte[] rawManifest = File.ReadAllBytes(Path.Combine(dir, "SmartAccountV3.manifest.json"));
-        Assert.AreEqual("4e9046335c5cfdab2f5ecd84c55ce8b66156ae88cd4e6b25429ec080104d7b3b", Hash(rawNef));
-        Assert.AreEqual("8b76f39ed5b4e5167be3dc6d5ca6c442eb4e28648140061b02e8a15f182215c0", Hash(rawManifest));
+        Assert.AreEqual("c4210d650f1efad431d38c7797776b6c41f698689838bbdf557ddb418c5195a5", Hash(rawNef));
+        Assert.AreEqual("7953c5135886bf0a6aac862e9f203f8c5520bddfa52b99327e98d260ff36433a", Hash(rawManifest));
         Assert.AreEqual("cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a", Hash(File.ReadAllBytes(typeof(ApplicationEngine).Assembly.Location)));
         Assert.AreEqual("cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9", Hash(File.ReadAllBytes(typeof(ExecutionEngine).Assembly.Location)));
         RuntimeFixture fx = new();
