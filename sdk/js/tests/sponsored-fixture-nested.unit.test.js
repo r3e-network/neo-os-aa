@@ -168,7 +168,12 @@ test('the pre-fix walk is shown accepting every planted non-byte mutation below'
   // ByteArray bytes, so it refused those two and returned success for every other kind; the accepted
   // set below is that remainder, which is the defect. If the set ever changes, the planted mutations
   // have stopped reproducing the reported defect and the green above would prove nothing.
-  const source = fs.readFileSync(PRE_FIX_WALK, 'utf8');
+  // The pin below is the LF form of the reviewed pre-fix text (the committed bytes, which a
+  // Linux CI checkout materialises as-is). A Windows core.autocrlf=true checkout materialises CRLF
+  // worktree bytes for the same committed content, so the text is normalized before it is hashed and
+  // executed - a no-op on an LF checkout (same normalization as
+  // scripts/check_neo_platform_packages.mjs).
+  const source = fs.readFileSync(PRE_FIX_WALK, 'utf8').replace(/\r\n?/g, '\n');
   const executed = [
     definitionOf(source, 'const byteHex ='),
     definitionOf(source, 'const hex ='),

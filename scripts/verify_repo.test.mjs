@@ -5,6 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+// Workflow files are text whose committed form is LF; a Windows core.autocrlf=true
+// checkout materialises CRLF worktree bytes for the same content. The multi-line
+// regexes below measure the LF form, so normalize at read time - a no-op on an
+// LF checkout.
+const readWorkflow = (url) => fs.readFileSync(url, 'utf8').replace(/\r\n?/g, '\n');
+
 function dispatch(t, args = [], failMatch = '', envOverrides = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'account-verify-dispatch-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -96,7 +102,13 @@ test('stubbed NeoExpress report redirections stay in the temporary checkout', (t
   assert.match(reports[0], /^aa-artifact-reproducibility-\d{8}\.json$/);
   assert.match(reports[1], /^aa-ordinary-runtime-provenance-\d{8}\.json$/);
   assert.ok(reports.every((name) => fs.statSync(path.join(result.reportDir, name)).size === 0));
-  assert.match(result.trace, new RegExp(result.reportDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  // The trace is the log of what the stubs were invoked with. Git Bash (MSYS) renders
+  // the Windows reportDir argument in its POSIX form (/tmp/<fixture>/docs/reports) when
+  // the fixture lives under the Windows temp directory, so the assertion anchors on the
+  // checkout-unique fixture segment with either separator instead of the drive-prefixed
+  // spelling; the snapshot check below is what proves the real reports directory was
+  // untouched.
+  assert.match(result.trace, /account-verify-dispatch-[^/\\]*[\\/]docs[\\/]reports/);
   assert.deepEqual(snapshot(), before, 'real repository reports must not be created or overwritten');
 });
 
@@ -154,8 +166,8 @@ test('ordinary package failure blocks the build and invalid selections fail clos
 });
 
 test('CI explicitly keeps ordinary and native validation in their respective jobs', () => {
-  const ordinary = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const native = fs.readFileSync(new URL('../.github/workflows/native-profile.yml', import.meta.url), 'utf8');
+  const ordinary = readWorkflow(new URL('../.github/workflows/ci.yml', import.meta.url));
+  const native = readWorkflow(new URL('../.github/workflows/native-profile.yml', import.meta.url));
   assert.match(ordinary, /run: \.\/scripts\/verify_repo.sh --profile ordinary/);
   assert.match(native, /\.\/scripts\/verify_repo.sh --profile native --contracts-only/);
   assert.match(native, /python3 scripts\/native_profile_ci.py/);
@@ -175,7 +187,7 @@ test('frontend profile dispatch preserves native browser checks without a native
 });
 
 test('every pull request retains an independent native browser gate without repeating the frontend suite', () => {
-  const ci = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const ci = readWorkflow(new URL('../.github/workflows/ci.yml', import.meta.url));
   const triggers = ci.slice(ci.indexOf('on:'), ci.indexOf('permissions:'));
   assert.match(triggers, /\n  push:/);
   assert.match(triggers, /\n  pull_request:/);
@@ -190,7 +202,7 @@ test('every pull request retains an independent native browser gate without repe
 });
 
 test('native VM workflow triggers every native source family', () => {
-  const workflow = fs.readFileSync(new URL('../.github/workflows/native-profile.yml', import.meta.url), 'utf8');
+  const workflow = readWorkflow(new URL('../.github/workflows/native-profile.yml', import.meta.url));
   const triggers = workflow.slice(workflow.indexOf('on:'), workflow.indexOf('workflow_dispatch:'));
   for (const pattern of [
     'implementations/native/**',
