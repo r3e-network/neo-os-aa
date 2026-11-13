@@ -139,7 +139,7 @@ timelock, broadcast only after reviewing the plan output against this document.
 2. Re-run the same preflight for the Anchor/agents path and confirm no account carries
    a live scope target before/after the upgrade.
 3. Commit a pinned artifact set and add the reproducibility gate described in
-   `AA-RUNTIME-ARTIFACT-ALIGNMENT-20260912.md`.
+   `history/AA-RUNTIME-ARTIFACT-ALIGNMENT-20260912.md`.
 
 ## 2026-09-13 current preflight recheck
 

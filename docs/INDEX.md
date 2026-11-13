@@ -92,6 +92,7 @@ semantics. Receipts absent from this checkout are not current release evidence.
 ## Historical Reports
 
 - `docs/reports/testnet-validation-v1v2-2026-03.md` — archived pre-V3 (V1/V2) testnet validation status
+- `docs/history/` — superseded dated records kept as history: the organization snapshot (`ORGANIZATION-20260927.md`), the runtime-alignment correction (`AA-RUNTIME-ARTIFACT-ALIGNMENT-20260912.md`), the proxy-scope finding and identity follow-up notes (`AA-PROXY-SIGNER-SCOPE-20260912.md`, `IDENTITY-VERIFICATION-FOLLOWUP-20260912.md`) and the dependency-remediation log (`DEPENDENCY-REMEDIATION-20260917.md`)
 
 ## Matrix Domain Support
 
