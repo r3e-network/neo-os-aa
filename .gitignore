@@ -106,6 +106,7 @@ docs/reports/*
 !docs/reports/aa-private-artifact-provenance-20261025.json
 !docs/reports/aa-artifact-reproducibility-20261030.json
 !docs/reports/aa-artifact-reproducibility-20261031.json
+!docs/reports/aa-artifact-reproducibility-20261113.json
 !docs/reports/aa-closure-gate-20261031.json
 !docs/reports/aa-formal-gate-20261030.json
 !docs/reports/aa-formal-gate-20261031.json
@@ -114,6 +115,7 @@ docs/reports/*
 !docs/reports/aa-private-artifact-provenance-20261030.json
 !docs/reports/aa-private-artifact-provenance-20261031.json
 !docs/reports/aa-ordinary-candidate-compatibility-20261030.json
+!docs/reports/aa-ordinary-candidate-compatibility-20261113.json
 !docs/reports/aa-native-ci-probe-consistency-20261009.json
 !docs/reports/testnet-validation-v1v2-2026-03.md
 !docs/reports/native-domain-copy-20261009/

@@ -20,6 +20,12 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const releaseDir = path.join(repoRoot, "contracts", "bin", "v3");
 const trackedDir = path.join(repoRoot, "contracts", "build");
 const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
+// Source inputs are TEXT, and the certificate they go into must hold the same digests on an LF
+// checkout and on a Windows core.autocrlf=true checkout, which materialises CRLF worktree bytes
+// for the same committed content. Hash the LF-normalised form (a no-op on an LF checkout), so the
+// certificate is portable and the "candidate source drift" consumers can hash the same way.
+// Compiled artifacts (.nef/.manifest.json under bin/) are binary evidence and keep raw-byte hashing.
+const sha256Text = (file) => sha256(Buffer.from(fs.readFileSync(file, "utf8").replace(/\r\n?/g, "\n"), "utf8"));
 const SKIP_DIRS = /(^|\/)(bin|obj|build)$/;
 // The restore policy every contract project is built under. Without them the scratch copy would
 // compile against whatever package source and framework version the machine happens to resolve.
@@ -27,14 +33,18 @@ export const RESTORE_POLICY_FILES = ["Directory.Build.props", "nuget.config"];
 export const ARTIFACT_PROFILES = ["v3", "platform"];
 const RECIPE_SUPPORT_FILES = ["scripts/dotnet_env.sh", "scripts/check_neo_platform_packages.mjs"];
 
-/** Recursively lists nef/manifest files relative to a directory. */
+/** Recursively lists nef/manifest files relative to a directory.
+ * Keys are normalized to '/' so the certificate is identical on Windows and Linux
+ * (path.relative yields '\' separators on Windows); consumers match with '/'-shaped
+ * literals, and a path-separator byte difference is not an artifact difference. */
 export function listArtifacts(dir) {
   const found = [];
   const walk = (current) => {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const full = path.join(current, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (/\.(nef|manifest\.json)$/.test(entry.name)) found.push(path.relative(dir, full));
+      else if (/\.(nef|manifest\.json)$/.test(entry.name))
+        found.push(path.relative(dir, full).replaceAll(path.sep, "/"));
     }
   };
   if (fs.existsSync(dir)) walk(dir);
@@ -63,7 +73,7 @@ export function listSourceInputs(dir) {
 export function sourceSnapshot(dir, root = dir) {
   return Object.fromEntries(listSourceInputs(dir).map((relative) => {
     const full = path.join(dir, relative);
-    return [path.relative(root, full).replaceAll(path.sep, "/"), sha256(fs.readFileSync(full))];
+    return [path.relative(root, full).replaceAll(path.sep, "/"), sha256Text(full)];
   }));
 }
 
@@ -72,7 +82,7 @@ export function sourceSnapshot(dir, root = dir) {
 export function buildInputSnapshot(root = repoRoot) {
   const inputs = sourceSnapshot(path.join(root, "contracts"), root);
   for (const file of [...RESTORE_POLICY_FILES, ...RECIPE_SUPPORT_FILES]) {
-    inputs[file] = sha256(fs.readFileSync(path.join(root, file)));
+    inputs[file] = sha256Text(path.join(root, file));
   }
   return Object.fromEntries(Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b, "en")));
 }
@@ -227,7 +237,7 @@ async function main() {
     const report = {
       schema: "neoos-aa-artifact-reproducibility/v2",
       generated_at: new Date().toISOString(),
-      release_dir: path.relative(repoRoot, releaseDir),
+      release_dir: path.relative(repoRoot, releaseDir).replaceAll(path.sep, "/"),
       profiles,
       artifacts_compared: rows.length,
       release_matches_fresh_build: profilesMatch,

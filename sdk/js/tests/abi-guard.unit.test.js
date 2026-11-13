@@ -53,8 +53,8 @@ const descriptor = (method) => ({
 });
 
 function assertCandidateEvidence(bytes = candidateBytes) {
-  const compatibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-candidate-compatibility-20261030.json')));
-  const reproducibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-artifact-reproducibility-20261031.json')));
+  const compatibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-ordinary-candidate-compatibility-20261113.json')));
+  const reproducibility = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/reports/aa-artifact-reproducibility-20261113.json')));
   const manifestReceipt = reproducibility.profiles.v3.artifacts.filter((entry) => entry.artifact === 'SmartAccountV3.manifest.json');
   assert.equal(manifestReceipt.length, 1);
   assert.equal(reproducibility.release_matches_fresh_build, true);
@@ -69,8 +69,13 @@ function assertCandidateEvidence(bytes = candidateBytes) {
   assert.equal(JSON.parse(bytes).abi.methods.length, compatibility.candidateArtifact.abiEntries);
   // Fail if the checked-in compilation source diverges from the receipt that
   // supplies this candidate. No local bin/ directory or compiler is required.
+  // The certificate pins the LF form of each text input (see
+  // scripts/check-artifact-reproducibility.mjs), so an autocrlf worktree — which
+  // materialises CRLF bytes for the same committed content — must hash the same
+  // normalized form; on an LF checkout this is byte-for-byte a no-op.
+  const sha256LfText = (file) => sha256(Buffer.from(fs.readFileSync(file, 'utf8').replace(/\r\n?/g, '\n'), 'utf8'));
   for (const [relative, digest] of Object.entries(reproducibility.certificate.source_files)) {
-    assert.equal(sha256(fs.readFileSync(path.join(repoRoot, relative))), digest, `candidate source drift: ${relative}`);
+    assert.equal(sha256LfText(path.join(repoRoot, relative)), digest, `candidate source drift: ${relative}`);
   }
   for (const required of candidateRecoveryMethods) {
     const matches = candidateManifest.abi.methods.filter((entry) => entry.name === required.name);
