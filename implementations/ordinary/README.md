@@ -29,11 +29,14 @@ public callback-resource, candidate-upgrade and deployment-readback boundaries
 explicit so an implementation reader can distinguish protocol correctness from
 release evidence.
 
-The 100-entry source candidate also reserves sponsored reimbursement against a
-shared per-transaction core budget and provides callback-free permanent
-owner-only recovery. Recovery keeps identity and nonce history but irreversibly
-disables plugin installation. The pinned 90-entry public artifact does not gain
-these capabilities until its governed upgrade and independent readback complete.
+The 108-entry source candidate also reserves sponsored reimbursement against a
+shared per-transaction core budget, provides callback-free permanent owner-only
+recovery, adds the admin-gated freeze surface, and moves its platform services
+(market escrow settlement, paymaster settlement, platform registrar) into
+standalone contracts behind the pending governed upgrade. Recovery keeps
+identity and nonce history but irreversibly disables plugin installation. The
+pinned 90-entry public artifact does not gain these capabilities until its
+governed upgrade and independent readback complete.
 
 The current source candidate passes the declared contract, SDK, frontend and
 formal-model gates. The [dated acceptance report](../../docs/reports/aa-ordinary-acceptance-20261013.md)

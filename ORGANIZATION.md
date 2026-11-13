@@ -12,7 +12,7 @@
 
 ```
 neo-os-aa/
-├── contracts/            # SmartAccountV3, verifier/hook plugins, paymaster, market
+├── contracts/            # SmartAccountV3, verifier/hook plugins, paymaster, market, registrar (platform-service contracts)
 ├── frontend/             # App workspace, marketing home, trustless AA market UI
 │   ├── src/
 │   │   └── config/generatedMorpheusRegistry.js  # Generated from neo-os-services
@@ -36,7 +36,7 @@ neo-os-aa/
 ### Supabase Migrations
 - Replayable end-to-end on fresh database
 - Apply in filename order
-- Exercised by `.github/workflows/supabase-migrations.yml` on every change
+- CI replay gate `.github/workflows/supabase-migrations.yml.disabled`: disabled since 2026-09-27 (runner-cost decision); replay is a manual step (scratch Postgres 16 + `supabase/tests/replay_assertions.sql`) until re-enabled by removing the `.disabled` suffix
 - **MANDATORY**: `20260327_security_hardening.sql`, `20260611_draft_metadata_hardening.sql`
 - Without hardening: permissive RLS, racy metadata writers, unbounded anonymous drafts
 

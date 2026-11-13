@@ -135,6 +135,14 @@ is
 [`aa-artifact-reproducibility-20261031.json`](reports/aa-artifact-reproducibility-20261031.json);
 the private-chain join is
 [`aa-private-artifact-provenance-20261031.json`](reports/aa-private-artifact-provenance-20261031.json).
+The 2026-11-13 replay of the post-extraction tree (registrar move, market-escrow
+and paymaster settlement splits, admin freeze surface) matched again with no
+drift and no missing artifacts; its certificate — whose text-input digests are
+LF-normalized so a Windows `core.autocrlf` checkout measures the same bytes as
+Linux CI — is
+[`aa-artifact-reproducibility-20261113.json`](reports/aa-artifact-reproducibility-20261113.json),
+and the candidate/public ABI delta it certifies is
+[`aa-ordinary-candidate-compatibility-20261113.json`](reports/aa-ordinary-candidate-compatibility-20261113.json).
 The joined NeoExpress receipt is bound to a reviewed source-runtime build
 (`sourceRuntime`): its 104-file map, source-build receipt, `neoxp.dll` and
 wrapper hashes are checked before and after the private run, with host paths

@@ -5,8 +5,13 @@ profile prepared for standard submission. The profile, native modules, SDK and
 UI remain in their existing build-compatible locations; [`profile.json`](profile.json)
 records the canonical roots and the native-only verification commands.
 
-The native consensus `SmartAccount` service itself belongs to the matching
-Neo core repository. This repository can validate the profile, modules, client,
+The only editable source of the native consensus `SmartAccount` contract now
+lives here, in [`core/SmartAccount/`](core/SmartAccount/); the matching Neo core
+checkout carries generated copies that
+[`scripts/sync_native_smartaccount.py`](../../scripts/sync_native_smartaccount.py)
+rewrites from it, and the native CI lane fails on sync drift against the
+SHA-pinned core. Native VM enforcement itself still belongs to the Neo core
+repository. This repository can validate the profile, modules, client,
 fixtures and test-only VM probes, but it cannot claim hardfork activation,
 node admission, formal refinement or public-network acceptance from those local
 checks. The native track is currently draft/unactivated and keeps

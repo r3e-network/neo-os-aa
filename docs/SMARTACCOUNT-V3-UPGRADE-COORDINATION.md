@@ -38,17 +38,17 @@ manifest methods (`finalizeEscape` is overloaded, so unique names are 107).
 
 Removed from the core (rotation now lives in the registrar service):
 
-- `rotatePlatformAccountOwner`
-- `proposePlatformAccountOwnerRotation`
-- `confirmPlatformAccountOwnerRotation`
-- `cancelPlatformAccountOwnerRotation`
-- `getPendingPlatformAccountOwnerRotation`
-- `getPlatformAccountOwnerRotationAvailableAt`
+- `rotatePlatformAccountOwner` (removed)
+- `proposePlatformAccountOwnerRotation` (removed)
+- `confirmPlatformAccountOwnerRotation` (removed)
+- `cancelPlatformAccountOwnerRotation` (removed)
+- `getPendingPlatformAccountOwnerRotation` (removed)
+- `getPlatformAccountOwnerRotationAvailableAt` (removed)
 
 Added to the core (delegation + migration surface):
 
 - `applyPlatformAccountOwnerRotation`
-- `freezeAccount`, `unfreezeAccount`, `isAccountFrozen`
+- `freezeAccount`, `unfreezeAccount`, `isAccountFrozen` (candidate ABI, not part of the pinned public artifact)
 - `getPlatformAccountBinding`
 - `setMarketService`, `isMarketService`
 - `isUserOpExecutionActive`
@@ -57,7 +57,8 @@ Added to the core (delegation + migration surface):
 Registrar-owned replacements (on `AAPlatformRegistrar`):
 `registerPlatformAccount`, `proposePlatformAccountOwnerRotation`,
 `confirmPlatformAccountOwnerRotation`, `cancelPlatformAccountOwnerRotation`,
-`getPendingPlatformOwnerRotation`, `getPlatformOwnerRotationAvailableAt`,
+`getPendingPlatformOwnerRotation`, `getPlatformOwnerRotationAvailableAt` (not part of any
+pinned core manifest; names live in the registrar source),
 `ingestPendingPlatformOwnerRotation`, plus the authority surface
 (`authorizedCore`, `setAuthorizedCore`, `proposeUpdate`, `confirmUpdate`,
 `rotateAdmin`, …). Event display names are intentionally preserved across
@@ -84,7 +85,7 @@ indexers keep continuity.
      the registrar, then deletes the core keys (one-time, core-admin-gated;
      rides the upgrade window, records keep their original `InitiatedAt` so
      in-flight rotations cannot be re-armed).
-4. Registrar authority: propose + confirm `AuthorizedCore` if the core hash
+4. Registrar authority: propose + confirm the `authorizedCore` change if the core hash
    itself ever rotates (not needed for an in-place `update`).
 5. Re-read `getPlatformRegistrar`, `getPendingPlatformRegistrar`,
    `getPlatformAccountBinding` via RPC as post-conditions (the script performs

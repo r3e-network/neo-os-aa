@@ -34,6 +34,18 @@ callbacks, witness fee estimation for supported signer shapes and signed-transac
 [workspace](NATIVE_ACCOUNT_WORKSPACE.md). It requires the matching native runtime
 and activation; public V3 deployment is not evidence of native availability.
 
+Source custody: `implementations/native/core/SmartAccount/` in this
+repository is the only editable copy of the native `SmartAccount` contract
+(the true source); the SHA-pinned Neo core checkout used by the
+[native VM workflow](../.github/workflows/native-profile.yml) carries
+generated copies of those ten files, and the workflow runs
+`scripts/sync_native_smartaccount.py --check` against the pinned core before
+any build or test work, so drift, missing or unmanaged copies fail the lane
+there. The pin now records the regenerated generated-marker commit. This
+local true-source/sync structure and its CI gate are repository mechanics;
+they do not change the external activation, acceptance or readback boundaries
+listed below.
+
 Discovery binds the [current profile parameters](proposals/smartaccount-native-profile-v2-parameters.json)
 and their digest, not just `getVersion() == 2`. Identity derivation remains version 1;
 authorization and the exact 14-field account record are version 2. Execution takes
@@ -111,3 +123,28 @@ erase old plugin storage, refund plugin-held funds, revoke token allowances, or
 remove an independent contract upgrade administrator. These additions are source
 candidate capabilities; integrations must discover the selected deployment ABI
 and read the chain state before exposing them.
+
+## Current source: platform services, freeze and rotation migration
+
+The committed ordinary source candidate extracts the platform services out of
+the core: market escrow settlement (`abandonListing`) lives on `AAAddressMarket`,
+paymaster reimbursement (`settleReimbursement`) on `AAPaymaster`, and
+platform-account registration plus the owner-rotation timelocks on the new
+standalone `AAPlatformRegistrar` (`contracts/registrar/`), applied to the core
+through the one-time admin-gated `migratePlatformOwnerRotations` migration. On
+top of the 2026-11-13 security remediation, the candidate adds the admin-gated
+freeze surface. The candidate-only freeze ABI (`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`, not part of the pinned public artifact) brings the candidate
+manifest to 108 raw methods (107 unique names; `finalizeEscape`
+is overloaded) against the 90 methods of the pinned public artifact.
+
+The public deployments still run the 90-method artifact, so the extraction,
+freeze and migration surfaces stay source-candidate capabilities behind the
+unchanged upgrade-required boundary: a governed upgrade and independent readback
+must land before any deployment claims them. The orchestration order and the
+cross-repository pin inventory are tracked in
+[the upgrade coordination](SMARTACCOUNT-V3-UPGRADE-COORDINATION.md). Local
+evidence so far is source-level only — contract tests cover the extracted
+service ABI, the owner-rotation migration and the freeze surface, and the
+candidate NEF/manifest hashes are re-pinned — while the fresh NeoExpress
+receipt, the artifact reproducibility certificate, the CI lanes and the
+public-chain readback remain open evidence gates.

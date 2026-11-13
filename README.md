@@ -86,7 +86,7 @@ The frontend now separates:
 
 For the market UI, set `VITE_AA_MARKET_HASH` to the deployed `AAAddressMarket` contract hash.
 
-For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_AA_RELAY_URL`, and `VITE_AA_RELAY_RPC_URL`, then apply every file in `supabase/migrations/` in filename order — the chain is replayable end to end on a fresh database and is exercised against a scratch Postgres by `.github/workflows/supabase-migrations.yml` on every change. The full chain keeps the public share link read-only, narrows collaborator links to signature-safe writes, moves operator-only status/relay mutations behind the signed operator mutation server route in `frontend/api/draft-operator.js`, and bounds anonymous draft payloads. `supabase/migrations/20260327_security_hardening.sql` and `supabase/migrations/20260611_draft_metadata_hardening.sql` are mandatory — without them the draft tables keep permissive RLS policies, racy metadata writers, and unbounded anonymous draft creation.
+For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_AA_RELAY_URL`, and `VITE_AA_RELAY_RPC_URL`, then apply every file in `supabase/migrations/` in filename order — the chain is replayable end to end on a fresh database. Its CI replay gate is currently disabled (`.github/workflows/supabase-migrations.yml.disabled`, deliberately parked on 2026-09-27 to drop the CI runner cost; see the deployment checklist below for the current manual replay step). The full chain keeps the public share link read-only, narrows collaborator links to signature-safe writes, moves operator-only status/relay mutations behind the signed operator mutation server route in `frontend/api/draft-operator.js`, and bounds anonymous draft payloads. `supabase/migrations/20260327_security_hardening.sql` and `supabase/migrations/20260611_draft_metadata_hardening.sql` are mandatory — without them the draft tables keep permissive RLS policies, racy metadata writers, and unbounded anonymous draft creation.
 
 If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `AA_RELAY_WIF` on the server, prefer `AA_RELAY_RPC_URL` for the relay backend, pin `AA_RELAY_ALLOWED_HASH` to the intended AA contract, and leave `AA_RELAY_ALLOW_RAW_FORWARD=0` unless you explicitly want raw passthrough in `frontend/api/relay-transaction.js`.
 For local setup, start from `frontend/.env.example` and copy the values you need into `frontend/.env.local` or your hosting provider's environment-variable dashboard.
@@ -194,7 +194,7 @@ Shared draft metadata is intentionally bounded: the frontend keeps the latest 10
 - Apply every file in `supabase/migrations/` in filename order (`20260308_home_operations_workspace.sql` through `20260611_draft_metadata_hardening.sql`). The chain replays cleanly on a fresh database; do not cherry-pick individual files.
 - Treat `supabase/migrations/20260327_security_hardening.sql` as mandatory: it removes the permissive `aa_account_metadata` RLS policies, revokes direct table access on `aa_transaction_drafts`, and fixes the signature-append race.
 - Treat `supabase/migrations/20260611_draft_metadata_hardening.sql` as mandatory: it locks the remaining draft metadata writers against lost updates, bounds anonymous `create_aa_draft` payloads (64 KiB cap, array caps, inbound activity/receipt trimming), and revokes anon execute on the internal activity-scope helper.
-- The migration chain is replay-tested in CI by `.github/workflows/supabase-migrations.yml`, which applies every file in filename order against a scratch Postgres 16 and then runs `supabase/tests/replay_assertions.sql`.
+- The migration chain is designed for CI replay, but its gate `.github/workflows/supabase-migrations.yml.disabled` has been disabled since 2026-09-27 (runner-cost decision; database operations run manually). Until it is re-enabled — which is only removing the `.disabled` suffix, since the workflow file, the migration files and `supabase/tests/replay_assertions.sql` still match each other — verify a migration change by replaying every file in filename order against a scratch Postgres 16 and then running `supabase/tests/replay_assertions.sql` yourself.
 - Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for browser-side anonymous draft persistence.
 - Share the normal draft URL for read-only review, the collaborator link for signature collection, and the operator link for relay checks, broadcast, and other operator-only actions. Signer links cannot append operator-class relay or broadcast activity entries.
 - Use the Rotate Collaborator Link action when a signer link leaks, and rotate the operator link if an operator-only URL should be invalidated without rebuilding the draft.
@@ -349,6 +349,8 @@ AA_TESTNET_UPDATE_SIGNER=<public-AA-admin-address-or-script-hash> \
 
 The helper verifies testnet magic, the local `SmartAccountV3` artifact, the live update surface, and the exact `update` preview. It writes a `testnet-smart-account-upgrade-latest.json` receipt under `docs/reports/` without signing or broadcasting. Execution requires `--execute`, `CONFIRM_AA_TESTNET_UPDATE=I_UNDERSTAND_THIS_WRITES_CHAIN`, and `AA_TESTNET_UPDATE_WIF`; the WIF-derived signer must match the public identity used for the preview. After a successful upgrade, rerun the platform shared-AA preflight before configuring the Registry core.
 
+The platform services are now extracted from the core: the registrar ships as the standalone `AAPlatformRegistrar` (`contracts/registrar/`), and `scripts/migrate_smart_account_v3.js` orchestrates the market enrollment, registrar timelock and legacy rotation-migration phases (dry-run by default). See [the upgrade coordination](docs/SMARTACCOUNT-V3-UPGRADE-COORDINATION.md) for the full orchestration order and the cross-repo pin inventory.
+
 ### Build
 
 ```bash
@@ -417,6 +419,7 @@ verbatim in
 - `contracts/verifiers/`: Verifier plugins (Web3Auth, TEE, WebAuthn, SessionKey, MultiSig, etc.).
 - `contracts/hooks/`: Hook plugins (DailyLimit, Whitelist, TokenRestricted, MultiHook, NeoDIDCredential).
 - `contracts/paymaster/`: On-chain Paymaster contract for sponsored/gasless transactions.
+- `contracts/registrar/`: Standalone `AAPlatformRegistrar` service contract for platform-account registration and owner-rotation timelocks, extracted from the core.
 - `frontend/`: Vue components demonstrating Account creation and signature workflows.
 - `sdk/js/`: JavaScript/TypeScript SDK for dApp integration.
 - `docs/`: Protocol design and specification standards.

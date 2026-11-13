@@ -53,7 +53,7 @@
     ]
   },
   "externalBoundaries": [
-    "neo/neo: the consensus SmartAccount contract and native VM enforcement are maintained outside this repository",
+    "neo-project/neo: the native VM enforcement and the generated SmartAccount copies carried by the core checkout are maintained outside this repository; implementations/native/core/SmartAccount/ here is the only editable true source, and the SHA-pinned core is kept in sync by scripts/sync_native_smartaccount.py --check in the native CI lane",
     "neo-project/proposals#243: ABI 2 proposal and review acceptance are external protocol gates",
     "Hardfork activation, node integration, formal refinement and public-network readback remain required before native status can change"
   ],
