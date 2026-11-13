@@ -253,12 +253,23 @@ export function restoredPackageProblems(libraries, manifest) {
 }
 
 /**
+ * Normalizes what the compiler printed for --version to the comparable semver core.
+ * Windows and Linux nccs both report the pinned version with a `+<commit>` build suffix, and
+ * Windows ends the line with CRLF; a prefix (e.g. `nccs version `) or a prerelease suffix is
+ * tolerated too. Anything without a x.y.z core yields "".
+ */
+export function parseCompilerVersion(versionOutput) {
+  const match = /(\d+)\.(\d+)\.(\d+)(?:[-+][^\s\r\n]*)?/.exec(versionOutput);
+  return match ? `${match[1]}.${match[2]}.${match[3]}` : "";
+}
+
+/**
  * Compares the installed compiler with the pinned one: the version it reports, the SHA-256 of the
  * package `dotnet tool install` kept, and the NuGet content hash recorded for that install.
  */
 export function compilerProblems({ versionOutput, nupkgSha256, contentHash }, compiler) {
   const problems = [];
-  const version = versionOutput.trim().split("+")[0];
+  const version = parseCompilerVersion(versionOutput);
   if (version !== compiler.version) {
     problems.push(`${compiler.tool} reports version ${version || "(nothing)"}, pinned ${compiler.version}`);
   }
@@ -387,7 +398,14 @@ function resolveCompiler() {
   );
   if (resolved.status !== 0) return null;
   const [nccs, dotnetRoot] = resolved.stdout.trim().split("\n");
-  return nccs && dotnetRoot ? { nccs, dotnetRoot } : null;
+  if (!nccs || !dotnetRoot) return null;
+  return { nccs: windowsToolPath(nccs), dotnetRoot };
+}
+
+/** Git Bash resolves $NCCS_BIN MSYS-style (/c/...); Windows needs a drive path to spawn and read it. */
+function windowsToolPath(toolPath) {
+  const match = /^\/([a-z])\/(.*)$/i.exec(toolPath);
+  return process.platform === "win32" && match ? `${match[1].toUpperCase()}:/${match[2]}` : toolPath;
 }
 
 function checkCompiler(manifest) {

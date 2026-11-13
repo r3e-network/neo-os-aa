@@ -275,6 +275,17 @@ through exact artifact hashes and full RPC readback. It writes distinct
 The private PLATFORM full-module matrix and native-chain validators have
 separate entrypoints; this source suite does not establish public deployment.
 
+### Restoring with an isolated package cache (NU1403)
+
+`restore` runs in locked mode, so it fails with `NU1403` ("package content hash validation
+failed") when the machine's global NuGet cache holds bytes that differ from the audited
+`packages.lock.json` content hashes. Do not delete or edit the lock files. Restore into a fresh,
+isolated package folder so every package is re-downloaded from nuget.org:
+
+```bash
+dotnet restore SmartAccount.sln -p:RestorePackagesPath=./nuget-isolated
+```
+
 ### Morpheus Generated Config
 
 `frontend/src/config/generatedMorpheusRegistry.js`, `frontend/src/config/generatedMorpheusRuntimeCatalog.js` and

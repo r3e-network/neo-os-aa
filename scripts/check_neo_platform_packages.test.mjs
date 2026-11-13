@@ -11,6 +11,7 @@ import {
   listProjects,
   lockFileFor,
   lockFileProblems,
+  parseCompilerVersion,
   parseManifest,
   pinConsistencyProblems,
   readOptionalPinnedVersion,
@@ -291,6 +292,12 @@ test("the installed compiler must be the pinned package", () => {
   const compiler = manifest.compiler;
   const good = { versionOutput: `${compiler.version}+abcdef\n`, nupkgSha256: compiler.sha256, contentHash: compiler.sha512 };
   assert.deepEqual(compilerProblems(good, compiler), []);
+  // Windows nccs ends the version line with CRLF; Linux with LF.
+  assert.deepEqual(compilerProblems({ ...good, versionOutput: `3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697\r\n` }, compiler), []);
+  assert.deepEqual(compilerProblems({ ...good, versionOutput: "nccs version 3.9.1+commit.abcdef\n" }, compiler), []);
+  assert.deepEqual(parseCompilerVersion(""), "");
+  assert.deepEqual(parseCompilerVersion("3.9.1"), "3.9.1");
+  assert.deepEqual(parseCompilerVersion("3.9.1-rc1+build.2\r\n"), "3.9.1");
   assert.deepEqual(compilerProblems({ ...good, versionOutput: "3.10.1+abcdef" }, compiler), ["nccs reports version 3.10.1, pinned 3.9.1"]);
   assert.deepEqual(compilerProblems({ ...good, versionOutput: "" }, compiler), ["nccs reports version (nothing), pinned 3.9.1"]);
   const forgedPackage = compilerProblems({ ...good, nupkgSha256: "0".repeat(64) }, compiler);

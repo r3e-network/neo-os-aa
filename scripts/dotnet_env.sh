@@ -6,7 +6,10 @@
 if [[ -z "${DOTNET_ROOT:-}" ]]; then
   runtime_path="$(dotnet --list-runtimes 2>/dev/null | awk -F'[][]' 'NR == 1 { print $2 }')"
   if [[ -n "$runtime_path" ]]; then
-    export DOTNET_ROOT="${runtime_path%/shared/*}"
+    # Linux prints /usr/local/share/dotnet/shared/<framework>, Windows prints
+    # C:\Program Files\dotnet\shared\<framework>; strip the shared part with either separator.
+    runtime_path="${runtime_path%%[/\\]shared[/\\]*}"
+    export DOTNET_ROOT="$runtime_path"
   fi
 fi
 
