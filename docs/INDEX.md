@@ -32,6 +32,9 @@ semantics. Receipts absent from this checkout are not current release evidence.
 - `docs/architecture.md` — technical architecture details
 - `docs/QUICK_REFERENCE.md` — commands and quick lookup material
 - `docs/POST_DEPLOY_SMOKE_TEST.md` — post-deployment frontend smoke-test checklist
+- `docs/ORGANIZATION.md` — repository layout: core contracts, auxiliary contracts, native implementation and verification map
+- `docs/mainnet-validation-runbook.md` — read-only MainNet validation runbook (`sdk/js` `mainnet:validate:readonly`)
+- `TESTNET_QUICKSTART.md` — dry-run-first TestNet validation entry (`sdk/js` `testnet:validate:dry-run`)
 
 ## Chinese Counterparts
 
@@ -92,7 +95,7 @@ semantics. Receipts absent from this checkout are not current release evidence.
 ## Historical Reports
 
 - `docs/reports/testnet-validation-v1v2-2026-03.md` — archived pre-V3 (V1/V2) testnet validation status
-- `docs/history/` — superseded dated records kept as history: the organization snapshot (`ORGANIZATION-20260927.md`), the runtime-alignment correction (`AA-RUNTIME-ARTIFACT-ALIGNMENT-20260912.md`), the proxy-scope finding and identity follow-up notes (`AA-PROXY-SIGNER-SCOPE-20260912.md`, `IDENTITY-VERIFICATION-FOLLOWUP-20260912.md`) and the dependency-remediation log (`DEPENDENCY-REMEDIATION-20260917.md`)
+- `docs/history/` — superseded dated records kept as history: the organization snapshots (`ORGANIZATION-20260927.md`, `ORGANIZATION-legacy.md`), the runtime-alignment correction (`AA-RUNTIME-ARTIFACT-ALIGNMENT-20260912.md`), the proxy-scope finding and identity follow-up notes (`AA-PROXY-SIGNER-SCOPE-20260912.md`, `IDENTITY-VERIFICATION-FOLLOWUP-20260912.md`), the dependency-remediation log (`DEPENDENCY-REMEDIATION-20260917.md`), the pre-V3 manual test checklist (`MANUAL_TEST_CHECKLIST.md`), the shared-draft execution note (`shared-draft-execution.md`), the 2026-09-12 mainnet upgrade readiness snapshot (`AA-MAINNET-UPGRADE-READINESS-20260912.md`), the 2026-03-28 professionalization plan (`2026-03-28-aa-professionalization.md`), superseded proposal material and retired validation scripts (`history/proposals/`), and the completed refinement working drafts (`AA-CAP-CONTEXT-REFINEMENT.md`, `AA-HELPER-GAS-BOUND.md`, `AA-HOOK-PARAMS-REFINEMENT.md`, `AA-INITIALIZER-SOURCE-REFINEMENT.md`, `AA-LEDGER-CODEC-REFINEMENT.md`, `AA-LOAD-ADMISSION.md`, `AA-REFINEMENT-TRUST-BOUNDARY.md`, `AA-REFINEMENT-GATE.md`, `AA-REIMBURSEMENT-COMPOSITION.md`, `AA-REIMBURSEMENT-INTEGER-BOUND.md`, `AA-RUNTIME-COLLECTION-BRIDGE.md`, `AA-RUNTIME-SOURCE-BRIDGE.md`) whose live state is tracked by `AA-FORMAL-VERIFICATION.md` and `formal/refinement/`
 
 ## Matrix Domain Support
 

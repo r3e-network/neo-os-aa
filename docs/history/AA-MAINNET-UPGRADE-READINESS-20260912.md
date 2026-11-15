@@ -15,7 +15,7 @@ the transaction's **Application HALT** and exact deployed script and manifest.
 - NEF checksum: `2035992441`; 90 ABI entries / 89 distinct method names;
   `transferAdmin` is absent.
 - System fee: **0.38820645 GAS**; network fee: **0.00800884 GAS**.
-- Evidence: [transaction, Application logs, and independent readback](reports/mainnet-smart-account-upgrade-20260915-evidence.json).
+- Evidence: [transaction, Application logs, and independent readback](../reports/mainnet-smart-account-upgrade-20260915-evidence.json).
 
 **Correction:** Earlier sections decoded little-endian RPC stack bytes as a
 canonical script hash, producing the wrong `NVrSS…` address. The matching signing

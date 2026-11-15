@@ -66,6 +66,6 @@ Implementation tests, private-chain execution, formal models, and artifact readb
 
 ## 6. Editorial action
 
-The revised English protocol text is maintained in [`nep-aa-entry-verifier.mediawiki`](./nep-aa-entry-verifier.mediawiki) and is synchronized with the file proposed in PR #243. The native-profile issue should reference the foundation and state its additional obligations instead of repeating implementation-specific account, administrator, proxy-script, or deployment claims.
+The revised English protocol text is maintained in [`nep-aa-entry-verifier.mediawiki`](../../proposals/nep-aa-entry-verifier.mediawiki) and is synchronized with the file proposed in PR #243. The native-profile issue should reference the foundation and state its additional obligations instead of repeating implementation-specific account, administrator, proxy-script, or deployment claims.
 
 This document does not reopen #221 and does not modify the scope of #218, #219, or #220.

@@ -19,7 +19,7 @@ methods compose its result correctly. The full gate must keep these distinctions
 | Public acceptance | Every ABI descriptor and its transitive dependencies must compose these results. Proved pure leaves, runtime probes and supporting models must not promote unproved entrypoints. |
 
 The source interpretation is the explicit Neo contract dialect documented in
-[the source-projection contract](AA-METHOD-SOURCE-REFINEMENT.md). It is not general
+[the source-projection contract](../AA-METHOD-SOURCE-REFINEMENT.md). It is not general
 CLR semantics. In particular, byte-value equality and record intrinsics require
 a correspondence argument; exporting a resolved symbol does not provide it.
 Source `BigInteger` addition remains unbounded. The target's integer bounds must

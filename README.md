@@ -303,6 +303,8 @@ release-grade cross-repository switch that `verify_repo.sh` also honours) makes 
 
 ### Live Testnet Validation
 
+See `TESTNET_QUICKSTART.md` for the dry-run-first entry point.
+
 ```bash
 cd sdk/js
 cp .env.example .env

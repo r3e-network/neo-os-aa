@@ -63,6 +63,6 @@ python3 formal/refinement/hook_params_proofs.py \
   --json-report /tmp/aa-hook-params-proof.json
 ```
 
-See [implementation acceptance](AA-IMPLEMENTATION-REFINEMENT.md) and
-[public entrypoint closure](AA-ENTRYPOINT-CLOSURE.md). `fullImplementationVerified`
+See [implementation acceptance](../AA-IMPLEMENTATION-REFINEMENT.md) and
+[public entrypoint closure](../AA-ENTRYPOINT-CLOSURE.md). `fullImplementationVerified`
 remains false even after this private-body reference theorem succeeds.
