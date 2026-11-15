@@ -10,8 +10,10 @@ test('public artifact selection cannot escape into the private profile', () => {
   for (const name of ['../platform/SmartAccountV3', '/tmp/other', 'verifiers/../../platform/Core', '', '..\\platform\\Core']) {
     assert.throws(() => artifactPaths(name), /public artifact name/);
   }
-  assert.match(artifactPaths('SmartAccountV3').nef, /contracts\/bin\/v3\/SmartAccountV3\.nef$/);
-  assert.match(artifactPaths('verifiers/WebAuthnVerifier').nef, /contracts\/bin\/v3\/verifiers\/WebAuthnVerifier\.nef$/);
+  // path.join yields native separators; the suffix pin must not depend on the host OS.
+  const sep = '[\\\\/]';
+  assert.match(artifactPaths('SmartAccountV3').nef, new RegExp(`contracts${sep}bin${sep}v3${sep}SmartAccountV3\\.nef$`));
+  assert.match(artifactPaths('verifiers/WebAuthnVerifier').nef, new RegExp(`contracts${sep}bin${sep}v3${sep}verifiers${sep}WebAuthnVerifier\\.nef$`));
 });
 
 function stubContract(t, methods) {

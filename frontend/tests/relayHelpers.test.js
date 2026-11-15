@@ -51,7 +51,9 @@ test('the relay payload allowlist is exactly the deployed core ABI execution sur
 });
 
 test('the generated relay operations module is reproducible from the deployed manifest', () => {
-  const generated = fs.readFileSync(GENERATED_OPERATIONS_FILE, 'utf8');
+  // The generator emits LF; a Windows core.autocrlf checkout materialises the
+  // tracked file as CRLF, so normalize before the byte comparison.
+  const generated = fs.readFileSync(GENERATED_OPERATIONS_FILE, 'utf8').replace(/\r\n/g, '\n');
   const result = spawnSync(process.execPath, [GENERATOR_SCRIPT], {
     cwd: path.resolve('..'),
     encoding: 'utf8',

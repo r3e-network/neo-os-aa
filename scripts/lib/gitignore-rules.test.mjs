@@ -138,6 +138,10 @@ function writeFixtureRepository(location) {
   }
   for (const [relative] of FIXTURE_RULES) {
     if (FIXTURE_DIRECTORIES.includes(relative)) continue;
+    // Glob metacharacters (* ?) are not legal win32 file names, so those probe
+    // paths cannot be materialised on Windows; the reader pins them regardless,
+    // only the git cross-check below loses them (see the compared count).
+    if (process.platform === "win32" && /[*?]/.test(relative)) continue;
     const file = path.join(location, relative);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     if (!fs.existsSync(file)) fs.writeFileSync(file, "x\n");
@@ -205,8 +209,11 @@ test("the fixture rules read the same in the reader and in git", () => {
     // Only paths that exist can be asked of git; the rest are pinned above.
     execFileSync("git", ["-C", fixture, "init", "-q"], { stdio: "ignore" });
     const compared = FIXTURE_RULES.filter(([relative]) => fs.existsSync(path.join(fixture, relative)));
+    const unmaterializable = process.platform === "win32"
+      ? FIXTURE_RULES.filter(([relative]) => /[*?]/.test(relative)).length
+      : 0;
     assert.ok(
-      compared.length >= FIXTURE_RULES.length - 1,
+      compared.length >= FIXTURE_RULES.length - 1 - unmaterializable,
       `the fixture must compare nearly every path with git, compared ${compared.length} of ${FIXTURE_RULES.length}`,
     );
     const gitSays = gitIgnoredSet(fixture, compared.map(([relative]) => relative));

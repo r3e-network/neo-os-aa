@@ -1,4 +1,5 @@
 """Fail-closed source selection and complete build-output comparison."""
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -45,9 +46,15 @@ class ReproducibleBuildTests(unittest.TestCase):
             evaluated = json.loads(output)
             self.assertEqual("true", evaluated["Properties"]["RepositoryTargetsRetained"])
             self.assertFalse(any(item["Identity"] == "Neo" for item in evaluated["Items"]["PackageReference"]))
-            self.assertEqual([str(root / "core/src/Neo/Neo.csproj")],
-                [item["Identity"] for item in evaluated["Items"]["ProjectReference"]])
-            self.assertEqual(str(root) + "/=/_/native-runner/", evaluated["Properties"]["PathMap"])
+            # Path spelling must not depend on the host: %TEMP% may be an 8.3 short
+            # path (C:\Users\ADMINI~1\...) while MSBuild evaluates the same directory
+            # in long form, and MSBuild joins with its own separators. Compare the
+            # canonical real path with normalized separators on both sides.
+            canonical = lambda value: os.path.realpath(value).replace("\\", "/")
+            self.assertEqual([canonical(root / "core/src/Neo/Neo.csproj")],
+                [canonical(item["Identity"]) for item in evaluated["Items"]["ProjectReference"]])
+            self.assertEqual(canonical(root) + "/=/_/native-runner/",
+                canonical(evaluated["Properties"]["PathMap"].split("=")[0]) + "/=/_/native-runner/")
 
     def test_sources_exclude_outputs_and_private_inputs(self):
         for path in ("src/Neo/Native.cs", "src/Neo/Neo.csproj", "global.json", "src/Directory.Build.props", "src/Neo/Resources/BIP-39.cs.txt"):

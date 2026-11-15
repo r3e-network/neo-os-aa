@@ -8,7 +8,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { ARTIFACT_PROFILES, buildInputSnapshot, listArtifacts } from "./check-artifact-reproducibility.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -316,7 +316,7 @@ function cliOptions(argv) {
   return options;
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const options = cliOptions(process.argv.slice(2));
   const report = verifyProvenance({
     repro: loadJson(options.repro),

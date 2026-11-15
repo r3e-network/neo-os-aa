@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const releaseDir = path.join(repoRoot, "contracts", "bin", "v3");
@@ -26,7 +26,10 @@ const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
 // certificate is portable and the "candidate source drift" consumers can hash the same way.
 // Compiled artifacts (.nef/.manifest.json under bin/) are binary evidence and keep raw-byte hashing.
 const sha256Text = (file) => sha256(Buffer.from(fs.readFileSync(file, "utf8").replace(/\r\n?/g, "\n"), "utf8"));
+// fs.cpSync hands the filter native separators ("...\contracts\bin" on Windows),
+// so normalize before matching or the build-output exclusion silently never fires.
 const SKIP_DIRS = /(^|\/)(bin|obj|build)$/;
+const isSkippedDirectory = (source) => SKIP_DIRS.test(source.replaceAll(path.sep, "/"));
 // The restore policy every contract project is built under. Without them the scratch copy would
 // compile against whatever package source and framework version the machine happens to resolve.
 export const RESTORE_POLICY_FILES = ["Directory.Build.props", "nuget.config"];
@@ -164,7 +167,7 @@ export function prepareScratch() {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "aa-repro-"));
   fs.cpSync(path.join(repoRoot, "contracts"), path.join(scratch, "contracts"), {
     recursive: true,
-    filter: (source) => !SKIP_DIRS.test(source),
+    filter: (source) => !isSkippedDirectory(source),
   });
   for (const file of RESTORE_POLICY_FILES) fs.copyFileSync(path.join(repoRoot, file), path.join(scratch, file));
   fs.mkdirSync(path.join(scratch, "scripts"), { recursive: true });
@@ -271,6 +274,8 @@ async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+// argv[1] arrives in native form; the template-literal file:// URL mis-parses
+// paths containing spaces or '%' (no percent-encoding). pathToFileURL is exact.
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await main();
 }

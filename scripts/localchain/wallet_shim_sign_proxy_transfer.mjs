@@ -12,12 +12,14 @@
 // frontend/src/features/operations/execution.js and sent by frontend/src/services/walletService.js.
 import { createHash, createPrivateKey, createPublicKey, sign as ecdsaSign } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { toMultiSigRpcParameter } from '../../shared/multiSigCore.mjs';
 import { assertLocalchainProbe } from './probe_isolation.mjs';
 
-const AA = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+// URL.pathname keeps a POSIX leading slash (" /D:/...") which breaks Windows
+// path resolution; fileURLToPath is the portable conversion.
+const AA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function emit(body) {
   process.stdout.write(`${JSON.stringify(body)}\n`);

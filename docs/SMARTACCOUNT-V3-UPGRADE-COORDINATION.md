@@ -135,7 +135,7 @@ Historical/dated material that intentionally stays untouched:
 
 - `docs/reports/*` — dated receipts and evidence; new evidence goes into new
   dated reports.
-- `docs/AA-MAINNET-UPGRADE-READINESS-*.md`, `PLUGIN_MATRIX.md`, etc. —
+- `docs/history/AA-MAINNET-UPGRADE-READINESS-*.md`, `PLUGIN_MATRIX.md`, etc. —
   historical docs; append updates, do not rewrite receipts.
 - `formal/refinement` fixtures still reference `PlatformRegistrarMock` —
   the formal gate is explicitly out of Phase 1b scope per the plan; flagged
@@ -164,30 +164,40 @@ change sets.
    suites pin the candidate NEF hash and fee-helper offsets; they are
    current with the Phase 1b build and re-pin on any further source change.
 
-## 6. Known environment-dependent script-test failures (Windows dev box)
+## 6. Windows script-test portability (resolved 2026-11-16)
 
-`node --test scripts/*.test.mjs` shows 13 failures on this Windows machine;
-12 are pre-existing environmental issues (the 13th — the mainnet candidate
-count pin — was re-pinned to 109 with the revised candidate and passes):
+The Windows-only script-test failures listed here previously are fixed:
 
-- `implementation_profiles.test.mjs` (3): `path.resolve(URL.pathname)`
-  doubles the drive (`D:\D:\Git\...`) on Windows.
-- `repo_hygiene.test.mjs` (1): git 2.56 `ls-files --cached --ignored`
-  misreports tracked `docs/reports/**` as ignored; `git check-ignore`
-  disagrees (not ignored).
-- `check-artifact-reproducibility.test.mjs` (2): `path.relative` yields
-  backslashes, breaking forward-slash artifact inventories; the scratch-copy
-  exclusion then lets `contracts/bin` through.
-- `verify-private-artifact-provenance.test.mjs` (1): same backslash
-  inventory mismatch inside `verifyReleaseCertificate`.
-- `check-ordinary-runtime-provenance.test.mjs` (3): child processes spawn
-  `python` through the Windows Store alias (exit 9009).
-- `verify_repo.test.mjs` (2): POSIX `/tmp` hardcoded where the test expects
-  `os.tmpdir()`; and a CRLF workflow checkout breaks an LF-only regex in the
-  native-browser-gate assertion (`.github/workflows` is a no-touch area).
+- `implementation_profiles.test.mjs` — repo root now resolves through
+  `fileURLToPath(new URL('..', import.meta.url))` instead of
+  `path.resolve(URL.pathname)`, which doubled the drive (`D:\D:\Git\...`).
+- `repo_hygiene.test.mjs` — the "tracked files matching .gitignore" failure
+  was real, not a git misreport: `git check-ignore` (without `--no-index`)
+  never reports tracked paths, while `git ls-files --cached --ignored` does.
+  The 51 evidence receipts cited by live protocol documents (or by other
+  receipts in the kept set) are now explicitly un-ignored in `.gitignore`;
+  the 23 unreferenced ones are untracked and stay local-only per the
+  reports policy. The evidence receipt referenced by
+  `implementations/ordinary/profile.json` was renamed to
+  `mainnet-smart-account-upgrade-20260915-evidence.json` to match the pin.
+- `check-artifact-reproducibility.test.mjs` — the scratch-copy filter
+  normalizes path separators before matching `bin|obj|build`, so build
+  output is excluded on Windows too.
+- `check-artifact-reproducibility.mjs` / `verify-private-artifact-provenance.mjs`
+  — the `main()` guard compares `import.meta.url` against
+  `pathToFileURL(path.resolve(argv[1]))`; the template-literal `file://` URL
+  mis-parses paths containing spaces or `%`.
+- `test_neoexpress_reproducible_build.py` — path assertions canonicalize
+  with `os.path.realpath` and normalized separators, tolerating an 8.3
+  `%TEMP%` spelling against MSBuild's long-form evaluation.
+- `lib/deploy-helpers.test.mjs` — the artifact-path suffix pins accept both
+  path separators instead of hardcoding `/`.
+- `lib/gitignore-rules.test.mjs` — fixture paths containing glob
+  metacharacters (`a/**/b`, `file?.txt`) are not legal win32 file names and
+  are skipped on Windows; only the git cross-check loses them, the reader
+  pins still cover them.
 
-None of these are caused by the Phase 1b edits; the Linux CI lane is the
-authoritative gate for them.
+The Linux CI lane remains the authoritative gate.
 
 ## 7. Rollback
 

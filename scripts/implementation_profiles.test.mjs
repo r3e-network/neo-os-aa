@@ -3,8 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+// URL.pathname keeps the POSIX leading slash ("/D:/Git/..."); on Windows
+// path.resolve then doubles the drive ("D:\D:\Git\..."). fileURLToPath is the
+// portable conversion.
+const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 function readProfile(name) {
   const profilePath = path.join(repoRoot, 'implementations', name, 'profile.json');
