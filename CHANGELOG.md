@@ -14,7 +14,7 @@ and this project adheres to Semantic Versioning.
 - `docs/AA-EIP-712-SPEC.md` — the canonical typed-data specification (domain, struct, word encodings, deliberate deviations, SDK builders) that was previously only implicit in contract and SDK source.
 
 ### Changed
-- The ordinary source candidate now exposes 111 raw manifest methods against the 90 methods of the pinned public artifact; candidate NEF/manifest hashes are re-pinned (`0683cb52…` / `fe716538…`) and the coordination note, compatibility report, gas-runtime offsets and upgrade-gate test follow. `_initialize` moved to offset 31074.
+- The ordinary source candidate now exposes 111 raw manifest methods against the 90 methods of the pinned public artifact; candidate NEF/manifest hashes are re-pinned (`0683cb52…` / `ee117b8f…`) and the coordination note, compatibility report, gas-runtime offsets and upgrade-gate test follow. `_initialize` moved to offset 31074.
 
 ### Fixed
 - `ZKEmailVerifier` no longer advertises the V3 capability while disabled (2026-11-16 design review): `supportsV3()` returns `false`, so the core's verifier binding check rejects registration and verifier updates up front (`Verifier does not implement V3 interface`) instead of letting an account bind to a verifier whose `validateSignature` always faults and recovering only through the 7-90 day escape path. The execution-time fail-closed assert remains as defense in depth. The NeoExpress scenario and the testnet plugin matrix now assert the bind-time rejection, and a source-invariant test pins both the disabled marker and the bind gate.

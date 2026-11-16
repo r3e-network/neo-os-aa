@@ -14,18 +14,23 @@ not establish that the protocol has no remaining defects.
 > `docs/AA-FORMAL-VERIFICATION.md`, and the dated build receipt under
 > `docs/reports/`.
 
-### Current ordinary-profile boundary (2026-10-13)
+### Current ordinary-profile boundary (2026-11-16)
 
 The ordinary source protocol is internally consistent for its executable nonce
 domain, operation-shape isolation, plugin lifecycle and bounded policy
 cardinality. The current source candidate is compiled and runtime-tested, while
 the pinned public artifact remains the separately verified deployment identity.
-The source candidate currently has a 109-entry ABI (108 unique method names because
+The source candidate currently has a 111-entry ABI (110 unique method names because
 of a retained overload entry); the pinned public artifact has 90 ABI entries.
 The current source also adds a shared per-transaction reimbursement ceiling within
 each core and callback-free `finalizeEscapeToOwner`: a permanent owner-only
 recovery mode. The latter preserves identity and nonce history while prohibiting
 all later plugin installation; it does not provide native epoch-module reinstallation.
+The 2026-11-16 Ethereum-AA alignment revision adds the `describeAccount`
+capability-discovery read and the non-faulting `simulateValidation` preflight
+(named after ERC-4337's EntryPoint), and lets `SessionKeyVerifier.setPublicKey`
+accept a version-0x01 initial-key blob in the registration verifier params so a
+session-key account works on day one.
 These local fixes have NeoVM regression coverage and corresponding formal models.
 Three release gates remain explicit:
 
