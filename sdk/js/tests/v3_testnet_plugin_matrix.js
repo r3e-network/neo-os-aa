@@ -1957,47 +1957,39 @@ async function main() {
 
   logSection("ZKEmail Verifier");
   {
-    const scenario = await registerAccount("zkemail", {
-      verifier: zkEmailVerifier.hash,
+    // The disabled verifier advertises no V3 capability, so the core's
+    // AssertV3Verifier must reject binding at registration time (simulated,
+    // not persisted: a deliberately faulting registration spends no fees).
+    const zkAccountId = aaClient.deriveRegistrationAccountIdHash({
+      verifierContractHash: normalizeHash(zkEmailVerifier.hash),
+      verifierParamsHex: "",
+      hookContractHash: "0x0000000000000000000000000000000000000000",
+      backupOwnerAddress: account.scriptHash,
+      escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
     });
-    const pendingConfig = await initiatePendingVerifierCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "setDKIMRegistry",
-      [hash160Param(scenario.accountId), byteArrayParam("aa")],
-    );
-
-    const inactive = await testInvoke(
+    const bindAttempt = await testInvoke(
       rpcClient,
       core.hash,
       account,
       networkMagic,
-      "executeUserOp",
+      "registerAccount",
       [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "ff",
-        }),
+        hash160Param(zkAccountId),
+        hash160Param(zkEmailVerifier.hash),
+        emptyByteArrayParam(),
+        hash160Param("0x0000000000000000000000000000000000000000"),
+        hash160Param(account.scriptHash),
+        integerParam(REGISTRATION_ESCAPE_TIMELOCK),
       ],
     );
 
     results.matrix.zkEmailVerifier = {
-      accountId: normalizeHash(scenario.accountId),
-      maintenance: pendingConfig,
-      inactive: assertFaultResult(
-        inactive,
-        "zkemail.inactive",
-        /No DKIM configured/,
+      bindRejected: assertFaultResult(
+        bindAttempt,
+        "zkemail.bindRejected",
+        /Verifier does not implement V3 interface/,
       ),
-      note: "DKIM registry configuration is timelocked; same-session live runs cannot reach the disabled-proof branch.",
+      note: "Disabled verifier is rejected at the bind gate (SupportsV3 = false); accounts can no longer be attached to it, so the execution-time fail-closed branch is unreachable for new accounts.",
     };
     console.log(JSON.stringify(results.matrix.zkEmailVerifier, null, 2));
   }

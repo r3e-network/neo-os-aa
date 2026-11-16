@@ -62,8 +62,10 @@ of this candidate flow.
   WebAuthn challenge, rpIdHash, origin, authenticatorData flags or sign counters. It
   provides no complete Passkey, biometric or browser-origin guarantee. A normal
   WebAuthn assertion is not automatically a signature over the same AA payload.
-- ZKEmailVerifier rejects operations pending real proof verification. DKIM proof,
-  email recovery and private on-chain email authorization remain design goals.
+- ZKEmailVerifier is disabled pending real proof verification: it advertises no V3
+  capability, so the core rejects binding it to an account at registration or update
+  time, and its validation path also fails closed. DKIM proof, email recovery and
+  private on-chain email authorization remain design goals.
 - SessionKeyVerifier, SubscriptionVerifier and Hooks enforce their implemented
   permissions and metering. Login alone does not grant a session or imply unlimited,
   risk-free use.

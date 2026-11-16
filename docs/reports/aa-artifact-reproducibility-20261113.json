@@ -1,6 +1,6 @@
 {
   "schema": "neoos-aa-artifact-reproducibility/v2",
-  "generated_at": "2026-11-13T13:29:47.855Z",
+  "generated_at": "2026-11-16T01:46:54.399Z",
   "release_dir": "contracts/bin/v3",
   "profiles": {
     "v3": {
@@ -289,14 +289,14 @@
         },
         {
           "artifact": "ZKEmailVerifier.manifest.json",
-          "expected_sha256": "b9ddb2a9ddb73399d53626f3ac44e26d87f49bafbc1ffa5fb424912c33d90320",
-          "actual_sha256": "b9ddb2a9ddb73399d53626f3ac44e26d87f49bafbc1ffa5fb424912c33d90320",
+          "expected_sha256": "0d6a7ac85f188226d99300ac90250e61add7cb9cff40a1f7d0b2b087c2610384",
+          "actual_sha256": "0d6a7ac85f188226d99300ac90250e61add7cb9cff40a1f7d0b2b087c2610384",
           "match": true
         },
         {
           "artifact": "ZKEmailVerifier.nef",
-          "expected_sha256": "d302976ab50d165d8c49e143ce6007539c22bdebe7c3f6d84ea8c9f2e6354d20",
-          "actual_sha256": "d302976ab50d165d8c49e143ce6007539c22bdebe7c3f6d84ea8c9f2e6354d20",
+          "expected_sha256": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
+          "actual_sha256": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
           "match": true
         },
         {
@@ -457,14 +457,14 @@
         },
         {
           "artifact": "verifiers/ZKEmailVerifier.manifest.json",
-          "expected_sha256": "b9ddb2a9ddb73399d53626f3ac44e26d87f49bafbc1ffa5fb424912c33d90320",
-          "actual_sha256": "b9ddb2a9ddb73399d53626f3ac44e26d87f49bafbc1ffa5fb424912c33d90320",
+          "expected_sha256": "0d6a7ac85f188226d99300ac90250e61add7cb9cff40a1f7d0b2b087c2610384",
+          "actual_sha256": "0d6a7ac85f188226d99300ac90250e61add7cb9cff40a1f7d0b2b087c2610384",
           "match": true
         },
         {
           "artifact": "verifiers/ZKEmailVerifier.nef",
-          "expected_sha256": "d302976ab50d165d8c49e143ce6007539c22bdebe7c3f6d84ea8c9f2e6354d20",
-          "actual_sha256": "d302976ab50d165d8c49e143ce6007539c22bdebe7c3f6d84ea8c9f2e6354d20",
+          "expected_sha256": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
+          "actual_sha256": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
           "match": true
         },
         {
@@ -683,7 +683,7 @@
       "contracts/verifiers/Web3AuthVerifier.csproj": "e461de1a2b38003918de3e721b757689fafa7aa4ff4282eb384585d41d26c3ac",
       "contracts/verifiers/WebAuthnVerifier.cs": "9be44a51f5bef5158b1ab2ee00aec4e6c56224d56baa715ee3c522111adce4e2",
       "contracts/verifiers/WebAuthnVerifier.csproj": "308a133cf9f231c2c246e9adbcd46bdad5120d1075dacb3b7f549175f6bbb2c3",
-      "contracts/verifiers/ZKEmailVerifier.cs": "21c0a0bf96426a86f6039fecbbf9663c8b33fcb926b5b9c7085c724cd6f14565",
+      "contracts/verifiers/ZKEmailVerifier.cs": "0350547589d284b974b63846bd7dc807e8f1bf0f28f93ec74fbe2969d15fb2e7",
       "contracts/verifiers/ZKEmailVerifier.csproj": "bf1476d311c3e1dd96477fc3f0777b73adf80c58f0baf2ac855bd5ddb3cba83d",
       "contracts/verifiers/ZkLoginVerifier.cs": "2fd2d5bd8e243345c77f549d62a3bceae94577acae2e3c0c0dd38d667cf35416",
       "contracts/verifiers/ZkLoginVerifier.csproj": "0d5e4b385849680ca922ca274e5ed2d226efcc0e4f5a8a804d9b33b4aedbbc8e",
@@ -692,7 +692,7 @@
       "scripts/check_neo_platform_packages.mjs": "cd3750a35daafb7ab058dd4f1149a07427359a5dcb4fbdd2358dab7311c50fe1",
       "scripts/dotnet_env.sh": "d769761a4ad4b44686962b5dda5150be9e532312291a3f3b869dceb951a1a74b"
     },
-    "source_snapshot_sha256": "24f8b1675bf6b220d9eaad64a6c694162b6c2b9603036f8a217d7fb0b1334dbd",
+    "source_snapshot_sha256": "beccbe12958fa9e8bf3723f2be83628fe7b77e073f1dc0fa6b164c412db5b09c",
     "compiler": {
       "tool": "nccs",
       "version": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"
@@ -753,8 +753,8 @@
       "v3/WrongHookLifecycleAbiModule.nef": "2814d80eb1007765b8543b30c54e48782e5183d8f00345b85fdc5ddb7ed6ce3d",
       "v3/WrongLifecycleAbiModule.manifest.json": "f9494bb848f0bbfcd6dde4cf52c1ba277b8d8e6902d02dd1ba313ea19a02570a",
       "v3/WrongLifecycleAbiModule.nef": "dce2b08a7dd2c48d01c32254e00eac76d6bcbeb76bbbc2add831bace6c666fd5",
-      "v3/ZKEmailVerifier.manifest.json": "b9ddb2a9ddb73399d53626f3ac44e26d87f49bafbc1ffa5fb424912c33d90320",
-      "v3/ZKEmailVerifier.nef": "d302976ab50d165d8c49e143ce6007539c22bdebe7c3f6d84ea8c9f2e6354d20",
+      "v3/ZKEmailVerifier.manifest.json": "0d6a7ac85f188226d99300ac90250e61add7cb9cff40a1f7d0b2b087c2610384",
+      "v3/ZKEmailVerifier.nef": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
       "v3/ZkLoginVerifier.manifest.json": "3ab57ac8026575215309b87436fed148390c41497b20bba305437304178e18e7",
       "v3/ZkLoginVerifier.nef": "2759bf32bc15cffb639c5792db671e415ee4c5403c1bb1c7c1d28a221af1e441",
       "v3/hooks/DailyLimitHook.manifest.json": "3834528b9a776481279ab343415c9a27168b8a6c498b4777945e1bd9b6d791a0",
@@ -781,8 +781,8 @@
       "v3/verifiers/Web3AuthVerifier.nef": "654af5115e45ba5285473ca7b17e0953fe6324cae2c4f80f123d7623d04031bd",
       "v3/verifiers/WebAuthnVerifier.manifest.json": "6355cce3a08b898d2d7bd3f09a4cb27b5118708edc85d810ed8a47f06ec3c921",
       "v3/verifiers/WebAuthnVerifier.nef": "690a91655d9acc16bb8fc857975adb4f3f2b1d48d612009adc358e2763aed6b4",
-      "v3/verifiers/ZKEmailVerifier.manifest.json": "b9ddb2a9ddb73399d53626f3ac44e26d87f49bafbc1ffa5fb424912c33d90320",
-      "v3/verifiers/ZKEmailVerifier.nef": "d302976ab50d165d8c49e143ce6007539c22bdebe7c3f6d84ea8c9f2e6354d20",
+      "v3/verifiers/ZKEmailVerifier.manifest.json": "0d6a7ac85f188226d99300ac90250e61add7cb9cff40a1f7d0b2b087c2610384",
+      "v3/verifiers/ZKEmailVerifier.nef": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
       "v3/verifiers/ZkLoginVerifier.manifest.json": "3ab57ac8026575215309b87436fed148390c41497b20bba305437304178e18e7",
       "v3/verifiers/ZkLoginVerifier.nef": "2759bf32bc15cffb639c5792db671e415ee4c5403c1bb1c7c1d28a221af1e441",
       "platform/SmartAccountV3.manifest.json": "c6ae6809171d0c57276b46082f7fb0d562ad10fef87c6827a2570f1c54f9cba8",
@@ -835,8 +835,8 @@
       "v3/WrongHookLifecycleAbiModule.nef": "2814d80eb1007765b8543b30c54e48782e5183d8f00345b85fdc5ddb7ed6ce3d",
       "v3/WrongLifecycleAbiModule.manifest.json": "f9494bb848f0bbfcd6dde4cf52c1ba277b8d8e6902d02dd1ba313ea19a02570a",
       "v3/WrongLifecycleAbiModule.nef": "dce2b08a7dd2c48d01c32254e00eac76d6bcbeb76bbbc2add831bace6c666fd5",
-      "v3/ZKEmailVerifier.manifest.json": "b9ddb2a9ddb73399d53626f3ac44e26d87f49bafbc1ffa5fb424912c33d90320",
-      "v3/ZKEmailVerifier.nef": "d302976ab50d165d8c49e143ce6007539c22bdebe7c3f6d84ea8c9f2e6354d20",
+      "v3/ZKEmailVerifier.manifest.json": "0d6a7ac85f188226d99300ac90250e61add7cb9cff40a1f7d0b2b087c2610384",
+      "v3/ZKEmailVerifier.nef": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
       "v3/ZkLoginVerifier.manifest.json": "3ab57ac8026575215309b87436fed148390c41497b20bba305437304178e18e7",
       "v3/ZkLoginVerifier.nef": "2759bf32bc15cffb639c5792db671e415ee4c5403c1bb1c7c1d28a221af1e441",
       "v3/hooks/DailyLimitHook.manifest.json": "3834528b9a776481279ab343415c9a27168b8a6c498b4777945e1bd9b6d791a0",
@@ -863,8 +863,8 @@
       "v3/verifiers/Web3AuthVerifier.nef": "654af5115e45ba5285473ca7b17e0953fe6324cae2c4f80f123d7623d04031bd",
       "v3/verifiers/WebAuthnVerifier.manifest.json": "6355cce3a08b898d2d7bd3f09a4cb27b5118708edc85d810ed8a47f06ec3c921",
       "v3/verifiers/WebAuthnVerifier.nef": "690a91655d9acc16bb8fc857975adb4f3f2b1d48d612009adc358e2763aed6b4",
-      "v3/verifiers/ZKEmailVerifier.manifest.json": "b9ddb2a9ddb73399d53626f3ac44e26d87f49bafbc1ffa5fb424912c33d90320",
-      "v3/verifiers/ZKEmailVerifier.nef": "d302976ab50d165d8c49e143ce6007539c22bdebe7c3f6d84ea8c9f2e6354d20",
+      "v3/verifiers/ZKEmailVerifier.manifest.json": "0d6a7ac85f188226d99300ac90250e61add7cb9cff40a1f7d0b2b087c2610384",
+      "v3/verifiers/ZKEmailVerifier.nef": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
       "v3/verifiers/ZkLoginVerifier.manifest.json": "3ab57ac8026575215309b87436fed148390c41497b20bba305437304178e18e7",
       "v3/verifiers/ZkLoginVerifier.nef": "2759bf32bc15cffb639c5792db671e415ee4c5403c1bb1c7c1d28a221af1e441",
       "platform/SmartAccountV3.manifest.json": "c6ae6809171d0c57276b46082f7fb0d562ad10fef87c6827a2570f1c54f9cba8",

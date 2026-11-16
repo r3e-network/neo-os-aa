@@ -404,7 +404,7 @@ Security outcomes recorded by the matrix's adversarial cases:
 
 Production note:
 
-- `ZKEmailVerifier` is intentionally disabled until a real proof-verification implementation is added. The previous placeholder behavior was not production-safe.
+- `ZKEmailVerifier` is intentionally disabled until a real proof-verification implementation is added. It advertises no V3 capability, so the core rejects binding it to an account at registration or update time; its validation path also fails closed as defense in depth. The previous placeholder behavior was not production-safe.
 
 ### Historical V1/V2 Validation (archived)
 

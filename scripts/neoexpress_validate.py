@@ -1159,8 +1159,12 @@ def scenario_abi_precheck(c):
     c.register("hook with wrong return type", hook=c.contracts["WrongHookLifecycleAbiModule"],
                expect_fault="Hook V3 pre ABI missing")
     for name in ("Web3AuthVerifier", "TEEVerifier", "WebAuthnVerifier", "NeoNativeVerifier",
-                 "MultiSigVerifier", "SubscriptionVerifier", "ZkLoginVerifier", "ZKEmailVerifier"):
+                 "MultiSigVerifier", "SubscriptionVerifier", "ZkLoginVerifier"):
         c.register(f"verifier {name} passes the pre-check", verifier=c.contracts[name])
+    # The disabled ZKEmail verifier must be rejected at bind time (SupportsV3() = false),
+    # not after an account is already attached to it.
+    c.register("disabled ZKEmail verifier rejected at registration", verifier=c.contracts["ZKEmailVerifier"],
+               expect_fault="Verifier does not implement V3 interface")
     for name in ("DailyLimitHook", "TokenRestrictedHook", "NeoDIDCredentialHook", "MultiHook"):
         c.register(f"hook {name} passes the pre-check", hook=c.contracts[name])
 
@@ -1173,7 +1177,8 @@ def scenario_profile_crypto(c, workdir):
     attestation. Web3Auth verifies the shipped EIP-712-style secp256k1 payload through
     a real ephemeral key, not a hosted Web3Auth login ceremony. ZkLogin is the shipped
     P-256 delegated-signer profile with provider and nullifier binding. ZKEmail is
-    intentionally disabled and must fail closed.
+    intentionally disabled and cannot be bound to an account at all (SupportsV3 is
+    false, so the core's AssertV3Verifier rejects registration and updates).
     """
     c.scenario("cryptographic verifier profile vectors")
     target = c.contracts["MockTransferTarget"]
@@ -1282,13 +1287,12 @@ def scenario_profile_crypto(c, workdir):
     c.check(c.nonce(account) == 1, "replayed delegated proof leaves the nonce unchanged")
 
     zk_email = c.contracts["ZKEmailVerifier"]
-    account, proxy = c.register("register disabled ZKEmail profile", verifier=zk_email)
-    c.two_phase("configure ZKEmail DKIM commitment", account, "verifier", "setDKIMRegistry",
-                [H(account), B(bytes([0x51]) * 32)])
-    c.execute("disabled ZKEmail proof fails closed", account,
-              c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0, signature=b"\x01"), "relay",
-              expect_fault="disabled pending real proof verification")
-    c.check(c.nonce(account) == 0, "disabled ZKEmail verifier cannot consume a nonce")
+    # Disabled at the bind gate: SupportsV3() = false makes AssertV3Verifier reject
+    # registration and updates, so no account can ever be attached to a verifier whose
+    # proof path always faults (previously the failure only surfaced at execution time
+    # and the account had to be rescued through the escape path).
+    c.register("disabled ZKEmail verifier cannot bind", verifier=zk_email,
+               expect_fault="Verifier does not implement V3 interface")
 
 
 def scenario_verifier_gas_cap(c):

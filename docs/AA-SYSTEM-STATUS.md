@@ -77,7 +77,7 @@ the network's global Verification budget.
   validation.
 - `TEEVerifier` trusts its registered signing key. A valid signature alone does
   not establish a particular enclave's attestation.
-- `ZKEmailVerifier` is disabled; do not offer it as a working account option.
+- `ZKEmailVerifier` is disabled and unbindable (`supportsV3()` = false rejects registration and updates); do not offer it as a working account option.
 - `ZkLoginVerifier` uses its documented delegated signing path; do not describe
   it as a locally verified general-purpose zero-knowledge login proof.
 - Social recovery's plugin owner and the core backup owner are separate state.

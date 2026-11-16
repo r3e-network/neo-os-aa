@@ -10,7 +10,7 @@ using System.ComponentModel;
 namespace SmartAccount.Verifiers
 {
     /// <summary>
-    /// Placeholder verifier reserved for a future zkEmail proof flow.
+    /// Disabled placeholder reserved for a future zkEmail proof flow.
     /// </summary>
     /// <remarks>
     /// The contract intentionally stays disabled until a real proof verifier is added.
@@ -20,15 +20,20 @@ namespace SmartAccount.Verifiers
     [ContractPermission("*", "canConfigureVerifier")]
     [ContractPermission("*", "canExecuteVerifier")]
     [ContractPermission("*", "computeArgsHash")]
-    [ManifestExtra("Description", "ZK-SNARK Email Proof Verifier")]
+    [ManifestExtra("Description", "Disabled placeholder for a future zkEmail proof verifier")]
     public class ZKEmailVerifier : SmartContract
     {
         private static readonly byte[] Prefix_AccountDKIM = new byte[] { 0x01 };
 
         public static void _deploy(object data, bool update) => VerifierAuthority.Initialize(data, update);
 
+        // Disabled verifiers must not advertise the V3 capability: the core's
+        // AssertV3Verifier gates registration and updates on this call, so returning
+        // false rejects binding at install time. Otherwise an account bound to this
+        // verifier could never execute (ValidateSignature always faults) and would
+        // only be recoverable through the 7-90 day escape path.
         [Safe]
-        public static bool SupportsV3() => true;
+        public static bool SupportsV3() => false;
 
         [Safe]
         public static bool SupportsComposition() => false;

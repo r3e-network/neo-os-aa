@@ -531,6 +531,19 @@ public class ContractTests
     }
 
     [TestMethod]
+    public void DisabledZkEmailVerifierIsRejectedAtTheBindGate()
+    {
+        // A verifier whose proof path is disabled must not advertise the V3
+        // capability: AssertV3Verifier calls supportsV3() at registration and at
+        // every update, so returning false rejects binding up front instead of
+        // letting an account attach to a verifier whose validateSignature always
+        // faults (which previously forced a 7-90 day escape to recover).
+        string source = ReadContractFile("verifiers/ZKEmailVerifier.cs");
+        StringAssert.Contains(source, "public static bool SupportsV3() => false;");
+        StringAssert.Contains(source, "ZKEmailVerifier disabled pending real proof verification");
+    }
+
+    [TestMethod]
     public void SessionAndSubscriptionVerifiersKeepValidateSignatureReadOnlyAndPersistStateInPostExecute()
     {
         string sessionSource = ReadContractFile("verifiers/SessionKeyVerifier.cs");

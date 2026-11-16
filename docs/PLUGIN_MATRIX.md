@@ -133,12 +133,17 @@ Note:
 ### ZKEmailVerifier
 
 - Positive path intentionally disabled.
+- Bind gate (2026-11-16): `supportsV3()` now returns `false`, so the core's
+  `AssertV3Verifier` rejects registration and updates up front with
+  `Verifier does not implement V3 interface`. No new account can attach to the
+  disabled verifier; the execution-time fail-closed branch below remains as
+  defense in depth for any historical binding.
 - Attack / misuse test: non-empty fake proof blob
   - Result: `FAULT`
   - Reason: `ZKEmailVerifier disabled pending real proof verification`
 
 Conclusion:
-- This verifier is intentionally blocked from production use until an actual proof-verification implementation exists.
+- This verifier is intentionally blocked from production use until an actual proof-verification implementation exists — now at both the bind gate and the validation path.
 
 ## Hook Matrix
 

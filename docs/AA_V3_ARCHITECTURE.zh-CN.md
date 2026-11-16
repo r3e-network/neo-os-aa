@@ -54,8 +54,9 @@ nonce 的唯一执行规则是 `0 <= nonce < 2^255`：高 191 位为通道，低
   rpIdHash、origin、authenticatorData 标志或签名计数器。不能宣称已有完整
   Passkey、FaceID/指纹或浏览器来源绑定；普通 WebAuthn assertion 也不能直接
   当作相同 payload 的签名。
-- ZKEmailVerifier 明确拒绝操作，尚无真实邮件证明验证。邮件恢复、DKIM 和
-  链上隐藏邮件内容是未实现的设计目标。
+- ZKEmailVerifier 在真实邮件证明验证落地前保持禁用：它不声明 V3 能力，核心在
+  注册与更新时即拒绝将其绑定到账户，其验证路径同时保持失败关闭。邮件恢复、
+  DKIM 和链上隐藏邮件内容是未实现的设计目标。
 - SessionKeyVerifier、SubscriptionVerifier 和策略 Hook 的权限及计量以各自
   实现为准；不能把临时登录解释为自动授予会话权限或无限制、无风险使用。
 - MultiSigVerifier 与 MultiHook 有配置和依赖限制；同名插件并不自动表示可组合。
