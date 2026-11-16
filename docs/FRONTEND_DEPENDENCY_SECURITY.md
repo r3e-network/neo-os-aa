@@ -1,5 +1,18 @@
 # Frontend dependency security assessment
 
+Re-reviewed on 2026-11-16 across every manifest ecosystem in this repository:
+`npm audit` reports 0 findings for `sdk/js`, and
+`dotnet list package --vulnerable --include-transitive` reports 0 findings for
+all 43 .NET projects (contracts, hooks, verifiers, native core, probes and test
+fixtures). The frontend remains at 22 production / 27 total affected packages,
+all low, all resolving to the same two reviewed advisories below; both audit
+gates pass. `@web3auth/modal` 11.4.3 was re-evaluated as an upgrade path: its
+published manifest still depends directly on `deepmerge ^4.3.1`, so the major
+migration would not clear either root advisory, and the Web3Auth 10.x line plus
+this review policy remains the correct posture. GitHub's Dependabot alert count
+on the web UI lags the merged state; the local gates above are the source of
+truth.
+
 Reviewed on 2026-10-30. The frontend's remaining low-severity audit entries
 originate from two upstream advisories, Elliptic and deepmerge, including findings
 propagated to dependent packages. They are known upstream risks, not a
