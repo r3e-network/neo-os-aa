@@ -107,7 +107,8 @@ namespace SmartAccount
 
         /// <summary>
         /// Non-faulting preflight of the core's execution-time checks for one operation,
-        /// in the spirit of ERC-4337 simulateValidation. Like previewUserOpValidation it
+        /// named after ERC-4337's EntryPoint.simulateValidation so 4337-aware tooling
+        /// finds the familiar entry point. Like previewUserOpValidation it
         /// deliberately excludes signature verification and hook execution; unlike it, the
         /// call reports instead of faulting on an unknown account, and exposes the two
         /// execution-relevant latches a submitter must see: market escrow (blocks
@@ -119,7 +120,7 @@ namespace SmartAccount
         /// nativeWitnessPresent, marketEscrowBlocks, escapeActive].
         /// </summary>
         [Safe]
-        public static object[] SimulateUserOp(UInt160 accountId, UserOperation op)
+        public static object[] SimulateValidation(UInt160 accountId, UserOperation op)
         {
             ValidateAccountId(accountId);
             ValidateUserOperation(op);

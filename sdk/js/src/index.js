@@ -1129,7 +1129,8 @@ class SmartAccountClient {
 
   /**
    * Non-faulting preflight of the core's execution-time checks for one
-   * operation (ERC-4337 simulateValidation semantics). Unlike
+   * operation, named after ERC-4337's EntryPoint simulateValidation so
+   * 4337-aware tooling finds the familiar entry point. Unlike
    * getUserOpValidationPreview this never faults on an unknown account and
    * additionally reports the two execution-relevant latches a submitter must
    * see: an active market escrow (blocks execution) and an active escape
@@ -1157,7 +1158,7 @@ class SmartAccountClient {
    * @returns {boolean} returns.escapeActive - Escape hatch is triggered
    * @throws {Error} If the RPC call itself fails
    */
-  async simulateUserOp({
+  async simulateValidation({
     accountIdHash = '',
     accountAddress = '',
     targetContract,
@@ -1171,7 +1172,7 @@ class SmartAccountClient {
       ? normalizeAddress(accountIdHash)
       : normalizeAddress(accountAddress);
 
-    const response = await this.invokeFunctionWithRetry(this.masterContractHash, 'simulateUserOp', [
+    const response = await this.invokeFunctionWithRetry(this.masterContractHash, 'simulateValidation', [
       { type: 'Hash160', value: accountId },
       {
         type: 'Struct',

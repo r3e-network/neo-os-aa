@@ -111,7 +111,7 @@ test('describeAccount decodes an unknown account without faulting', async () => 
   assert.equal(descriptor.pendingVerifierMatureAt, '0');
 });
 
-test('simulateUserOp decodes the 7-field preflight and forwards signers', async () => {
+test('simulateValidation decodes the 7-field preflight and forwards signers', async () => {
   const { client, calls } = mockClient([
     boolItem(true),
     boolItem(true),
@@ -123,7 +123,7 @@ test('simulateUserOp decodes the 7-field preflight and forwards signers', async 
   ]);
   const signers = [{ account: BACKUP, scopes: 'None' }];
 
-  const simulation = await client.simulateUserOp({
+  const simulation = await client.simulateValidation({
     accountIdHash: ACCOUNT_ID,
     targetContract: TARGET,
     method: 'transfer',
@@ -134,7 +134,7 @@ test('simulateUserOp decodes the 7-field preflight and forwards signers', async 
   });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].operation, 'simulateUserOp');
+  assert.equal(calls[0].operation, 'simulateValidation');
   assert.deepEqual(calls[0].signers, signers);
   assert.equal(calls[0].params[0].type, 'Hash160');
   assert.equal(calls[0].params[1].type, 'Struct');
@@ -153,9 +153,9 @@ test('simulateUserOp decodes the 7-field preflight and forwards signers', async 
   });
 });
 
-test('simulateUserOp decodes the unknown-account all-false result', async () => {
+test('simulateValidation decodes the unknown-account all-false result', async () => {
   const { client } = mockClient(Array.from({ length: 7 }, () => boolItem(false)));
-  const simulation = await client.simulateUserOp({
+  const simulation = await client.simulateValidation({
     accountIdHash: ACCOUNT_ID,
     targetContract: TARGET,
     method: 'transfer',
@@ -308,7 +308,7 @@ test('toErc4337UserOperation maps the V3 fields onto the 4337 shape', () => {
   assert.equal(op.deadline, '1700000000000');
 });
 
-test('estimateUserOperationGas anchors the 4337 gas shape on simulateUserOp', async () => {
+test('estimateUserOperationGas anchors the 4337 gas shape on simulateValidation', async () => {
   const { client } = mockClient(Array.from({ length: 7 }, () => boolItem(true)));
   const estimate = await estimateUserOperationGas(client, {
     accountIdHash: ACCOUNT_ID,

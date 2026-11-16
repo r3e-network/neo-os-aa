@@ -1456,17 +1456,17 @@ def scenario_discovery_and_day_one_session_key(c, workdir):
     c.check(missing[0] is False and "0x" + missing[1][::-1].hex() == ZERO,
             "describeAccount reports an unknown account without faulting")
 
-    # simulateUserOp is the non-faulting preflight of the core's execution checks.
-    sim = c.results("SmartAccountV3", "simulateUserOp", H(account),
+    # simulateValidation is the non-faulting preflight of the core's execution checks.
+    sim = c.results("SmartAccountV3", "simulateValidation", H(account),
                     c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 1))
     c.check(sim[0] is True and sim[1] is True and sim[2] is True and sim[3] is True,
-            "simulateUserOp clears the account, deadline, nonce and verifier checks")
+            "simulateValidation clears the account, deadline, nonce and verifier checks")
     c.check(sim[5] is False and sim[6] is False,
-            "simulateUserOp reports no escrow block and no active escape")
-    sim_missing = c.results("SmartAccountV3", "simulateUserOp", H(unknown),
+            "simulateValidation reports no escrow block and no active escape")
+    sim_missing = c.results("SmartAccountV3", "simulateValidation", H(unknown),
                             c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0))
     c.check(all(flag is False for flag in sim_missing),
-            "simulateUserOp reports an unknown account without faulting")
+            "simulateValidation reports an unknown account without faulting")
 
 
 def scenario_recovery_cleanup(c, workdir):

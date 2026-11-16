@@ -1,6 +1,6 @@
 {
   "schema": "neoos-aa-artifact-reproducibility/v2",
-  "generated_at": "2026-11-16T04:09:04.598Z",
+  "generated_at": "2026-11-16T05:11:05.311Z",
   "release_dir": "contracts/bin/v3",
   "profiles": {
     "v3": {
@@ -169,8 +169,8 @@
         },
         {
           "artifact": "SmartAccountV3.manifest.json",
-          "expected_sha256": "fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7",
-          "actual_sha256": "fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7",
+          "expected_sha256": "ee117b8f4ca661138be3ddda68c9f902bc75e99ca8b49518dd526ee0e4499e54",
+          "actual_sha256": "ee117b8f4ca661138be3ddda68c9f902bc75e99ca8b49518dd526ee0e4499e54",
           "match": true
         },
         {
@@ -491,8 +491,8 @@
       "artifacts": [
         {
           "artifact": "SmartAccountV3.manifest.json",
-          "expected_sha256": "fadd438796fe2bc86dc88d7833095b7b7599d17b3229cec6c5c2d5f44dbaef0d",
-          "actual_sha256": "fadd438796fe2bc86dc88d7833095b7b7599d17b3229cec6c5c2d5f44dbaef0d",
+          "expected_sha256": "5bccc9cb45a133c64c5f58e8c0a0b99d1bd03dbb7d2df875e0d8d064732e673e",
+          "actual_sha256": "5bccc9cb45a133c64c5f58e8c0a0b99d1bd03dbb7d2df875e0d8d064732e673e",
           "match": true
         },
         {
@@ -651,7 +651,7 @@
       "contracts/SmartAccount.Paymaster.cs": "386fbef69d2a10d5cefa888a3f4494c44e2e162b30f0bc9013060b393c312416",
       "contracts/SmartAccount.PlatformRegistrar.cs": "54ce6e86ab92176730070c552c853ba9763840c68cebfe2faed67dae79bfb707",
       "contracts/SmartAccount.Proxy.cs": "42287e7fbaf35f4e2021d983cf4319ff559a7a6a5e5390e57784e997ed61a0b4",
-      "contracts/SmartAccount.State.cs": "94a22c65117939f03eed81af7c296df2ba09bd437b084c4fca7157173033eae4",
+      "contracts/SmartAccount.State.cs": "c8513fa8eeedc04a8afeef96bd0e1e704e21f7d5d3cea6e90fc5aae55ee1fb6a",
       "contracts/SmartAccount.VerifierChildren.cs": "a5ae57fa3c6b77dbd3ab877a65d9cf675d2e9ec37f057573cbe98f793901b744",
       "contracts/SmartAccount.VerifyContext.cs": "48d04a3958194d6e657e95fb8bc23c41d7cab71e562c3c1dbf3f80a63c32fc24",
       "contracts/verifiers/MultiSigVerifier.cs": "75854b9e50d1405cc1003839765841d68c89771325c42d3e25c8dfcf9341d2d8",
@@ -692,7 +692,7 @@
       "scripts/check_neo_platform_packages.mjs": "cd3750a35daafb7ab058dd4f1149a07427359a5dcb4fbdd2358dab7311c50fe1",
       "scripts/dotnet_env.sh": "d769761a4ad4b44686962b5dda5150be9e532312291a3f3b869dceb951a1a74b"
     },
-    "source_snapshot_sha256": "cbb68e8a37fba55ffc6d5937add1542f323a4da6206090de2b4c078925594542",
+    "source_snapshot_sha256": "b0379044d1b4fc774042c541778ba0b3f78ffd2b0f246af4c6daa25b4b348932",
     "compiler": {
       "tool": "nccs",
       "version": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"
@@ -733,7 +733,7 @@
       "v3/PolicyExecutionProbe.nef": "08ad2d87a45d7a374e83bdb926b8f3d03be115d42c04afe57b64d1d1468482c9",
       "v3/SessionKeyVerifier.manifest.json": "4cb7262614f1af122f215d0c861a6638c25561a5b06e4ddc3814c49c9b6d7529",
       "v3/SessionKeyVerifier.nef": "34facafd2b2e948fa0cdfc8897363953346a22f39df42d9db368a08050232e7d",
-      "v3/SmartAccountV3.manifest.json": "fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7",
+      "v3/SmartAccountV3.manifest.json": "ee117b8f4ca661138be3ddda68c9f902bc75e99ca8b49518dd526ee0e4499e54",
       "v3/SmartAccountV3.nef": "0683cb52289f99cbc5485f5d8347caf864744f1c894beb8eb530d5bd7b0690d4",
       "v3/SocialRecoveryVerifier.manifest.json": "d72c64614a70d24555d62b7ff6249e0777e1fbb4f74223d667ab42d17d791b87",
       "v3/SocialRecoveryVerifier.nef": "67a578ea4011c5398c3e96fd27cf9b1464d5af7ad618f6f00fd7c087404c0248",
@@ -785,7 +785,7 @@
       "v3/verifiers/ZKEmailVerifier.nef": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
       "v3/verifiers/ZkLoginVerifier.manifest.json": "3ab57ac8026575215309b87436fed148390c41497b20bba305437304178e18e7",
       "v3/verifiers/ZkLoginVerifier.nef": "2759bf32bc15cffb639c5792db671e415ee4c5403c1bb1c7c1d28a221af1e441",
-      "platform/SmartAccountV3.manifest.json": "fadd438796fe2bc86dc88d7833095b7b7599d17b3229cec6c5c2d5f44dbaef0d",
+      "platform/SmartAccountV3.manifest.json": "5bccc9cb45a133c64c5f58e8c0a0b99d1bd03dbb7d2df875e0d8d064732e673e",
       "platform/SmartAccountV3.nef": "1c3c6162ce25a1f3714a03fd4b5dda7d00ed27d66770258983e818da4e857ac2"
     },
     "release_artifact_sha256": {
@@ -815,7 +815,7 @@
       "v3/PolicyExecutionProbe.nef": "08ad2d87a45d7a374e83bdb926b8f3d03be115d42c04afe57b64d1d1468482c9",
       "v3/SessionKeyVerifier.manifest.json": "4cb7262614f1af122f215d0c861a6638c25561a5b06e4ddc3814c49c9b6d7529",
       "v3/SessionKeyVerifier.nef": "34facafd2b2e948fa0cdfc8897363953346a22f39df42d9db368a08050232e7d",
-      "v3/SmartAccountV3.manifest.json": "fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7",
+      "v3/SmartAccountV3.manifest.json": "ee117b8f4ca661138be3ddda68c9f902bc75e99ca8b49518dd526ee0e4499e54",
       "v3/SmartAccountV3.nef": "0683cb52289f99cbc5485f5d8347caf864744f1c894beb8eb530d5bd7b0690d4",
       "v3/SocialRecoveryVerifier.manifest.json": "d72c64614a70d24555d62b7ff6249e0777e1fbb4f74223d667ab42d17d791b87",
       "v3/SocialRecoveryVerifier.nef": "67a578ea4011c5398c3e96fd27cf9b1464d5af7ad618f6f00fd7c087404c0248",
@@ -867,7 +867,7 @@
       "v3/verifiers/ZKEmailVerifier.nef": "5b877b4c14d5875fa3dbc5f67d09e325621c38ea9ab35469bb346e84d3fda0d4",
       "v3/verifiers/ZkLoginVerifier.manifest.json": "3ab57ac8026575215309b87436fed148390c41497b20bba305437304178e18e7",
       "v3/verifiers/ZkLoginVerifier.nef": "2759bf32bc15cffb639c5792db671e415ee4c5403c1bb1c7c1d28a221af1e441",
-      "platform/SmartAccountV3.manifest.json": "fadd438796fe2bc86dc88d7833095b7b7599d17b3229cec6c5c2d5f44dbaef0d",
+      "platform/SmartAccountV3.manifest.json": "5bccc9cb45a133c64c5f58e8c0a0b99d1bd03dbb7d2df875e0d8d064732e673e",
       "platform/SmartAccountV3.nef": "1c3c6162ce25a1f3714a03fd4b5dda7d00ed27d66770258983e818da4e857ac2"
     },
     "byte_equal_release": true,

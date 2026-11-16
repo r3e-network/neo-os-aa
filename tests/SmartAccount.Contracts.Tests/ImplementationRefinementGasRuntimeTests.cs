@@ -152,7 +152,7 @@ public class ImplementationRefinementGasRuntimeTests
             artifacts = new
             {
                 nefSha256 = "0683cb52289f99cbc5485f5d8347caf864744f1c894beb8eb530d5bd7b0690d4",
-                manifestSha256 = "fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7"
+                manifestSha256 = "ee117b8f4ca661138be3ddda68c9f902bc75e99ca8b49518dd526ee0e4499e54"
             },
             runtime = new { neo = RuntimeIdentity(typeof(ApplicationEngine)), vm = RuntimeIdentity(typeof(ExecutionEngine)) },
             priceTable = ApplicationEngine.OpCodePriceTable,
@@ -246,7 +246,7 @@ public class ImplementationRefinementGasRuntimeTests
         byte[] rawNef = File.ReadAllBytes(Path.Combine(dir, "SmartAccountV3.nef"));
         byte[] rawManifest = File.ReadAllBytes(Path.Combine(dir, "SmartAccountV3.manifest.json"));
         Assert.AreEqual("0683cb52289f99cbc5485f5d8347caf864744f1c894beb8eb530d5bd7b0690d4", Hash(rawNef));
-        Assert.AreEqual("fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7", Hash(rawManifest));
+        Assert.AreEqual("ee117b8f4ca661138be3ddda68c9f902bc75e99ca8b49518dd526ee0e4499e54", Hash(rawManifest));
         Assert.AreEqual("cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a", Hash(File.ReadAllBytes(typeof(ApplicationEngine).Assembly.Location)));
         Assert.AreEqual("cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9", Hash(File.ReadAllBytes(typeof(ExecutionEngine).Assembly.Location)));
         RuntimeFixture fx = new();

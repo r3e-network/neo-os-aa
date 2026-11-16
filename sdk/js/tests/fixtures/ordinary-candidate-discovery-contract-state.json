@@ -19,7 +19,7 @@
           "safe": true
         },
         {
-          "name": "simulateUserOp",
+          "name": "simulateValidation",
           "parameters": [
             {
               "name": "accountId",

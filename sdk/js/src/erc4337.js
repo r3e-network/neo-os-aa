@@ -6,7 +6,7 @@
  * the VM at execution time). What these adapters provide is the SHAPE: they
  * map a V3 UserOperation onto the field names 4337-aware tooling (wallets,
  * indexers, bundler UIs) already know how to display, and they run the
- * non-faulting simulateUserOp preflight where 4337 would run
+ * non-faulting simulateValidation preflight where 4337 would run
  * simulateValidation.
  *
  * Field mapping:
@@ -90,21 +90,21 @@ function toErc4337UserOperation({
 
 /**
  * ERC-4337 estimateUserOperationGas counterpart: runs the core's
- * non-faulting simulateUserOp preflight (the simulateValidation analogue)
+ * non-faulting simulateValidation preflight
  * and returns the 4337 gas fields as zero alongside the simulation, because
  * Neo N3 prices execution in the VM instead of through bid fields.
  *
  * @param {SmartAccountClient} client - The SDK client instance
- * @param {Object} options - Same options as client.simulateUserOp
+ * @param {Object} options - Same options as client.simulateValidation
  * @returns {Promise<Object>} 4337-shaped gas estimate with the simulation
  */
 async function estimateUserOperationGas(client, options = {}) {
-  if (!client || typeof client.simulateUserOp !== 'function') {
+  if (!client || typeof client.simulateValidation !== 'function') {
     throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
-      hint: 'estimateUserOperationGas requires a SmartAccountClient with simulateUserOp',
+      hint: 'estimateUserOperationGas requires a SmartAccountClient with simulateValidation',
     });
   }
-  const simulation = await client.simulateUserOp(options);
+  const simulation = await client.simulateValidation(options);
   return {
     preVerificationGas: '0x0',
     verificationGasLimit: '0x0',

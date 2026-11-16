@@ -381,8 +381,9 @@ The ordinary source candidate narrows the practical interop gap with the
 Ethereum AA tooling surface. All of it stays behind the unchanged
 upgrade-required boundary until the governed upgrade lands:
 
-- **ERC-4337 `simulateValidation` ≈ `simulateUserOp(accountId, op)`:**
-  non-faulting preflight of the core's execution-time checks. Unknown
+- **ERC-4337 `simulateValidation` = `simulateValidation(accountId, op)`:**
+  the candidate carries the EntryPoint name itself. A non-faulting preflight
+  of the core's execution-time checks. Unknown
   accounts report an all-false result instead of faulting; the escrow latch
   and the native backup-owner witness are reported explicitly. Signature
   verification and hook execution stay excluded, exactly like

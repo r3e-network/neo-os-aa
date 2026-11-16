@@ -172,14 +172,14 @@ export function decodeAccountDescriptorStack(item) {
 }
 
 /**
- * Decodes a simulateUserOp result stack item.
+ * Decodes a simulateValidation result stack item.
  *
  * Non-faulting preflight of the core's execution-time checks, in the spirit
  * of ERC-4337 simulateValidation: every field reports instead of throwing,
  * so an unknown account decodes to an all-false result with
  * accountExists === false.
  *
- * @param {Object} item - Array stack item from simulateUserOp
+ * @param {Object} item - Array stack item from simulateValidation
  * @returns {Object} Simulation with accountExists, deadlineOk, nonceOk,
  *   verifierBound, nativeWitnessPresent, marketEscrowBlocks and escapeActive
  */

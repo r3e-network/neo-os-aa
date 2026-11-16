@@ -1214,7 +1214,7 @@ function digestReportInventoryAllowances() {
       '1b38295dfc9f13ffab795615864ff3903c7c706616691358e7b63789444d3053'),
     entry('aa-artifact-reproducibility-20261113-content-digests',
       'docs/reports/aa-artifact-reproducibility-20261113.json', 283,
-      '54eb7634e127bec717565df25120940a59ce7b1ba9b14f794f48741d8acaf3c1'),
+      '90a4f52e7cdfaa69a2ae57a349bf20530831e33973f7f05580be6a674825fd2f'),
     entry('aa-formal-gate-20261030-content-digests',
       'docs/reports/aa-formal-gate-20261030.json', 346,
       '6c467afc4865c0ce091f9683772704a8d1b1faf42e9181dee4b65e50fbd32f07'),

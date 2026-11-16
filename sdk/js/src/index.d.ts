@@ -766,7 +766,7 @@ export declare function toErc4337UserOperation(options: {
   signatureHex?: string;
 }): Erc4337UserOperation;
 
-/** ERC-4337 estimateUserOperationGas counterpart anchored on simulateUserOp. */
+/** ERC-4337 estimateUserOperationGas counterpart anchored on simulateValidation. */
 export declare function estimateUserOperationGas(
   client: SmartAccountClient,
   options: UserOpSimulationOptions,
@@ -889,7 +889,7 @@ export interface AccountDescriptor {
   pendingHookMatureAt: string;
 }
 
-/** Options for {@link SmartAccountClient.simulateUserOp}. */
+/** Options for {@link SmartAccountClient.simulateValidation}. */
 export interface UserOpSimulationOptions extends UserOpValidationPreviewOptions {
   /**
    * Optional RPC signers. Attach the backup owner to learn whether the
@@ -899,8 +899,8 @@ export interface UserOpSimulationOptions extends UserOpValidationPreviewOptions 
 }
 
 /**
- * Non-faulting preflight result returned by {@link SmartAccountClient.simulateUserOp}
- * (ERC-4337 simulateValidation semantics): unknown accounts decode to an
+ * Non-faulting preflight result returned by {@link SmartAccountClient.simulateValidation}
+ * (named after ERC-4337's EntryPoint simulateValidation): unknown accounts decode to an
  * all-false result instead of throwing.
  */
 export interface UserOpSimulation {
@@ -1116,11 +1116,11 @@ export declare class SmartAccountClient {
   ): Promise<AccountDescriptor>;
 
   /**
-   * Non-faulting preflight of the core's execution-time checks (ERC-4337
-   * simulateValidation semantics). Signature verification and hook execution
+   * Non-faulting preflight of the core's execution-time checks (named after
+   * ERC-4337's EntryPoint simulateValidation). Signature verification and hook execution
    * are deliberately excluded.
    */
-  simulateUserOp(
+  simulateValidation(
     options: UserOpSimulationOptions,
   ): Promise<UserOpSimulation>;
 

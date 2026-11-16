@@ -150,7 +150,7 @@ public class ContractTests
             "CallHook",
             "PreviewUserOpValidation",
             "DescribeAccount",
-            "SimulateUserOp",
+            "SimulateValidation",
             "ExecuteUserOp",
             "ExecuteUserOps",
             "ExecuteSponsoredUserOp",
@@ -553,7 +553,7 @@ public class ContractTests
         // unknown account id.
         string source = ReadContractFile("SmartAccount.State.cs");
         StringAssert.Contains(source, "public static object[] DescribeAccount(UInt160 accountId)");
-        StringAssert.Contains(source, "public static object[] SimulateUserOp(UInt160 accountId, UserOperation op)");
+        StringAssert.Contains(source, "public static object[] SimulateValidation(UInt160 accountId, UserOperation op)");
         StringAssert.Contains(source, "if (data == null)");
         // Simulation reports the two execution-relevant latches: market escrow blocks
         // execution; an active escape is cancelled by execution.
