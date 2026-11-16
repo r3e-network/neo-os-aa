@@ -112,7 +112,7 @@ test("a manifest without the compiler is reported", () => {
 });
 
 test("every project that restores Neo packages has a committed lock file that agrees with the audit", () => {
-  assert.equal(projects.length, 26, "25 contract projects and the tests project");
+  assert.equal(projects.length, 28, "27 contract projects (incl. 2 plugin templates) and the tests project");
   const locks = locksFromRepository();
   assert.deepEqual(lockFileProblems(locks, manifest), []);
   assert.ok(locks.every(({ lock }) => lock !== null));
@@ -121,8 +121,8 @@ test("every project that restores Neo packages has a committed lock file that ag
 test("public restore gate excludes native projects while explicit native scope includes six modules and the epoch probe", () => {
   const all = listProjects(repoRoot, { includeNative: true });
   const native = all.filter((project) => project.startsWith("contracts/native/"));
-  assert.equal(projects.length, 26);
-  assert.equal(all.length, 36);
+  assert.equal(projects.length, 28);
+  assert.equal(all.length, 38);
   assert.ok(all.includes("tests/NativeEpochProbe/NativeEpochProbe.csproj"));
   assert.ok(all.includes("tests/NativeEpochProbe/contracts/NativeEpochCore.csproj"));
   assert.ok(projects.every((project) => !project.startsWith("tests/NativeEpochProbe/")));

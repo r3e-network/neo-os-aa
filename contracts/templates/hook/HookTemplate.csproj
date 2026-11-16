@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RunNccsAfterBuild>false</RunNccsAfterBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+  </ItemGroup>
+
+  <!-- Shared plugin layer, compiled in as source (contracts cannot reference the
+       core's assembly). -->
+  <ItemGroup>
+    <Compile Include="../../hooks/HookAuthority.cs" />
+    <Compile Include="HookTemplate.cs" />
+  </ItemGroup>
+
+  <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
+    <Message Text="Compiling Neo smart contract: HookTemplate.cs" Importance="high" />
+    <Exec Command="nccs ./HookTemplate.csproj -o ./build" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+
+</Project>

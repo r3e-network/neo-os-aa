@@ -10,6 +10,31 @@ This guide is for developers building Verifier or Hook plugins for the Neo N3 Ab
 
 ---
 
+## 0. Quick Start: From Template to Bound Plugin
+
+The fastest correct path is to copy a template, not to start from a blank file:
+
+```text
+contracts/templates/verifier/   minimal verifier (single-key secp256r1 authorization)
+contracts/templates/hook/       minimal hook (fail-closed per-account target gate)
+```
+
+Each template compiles against the same shared layer the shipped plugins use
+(`VerifierAuthority` / `VerifierPayload` / `VerifierModels` / `SignerDomain` for
+verifiers, `HookAuthority` for hooks), exposes exactly the ABI the core's
+bind-time gate demands, and wires the timelocked governance rails (self-upgrade,
+admin rotation, core re-pointing). Copy the directory, rename the class and
+`DisplayName`, replace the marked policy method, and compile. The step-by-step
+walkthrough and the five rules that bite are in
+[`contracts/templates/README.md`](../contracts/templates/README.md).
+
+`node scripts/check_plugin_templates.mjs` recompiles both templates and asserts
+their manifests still satisfy the binding ABI; the repository verification gate
+runs it on every contract build, so a shared-layer change that would break a
+fresh plugin fails here first.
+
+---
+
 ## 1. Plugin Architecture Overview
 
 ### 1.1 Two Plugin Types

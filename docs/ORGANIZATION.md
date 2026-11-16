@@ -47,6 +47,10 @@ profile prepared for standard submission, while the consensus
 ## File Organization Rules
 
 - Keep contract sources and contract-specific checks under contracts/.
+- Keep third-party plugin starting points under contracts/templates/; templates
+  compile against the shared plugin layer (contracts/verifiers/Verifier*.cs,
+  contracts/hooks/HookAuthority.cs) and scripts/check_plugin_templates.mjs keeps
+  their manifests aligned with the core's bind-time ABI gate.
 - Use `implementations/ordinary/profile.json` and
   `implementations/native/profile.json` to select the implementation profile;
   do not infer profile identity from a deployment label or a shared artifact

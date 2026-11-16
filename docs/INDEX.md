@@ -68,6 +68,7 @@ semantics. Receipts absent from this checkout are not current release evidence.
 - `docs/AA-FORMAL-VERIFICATION.md` — AA formal-model, runtime-correspondence and boundary report
 - `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md` — exact NeoVM/DevPack verifier-budget extension and integration gates
 - `docs/SECURITY_MODEL.md` — current threat model and trust assumptions
+- `contracts/templates/` — minimal verifier/hook starting points that compile to the exact bind-time ABI (quick start: `contracts/templates/README.md`)
 - `docs/reports/aa-protocol-security-build-20260918.json` — reproducible local artifact and security-regression receipt
 - `docs/reports/aa-neoexpress-readback-20260918.json` — isolated NeoExpress deployment/readback receipt; public-chain parity remains unverified
 - `docs/reports/aa-neoexpress-readback-20260919.json` — historical pre-callback-ABI-fix NeoExpress readback; superseded by the 2026-09-20 receipt

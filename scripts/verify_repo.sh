@@ -129,6 +129,10 @@ if [[ $run_contracts -eq 1 ]]; then
     if [[ $skip_contract_build -eq 0 ]]; then
       dotnet build contracts/SmartAccount.csproj -c Release -p:WarningsAsErrors=nullable -nologo
       bash contracts/compile.sh
+      # The plugin templates under contracts/templates/ are the documented starting point
+      # for third-party verifiers/hooks: keep them compiling against the shared plugin
+      # layer and matching the core's bind-time ABI gate.
+      node scripts/check_plugin_templates.mjs
     fi
     # The NeoDIDRegistry cross-contract proof deploys a compiled artifact built by
     # the private sibling repository neo-os-services, whose contracts/build output is
