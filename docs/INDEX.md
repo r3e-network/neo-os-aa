@@ -30,6 +30,8 @@ semantics. Receipts absent from this checkout are not current release evidence.
 - `docs/WORKFLOWS.md` — transaction lifecycle and submission flows
 - `docs/DATA_FLOW.md` — browser / Supabase / relay / chain boundaries
 - `docs/architecture.md` — technical architecture details
+- `docs/AA-EIP-712-SPEC.md` — canonical EIP-712-style typed-data layout the verifiers hash on-chain
+- `docs/ETHEREUM_AA_COMPARISON.md` — Ethereum AA (4337/7702/7579/7715) alignment and deliberate divergences
 - `docs/QUICK_REFERENCE.md` — commands and quick lookup material
 - `docs/POST_DEPLOY_SMOKE_TEST.md` — post-deployment frontend smoke-test checklist
 - `docs/ORGANIZATION.md` — repository layout: core contracts, auxiliary contracts, native implementation and verification map

@@ -18,6 +18,7 @@ const { SmartAccountClient } = require('../src/index');
 const neonCompat = require('../src/neonCompat');
 const { createHash } = require('node:crypto');
 const recoveryStateFixture = require('./fixtures/ordinary-owner-only-contract-state.json');
+const discoveryStateFixture = require('./fixtures/ordinary-candidate-discovery-contract-state.json');
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const indexSourcePath = path.join(repoRoot, 'sdk', 'js', 'src', 'index.js');
@@ -47,6 +48,12 @@ const candidateFixturePath = path.join(__dirname, 'fixtures', 'ordinary-owner-on
 const candidateBytes = fs.readFileSync(candidateFixturePath);
 const candidateManifest = JSON.parse(candidateBytes);
 const candidateRecoveryMethods = recoveryStateFixture.manifest.abi.methods;
+// Discovery/simulation reads are likewise candidate-only until the upgraded
+// core deploys; they ship in their own capability fixture.
+const candidateCapabilityMethods = [
+  ...candidateRecoveryMethods,
+  ...discoveryStateFixture.manifest.abi.methods,
+];
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const descriptor = (method) => ({
   name: method.name, parameters: method.parameters, returntype: method.returntype, safe: method.safe,
@@ -77,7 +84,7 @@ function assertCandidateEvidence(bytes = candidateBytes) {
   for (const [relative, digest] of Object.entries(reproducibility.certificate.source_files)) {
     assert.equal(sha256LfText(path.join(repoRoot, relative)), digest, `candidate source drift: ${relative}`);
   }
-  for (const required of candidateRecoveryMethods) {
+  for (const required of candidateCapabilityMethods) {
     const matches = candidateManifest.abi.methods.filter((entry) => entry.name === required.name);
     assert.equal(matches.length, 1);
     assert.deepEqual(descriptor(matches[0]), descriptor(required), `capability descriptor matches compiled candidate: ${required.name}`);
@@ -90,7 +97,7 @@ function assertOperationSurface(operations) {
   assertCandidateEvidence();
   for (const operation of operations) {
     if (walletAbi.has(operation) || paymasterAbi.has(operation)) continue;
-    const gated = candidateRecoveryMethods.find((entry) => entry.name === operation);
+    const gated = candidateCapabilityMethods.find((entry) => entry.name === operation);
     assert.ok(gated, `SDK operation has no pinned public ABI or verified capability-gated candidate descriptor: ${operation}`);
     assert.ok(candidateManifest.abi.methods.some((entry) => JSON.stringify(descriptor(entry)) === JSON.stringify(descriptor(gated))));
   }

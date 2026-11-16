@@ -375,6 +375,40 @@ relayMetaInvocation({ scriptHash: aaContract, operation: "executeUserOps", args:
 
 ---
 
+## 11a. Standards Alignment Surface (2026-11-16)
+
+The ordinary source candidate narrows the practical interop gap with the
+Ethereum AA tooling surface. All of it stays behind the unchanged
+upgrade-required boundary until the governed upgrade lands:
+
+- **ERC-4337 `simulateValidation` ≈ `simulateUserOp(accountId, op)`:**
+  non-faulting preflight of the core's execution-time checks. Unknown
+  accounts report an all-false result instead of faulting; the escrow latch
+  and the native backup-owner witness are reported explicitly. Signature
+  verification and hook execution stay excluded, exactly like
+  `previewUserOpValidation`.
+- **ERC-7579 capability discovery ≈ `describeAccount(accountId)`:** one safe
+  read returning the full descriptor — verifier, hook, backup owner, escape
+  state, market-escrow latch and both pending-update maturity windows — so
+  wallets and indexers stop fanning out across per-field getters.
+- **ERC-7715 session permissions ≈ `buildSessionKeyPermission`:** the SDK
+  emits a 7715-shaped grant (signer + contract-call permission + unix-second
+  expiry) next to the canonical on-chain artifacts; the registration-time
+  version-0x01 blob installs the first session key immediately
+  (`SessionKeyVerifier.setPublicKey`), closing the day-one usability gap
+  without weakening the 24h rotation cooldown for later changes.
+- **4337 tooling shape ≈ `toErc4337UserOperation`:** sender = account id,
+  `callData` = the Neo VM invocation script, gas fields zeroed (Neo prices
+  execution in the VM), deadline carried as an extension field.
+
+Deliberately not adopted: EIP-7702 EOA delegation (Neo has no EOAs in the
+Ethereum sense — the virtual-account proxy already covers the goal), mempool
+rules / ERC-7562 (Neo has no alt-mempool to police), initCode (accounts are
+zero-deployment), and BLS aggregate signatures (no native pairing precompile
+on the ordinary surface).
+
+---
+
 ## 12. Neo N3 Advantages vs Ethereum AA
 
 1. **Zero-Deployment Virtual Accounts:** No gas cost for account creation.

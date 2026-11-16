@@ -138,8 +138,24 @@ freeze surface and the migration-seal read. The candidate-only freeze ABI and se
 manifest to 109 raw methods (108 unique names; `finalizeEscape`
 is overloaded) against the 90 methods of the pinned public artifact.
 
+The 2026-11-16 Ethereum-AA alignment revision adds two safe reads on top of
+that candidate: `describeAccount(accountId)` aggregates the full account
+descriptor (ERC-7579-style capability discovery), and
+`simulateUserOp(accountId, op)` is a non-faulting execution-check preflight
+(ERC-4337 `simulateValidation` semantics, signature and hook execution
+excluded) that also reports the escrow latch and the native backup-owner
+witness. They raise the candidate to 111 raw methods. The same revision lets
+`SessionKeyVerifier.setPublicKey` accept a version-0x01 initial-key blob in
+the registration verifier params, so a session-key account works on day one;
+later key changes keep the 24h rotation cooldown. The SDK exposes
+`describeAccount` / `simulateUserOp` / `createSessionKeyAccountPayload` plus
+ERC-4337-shaped (`toErc4337UserOperation`, `estimateUserOperationGas`) and
+ERC-7715-shaped (`buildSessionKeyPermission`) adapters; the typed-data
+signing layout is specified in [AA-EIP-712-SPEC.md](AA-EIP-712-SPEC.md).
+
 The public deployments still run the 90-method artifact, so the extraction,
-freeze and migration surfaces stay source-candidate capabilities behind the
+freeze, migration, discovery and day-one-session-key surfaces stay
+source-candidate capabilities behind the
 unchanged upgrade-required boundary: a governed upgrade and independent readback
 must land before any deployment claims them. The orchestration order and the
 cross-repository pin inventory are tracked in

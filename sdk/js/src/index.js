@@ -22,6 +22,9 @@ const { createRegistrationAccountIdDeriver } = require('../../../shared/registra
 const transferOutcome = require('../../../shared/transferOutcome.mjs');
 const { normalizeRelayContractParameter, MAX_RELAY_PARAMETER_DEPTH } = require('../../../shared/relayContractParameter.mjs');
 const { toMultiSigRpcParameter } = require('../../../shared/multiSigCore.mjs');
+// Registration-time session key blob layout, shared with the frontend and
+// the Python live validators (single source of truth: shared/sessionKeyBlob.mjs).
+const sessionKeyBlob = require('../../../shared/sessionKeyBlob.mjs');
 
 const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({
   hash160: (value) => sanitizeHex(u.hash160(value)),
@@ -78,7 +81,13 @@ function decodeByteStringStackText(item) {
 }
 
 // Stack-item decode helpers shared with the frontend via shared/metaTxCore.mjs.
-const { decodeStackBoolean, decodeHash160Stack, decodeValidationPreviewStack } = metaTxExports;
+const {
+  decodeStackBoolean,
+  decodeHash160Stack,
+  decodeValidationPreviewStack,
+  decodeAccountDescriptorStack,
+  decodeUserOpSimulationStack,
+} = metaTxExports;
 
 // Both sponsored builders and the signing hash use the same typed byte boundary.
 //
@@ -533,6 +542,43 @@ class SmartAccountClient {
         sc.ContractParam.integer(escapeTimelock)
       ],
     };
+  }
+
+  /**
+   * Creates the registration payload for a session-key account whose first
+   * session key is installed immediately at registration time.
+   *
+   * The session key travels inside verifierParams (see
+   * shared/sessionKeyBlob.mjs for the version-0x01 blob layout), so the
+   * registration-bound account id commits to it and the verifier installs it
+   * without the 24h rotation cooldown that applies to later key changes.
+   *
+   * @param {Object} options - Account creation options
+   * @param {string} options.sessionKeyVerifierHash - SessionKeyVerifier contract hash
+   * @param {Object} options.sessionKey - Initial session key options
+   * @param {string} options.sessionKey.publicKeyHex - secp256r1 public key (33 or 65 bytes, hex)
+   * @param {string} options.sessionKey.targetContract - Target contract hash
+   * @param {string} options.sessionKey.method - Allowed target method
+   * @param {string|number|bigint} options.sessionKey.validUntilMs - Expiry (Runtime.Time ms)
+   * @param {string|number|bigint} [options.sessionKey.spendingLimitDatoshi=0] - Spending cap
+   * @param {string} [options.sessionKey.description=''] - Human-readable label
+   * @param {string} [options.hookContractHash=''] - Hook contract hash
+   * @param {string} options.backupOwnerAddress - Backup owner address
+   * @param {number} [options.escapeTimelock=2592000] - Escape hatch timelock in seconds
+   * @returns {Object} Contract invocation payload (same shape as createAccountPayload)
+   * @throws {Error} If required parameters are missing or invalid
+   */
+  createSessionKeyAccountPayload(options) {
+    validateOptions(options, ['sessionKeyVerifierHash', 'backupOwnerAddress']);
+    const { sessionKeyVerifierHash, sessionKey = {}, hookContractHash = '', backupOwnerAddress, escapeTimelock } = options;
+    const verifierParamsHex = sessionKeyBlob.buildSessionKeyRegistrationBlob(sessionKey);
+    return this.createAccountPayload({
+      verifierContractHash: sessionKeyVerifierHash,
+      verifierParamsHex,
+      hookContractHash,
+      backupOwnerAddress,
+      ...(escapeTimelock !== undefined ? { escapeTimelock } : {}),
+    });
   }
 
   /**
@@ -1040,6 +1086,111 @@ class SmartAccountClient {
     }
 
     return decodeValidationPreviewStack(response?.stack?.[0]);
+  }
+
+  /**
+   * Reads the complete account descriptor in one call (ERC-7579-style
+   * capability discovery). Aggregates every per-getter field of
+   * getAccountState plus the market-escrow latch and the pending verifier /
+   * hook maintenance windows. Never faults on an unknown account: the result
+   * reports exists=false with zeroed fields instead.
+   *
+   * @param {string} accountHashOrAddress - Account ID hash or address
+   * @returns {Promise<Object>} Account descriptor
+   * @returns {boolean} returns.exists - Account is registered
+   * @returns {string} returns.verifier - Verifier hash (big-endian display hex)
+   * @returns {string} returns.hook - Hook hash (big-endian display hex)
+   * @returns {string} returns.backupOwner - Backup owner hash (big-endian display hex)
+   * @returns {string} returns.escapeTimelock - Escape timelock in seconds
+   * @returns {string} returns.escapeTriggeredAt - Escape trigger timestamp (ms)
+   * @returns {boolean} returns.escapeActive - Escape hatch is triggered
+   * @returns {string} returns.marketEscrowContract - Escrow contract hash
+   * @returns {string} returns.marketEscrowListingId - Escrow listing id
+   * @returns {boolean} returns.marketEscrowActive - Escrow currently blocks execution
+   * @returns {boolean} returns.pendingVerifierUpdate - Verifier update is maturing
+   * @returns {string} returns.pendingVerifierMatureAt - Verifier update maturity (ms)
+   * @returns {boolean} returns.pendingHookUpdate - Hook update is maturing
+   * @returns {string} returns.pendingHookMatureAt - Hook update maturity (ms)
+   * @throws {Error} If the RPC call itself fails
+   */
+  async describeAccount(accountHashOrAddress) {
+    const accountId = normalizeAddress(accountHashOrAddress);
+
+    const response = await this.invokeFunctionWithRetry(this.masterContractHash, 'describeAccount', [
+      { type: 'Hash160', value: accountId },
+    ]);
+
+    if (response?.state === 'FAULT') {
+      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
+    }
+
+    return decodeAccountDescriptorStack(response?.stack?.[0]);
+  }
+
+  /**
+   * Non-faulting preflight of the core's execution-time checks for one
+   * operation (ERC-4337 simulateValidation semantics). Unlike
+   * getUserOpValidationPreview this never faults on an unknown account and
+   * additionally reports the two execution-relevant latches a submitter must
+   * see: an active market escrow (blocks execution) and an active escape
+   * (execution would cancel it). Signature verification and hook execution
+   * are deliberately excluded, exactly like the preview.
+   *
+   * @param {Object} options - Simulation options
+   * @param {string} [options.accountIdHash] - V3 account ID hash
+   * @param {string} [options.accountAddress] - Legacy account address
+   * @param {string} options.targetContract - Target contract hash
+   * @param {string} options.method - Method name
+   * @param {Array} [options.args=[]] - Method arguments
+   * @param {string|number} [options.nonce=0] - Nonce value
+   * @param {string|number} [options.deadline=0] - Deadline in Neo Runtime.Time milliseconds
+   * @param {Array} [options.signers] - Optional RPC signers; attach the backup
+   *   owner to learn whether the native witness fallback would authorize the
+   *   operation via nativeWitnessPresent
+   * @returns {Promise<Object>} Simulation result
+   * @returns {boolean} returns.accountExists - Account is registered
+   * @returns {boolean} returns.deadlineOk - Deadline has not passed
+   * @returns {boolean} returns.nonceOk - Nonce is acceptable
+   * @returns {boolean} returns.verifierBound - A verifier is configured
+   * @returns {boolean} returns.nativeWitnessPresent - Backup-owner witness attached
+   * @returns {boolean} returns.marketEscrowBlocks - Escrow would block execution
+   * @returns {boolean} returns.escapeActive - Escape hatch is triggered
+   * @throws {Error} If the RPC call itself fails
+   */
+  async simulateUserOp({
+    accountIdHash = '',
+    accountAddress = '',
+    targetContract,
+    method,
+    args = [],
+    nonce = 0,
+    deadline = 0,
+    signers,
+  } = {}) {
+    const accountId = accountIdHash
+      ? normalizeAddress(accountIdHash)
+      : normalizeAddress(accountAddress);
+
+    const response = await this.invokeFunctionWithRetry(this.masterContractHash, 'simulateUserOp', [
+      { type: 'Hash160', value: accountId },
+      {
+        type: 'Struct',
+        value: [
+          { type: 'Hash160', value: normalizeAddress(targetContract) },
+          { type: 'String', value: String(method || '') },
+          { type: 'Array', value: args },
+          { type: 'Integer', value: String(nonce) },
+          { type: 'Integer', value: String(deadline) },
+          { type: 'ByteArray', value: '' },
+        ],
+      },
+    ], signers);
+
+    if (response?.state === 'FAULT') {
+      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
+    }
+
+    return decodeUserOpSimulationStack(response?.stack?.[0]);
   }
 
   /**
@@ -1712,6 +1863,15 @@ module.exports = {
   createUserOpBuilder: require('./UserOpBuilder').createUserOpBuilder,
   simulateUserOperation: require('./simulation').simulateUserOperation,
   preFlightCheck: require('./simulation').preFlightCheck,
+  // ERC-4337 shape adapters (shape mapping + simulateValidation-style preflight)
+  toErc4337UserOperation: require('./erc4337').toErc4337UserOperation,
+  estimateUserOperationGas: require('./erc4337').estimateUserOperationGas,
+  // Session-key registration blob (shared layout with the live validators)
+  buildSessionKeyRegistrationBlob: sessionKeyBlob.buildSessionKeyRegistrationBlob,
+  buildSessionKeyPermission: sessionKeyBlob.buildSessionKeyPermission,
+  SESSION_KEY_BLOB_VERSION: sessionKeyBlob.SESSION_KEY_BLOB_VERSION,
+  MAX_SESSION_KEY_DESCRIPTION_BYTES: sessionKeyBlob.MAX_SESSION_KEY_DESCRIPTION_BYTES,
+  MAX_SESSION_DURATION_MS: sessionKeyBlob.MAX_SESSION_DURATION_MS,
   // Retry utility
   withRetry: require('./retry').withRetry,
   isRetryableError: require('./retry').isRetryableError,

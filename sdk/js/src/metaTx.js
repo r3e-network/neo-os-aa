@@ -11,6 +11,8 @@ const {
   decodeStackBoolean,
   decodeHash160Stack,
   decodeValidationPreviewStack,
+  decodeAccountDescriptorStack,
+  decodeUserOpSimulationStack,
 } = metaTxCore;
 
 /**
@@ -385,6 +387,8 @@ module.exports = {
   decodeStackBoolean,
   decodeHash160Stack,
   decodeValidationPreviewStack,
+  decodeAccountDescriptorStack,
+  decodeUserOpSimulationStack,
   buildMetaTransactionTypedData,
   buildV3UserOperationTypedData,
   buildContractCompatibleStructHash,

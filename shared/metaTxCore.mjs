@@ -138,6 +138,65 @@ export function decodeValidationPreviewStack(item) {
 }
 
 /**
+ * Decodes a describeAccount result stack item.
+ *
+ * The core returns the 14-field account descriptor in one read-only call so
+ * wallets and indexers do not have to fan out across the individual getters.
+ * Integer fields are returned as decimal strings, matching getAccountState.
+ *
+ * @param {Object} item - Array stack item from describeAccount
+ * @returns {Object} Descriptor with exists, verifier, hook, backupOwner,
+ *   escapeTimelock, escapeTriggeredAt, escapeActive, marketEscrowContract,
+ *   marketEscrowListingId, marketEscrowActive, pendingVerifierUpdate,
+ *   pendingVerifierMatureAt, pendingHookUpdate and pendingHookMatureAt
+ *   (hashes in big-endian display hex)
+ */
+export function decodeAccountDescriptorStack(item) {
+  const values = item?.type === 'Array' && Array.isArray(item.value) ? item.value : [];
+  return {
+    exists: decodeStackBoolean(values[0]),
+    verifier: decodeHash160Stack(values[1]),
+    hook: decodeHash160Stack(values[2]),
+    backupOwner: decodeHash160Stack(values[3]),
+    escapeTimelock: decodeIntegerStack(values[4]).toString(),
+    escapeTriggeredAt: decodeIntegerStack(values[5]).toString(),
+    escapeActive: decodeStackBoolean(values[6]),
+    marketEscrowContract: decodeHash160Stack(values[7]),
+    marketEscrowListingId: decodeIntegerStack(values[8]).toString(),
+    marketEscrowActive: decodeStackBoolean(values[9]),
+    pendingVerifierUpdate: decodeStackBoolean(values[10]),
+    pendingVerifierMatureAt: decodeIntegerStack(values[11]).toString(),
+    pendingHookUpdate: decodeStackBoolean(values[12]),
+    pendingHookMatureAt: decodeIntegerStack(values[13]).toString(),
+  };
+}
+
+/**
+ * Decodes a simulateUserOp result stack item.
+ *
+ * Non-faulting preflight of the core's execution-time checks, in the spirit
+ * of ERC-4337 simulateValidation: every field reports instead of throwing,
+ * so an unknown account decodes to an all-false result with
+ * accountExists === false.
+ *
+ * @param {Object} item - Array stack item from simulateUserOp
+ * @returns {Object} Simulation with accountExists, deadlineOk, nonceOk,
+ *   verifierBound, nativeWitnessPresent, marketEscrowBlocks and escapeActive
+ */
+export function decodeUserOpSimulationStack(item) {
+  const values = item?.type === 'Array' && Array.isArray(item.value) ? item.value : [];
+  return {
+    accountExists: decodeStackBoolean(values[0]),
+    deadlineOk: decodeStackBoolean(values[1]),
+    nonceOk: decodeStackBoolean(values[2]),
+    verifierBound: decodeStackBoolean(values[3]),
+    nativeWitnessPresent: decodeStackBoolean(values[4]),
+    marketEscrowBlocks: decodeStackBoolean(values[5]),
+    escapeActive: decodeStackBoolean(values[6]),
+  };
+}
+
+/**
  * Validation-error kinds raised by the typed-data builders. Consumers may
  * map these onto their own error systems via the createError option of
  * createMetaTxBuilders().

@@ -663,6 +663,121 @@ export interface CreateAccountPayloadOptions {
   escapeTimelock?: number;
 }
 
+/** Initial session key options for registration-time installation. */
+export interface SessionKeyOptions {
+  /** secp256r1 public key: compressed (33 bytes, 02/03 prefix) or uncompressed (65 bytes, 04 prefix), hex. */
+  publicKeyHex: string;
+  /** Target contract hash (big-endian display hex). */
+  targetContract: Hash160;
+  /** Allowed target method ("*" wildcard cannot carry a spending limit). */
+  method: string;
+  /** Expiry in Neo Runtime.Time milliseconds; the contract enforces future expiry and the 30-day cap. */
+  validUntilMs: IntegerLike;
+  /** Total spending cap in datoshi; 0 = unlimited and the only legal value for non-"transfer" methods. */
+  spendingLimitDatoshi?: IntegerLike;
+  /** Human-readable label, at most 128 UTF-8 bytes. */
+  description?: string;
+}
+
+/** Options for {@link SmartAccountClient.createSessionKeyAccountPayload}. */
+export interface CreateSessionKeyAccountPayloadOptions {
+  /** SessionKeyVerifier contract hash. */
+  sessionKeyVerifierHash: Hash160;
+  /** Initial session key installed at registration time. */
+  sessionKey: SessionKeyOptions;
+  hookContractHash?: Hash160;
+  backupOwnerAddress: Hash160 | NeoAddress;
+  /** Escape-hatch timelock in seconds (default: 30 days). */
+  escapeTimelock?: number;
+}
+
+/**
+ * ERC-7715-shaped session-key permission grant plus the on-chain artifacts.
+ * The 7715 envelope is wallet-facing (expiry in unix seconds); the blob and
+ * call arguments carry the canonical Neo values (Runtime.Time ms, datoshi).
+ */
+export interface SessionKeyPermission {
+  permission: {
+    signer: { type: 'key'; data: { publicKey: string } };
+    permissions: [{
+      type: 'contract-call';
+      data: { address: string; selector: string; spendingLimit: string };
+    }];
+    /** Unix seconds (7715 convention). */
+    expiry: number;
+  };
+  /** Version-0x01 blob for createAccountPayload's verifierParamsHex. */
+  registrationBlobHex: string;
+  /** Canonical call arguments for the post-registration setSessionKey path. */
+  sessionKeyArgs: {
+    publicKeyHex: string;
+    targetContract: string;
+    method: string;
+    validUntilMs: string;
+    spendingLimitDatoshi: string;
+    description: string;
+  };
+}
+
+/** Blob format version consumed by SessionKeyVerifier.setPublicKey. */
+export declare const SESSION_KEY_BLOB_VERSION: number;
+/** Contract-side session-key description cap in UTF-8 bytes. */
+export declare const MAX_SESSION_KEY_DESCRIPTION_BYTES: number;
+/** Contract-side session lifetime cap in milliseconds (30 days). */
+export declare const MAX_SESSION_DURATION_MS: number;
+
+/** Builds the version-0x01 registration-time session key blob (hex, no 0x). */
+export declare function buildSessionKeyRegistrationBlob(
+  options: SessionKeyOptions,
+): string;
+
+/** Builds an ERC-7715-shaped session-key permission plus on-chain artifacts. */
+export declare function buildSessionKeyPermission(
+  options: SessionKeyOptions,
+): SessionKeyPermission;
+
+/**
+ * ERC-4337-shaped UserOperation. `sender` is the V3 account id (not an EOA);
+ * `callData` is the Neo VM invocation script; gas fields are '0x0' because
+ * Neo N3 prices execution in the VM; `deadline` (Runtime.Time ms) is an
+ * extension field with no 4337 counterpart.
+ */
+export interface Erc4337UserOperation {
+  sender: string;
+  nonce: string;
+  callData: string;
+  signature: string;
+  callGasLimit: string;
+  verificationGasLimit: string;
+  preVerificationGas: string;
+  maxFeePerGas: string;
+  maxPriorityFeePerGas: string;
+  deadline: string;
+}
+
+/** Maps a V3 UserOperation onto the ERC-4337 field names. */
+export declare function toErc4337UserOperation(options: {
+  accountIdHash: Hash160;
+  targetContract: Hash160;
+  method: string;
+  args?: ContractParameter[];
+  nonce?: IntegerLike;
+  deadline?: IntegerLike;
+  signatureHex?: string;
+}): Erc4337UserOperation;
+
+/** ERC-4337 estimateUserOperationGas counterpart anchored on simulateUserOp. */
+export declare function estimateUserOperationGas(
+  client: SmartAccountClient,
+  options: UserOpSimulationOptions,
+): Promise<{
+  preVerificationGas: string;
+  verificationGasLimit: string;
+  callGasLimit: string;
+  simulation: UserOpSimulation;
+  note: string;
+}>;
+
 /** A contract invocation payload returned by the `create*Payload` methods. */
 export interface ContractInvocationPayload {
   scriptHash: Hash160;
@@ -743,6 +858,59 @@ export interface UserOpValidationPreview {
   verifier: string;
   /** Hook hash (big-endian display hex). */
   hook: string;
+}
+
+/**
+ * Aggregated account descriptor returned by {@link SmartAccountClient.describeAccount}
+ * (the core's describeAccount read). Hash fields are big-endian display hex;
+ * timelock/timestamp fields are decimal strings. Never faults on an unknown
+ * account: `exists` is false and every other field is zeroed.
+ */
+export interface AccountDescriptor {
+  exists: boolean;
+  verifier: string;
+  hook: string;
+  backupOwner: string;
+  /** Escape-hatch timelock in seconds (decimal string). */
+  escapeTimelock: string;
+  /** Timestamp the escape was triggered (decimal string, ms). */
+  escapeTriggeredAt: string;
+  escapeActive: boolean;
+  /** Market escrow contract hash (big-endian display hex, '' when unset). */
+  marketEscrowContract: string;
+  /** Market escrow listing id (decimal string). */
+  marketEscrowListingId: string;
+  marketEscrowActive: boolean;
+  pendingVerifierUpdate: boolean;
+  /** Verifier update maturity timestamp (decimal string, ms). */
+  pendingVerifierMatureAt: string;
+  pendingHookUpdate: boolean;
+  /** Hook update maturity timestamp (decimal string, ms). */
+  pendingHookMatureAt: string;
+}
+
+/** Options for {@link SmartAccountClient.simulateUserOp}. */
+export interface UserOpSimulationOptions extends UserOpValidationPreviewOptions {
+  /**
+   * Optional RPC signers. Attach the backup owner to learn whether the
+   * native witness fallback would authorize the operation.
+   */
+  signers?: unknown[];
+}
+
+/**
+ * Non-faulting preflight result returned by {@link SmartAccountClient.simulateUserOp}
+ * (ERC-4337 simulateValidation semantics): unknown accounts decode to an
+ * all-false result instead of throwing.
+ */
+export interface UserOpSimulation {
+  accountExists: boolean;
+  deadlineOk: boolean;
+  nonceOk: boolean;
+  verifierBound: boolean;
+  nativeWitnessPresent: boolean;
+  marketEscrowBlocks: boolean;
+  escapeActive: boolean;
 }
 
 /**
@@ -860,6 +1028,14 @@ export declare class SmartAccountClient {
   createAccountPayload(
     options: CreateAccountPayloadOptions,
   ): ContractInvocationPayload;
+  /**
+   * Builds the registration payload for a session-key account whose first
+   * session key is installed immediately at registration time (the key
+   * travels inside verifierParams, so the account id commits to it).
+   */
+  createSessionKeyAccountPayload(
+    options: CreateSessionKeyAccountPayloadOptions,
+  ): ContractInvocationPayload;
   /** Builds the payload to update an account's verifier. */
   createUpdateVerifierPayload(
     options: UpdateVerifierPayloadOptions,
@@ -930,6 +1106,23 @@ export declare class SmartAccountClient {
   getUserOpValidationPreview(
     options: UserOpValidationPreviewOptions,
   ): Promise<UserOpValidationPreview>;
+
+  /**
+   * Reads the complete account descriptor in one call (ERC-7579-style
+   * capability discovery). Never faults on an unknown account.
+   */
+  describeAccount(
+    accountHashOrAddress: Hash160 | NeoAddress,
+  ): Promise<AccountDescriptor>;
+
+  /**
+   * Non-faulting preflight of the core's execution-time checks (ERC-4337
+   * simulateValidation semantics). Signature verification and hook execution
+   * are deliberately excluded.
+   */
+  simulateUserOp(
+    options: UserOpSimulationOptions,
+  ): Promise<UserOpSimulation>;
 
   /** Returns the full state of an abstract account. */
   getAccountState(
