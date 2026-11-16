@@ -1,6 +1,6 @@
-# Action identity enrollment and session migration
+# Action identity enrollment and sessions
 
-SocialRecoveryVerifier action-v4 uses a separate owner-enrolled identity set.
+SocialRecoveryVerifier action sessions use a separate owner-enrolled identity set.
 Recovery factors are never copied into it. The initial owner still authenticates
 `setupRecovery` against the pinned core's backup-owner registry. Subsequent
 enrollment uses the verifier's **current owner**, including an owner changed by
@@ -38,7 +38,7 @@ Integer exhaustion faults atomically; the epoch never wraps or resets to zero.
 - Oracle packet: ASCII `4|base64(master32)|epochDecimal|base64(actionNullifier32)|base64(signature64)`.
   Exactly five fields; epoch is positive canonical decimal. The DID owner source
   exports its encoder. Recovery packet v3 and its digest domain are unchanged.
-- Manual entry: `submitActionTicketV4(accountId, executor, actionId, expiresAt,
+- Manual entry: `submitActionTicket(accountId, executor, actionId, expiresAt,
   masterNullifier, authorizationEpoch, actionNullifier, verificationSignature)`.
   Manual and Oracle routes share activation's current membership/epoch guard,
   followed by the existing context/signature/expiry/replay checks and atomic
@@ -53,16 +53,10 @@ Unknown, missing, FAULT or incoherent reads fail before any custody signing.
 Caller RPC URLs, owner strings, posted grants or valid JWTs alone cannot supply
 this authority. The action lane does not inherit the recovery provider override.
 
-## Existing v3 tickets and active sessions
+## Owner reauthorization of an active session
 
-New AA issuance requires v4. The legacy direct `submitActionTicket` may consume
-an existing v3 signature **only with actual current-owner witness plus executor
-witness**; the shared helper enforces this rule. It does not provide ownerless
-fallback. Old Oracle v3 packets are rejected; submit a new v4 request after
-explicit action enrollment. No recovery-only identity is grandfathered.
-
-Previously stored active sessions have no authorization-origin marker. Their
-session execution branch returns false until the current owner explicitly
+A session whose authorization row was invalidated by an epoch advance returns
+false from the session execution branch until the current owner explicitly
 invokes `reauthorizeActiveActionSession(accountId, expectedExecutor,
 expectedActionId, expectedExpiresAt, expectedActionNullifier)`, or authorizes a
 new session. The method compares the exact displayed tuple before recording
@@ -75,4 +69,4 @@ Preserve the salt and stable identity roots. Existing users enroll the action
 purpose with the owner wallet; they do not re-register the consumed nullifier
 in NeoDIDRegistry. Deployments need freshly built artifacts and an explicit
 consumer/issuer/Services composition plan; source changes and fake controls do
-not establish compilation, migration execution or production readiness.
+not establish compilation or production readiness.

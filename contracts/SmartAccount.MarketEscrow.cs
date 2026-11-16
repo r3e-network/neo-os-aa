@@ -15,7 +15,9 @@ namespace SmartAccount
         // ========================================================================
 
         // Storage prefix for the owner-driven, timelocked escrow cancellation marker.
-        // The active layout is globally unique; reads and deletes also cover the legacy 0x13 key.
+        // 0x1D is the globally unique active allocation for this latch: there is no
+        // legacy sibling row to read or delete, so every code path touches exactly
+        // this prefix.
         private static readonly byte[] Prefix_MarketEscrowCancelInitiated = new byte[] { 0x1D };
 
         // Registered market-service allowlist. EnterMarketEscrow requires BOTH the
@@ -189,7 +191,6 @@ namespace SmartAccount
 
             byte[] key = Helper.Concat(Prefix_MarketEscrowCancelInitiated, (byte[])accountId);
             Storage.Put(Storage.CurrentContext, key, Runtime.Time);
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(LegacyStoragePrefix13, (byte[])accountId));
 
             AccountState state = GetAccountState(accountId);
             OnMarketEscrowOwnerCancelInitiated(accountId, state.BackupOwner!, Runtime.Time + MarketEscrowOwnerCancelTimelockMs);
@@ -247,9 +248,7 @@ namespace SmartAccount
         private static ByteString? GetMarketEscrowOwnerCancelInitiated(UInt160 accountId)
         {
             byte[] key = Helper.Concat(Prefix_MarketEscrowCancelInitiated, (byte[])accountId);
-            ByteString? value = Storage.Get(Storage.CurrentContext, key);
-            if (value != null) return value;
-            return Storage.Get(Storage.CurrentContext, Helper.Concat(LegacyStoragePrefix13, (byte[])accountId));
+            return Storage.Get(Storage.CurrentContext, key);
         }
 
         /// <summary>
@@ -312,11 +311,9 @@ namespace SmartAccount
             byte[] marketKey = Helper.Concat(Prefix_MarketEscrowContract, (byte[])accountId);
             byte[] listingKey = Helper.Concat(Prefix_MarketEscrowListing, (byte[])accountId);
             byte[] ownerCancelKey = Helper.Concat(Prefix_MarketEscrowCancelInitiated, (byte[])accountId);
-            byte[] legacyOwnerCancelKey = Helper.Concat(LegacyStoragePrefix13, (byte[])accountId);
             Storage.Delete(Storage.CurrentContext, marketKey);
             Storage.Delete(Storage.CurrentContext, listingKey);
             Storage.Delete(Storage.CurrentContext, ownerCancelKey);
-            Storage.Delete(Storage.CurrentContext, legacyOwnerCancelKey);
         }
 
         private const string MarketAbandonListingMethod = "abandonListing";

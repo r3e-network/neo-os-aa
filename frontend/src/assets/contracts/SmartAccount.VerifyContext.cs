@@ -99,11 +99,6 @@ namespace SmartAccount
         {
             byte[] key = Helper.Concat(Prefix_VerifyScopeTarget, (byte[])accountId);
             ByteString? value = Storage.Get(Storage.CurrentContext, key);
-            if (value == null)
-            {
-                byte[] legacyKey = Helper.Concat(LegacyStoragePrefix12, (byte[])accountId);
-                value = Storage.Get(Storage.CurrentContext, legacyKey);
-            }
             return value == null ? UInt160.Zero : (UInt160)value;
         }
 
@@ -131,7 +126,6 @@ namespace SmartAccount
             AssertAccountConfigurationIdle(accountId!);
             byte[] key = Helper.Concat(Prefix_VerifyScopeTarget, (byte[])accountId!);
             Storage.Put(Storage.CurrentContext, key, (byte[])targetContract!);
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(LegacyStoragePrefix12, (byte[])accountId!));
             OnVerifyScopeTargetSet(accountId!, targetContract!);
         }
 

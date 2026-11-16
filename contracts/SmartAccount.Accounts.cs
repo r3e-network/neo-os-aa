@@ -475,7 +475,7 @@ namespace SmartAccount
             AcquireDependencyMaintenance(lockKey, accountId);
             try
             {
-                UInt160[] children = ReadDependencyChildren(accountId, root, verifier);
+                UInt160[] children = ReadDependencyChildren(accountId, verifier);
                 ValidateDependencyChildren(children, root, verifier);
                 for (int i = 0; i < children.Length; i++)
                 {
@@ -489,49 +489,13 @@ namespace SmartAccount
             }
         }
 
-        private static void EnsureLegacyDependencies(UInt160 accountId, UInt160 root, bool verifier)
+        private static UInt160[] ReadDependencyChildren(UInt160 accountId, bool verifier)
         {
-            byte[] key = DependencyKey(accountId, verifier);
-            if (Storage.Get(Storage.CurrentContext, key) != null) return;
-            byte[] lockKey = Helper.Concat(Prefix_DependencyMaintenance, (byte[])accountId);
-            AcquireDependencyMaintenance(lockKey, accountId);
-            try
-            {
-                UInt160[] children = ReadDependencyChildren(accountId, root, verifier);
-                if (children.Length == 0) return;
-                ValidateDependencyChildren(children, root, verifier);
-                Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
-            }
-            finally
-            {
-                Storage.Delete(Storage.CurrentContext, lockKey);
-            }
-        }
-
-        private static UInt160[] ReadDependencyChildren(UInt160 accountId, UInt160 root, bool verifier)
-        {
+            // The cache is authoritative: children can only be registered through
+            // SetDependencies, which writes this row, so a missing row means no children.
             byte[] key = DependencyKey(accountId, verifier);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data != null) return (UInt160[])StdLib.Deserialize(data!)!;
-
-            string method = verifier ? "getChildVerifierConfig" : "getChildHookConfig";
-            ContractParameterType result = verifier ? ContractParameterType.Any : ContractParameterType.Array;
-            if (!ModuleExposesSafeMethod(root, method, result, ContractParameterType.Hash160))
-            {
-                return new UInt160[0];
-            }
-            if (verifier)
-            {
-                VerifierChildConfiguration config = (VerifierChildConfiguration)CallModuleWithMaintenanceBudget(
-                    root, method, CallFlags.ReadOnly, new object[] { accountId });
-                if (config == null || config.Verifiers == null) return new UInt160[0];
-                return config.Verifiers!;
-            }
-            object[] raw = (object[])CallModuleWithMaintenanceBudget(
-                root, method, CallFlags.ReadOnly, new object[] { accountId })!;
-            UInt160[] children = new UInt160[raw!.Length];
-            for (int i = 0; i < raw.Length; i++) children[i] = (UInt160)raw[i]!;
-            return children;
+            return data == null ? new UInt160[0] : (UInt160[])StdLib.Deserialize(data!)!;
         }
 
         private static UInt160 ValidateDependencyCall(UInt160 accountId, bool verifier, bool clearing)
@@ -784,7 +748,6 @@ namespace SmartAccount
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.Verifier != null && state.Verifier != UInt160.Zero, "Verifier not configured");
 
-            if (method == "setConfig") EnsureLegacyDependencies(accountId, state.Verifier!, true);
             byte[] pendingKey = Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId);
             if (!TryConfirmPendingModuleCall(pendingKey, state.Verifier!, method, args))
             {
@@ -818,7 +781,6 @@ namespace SmartAccount
             AccountState state = GetAccountState(accountId);
             ExecutionEngine.Assert(state.HookId != null && state.HookId != UInt160.Zero, "Hook not configured");
 
-            if (method == "setHooks") EnsureLegacyDependencies(accountId, state.HookId!, false);
             byte[] pendingKey = Helper.Concat(Prefix_PendingHookCall, (byte[])accountId);
             if (!TryConfirmPendingModuleCall(pendingKey, state.HookId!, method, args))
             {

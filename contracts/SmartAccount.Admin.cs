@@ -86,8 +86,6 @@ namespace SmartAccount
             ValidateAdmin();
             ExecutionEngine.Assert(nefHash != UInt256.Zero && nefHash.IsValid, "Invalid NEF hash");
             ExecutionEngine.Assert(manifestHash != UInt256.Zero && manifestHash.IsValid, "Invalid manifest hash");
-            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix12);
-            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix13);
             Storage.Put(Storage.CurrentContext, Prefix_PendingUpdateNefHash, (byte[])nefHash);
             Storage.Put(Storage.CurrentContext, Prefix_PendingUpdateManifestHash, (byte[])manifestHash);
             Storage.Put(Storage.CurrentContext, Prefix_UpdateTimelock, Runtime.Time);
@@ -104,8 +102,6 @@ namespace SmartAccount
             UInt256 cancelledManifest = cancelledManifestData == null ? UInt256.Zero : (UInt256)cancelledManifestData!;
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
-            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix12);
-            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix13);
             Storage.Delete(Storage.CurrentContext, Prefix_UpdateTimelock);
             OnUpdateCancelled(cancelledNef, cancelledManifest);
         }
@@ -130,8 +126,6 @@ namespace SmartAccount
             ExecutionEngine.Assert((UInt256)CryptoLib.Sha256(manifest) == (UInt256)pendingManifest!, "Manifest hash mismatch");
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
-            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix12);
-            Storage.Delete(Storage.CurrentContext, LegacyStoragePrefix13);
             Storage.Delete(Storage.CurrentContext, Prefix_UpdateTimelock);
             OnUpdateConfirmed((UInt256)pendingNef!, (UInt256)pendingManifest!);
             ContractManagement.Update(nef, manifest);
@@ -139,25 +133,12 @@ namespace SmartAccount
 
         private static ByteString? GetPendingUpdateNefHash()
         {
-            // Audit fix L-5 (documentation): the 0x12 read fallback covers contracts
-            // deployed before the AA-D-01 re-keying, whose pending NEF hash still
-            // lives under LegacyStoragePrefix12. The pinned public artifact still
-            // runs the pre-split build (implementations/ordinary/profile.json:
-            // release boundary "PINNED-ARTIFACT-UPGRADE-REVIEW", abiMethodCount 90
-            // pinned vs 109 in source), so a legacy proposal can still be confirmed.
-            // Remove this fallback only after every public deployment has upgraded
-            // through a proposal written under Prefix_PendingUpdateNefHash (0x1A).
-            ByteString? value = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
-            return value ?? Storage.Get(Storage.CurrentContext, LegacyStoragePrefix12);
+            return Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
         }
 
         private static ByteString? GetPendingUpdateManifestHash()
         {
-            // Audit fix L-5 (documentation): same removal condition as the 0x12 fallback
-            // above — delete this 0x13 read only after the pinned artifact upgrade has
-            // been applied on every public deployment.
-            ByteString? value = Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
-            return value ?? Storage.Get(Storage.CurrentContext, LegacyStoragePrefix13);
+            return Storage.Get(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
         }
 
         /// <summary>Alias for <see cref="Update"/>, mirroring the verifier/hook upgrade naming.</summary>

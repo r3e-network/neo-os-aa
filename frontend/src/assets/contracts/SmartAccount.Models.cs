@@ -66,11 +66,5 @@ namespace SmartAccount
             public ByteString CallHash = (ByteString)new byte[0];
             public BigInteger InitiatedAt;
         }
-
-        public class PendingPlatformOwnerRotation
-        {
-            public UInt160 NewBackupOwner = UInt160.Zero;
-            public BigInteger InitiatedAt;
-        }
     }
 }

@@ -31,19 +31,10 @@ namespace SmartAccount
         // authorization subject.  Only the platform registrar may create this
         // binding, and it is immutable for the lifetime of the account.
         private static readonly byte[] Prefix_PlatformProxyAccount = new byte[] { 0x1F };
-        // Phase 1b migration: written by MigratePlatformOwnerRotations only after a
-        // prefix scan over the legacy pending-rotation family (0x20) proves no row
-        // remains, so a batched orchestration can never strand legacy rows behind the seal.
-        private static readonly byte[] Prefix_PlatformOwnerRotationsMigrated = new byte[] { 0x2A };
         private static readonly byte[] StablePlatformAccountOwnerDomain = new byte[] { 0xAA, 0x52, 0x47, 0x02 };
-        // Legacy compatibility: pending platform owner rotations under 0x20 were moved to
-        // the AAPlatformRegistrar service. This prefix is read-only — consumed exactly once
-        // by MigratePlatformOwnerRotations — and never written by the current layout.
-        private static readonly byte[] LegacyStoragePrefix20 = new byte[] { 0x20 };
 
         public delegate void PlatformRegistrarProposalDelegate(UInt160 registrar, BigInteger availableAt);
         public delegate void PlatformAccountOwnerRotationDelegate(UInt160 accountId, UInt160 previousOwner, UInt160 newOwner);
-        public delegate void PlatformOwnerRotationsMigratedDelegate(BigInteger accountCount);
 
         [DisplayName("PlatformRegistrarProposed")]
         public static event PlatformRegistrarProposalDelegate OnPlatformRegistrarProposed = null!;
@@ -65,9 +56,6 @@ namespace SmartAccount
         // ownership change once ApplyPlatformAccountOwnerRotation succeeds.
         [DisplayName("PlatformAccountOwnerRotated")]
         public static event PlatformAccountOwnerRotationDelegate OnPlatformAccountOwnerRotated = null!;
-
-        [DisplayName("PlatformOwnerRotationsMigrated")]
-        public static event PlatformOwnerRotationsMigratedDelegate OnPlatformOwnerRotationsMigrated = null!;
 
         [Safe]
         public static UInt160 ComputePlatformAccountId(ByteString appBinding, UInt160 backupOwner, uint escapeTimelock)
@@ -176,83 +164,6 @@ namespace SmartAccount
         }
 
         /// <summary>
-        /// One-time migration of the legacy core-side pending platform owner rotations
-        /// (prefix 0x20) into the registrar service's storage. Admin-gated; the
-        /// <c>0x2A</c> flag makes it strictly one-shot. Migrated records keep their
-        /// original <c>InitiatedAt</c>, so an in-flight rotation cannot be re-armed by
-        /// the migration. Accounts without a pending row are skipped, but a listed
-        /// account whose binding row is missing aborts the whole run.
-        /// </summary>
-        /// <remarks>
-        /// Scan-based seal (audit High 1 / Medium 2): the <c>0x2A</c> flag is written only
-        /// after a <see cref="Storage.Find"/> scan over the legacy 0x20 family proves that
-        /// no row remains anywhere — not merely that the accounts listed in this call
-        /// were processed. A batched orchestration therefore cannot strand rows behind
-        /// the seal: a batch that leaves legacy rows behind simply returns unsealed, and
-        /// the batch that empties the family writes the flag, after which the strictly
-        /// one-shot entry assertion rejects any further run. This matters because the
-        /// upgraded core never reads 0x20 again, so a row stranded behind an early seal
-        /// would be permanently unmigratable.
-        /// </remarks>
-        public static void MigratePlatformOwnerRotations(UInt160[] accountIds)
-        {
-            ValidateAdmin();
-            ExecutionEngine.Assert(
-                Storage.Get(Storage.CurrentContext, Prefix_PlatformOwnerRotationsMigrated) == null,
-                "Platform owner rotations already migrated");
-            UInt160 registrar = GetPlatformRegistrar();
-            ExecutionEngine.Assert(registrar != UInt160.Zero, "Platform registrar not set");
-            ExecutionEngine.Assert(accountIds != null && accountIds.Length > 0, "No accounts to migrate");
-
-            BigInteger migrated = 0;
-            foreach (UInt160 accountId in accountIds!)
-            {
-                byte[] pendingKey = Helper.Concat(LegacyStoragePrefix20, (byte[])accountId);
-                ByteString? data = Storage.Get(Storage.CurrentContext, pendingKey);
-                if (data == null) continue;
-                PendingPlatformOwnerRotation pending = (PendingPlatformOwnerRotation)StdLib.Deserialize(data!);
-                ByteString? binding = Storage.Get(
-                    Storage.CurrentContext,
-                    Helper.Concat(Prefix_PlatformAccountBinding, (byte[])accountId));
-                ExecutionEngine.Assert(binding != null, "Platform account binding not found");
-                UInt160 previousOwner = GetAccountState(accountId).BackupOwner;
-                Contract.Call(
-                    registrar,
-                    "ingestPendingPlatformOwnerRotation",
-                    CallFlags.All,
-                    new object[]
-                    {
-                        accountId,
-                        binding!,
-                        pending.NewBackupOwner,
-                        previousOwner,
-                        pending.InitiatedAt
-                    });
-                Storage.Delete(Storage.CurrentContext, pendingKey);
-                migrated++;
-            }
-
-            // The seal is derived from storage, not from the caller's batch position: only
-            // a batch that empties the legacy family may write the flag, and a batch that
-            // leaves rows behind returns unsealed so a later batch can pick them up.
-            if (AnyLegacyOwnerRotationRowRemains()) return;
-
-            Storage.Put(Storage.CurrentContext, Prefix_PlatformOwnerRotationsMigrated, new byte[] { 1 });
-            OnPlatformOwnerRotationsMigrated(migrated);
-        }
-
-        /// <summary>
-        /// Returns true once the legacy core-side pending platform owner rotations have been
-        /// fully migrated and sealed. Read by the migration orchestration (and its report) to
-        /// verify that a batched run actually drained the legacy 0x20 family before the seal.
-        /// </summary>
-        [Safe]
-        public static bool IsPlatformOwnerRotationsMigrated()
-        {
-            return Storage.Get(Storage.CurrentContext, Prefix_PlatformOwnerRotationsMigrated) != null;
-        }
-
-        /// <summary>
         /// Resolves a platform virtual-account witness address to its AA
         /// account identifier.  The result is only populated by the trusted
         /// platform registrar during account creation; callers cannot register
@@ -347,17 +258,6 @@ namespace SmartAccount
             UInt160 registrar = GetPlatformRegistrar();
             ExecutionEngine.Assert(registrar != UInt160.Zero, "Platform registrar not set");
             ExecutionEngine.Assert(Runtime.CallingScriptHash == registrar, "Unauthorized platform registrar");
-        }
-
-        /// <summary>
-        /// Scans the legacy pending-rotation family for any remaining row. The migration
-        /// seal may only be written when this returns false.
-        /// </summary>
-        private static bool AnyLegacyOwnerRotationRowRemains()
-        {
-            Iterator iterator = Storage.Find(
-                Storage.CurrentContext, LegacyStoragePrefix20, FindOptions.KeysOnly);
-            return iterator.Next();
         }
 
         private static void IndexPlatformProxy(UInt160 accountId)

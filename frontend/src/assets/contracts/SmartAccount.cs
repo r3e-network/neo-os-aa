@@ -32,8 +32,6 @@ namespace SmartAccount
     //   * paymaster settlement     : authorizedCore (read) + settleReimbursement
     //                                on the authorized AAPaymaster
     //   * market escape path       : abandonListing on the bound AAAddressMarket
-    //   * registrar migration      : ingestPendingPlatformOwnerRotation on the
-    //                                authorized AAPlatformRegistrar
     //   * governed self-upgrade    : ContractManagement.Update; user-op targets
     //                                are explicitly barred from it
     // The extracted service contracts (AAPaymaster, AAAddressMarket,
@@ -98,22 +96,9 @@ namespace SmartAccount
         // 0x27  Prefix_AccountFrozen              Escape.cs                 +acctId
         // 0x28  Prefix_UserOperationInFlight      Internal.cs               bare
         // 0x29  Prefix_MarketServiceRegistration   MarketEscrow.cs           +acctId(market)
-        // 0x2A  Prefix_PlatformOwnerRotationsMigrated PlatformRegistrar.cs   bare
         //
         // ACTIVE LAYOUT: every prefix byte is globally unique. StoragePrefixMapTests pins this map
         // against the source and rejects any future active prefix reuse.
-        //
-        // LEGACY COMPATIBILITY: LegacyStoragePrefix12, LegacyStoragePrefix13 and
-        // LegacyStoragePrefix20 below are used only
-        // to read and delete keys written by the pre-renumbered / pre-extraction layout. They are not active prefixes,
-        // and all new writes use the unique 0x1A-0x1D allocation above. This keeps ContractManagement
-        // upgrades state-compatible without carrying the old shape-based allocation forward.
-        // LegacyStoragePrefix20 (pending platform owner rotations) is read exactly once by
-        // MigratePlatformOwnerRotations, which moves those rows into the AAPlatformRegistrar
-        // service contract and then never reads them again.
         // =====================================================================================
-
-        private static readonly byte[] LegacyStoragePrefix12 = new byte[] { 0x12 };
-        private static readonly byte[] LegacyStoragePrefix13 = new byte[] { 0x13 };
     }
 }

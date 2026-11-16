@@ -161,8 +161,6 @@ if [[ $run_contracts -eq 1 ]]; then
     python3 -m unittest discover -s scripts -p 'test_neoexpress_source_validate.py'
     python3 -m unittest discover -s scripts -p 'test_neoexpress_reproducible_build.py'
     node --test scripts/lib/deploy-helpers.test.mjs \
-      scripts/upgrade_mainnet_smart_account.test.mjs \
-      scripts/upgrade_testnet_smart_account.test.mjs \
       scripts/deploy_latest_aa_verifiers.test.mjs \
       scripts/check_neo_platform_packages.test.mjs \
       scripts/check-artifact-reproducibility.test.mjs \

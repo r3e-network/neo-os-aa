@@ -213,7 +213,12 @@ public class StoragePrefixMapTests
 
         StringAssert.Contains(marketSource, "globally unique",
             "MarketEscrow.cs must document that its active prefix is globally unique.");
-        StringAssert.Contains(marketSource, "legacy 0x13",
-            "MarketEscrow.cs must document the legacy compatibility read/delete path.");
+        // Design-phase rule: no pre-renumbering storage row is kept readable. The escrow
+        // latch lives at 0x1D alone; a legacy sibling would be dead code, so the partial
+        // must neither document nor implement one.
+        Assert.IsFalse(marketSource.Contains("legacy 0x13"),
+            "MarketEscrow.cs must not carry a legacy 0x13 compatibility read/delete path.");
+        Assert.IsFalse(marketSource.Contains("0x13"),
+            "MarketEscrow.cs must not touch any prefix other than its declared active ones.");
     }
 }

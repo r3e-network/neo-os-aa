@@ -124,19 +124,16 @@ remove an independent contract upgrade administrator. These additions are source
 candidate capabilities; integrations must discover the selected deployment ABI
 and read the chain state before exposing them.
 
-## Current source: platform services, freeze and rotation migration
+## Current source: platform services, freeze and discovery reads
 
 The committed ordinary source candidate extracts the platform services out of
 the core: market escrow settlement (`abandonListing`) lives on `AAAddressMarket`,
 paymaster reimbursement (`settleReimbursement`) on `AAPaymaster`, and
-platform-account registration plus the owner-rotation timelocks on the new
-standalone `AAPlatformRegistrar` (`contracts/registrar/`), applied to the core
-through the one-time admin-gated `migratePlatformOwnerRotations` migration. On
-top of the 2026-11-13 security remediation, the candidate adds the admin-gated
-freeze surface and the migration-seal read. The candidate-only freeze ABI and seal read
-(`freezeAccount` / `unfreezeAccount` / `isAccountFrozen` / `isPlatformOwnerRotationsMigrated`, not part of the pinned public artifact) bring the candidate
-manifest to 109 raw methods (108 unique names; `finalizeEscape`
-is overloaded) against the 90 methods of the pinned public artifact.
+platform-account registration plus the owner-rotation timelocks on the
+standalone `AAPlatformRegistrar` (`contracts/registrar/`). On top of the
+2026-11-13 security remediation, the candidate adds the admin-gated freeze
+surface (`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`), not part of
+the pinned public artifact.
 
 The 2026-11-16 Ethereum-AA alignment revision adds two safe reads on top of
 that candidate: `describeAccount(accountId)` aggregates the full account
@@ -144,7 +141,7 @@ descriptor (ERC-7579-style capability discovery), and
 `simulateValidation(accountId, op)` — named after ERC-4337's EntryPoint so
 4337-aware tooling finds the familiar entry point — is a non-faulting
 execution-check preflight (signature and hook execution excluded) that also
-reports the escrow latch and the native backup-owner witness. They raise the candidate to 111 raw methods. The same revision lets
+reports the escrow latch and the native backup-owner witness. The same revision lets
 `SessionKeyVerifier.setPublicKey` accept a version-0x01 initial-key blob in
 the registration verifier params, so a session-key account works on day one;
 later key changes keep the 24h rotation cooldown. The SDK exposes
@@ -153,15 +150,19 @@ ERC-4337-shaped (`toErc4337UserOperation`, `estimateUserOperationGas`) and
 ERC-7715-shaped (`buildSessionKeyPermission`) adapters; the typed-data
 signing layout is specified in [AA-EIP-712-SPEC.md](AA-EIP-712-SPEC.md).
 
+A same-day design-phase cleanup removed every pre-deployment compatibility
+path (legacy storage-prefix fallbacks, the one-time rotation migration, the
+v3 recovery action ticket and the migration/upgrade scripts), bringing the
+candidate to 109 raw methods (108 unique names; `finalizeEscape`
+is overloaded) against the 90 methods of the pinned public artifact.
+
 The public deployments still run the 90-method artifact, so the extraction,
-freeze, migration, discovery and day-one-session-key surfaces stay
+freeze, discovery and day-one-session-key surfaces stay
 source-candidate capabilities behind the
 unchanged upgrade-required boundary: a governed upgrade and independent readback
-must land before any deployment claims them. The orchestration order and the
-cross-repository pin inventory are tracked in
-[the upgrade coordination](SMARTACCOUNT-V3-UPGRADE-COORDINATION.md). Local
+must land before any deployment claims them. Local
 evidence so far is source-level only — contract tests cover the extracted
-service ABI, the owner-rotation migration and the freeze surface, and the
+service ABI and the freeze surface, and the
 candidate NEF/manifest hashes are re-pinned — while the fresh NeoExpress
 receipt, the artifact reproducibility certificate, the CI lanes and the
 public-chain readback remain open evidence gates.

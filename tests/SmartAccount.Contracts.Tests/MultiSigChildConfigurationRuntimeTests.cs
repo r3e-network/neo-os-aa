@@ -361,34 +361,6 @@ public class MultiSigChildConfigurationRuntimeTests
     }
 
     [TestMethod]
-    public void CompositeDependencies_LegacyUnregisteredChildrenAreCleaned()
-    {
-        Harness h = new();
-        object[] keyArgs = h.KeyArgs();
-        Assert.IsFalse(h.Stage(h.Web, "setPublicKey", keyArgs));
-        h.Fx.AdvanceTime(Window);
-        h.Apply(h.Web, "setPublicKey", keyArgs);
-        Assert.IsFalse(h.Stage(h.Native, "setConfig", h.NativeArgs()));
-        h.Fx.AdvanceTime(Window);
-        h.Apply(h.Native, "setConfig", h.NativeArgs());
-        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Native, "getThreshold", h.Account));
-
-        h.Fx.Engine.Storage.Snapshot.Delete(h.AccountStorageKey(h.Core, 0x24));
-        h.SetTopology(new[] { h.Native }, 1);
-        CollectionAssert.AreEqual(Array.Empty<byte>(), h.Fx.CallBytes(h.Web, "getPublicKey", h.Account),
-            "A pre-registry account must enroll its old topology before removing a child.");
-
-        h.Fx.Engine.Storage.Snapshot.Delete(h.AccountStorageKey(h.Core, 0x24));
-        h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, UInt160.Zero, Array.Empty<byte>());
-        h.Fx.AdvanceTime(Window);
-        h.Fx.CallVoid(h.Core, "confirmVerifierUpdate", h.Account);
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Native, "getThreshold", h.Account));
-        Assert.IsTrue(h.Fx.Call(h.Root, "getConfig", h.Account).IsNull);
-        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.AccountStorageKey(h.Core, 0x24)));
-        h.AssertNoConfigContext();
-    }
-
-    [TestMethod]
     [DataRow(0)]
     [DataRow(1)]
     [DataRow(2)]

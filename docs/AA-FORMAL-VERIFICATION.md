@@ -2,6 +2,21 @@
 
 ## Status
 
+### Pending fixture refresh (2026-11-16)
+
+The 2026-11-16 design-phase legacy-compatibility sweep changed the ordinary
+core source (legacy storage-prefix fallbacks, the rotation-migration surface
+and the dependency backfill were removed; the recovery verifier's v3 action
+ticket was dropped and `submitActionTicketV4` renamed to `submitActionTicket`).
+The refinement fixtures under `formal/refinement/fixtures/` and the model specs
+that reference them still pin the pre-sweep candidate and stay internally
+consistent (the host-side suite passes against them). Before the next formal
+sign-off, rerun the RefinementExport inventory against the fresh candidate and
+re-distill `cap-method-source.json`, `initializer-source.json` and
+`current-initializer-source.json`; `storage_getter_source.py` keeps a
+`legacy_symbol` / `inline-fallback` shape for the pre-sweep getters that the
+refreshed inventory will retire.
+
 ### Current private validation refresh (2026-10-31)
 
 The current SmartAccount/native-core source snapshot passes the pinned Docker

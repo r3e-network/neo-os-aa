@@ -220,6 +220,21 @@ regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targ
 
 [[allowlists]]
 description = """\
+Generated 2026-11-16 reproducibility report. Its maps associate repository-relative source, \
+project, assembly and artifact names with the SHA-256 of those public files. generic-api-key \
+reports 37 members because names such as SessionKeyVerifier or Web3AuthVerifier contain the \
+rule's keyword; every reported value is a 64-character lower-case content digest, not a \
+credential. The allowance admits only a file-shaped member name mapped to that digest width, \
+and the reviewed inventory pins the matched line count and the report SHA-256.\
+"""
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^docs/reports/aa-artifact-reproducibility-20261116\.json$''']
+regexTarget = "line"
+regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
+
+[[allowlists]]
+description = """\
 Generated 2026-10-30 formal-gate receipt. Its source, model and artifact maps associate \
 repository-relative file names with SHA-256 content digests. generic-api-key reports 18 members \
 because names such as SessionKeyVerifier contain the rule's keyword; every reported value is a \

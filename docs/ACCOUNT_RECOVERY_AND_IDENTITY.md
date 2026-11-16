@@ -42,7 +42,7 @@ of accepting an unrelated ID solely because its signature matches. Existing
 v3 action signatures are accepted only through the legacy manual route with
 current-owner and executor witnesses; old Oracle v3 action packets are rejected.
 Pre-v4 active sessions require explicit current-owner reauthorization or a new
-authorized session. See [action session migration](action-sessions-v4.md).
+authorized session. See [action sessions](action-sessions.md).
 Tickets issued before raw-account binding remain incompatible; deployment and
 in-flight request migration still require an owner-approved plan.
 

@@ -10,14 +10,13 @@ using Neo.SmartContract.Framework.Services;
 namespace SmartAccount
 {
     /// <summary>
-    /// On-chain platform registrar service for Neo N3 AA (Phase 1b service extraction).
+    /// On-chain platform registrar service for Neo N3 AA.
     ///
     /// The service owns the pending platform-account owner rotations: the proposal
-    /// records, their 7-day timelock, cancellation, and the one-time migration ingest of
-    /// legacy core-side rotation records. Account *state* itself (deterministic account
-    /// ids, bindings, proxy indexes, the authoritative ownership write) stays in the AA
-    /// core; the registrar orchestrates and the core re-validates every write through
-    /// its registrar-gated entry points.
+    /// records, their 7-day timelock, and cancellation. Account *state* itself
+    /// (deterministic account ids, bindings, proxy indexes, the authoritative
+    /// ownership write) stays in the AA core; the registrar orchestrates and the
+    /// core re-validates every write through its registrar-gated entry points.
     /// </summary>
     [DisplayName("AAPlatformRegistrar")]
     // The registrar only ever calls its authorized AA core; each fixed callee method is
@@ -73,18 +72,12 @@ namespace SmartAccount
 
         public delegate void PlatformRotationProposedDelegate(UInt160 accountId, UInt160 previousOwner, UInt160 newOwner, BigInteger availableAt);
         public delegate void PlatformRotationCancelledDelegate(UInt160 accountId);
-        public delegate void PlatformRotationIngestedDelegate(UInt160 accountId, UInt160 previousOwner, UInt160 newOwner, BigInteger initiatedAt);
 
-        // Display names carry over from the pre-extraction core events so indexers that
-        // already observe PlatformOwnerRotation* notifications keep working.
         [DisplayName("PlatformOwnerRotationProposed")]
         public static event PlatformRotationProposedDelegate OnPlatformRotationProposed = null!;
 
         [DisplayName("PlatformOwnerRotationCancelled")]
         public static event PlatformRotationCancelledDelegate OnPlatformRotationCancelled = null!;
-
-        [DisplayName("PlatformOwnerRotationIngested")]
-        public static event PlatformRotationIngestedDelegate OnPlatformRotationIngested = null!;
 
         // ========================================================================
         // Lifecycle & Authority (delegates to PlatformRegistrarAuthority)
@@ -291,43 +284,7 @@ namespace SmartAccount
         }
 
         // ========================================================================
-        // 3. One-time migration ingest (core caller only)
-        // ========================================================================
-
-        /// <summary>
-        /// Ingests a legacy core-side pending rotation during the one-time
-        /// <c>migratePlatformOwnerRotations</c> run. Only the authorized core may call
-        /// this; the record keeps its original <c>InitiatedAt</c>, so an in-flight
-        /// rotation cannot be re-armed by the migration.
-        /// </summary>
-        public static void IngestPendingPlatformOwnerRotation(
-            UInt160 accountId,
-            ByteString appBinding,
-            UInt160 newBackupOwner,
-            UInt160 previousOwner,
-            BigInteger initiatedAt)
-        {
-            PlatformRegistrarAuthority.ValidateCoreCaller();
-            ValidatePlatformBinding(appBinding);
-            ExecutionEngine.Assert(
-                newBackupOwner != null && newBackupOwner != UInt160.Zero && newBackupOwner.IsValid,
-                "Invalid platform backup owner");
-            ExecutionEngine.Assert(previousOwner != null && previousOwner != UInt160.Zero, "Invalid previous owner");
-            byte[] pendingKey = Helper.Concat(Prefix_PendingRotation, (byte[])accountId);
-            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, pendingKey) == null,
-                "Platform owner rotation already pending");
-            Storage.Put(Storage.CurrentContext, pendingKey, StdLib.Serialize(new PendingRotation
-            {
-                NewBackupOwner = newBackupOwner!,
-                PreviousOwner = previousOwner!,
-                AppBinding = appBinding!,
-                InitiatedAt = initiatedAt
-            }));
-            OnPlatformRotationIngested(accountId, previousOwner!, newBackupOwner!, initiatedAt);
-        }
-
-        // ========================================================================
-        // 4. State Queries
+        // 3. State Queries
         // ========================================================================
 
         [Safe]

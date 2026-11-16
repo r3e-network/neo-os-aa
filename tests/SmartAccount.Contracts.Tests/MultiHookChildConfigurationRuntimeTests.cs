@@ -145,33 +145,4 @@ public class MultiHookChildConfigurationRuntimeTests
         Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.CoreStorageKey(0x24)));
         h.AssertNoConfigContext();
     }
-
-    [TestMethod]
-    public void ChildConfiguration_LegacyUnregisteredChildrenAreCleaned()
-    {
-        Harness h = new();
-        object[] args = h.WhitelistArgs();
-        Assert.IsFalse(h.Stage("setWhitelist", args));
-        h.Fx.AdvanceTime(Window);
-        h.Apply("setWhitelist", args);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Whitelist, "isWhitelisted", h.Account, h.Target));
-
-        h.Fx.Engine.Storage.Snapshot.Delete(h.CoreStorageKey(0x23));
-        h.SetChildren(new[] { h.Restricted });
-        Assert.IsFalse(h.Fx.CallBoolean(h.Whitelist, "isWhitelisted", h.Account, h.Target),
-            "A pre-registry account must enroll its old topology before removing a child.");
-
-        h.SetChildren(new[] { h.Whitelist });
-        Assert.IsFalse(h.Stage("setWhitelist", args));
-        h.Fx.AdvanceTime(Window);
-        h.Apply("setWhitelist", args);
-        h.Fx.Engine.Storage.Snapshot.Delete(h.CoreStorageKey(0x23));
-        h.Fx.CallVoid(h.Core, "updateHook", h.Account, UInt160.Zero);
-        h.Fx.AdvanceTime(Window);
-        h.Fx.CallVoid(h.Core, "confirmHookUpdate", h.Account);
-        Assert.IsFalse(h.Fx.CallBoolean(h.Whitelist, "isWhitelisted", h.Account, h.Target));
-        Assert.AreEqual(0, ((Neo.VM.Types.Array)h.Fx.Call(h.Root, "getHooks", h.Account)).Count);
-        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.CoreStorageKey(0x23)));
-        h.AssertNoConfigContext();
-    }
 }

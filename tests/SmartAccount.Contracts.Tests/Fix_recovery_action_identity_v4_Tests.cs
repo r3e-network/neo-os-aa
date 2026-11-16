@@ -35,14 +35,14 @@ public partial class FixRecoveryTests
         ulong expiresAt = expiry ?? (ulong)(h.Fx.Now() + 600_000);
         string actionId = h.BuildActionId(account, Executor, expiresAt);
         byte[] nullifier = Enumerable.Repeat(tag, 32).ToArray();
-        byte[] signature = key.Sign(h.ComputeActionDigestV4(
+        byte[] signature = key.Sign(h.ComputeActionDigest(
             account, text, Executor, actionId, expiresAt, master, generation, nullifier));
         return new(actionId, expiresAt, master, generation, nullifier, signature);
     }
 
     private static void SubmitIdentityGrantTicket(RecoveryHarness h, byte[] account, IdentityGrantTicket ticket)
     {
-        h.Fx.CallVoid(h.Verifier, "submitActionTicketV4", account, Executor,
+        h.Fx.CallVoid(h.Verifier, "submitActionTicket", account, Executor,
             ticket.ActionId, ticket.ExpiresAt, ticket.Master, ticket.Epoch, ticket.Nullifier, ticket.Signature);
     }
 
@@ -216,51 +216,53 @@ public partial class FixRecoveryTests
 
     [TestMethod]
     [TestCategory("DID-R1-IdentityGrantV4")]
-    public void IdentityGrantV4_UnmarkedSessionRequiresExactCurrentRecoveredOwnerConsent()
+    public void IdentityGrantV4_EpochInvalidatedSessionRequiresExactCurrentOwnerConsent()
     {
         RecoveryHarness h = IdentityGrantHarness(); using P256SessionKey key = new();
         byte[] account = h.SetupAccount("old-session", OwnerA, key.CompressedPublicKey), master = Factor();
-        CompleteIdentityGrantRecovery(h, key, account, "old-session", 0x28);
-        ulong expiry = (ulong)(h.Fx.Now() + 600_000); string id = h.BuildActionId(account, Executor, expiry);
-        byte[] nullifier = Enumerable.Repeat((byte)0x29, 32).ToArray();
-        byte[] signature = key.Sign(h.ComputeActionDigest(account, "old-session", Executor, id, expiry, nullifier));
-        h.Fx.SetSigners(OwnerB, Executor);
-        h.Fx.CallVoid(h.Verifier, "submitActionTicket", account, Executor, id, expiry, nullifier, signature);
-        // Synthetic pre-v4 storage shape in the real VM, not an old deployed NEF.
-        h.DeleteNewActionStorage(account, 0x1A); h.DeleteNewActionStorage(account, 0x1C);
+        h.Fx.SetSigners(OwnerA);
+        h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, true);
+        IdentityGrantTicket ticket = IdentityGrantTicketFor(h, key, account, "old-session", master, 0x29);
+        h.Fx.SetSigners(Executor);
+        SubmitIdentityGrantTicket(h, account, ticket);
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        // Enrolling a second identity advances the epoch, which deletes the
+        // session's authorization row; the session itself stays active until expiry.
+        byte[] second = Enumerable.Repeat((byte)0x71, 32).ToArray();
+        h.Fx.SetSigners(OwnerA);
+        h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, second, true);
         h.Fx.SetSigners(Executor);
         Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
-        object[] before = IdentityGrantState(h, account, master, nullifier);
-        foreach (UInt160 unauthorized in new[] { OwnerA, Executor, Attacker })
+        object[] before = IdentityGrantState(h, account, master, ticket.Nullifier);
+        foreach (UInt160 unauthorized in new[] { OwnerB, Executor, Attacker })
         {
             h.Fx.SetSigners(unauthorized);
             TestException error = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier,
-                "reauthorizeActiveActionSession", account, Executor, id, expiry, nullifier));
+                "reauthorizeActiveActionSession", account, Executor, ticket.ActionId, ticket.ExpiresAt, ticket.Nullifier));
             StringAssert.Contains(error.Message, "Not owner");
-            CollectionAssert.AreEqual(before, IdentityGrantState(h, account, master, nullifier));
+            CollectionAssert.AreEqual(before, IdentityGrantState(h, account, master, ticket.Nullifier));
         }
-        h.Fx.SetSigners(OwnerB);
+        h.Fx.SetSigners(OwnerA);
         foreach (object?[] expected in new[]
         {
-            new object?[] { Attacker, id, expiry, nullifier },
-            new object?[] { Executor, id + "-changed", expiry, nullifier },
-            new object?[] { Executor, id, expiry + 1, nullifier },
-            new object?[] { Executor, id, expiry, Enumerable.Repeat((byte)0x2a, 32).ToArray() }
+            new object?[] { Attacker, ticket.ActionId, ticket.ExpiresAt, ticket.Nullifier },
+            new object?[] { Executor, ticket.ActionId + "-changed", ticket.ExpiresAt, ticket.Nullifier },
+            new object?[] { Executor, ticket.ActionId, ticket.ExpiresAt + 1, ticket.Nullifier },
+            new object?[] { Executor, ticket.ActionId, ticket.ExpiresAt, Enumerable.Repeat((byte)0x2a, 32).ToArray() }
         })
         {
             TestException error = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier,
                 "reauthorizeActiveActionSession", account, expected[0], expected[1], expected[2], expected[3]));
             StringAssert.Contains(error.Message, "Active session changed");
-            CollectionAssert.AreEqual(before, IdentityGrantState(h, account, master, nullifier));
+            CollectionAssert.AreEqual(before, IdentityGrantState(h, account, master, ticket.Nullifier));
         }
-        h.Fx.CallVoid(h.Verifier, "reauthorizeActiveActionSession", account, Executor, id, expiry, nullifier);
-        Assert.IsTrue(h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account) > 0);
+        h.Fx.CallVoid(h.Verifier, "reauthorizeActiveActionSession", account, Executor, ticket.ActionId, ticket.ExpiresAt, ticket.Nullifier);
         h.Fx.SetSigners(Executor); Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
         Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
         Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isAllowedActionIdentity", account, master));
-        IdentityGrantTicket next = IdentityGrantTicketFor(h, key, account, "old-session", master, 0x2b);
-        AssertIdentityGrantTicketRejected(h, account, next, "Action identity not enrolled");
+        // A ticket signed under the pre-enrollment epoch is stale.
+        IdentityGrantTicket stale = IdentityGrantTicketFor(h, key, account, "old-session", master, 0x2b, epoch: ticket.Epoch);
+        AssertIdentityGrantTicketRejected(h, account, stale, "Stale action authorization epoch");
     }
 
     [TestMethod]
@@ -299,11 +301,11 @@ public partial class FixRecoveryTests
         IdentityGrantTicket ticket = IdentityGrantTicketFor(h, key, account, "domains", master, 0x2e);
         byte[][] wrongDomainSignatures =
         {
-            key.Sign(h.ComputeActionDigestV4(account, "domains", Executor, ticket.ActionId,
+            key.Sign(h.ComputeActionDigest(account, "domains", Executor, ticket.ActionId,
                 ticket.ExpiresAt, master, ticket.Epoch, ticket.Nullifier, signingNetwork: "neo3-mainnet")),
-            key.Sign(h.ComputeActionDigestV4(account, "domains", Executor, ticket.ActionId,
+            key.Sign(h.ComputeActionDigest(account, "domains", Executor, ticket.ActionId,
                 ticket.ExpiresAt, master, ticket.Epoch, ticket.Nullifier, signingVerifier: h.Core)),
-            key.Sign(h.ComputeActionDigestV4(account, "domains", Executor, ticket.ActionId,
+            key.Sign(h.ComputeActionDigest(account, "domains", Executor, ticket.ActionId,
                 ticket.ExpiresAt, otherMaster, ticket.Epoch, ticket.Nullifier))
         };
         h.Fx.SetSigners(Executor);

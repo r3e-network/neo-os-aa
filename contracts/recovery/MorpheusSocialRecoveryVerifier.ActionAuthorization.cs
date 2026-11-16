@@ -122,7 +122,6 @@ namespace Neo.SmartContract.Examples
             ExecutionEngine.Assert(session.Active && session.ExpiresAt > Runtime.Time, "No unexpired active session");
             ExecutionEngine.Assert(session.Executor == expectedExecutor && session.ActionId == expectedActionId
                 && session.ExpiresAt == expectedExpiresAt && session.ActionNullifier.Equals(expectedActionNullifier), "Active session changed");
-            if (GetActionAuthorizationEpoch(accountId) == 0) AdvanceActionAuthorizationEpoch(accountId);
             SaveActionSessionAuthorization(accountId, (ByteString)"", GetActionAuthorizationEpoch(accountId), true, GetSessionNonce(accountId));
         }
 
@@ -163,7 +162,9 @@ namespace Neo.SmartContract.Examples
         private static bool IsActiveActionSessionAuthorized(UInt160 accountId)
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_SESSION_AUTHORIZATION, accountId));
-            if (data == null) return false; // Legacy state requires explicit owner consent.
+            // A missing row means the epoch advanced after the session was activated
+            // (AdvanceActionAuthorizationEpoch deletes it); the session needs fresh authorization.
+            if (data == null) return false;
             SessionAuthorization auth = (SessionAuthorization)StdLib.Deserialize(data);
             if (auth.Epoch <= 0 || auth.Epoch != GetActionAuthorizationEpoch(accountId) || auth.SessionNonce != GetSessionNonce(accountId)) return false;
             return auth.OwnerConsent || IsAllowedActionIdentity(accountId, auth.MasterNullifier);

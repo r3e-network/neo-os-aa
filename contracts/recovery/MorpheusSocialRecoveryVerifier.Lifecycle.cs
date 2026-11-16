@@ -56,25 +56,6 @@ namespace Neo.SmartContract.Examples
         }
 
         public static void SubmitActionTicket(
-            UInt160 accountId,
-            UInt160 executor,
-            string actionId,
-            ulong expiresAt,
-            ByteString actionNullifier,
-            ByteString verificationSignature)
-        {
-            ValidateAccountId(accountId, "accountId");
-            ValidateAddress(executor, "executor");
-            ValidateShortText(actionId, "actionId");
-            ValidateFixedHash(actionNullifier, "actionNullifier");
-            ValidateSignature(verificationSignature);
-            ExecutionEngine.Assert(expiresAt > Runtime.Time, "Session already expired");
-            ExecutionEngine.Assert(Runtime.CheckWitness(executor), "Executor witness required");
-
-            ActivateActionSessionInternal(accountId, executor, actionId, expiresAt, actionNullifier, verificationSignature, (ByteString)"", 0, true);
-        }
-
-        public static void SubmitActionTicketV4(
             UInt160 accountId, UInt160 executor, string actionId, ulong expiresAt,
             ByteString masterNullifier, BigInteger authorizationEpoch,
             ByteString actionNullifier, ByteString verificationSignature)
@@ -82,7 +63,7 @@ namespace Neo.SmartContract.Examples
             ValidateAccountId(accountId, "accountId");
             ExecutionEngine.Assert(Runtime.CheckWitness(executor), "Executor witness required");
             ActivateActionSessionInternal(accountId, executor, actionId, expiresAt,
-                actionNullifier, verificationSignature, masterNullifier, authorizationEpoch, false);
+                actionNullifier, verificationSignature, masterNullifier, authorizationEpoch);
         }
 
         public static void DepositOracleCredits(UInt160 accountId, BigInteger amount)
@@ -183,8 +164,7 @@ namespace Neo.SmartContract.Examples
                     ticket.ActionNullifier,
                     ticket.Signature,
                     ticket.MasterNullifier,
-                    ticket.AuthorizationEpoch,
-                    false);
+                    ticket.AuthorizationEpoch);
                 return;
             }
 

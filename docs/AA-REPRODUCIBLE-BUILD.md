@@ -143,6 +143,13 @@ Linux CI — is
 [`aa-artifact-reproducibility-20261113.json`](reports/aa-artifact-reproducibility-20261113.json),
 and the candidate/public ABI delta it certifies is
 [`aa-ordinary-candidate-compatibility-20261113.json`](reports/aa-ordinary-candidate-compatibility-20261113.json).
+The 2026-11-16 replay of the design-phase legacy-compat sweep (storage fallbacks,
+the one-time rotation migration and the v3 recovery ticket removed; the candidate
+ABI is now 109 methods) matched again with no drift and no missing artifacts; its
+certificate is
+[`aa-artifact-reproducibility-20261116.json`](reports/aa-artifact-reproducibility-20261116.json),
+and the candidate/public ABI delta it certifies is
+[`aa-ordinary-candidate-compatibility-20261116.json`](reports/aa-ordinary-candidate-compatibility-20261116.json).
 The joined NeoExpress receipt is bound to a reviewed source-runtime build
 (`sourceRuntime`): its 104-file map, source-build receipt, `neoxp.dll` and
 wrapper hashes are checked before and after the private run, with host paths

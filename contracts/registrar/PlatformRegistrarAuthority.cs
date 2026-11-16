@@ -13,10 +13,8 @@ namespace SmartAccount
         private static readonly byte[] Prefix_PendingAdmin = new byte[] { 0xD2 };
         private static readonly byte[] Prefix_AdminRotationTimelock = new byte[] { 0xD3 };
         // Parity with PaymasterAuthority (audit fix M-7): timelocked change of the trusted AA
-        // core. A repointed "core" passes ValidateCoreCaller and could then drive
-        // applyPlatformAccountOwnerRotation / registerPlatformAccount for arbitrary
-        // account ids, so the change must never be instant.
-        // New prefixes — never written by previous deployments.
+        // core. A repointed "core" could then drive applyPlatformAccountOwnerRotation /
+        // registerPlatformAccount for arbitrary account ids, so the change must never be instant.
         private static readonly byte[] Prefix_PendingCore = new byte[] { 0xD4 };
         private static readonly byte[] Prefix_CoreTimelock = new byte[] { 0xD5 };
         // Parity with PaymasterAuthority (AA-D-01): timelocked contract upgrade. The admin
@@ -136,13 +134,6 @@ namespace SmartAccount
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateNefHash);
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
             Storage.Delete(Storage.CurrentContext, Prefix_UpdateTimelock);
-        }
-
-        internal static void ValidateCoreCaller()
-        {
-            UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
-            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
         }
 
         internal static void RotateAdmin(UInt160 newAdmin)

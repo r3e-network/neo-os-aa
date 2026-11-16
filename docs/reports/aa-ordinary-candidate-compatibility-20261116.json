@@ -1,0 +1,37 @@
+{
+  "candidateArtifact": {
+    "nefSha256": "9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76",
+    "manifestSha256": "a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31",
+    "abiEntries": 109
+  },
+  "pinnedArtifact": {
+    "nefSha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+    "manifestSha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+    "abiEntries": 90
+  },
+  "addedMethods": [
+    "applyPlatformAccountOwnerRotation/4",
+    "callHookChild/4",
+    "callVerifierChild/4",
+    "clearHookDependencies/1",
+    "clearVerifierDependencies/1",
+    "describeAccount/1",
+    "finalizeEscapeToOwner/1",
+    "freezeAccount/1",
+    "getPendingHookUpdate/1",
+    "getPendingVerifierUpdate/1",
+    "getPlatformAccountBinding/1",
+    "isAccountFrozen/1",
+    "isMarketService/1",
+    "isOwnerOnlyRecovery/1",
+    "isUserOpExecutionActive/0",
+    "setHookDependencies/2",
+    "setMarketService/2",
+    "setVerifierDependencies/2",
+    "simulateValidation/2",
+    "unfreezeAccount/1"
+  ],
+  "removedMethods": [
+    "rotatePlatformAccountOwner/3"
+  ]
+}

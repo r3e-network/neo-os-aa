@@ -223,18 +223,9 @@ npm run testnet:validate:report
 
 The suite writes JSON artifacts under `sdk/docs/reports/`.
 
-### Shared Platform Account Bootstrap
+### Platform Registrar Service
 
-The shared platform-account registrar is enabled in a separate, testnet-only AA upgrade before the PlatformRegistry reciprocal configuration. Start with a read-only exact-update simulation using the AA core's public admin identity:
-
-```bash
-AA_TESTNET_UPDATE_SIGNER=<public-AA-admin-address-or-script-hash> \
-  node scripts/upgrade_testnet_smart_account.js
-```
-
-The helper verifies testnet magic, the local `SmartAccountV3` artifact, the live update surface, and the exact `update` preview. It writes a `testnet-smart-account-upgrade-latest.json` receipt under `docs/reports/` without signing or broadcasting. Execution requires `--execute`, `CONFIRM_AA_TESTNET_UPDATE=I_UNDERSTAND_THIS_WRITES_CHAIN`, and `AA_TESTNET_UPDATE_WIF`; the WIF-derived signer must match the public identity used for the preview. After a successful upgrade, rerun the platform shared-AA preflight before configuring the Registry core.
-
-The platform services are now extracted from the core: the registrar ships as the standalone `AAPlatformRegistrar` (`contracts/registrar/`), and `scripts/migrate_smart_account_v3.js` orchestrates the market enrollment, registrar timelock and legacy rotation-migration phases (dry-run by default). See the upgrade coordination doc (`docs/SMARTACCOUNT-V3-UPGRADE-COORDINATION.md`) for the full orchestration order and the cross-repo pin inventory.
+The platform services are extracted from the core: the registrar ships as the standalone `AAPlatformRegistrar` (`contracts/registrar/`), configured through the core's timelocked `proposePlatformRegistrar` / `confirmPlatformRegistrar` admin path. Once the pointer is set, the registrar owns platform-account owner-rotation proposals and the core re-validates every state write it drives.
 
 ### Build
 

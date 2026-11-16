@@ -140,13 +140,10 @@ public class MarketEscrowRuntimeTests
     }
 
     [TestMethod]
-    [DataRow(true, false, false)]
-    [DataRow(false, true, false)]
-    [DataRow(true, true, false)]
-    [DataRow(true, false, true)]
-    [DataRow(false, true, true)]
-    [DataRow(true, true, true)]
-    public void MarketEscrow_SettleCompositeRoots_CleansLeavesAndTransfersShell(bool verifier, bool hook, bool legacy)
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public void MarketEscrow_SettleCompositeRoots_CleansLeavesAndTransfersShell(bool verifier, bool hook)
     {
         MarketHarness h = new();
         UInt160 rootVerifier = verifier ? h.Fx.Deploy("verifiers/MultiSigVerifier", h.Wallet.ToArray()) : UInt160.Zero;
@@ -179,11 +176,6 @@ public class MarketEscrowRuntimeTests
 
         var state = (Neo.VM.Types.Array)h.Fx.Call(UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", h.Wallet);
         StorageKey Key(byte prefix) => new() { Id = (int)state[0].GetInteger(), Key = new[] { prefix }.Concat(account.ToArray()).ToArray() };
-        if (legacy)
-        {
-            h.Fx.Engine.Storage.Snapshot.Delete(Key(0x23));
-            h.Fx.Engine.Storage.Snapshot.Delete(Key(0x24));
-        }
 
         BigInteger listing = h.CreateListing(account);
         h.Fx.FundGasFromValidators(Buyer, Price * 2);

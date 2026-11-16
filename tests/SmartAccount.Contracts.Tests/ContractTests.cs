@@ -164,7 +164,6 @@ public class ContractTests
             "SetMarketService",
             "IsMarketService",
             "ApplyPlatformAccountOwnerRotation",
-            "MigratePlatformOwnerRotations",
             "GetPlatformAccountBinding",
             "_deploy",
             "Update",
@@ -743,7 +742,6 @@ public class ContractTests
             "ProposePlatformAccountOwnerRotation",
             "ConfirmPlatformAccountOwnerRotation",
             "CancelPlatformAccountOwnerRotation",
-            "IngestPendingPlatformOwnerRotation",
             "GetPendingPlatformOwnerRotation",
             "GetPlatformOwnerRotationAvailableAt",
             "AuthorizedCore",
@@ -765,13 +763,13 @@ public class ContractTests
     }
 
     [TestMethod]
-    public void RegistrarIngestIsCoreCallerGated()
+    public void RegistrarRotationProposalIsTimelocked()
     {
         string source = ReadContractFile("registrar/PlatformRegistrar.cs");
 
-        StringAssert.Contains(source, "PlatformRegistrarAuthority.ValidateCoreCaller();");
-        // The migration ingest must not be reachable by ordinary callers.
-        StringAssert.Contains(source, "public static void IngestPendingPlatformOwnerRotation(");
+        // Rotation proposals sit behind the 7-day timelock before confirmation.
+        StringAssert.Contains(source, "RotationTimelockMs = 7L * 24 * 60 * 60 * 1000");
+        StringAssert.Contains(source, "public static void ProposePlatformAccountOwnerRotation(");
     }
 
     [TestMethod]

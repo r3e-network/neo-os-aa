@@ -127,14 +127,15 @@ public class OwnerOnlyRecoveryRuntimeTests
         h.Fx.CallBoolean(h.Core, "callVerifier", h.Account, "clearAccount", new object[] { h.Account });
         h.Fx.CallBoolean(h.Core, "callHook", h.Account, "clearAccount", new object[] { h.Account });
         // Phase 1b: pending platform owner rotations moved to the registrar service's
-        // storage, so a raw 0x20 row is no longer core-owned state to sweep.
+        // storage, so a raw 0x20 row is no longer core-owned state to sweep; the retired
+        // 0x13 escrow-cancel sibling likewise no longer exists in the design-phase
+        // prefix map, so there is nothing to seed or sweep there.
         h.Seed(0x06, UInt160.Zero.ToArray());
         h.Seed(0x07, new byte[] { 1 });
         h.Seed(0x1D, new byte[] { 1 });
-        h.Seed(0x13, new byte[] { 1 });
         h.Mature();
         h.Recover();
-        foreach (byte prefix in new byte[] { 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x1D, 0x13 })
+        foreach (byte prefix in new byte[] { 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x1D })
             Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key(prefix)), $"Stale account marker {prefix:X2}");
         TestException repeat = Assert.ThrowsExactly<TestException>(() => h.Recover());
         StringAssert.Contains(repeat.Message, "Already recovered to owner-only");
