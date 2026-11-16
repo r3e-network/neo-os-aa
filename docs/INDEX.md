@@ -86,7 +86,6 @@ semantics. Receipts absent from this checkout are not current release evidence.
 - `docs/ETHEREUM_AA_COMPARISON.md`
 - `docs/PLUGIN_MATRIX.md`
 - `docs/PLUGIN_DEVELOPER_GUIDE.md`
-- `SECURITY_IMPROVEMENTS.md` — historical 2026-03-09 hardening note (pre-V3 tree)
 
 ## Build Toolchain
 

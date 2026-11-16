@@ -139,7 +139,7 @@ test('native contract validation selects its required guards and epoch probe', (
   assert.match(result.trace, /check_neo_platform_packages.mjs --include-native/);
   assert.match(result.trace, /node --test scripts\/implementation_profiles.test.mjs/);
   assert.match(result.trace, /validate-native-smartaccount-profile.py/);
-  assert.match(result.trace, /test_native_profile_ci.py/);
+  assert.match(result.trace, /test_native_\*\.py/);
   assert.match(result.trace, /native_epoch_probe.py --compiler \/test\/compiler/);
   assert.doesNotMatch(result.trace, /compile-public|dotnet test SmartAccount.sln|npm /);
 });

@@ -90,7 +90,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,compil
             'neoexpress_native_service_validate.py','neoexpress_native_proxy_validate.py','neoexpress_native_configuration_validate.py',
             'neoexpress_native_recovery_validate.py','neoexpress_native_modules_validate.py','neoexpress_native_session_validate.py',
             'neoexpress_native_daily_validate.py','neoexpress_reproducible_build.py','native_module_profile.py','build_native_modules.py')]]
-        sources.extend(sorted((Path(__file__).resolve().parent.parent/'tests/fixtures/restricted-outflow').glob('*')))
+        sources.extend(p for p in sorted((Path(__file__).resolve().parent.parent/'tests/fixtures/restricted-outflow').glob('*')) if p.is_file())
         require(len(sources)==16,'Exactly three diagnostic source/project files required')
         report.update(sourceSha256={p.name:sha256(p) for p in sources},sourceBuildReceiptSha256=sha256(build_receipt),moduleBuildReceiptSha256=sha256(module_receipt))
         build=json.loads(build_receipt.read_text());check_runtime_receipt(build,runtime)

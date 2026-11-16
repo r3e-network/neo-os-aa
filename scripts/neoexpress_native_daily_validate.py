@@ -184,7 +184,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,advers
             'neoexpress_reproducible_build.py','native_module_profile.py','build_native_modules.py')]]
         if adversarial:
             require(compiler is not None and cache is not None,'Adversarial matrix requires explicit compiler and cache')
-            sources.extend(sorted((Path(__file__).resolve().parent.parent/'tests/fixtures/daily-outflow').glob('*')))
+            sources.extend(p for p in sorted((Path(__file__).resolve().parent.parent/'tests/fixtures/daily-outflow').glob('*')) if p.is_file())
             require(len(sources)==14,'Diagnostic source and project are required')
         report.update(sourceSha256={p.name:sha256(p) for p in sources},sourceBuildReceiptSha256=sha256(build_receipt),moduleBuildReceiptSha256=sha256(module_receipt))
         build=json.loads(build_receipt.read_text());check_runtime_receipt(build,runtime)

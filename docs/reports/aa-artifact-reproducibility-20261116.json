@@ -1,6 +1,6 @@
 {
   "schema": "neoos-aa-artifact-reproducibility/v2",
-  "generated_at": "2026-11-16T09:37:34.023Z",
+  "generated_at": "2026-11-16T11:16:49.287Z",
   "release_dir": "contracts/bin/v3",
   "profiles": {
     "v3": {
@@ -617,7 +617,6 @@
       "contracts/mocks/packages.MarkerOnlyModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
       "contracts/mocks/packages.MockTransferTarget.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
       "contracts/mocks/packages.MockVerifierCore.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
-      "contracts/mocks/packages.PlatformRegistrarMock.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
       "contracts/mocks/packages.PolicyExecutionProbe.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
       "contracts/mocks/packages.WrongHookLifecycleAbiModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
       "contracts/mocks/packages.WrongLifecycleAbiModule.lock.json": "1d77fc2eac07e3288b85470568003ad095095422aab14b0fd3ac5af81e7f2ca6",
@@ -670,7 +669,7 @@
       "contracts/SmartAccount.Execution.cs": "258e4947dc24cdf80632cee8eb0563278b5e1dfbc0ccd49dd3d2c7371db0ffd0",
       "contracts/SmartAccount.HookChildren.cs": "bbf04b68b1788fb2bafa91c255f0511c7443c64e6419f34a74d5e01dc54feb75",
       "contracts/SmartAccount.Internal.cs": "c32620e8721e224016c63ef0f327cf67f2d451a47d664fbc2990ed2657275654",
-      "contracts/SmartAccount.MarketEscrow.cs": "712b9967b4a16c5374cb931102aa4b506051ecfaa40b9b92ed7c9abff91cd54b",
+      "contracts/SmartAccount.MarketEscrow.cs": "98d7cb032f7c896737fbbf5d34641dcac987cdea8bb1abdfe3e6b50faac7fc61",
       "contracts/SmartAccount.Models.cs": "0590a9735b7db758acb055ffc6b4d734a204cd038eff05cdaec313016335d12e",
       "contracts/SmartAccount.Paymaster.cs": "386fbef69d2a10d5cefa888a3f4494c44e2e162b30f0bc9013060b393c312416",
       "contracts/SmartAccount.PlatformRegistrar.cs": "00ee1e9fc23a79bc5f96a2b32b2f66a1539f1e5bff8d6fcfb797b3ab844e4e33",
@@ -722,7 +721,7 @@
       "scripts/check_neo_platform_packages.mjs": "cd3750a35daafb7ab058dd4f1149a07427359a5dcb4fbdd2358dab7311c50fe1",
       "scripts/dotnet_env.sh": "d769761a4ad4b44686962b5dda5150be9e532312291a3f3b869dceb951a1a74b"
     },
-    "source_snapshot_sha256": "7d43da0b98318c2e8a0997b1c14da96c1dd621b3bbcfb7c5791b1f4578ae880d",
+    "source_snapshot_sha256": "ec4d36d82f3d7165a6a75adf4e79560dbe8ec16ff3cd2496dfc74a852c80db6f",
     "compiler": {
       "tool": "nccs",
       "version": "3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"

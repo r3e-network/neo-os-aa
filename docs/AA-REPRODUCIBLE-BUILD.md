@@ -10,7 +10,7 @@ builder gets the same NEF and manifest bytes.
 | --- | --- | --- |
 | `Neo.SmartContract.Framework`, `Neo.SmartContract.Testing` | 3.10.1 | `Directory.Build.props` (`NeoSmartContractFrameworkVersion`) |
 | the Neo packages they pull in | `Neo`, `Neo.Extensions`, `Neo.IO`, `Neo.Json`, `Neo.VM`, `Neo.Disassembler.CSharp` 3.10.1; `Neo.Cryptography.BLS12_381` 3.9.0 | `contracts/neo-platform-packages.json` (SHA-512 of each package) |
-| every other package (MSTest, Akka, ...) | resolved version and content hash | committed locks for 26 public projects; `--include-native` checks all 36, including six native modules, two test-only epoch-probe projects and two runtime probe hosts with empty NuGet dependency locks |
+| every other package (MSTest, Akka, ...) | resolved version and content hash | committed locks for 28 public projects; `--include-native` checks all 38, including six native modules, two test-only epoch-probe projects and two runtime probe hosts with empty NuGet dependency locks |
 | package source | nuget.org only, every package id mapped to it | `nuget.config` |
 | compiler | `Neo.Compiler.CSharp` 3.9.1 (`nccs`) | `.github/workflows/ci.yml`; the installed package is checked against `contracts/neo-platform-packages.json` |
 | SDK | .NET 10 (`net10.0`) | `actions/setup-dotnet` in `ci.yml` |
@@ -148,6 +148,9 @@ the one-time rotation migration and the v3 recovery ticket removed; the candidat
 ABI is now 109 methods) matched again with no drift and no missing artifacts; its
 certificate is
 [`aa-artifact-reproducibility-20261116.json`](reports/aa-artifact-reproducibility-20261116.json),
+regenerated the same day after the orphaned `contracts/mocks/packages.PlatformRegistrarMock.lock.json`
+left the tree (132 source inputs; the sweep commit's receipt had been generated one
+`SmartAccount.MarketEscrow.cs` revision early, which the regeneration also corrects),
 and the candidate/public ABI delta it certifies is
 [`aa-ordinary-candidate-compatibility-20261116.json`](reports/aa-ordinary-candidate-compatibility-20261116.json).
 The joined NeoExpress receipt is bound to a reviewed source-runtime build

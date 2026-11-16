@@ -180,11 +180,12 @@ if [[ $run_contracts -eq 1 ]]; then
     fi
     python3 docs/proposals/validate-native-smartaccount-profile.py
     python3 -m unittest discover -s docs/proposals -p 'test_native_profile*.py'
-    python3 -m unittest discover -s scripts -p 'test_native_module_*.py'
-    python3 -m unittest discover -s scripts -p 'test_native_profile_ci.py'
+    # One pattern covers every scripts/test_native_*.py lane (module profile, profile CI,
+    # multisig, NEF probe, restricted, service identity, SmartAccount sync, budget
+    # benchmark), so a newly added native guard cannot be orphaned outside the gate.
+    python3 -m unittest discover -s scripts -p 'test_native_*.py'
     python3 -m unittest discover -s scripts -p 'test_neoexpress_native_*.py'
     python3 -m unittest discover -s scripts -p 'test_neoexpress_activation_validate.py'
-    python3 -m unittest discover -s scripts -p 'test_native_budget_benchmark.py'
     python3 -m unittest discover -s scripts -p 'test_build_native_*.py'
     # Real production module bytecode runs in the public NeoVM with a test-only ABI
     # fixture. This proves module storage/object isolation, not native-chain admission.
