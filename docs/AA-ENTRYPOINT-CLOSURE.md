@@ -200,7 +200,7 @@ scenario file declares an ordered list of calls — method, literal arguments, s
 the block time it runs at, the contract the call lands on, the ending each call
 expects, and which earlier argument a result must equal — and the same engine runs
 them in order over one deployment, so a write and the read that follows it are both
-on the record. Four files are driven. The first, thirty calls at one block time,
+on the record. Four files are driven. The first, twenty-nine calls at one block time,
 builds an account, registers it, writes through it and reads it back. The second,
 fifty-three calls at nine declared block times, drives the timelocks: four pairs are
 the same call with the same arguments one millisecond before a boundary and exactly
@@ -209,13 +209,14 @@ plugin contracts beside the account and calls into them — a limit here is stru
 rather than temporal, since a verifier body cannot run without a verifier and the
 admission check reads a deployed manifest rather than a source file. Ten of its steps
 land on a plugin, and their declared return types are read from that plugin's own
-manifest. The fourth, eighty-two calls, deploys the *other party* rather than a
+manifest. The fourth, eighty-four calls, deploys the *other party* rather than a
 plugin: the platform-registrar channel and the market escrow both assert that their
-caller is a contract, so a registrar mock, a forwarder and a paymaster are installed
-and the account's own registrar-gated and market-gated entries run behind them.
-Together on the pinned artifact: 227 calls, 185 halted and 42 faults with the
-reasons the files predict, 227 of 227 frames byte-identical to an encoder written
-against the opcode table, 227 of 227 at their declared time and signer,
+caller is a contract, so the registrar service contract itself, a forwarder and a
+paymaster are installed, and the account's own registrar-gated and market-gated
+entries run behind them.
+Together on the pinned artifact: 228 calls, 186 halted and 42 faults with the
+reasons the files predict, 228 of 228 frames byte-identical to an encoder written
+against the opcode table, 228 of 228 at their declared time and signer,
 thirty-eight read links holding byte for byte, and every declared integer, boolean
 and array length matching.
 
@@ -262,6 +263,15 @@ receipt is still `7b58876f…`, the windows face `33093cac…`, the plugin face
 what a new file beside three old ones should look like, and what a change to the
 account's bytes would not. It still returns `NO-GO`: `fullUnprovedCount 100`,
 `verifiedEntrypoints []`, all four obligations open.
+
+2026-11-16 amendment: the four scenario files are re-based onto the rebuilt core
+artifact (deployed account `0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294`), the
+registrar file now deploys the AAPlatformRegistrar service contract itself instead
+of the deleted mock, and the four caller/plugin artifacts whose sources the
+2026-11-13 security remediation changed are rebuilt and re-pinned. The
+re-measured faces — 29, 53, 62 and 84 frames, all agreeing — are recorded in the
+closure-gate document's same-day amendment; the gate-run paragraphs above stay as
+the historical record of the runs they describe.
 
 
 ## Why more body proofs cannot move `fullyClosed`

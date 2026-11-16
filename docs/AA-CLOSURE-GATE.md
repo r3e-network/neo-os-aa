@@ -183,17 +183,18 @@ A fourth block, `abiScenarioRegistrar`, runs
 reason is neither time nor admission but *who is calling*: the platform-registrar
 channel checks `Runtime.CallingScriptHash` against the registrar the account
 recorded, and the market escrow checks it against the market, so no step aimed at
-the account can run either. That file installs the other party — a registrar mock
-whose `register` derives the account id from the account and calls back into it, a
-forwarder with a blanket permission that lets the market's own cancel and settle
-arrive from a contract, and a paymaster — and the module question is applied to all
-six artifacts it deploys, the three callers included, because a claim about who
+the account can run either. That file installs the other party — the
+AAPlatformRegistrar service contract itself, pointed back at the account through
+its own `setAuthorizedCore` and driven as its own admin, a forwarder with a
+blanket permission that lets the market's own cancel and settle arrive from a
+contract, and a paymaster — and the module question is applied to all six
+artifacts it deploys, the three callers included, because a claim about who
 called the account is a claim about an artifact. The same non-vacuity floor applies,
 so a file that declared callers and never called through one cannot pass.
 
-Eight of the entries that file drives execute inside the account without a step
-landing on them: the two platform registrations, the three platform owner-rotation
-calls and the three escrow transitions are reached through the caller and are
+Six of the entries that file drives execute inside the account without a step
+landing on them: the two platform registrations, the platform owner-rotation apply
+and the three escrow transitions are reached through the caller and are
 evidenced by the state they change — an account id that resolves through its proxy
 index, a backup owner that moved to the rotation's new owner, a listing id that is
 present and then cleared. The receipt counts those apart from the entries a step
@@ -409,6 +410,30 @@ admitted — 79 failing inside the contract, 7 answering — which is recorded a
 []`, seventeen of seventeen mutations caught. The tree was re-hashed against this
 run's own records afterwards: 128 tool files, 254 inputs and 120 project inputs, all
 identical, none missing.
+
+2026-11-16 amendment, measured with the pinned exporter on this machine rather
+than a full gate run: the four scenario files are re-based onto the rebuilt core
+artifact, whose deployed address is `0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294`
+— a pure function of the rebuilt NEF, the manifest name and the unchanged deploy
+signer — and every script frame and embedded literal moves with it. The
+roundtrip file loses the `getPendingPlatformAccountOwnerRotation` read removed
+when the rotation bookkeeping moved to the registrar service, and now drives
+29 calls. The registrar file deploys the AAPlatformRegistrar service contract
+itself in place of the deleted mock — pointed back at the account through its
+own `setAuthorizedCore`, driven as its own admin, and gaining the core's
+`SetMarketService` registration the hardened escrow requires — and now runs
+84 calls. The four caller/plugin artifacts whose sources the 2026-11-13
+security remediation changed are rebuilt from those sources with the pinned
+compiler, `provenance.json` is re-pinned to the new bytes, and
+`build-plugins.sh` reproduces all twelve artifacts byte for byte; module
+addresses move accordingly, and with them the account ids derived from a
+module's address. Re-measured faces, all agreeing: `abiScenario` scenario
+`d5ab5b55…` (29 of 29 frames), `abiScenarioWindows` `867d3d07…` (53 of 53),
+`abiScenarioPlugins` `9d16c9b2…` (62 of 62, four modules matched), and
+`abiScenarioRegistrar` `960b72eb…` (84 of 84, six modules matched, eleven read
+links, eighteen steps on modules). The gate-run numbers above this paragraph —
+the entry counts and the earlier receipt pins — describe earlier artifacts and
+remain as the historical record; the next full closure run re-derives them.
 
 Two things were recorded after that run and neither changed a measured byte. The
 prose in this file and in the two companion documents was rewritten from the

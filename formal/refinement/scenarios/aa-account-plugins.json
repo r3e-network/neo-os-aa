@@ -1,7 +1,7 @@
 {
   "schema": "aa-abi-scenario-input/v1",
   "name": "plugin-admission-update-timelock-and-two-phase-module-calls",
-  "contractAddress": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640",
+  "contractAddress": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294",
   "contractAddressNote": "The receipt records the address the engine deployed for this exact artifact, manifest name and signer, and requires it to equal this one.",
   "note": [
     "The first two scenarios could only measure this contract talking to itself and to the VM. Most of what is left is unreachable for a structural reason: a verifier body cannot run without a verifier, and AssertV3Verifier reads the deployed plugin's manifest rather than a source file, so the admission check itself is a claim about an artifact that has to exist.",
@@ -21,7 +21,7 @@
       "nef": "../plugins/MultiSigVerifier.nef",
       "manifest": "../plugins/MultiSigVerifier.manifest.json",
       "signer": "0x7777777777777777777777777777777777777777",
-      "address": "0x17c28d21c86e07d95493149aca488a5146610996",
+      "address": "0xfeefd28dedc55347f5f8570ba7eb5576b1b0b3da",
       "addressNote": "A function of the NEF, the manifest name and the deploy signer. The receipt records the address the engine deployed and requires it to equal this one."
     },
     {
@@ -29,14 +29,14 @@
       "nef": "../plugins/MultiSigVerifier.nef",
       "manifest": "../plugins/MultiSigVerifier.manifest.json",
       "signer": "0x7777777777777777777777777777777777777778",
-      "address": "0x242baece475a77e797f93d0d333ccab91b31581b"
+      "address": "0x06aadbdf704fa79a2cbdb31357cbfd2af5cd483c"
     },
     {
       "name": "hookA",
       "nef": "../plugins/NeoDIDCredentialHook.nef",
       "manifest": "../plugins/NeoDIDCredentialHook.manifest.json",
       "signer": "0x8888888888888888888888888888888888888888",
-      "address": "0x231efaedb5150942ddc16d1881624cb7648cd371"
+      "address": "0x8c390731cf144c17c9086fbc18bad47b9ed4e7a9"
     },
     {
       "name": "hookB",
@@ -55,7 +55,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+          "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
         }
       ],
       "expect": "HALT"
@@ -79,7 +79,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+          "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
         }
       ],
       "expect": "FAULT",
@@ -93,7 +93,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+          "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
         }
       ],
       "expect": "HALT"
@@ -106,7 +106,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+          "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
         }
       ],
       "expect": "HALT"
@@ -130,7 +130,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+          "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
         }
       ],
       "expect": "FAULT",
@@ -144,7 +144,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+          "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
         }
       ],
       "expect": "HALT"
@@ -168,7 +168,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+          "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
         }
       ],
       "expect": "FAULT",
@@ -180,7 +180,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
+          "value": "0xfeefd28dedc55347f5f8570ba7eb5576b1b0b3da"
         },
         {
           "type": "ByteString",
@@ -219,7 +219,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0x231efaedb5150942ddc16d1881624cb7648cd371"
+          "value": "0x8c390731cf144c17c9086fbc18bad47b9ed4e7a9"
         },
         {
           "type": "Hash160",
@@ -274,11 +274,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "Hash160",
-          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
+          "value": "0xfeefd28dedc55347f5f8570ba7eb5576b1b0b3da"
         },
         {
           "type": "ByteString",
@@ -305,7 +305,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -320,7 +320,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "String",
@@ -328,7 +328,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
+          "value": "0xfeefd28dedc55347f5f8570ba7eb5576b1b0b3da"
         }
       ],
       "expect": "HALT",
@@ -340,7 +340,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "String",
@@ -348,7 +348,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0x231efaedb5150942ddc16d1881624cb7648cd371"
+          "value": "0x8c390731cf144c17c9086fbc18bad47b9ed4e7a9"
         }
       ],
       "expect": "HALT",
@@ -360,7 +360,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -377,11 +377,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "Hash160",
-          "value": "0x242baece475a77e797f93d0d333ccab91b31581b"
+          "value": "0x06aadbdf704fa79a2cbdb31357cbfd2af5cd483c"
         },
         {
           "type": "ByteString",
@@ -396,7 +396,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -409,7 +409,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -423,11 +423,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "Hash160",
-          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
+          "value": "0xfeefd28dedc55347f5f8570ba7eb5576b1b0b3da"
         },
         {
           "type": "ByteString",
@@ -445,7 +445,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "FAULT",
@@ -458,7 +458,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -475,7 +475,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT"
@@ -487,7 +487,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -503,7 +503,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -517,7 +517,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "String",
@@ -528,7 +528,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+              "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
             }
           ]
         }
@@ -543,7 +543,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -556,7 +556,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -572,7 +572,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT"
@@ -584,7 +584,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -598,7 +598,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "String",
@@ -609,7 +609,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+              "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
             }
           ]
         }
@@ -625,7 +625,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "String",
@@ -636,7 +636,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+              "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
             }
           ]
         }
@@ -650,7 +650,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -664,11 +664,11 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "Hash160",
-          "value": "0x17c28d21c86e07d95493149aca488a5146610996"
+          "value": "0xfeefd28dedc55347f5f8570ba7eb5576b1b0b3da"
         },
         {
           "type": "ByteString",
@@ -685,7 +685,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT"
@@ -697,7 +697,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -713,7 +713,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         }
       ],
       "expect": "HALT",
@@ -727,7 +727,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "String",
@@ -749,7 +749,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         },
         {
           "type": "Hash160",
@@ -761,7 +761,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0x231efaedb5150942ddc16d1881624cb7648cd371"
+          "value": "0x8c390731cf144c17c9086fbc18bad47b9ed4e7a9"
         },
         {
           "type": "Hash160",
@@ -781,7 +781,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT",
@@ -797,7 +797,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0xb2acd9a17f3ac3ee5deb90c635ac3ddcfc4a7dba"
+          "value": "0x4d4c742b3fdc7e7a5561a76cc34044f380cf56ed"
         },
         {
           "type": "String",
@@ -805,7 +805,7 @@
         },
         {
           "type": "Hash160",
-          "value": "0x231efaedb5150942ddc16d1881624cb7648cd371"
+          "value": "0x8c390731cf144c17c9086fbc18bad47b9ed4e7a9"
         }
       ],
       "expect": "HALT",
@@ -819,7 +819,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         },
         {
           "type": "String",
@@ -830,7 +830,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+              "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
             }
           ]
         }
@@ -845,7 +845,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT",
@@ -858,7 +858,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT",
@@ -874,7 +874,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT"
@@ -886,7 +886,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT",
@@ -900,7 +900,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         },
         {
           "type": "String",
@@ -911,7 +911,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+              "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
             }
           ]
         }
@@ -927,7 +927,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         },
         {
           "type": "String",
@@ -938,7 +938,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+              "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
             }
           ]
         }
@@ -952,7 +952,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT",
@@ -966,7 +966,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         },
         {
           "type": "String",
@@ -988,7 +988,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         },
         {
           "type": "Hash160",
@@ -1004,7 +1004,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT",
@@ -1018,7 +1018,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT"
@@ -1030,7 +1030,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT",
@@ -1046,7 +1046,7 @@
       "args": [
         {
           "type": "Hash160",
-          "value": "0x9f325ac0f7bf5a7b7f70b1a29f86dd26ea7b828a"
+          "value": "0xce69a03f381c3fc694be0581ac770e4d953a14fc"
         }
       ],
       "expect": "HALT",

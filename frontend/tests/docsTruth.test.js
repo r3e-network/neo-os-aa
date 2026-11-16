@@ -1201,8 +1201,8 @@ function digestReportInventoryAllowances() {
   });
   return [
     entry('aa-formal-source-lock-content-digests',
-      'formal/source-lock.json', 347,
-      '63e25d5ebdd62f5d16cb91690381bb2a46228e31e3254244db71d5cd983e15f3'),
+      'formal/source-lock.json', 349,
+      'f7bce73d33b79fd30b35a7ad5d25d5a17e9d006e5d2b7788d1f87a93a1414c27'),
     entry('aa-artifact-reproducibility-20261025-content-digests',
       'docs/reports/aa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),

@@ -549,7 +549,7 @@ def tool_paths():
                'plugins/MultiSigVerifier.nef', 'plugins/MultiSigVerifier.manifest.json',
                'plugins/NeoDIDCredentialHook.nef', 'plugins/NeoDIDCredentialHook.manifest.json',
                'plugins/MultiHook.nef', 'plugins/MultiHook.manifest.json',
-               'plugins/PlatformRegistrarMock.nef', 'plugins/PlatformRegistrarMock.manifest.json',
+               'plugins/AAPlatformRegistrar.nef', 'plugins/AAPlatformRegistrar.manifest.json',
                'plugins/MockVerifierCore.nef', 'plugins/MockVerifierCore.manifest.json',
                'plugins/AAPaymaster.nef', 'plugins/AAPaymaster.manifest.json',
                'plugins/provenance.json',

@@ -4,7 +4,7 @@
     "AssertV3Verifier and AssertV3Hook read a deployed contract's manifest, so the plugin admission check is a claim about bytes rather than about a source file. These bytes are pinned by hash below, and the gate reads the hashes.",
     "That the pinned compiler turns these sources into these bytes is a recorded build step, not something any run re-derives. build-plugins.sh is that step: it refuses to run against a different compiler and exits non-zero if any artifact it produces hashes differently from what is written here. This is the same standing contracts/bin/v3 has for the main contract, and no stronger.",
     "Nothing here proves the plugins are correct, or that they are what a deployed chain would run. It says which bytes the scenario deployed and where they came from.",
-    "The fourth entry is not a plugin. It is the caller side of the platform-registrar channel: the account only runs its registrar-gated calls when the caller is the registrar it recorded, so measuring that channel means deploying a contract that calls back. Same rule applies to it - name the bytes."
+    "The fourth entry is not a plugin. It is the caller side of the platform-registrar channel: the account only runs its registrar-gated calls when the caller is the registrar it recorded, so measuring that channel means deploying the registrar service contract itself, driven as its own admin. Same rule applies to it - name the bytes."
   ],
   "compiler": {
     "name": "nccs",
@@ -34,17 +34,17 @@
         },
         {
           "path": "contracts/verifiers/MultiSigVerifier.cs",
-          "sha256": "216074abb1403be556013f7fa795fdb88ea6074cd6c1fc7cc9b70562f88b8912"
+          "sha256": "75854b9e50d1405cc1003839765841d68c89771325c42d3e25c8dfcf9341d2d8"
         }
       ],
       "artifacts": {
         "nef": {
           "file": "MultiSigVerifier.nef",
-          "sha256": "6cf03c4d16f97fe7e3093d07b03b52c9829c3ad73e8b1a4fbc1935a7bb935a93"
+          "sha256": "3fa2b95cd154fea6e3e445a39518f7067e63529594a88765e6e1c5097b5c1c84"
         },
         "manifest": {
           "file": "MultiSigVerifier.manifest.json",
-          "sha256": "f41347b8adffe17aa3017fbfb8a437ad3d610af1fe612651bd073d5419b2016d"
+          "sha256": "593d1859c475197c76dd1da724dd9cea7f875a6503eaa1e24dcaf658d0a36ed8"
         }
       },
       "manifestName": "MultiSigVerifier",
@@ -62,17 +62,17 @@
         },
         {
           "path": "contracts/hooks/NeoDIDCredentialHook.cs",
-          "sha256": "766c002d6db957a1b8f0bb19e02349851abc8872b51feb8ec65dfdd772541074"
+          "sha256": "65fb66c2b9cfdc7fd745d822d9793247d64ec54289af0aff1c30a0c67b059b3a"
         }
       ],
       "artifacts": {
         "nef": {
           "file": "NeoDIDCredentialHook.nef",
-          "sha256": "97bc2d32d4329f65f58751164c01a706717cefd0e49e5db2bb8d9ee587ae621c"
+          "sha256": "d6a9566796b4da3ff681c9d03e925a47f054b1e842762493f96b2e9f991e0083"
         },
         "manifest": {
           "file": "NeoDIDCredentialHook.manifest.json",
-          "sha256": "ae87bc33b7a0fb887683a7c2a2cb48b8153a3b8eb304251d9110a85f1f2b04f8"
+          "sha256": "19f5e0c1749cba3a4ee43458c6f5a2a3087674fec2d561e7db918738369b843c"
         }
       },
       "manifestName": "NeoDIDCredentialHook",
@@ -108,29 +108,33 @@
       "permissions": 4
     },
     {
-      "name": "PlatformRegistrarMock",
-      "project": "contracts/mocks/PlatformRegistrarMock.csproj",
-      "projectSha256": "32c7ede85254e723e71d1c63a67ffb6e75c362be2a79289f7fbbdc7d261b1b00",
+      "name": "AAPlatformRegistrar",
+      "project": "contracts/registrar/PlatformRegistrar.csproj",
+      "projectSha256": "1a904f50b17a93d7c1525b4849025804ce2bf14f725e7be10551aade688c2ac6",
       "sources": [
         {
-          "path": "contracts/mocks/PlatformRegistrarMock.cs",
-          "sha256": "1f2f22178c850cd06717283a4c9cfc6f74184e8b96e5cb7395e359108d547728"
+          "path": "contracts/registrar/PlatformRegistrarAuthority.cs",
+          "sha256": "c1540950345e1ad867ac29018fe4b734335596604b049c8e3c6b076d7fb0a6ee"
+        },
+        {
+          "path": "contracts/registrar/PlatformRegistrar.cs",
+          "sha256": "8ea38d8f1933be37f69e79971fe0fb5750c668ddbb6c7728e3fb181876671c1b"
         }
       ],
       "artifacts": {
         "nef": {
-          "file": "PlatformRegistrarMock.nef",
-          "sha256": "fdd56fe4ccd14f29dfb4527450b4a9dd8b18342fa1c60174626e90dbf9d36f42"
+          "file": "AAPlatformRegistrar.nef",
+          "sha256": "598a769f28539398c89f38c280f4d031d6308af8653b4ec9c8771ecf83fd2c1c"
         },
         "manifest": {
-          "file": "PlatformRegistrarMock.manifest.json",
-          "sha256": "2c5b922ef308391f413b8aaa0a484ee85cfd29d0681647e16f0826b05594bb0a"
+          "file": "AAPlatformRegistrar.manifest.json",
+          "sha256": "58d19b545c4484eaa0c9ecebcd78f543556eddb79a6e3e297640ac0f4468df78"
         }
       },
-      "manifestName": "PlatformRegistrarMock",
-      "abiMethods": 5,
-      "permissions": 1,
-      "why": "Not a plugin. The account's platform-registrar channel asserts that its caller is the registrar, so `registerPlatformAccount` and the platform owner-rotation calls only execute when a second contract calls them. This mock is that second contract, and pinning its bytes is what makes the scenario's claim about who called the account a claim about an artifact."
+      "manifestName": "AAPlatformRegistrar",
+      "abiMethods": 22,
+      "permissions": 4,
+      "why": "Not a plugin. It is the caller side of the platform-registrar channel: the account only runs registerPlatformAccount, registerStablePlatformAccount and applyPlatformAccountOwnerRotation when the caller is the registrar it recorded, so measuring that channel means deploying the registrar service itself. The scenario points the service's authorizedCore back at the account and drives it as its own admin, and pinning its bytes is what makes the scenario's claim about who called the account a claim about an artifact."
     },
     {
       "name": "MockVerifierCore",
@@ -139,17 +143,17 @@
       "sources": [
         {
           "path": "contracts/mocks/MockVerifierCore.cs",
-          "sha256": "c268de83eba12746249a421dcbdcaeb4f6479de089d12aef55f56d824faf01ad"
+          "sha256": "7f4299a33895a91c1e76bdba6fbbef5ca4033c289286254670124b6619aa8609"
         }
       ],
       "artifacts": {
         "nef": {
           "file": "MockVerifierCore.nef",
-          "sha256": "57766ec81ac99e150bf3dfb23c2d287c16af479dd54522910aa208a8fb5ccae2"
+          "sha256": "63462ecdd285dc48b5fd1268d07f9ea9eb8588eab611711c9dced5d70ce97eff"
         },
         "manifest": {
           "file": "MockVerifierCore.manifest.json",
-          "sha256": "20853a29e320946348d211dce3ab6b9c1574d88782ab9a8bfba61ab828d63dd6"
+          "sha256": "5387c2c39d634ed849a93a23d00b1c3baef36ed91fbb89557e373b3995c35d2e"
         }
       },
       "manifestName": "MockVerifierCore",
@@ -164,7 +168,7 @@
       "sources": [
         {
           "path": "contracts/paymaster/Paymaster.cs",
-          "sha256": "b549373e4298218487861add545785164a6a90cebe8e75d3ebe2089fc2555bb6"
+          "sha256": "3a7c95159bfe126e5b52c958d3d22951def46b7f866f92c1190ad0fad4880a27"
         },
         {
           "path": "contracts/paymaster/PaymasterAuthority.cs",
@@ -174,11 +178,11 @@
       "artifacts": {
         "nef": {
           "file": "AAPaymaster.nef",
-          "sha256": "c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a"
+          "sha256": "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1"
         },
         "manifest": {
           "file": "AAPaymaster.manifest.json",
-          "sha256": "49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54"
+          "sha256": "a066faf3ee31e9c1e716bf26f0ccfab74f1c9639adacb1adab0502b20918ca54"
         }
       },
       "manifestName": "AAPaymaster",

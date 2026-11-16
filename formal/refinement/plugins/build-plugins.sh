@@ -47,10 +47,11 @@ build verifiers MultiSigVerifier     MultiSigVerifier
 build hooks     NeoDIDCredentialHook NeoDIDCredentialHook
 build hooks     MultiHook            MultiHook
 # Not a plugin: the caller side of the platform-registrar channel. The account
-# only runs registerPlatformAccount and the platform owner rotations when the
-# caller is the registrar it recorded, so that path needs a second contract
-# whose bytes are pinned like everything else in this directory.
-build mocks     PlatformRegistrarMock PlatformRegistrarMock
+# only runs registerPlatformAccount, registerStablePlatformAccount and the
+# platform owner-rotation apply when the caller is the registrar it recorded,
+# so that path deploys the registrar service contract itself, with its bytes
+# pinned like everything else in this directory.
+build registrar PlatformRegistrar   AAPlatformRegistrar
 # Nor these two: the caller side of the market escrow (a forwarder with a
 # blanket permission, so the market's own cancel and settle calls have somebody
 # to come from) and the sponsor side of the sponsored paths.

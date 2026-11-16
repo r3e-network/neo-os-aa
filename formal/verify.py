@@ -5,7 +5,7 @@ import hashlib
 import itertools
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import shutil
 import subprocess
@@ -70,6 +70,8 @@ SOURCE_FILES = {"contracts/compile.sh", "contracts/SmartAccount.csproj",
                 "contracts/SmartAccount.Execution.cs",
                 "contracts/SmartAccount.Accounts.cs",
                 "contracts/SmartAccount.PlatformRegistrar.cs",
+                "contracts/registrar/PlatformRegistrar.cs",
+                "contracts/registrar/PlatformRegistrarAuthority.cs",
                 "contracts/SmartAccount.Admin.cs",
                 "contracts/SmartAccount.MarketEscrow.cs",
                 "contracts/SmartAccount.Internal.cs",
@@ -886,7 +888,7 @@ def check_native_core_sources(lock, core_root):
 
 
 def check_inventory(root=ROOT):
-    found = {str(p.relative_to(root)) for d in ("coq", "tla", "smt")
+    found = {p.relative_to(root).as_posix() for d in ("coq", "tla", "smt")
              for p in (root / d).rglob("*") if p.suffix in {".v", ".tla", ".cfg", ".smt2"}}
     require(found == ARTIFACTS, f"Artifact inventory mismatch: {found ^ ARTIFACTS}")
     lock = json.loads((root / "source-lock.json").read_text())
@@ -910,13 +912,25 @@ def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
     model_delay = re.search(r"Definition min_upgrade_delay : Z := (\d+)\.", model)
     require(model_delay is not None and source_delay == int(model_delay.group(1)) == 604800000,
             "Ordinary governance millisecond delay correspondence changed")
-    registrar = (repo_root / "contracts/SmartAccount.PlatformRegistrar.cs").read_text()
-    require("bool owner = state.BackupOwner != UInt160.Zero && Runtime.CheckWitness(state.BackupOwner);" in registrar,
+    # Phase 1b: owner-cancellation moved to the registrar service contract. The
+    # witness guard keeps the same shape — the owner path checks the owner's
+    # witness, independent of the caller — only relocated.
+    registrar = (repo_root / "contracts/registrar/PlatformRegistrar.cs").read_text()
+    require("bool owner = currentOwner != UInt160.Zero && Runtime.CheckWitness(currentOwner);" in registrar,
             "Ordinary owner cancellation witness source guard changed")
-    for name in ("Escape", "MarketEscrow"):
+    # The core no longer deletes a registrar-owned pending key on escape or market
+    # settlement; ApplyPlatformAccountOwnerRotation instead rejects a record whose
+    # previousOwner no longer matches the live account state, so a stale record can
+    # never be confirmed against a sold or re-registered account.
+    core_registrar = (repo_root / "contracts/SmartAccount.PlatformRegistrar.cs").read_text()
+    require("previousOwner == state.BackupOwner," in core_registrar
+            and '"Platform owner rotation stale"' in core_registrar,
+            "Ordinary pending rotation staleness guard changed")
+    for name, marker in (("Escape", "// Phase 1b: pending platform owner rotations live in the registrar service's"),
+                         ("MarketEscrow", "// Phase 1b: a pre-sale pending platform owner rotation lives in the registrar")):
         source = (repo_root / f"contracts/SmartAccount.{name}.cs").read_text()
-        require("Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingPlatformOwnerRotation, (byte[])accountId));" in source,
-                f"Ordinary pending rotation cleanup source guard missing: {name}")
+        require(marker in source,
+                f"Ordinary pending rotation registrar-ownership marker missing: {name}")
     return {"delayMilliseconds": source_delay, "ownerWitnessIndependentOfCaller": True,
             "boundary": "Reviewed source fragments and arithmetic equality; binding, witness and VM refinement external"}
 
@@ -1277,7 +1291,13 @@ def java_candidates(environ=None, platform=None):
     candidates = []
     java_home = environ.get("JAVA_HOME")
     if java_home:
-        candidates.append(str(Path(java_home) / "bin" / "java"))
+        # The platform argument decides the path flavour, not the host: the tests
+        # drive this function with simulated platforms, and a Windows host must
+        # still render the POSIX layout a POSIX target would use.
+        if platform == "win32":
+            candidates.append(str(PureWindowsPath(java_home) / "bin" / "java"))
+        else:
+            candidates.append(str(PurePosixPath(java_home) / "bin" / "java"))
     if platform == "darwin":
         locator = shutil.which("/usr/libexec/java_home")
         if locator is not None:

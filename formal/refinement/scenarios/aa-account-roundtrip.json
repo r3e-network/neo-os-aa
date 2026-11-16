@@ -1,7 +1,7 @@
 {
   "schema": "aa-abi-scenario-input/v1",
   "name": "account-registration-pending-reads-and-native-execution",
-  "contractAddress": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640",
+  "contractAddress": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294",
   "contractAddressNote": "The address of the deployment this scenario drives. It is a function of the NEF, the manifest name and the deploy signer, so the receipt records the address the engine actually deployed and requires it to equal this one.",
   "note": [
     "An ordered list of calls with literal arguments over one deployment. This file says what to call; the dump says what happened. It is input, never evidence.",
@@ -281,17 +281,6 @@
       "expect": "HALT"
     },
     {
-      "id": "read-pending-platform-rotation",
-      "method": "getPendingPlatformAccountOwnerRotation",
-      "args": [
-        {
-          "type": "Hash160",
-          "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc"
-        }
-      ],
-      "expect": "HALT"
-    },
-    {
       "id": "write-metadata-uri",
       "method": "setMetadataUri",
       "args": [
@@ -381,7 +370,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+              "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
             },
             {
               "type": "String",
@@ -422,7 +411,7 @@
           "items": [
             {
               "type": "Hash160",
-              "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+              "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
             },
             {
               "type": "String",
@@ -477,7 +466,7 @@
               "items": [
                 {
                   "type": "Hash160",
-                  "value": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640"
+                  "value": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294"
                 },
                 {
                   "type": "String",

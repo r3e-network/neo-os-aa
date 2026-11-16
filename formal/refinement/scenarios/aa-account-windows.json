@@ -1,7 +1,7 @@
 {
   "schema": "aa-abi-scenario-input/v1",
   "name": "account-timelock-boundaries-batch-registration-and-post-recovery-reads",
-  "contractAddress": "0x1f083983a290fbfd6b70c24dc6e10c03f449a640",
+  "contractAddress": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294",
   "contractAddressNote": "The deployment this scenario drives. A function of the NEF, the manifest name and the deploy signer, so the receipt records the address the engine actually deployed and requires it to equal this one.",
   "note": [
     "The first scenario sends one call sequence at one block time. Every timelock in this contract is a comparison against Runtime.Time, so a harness frozen at one timestamp can only reach the refusing side of each of them: it can show that a call before the window faults, and never that the same call at the window succeeds.",

@@ -907,10 +907,10 @@ aimed at the account can satisfy that, because a step's caller is the transactio
 entry script.
 
 `scenarios/aa-account-registrar.json` deploys the other party instead of a plugin.
-Three of the six artifacts it installs are neither plugins nor under test: a
-registrar mock whose `register` derives the account id from the account and then
-calls back into it, a forwarder with a blanket permission that lets the market's
-own calls come from a contract, and a paymaster. All six are pinned by hash the
+Three of the six artifacts it installs are neither plugins nor under test: the
+AAPlatformRegistrar service contract, driven as its own admin so its calls reach
+the account through the registrar gate, a forwarder with a blanket permission
+that lets the market's own calls come from a contract, and a paymaster. All six are pinned by hash the
 same way the plugins are, and the receipt compares address, bytes and deploy signer
 for each — a claim about who called the account is a claim about an artifact, so it
 gets the artifact question.
@@ -1040,15 +1040,14 @@ that, but they bound it, they do not remove it.
   engine. The receipt counts them (`boundaryTypeCompleted`) and leaves the
   judgement to whoever reads the entry. It also measures one engine version, so
   `shapeEnforcedAtBoundary: false` is a fact about Neo 3.9.1 as built here.
-- The scenario layer answers for the ABI entries it names — with 8 more
+- The scenario layer answers for the ABI entries it names — with 6 more
   reached through a deployed caller and evidenced by the state they change — and only
   for the sequences in the four files. Every remaining question about behaviour — an
   argument outside these literals, a second read of the same value, a call after a
   fault a real chain would have rolled back, an entry nobody wrote a step for — is
-  outside it. The 3 that remain are not a coverage problem to be fixed by writing
+  outside it. The 2 that remain are not a coverage problem to be fixed by writing
   more steps: `_deploy/2` and `_initialize/0` cannot be invoked through
-  `System.Contract.Call` at all, and `rotatePlatformAccountOwner/3` is an alias whose
-  target the registrar mock calls instead. `cancelPlatformRegistrar` is now a
+  `System.Contract.Call` at all. `cancelPlatformRegistrar` is now a
   successful control: it completes at its timelock and emits
   `PlatformRegistrarCancelled`, whose name is within Neo's 32-byte limit. So
   `ACTUAL_VM_APPLICATION_ENGINE_ABI_DISPATCH` stays open on the obligation, not on

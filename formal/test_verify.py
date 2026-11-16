@@ -23,10 +23,10 @@ class VerificationGateTests(unittest.TestCase):
                             verify.coq_mutation_label('OrdinaryRecovery.v', 'recovery-retains-verifier'))
 
     def test_current_ordinary_receipt_is_tracked_and_source_bound(self):
-        receipt_path = verify.ROOT.parent / 'docs/reports/aa-formal-ordinary-go-20261013.json'
+        receipt_path = verify.ROOT.parent / 'docs/reports/aa-formal-gate-20261031.json'
         self.assertTrue(receipt_path.exists())
         self.assertEqual(
-            'a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21',
+            '456af189c4249307f5c6706345a06a855d0c55f1b35c5ddbe3d5c691c7af5c08',
             hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
         )
         receipt = json.loads(receipt_path.read_text())
@@ -34,14 +34,14 @@ class VerificationGateTests(unittest.TestCase):
         self.assertFalse(receipt['implementationVerified'])
         self.assertIn('coq/OrdinaryGovernance.v', receipt['modelProfiles'])
         self.assertEqual(['v3', 'platform'], receipt['modelProfiles']['coq/OrdinaryGovernance.v'])
-        self.assertEqual(27, len(receipt['coqDeclarations']))
-        self.assertEqual(460, sum(receipt['coqDeclarations'].values()))
-        self.assertEqual(254, sum(len(names) for names in receipt['coqMutationsRejected'].values()))
+        self.assertEqual(29, len(receipt['coqDeclarations']))
+        self.assertEqual(554, sum(receipt['coqDeclarations'].values()))
+        self.assertEqual(311, sum(len(names) for names in receipt['coqMutationsRejected'].values()))
         self.assertEqual(4, len(receipt['tlcMutationsRejected']))
         self.assertEqual(61460, receipt['tlc']['distinct'])
-        self.assertEqual(6, receipt['smt']['obligations'])
-        self.assertEqual(6, receipt['smt']['controls'])
-        self.assertEqual(310, len(receipt['nativeCoreSourceSha256']))
+        self.assertEqual(7, receipt['smt']['obligations'])
+        self.assertEqual(7, receipt['smt']['controls'])
+        self.assertEqual(311, len(receipt['nativeCoreSourceSha256']))
 
     def test_native_composite_phase_model_is_registered(self):
         self.assertIn('coq/NativeCompositePhase.v', verify.ARTIFACTS)
@@ -190,7 +190,8 @@ class VerificationGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for name in ('formal/coq/OrdinaryGovernance.v', 'contracts/SmartAccount.Admin.cs',
-                         'contracts/SmartAccount.PlatformRegistrar.cs', 'contracts/SmartAccount.Escape.cs',
+                         'contracts/SmartAccount.PlatformRegistrar.cs', 'contracts/registrar/PlatformRegistrar.cs',
+                         'contracts/SmartAccount.Escape.cs',
                          'contracts/SmartAccount.MarketEscrow.cs'):
                 destination = root / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
@@ -708,6 +709,7 @@ class VerificationGateTests(unittest.TestCase):
         launcher.chmod(0o755)
         return str(launcher)
 
+    @unittest.skipIf(os.name == "nt", "fake launchers are #!/bin/sh scripts, which Windows neither finds nor executes")
     def test_java_resolver_skips_stub_launcher_and_uses_working_runtime(self):
         with tempfile.TemporaryDirectory() as temp:
             stub = self.write_fake_java(temp, "java-stub", 1, "Unable to locate a Java Runtime.")
