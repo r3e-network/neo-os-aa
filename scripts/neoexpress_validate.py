@@ -427,6 +427,11 @@ class Web3AuthSecp256k1Key:
         if not helper.is_file():
             raise ValidationFailure(f"Web3Auth signer helper is missing: {helper.name}")
         self.name = name
+        # The helper keeps the key in memory and never touches its working directory
+        # (module resolution is relative to the script, not the CWD), so the child
+        # inherits this process's CWD. Pointing it at the caller's scratch directory
+        # made Windows keep that directory locked for tens of milliseconds after the
+        # child exited, which raced TemporaryDirectory cleanup in the unit tests.
         self.process = subprocess.Popen(
             [node, str(helper), "serve"],
             stdin=subprocess.PIPE,
@@ -434,7 +439,6 @@ class Web3AuthSecp256k1Key:
             stderr=subprocess.DEVNULL,
             text=True,
             bufsize=1,
-            cwd=str(workdir),
         )
         try:
             response = self._request({"op": "publicKey"})
