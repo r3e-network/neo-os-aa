@@ -53,40 +53,34 @@ export const MORPHEUS_PUBLIC_RUNTIME_CATALOG = {
         "oracleAttestationExplorerUrl": "",
         "datafeedCvmId": "ac5b6886a2832df36e479294206611652400178f",
         "datafeedCvmName": "datafeed-morpheus-neo-r3e",
-        "datafeedProviders": [
-          "TWELVEDATA",
-          "COINGECKO",
-          "COINPAPRIKA"
-        ],
         "datafeedAttestationExplorerUrl": "",
         "neoDidServiceDid": "did:morpheus:neo_n3:service:neodid"
       },
       "contracts": {
         "aaCore": "0x0268a387913b250166ddec032b03332690a1ef78",
         "aaWeb3AuthVerifier": "0xf5c452cd4ba29dcdc47026383568c0d8b38d9272",
-        "aaSessionKeyVerifier": "0x63d6a10d388dd4885bc42ba69593734476f47151",
-        "aaSocialRecoveryVerifier": "0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26",
+        "aaSessionKeyVerifier": "0x3ba8333406e59f9fd83cf378b33706a33d9f3755",
+        "aaSocialRecoveryVerifier": "0x198b3a9cec9bccc2110d19bd929b10374a9d034d",
         "aaAddressMarket": "0xae7afe3a85ab08bfd1d4907b35ae8b80c75b3a69",
         "aaPaymaster": "0xa0defa2bc6d7a71ba1e237149287c8ca4ff46caf",
         "morpheusOracle": "0xf54d8584ef82315c1800373272ab08ae0db2d5ef",
         "oracleCallbackConsumer": "0xe1226268f2fe08bea67fb29e1c8fda0d7c8e9844",
         "morpheusDatafeed": "0x03013f49c42a14546c8bbe58f9d434c3517fccab",
-        "morpheusNeoDid": "0xb81f31ea81e279793b30411b82c2e82078b63105",
-        "matrixNameService": "0x994c3cbe0d8641b9c911452c37191de8dd9f5f4e"
+        "morpheusNeoDid": "0xb81f31ea81e279793b30411b82c2e82078b63105"
       },
       "domains": {
-        "aa": "morpheus-aa.miniapp.neo",
-        "aaAlias": "morpheus-aa-alias.miniapp.neo",
-        "aaCore": "aa-core.miniapp.neo",
-        "aaWeb3AuthVerifier": "aa-web3auth.miniapp.neo",
-        "aaSessionKeyVerifier": "aa-session.miniapp.neo",
-        "aaSocialRecoveryVerifier": "aa-recovery.miniapp.neo",
-        "aaAddressMarket": "aa-market.miniapp.neo",
-        "aaPaymaster": "aa-paymaster.miniapp.neo",
-        "oracle": "morpheus-oracle.miniapp.neo",
-        "callbackConsumer": "morpheus-callback-consumer.miniapp.neo",
-        "datafeed": "morpheus-datafeed.miniapp.neo",
-        "neodid": "morpheus-neodid.miniapp.neo"
+        "aa": "smartwallet.neo",
+        "aaAlias": "aa.morpheus.neo",
+        "aaCore": "core.smartwallet.neo",
+        "aaWeb3AuthVerifier": "web3auth.smartwallet.neo",
+        "aaSessionKeyVerifier": "sessionkey.smartwallet.neo",
+        "aaSocialRecoveryVerifier": "recovery.smartwallet.neo",
+        "aaAddressMarket": "market.smartwallet.neo",
+        "aaPaymaster": "paymaster.smartwallet.neo",
+        "oracle": "oracle.morpheus.neo",
+        "callbackConsumer": "callback.morpheus.neo",
+        "datafeed": "pricefeed.morpheus.neo",
+        "neodid": "neodid.morpheus.neo"
       }
     },
     "testnet": {
@@ -111,26 +105,20 @@ export const MORPHEUS_PUBLIC_RUNTIME_CATALOG = {
         "oracleAttestationExplorerUrl": "",
         "datafeedCvmId": "ac5b6886a2832df36e479294206611652400178f",
         "datafeedCvmName": "datafeed-morpheus-neo-r3e",
-        "datafeedProviders": [
-          "TWELVEDATA",
-          "COINGECKO",
-          "COINPAPRIKA"
-        ],
         "datafeedAttestationExplorerUrl": "",
         "neoDidServiceDid": "did:morpheus:neo_n3:service:neodid"
       },
       "contracts": {
         "aaCore": "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2",
         "aaWeb3AuthVerifier": "0x1111f5b6b046a964c75d208998c13945ce172e85",
-        "aaSessionKeyVerifier": "0x63d6a10d388dd4885bc42ba69593734476f47151",
-        "aaSocialRecoveryVerifier": "0xfb3f605fc6bcd59d265d7c18230093d7dc24ac26",
+        "aaSessionKeyVerifier": "0xed44c88535650b4dd6b8d59776e6ed045462cab6",
+        "aaSocialRecoveryVerifier": "",
         "aaAddressMarket": "0x6b979cdd246cc6491a20000a2a822e497c92c23b",
         "aaPaymaster": "",
         "morpheusOracle": "0xf54d8584ef82315c1800373272ab08ae0db2d5ef",
         "oracleCallbackConsumer": "0x0ac1fa9cdcb66c1672f0642f62d767902f460f2b",
         "morpheusDatafeed": "0x9bea75cf702f6afc09125aa6d22f082bfd2ee064",
-        "morpheusNeoDid": "",
-        "matrixNameService": "0x994c3cbe0d8641b9c911452c37191de8dd9f5f4e"
+        "morpheusNeoDid": ""
       },
       "domains": {
         "aa": "",

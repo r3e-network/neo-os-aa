@@ -162,7 +162,7 @@ test('getRuntimeConfig prefers Vite overrides', () => {
   assert.deepEqual(config, {
     morpheusNetwork: 'mainnet',
     abstractAccountHash: '1111111111111111111111111111111111111111',
-    abstractAccountDomain: 'morpheus-aa.miniapp.neo',
+    abstractAccountDomain: 'smartwallet.neo',
     rpcUrl: 'https://rpc.example.org',
     networkMagic: 860833102,
     supabaseUrl: '',
@@ -189,7 +189,7 @@ test('getRuntimeConfig prefers Vite overrides', () => {
     web3AuthEmailLoginEnabled: true,
     web3AuthSmsLoginEnabled: true,
     neoDidProvider: DEFAULT_DID_PROVIDER,
-    neoDidDomain: 'morpheus-neodid.miniapp.neo',
+    neoDidDomain: 'neodid.morpheus.neo',
     morpheusApiBaseUrl: DEFAULT_MORPHEUS_API_BASE_URL,
     morpheusEnvelopeVersion: DEFAULT_MORPHEUS_ENVELOPE_VERSION,
     morpheusWorkflowIds: DEFAULT_MORPHEUS_WORKFLOW_IDS,
@@ -254,13 +254,13 @@ test('network magic honours an explicit override and rejects junk', () => {
 test('network defaults keep mainnet and testnet anchors explicit', () => {
   assert.deepEqual(MORPHEUS_NETWORK_DEFAULTS.mainnet, {
     abstractAccountHash: '0268a387913b250166ddec032b03332690a1ef78',
-    abstractAccountDomain: 'morpheus-aa.miniapp.neo',
+    abstractAccountDomain: 'smartwallet.neo',
     addressMarketHash: 'ae7afe3a85ab08bfd1d4907b35ae8b80c75b3a69',
     paymasterHash: 'a0defa2bc6d7a71ba1e237149287c8ca4ff46caf',
     rpcUrl: 'https://api.n3index.dev/mainnet',
     networkMagic: 860833102,
     n3IndexNetwork: 'mainnet',
-    neoDidDomain: 'morpheus-neodid.miniapp.neo',
+    neoDidDomain: 'neodid.morpheus.neo',
     morpheusApiBaseUrl: DEFAULT_MORPHEUS_API_BASE_URL,
   });
   assert.deepEqual(MORPHEUS_NETWORK_DEFAULTS.testnet, {
@@ -278,11 +278,13 @@ test('network defaults keep mainnet and testnet anchors explicit', () => {
 
 
 test('Matrix resolver is network-scoped and testnet env cannot configure mainnet', () => {
-  assert.equal(DEFAULT_MATRIX_CONTRACT_HASH, '994c3cbe0d8641b9c911452c37191de8dd9f5f4e');
-  assert.equal(DEFAULT_MATRIX_CONTRACT_HASH_TESTNET, '994c3cbe0d8641b9c911452c37191de8dd9f5f4e');
+  // The registry publishes no Matrix name-service contract on either network;
+  // the defaults are empty until it does again.
+  assert.equal(DEFAULT_MATRIX_CONTRACT_HASH, '');
+  assert.equal(DEFAULT_MATRIX_CONTRACT_HASH_TESTNET, '');
   assert.equal(getRuntimeConfig({}).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH);
   assert.equal(getRuntimeConfig({ VITE_AA_NETWORK: 'testnet' }).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH_TESTNET);
-  assert.equal(getRuntimeConfig({ VITE_MATRIX_CONTRACT_HASH_TESTNET: DEFAULT_MATRIX_CONTRACT_HASH_TESTNET }).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH);
+  assert.equal(getRuntimeConfig({ VITE_MATRIX_CONTRACT_HASH_TESTNET: '2'.repeat(40) }).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH);
   assert.equal(getRuntimeConfig({ VITE_MATRIX_CONTRACT_HASH_MAINNET: '1'.repeat(40) }).matrixContractHash, '1'.repeat(40));
 });
 

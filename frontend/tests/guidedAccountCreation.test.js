@@ -33,13 +33,15 @@ const PANEL_FILE = path.resolve('src/features/studio/components/CreateAccountPan
 const BOUNDARY_STUB = path.resolve('tests/fixtures/studioBoundaryStubs.js');
 const MANIFEST_DIR = path.resolve('..', 'contracts', 'build');
 const NETWORK = 'mainnet';
-const PUBLISHED_VERIFIER_KEYS = [
-  'aaWeb3AuthVerifier',
-  'aaSessionKeyVerifier',
-  'aaSocialRecoveryVerifier',
-];
+// The catalogue is per-network: the testnet registry publishes no
+// social-recovery verifier yet (empty address), and an unpublished entry
+// yields no preset.
+const PUBLISHED_VERIFIER_KEYS = {
+  mainnet: ['aaWeb3AuthVerifier', 'aaSessionKeyVerifier', 'aaSocialRecoveryVerifier'],
+  testnet: ['aaWeb3AuthVerifier', 'aaSessionKeyVerifier'],
+};
 
-const publishedVerifierContracts = PUBLISHED_VERIFIER_KEYS.map(
+const publishedVerifierContracts = PUBLISHED_VERIFIER_KEYS[NETWORK].map(
   (key) => MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts[key],
 );
 
@@ -255,7 +257,7 @@ test('the studio create flow exposes a verifier preset catalogue', () => {
   const presets = studio.createVerifierPresets.value;
   assert.deepEqual(
     presets.map((preset) => preset.registryKey),
-    PUBLISHED_VERIFIER_KEYS,
+    PUBLISHED_VERIFIER_KEYS[NETWORK],
     'the create presets are not the registry-published verifier keys',
   );
   for (const preset of presets) {
@@ -333,7 +335,7 @@ test('the catalogue is exactly the verifier modules the registry publishes on ea
     const presets = createAccountVerifierPresets(network, { t: fallbackT });
     assert.deepEqual(
       presets.map((preset) => preset.registryKey),
-      PUBLISHED_VERIFIER_KEYS,
+      PUBLISHED_VERIFIER_KEYS[network],
       `${network} preset keys are not the published verifier keys`,
     );
     for (const preset of presets) {
