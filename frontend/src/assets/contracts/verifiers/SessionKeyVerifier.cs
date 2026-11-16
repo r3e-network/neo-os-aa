@@ -119,6 +119,80 @@ namespace SmartAccount.Verifiers
         }
 
         /// <summary>
+        /// Registration-time initial session key, invoked by the core when the account is
+        /// registered with verifier params (the account id already binds these bytes via
+        /// computeRegistrationAccountId). First installation into an empty slot is
+        /// immediate by protocol semantics; later changes still go through the core's
+        /// timelocked configuration path.
+        ///
+        /// Blob layout (version 0x01, integers little-endian):
+        ///   [0] version | [1] pubKeyLength + pubKey (33 or 65) | targetContract (20) |
+        ///   methodLength (1) + method | validUntil ms (8) | spendingLimit datoshi (8) |
+        ///   descriptionLength (1) + description (0-128)
+        /// </summary>
+        public static void SetPublicKey(UInt160 accountId, ByteString initialKeyBlob)
+        {
+            byte[] raw = (byte[])initialKeyBlob;
+            ExecutionEngine.Assert(raw != null && raw.Length >= 1 + 1 + 33 + 20 + 1 + 8 + 8 + 1,
+                "Invalid session key blob");
+            ExecutionEngine.Assert(raw[0] == 0x01, "Unsupported session key blob version");
+
+            int cursor = 1;
+            int pubKeyLength = raw[cursor++];
+            ExecutionEngine.Assert(pubKeyLength == 33 || pubKeyLength == 65, "Invalid public key length");
+            ExecutionEngine.Assert(raw.Length >= cursor + pubKeyLength + 20 + 1 + 8 + 8 + 1,
+                "Invalid session key blob length");
+            ByteString pubKey = (ByteString)CopyBytes(raw, cursor, pubKeyLength);
+            cursor += pubKeyLength;
+
+            UInt160 targetContract = (UInt160)(ByteString)CopyBytes(raw, cursor, 20);
+            cursor += 20;
+
+            int methodLength = raw[cursor++];
+            ExecutionEngine.Assert(methodLength > 0 && raw.Length >= cursor + methodLength + 8 + 8 + 1,
+                "Invalid session key method");
+            string method = (string)(ByteString)CopyBytes(raw, cursor, methodLength);
+            cursor += methodLength;
+
+            BigInteger validUntil = ReadUInt64LittleEndian(raw, cursor);
+            cursor += 8;
+            BigInteger spendingLimit = ReadUInt64LittleEndian(raw, cursor);
+            cursor += 8;
+
+            int descriptionLength = raw[cursor++];
+            ExecutionEngine.Assert(raw.Length == cursor + descriptionLength, "Invalid session key blob length");
+            string description = descriptionLength == 0
+                ? string.Empty
+                : (string)(ByteString)CopyBytes(raw, cursor, descriptionLength);
+
+            // Delegate to the timelocked path's own implementation so every invariant
+            // (expiry window, 30-day cap, spending-limit enforceability, description
+            // bound, rotation bookkeeping) is enforced identically for registration-time
+            // and post-registration configuration.
+            SetSessionKey(accountId, pubKey, targetContract, method, validUntil, spendingLimit, description);
+        }
+
+        private static byte[] CopyBytes(byte[] source, int offset, int length)
+        {
+            byte[] result = new byte[length];
+            for (int i = 0; i < length; i++)
+            {
+                result[i] = source[offset + i];
+            }
+            return result;
+        }
+
+        private static BigInteger ReadUInt64LittleEndian(byte[] source, int offset)
+        {
+            BigInteger value = 0;
+            for (int i = 7; i >= 0; i--)
+            {
+                value = value * 256 + source[offset + i];
+            }
+            return value;
+        }
+
+        /// <summary>
         /// Configures the active session key and its target/method/expiry scope.
         /// </summary>
         public static void SetSessionKey(UInt160 accountId, ByteString pubKey, UInt160 targetContract, string method, BigInteger validUntil, BigInteger spendingLimit, string description)

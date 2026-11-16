@@ -60,6 +60,89 @@ namespace SmartAccount
         }
 
         /// <summary>
+        /// Aggregated, non-faulting account descriptor for wallets and explorers, in the
+        /// spirit of ERC-7579 capability discovery. Unknown account ids return
+        /// <c>exists = false</c> with zeroed fields instead of faulting, so callers can
+        /// probe counterfactual accounts before registration.
+        /// Layout: [exists, verifier, hook, backupOwner, escapeTimelock,
+        /// escapeTriggeredAt, escapeActive, marketEscrowContract, marketEscrowListingId,
+        /// marketEscrowActive, pendingVerifierUpdate, pendingVerifierMatureAt,
+        /// pendingHookUpdate, pendingHookMatureAt].
+        /// </summary>
+        [Safe]
+        public static object[] DescribeAccount(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data == null)
+            {
+                return new object[]
+                {
+                    false, UInt160.Zero, UInt160.Zero, UInt160.Zero,
+                    0, 0, false, UInt160.Zero, 0, false, false, 0, false, 0
+                };
+            }
+            AccountState state = (AccountState)StdLib.Deserialize(data);
+            UInt160 escrowContract = GetMarketEscrowContract(accountId);
+            BigInteger escrowListing = GetMarketEscrowListingId(accountId);
+            return new object[]
+            {
+                true,
+                state.Verifier,
+                state.HookId,
+                state.BackupOwner,
+                (BigInteger)state.EscapeTimelock,
+                state.EscapeTriggeredAt,
+                state.EscapeTriggeredAt > 0,
+                escrowContract,
+                escrowListing,
+                escrowContract != UInt160.Zero && escrowListing > 0,
+                HasPendingVerifierUpdate(accountId),
+                GetPendingVerifierUpdateTime(accountId),
+                HasPendingHookUpdate(accountId),
+                GetPendingHookUpdateTime(accountId),
+            };
+        }
+
+        /// <summary>
+        /// Non-faulting preflight of the core's execution-time checks for one operation,
+        /// in the spirit of ERC-4337 simulateValidation. Like previewUserOpValidation it
+        /// deliberately excludes signature verification and hook execution; unlike it, the
+        /// call reports instead of faulting on an unknown account, and exposes the two
+        /// execution-relevant latches a submitter must see: market escrow (blocks
+        /// execution) and an active escape (execution would cancel it).
+        /// nativeWitnessPresent reflects the witness set of this invocation context; a
+        /// wallet simulating with the backup owner attached learns whether the native
+        /// fallback path would authorize the operation.
+        /// Layout: [accountExists, deadlineOk, nonceOk, verifierBound,
+        /// nativeWitnessPresent, marketEscrowBlocks, escapeActive].
+        /// </summary>
+        [Safe]
+        public static object[] SimulateUserOp(UInt160 accountId, UserOperation op)
+        {
+            ValidateAccountId(accountId);
+            ValidateUserOperation(op);
+            byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId);
+            ByteString? data = Storage.Get(Storage.CurrentContext, key);
+            if (data == null)
+            {
+                return new object[] { false, false, false, false, false, false, false };
+            }
+            AccountState state = (AccountState)StdLib.Deserialize(data);
+            return new object[]
+            {
+                true,
+                Runtime.Time <= op.Deadline,
+                IsNonceAcceptable(accountId, op.Nonce),
+                state.Verifier != UInt160.Zero,
+                Runtime.CheckWitness(state.BackupOwner),
+                IsMarketEscrowActive(accountId),
+                state.EscapeTriggeredAt > 0,
+            };
+        }
+
+        /// <summary>
         /// Neo adapter for ERC-1271 contract-wallet message validation.
         ///
         /// The four-byte result is intentionally the ERC-1271 magic value so a

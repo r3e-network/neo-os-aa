@@ -149,6 +149,8 @@ public class ContractTests
             "CallVerifier",
             "CallHook",
             "PreviewUserOpValidation",
+            "DescribeAccount",
+            "SimulateUserOp",
             "ExecuteUserOp",
             "ExecuteUserOps",
             "ExecuteSponsoredUserOp",
@@ -541,6 +543,33 @@ public class ContractTests
         string source = ReadContractFile("verifiers/ZKEmailVerifier.cs");
         StringAssert.Contains(source, "public static bool SupportsV3() => false;");
         StringAssert.Contains(source, "ZKEmailVerifier disabled pending real proof verification");
+    }
+
+    [TestMethod]
+    public void DiscoveryAndSimulationReadsAreSafeAndNonFaulting()
+    {
+        // Wallets and explorers probe counterfactual accounts before registration,
+        // so both reads must be Safe and must report instead of faulting on an
+        // unknown account id.
+        string source = ReadContractFile("SmartAccount.State.cs");
+        StringAssert.Contains(source, "public static object[] DescribeAccount(UInt160 accountId)");
+        StringAssert.Contains(source, "public static object[] SimulateUserOp(UInt160 accountId, UserOperation op)");
+        StringAssert.Contains(source, "if (data == null)");
+        // Simulation reports the two execution-relevant latches: market escrow blocks
+        // execution; an active escape is cancelled by execution.
+        StringAssert.Contains(source, "IsMarketEscrowActive(accountId)");
+        StringAssert.Contains(source, "Runtime.CheckWitness(state.BackupOwner)");
+    }
+
+    [TestMethod]
+    public void SessionKeyVerifierAcceptsRegistrationTimeInitialKey()
+    {
+        // The core delivers registration verifierParams to setPublicKey; decoding and
+        // storing must reuse the timelocked path's validation instead of duplicating it.
+        string source = ReadContractFile("verifiers/SessionKeyVerifier.cs");
+        StringAssert.Contains(source, "public static void SetPublicKey(UInt160 accountId, ByteString initialKeyBlob)");
+        StringAssert.Contains(source, "\"Unsupported session key blob version\"");
+        StringAssert.Contains(source, "SetSessionKey(accountId, pubKey, targetContract, method, validUntil, spendingLimit, description);");
     }
 
     [TestMethod]

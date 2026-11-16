@@ -19,7 +19,7 @@ namespace SmartAccount.Contracts.Tests;
 [TestClass]
 public class ImplementationRefinementRuntimeTests
 {
-    private const string NefHash = "c4210d650f1efad431d38c7797776b6c41f698689838bbdf557ddb418c5195a5";
+    private const string NefHash = "0683cb52289f99cbc5485f5d8347caf864744f1c894beb8eb530d5bd7b0690d4";
     private const string RegionHex = "11116bb99f74106b6a11ce9fba6c78a09e756d78b976";
     private const int MethodEntry = 19437;
     private const int RegionStart = 19547;

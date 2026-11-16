@@ -7,7 +7,8 @@ contracts/bin/v3 with the same deploy data the production tooling uses. Each
 deployment records its profile so provenance cannot join the public core to a
 bounded-callback receipt. The validator drives real transactions (native backup-owner path,
 escape hatch, bounded hook callbacks, lifecycle-ABI pre-checks, session-key relay
-submission, paymaster settlement, recovery cleanup with credit refund, MultiSig
+submission including a registration-time day-one key, account discovery and
+simulation reads, paymaster settlement, recovery cleanup with credit refund, MultiSig
 and MultiHook child pre-checks, market escrow including the silent-market owner
 escape, platform-account owner rotation, subscription pulls), reads every deployed contract back over JSON-RPC
 against the local NEF and manifest, and writes a dated receipt.
@@ -1404,6 +1405,70 @@ def scenario_session_key_and_paymaster(c, workdir):
     c.check(c.nonce(account) == 2, "sponsored op consumed nonce 1")
 
 
+def session_key_registration_blob(pubkey, target_hash, method, valid_until_ms, spending_limit, description=b""):
+    """Version-0x01 initial session-key blob consumed by SessionKeyVerifier.setPublicKey
+    during registration (integers little-endian; UInt160 in its stored LE form)."""
+    method_bytes = method.encode()
+    description_bytes = description.encode() if isinstance(description, str) else bytes(description)
+    out = bytearray([1, len(pubkey)])
+    out += pubkey
+    out += bytes.fromhex(target_hash[2:])[::-1]
+    out.append(len(method_bytes))
+    out += method_bytes
+    out += int(valid_until_ms).to_bytes(8, "little")
+    out += int(spending_limit).to_bytes(8, "little")
+    out.append(len(description_bytes))
+    out += description_bytes
+    return bytes(out)
+
+
+def scenario_discovery_and_day_one_session_key(c, workdir):
+    c.scenario("account discovery reads and registration-time session key")
+    target = c.contracts["MockTransferTarget"]
+    verifier = c.contracts["SessionKeyVerifier"]
+
+    # Day-one session key: the registration params carry the initial key, so the
+    # account is usable immediately. First installation into an empty slot is
+    # immediate by protocol semantics; later changes keep the 24h timelock.
+    key = P256Key(workdir, "session-day-one")
+    valid_until = c.now() + 2 * DAY * 1000
+    blob = session_key_registration_blob(key.compressed, target, "transfer", valid_until, 0, b"day-one")
+    account, proxy = c.register("register account with day-one session key",
+                                verifier=verifier, params=blob)
+    session = c.results("SessionKeyVerifier", "getSessionKey", H(account))
+    c.check(session[0] == key.compressed, "registration-time session key stored without the 24h wait")
+
+    args = A(H(proxy), H(c.wallets["buyer"]), I(1000), B(b""))
+    payload = c.results("SessionKeyVerifier", "getPayload", H(account), H(target), S("transfer"),
+                        args, I(0), I(FAR_DEADLINE))
+    op = A(H(target), S("transfer"), args, I(0), I(FAR_DEADLINE), B(key.sign(payload)))
+    c.execute("relay uses the day-one session key", account, op, "relay")
+    c.check(c.nonce(account) == 1, "day-one session key consumed nonce 0")
+
+    # describeAccount aggregates the wallet discovery surface in one read-only call.
+    description = c.results("SmartAccountV3", "describeAccount", H(account))
+    c.check(description[0] is True, "describeAccount reports the account exists")
+    c.check("0x" + description[1][::-1].hex() == verifier, "describeAccount reports the bound verifier")
+    c.check(description[6] is False and description[9] is False,
+            "describeAccount reports no escape and no market escrow")
+    unknown = "0x" + "42" * 20
+    missing = c.results("SmartAccountV3", "describeAccount", H(unknown))
+    c.check(missing[0] is False and "0x" + missing[1][::-1].hex() == ZERO,
+            "describeAccount reports an unknown account without faulting")
+
+    # simulateUserOp is the non-faulting preflight of the core's execution checks.
+    sim = c.results("SmartAccountV3", "simulateUserOp", H(account),
+                    c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 1))
+    c.check(sim[0] is True and sim[1] is True and sim[2] is True and sim[3] is True,
+            "simulateUserOp clears the account, deadline, nonce and verifier checks")
+    c.check(sim[5] is False and sim[6] is False,
+            "simulateUserOp reports no escrow block and no active escape")
+    sim_missing = c.results("SmartAccountV3", "simulateUserOp", H(unknown),
+                            c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0))
+    c.check(all(flag is False for flag in sim_missing),
+            "simulateUserOp reports an unknown account without faulting")
+
+
 def scenario_recovery_cleanup(c, workdir):
     c.scenario("recovery verifier rotation with cleanup and credit refund")
     recovery = c.contracts["SocialRecoveryVerifier"]
@@ -1990,6 +2055,8 @@ def main():
             scenario_verifier_gas_cap(chain)
         if not only_did:
             scenario_session_key_and_paymaster(chain, workdir)
+        if not only_did:
+            scenario_discovery_and_day_one_session_key(chain, workdir)
         if not only_did:
             scenario_recovery_cleanup(chain, workdir)
         if not only_did:

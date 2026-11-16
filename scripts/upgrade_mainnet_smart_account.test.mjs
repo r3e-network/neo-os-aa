@@ -38,8 +38,9 @@ test("mainnet candidate removes the instant admin transfer surface", () => {
   // extracted the platform services, so the candidate now also carries the
   // market/registrar delegation surface, and the 2026-11-13 seal revision
   // added the migration-seal read (finalizeEscape is overloaded, so the
-  // raw entry count is one above the unique method-name count).
-  assert.equal(artifact.methodCount, 109);
+  // raw entry count is one above the unique method-name count). The
+  // 2026-11-16 revision added the describeAccount/simulateUserOp reads.
+  assert.equal(artifact.methodCount, 111);
   const manifest = JSON.parse(artifact.manifestText);
   for (const name of ['callVerifierChild', 'callHookChild']) {
     const childConfiguration = manifest.abi.methods.find((method) => method.name === name);

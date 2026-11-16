@@ -27,7 +27,7 @@ namespace SmartAccount.Contracts.Tests;
 public class ImplementationRefinementGasRuntimeTests
 {
     private const long HostingGas = 100_00000000;
-    private const int HelperEntry = 19437, HelperEnd = 19718, InitializeEntry = 30718;
+    private const int HelperEntry = 19437, HelperEnd = 19718, InitializeEntry = 31074;
     private sealed record Charge(int Sequence, string ScriptHash, int Pc, string OpCode, string InstructionHex,
         string Method, string BeforePico, string AfterPico, string OpcodePico, string AdditionalPico, bool Completed,
         string? StorageKeyHex = null, int? StorageValueLength = null);
@@ -151,8 +151,8 @@ public class ImplementationRefinementGasRuntimeTests
             name,
             artifacts = new
             {
-                nefSha256 = "c4210d650f1efad431d38c7797776b6c41f698689838bbdf557ddb418c5195a5",
-                manifestSha256 = "7953c5135886bf0a6aac862e9f203f8c5520bddfa52b99327e98d260ff36433a"
+                nefSha256 = "0683cb52289f99cbc5485f5d8347caf864744f1c894beb8eb530d5bd7b0690d4",
+                manifestSha256 = "fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7"
             },
             runtime = new { neo = RuntimeIdentity(typeof(ApplicationEngine)), vm = RuntimeIdentity(typeof(ExecutionEngine)) },
             priceTable = ApplicationEngine.OpCodePriceTable,
@@ -245,8 +245,8 @@ public class ImplementationRefinementGasRuntimeTests
         string dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/v3"));
         byte[] rawNef = File.ReadAllBytes(Path.Combine(dir, "SmartAccountV3.nef"));
         byte[] rawManifest = File.ReadAllBytes(Path.Combine(dir, "SmartAccountV3.manifest.json"));
-        Assert.AreEqual("c4210d650f1efad431d38c7797776b6c41f698689838bbdf557ddb418c5195a5", Hash(rawNef));
-        Assert.AreEqual("7953c5135886bf0a6aac862e9f203f8c5520bddfa52b99327e98d260ff36433a", Hash(rawManifest));
+        Assert.AreEqual("0683cb52289f99cbc5485f5d8347caf864744f1c894beb8eb530d5bd7b0690d4", Hash(rawNef));
+        Assert.AreEqual("fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7", Hash(rawManifest));
         Assert.AreEqual("cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a", Hash(File.ReadAllBytes(typeof(ApplicationEngine).Assembly.Location)));
         Assert.AreEqual("cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9", Hash(File.ReadAllBytes(typeof(ExecutionEngine).Assembly.Location)));
         RuntimeFixture fx = new();

@@ -1,8 +1,8 @@
 {
   "candidateArtifact": {
-    "nefSha256": "c4210d650f1efad431d38c7797776b6c41f698689838bbdf557ddb418c5195a5",
-    "manifestSha256": "7953c5135886bf0a6aac862e9f203f8c5520bddfa52b99327e98d260ff36433a",
-    "abiEntries": 109
+    "nefSha256": "0683cb52289f99cbc5485f5d8347caf864744f1c894beb8eb530d5bd7b0690d4",
+    "manifestSha256": "fe7165381209746359635a9a8e533309414e7c032ea9378b629e37f5673ce8b7",
+    "abiEntries": 111
   },
   "pinnedArtifact": {
     "nefSha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
@@ -15,6 +15,7 @@
     "callVerifierChild/4",
     "clearHookDependencies/1",
     "clearVerifierDependencies/1",
+    "describeAccount/1",
     "finalizeEscapeToOwner/1",
     "freezeAccount/1",
     "getPendingHookUpdate/1",
@@ -29,6 +30,7 @@
     "setHookDependencies/2",
     "setMarketService/2",
     "setVerifierDependencies/2",
+    "simulateUserOp/2",
     "unfreezeAccount/1"
   ],
   "removedMethods": [
