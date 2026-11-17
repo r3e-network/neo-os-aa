@@ -136,7 +136,7 @@ negation, which must compile and pass `coqchk`).
   the factor identity and the fee limit.
 - Reference counting, the disposables `Convert(object?)` adds, and payload
   aliasing between caller and handler.
-- Trusted C# extraction and compiler/CLR correspondence; all 105 public
+- Trusted C# extraction and compiler/CLR correspondence; all 109 public
   entrypoints.
 
 ## Running it

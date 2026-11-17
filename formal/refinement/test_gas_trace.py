@@ -57,8 +57,8 @@ class GasTraceTests(unittest.TestCase):
     def test_valid_loop_opcode_mutation_rejected_by_cfg(self):
         bound = gas_trace.bind_artifact()
         modified = [dict(i) for i in bound['instructions']]
-        last_jump = next(i for i in modified if i['offset'] == 18040)
-        last_jump['edges'] = [{'kind': 'branch', 'target': 18040}]
+        last_jump = next(i for i in modified if i['offset'] == 19178)
+        last_jump['edges'] = [{'kind': 'branch', 'target': 19178}]
         with self.assertRaises(ValueError):
             gas_trace.enumerate_paths(modified)
 

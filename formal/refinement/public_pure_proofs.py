@@ -237,13 +237,13 @@ def run_proofs(inventory, output_dir, controls=True):
         (work / path.name).write_bytes(raw)
         kernel(['coqc', '-q', path.name], work, work / (module + '.log'))
     certificate = render_certificate(bound)
-    (work / 'PublicPureArtifact.v').write_text(certificate)
+    (work / 'PublicPureArtifact.v').write_bytes(certificate.encode())
     names['PublicPureArtifact'] = declarations(certificate)
     kernel(['coqc', '-q', 'PublicPureArtifact.v'], work, work / 'artifact.log')
     kernel(['coqchk', '-silent', 'PublicPureArtifact'], work, work / 'coqchk.log')
     audit = 'Require Import ' + ' '.join(names) + '.\n' + '\n'.join(
         'Print Assumptions ' + module + '.' + name + '.' for module, decls in names.items() for name in decls)
-    (work / 'Assumptions.v').write_text(audit)
+    (work / 'Assumptions.v').write_bytes(audit.encode())
     _, assumptions = kernel(['coqc', '-q', 'Assumptions.v'], work, work / 'assumptions.log')
     require(assumptions.count('Closed under the global context') == sum(map(len, names.values())), 'Incomplete assumption audit')
     results = semantic_controls(bound, work, inventory) if controls else []
@@ -310,7 +310,7 @@ def semantic_controls(bound, work, inventory):
         definitions = ('From Coq Require Import ZArith List Bool.\n'
                        'Require Import IntegerSemantics CapArithmetic CapMethodVm PublicPureMethods.\n'
                        'Import ListNotations. Open Scope Z_scope.\n' + '\n'.join(definition_lines) + '\n')
-        (work / (module+'.v')).write_text(definitions)
+        (work / (module+'.v')).write_bytes(definitions.encode())
         kernel(['coqc','-q',module+'.v'], work, work / (module+'.log'))
         value = 'VNull' if not entry['source']['parameters'] else 'VBytes ['+';'.join(str(b)+'%nat' for b in witness)+']'
         inputs = '[]' if not entry['source']['parameters'] else '['+value+']'
@@ -322,7 +322,7 @@ def semantic_controls(bound, work, inventory):
                      f'Example original_semantics : public_classified (budget_eval {method}_source ({value}))\n'
                      f'(run_public 24 {method}_code {initial}) {initial}.\n'
                      'Proof. vm_compute. repeat split; reflexivity. Qed.\n')
-        (work / (reject_module+'.v')).write_text(assertion)
+        (work / (reject_module+'.v')).write_bytes(assertion.encode())
         code, output = kernel(['coqc','-q',reject_module+'.v'], work, work / (reject_module+'.log'), success=False)
         require(code != 0 and 'Error:' in output, 'Semantic control did not fail a valid theorem: '+name)
         reports.append(dict(name=name, method=method, definitionsAccepted=True, proofRejected=True,

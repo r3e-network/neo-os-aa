@@ -201,7 +201,7 @@ def main():
     args.json_report.write_text(json.dumps(report) + "\n")
     try:
         tool_paths = [Path(__file__), ROOT / "nef_decode.py", ROOT / "verify.py"]
-        tools_before = {str(p.relative_to(ROOT.parent.parent)): hashlib.sha256(p.read_bytes()).hexdigest()
+        tools_before = {p.relative_to(ROOT.parent.parent).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                         for p in tool_paths}
         raw_inventory = args.inventory.read_bytes()
         inventory = json.loads(raw_inventory)

@@ -293,7 +293,7 @@ def prepare_models(output_dir):
     names, hashes = [], {}
     for path in files:
         raw = path.read_bytes()
-        hashes[str(path.relative_to(REPO))] = hashlib.sha256(raw).hexdigest()
+        hashes[str(path.relative_to(REPO).as_posix())] = hashlib.sha256(raw).hexdigest()
         source = raw.decode("utf-8")
         require(not re.search(r"\b(?:Axiom|Admitted|admit|Abort|Parameter)\b", source), "Untrusted declaration: " + path.name)
         target = output_dir / path.name
@@ -330,7 +330,7 @@ def certify(directory, coqc, program, expression, filename="CapArtifact.v", expe
 
 def run_proofs(inventory, output_dir):
     tool_paths = [Path(__file__), ROOT / "proof_tactic.txt", ROOT / "verify.py", ROOT / "nef_decode.py"]
-    tools_before = {str(path.relative_to(REPO)): digest(path) for path in tool_paths}
+    tools_before = {path.relative_to(REPO).as_posix(): digest(path) for path in tool_paths}
     recipe = (ROOT / "proof_tactic.txt").read_bytes()
     require(hashlib.sha256(recipe).hexdigest() == tools_before["formal/refinement/proof_tactic.txt"], "Proof recipe read drift")
     # Actual inputs and raw NEF are rechecked here as well as by the outer gate.

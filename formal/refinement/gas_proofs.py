@@ -213,7 +213,7 @@ def run_proofs(output_dir, *, source_text=None, controls=True, cache=None):
     hashes = {str(path): digest(raw) for path, raw in raw_inputs.items()}
     source = source_text if source_text is not None else pinned_source(cache)
     projection = project_source(source)
-    (directory / "source.cs").write_text(source)
+    (directory / "source.cs").write_bytes(source.encode())
     (directory / "projection.json").write_text(json.dumps(projection, indent=2) + "\n")
     coqc, coqchk = shutil.which("coqc"), shutil.which("coqchk")
     require(coqc and coqchk, "missing real coqc/coqchk")
@@ -221,12 +221,12 @@ def run_proofs(output_dir, *, source_text=None, controls=True, cache=None):
     artifact = certificate(projection)
     for name, text in [("GasSemantics", model), ("GasArtifact", artifact)]:
         require(not re.search(r"\b(?:Admitted|Axiom|Parameter|admit|Abort)\b", text), "untrusted proof declaration")
-        (directory / (name + ".v")).write_text(text)
+        (directory / (name + ".v")).write_bytes(text.encode())
         command([coqc, "-q", name + ".v"], directory, directory / (name + ".log"))
     command([coqchk, "-silent", "GasSemantics", "GasArtifact"], directory, directory / "coqchk.log")
     names = {"GasSemantics": declarations(model), "GasArtifact": declarations(artifact)}
     checks = "Require Import GasSemantics GasArtifact.\n" + "\n".join("Print Assumptions " + module + "." + name + "." for module, items in names.items() for name in items)
-    (directory / "Assumptions.v").write_text(checks + "\n")
+    (directory / "Assumptions.v").write_bytes((checks + "\n").encode())
     _, checked = command([coqc, "-q", "Assumptions.v"], directory, directory / "assumptions.log")
     count = sum(map(len, names.values()))
     require(checked.count("Closed under the global context") == count and "Axioms:" not in checked, "assumption audit failed")
@@ -256,9 +256,9 @@ def run_proofs(output_dir, *, source_text=None, controls=True, cache=None):
             for suffix in (".v", ".vo"):
                 shutil.copyfile(directory / ("GasSemantics" + suffix), case / ("GasSemantics" + suffix))
             definitions = mutated.split("Theorem actual_add_fee_refines_spec", 1)[0]
-            (case / "Definitions.v").write_text(definitions)
+            (case / "Definitions.v").write_bytes(definitions.encode())
             command([coqc, "-q", "Definitions.v"], case, case / "definitions.log")
-            (case / "GasArtifact.v").write_text(mutated)
+            (case / "GasArtifact.v").write_bytes(mutated.encode())
             rc, message = command([coqc, "-q", "GasArtifact.v"], case, case / "rejection.log", False)
             require(rc != 0 and "Error:" in message and "Syntax error" not in message, "semantic mutation escaped: " + name)
             rejected.append({"name": name, "definitionsCompiled": True, "certificateRejected": True})

@@ -2,9 +2,9 @@
 """Kernel certificate lane: source-level storage-key getter refinement.
 
 Binds the pinned read-only getters to their exact manifest/debug/byte
-regions. The pinned entries are: the two keyed direct storage getters
-(getMarketEscrowContract, getMarketEscrowListingId); the four fixed-prefix
-getters that take no ABI argument (getContractAdmin,
+regions. The pinned entries are: the three keyed direct storage getters
+(getMarketEscrowContract, getMarketEscrowListingId, getVerifyScopeTarget);
+the four fixed-prefix getters that take no ABI argument (getContractAdmin,
 getPendingContractAdmin, getPlatformRegistrar,
 getPendingPlatformRegistrar); the two fixed-prefix timelock getters
 (getAdminTransferAvailableAt, getPlatformRegistrarAvailableAt); the raw
@@ -16,18 +16,17 @@ isExecutionActive); the two delegating presence getters
 (hasPendingVerifierCall, hasPendingHookCall); the six delegating
 PendingModuleCall record projections (the Module, Time and Hash pairs); the
 two inline epoch getters (getPendingVerifierUpdateTime,
-getPendingHookUpdateTime); and the three legacy-compatibility accessors that
-read an active key and fall back to a historical one (getVerifyScopeTarget,
-hasMarketEscrowOwnerCancel, getMarketEscrowOwnerCancelTime). The state
+getPendingHookUpdateTime); and the two escrow owner-cancel accessors that
+delegate a raw single-key read to their shared private reader
+(hasMarketEscrowOwnerCancel, getMarketEscrowOwnerCancelTime). The state
 projections are certified together with their shared private callee
 GetAccountState (storage read, null assert, StdLib.Deserialize), the
 delegating presence getters and record projections with the shared private
 callee GetPendingModuleCallRecord (parameterised key concat, storage read,
-null-on-miss, StdLib.Deserialize), and the legacy-compatibility accessors
+null-on-miss, StdLib.Deserialize), and the escrow owner-cancel accessors
 with the shared private callee GetMarketEscrowOwnerCancelInitiated
-(active-key read, historical-key read only on a miss, raw payload returned
-verbatim - it performs no deserialize, so that family consumes no token
-oracle).
+(single-key read, raw payload returned verbatim - it performs no
+deserialize, so that family consumes no token oracle).
 The lane renders a Coq certificate pinning
 prefix/default/decode semantics over an abstract storage map, models
 every pinned region at the bytecode level (StorageGetterVm: decoded
@@ -74,15 +73,15 @@ DESERIALIZE_TOKEN_INDEX = 4
 # Projection kinds that delegate to a shared private callee, and the debug
 # method-table name each callee is bound through. A target may override the
 # kind's default callee by naming its own (`row['callee']`), which is how the
-# legacy-compatibility accessors bind the fallback reader while the
+# escrow owner-cancel accessors bind the raw reader while the
 # pending-module-call accessors keep binding the record reader.
 CALLEE_KINDS = {
     'state-field': 'getAccountState',
     'state-gt-zero': 'getAccountState',
     'presence-call': 'getPendingModuleCallRecord',
     'presence-call-item': 'getPendingModuleCallRecord',
-    'fallback-call-presence': 'getMarketEscrowOwnerCancelInitiated',
-    'fallback-call-offset': 'getMarketEscrowOwnerCancelInitiated',
+    'raw-call-presence': 'getMarketEscrowOwnerCancelInitiated',
+    'raw-call-offset': 'getMarketEscrowOwnerCancelInitiated',
 }
 SHARED_CALLEE_DEBUG_NAMES = {
     'getAccountState': 'SmartAccount.SmartAccount,GetAccountState',
@@ -93,7 +92,7 @@ SHARED_CALLEE_DEBUG_NAMES = {
 # Projection kinds whose traced machine carries the universally quantified
 # deserialize oracle as its `mtokens` field (the entry state of every such
 # getter is built with the same oracle as its successor machines). The
-# legacy-compatibility accessors return the raw payload and consume no token,
+# escrow owner-cancel accessors return the raw payload and consume no token,
 # so they are deliberately absent.
 ORACLE_KINDS = ('state-field', 'state-gt-zero', 'presence-call',
                 'presence-call-item', 'inline-record-time')
@@ -115,10 +114,8 @@ TCB = [
     ' ExecutionEngine.Assert, StdLib.Deserialize) and the reviewed'
     ' UInt160.Zero / Int32-literal / zero-length-byte-string defaults.',
     'Abstract storage map: single-key lookup with no aliasing, iteration or'
-    ' read-size semantics. The legacy-compatibility getters read two keys'
-    ' through read_fallback; the order (active prefix first, historical second)'
-    ' is part of the pinned contract and each prefix is resolved from its own'
-    ' declaration in the inputs.',
+    ' read-size semantics; each prefix is resolved from its own declaration'
+    ' in the inputs.',
     'VM model in StorageGetterVm: one instruction per slot, the decoded'
     ' interop pop order for System.Storage.Get (context handle then key),'
     ' structural equality including null, and little-endian integer decode;'
@@ -134,13 +131,11 @@ TCB = [
     'AccountState, PendingModuleCall and PendingConfigUpdate field ordinals are'
     ' derived from the class declaration order in the inputs and cross-checked'
     ' against the bytecode PICKITEM index rendered from the pinned regions.',
-    'The shared legacy-compatibility reader is delegated through the debug-only'
+    'The shared escrow owner-cancel reader is delegated through the debug-only'
     ' method table and returns the stored payload verbatim (or the null item),'
-    ' performing no deserialize: its callers apply the pinned UInt160 width'
-    ' check and little-endian cast themselves. Its two pinned prefixes are read'
-    ' from their own declarations in the inputs, and the read order - active'
-    ' key first, historical key only on a miss - is a pinned contract of this'
-    ' lane, backed by a kernel-rejected control that swaps it.',
+    ' performing no deserialize: its callers apply the pinned null test and the'
+    ' little-endian cast plus pinned timelock themselves. Its pinned prefix is'
+    ' resolved from its own declaration in the inputs.',
 ]
 
 
@@ -382,7 +377,7 @@ def bind_entries(inventory, projection, callees):
 
     State-projection getters call the pinned shared callee GetAccountState, the
     delegating presence getters and record projections call the pinned shared
-    callee GetPendingModuleCallRecord, and the legacy-compatibility accessors
+    callee GetPendingModuleCallRecord, and the escrow owner-cancel accessors
     call the pinned shared callee GetMarketEscrowOwnerCancelInitiated; every
     shared callee is bound separately from
     the debug-only method table (it carries no ABI entry) and each caller's
@@ -467,30 +462,9 @@ def bind_entries(inventory, projection, callees):
                 callee=bound_callees['getAccountState'])
 
 
-FALLBACK_KINDS = ('inline-fallback', 'fallback-call-presence', 'fallback-call-offset')
-
-
 def _prefix_literal(values):
     """Render a pinned prefix byte list as a Coq `bytes` literal."""
     return '[' + ';'.join(str(b) + '%nat' for b in values) + ']'
-
-
-def _fallback_prefixes(bound, name):
-    """Return the (active, historical) pinned prefixes of a fallback getter.
-
-    The inline form pins both in its own projection; the two delegating forms
-    pin neither and read them out of the shared reader they call. Whichever
-    frame owns them, the bindings below name them per getter, so a delegating
-    caller defines its own copies of the reader's two constants.
-    """
-    entry = bound['methods'][name]
-    row = entry['projection']
-    source = row
-    if row.get('kind', 'direct') in ('fallback-call-presence', 'fallback-call-offset'):
-        source = bound['callees'][row.get('callee') or CALLEE_KINDS[row['kind']]]['projection']
-    require('prefixBytes' in source and 'legacyBytes' in source,
-            'Fallback getter must pin both of its prefixes: ' + name)
-    return source['prefixBytes'], source['legacyBytes']
 
 
 def render_certificate(bound):
@@ -498,9 +472,9 @@ def render_certificate(bound):
     kinds = {name: entry['projection'].get('kind', 'direct')
              for name, entry in methods.items()}
     out = [PRELUDE]
-    if any(k in kinds.values() for k in ('presence-call', 'fallback-call-presence')):
+    if any(k in kinds.values() for k in ('presence-call', 'raw-call-presence')):
         # The delegating presence outcomes test the deserialize oracle result
-        # (and, for the legacy-compatibility presence getter, the raw reader
+        # (and, for the escrow owner-cancel presence getter, the raw reader
         # result) with the VM model's structural null equality, so the
         # source-level outcome and the traced NOTEQUAL step are literally the
         # same term.
@@ -525,35 +499,6 @@ def render_certificate(bound):
                    '      | _ => Fault\n'
                    '      end\n'
                    '  end.\n')
-    if any(k in FALLBACK_KINDS for k in kinds.values()):
-        # Derived facts about the shared fallback read, stated as lemmas rather
-        # than re-derived inside each getter proof: unfolding `read_fallback`
-        # directly in a proof would let `simpl` unfold the caller's own prefix
-        # constant into its byte literal, and the hypotheses below are stated
-        # at the named constants, so the two spellings must not be mixed.
-        out.append('''Lemma read_fallback_none : forall (active legacy : bytes)
-  (sto : storage) (account : bytes),
-  sto (active ++ account) = None ->
-  sto (legacy ++ account) = None ->
-  read_fallback active legacy sto account = None.
-Proof. intros active legacy sto account Hactive Hlegacy.
- unfold read_fallback. rewrite Hactive. simpl. rewrite Hlegacy. reflexivity. Qed.
-Print Assumptions read_fallback_none.
-Lemma read_fallback_hit : forall (active legacy : bytes) (sto : storage)
-  (account payload : bytes),
-  sto (active ++ account) = Some payload ->
-  read_fallback active legacy sto account = Some payload.
-Proof. intros active legacy sto account payload Hactive.
- unfold read_fallback. rewrite Hactive. reflexivity. Qed.
-Print Assumptions read_fallback_hit.
-Lemma read_fallback_miss : forall (active legacy : bytes) (sto : storage)
-  (account : bytes),
-  sto (active ++ account) = None ->
-  read_fallback active legacy sto account = sto (legacy ++ account).
-Proof. intros active legacy sto account Hactive.
- unfold read_fallback. rewrite Hactive. reflexivity. Qed.
-Print Assumptions read_fallback_miss.
-''')
     for name in sorted(methods):
         entry = methods[name]
         row = entry['projection']
@@ -876,111 +821,25 @@ Proof. intros tok sto account {hit_decl} H Htok Hnth.
  unfold {name}_binding. rewrite H, Htok, Hnth. reflexivity. Qed.
 Print Assumptions {name}_source_hit.
 ''')
-        elif kind == 'inline-fallback':
-            # Legacy-compatibility inline reader: `data = Storage.Get(<active>,
-            # accountId); if (data == null) data = Storage.Get(<legacy>,
-            # accountId); if (data == null) return UInt160.Zero;
-            # if (((ByteString)data).Length != 20) throw;
-            # return (UInt160)data;`. The region builds both keys and performs
-            # both reads itself, so the binding is read_fallback plus the pinned
-            # hash160 decode. The read order - the active key is authoritative
-            # and the historical key is consulted only when it is unbound - is
-            # part of the pinned contract, so the theorems below separate the
-            # three cases instead of collapsing them into one lookup.
-            require(row['decode'] == 'hash160' and 'offset' not in row and
-                    row['default'] == {'kind': 'bytes', 'value': [0] * 20},
-                    'Unsupported inline fallback projection: ' + name)
-            active, legacy = _fallback_prefixes(bound, name)
-            out.append(f'Definition {name}_prefix : bytes := {_prefix_literal(active)}.\n'
-                       f'Definition {name}_legacy_prefix : bytes := '
-                       f'{_prefix_literal(legacy)}.\n'
-                       f'Definition {name}_binding (sto : storage) (account : bytes) : Outcome :=\n'
-                       f' fallback_outcome {name}_prefix {name}_legacy_prefix'
-                       ' (GBytes hash160_default) decode_hash160 sto account.\n')
-            out.append(f'''Theorem {name}_source_missing_key_default : forall sto account,
- sto ({name}_prefix ++ account) = None ->
- sto ({name}_legacy_prefix ++ account) = None ->
- {name}_binding sto account = OK (GBytes hash160_default).
-Proof. intros sto account Hactive Hlegacy.
- unfold {name}_binding, fallback_outcome.
- rewrite (read_fallback_none {name}_prefix {name}_legacy_prefix sto account
-          Hactive Hlegacy).
- reflexivity. Qed.
-Print Assumptions {name}_source_missing_key_default.
-Theorem {name}_source_active_key_wins : forall sto account payload legacy_payload,
- sto ({name}_prefix ++ account) = Some payload ->
- sto ({name}_legacy_prefix ++ account) = Some legacy_payload ->
- {name}_binding sto account = decode_hash160 payload.
-Proof. intros sto account payload legacy_payload Hstore Hlegacy.
- unfold {name}_binding, fallback_outcome.
- rewrite (read_fallback_hit {name}_prefix {name}_legacy_prefix sto account
-          payload Hstore).
- reflexivity. Qed.
-Print Assumptions {name}_source_active_key_wins.
-Theorem {name}_source_falls_back : forall sto account payload,
- sto ({name}_prefix ++ account) = None ->
- sto ({name}_legacy_prefix ++ account) = Some payload ->
- {name}_binding sto account = decode_hash160 payload.
-Proof. intros sto account payload Hactive Hstore.
- unfold {name}_binding, fallback_outcome.
- rewrite (read_fallback_miss {name}_prefix {name}_legacy_prefix sto account Hactive).
- rewrite Hstore. reflexivity. Qed.
-Print Assumptions {name}_source_falls_back.
-Theorem {name}_source_active_hash160 : forall sto account payload,
- sto ({name}_prefix ++ account) = Some payload ->
- valid_bytes payload = true ->
- (length payload = 20)%nat ->
- {name}_binding sto account = OK (GBytes payload).
-Proof. intros sto account payload Hstore Hvalid Hlen.
- assert (Hz : (length payload =? 20)%nat = true).
- {{ apply Nat.eqb_eq. exact Hlen. }}
- unfold {name}_binding, fallback_outcome, decode_hash160.
- rewrite (read_fallback_hit {name}_prefix {name}_legacy_prefix sto account
-          payload Hstore).
- rewrite Hvalid, Hz. reflexivity. Qed.
-Print Assumptions {name}_source_active_hash160.
-Theorem {name}_source_short_payload_faults : forall sto account payload,
- sto ({name}_prefix ++ account) = Some payload ->
- (length payload <> 20)%nat ->
- {name}_binding sto account = Fault.
-Proof. intros sto account payload Hstore Hlen.
- unfold {name}_binding, fallback_outcome.
- rewrite (read_fallback_hit {name}_prefix {name}_legacy_prefix sto account
-          payload Hstore).
- unfold decode_hash160. destruct (valid_bytes payload); simpl.
- - apply Nat.eqb_neq in Hlen. rewrite Hlen. reflexivity.
- - reflexivity. Qed.
-Print Assumptions {name}_source_short_payload_faults.
-Theorem {name}_source_legacy_hash160 : forall sto account payload,
- sto ({name}_prefix ++ account) = None ->
- sto ({name}_legacy_prefix ++ account) = Some payload ->
- valid_bytes payload = true ->
- (length payload = 20)%nat ->
- {name}_binding sto account = OK (GBytes payload).
-Proof. intros sto account payload Hactive Hstore Hvalid Hlen.
- assert (Hz : (length payload =? 20)%nat = true).
- {{ apply Nat.eqb_eq. exact Hlen. }}
- unfold {name}_binding, fallback_outcome, decode_hash160.
- rewrite (read_fallback_miss {name}_prefix {name}_legacy_prefix sto account Hactive).
- rewrite Hstore, Hvalid, Hz. reflexivity. Qed.
-Print Assumptions {name}_source_legacy_hash160.
-''')
-        elif kind == 'fallback-call-presence':
-            # Delegating legacy-compatibility presence getter: `return
+        elif kind == 'raw-call-presence':
+            # Delegating raw presence getter: `return
             # GetMarketEscrowOwnerCancelInitiated(accountId) != null;`. The
-            # shared reader returns the null item when both keys are unbound
-            # and otherwise the stored payload verbatim (it performs no
+            # shared reader returns the null item when the key is unbound and
+            # otherwise the stored payload verbatim (it performs no
             # deserialize, so this family consumes no token oracle), and the
-            # caller's null test is the VM model's structural equality.
-            active, legacy = _fallback_prefixes(bound, name)
+            # caller's null test is the VM model's structural equality. The
+            # reader owns the prefix, so the binding names the caller's own
+            # copy of that one constant.
             require('offset' not in row and 'decode' not in row,
-                    'Fallback presence projection must carry no decode contract: ' + name)
-            out.append(f'Definition {name}_prefix : bytes := {_prefix_literal(active)}.\n'
-                       f'Definition {name}_legacy_prefix : bytes := '
-                       f'{_prefix_literal(legacy)}.\n'
+                    'Raw presence projection must carry no decode contract: ' + name)
+            source = bound['callees'][row.get('callee')
+                                          or CALLEE_KINDS[kind]]['projection']
+            require('prefixBytes' in source,
+                    'Raw presence reader must pin its prefix: ' + name)
+            out.append(f'Definition {name}_prefix : bytes := '
+                       f'{_prefix_literal(source["prefixBytes"])}.\n'
                        f'Definition {name}_reader (sto : storage) (account : bytes) : GVal :=\n'
-                       f' match read_fallback {name}_prefix {name}_legacy_prefix'
-                       ' sto account with\n'
+                       f' match sto ({name}_prefix ++ account) with\n'
                        ' | None => GNull\n'
                        ' | Some payload => GBytes payload\n'
                        ' end.\n'
@@ -988,35 +847,19 @@ Print Assumptions {name}_source_legacy_hash160.
                        f' OK (GBool (negb (gval_eqb GNull ({name}_reader sto account)))).\n')
             out.append(f'''Theorem {name}_source_miss : forall sto account,
  sto ({name}_prefix ++ account) = None ->
- sto ({name}_legacy_prefix ++ account) = None ->
  {name}_binding sto account = OK (GBool false).
-Proof. intros sto account Hactive Hlegacy.
- unfold {name}_binding, {name}_reader.
- rewrite (read_fallback_none {name}_prefix {name}_legacy_prefix sto account
-          Hactive Hlegacy).
- reflexivity. Qed.
+Proof. intros sto account Hstore.
+ unfold {name}_binding, {name}_reader. rewrite Hstore. reflexivity. Qed.
 Print Assumptions {name}_source_miss.
 Theorem {name}_source_hit : forall sto account payload,
  sto ({name}_prefix ++ account) = Some payload ->
  {name}_binding sto account = OK (GBool true).
 Proof. intros sto account payload Hstore.
- unfold {name}_binding, {name}_reader.
- rewrite (read_fallback_hit {name}_prefix {name}_legacy_prefix sto account
-          payload Hstore).
- reflexivity. Qed.
+ unfold {name}_binding, {name}_reader. rewrite Hstore. reflexivity. Qed.
 Print Assumptions {name}_source_hit.
-Theorem {name}_source_falls_back : forall sto account payload,
- sto ({name}_prefix ++ account) = None ->
- sto ({name}_legacy_prefix ++ account) = Some payload ->
- {name}_binding sto account = OK (GBool true).
-Proof. intros sto account payload Hactive Hstore.
- unfold {name}_binding, {name}_reader.
- rewrite (read_fallback_miss {name}_prefix {name}_legacy_prefix sto account Hactive).
- rewrite Hstore. reflexivity. Qed.
-Print Assumptions {name}_source_falls_back.
 ''')
-        elif kind == 'fallback-call-offset':
-            # Delegating legacy-compatibility epoch getter: `initiated =
+        elif kind == 'raw-call-offset':
+            # Delegating raw epoch getter: `initiated =
             # GetMarketEscrowOwnerCancelInitiated(accountId); return initiated
             # == null ? 0 : (BigInteger)initiated + <pinned delay>;`. The
             # shared reader returns the raw payload, so the decode is the
@@ -1025,12 +868,14 @@ Print Assumptions {name}_source_falls_back.
             # getters do; the miss value is the pinned integer default.
             require(row['decode'] == 'integer' and 'offset' in row and
                     row['default'] == {'kind': 'integer', 'value': 0},
-                    'Unsupported fallback epoch projection: ' + name)
+                    'Unsupported raw epoch projection: ' + name)
             offset_txt = '%d%%Z' % row['offset']
-            active, legacy = _fallback_prefixes(bound, name)
-            out.append(f'Definition {name}_prefix : bytes := {_prefix_literal(active)}.\n'
-                       f'Definition {name}_legacy_prefix : bytes := '
-                       f'{_prefix_literal(legacy)}.\n'
+            source = bound['callees'][row.get('callee')
+                                          or CALLEE_KINDS[kind]]['projection']
+            require('prefixBytes' in source,
+                    'Raw epoch reader must pin its prefix: ' + name)
+            out.append(f'Definition {name}_prefix : bytes := '
+                       f'{_prefix_literal(source["prefixBytes"])}.\n'
                        f'Definition {name}_decode (b : bytes) : Outcome :=\n'
                        ' match decode_integer b with\n'
                        f' | OK (GInt v) => OK (GInt (v + {offset_txt}))\n'
@@ -1038,38 +883,21 @@ Print Assumptions {name}_source_falls_back.
                        ' | Fault => Fault\n'
                        ' end.\n'
                        f'Definition {name}_binding (sto : storage) (account : bytes) : Outcome :=\n'
-                       f' fallback_outcome {name}_prefix {name}_legacy_prefix'
-                       f' (GInt 0%Z) {name}_decode sto account.\n')
+                       f' getter_outcome {name}_prefix (GInt 0%Z) {name}_decode sto account.\n')
             out.append(f'''Theorem {name}_source_miss : forall sto account,
  sto ({name}_prefix ++ account) = None ->
- sto ({name}_legacy_prefix ++ account) = None ->
  {name}_binding sto account = OK (GInt 0%Z).
-Proof. intros sto account Hactive Hlegacy.
- unfold {name}_binding, fallback_outcome.
- rewrite (read_fallback_none {name}_prefix {name}_legacy_prefix sto account
-          Hactive Hlegacy).
- reflexivity. Qed.
+Proof. intros sto account H. unfold {name}_binding, getter_outcome.
+ rewrite H. reflexivity. Qed.
 Print Assumptions {name}_source_miss.
 Theorem {name}_source_hit : forall sto account payload value,
  sto ({name}_prefix ++ account) = Some payload ->
  decode_integer payload = OK (GInt value) ->
  {name}_binding sto account = OK (GInt (value + {offset_txt})).
 Proof. intros sto account payload value Hstore Hdecode.
- unfold {name}_binding, fallback_outcome, {name}_decode.
- rewrite (read_fallback_hit {name}_prefix {name}_legacy_prefix sto account
-          payload Hstore).
- rewrite Hdecode. reflexivity. Qed.
-Print Assumptions {name}_source_hit.
-Theorem {name}_source_falls_back : forall sto account payload value,
- sto ({name}_prefix ++ account) = None ->
- sto ({name}_legacy_prefix ++ account) = Some payload ->
- decode_integer payload = OK (GInt value) ->
- {name}_binding sto account = OK (GInt (value + {offset_txt})).
-Proof. intros sto account payload value Hactive Hstore Hdecode.
- unfold {name}_binding, fallback_outcome, {name}_decode.
- rewrite (read_fallback_miss {name}_prefix {name}_legacy_prefix sto account Hactive).
+ unfold {name}_binding, getter_outcome, {name}_decode.
  rewrite Hstore, Hdecode. reflexivity. Qed.
-Print Assumptions {name}_source_falls_back.
+Print Assumptions {name}_source_hit.
 ''')
         else:
             raise ValueError('Unknown projection kind: ' + kind)
@@ -1078,9 +906,7 @@ Print Assumptions {name}_source_falls_back.
     # presence getters and their record projections read the same
     # PendingModuleCall key), so the definition list is deduplicated by byte
     # value and the kernel still checks that every distinct constant differs
-    # from every other one. Historical prefixes are included alongside the
-    # active ones: a legacy-compatibility getter must not read its fallback key
-    # from the same byte string it prefers, or the fallback would be dead code.
+    # from every other one.
     prefix_defs, seen_prefixes = [], set()
 
     def add_prefix(label, value):
@@ -1091,19 +917,15 @@ Print Assumptions {name}_source_falls_back.
 
     for name in sorted(methods):
         row = methods[name]['projection']
-        for key, suffix in (('prefixBytes', '_prefix'),
-                            ('legacyBytes', '_legacy_prefix')):
-            value = row.get(key)
-            if value is not None:
-                add_prefix('%s%s' % (name, suffix), value)
-        if row.get('kind', 'direct') in ('fallback-call-presence',
-                                         'fallback-call-offset'):
-            # A delegating fallback getter pins neither prefix itself: both are
-            # read out of the shared reader, and the binding defines them under
-            # the caller's own names.
-            active, legacy = _fallback_prefixes(bound, name)
-            add_prefix('%s_prefix' % name, active)
-            add_prefix('%s_legacy_prefix' % name, legacy)
+        value = row.get('prefixBytes')
+        if value is not None:
+            add_prefix('%s_prefix' % name, value)
+        if row.get('kind', 'direct') in ('raw-call-presence', 'raw-call-offset'):
+            # A delegating raw getter pins no prefix itself: the prefix is read
+            # out of the shared reader's projection, and the binding defines it
+            # under the caller's own name.
+            callee = bound['callees'][row.get('callee') or CALLEE_KINDS[row['kind']]]
+            add_prefix('%s_prefix' % name, callee['projection']['prefixBytes'])
     if 'state-field' in kinds.values() or 'state-gt-zero' in kinds.values():
         add_prefix('account_state_prefix',
                    bound['callee']['projection']['prefixBytes'])
@@ -1219,11 +1041,6 @@ def _simulate_trace(parts, static_term, seed, static_terms=None):
     (hyp_name, statement, pushed _Val) and its step lemma must rewrite the
     hypothesis before closing by reflexivity:
       storage    - System.Storage.Get result (miss GNull / hit GBytes payload).
-                   A list seeds the reads in program order, which is what the
-                   legacy-compatibility readers need: they consult the active
-                   key and then, only on a miss, the historical one, so one
-                   path can read two different keys with two different
-                   outcomes.
       calltoken  - StdLib.Deserialize oracle result (hit GArray xs)
       pick       - PICKITEM projection result (hit v / GInt z)
       convert    - CONVERT 0x21 on a symbolic payload (decode contract)
@@ -1337,13 +1154,9 @@ def _simulate_trace(parts, static_term, seed, static_terms=None):
             stack.pop()  # key
             require(ctx.inner == '[33%nat]', 'Storage.Get context handle mismatch')
             require('storage' in seed, 'StorageGet without a seed')
-            entry = seed['storage']
-            if isinstance(entry, list):
-                require(lookups[0] < len(entry),
-                        'Program performs more storage reads than the seed fixes')
-                entry = entry[lookups[0]]
+            hyp, stmt, val = seed['storage']
             lookups[0] += 1
-            hyp, stmt, val = entry
+            require(lookups[0] == 1, 'Program performs more than one storage read')
             needs.append((hyp, stmt))
             stack.append(val)
         elif op == 'EqualIns':
@@ -1758,13 +1571,12 @@ def build_program(bound, decoded_rows, name):
             callee_rows, token_index=DESERIALIZE_TOKEN_INDEX, call_args=call_args)
         # The combined table holds the caller's own prefix field (when its
         # projection pins one), the delay constant it adds (same condition) and
-        # the callee's own prefix fields, so the bound is derived from the two
+        # the callee's own prefix field, so the bound is derived from the two
         # projections and the disjointness of the frames is still enforced by
         # combine_program.
         static_limit = ((1 if 'prefixBytes' in row else 0)
                         + (1 if 'offset' in row else 0)
-                        + sum(1 for key in ('prefixBytes', 'legacyBytes')
-                              if key in callee_entry['projection']))
+                        + (1 if 'prefixBytes' in callee_entry['projection'] else 0))
         parts, nlocals, statics = combine_program(
             caller_parts, caller_meta, callee_parts, callee_meta,
             static_limit=static_limit)
@@ -1786,26 +1598,26 @@ def build_program(bound, decoded_rows, name):
             require(parts[ci + 1] == 'Push GNull' and parts[ci + 2] == 'NotEqualIns',
                     'Delegating presence region must test the callee result against null: '
                     + name)
-        elif kind == 'fallback-call-presence':
-            # `return <fallback reader>(accountId) != null;`: the same null test
-            # as the pending-module-call presence getters, but the shared reader
-            # owns both prefixes and the caller declares no static field at all.
+        elif kind == 'raw-call-presence':
+            # `return <raw reader>(accountId) != null;`: the same null test
+            # as the pending-module-call presence getters, but the shared
+            # reader owns the prefix and the caller declares no static field
+            # at all.
             require(not caller_meta['static_slots'],
-                    'Delegating fallback presence getter must pin no static field'
+                    'Delegating raw presence getter must pin no static field'
                     ' of its own: ' + name)
-            # The two prefixes and the read order live in the shared reader, so
-            # the caller's own projection must claim neither a prefix nor a
-            # decode contract. Claiming one would make the pinned static
-            # inventory disagree with the region the projection is read as.
-            require(not any(key in row
-                            for key in ('prefixBytes', 'legacyBytes', 'offset', 'decode')),
-                    'Delegating fallback presence getter must declare no prefix or'
+            # The prefix lives in the shared reader, so the caller's own
+            # projection must claim neither a prefix nor a decode contract.
+            # Claiming one would make the pinned static inventory disagree
+            # with the region the projection is read as.
+            require(not any(key in row for key in ('prefixBytes', 'offset', 'decode')),
+                    'Delegating raw presence getter must declare no prefix or'
                     ' decode of its own: ' + name)
             require(parts[ci + 1] == 'Push GNull' and parts[ci + 2] == 'NotEqualIns',
-                    'Delegating fallback presence region must test the callee result'
+                    'Delegating raw presence region must test the callee result'
                     ' against null: ' + name)
-        elif kind == 'fallback-call-offset':
-            # `initiated = <fallback reader>(accountId); return initiated == null
+        elif kind == 'raw-call-offset':
+            # `initiated = <raw reader>(accountId); return initiated == null
             #  ? 0 : (BigInteger)initiated + <pinned delay>;`. The hit arm is the
             # framework reference cast of the raw payload, so the checked shape is
             # the null test, the pinned integer miss arm, the cast sequence and
@@ -1813,28 +1625,28 @@ def build_program(bound, decoded_rows, name):
             # reader returns the payload itself rather than a record.
             require(row['decode'] == 'integer' and
                     row['default'] == {'kind': 'integer', 'value': 0},
-                    'Fallback epoch projection must default to the pinned integer: ' + name)
-            # As for the presence delegator, both prefixes belong to the shared
+                    'Raw epoch projection must default to the pinned integer: ' + name)
+            # As for the presence delegator, the prefix belongs to the shared
             # reader: the caller owns the decode and the delay constant only.
-            require(not any(key in row for key in ('prefixBytes', 'legacyBytes')),
-                    'Delegating fallback epoch getter must declare no prefix of its'
+            require('prefixBytes' not in row,
+                    'Delegating raw epoch getter must declare no prefix of its'
                     ' own: ' + name)
             require(parts[ci + 1:ci + 5] == ['StLoc 0', 'LdLoc 0', 'Push GNull',
                                             'EqualIns'],
-                    'Fallback epoch region must store the reader result and test it'
+                    'Raw epoch region must store the reader result and test it'
                     ' against null: ' + name)
             require(parts[ci + 5].startswith('JumpIfNot '),
-                    'Fallback epoch region must branch on the null test: ' + name)
+                    'Raw epoch region must branch on the null test: ' + name)
             arm = int(parts[ci + 5].split()[1])
             require(parts[ci + 6] == 'Push (GInt 0)',
-                    'Fallback epoch miss arm must be the pinned integer default: ' + name)
+                    'Raw epoch miss arm must be the pinned integer default: ' + name)
             require(parts[arm:arm + 3] == ['LdLoc 0', 'Dup', 'IsNull'],
-                    'Fallback epoch hit arm must cast the raw payload: ' + name)
+                    'Raw epoch hit arm must cast the raw payload: ' + name)
             adds = [i for i, p in enumerate(parts) if p == 'AddIns']
             require('offset' in row and len(adds) == 1 and
                     parts[adds[0] - 1].startswith('LdStatic ') and
                     parts[adds[0] - 2] == 'Convert %d' % CONVERT_INTEGER,
-                    'Fallback epoch region must add the pinned delay to the decoded'
+                    'Raw epoch region must add the pinned delay to the decoded'
                     ' payload: ' + name)
         else:
             require(kind == 'presence-call-item', 'Unknown callee kind: ' + kind)
@@ -1905,27 +1717,6 @@ def build_program(bound, decoded_rows, name):
             require(sum(1 for p in parts if p.startswith('LdStatic ')) == 2 and
                     'AddIns' in parts,
                     'Offset getter region must add the pinned delay constant: ' + name)
-        if kind == 'inline-fallback':
-            # The inline twin of the delegated fallback reader: the region builds
-            # the active key itself, reads once, re-reads the historical key into
-            # the same local when the active read missed, and only then projects
-            # the payload. Every claim the source-level projection asserts is
-            # re-checked here: exactly two concatenations and two reads, both
-            # tested against null, the second stored into the same slot the first
-            # one used, the two prefix statics distinct, and the UInt160 cast
-            # width witness present.
-            require('legacyBytes' in row,
-                    'Inline fallback projection must pin the historical prefix: ' + name)
-            require('offset' not in row,
-                    'Inline fallback region must not carry a delay constant: ' + name)
-            require(parts.count('Concat') == 2 and parts.count('StorageGet') == 2,
-                    'Inline fallback region must build and read exactly two keys: ' + name)
-            require(parts.count('EqualIns') == 2 and parts.count('Push GNull') == 2,
-                    'Inline fallback region must test both reads against null: ' + name)
-            require(parts.count('StLoc 1') == 2 and parts.count('StLoc 2') == 1,
-                    'Inline fallback region must re-read into the value local: ' + name)
-            require(parts.count('Throw') == 1 and cast_width is not None,
-                    'Inline fallback region must carry the UInt160 cast witness: ' + name)
         if kind == 'inline-record-time':
             # The inline twin of the delegating Time getters: the region builds
             # the key itself, reads once, guards with an early return of the
@@ -1963,14 +1754,13 @@ def _static_plan(bound, name, parts):
     Roles are assigned per frame, never by raw program position:
       delay   the load the program ADDs (so a delay that drifted into another
               slot is refused instead of being relabelled);
-      prefix  the caller's own active prefix field, or the callee's first one;
-      legacy  the historical prefix field of whichever frame pins it.
+      prefix  the caller's own prefix field, or the callee's one.
     The expected role set is read off the projections (caller and, when the
     kind delegates, callee), and the number of loads must match it exactly, so
     an unmodelled extra static fails closed instead of being ignored. The
-    delegating legacy-compatibility kinds place the caller's delay *ahead* of
-    the callee region, which is why the delay role is located by what the load
-    feeds into rather than by where it appears.
+    delegating epoch kinds place the caller's delay *ahead* of the callee
+    region, which is why the delay role is located by what the load feeds
+    into rather than by where it appears.
     """
     entry = bound['methods'][name]
     row = entry['projection']
@@ -1985,7 +1775,7 @@ def _static_plan(bound, name, parts):
     for source in (row, callee['projection'] if callee else None):
         if source is None:
             continue
-        expected += sum(1 for key in ('prefixBytes', 'legacyBytes') if key in source)
+        expected += 1 if 'prefixBytes' in source else 0
     if 'offset' in row:
         expected += 1
     require(len(loads) == expected,
@@ -1999,33 +1789,21 @@ def _static_plan(bound, name, parts):
     if delay_slot is not None:
         roles.append((int(parts[delay_slot][len('LdStatic '):]), 'delay'))
     caller = [i for i in loads if i < split and i != delay_slot]
-    if 'legacyBytes' in row:
-        # Inline fallback: the region pins both prefixes in its own frame, so
-        # the active key is the first load it makes and the historical key is
-        # the second. The order is the pinned contract, which is why the roles
-        # are assigned by position inside this one frame.
-        require('prefixBytes' in row and len(caller) == 2,
-                'Inline fallback must load both of its prefixes: ' + name)
-        roles.append((int(parts[caller[0]][len('LdStatic '):]), 'prefix'))
-        roles.append((int(parts[caller[1]][len('LdStatic '):]), 'legacy'))
-    elif 'prefixBytes' in row:
+    if 'prefixBytes' in row:
         require(len(caller) == 1, 'Caller frame must load exactly its own prefix: ' + name)
         roles.append((int(parts[caller[0]][len('LdStatic '):]), 'prefix'))
     else:
         # The caller pins no prefix of its own: the frame the certified CALL
         # enters owns the key, either from the pinned constant the caller
         # passes as an operand (the record reader) or from its own static
-        # fields (the state reader, the legacy-compatibility reader).
+        # field (the state reader, the escrow owner-cancel reader).
         require(callee is not None and 'prefixBytes' in callee['projection'],
-                'Missing the active prefix load: ' + name)
+                'Missing the prefix load: ' + name)
         require(not caller, 'Caller frame must not load a prefix it does not pin: ' + name)
         callee_loads = [i for i in loads if i >= split and i != delay_slot]
-        require(callee_loads, 'Callee frame must load the prefix the getter reads: ' + name)
+        require(len(callee_loads) == 1,
+                'Callee frame must load exactly its own prefix: ' + name)
         roles.append((int(parts[callee_loads[0]][len('LdStatic '):]), 'prefix'))
-        if 'legacyBytes' in callee['projection']:
-            require(len(callee_loads) == 2,
-                    'Callee frame must load exactly its two prefixes: ' + name)
-            roles.append((int(parts[callee_loads[1]][len('LdStatic '):]), 'legacy'))
     slots = [slot for slot, _ in roles]
     require(len(set(slots)) == len(slots), 'Pinned static roles must use distinct slots: ' + name)
     require(set(slots) == set(int(p[len('LdStatic '):]) for p in parts
@@ -2033,11 +1811,10 @@ def _static_plan(bound, name, parts):
             'Unassigned static load in ' + name)
     # Canonical role order: the rendered table must depend on WHICH roles a
     # program pins, not on the order its loads happen to appear in (the
-    # delegating fallback reader loads its own prefixes after the caller's
-    # delay), so the roles are re-emitted active prefix, historical prefix,
-    # delay.
+    # delegating epoch getter loads its own delay ahead of the callee region),
+    # so the roles are re-emitted prefix first, delay second.
     slot_of = {role: slot for slot, role in roles}
-    return [(slot_of[role], role) for role in ('prefix', 'legacy', 'delay')
+    return [(slot_of[role], role) for role in ('prefix', 'delay')
             if role in slot_of]
 
 
@@ -2048,8 +1825,6 @@ def _static_term(bound, name, role):
     kind = row.get('kind', 'direct')
     if role == 'delay':
         return 'GInt %d%%Z' % row['offset']
-    if role == 'legacy':
-        return 'GBytes %s_legacy_prefix' % name
     if kind in ('state-field', 'state-gt-zero'):
         return 'GBytes account_state_prefix'
     return 'GBytes %s_prefix' % name
@@ -2060,10 +1835,9 @@ def _statics_definition(ident, roles, terms):
 
     The first arm sits on the `fun i =>` line and every further arm continues
     an indented `else if`, so a program pinning a single prefix renders on one
-    line, the two-role timelock getters render as before, and the
-    legacy-compatibility programs pin all three roles (active prefix,
-    historical prefix, added delay) in one table. The arm order is the
-    canonical role order `_static_plan` returns, never a program's load order.
+    line and the two-role timelock getters render both arms. The arm order is
+    the canonical role order `_static_plan` returns, never a program's load
+    order.
     """
     require(roles, 'A program must pin at least one static field')
     lines = ['Definition %s_statics : nat -> option GVal :=' % ident]
@@ -2116,8 +1890,6 @@ def render_vm_certificate(bound, decoded_rows):
             inner = None
             if role == 'prefix':
                 inner = prefix_name
-            elif role == 'legacy':
-                inner = '%s_legacy_prefix' % name
             static_terms[slot] = (terms[role], inner)
         definitions.append(_statics_definition(ident, roles, terms))
         init_args = '(sto : storage) (account : bytes)'
@@ -2137,8 +1909,9 @@ def render_vm_certificate(bound, decoded_rows):
             # The traced entry state carries the argument vector the caller
             # actually builds at the certified CALL. A two-parameter callee
             # (the record reader) is bound to [account; pinned prefix] exactly
-            # as before; a one-parameter callee (the fallback reader) takes the
-            # ABI account argument alone and pins both of its prefixes itself.
+            # as before; a one-parameter callee (the raw owner-cancel reader)
+            # takes the ABI account argument alone and pins its own prefix
+            # itself.
             nparams = bound['callees'][row.get('callee') or CALLEE_KINDS[kind]]['nparams']
             require(nparams in (1, 2), 'Unsupported shared callee arity: ' + name)
             if nparams == 2:
@@ -2697,164 +2470,43 @@ def render_vm_certificate(bound, decoded_rows):
                 % {'n': name, 'p': prefix_name, 'f': fuel, 'id': ident,
                    't': DESERIALIZE_TOKEN_INDEX, 'i': index, 'chain': hit_chain,
                    'end': hit_end, 'hv': hit_val})
-        elif kind in FALLBACK_KINDS:
-            # Legacy-compatibility getters. The pinned claim of the family is
-            # the READ ORDER, so the traces separate the cases it creates
-            # instead of collapsing them: the active key bound (the historical
-            # read is skipped entirely), the active key unbound with the
-            # historical key bound (the fallback read is taken), and both
-            # unbound (the pinned default). A control that only ever bound one
-            # of the two keys could not tell the order from its reverse.
-            legacy_name = '%s_legacy_prefix' % name
-            key_active = prefix_name + ' ++ account'
-            key_legacy = legacy_name + ' ++ account'
-
-            def seeds(active_entry, legacy_entry, extra=None):
-                entries = []
-                if active_entry is not None:
-                    entries.append(active_entry)
-                if legacy_entry is not None:
-                    entries.append(legacy_entry)
-                bundle = {'storage': entries}
-                bundle.update(extra or {})
-                return bundle
-
-            miss_seed = seeds(('Hactive', 'sto (%s) = None' % key_active, _Val('GNull')),
-                              ('Hlegacy', 'sto (%s) = None' % key_legacy, _Val('GNull')))
-            active_seed = seeds(('Hstore', 'sto (%s) = Some payload' % key_active,
-                                 _Val('GBytes payload', 'payload')), None)
-            fallback_seed = seeds(('Hactive', 'sto (%s) = None' % key_active,
-                                   _Val('GNull')),
-                                  ('Hstore', 'sto (%s) = Some payload' % key_legacy,
-                                   _Val('GBytes payload', 'payload')))
-            if kind == 'inline-fallback':
-                require(row['decode'] == 'hash160' and cast_width is not None,
-                        'Inline fallback getter must carry the UInt160 width witness: '
-                        + name)
-                width = cast_width
-                default_val = '(GBytes hash160_default)'
-                active_seed['jmpeq'] = (
-                    'Hz', 'Z.eqb (Z.of_nat (length payload)) %d%%Z = true' % width,
-                    'true')
-                fallback_seed['jmpeq'] = active_seed['jmpeq']
-                miss_chain = render_chain('miss', '', '', miss_seed,
-                                          'Done ' + default_val)
-                active_chain = render_chain('hitactive', '(payload : bytes)', 'payload',
-                                            active_seed, 'Done (GBytes payload)')
-                fallback_chain = render_chain('hitfallback', '(payload : bytes)', 'payload',
-                                              fallback_seed, 'Done (GBytes payload)')
-                invalid_seed = seeds(('Hstore',
-                                      'sto (%s) = Some payload' % key_active,
-                                      _Val('GBytes payload', 'payload')), None)
-                invalid_seed['jmpeq'] = (
-                    'Hz', 'Z.eqb (Z.of_nat (length payload)) %d%%Z = false' % width,
-                    'false')
-                invalid_chain = render_chain('hitinvalid', '(payload : bytes)', 'payload',
-                                             invalid_seed, 'Thrown')
-                theorems.append(
-                    'Theorem %(n)s_vm_miss : forall sto account,\n'
-                    ' sto (%(a)s) = None ->\n'
-                    ' sto (%(l)s) = None ->\n'
-                    ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
-                    ' = Done %(dv)s /\\\n'
-                    ' %(n)s_binding sto account = OK %(dv)s.\n'
-                    'Proof.\n'
-                    ' intros sto account Hactive Hlegacy. split.\n'
-                    ' - exact (%(chain)s).\n'
-                    ' - exact (%(n)s_source_missing_key_default sto account'
-                    ' Hactive Hlegacy).\n'
-                    'Qed.\n'
-                    'Print Assumptions %(n)s_vm_miss.\n'
-                    % {'n': name, 'a': key_active, 'l': key_legacy, 'f': fuel,
-                       'id': ident, 'dv': default_val, 'chain': miss_chain})
-                theorems.append(
-                    'Theorem %(n)s_vm_hit_active : forall sto account payload,\n'
-                    ' sto (%(a)s) = Some payload ->\n'
-                    ' valid_bytes payload = true ->\n'
-                    ' (length payload = %(w)d)%%nat ->\n'
-                    ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
-                    ' = Done (GBytes payload) /\\\n'
-                    ' %(n)s_binding sto account = OK (GBytes payload).\n'
-                    'Proof.\n'
-                    ' intros sto account payload Hstore Hvalid Hlen.\n'
-                    ' assert (Hz : Z.eqb (Z.of_nat (length payload)) %(w)d%%Z = true).\n'
-                    ' { apply Z.eqb_eq. rewrite Hlen. reflexivity. }\n'
-                    ' split.\n'
-                    ' - exact (%(chain)s).\n'
-                    ' - exact (%(n)s_source_active_hash160 sto account payload'
-                    ' Hstore Hvalid Hlen).\n'
-                    'Qed.\n'
-                    'Print Assumptions %(n)s_vm_hit_active.\n'
-                    % {'n': name, 'a': key_active, 'w': width, 'f': fuel,
-                       'id': ident, 'chain': active_chain})
-                theorems.append(
-                    'Theorem %(n)s_vm_falls_back : forall sto account payload,\n'
-                    ' sto (%(a)s) = None ->\n'
-                    ' sto (%(l)s) = Some payload ->\n'
-                    ' valid_bytes payload = true ->\n'
-                    ' (length payload = %(w)d)%%nat ->\n'
-                    ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
-                    ' = Done (GBytes payload) /\\\n'
-                    ' %(n)s_binding sto account = OK (GBytes payload).\n'
-                    'Proof.\n'
-                    ' intros sto account payload Hactive Hstore Hvalid Hlen.\n'
-                    ' assert (Hz : Z.eqb (Z.of_nat (length payload)) %(w)d%%Z = true).\n'
-                    ' { apply Z.eqb_eq. rewrite Hlen. reflexivity. }\n'
-                    ' split.\n'
-                    ' - exact (%(chain)s).\n'
-                    ' - exact (%(n)s_source_legacy_hash160 sto account payload'
-                    ' Hactive Hstore Hvalid Hlen).\n'
-                    'Qed.\n'
-                    'Print Assumptions %(n)s_vm_falls_back.\n'
-                    % {'n': name, 'a': key_active, 'l': key_legacy, 'w': width,
-                       'f': fuel, 'id': ident, 'chain': fallback_chain})
-                theorems.append(
-                    'Theorem %(n)s_vm_hit_invalid_size : forall sto account payload,\n'
-                    ' sto (%(a)s) = Some payload ->\n'
-                    ' (length payload <> %(w)d)%%nat ->\n'
-                    ' run %(f)d 0 %(id)s_code (%(id)s_init sto account) = Thrown /\\\n'
-                    ' %(n)s_binding sto account = Fault.\n'
-                    'Proof.\n'
-                    ' intros sto account payload Hstore Hlen.\n'
-                    ' assert (Hz : Z.eqb (Z.of_nat (length payload)) %(w)d%%Z = false).\n'
-                    ' { apply Z.eqb_neq. intro He. apply Hlen.\n'
-                    '   apply (Nat2Z.inj (length payload) %(w)d He). }\n'
-                    ' split.\n'
-                    ' - exact (%(chain)s).\n'
-                    ' - exact (%(n)s_source_short_payload_faults sto account'
-                    ' payload Hstore Hlen).\n'
-                    'Qed.\n'
-                    'Print Assumptions %(n)s_vm_hit_invalid_size.\n'
-                    % {'n': name, 'a': key_active, 'w': width, 'f': fuel,
-                       'id': ident, 'chain': invalid_chain})
-            elif kind == 'fallback-call-presence':
-                # The shared reader returns the raw payload or the null item, so
-                # the caller's null test is decidable on both sides: a bound key
-                # yields the payload itself and an unbound pair yields null.
+        elif kind in ('raw-call-presence', 'raw-call-offset'):
+            # Delegating raw readers over the escrow owner-cancel latch. The
+            # shared reader returns the stored payload verbatim (the null item
+            # on a miss) and performs no deserialize, so the traces are the
+            # two outcomes of the one pinned key: the miss, answered with the
+            # pinned default, and the hit, whose payload the caller tests
+            # against null or casts and offsets in its own frame.
+            key_expr = prefix_name + ' ++ account'
+            miss_seed = {'storage': ('Hstore', 'sto (%s) = None' % key_expr,
+                                     _Val('GNull'))}
+            hit_seed = {'storage': ('Hstore', 'sto (%s) = Some payload' % key_expr,
+                                    _Val('GBytes payload', 'payload'))}
+            if kind == 'raw-call-presence':
+                # The reader's raw result makes the caller's null test
+                # decidable on both sides: a bound key yields the payload
+                # itself and an unbound key yields the null item.
                 miss_chain = render_chain('miss', '', '', miss_seed,
                                           'Done (GBool false)')
-                active_chain = render_chain('hit', '(payload : bytes)', 'payload',
-                                            active_seed, 'Done (GBool true)')
-                fallback_chain = render_chain('hitfallback', '(payload : bytes)', 'payload',
-                                              fallback_seed, 'Done (GBool true)')
+                hit_chain = render_chain('hit', '(payload : bytes)', 'payload',
+                                         hit_seed, 'Done (GBool true)')
                 theorems.append(
                     'Theorem %(n)s_vm_miss : forall sto account,\n'
-                    ' sto (%(a)s) = None ->\n'
-                    ' sto (%(l)s) = None ->\n'
+                    ' sto (%(k)s) = None ->\n'
                     ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
                     ' = Done (GBool false) /\\\n'
                     ' %(n)s_binding sto account = OK (GBool false).\n'
                     'Proof.\n'
-                    ' intros sto account Hactive Hlegacy. split.\n'
+                    ' intros sto account Hstore. split.\n'
                     ' - exact (%(chain)s).\n'
-                    ' - exact (%(n)s_source_miss sto account Hactive Hlegacy).\n'
+                    ' - exact (%(n)s_source_miss sto account Hstore).\n'
                     'Qed.\n'
                     'Print Assumptions %(n)s_vm_miss.\n'
-                    % {'n': name, 'a': key_active, 'l': key_legacy, 'f': fuel,
-                       'id': ident, 'chain': miss_chain})
+                    % {'n': name, 'k': key_expr, 'f': fuel, 'id': ident,
+                       'chain': miss_chain})
                 theorems.append(
                     'Theorem %(n)s_vm_hit : forall sto account payload,\n'
-                    ' sto (%(a)s) = Some payload ->\n'
+                    ' sto (%(k)s) = Some payload ->\n'
                     ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
                     ' = Done (GBool true) /\\\n'
                     ' %(n)s_binding sto account = OK (GBool true).\n'
@@ -2864,64 +2516,43 @@ def render_vm_certificate(bound, decoded_rows):
                     ' - exact (%(n)s_source_hit sto account payload Hstore).\n'
                     'Qed.\n'
                     'Print Assumptions %(n)s_vm_hit.\n'
-                    % {'n': name, 'a': key_active, 'f': fuel, 'id': ident,
-                       'chain': active_chain})
-                theorems.append(
-                    'Theorem %(n)s_vm_falls_back : forall sto account payload,\n'
-                    ' sto (%(a)s) = None ->\n'
-                    ' sto (%(l)s) = Some payload ->\n'
-                    ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
-                    ' = Done (GBool true) /\\\n'
-                    ' %(n)s_binding sto account = OK (GBool true).\n'
-                    'Proof.\n'
-                    ' intros sto account payload Hactive Hstore. split.\n'
-                    ' - exact (%(chain)s).\n'
-                    ' - exact (%(n)s_source_falls_back sto account payload'
-                    ' Hactive Hstore).\n'
-                    'Qed.\n'
-                    'Print Assumptions %(n)s_vm_falls_back.\n'
-                    % {'n': name, 'a': key_active, 'l': key_legacy, 'f': fuel,
-                       'id': ident, 'chain': fallback_chain})
+                    % {'n': name, 'k': key_expr, 'f': fuel, 'id': ident,
+                       'chain': hit_chain})
             else:
                 # The delegating epoch getter: the reader's raw payload is cast
                 # with the pinned little-endian decode and the pinned delay is
                 # added inside the caller's field arm, so the observable result
-                # carries the constant on the hit and the fallback paths alike.
+                # carries the constant on the hit path.
                 require(row['decode'] == 'integer' and 'offset' in row,
-                        'Fallback epoch projection must carry the delay constant: ' + name)
+                        'Raw epoch projection must carry the delay constant: ' + name)
                 offset_txt = '%d%%Z' % row['offset']
                 default_val = '(GInt 0%Z)'
                 hit_end = 'Done (GInt (value + %s))' % offset_txt
-                active_seed['convert'] = (
+                hit_seed['convert'] = (
                     'Hdecode', 'decode_integer payload = OK (GInt value)',
                     _Val('GInt value'))
-                fallback_seed['convert'] = active_seed['convert']
                 miss_chain = render_chain('miss', '', '', miss_seed,
                                           'Done ' + default_val)
-                active_chain = render_chain(
+                hit_chain = render_chain(
                     'hit', '(payload : bytes) (value : Z)', 'payload value',
-                    active_seed, hit_end)
-                fallback_chain = render_chain(
-                    'hitfallback', '(payload : bytes) (value : Z)', 'payload value',
-                    fallback_seed, hit_end)
+                    hit_seed, hit_end)
                 theorems.append(
                     'Theorem %(n)s_vm_miss : forall sto account,\n'
-                    ' sto (%(a)s) = None ->\n'
-                    ' sto (%(l)s) = None ->\n'
+                    ' sto (%(k)s) = None ->\n'
                     ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
                     ' = Done %(dv)s /\\\n'
                     ' %(n)s_binding sto account = OK %(dv)s.\n'
                     'Proof.\n'
-                    ' intros sto account Hactive Hlegacy. split.\n'
+                    ' intros sto account Hstore. split.\n'
                     ' - exact (%(chain)s).\n'
-                    ' - exact (%(n)s_source_miss sto account Hactive Hlegacy).\n'
+                    ' - exact (%(n)s_source_miss sto account Hstore).\n'
                     'Qed.\n'
                     'Print Assumptions %(n)s_vm_miss.\n'
-                    % {'n': name, 'a': key_active, 'l': key_legacy, 'f': fuel,
-                       'id': ident, 'dv': default_val, 'chain': miss_chain})
+                    % {'n': name, 'k': key_expr, 'f': fuel, 'id': ident,
+                       'dv': default_val, 'chain': miss_chain})
                 theorems.append(
                     'Theorem %(n)s_vm_hit : forall sto account payload value,\n'
-                    ' sto (%(a)s) = Some payload ->\n'
+                    ' sto (%(k)s) = Some payload ->\n'
                     ' decode_integer payload = OK (GInt value) ->\n'
                     ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
                     ' = %(end)s /\\\n'
@@ -2933,26 +2564,8 @@ def render_vm_certificate(bound, decoded_rows):
                     ' Hstore Hdecode).\n'
                     'Qed.\n'
                     'Print Assumptions %(n)s_vm_hit.\n'
-                    % {'n': name, 'a': key_active, 'f': fuel, 'id': ident,
-                       'end': hit_end, 'o': offset_txt, 'chain': active_chain})
-                theorems.append(
-                    'Theorem %(n)s_vm_falls_back : forall sto account payload value,\n'
-                    ' sto (%(a)s) = None ->\n'
-                    ' sto (%(l)s) = Some payload ->\n'
-                    ' decode_integer payload = OK (GInt value) ->\n'
-                    ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
-                    ' = %(end)s /\\\n'
-                    ' %(n)s_binding sto account = OK (GInt (value + %(o)s)).\n'
-                    'Proof.\n'
-                    ' intros sto account payload value Hactive Hstore Hdecode. split.\n'
-                    ' - exact (%(chain)s).\n'
-                    ' - exact (%(n)s_source_falls_back sto account payload value'
-                    ' Hactive Hstore Hdecode).\n'
-                    'Qed.\n'
-                    'Print Assumptions %(n)s_vm_falls_back.\n'
-                    % {'n': name, 'a': key_active, 'l': key_legacy, 'f': fuel,
-                       'id': ident, 'end': hit_end, 'o': offset_txt,
-                       'chain': fallback_chain})
+                    % {'n': name, 'k': key_expr, 'f': fuel, 'id': ident,
+                       'end': hit_end, 'o': offset_txt, 'chain': hit_chain})
         else:
             raise ValueError('Unknown projection kind: ' + kind)
         code_names = [ident + '_code']
@@ -3093,46 +2706,16 @@ VM_MUTANTS = [
      '             GBytes (repeat 0%nat 20); GInt 5%Z]\n'
      ' | _ => GNull\n'
      ' end.\n'),
-    # Legacy-compatibility readers. The pinned claim of the family is the read
-    # order, so the fixtures bind exactly ONE of the two keys and assert the
-    # outcome that order produces: the inline reader's fixture leaves the active
-    # key ([28]) unbound and binds the historical key ([18]) to a 20-byte
-    # payload, so a region that re-reads the active key returns the pinned zero
-    # default instead of that payload. The delegating twin does the same through
-    # the shared reader, whose own two static loads are the ones mutated; the
-    # caller's added delay is a third static load and is deliberately excluded
-    # from the mutation.
-    ('vm-inline-fallback-order',
-     'getVerifyScopeTarget',
-     'fun key => if bytes_eqb key [18%nat;1%nat] then Some (repeat 7%nat 20) else None',
-     '[1%nat]',
-     'Done (GBytes (repeat 7%nat 20))',
-     None),
-    ('vm-call-fallback-order',
-     'getMarketEscrowOwnerCancelTime',
-     'fun key => if bytes_eqb key [19%nat;1%nat] then Some [5%nat] else None',
-     '[1%nat]',
-     'Done (GInt 604800005)',
-     None),
-    # The width witness the inline reader re-checks before returning: bound to a
-    # valid 20-byte payload, the original returns it and an off-by-one witness
-    # throws instead.
-    ('vm-inline-fallback-width',
-     'getVerifyScopeTarget',
-     'fun key => if bytes_eqb key [28%nat;1%nat] then Some (repeat 5%nat 20) else None',
-     '[1%nat]',
-     'Done (GBytes (repeat 5%nat 20))',
-     None),
-    # The delegating presence test and the delegating epoch getter's pinned
-    # delay, both on the active key so the mutation and not the fallback is
-    # what the control isolates.
-    ('vm-presence-fallback-flip',
+    # Escrow owner-cancel raw readers: the delegating presence test and the
+    # delegating epoch getter's pinned delay, both on the reader's single
+    # prefix ([29]) so the mutation is what the control isolates.
+    ('vm-raw-presence-flip',
      'hasMarketEscrowOwnerCancel',
      'fun key => if bytes_eqb key [29%nat;1%nat] then Some [5%nat] else None',
      '[1%nat]',
      'Done (GBool true)',
      None),
-    ('vm-fallback-offset-delay',
+    ('vm-raw-offset-delay',
      'getMarketEscrowOwnerCancelTime',
      'fun key => if bytes_eqb key [29%nat;1%nat] then Some [5%nat] else None',
      '[1%nat]',
@@ -3215,7 +2798,7 @@ def _vm_mutant_program(name, getter, parts):
         mutated[picked] = 'Push (GInt %d)' % (index + 1)
         return mutated, 'record PICKITEM index %d -> %d' % (index, index + 1)
     if name in ('vm-record-time-delay', 'vm-inline-record-delay',
-                'vm-fallback-offset-delay'):
+                'vm-raw-offset-delay'):
         originals = [i for i, p in enumerate(parts)
                      if p.startswith('LdStatic ') and parts[i + 1] == 'AddIns']
         require(len(originals) == 1, 'Ambiguous delay static for mutation')
@@ -3223,61 +2806,20 @@ def _vm_mutant_program(name, getter, parts):
         mutated[originals[0]] = 'Push (GInt 0)'
         description = {'vm-record-time-delay': 'record timelock static -> literal zero',
                        'vm-inline-record-delay': 'inline epoch timelock static -> literal zero',
-                       'vm-fallback-offset-delay':
-                           'legacy-compatibility fallback reader timelock static'
-                           ' -> literal zero'}[name]
+                       'vm-raw-offset-delay':
+                           'raw reader epoch timelock static -> literal zero'}[name]
         return mutated, description
-    if name in ('vm-inline-fallback-order', 'vm-call-fallback-order'):
-        # The pinned claim of the legacy-compatibility family is the read ORDER:
-        # the active key is authoritative and the historical key is consulted
-        # only when the active key is unbound. Replacing the historical static
-        # load with the active prefix makes the region re-read the same key
-        # instead of falling back, so the pinned default is returned where the
-        # original returns the historical payload. The inline twin owns both
-        # loads in one frame; the delegating twin owns them in the shared reader
-        # the certified CALL enters, which is why the caller's own added delay
-        # (a static load too, but one the ADD consumes) is excluded here.
-        loads = [i for i, p in enumerate(parts) if p.startswith('LdStatic ')]
-        calls = [i for i, p in enumerate(parts) if p.startswith('Call ')]
-        frame = list(loads)
-        if calls:
-            frame = [i for i in loads if i > calls[0]]
-        frame = [i for i in frame
-                 if not (i + 1 < len(parts) and parts[i + 1] == 'AddIns')]
-        require(len(frame) == 2, 'Ambiguous fallback static loads for mutation')
-        mutated = list(parts)
-        mutated[frame[1]] = parts[frame[0]]
-        return mutated, ('historical prefix static load -> active prefix static load'
-                         if name == 'vm-inline-fallback-order'
-                         else 'shared reader historical prefix static load'
-                              ' -> active prefix static load')
-    if name == 'vm-inline-fallback-width':
-        # The inline reader re-checks the UInt160 width on the value it returns.
-        # Off-by-one on the pinned witness makes the region throw on every
-        # payload the original returns, which is what the control measures.
-        picks = []
-        for i, p in enumerate(parts):
-            if p.startswith('Push (GInt ') and i + 1 < len(parts) \
-                    and parts[i + 1].startswith('JumpEq '):
-                inner = p[len('Push (GInt '):-1]
-                suffix = '%Z' if inner.endswith('%Z') else ''
-                picks.append((i, int(inner[:-2] if suffix else inner), suffix))
-        require(len(picks) == 1, 'Ambiguous UInt160 width witness for mutation')
-        slot, width, suffix = picks[0]
-        mutated = list(parts)
-        mutated[slot] = 'Push (GInt %d%s)' % (width + 1, suffix)
-        return mutated, 'UInt160 width witness %d -> %d' % (width, width + 1)
-    if name == 'vm-presence-fallback-flip':
-        # `return <fallback reader>(accountId) != null;`: inverting the caller's
+    if name == 'vm-raw-presence-flip':
+        # `return <raw reader>(accountId) != null;`: inverting the caller's
         # null test flips the observable presence bit on every bound key.
         call_indices = [i for i, p in enumerate(parts) if p.startswith('Call ')]
         require(len(call_indices) == 1, 'Ambiguous call for mutation')
         ci = call_indices[0]
         require(parts[ci + 1] == 'Push GNull' and parts[ci + 2] == 'NotEqualIns',
-                'Expected the delegating fallback null test for mutation')
+                'Expected the delegating raw null test for mutation')
         mutated = list(parts)
         mutated[ci + 2] = 'EqualIns'
-        return mutated, 'NOTEQUAL -> EQUAL in the delegating fallback presence test'
+        return mutated, 'NOTEQUAL -> EQUAL in the delegating raw presence test'
     if name == 'vm-record-hash-default':
         originals = [i for i, p in enumerate(parts)
                      if p == 'Push (GInt 0)' and i + 1 < len(parts)
@@ -3302,12 +2844,10 @@ def _mutant_static_term(bound, name, role):
     kind = row.get('kind', 'direct')
     if role == 'delay':
         return 'GInt %d%%Z' % row['offset']
-    if kind in ('fallback-call-presence', 'fallback-call-offset'):
+    if kind in ('raw-call-presence', 'raw-call-offset'):
         source = bound['callees'][row.get('callee') or CALLEE_KINDS[kind]]['projection']
     else:
         source = row
-    if role == 'legacy':
-        return 'GBytes ' + _prefix_literal(source['legacyBytes'])
     if kind in ('state-field', 'state-gt-zero'):
         return ('GBytes '
                 + _prefix_literal(bound['callee']['projection']['prefixBytes']))
@@ -3386,12 +2926,12 @@ def vm_mutant_controls(bound, decoded_rows, work):
 
         module = 'VmMutant' + str(index)
         twin = render(parts)
-        (work / (module + 'Baseline.v')).write_text(twin)
+        (work / (module + 'Baseline.v')).write_bytes(twin.encode())
         code, out = kernel(['coqc', '-q', module + 'Baseline.v'], work,
                            work / (module + 'Baseline.log'))
         require(code == 0, 'VM mutant baseline was not accepted: ' + name)
         text = render(mutated)
-        (work / (module + '.v')).write_text(text)
+        (work / (module + '.v')).write_bytes(text.encode())
         code, out = kernel(['coqc', '-q', module + '.v'], work,
                            work / (module + '.log'), success=False)
         require(code != 0 and 'Error' in out, 'VM mutant was not rejected: ' + name)
@@ -3454,14 +2994,14 @@ def semantic_controls(bound, work):
                        'Definition mutant_binding (sto : storage) (acct : bytes) : Outcome :=\n'
                        ' getter_outcome ' + (prefix or original_prefix) + ' '
                        + (default or original_default) + ' ' + decode + ' sto acct.\n')
-        (work / (module + '.v')).write_text(definitions)
+        (work / (module + '.v')).write_bytes(definitions.encode())
         kernel(['coqc', '-q', module + '.v'], work, work / (module + '.log'))
         reject_module = 'StorageCounterexample' + str(index)
         assertion = (PRELUDE + 'Require Import ' + module + '.\n'
                      'Example mutant_matches_original : mutant_binding fixture_storage ' + account
                      + ' =\n original_binding fixture_storage ' + account + '.\n'
                      'Proof. reflexivity. Qed.\n')
-        (work / (reject_module + '.v')).write_text(assertion)
+        (work / (reject_module + '.v')).write_bytes(assertion.encode())
         code, text = kernel(['coqc', '-q', reject_module + '.v'], work,
                             work / (reject_module + '.log'), success=False)
         require(code != 0 and 'Error' in text, 'Mutant was not rejected: ' + name)
@@ -3471,81 +3011,6 @@ def semantic_controls(bound, work):
                             assertionSha256=sha(assertion.encode())))
     require(len(reports) == len(MUTANTS),
             'Every source-level binding mutant must run its control')
-    return reports
-
-
-def fallback_read_order_controls(bound, work):
-    """Kernel rejection of a swapped legacy-compatibility read order.
-
-    The one semantic claim the legacy-compatibility family adds to this lane is
-    the READ ORDER: the active key is authoritative and the historical key is
-    consulted only when the active key is unbound. Each control therefore binds
-    a fixture in which BOTH keys are present with DIFFERENT payloads, defines
-    the original read and the order-swapped read over that fixture, and asserts
-    that the swapped one agrees with the original. The equality for the original
-    order would be definitional; the swapped one cannot be proved, and the
-    runner requires the
-    kernel to reject it - so a fixture that failed to tell the two keys apart
-    would let the assertion compile and fail the lane. Controls are keyed by
-    the prefix PAIR, because the two delegating getters pin the same pair
-    through one shared reader and a second control over it would be the same
-    statement twice.
-    """
-    pairs, seen = [], set()
-    for name in sorted(bound['methods']):
-        entry = bound['methods'][name]
-        if entry['projection'].get('kind', 'direct') not in FALLBACK_KINDS:
-            continue
-        active, legacy = _fallback_prefixes(bound, name)
-        key = (tuple(active), tuple(legacy))
-        require(key[0] != key[1],
-                'A fallback getter must not read its fallback key from the same'
-                ' byte string it prefers: ' + name)
-        if key in seen:
-            continue
-        seen.add(key)
-        pairs.append((name, key[0], key[1]))
-    require(pairs, 'The legacy-compatibility family must be bound')
-    reports = []
-    for index, (name, active, legacy) in enumerate(pairs):
-        active_key, legacy_key = _prefix_literal(active), _prefix_literal(legacy)
-        module = 'StorageFallback' + str(index)
-        definitions = (PRELUDE +
-                       'Definition bytes_eqb (a b : bytes) : bool :=\n'
-                       '  match list_eq_dec Nat.eq_dec a b with'
-                       ' left _ => true | right _ => false end.\n'
-                       'Definition fixture_storage : storage := fun key =>\n'
-                       '  if bytes_eqb key (' + active_key + ' ++ [1%nat])'
-                       ' then Some (repeat 5%nat 20)\n'
-                       '  else if bytes_eqb key (' + legacy_key + ' ++ [1%nat])'
-                       ' then Some (repeat 7%nat 20)\n'
-                       '  else None.\n'
-                       'Definition original_read : option bytes :=\n'
-                       ' read_fallback ' + active_key + ' ' + legacy_key
-                       + ' fixture_storage [1%nat].\n'
-                       'Definition swapped_read : option bytes :=\n'
-                       ' read_fallback ' + legacy_key + ' ' + active_key
-                       + ' fixture_storage [1%nat].\n')
-        (work / (module + '.v')).write_text(definitions)
-        kernel(['coqc', '-q', module + '.v'], work, work / (module + '.log'))
-        reject_module = 'StorageFallbackCounterexample' + str(index)
-        assertion = (PRELUDE + 'Require Import ' + module + '.\n'
-                     'Example swapped_read_matches_original :'
-                     ' swapped_read = original_read.\n'
-                     'Proof. reflexivity. Qed.\n')
-        (work / (reject_module + '.v')).write_text(assertion)
-        code, text = kernel(['coqc', '-q', reject_module + '.v'], work,
-                            work / (reject_module + '.log'), success=False)
-        require(code != 0 and 'Error' in text,
-                'Swapped fallback read order was not rejected: ' + name)
-        reports.append(dict(name='mutant-fallback-read-order-swapped/' + name,
-                            method=name, activePrefix=active, legacyPrefix=legacy,
-                            definitionsAccepted=True, proofRejected=True,
-                            kernelExitCode=code,
-                            definitionsSha256=sha(definitions.encode()),
-                            assertionSha256=sha(assertion.encode())))
-    require(len(reports) == len(pairs) >= 2,
-            'Every distinct fallback prefix pair needs its read-order control')
     return reports
 
 
@@ -3576,13 +3041,13 @@ def run_proofs(inventory, output_dir):
         kernel(['coqc', '-q', module_name + '.v'], work, work / (module_name + '.log'))
     model = models[MODULE]
     certificate = render_certificate(bound)
-    (work / (MODULE + 'Artifact.v')).write_text(certificate)
+    (work / (MODULE + 'Artifact.v')).write_bytes(certificate.encode())
     artifact = MODULE + 'Artifact'
     names[artifact] = declarations(certificate)
     kernel(['coqc', '-q', artifact + '.v'], work, work / 'artifact.log')
     vm_modules = render_vm_certificate(bound, decoded_rows)
     for module_name, text in vm_modules:
-        (work / (module_name + '.v')).write_text(text)
+        (work / (module_name + '.v')).write_bytes(text.encode())
         names[module_name] = declarations(text)
         kernel(['coqc', '-q', module_name + '.v'], work,
                work / (module_name + '.log'))
@@ -3600,7 +3065,6 @@ def run_proofs(inventory, output_dir):
                 and 'Axioms:' not in text,
                 'Assumption inventory not closed: ' + filename)
     controls = semantic_controls(bound, work)
-    controls.extend(fallback_read_order_controls(bound, work))
     vm_controls = vm_mutant_controls(bound, decoded_rows, work)
     require(getter_source.project(inventory) == projection, 'Projection changed during proof')
     require(getter_source.project_callee(inventory) == callee_projection,
@@ -3630,15 +3094,10 @@ def run_proofs(inventory, output_dir):
                                     + ('-offset' if 'offset' in entry['projection'] else '')]
         elif kind == 'inline-record-time':
             trace_coverage[name] = ['miss-early-return', 'hit-projection-offset']
-        elif kind == 'inline-fallback':
-            trace_coverage[name] = ['miss-both-keys-unbound', 'hit-active-key',
-                                    'hit-historical-fallback', 'hit-invalid-width']
-        elif kind == 'fallback-call-presence':
-            trace_coverage[name] = ['miss-both-keys-unbound', 'hit-active-key',
-                                    'hit-historical-fallback']
-        elif kind == 'fallback-call-offset':
-            trace_coverage[name] = ['miss-both-keys-unbound', 'hit-active-key',
-                                    'hit-historical-fallback']
+        elif kind == 'raw-call-presence':
+            trace_coverage[name] = ['miss', 'hit']
+        elif kind == 'raw-call-offset':
+            trace_coverage[name] = ['miss', 'hit-offset']
     kinds_seen = {}
     for name in bound['methods']:
         total_kind = bound['methods'][name]['projection'].get('kind', 'direct')
@@ -3673,24 +3132,15 @@ def run_proofs(inventory, output_dir):
                               ' hit projects one PendingConfigUpdate field and adds'
                               ' the pinned timelock (miss-early-return +'
                               ' hit-projection-offset)',
-        'inline-fallback': 'the inline legacy-compatibility reader'
-                           ' (getVerifyScopeTarget): the region builds and reads'
-                           ' the active key itself, reads the historical key only'
-                           ' when the active key is unbound, and checks the pinned'
-                           ' UInt160 width before returning (miss-both-keys-unbound'
-                           ' + hit-active-key + hit-historical-fallback +'
-                           ' hit-invalid-width)',
-        'fallback-call-presence': 'the delegating legacy-compatibility presence'
-                                  ' getter (hasMarketEscrowOwnerCancel), which'
-                                  ' tests the shared reader\'s raw result against'
-                                  ' null (miss-both-keys-unbound + hit-active-key +'
-                                  ' hit-historical-fallback)',
-        'fallback-call-offset': 'the delegating legacy-compatibility epoch getter'
-                                ' (getMarketEscrowOwnerCancelTime), which casts the'
-                                ' shared reader\'s raw payload with the pinned'
-                                ' decode and adds the pinned timelock'
-                                ' (miss-both-keys-unbound + hit-active-key +'
-                                ' hit-historical-fallback)',
+        'raw-call-presence': 'the delegating raw presence getter'
+                             ' (hasMarketEscrowOwnerCancel), which tests the'
+                             ' shared reader\'s raw result against null'
+                             ' (miss + hit)',
+        'raw-call-offset': 'the delegating raw epoch getter'
+                           ' (getMarketEscrowOwnerCancelTime), which casts the'
+                           ' shared reader\'s raw payload with the pinned'
+                           ' decode and adds the pinned timelock'
+                           ' (miss + hit-offset)',
     }
     scope_detail = '; '.join('%d %s' % (kinds_seen[k], kind_labels[k])
                              for k in sorted(kinds_seen))
@@ -3707,9 +3157,10 @@ def run_proofs(inventory, output_dir):
                     ' parameter bindings, syscall pop order and cast widths are'
                     ' rendered from the decoded region bytes; StdLib.Deserialize'
                     ' is a pinned token index whose behavior is a universally'
-                    ' quantified oracle, and the legacy-compatibility family'
-                    ' (which reads its payload verbatim through the shared reader'
-                    ' and performs no deserialize of its own) consumes no token.'
+                    ' quantified oracle, and the escrow owner-cancel accessors'
+                    ' (which read their payload verbatim through the shared raw'
+                    ' reader and perform no deserialize of their own) consume no'
+                    ' token.'
                     ' %d semantic and %d bytecode mutation'
                     ' controls, each bytecode control compiled with an accepted'
                     ' unmutated twin, are rejected by the kernel.'

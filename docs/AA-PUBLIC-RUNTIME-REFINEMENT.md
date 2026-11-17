@@ -83,14 +83,18 @@ artifact identities are:
 | AAPaymaster | `c29738ab55d59c28608a6a646e5f36c4746d4158fccbde54079f11c2865d285a` | `49a51b95c284db4f7971b0f049f8e3e208f6a1f0b3cdce8631bcb6fd73ce0a54` |
 | MockTransferTarget | `97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0` | `3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c` |
 
-The SmartAccountV3 row names the *current* artifact. It moved twice after the
-dated paths above were captured: the rename to `SmartAccountV3` shortened the
-script by 10 bytes (`083ed325…` / `e79fa049…` → `be43cd05…` / `35fbb188…`), and
-the helper's VM-integer headroom assertion then grew it by 73 bytes to the
-identity above. Those files have not been recopied since either change, so they
-are evidence about an earlier build only and must be regenerated before being
-cited for the current NEF. AAPaymaster and MockTransferTarget were not affected
-by either change and their rows are current.
+The SmartAccountV3 row named the current artifact when the table was written.
+It moved three times after the dated paths above were captured: the rename to
+`SmartAccountV3` shortened the script by 10 bytes
+(`083ed325…` / `e79fa049…` → `be43cd05…` / `35fbb188…`), the helper's
+VM-integer headroom assertion then grew it by 73 bytes, and the 2026-11-16
+design-phase legacy-compatibility sweep changed it again (current NEF
+`9f714866…`, manifest `a6533d47…`, as pinned by the regenerated five-shape
+helper-gas runtime capture). Those files have not been recopied since any of
+these changes, so they are evidence about an earlier build only and must be
+regenerated before being cited for the current NEF. AAPaymaster and
+MockTransferTarget were not affected by any of the three changes and their
+rows are current.
 
 MockTransferTarget is explicitly a compiled test target, not a production token.
 The in-memory nesting adversary is also test-only. Actual GAS reimbursement uses

@@ -21,6 +21,9 @@ graphify-out/
 .nia.cache
 .runs/
 .codex/
+# Formal-refinement closure/scratch working dirs (regenerated on every run)
+.work/
+.closure-out/
 # CodeGraph writes a tracked, self-ignoring .codegraph/.gitignore. Ignore the
 # rest of every .codegraph/ directory without hiding that file.
 **/.codegraph/*
@@ -44,6 +47,7 @@ contracts/templates/build/
 # Isolated NuGet restore cache (README: Restoring with an isolated package cache)
 nuget-isolated/
 nuget-isolated1/
+nuget-isolated-v/
 
 # Python bytecode
 __pycache__/
@@ -116,6 +120,7 @@ docs/reports/*
 !docs/reports/aa-artifact-reproducibility-20261113.json
 !docs/reports/aa-artifact-reproducibility-20261116.json
 !docs/reports/aa-closure-gate-20261031.json
+!docs/reports/aa-closure-gate-20261117.json
 !docs/reports/aa-formal-gate-20261030.json
 !docs/reports/aa-formal-gate-20261031.json
 !docs/reports/aa-neoexpress-validation-20261030.json

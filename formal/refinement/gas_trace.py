@@ -18,9 +18,9 @@ except ImportError:
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 COMMIT = 'd10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d'
-NEF_SHA = '6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3'
-MANIFEST_SHA = '8b6bd9623ab4ed293ad9b6fda27402aaf3100d0b2a9d5c44658edb7e83fb0c29'
-START, END, INIT = 17762, 18043, 29415
+NEF_SHA = '9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76'
+MANIFEST_SHA = 'a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31'
+START, END, INIT = 18900, 19181, 29996
 SOURCES = {
  'ApplicationEngine.cs': '97b08bfe754bc51ed8418316b45d3805dccff76ef51fbd43ac9b663eacb4d5eb',
  'ApplicationEngine.OpCodePrices.cs': '9835961f56aacb0d4df903dad7b98ab33ee3a1e75ea98189228b000f7ed0a447',
@@ -215,11 +215,11 @@ def derive(bound, fees):
                 fixed_price = fees['syscalls']['System.Contract.CallNative']['fixed']
                 cpu_price = fees['nativeCpu'][method]
                 coefficient += wrapper_price + fixed_price + cpu_price
-            events.append(dict(pc=pc, execution=coefficient, storage=pc == 18034, opcode=opcode_price, fixed=fixed_price, native=cpu_price, wrapper=wrapper_price))
+            events.append(dict(pc=pc, execution=coefficient, storage=pc == 19172, opcode=opcode_price, fixed=fixed_price, native=cpu_price, wrapper=wrapper_price))
         path['events'] = events
         path['executionCoefficient'] = sum(e['execution'] for e in events)
-        path['absent'] = dict(path['decisions'])[17789] == 'fallthrough'
-        path['reset'] = dict(path['decisions'])[17840] == 'fallthrough'
+        path['absent'] = dict(path['decisions'])[18927] == 'fallthrough'
+        path['reset'] = dict(path['decisions'])[18978] == 'fallthrough'
     init = bound['initializer']
     require(len(init) == 182 and init[-1]['name'] == 'RET', 'Initializer path drift')
     require(all(i['name'] in fees['opcodes'] and i['name'] not in ('CALLT', 'SYSCALL') and
@@ -267,7 +267,7 @@ def check_runtime_events(receipt, model, selected, nodes, billed, shape):
             syscall = int.from_bytes(bytes.fromhex(instruction['operandHex']), 'little')
             require(syscall in by_hash, 'Unpriced runtime syscall')
             additional = by_hash[syscall]['fixed'] * e
-            if pc == 18034: additional += billed * s * f
+            if pc == 19172: additional += billed * s * f
         add('CapReimbursementToActualCost', core_hash, instruction, additional,
             instruction['name'] != 'ABORTMSG')
         if instruction['name'] == 'CALLT':
@@ -303,7 +303,7 @@ def check_runtime_events(receipt, model, selected, nodes, billed, shape):
                 and receipt_amount(row.get('OpcodePico')) == opcode
                 and receipt_amount(row.get('AdditionalPico')) == additional,
                 'Runtime event charge or cumulative accounting mismatch')
-        if method == 'CapReimbursementToActualCost' and instruction['offset'] == 18034:
+        if method == 'CapReimbursementToActualCost' and instruction['offset'] == 19172:
             require(row.get('StorageKeyHex') == '21' and type(row.get('StorageValueLength')) is int
                     and row['StorageValueLength'] == 39, 'Runtime Put argument drift')
         else:
@@ -354,7 +354,7 @@ def crosscheck_runtime(model, directory):
         e, s, f = int(receipt['execPicoFactor']), receipt['storagePriceDatoshi'], int(receipt['feeFactor'])
         require(e >= 0 and s >= 0, 'Negative runtime fee configuration')
         billed = 0
-        put = [r for r in helper if r['Pc'] == 18034]
+        put = [r for r in helper if r['Pc'] == 19172]
         if put:
             require(len(put) == 1 and put[0]['StorageKeyHex'] == '21', 'Runtime Put argument drift')
             billed = put_size(None if shape == 'absent' else 39, put[0]['StorageValueLength'])

@@ -2,18 +2,22 @@
 
 This is a structural inventory and implementation plan. It proves no VM, ApplicationEngine, compiler, storage, or whole-method semantics. The current arithmetic certificate remains a region certificate; it cannot establish a whole-method certificate.
 
-## Current artifact summary (2026-10-30)
+## Current artifact summary (2026-11-17)
 
 The current SmartAccount V3 NEF is
-`6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3`
+`9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`
 with script SHA256
-`b7fa49f95cf7ba5fbc9676de60bc7917331687b6dd6d2dfc52a2fbcee1b95913`.
+`909ba759b66a4d84a4bd2aa2a2a78ef611c8b27e834b460a90f8ff83d387e1cd`.
 Its `CapReimbursementToActualCost` helper is the complete interval
-`[17762,18043)`: 281 bytes, 116 instructions, and 52 distinct opcode names.
-The initializer is `[29415,30097)`: 682 bytes and 182 instructions. The helper
+`[18900,19181)`: 281 bytes, 116 instructions, and 52 distinct opcode names.
+The initializer is `[29996,30678)`: 682 bytes and 182 instructions. The helper
 reads static slot 38; the initializer stores the reimbursement key with
-`PUSHDATA1 21` at 29909, `CONVERT Buffer` at 29912, and `STSFLD 38` at 29914.
-The current compiler artifact has 105 ABI entries, not the historical 100.
+`PUSHDATA1 21` at 30497, `CONVERT Buffer` at 30500, and `STSFLD 38` at 30502.
+The current compiler artifact has 109 ABI entries, not the historical 100.
+
+Only `INITSLOT` at 18900 has no exact declared source point; the other 115 instructions have explicit debug source points. The optional existing arithmetic certificate claims 22 instructions, leaving 94 method instructions unaccounted for by that certificate. These are counts of declared coverage, not proof acceptance.
+
+The two `LDSFLD` instructions at 18911 and 19165 use static index 38, named `Prefix_TransactionReimbursement`. Outside this helper, initialization is `30497: 0c0121` (PUSHDATA1 containing `21`), `30500: db30` (CONVERT to Buffer), `30502: 6726` (STSFLD 38). (The pre-sweep build `6c347dac…` had the same shape with `INITSLOT` at 13557, `LDSFLD` sites at 13568/13822, initializer instructions at 25432/25435/25437 and static index 34; the 2026-11-16 design-phase legacy sweep moved the offsets and the slot.) Thus a helper entry-state specification must bind slot 38 to `Buffer([0x21])` and establish that initialization ran. Those three initializer instructions are not part of the 116-instruction helper.
 
 ## Historical candidate and scope
 
@@ -35,14 +39,10 @@ python3 formal/refinement/method_inventory.py \
   --json-report /path/to/method-inventory.json
 ```
 
-Only `INITSLOT` at 13557 has no exact declared source point; the other 115 instructions have explicit debug source points. The optional existing arithmetic certificate claims 22 instructions, leaving 94 method instructions unaccounted for by that certificate. These are counts of declared coverage, not proof acceptance.
-
-The two `LDSFLD` instructions at 13568 and 13822 use static index 34, named `Prefix_TransactionReimbursement`. Outside this helper, initialization is `25432: 0c0121` (PUSHDATA1 containing `21`), `25435: db30` (CONVERT to Buffer), `25437: 6722` (STSFLD 34). (These three offsets are 10 lower than in the pre-rename build `083ed325…`, which kept the same `LDSFLD` sites at 13568/13749 but was 10 script bytes longer after `getAccountImplementationId`.) Thus a helper entry-state specification must bind slot 34 to `Buffer([0x21])` and establish that initialization ran. Those three initializer instructions are not part of the 116-instruction helper.
-
 ## Interpreter and correspondence split
 
 1. **VM control and data operations.** Extend the existing arithmetic semantics with `INITSLOT`, static fields, Null/ByteString/Array/Struct values, PACK, stack rearrangements, field mutation, equality, conditional/unconditional branches, ABORTMSG, and RET. Preserve actual pc, slot counts, stack order, type/index faults, object aliasing, and frame conditions; do not replace the method with its source formula.
-2. **Explicit environment outcomes.** Give the seven SYSCALL sites and two native CALLT sites success/fault relations. Bind repeated script-container reads to the same transaction and bind the static field at index 34 to the initialized reimbursement key. State deployed-contract/context and ReadStates/WriteStates/AllowCall assumptions. Model absent storage separately from deserialization and the matching/different transaction-hash paths.
+2. **Explicit environment outcomes.** Give the seven SYSCALL sites and two native CALLT sites success/fault relations. Bind repeated script-container reads to the same transaction and bind the static field at index 38 to the initialized reimbursement key. State deployed-contract/context and ReadStates/WriteStates/AllowCall assumptions. Model absent storage separately from deserialization and the matching/different transaction-hash paths.
 3. **All helper paths.** Certify all 116 instructions against an explicit two-field stored-budget invariant, or extend the value model to other deserialized shapes and their type/index faults. Include settled<=0 ABORTMSG and reservation overflow before serialization; the arithmetic proof alone does not establish these paths. Observe returned settlement and the serialized budget stored under the correct contract/key, with other state unchanged on the success path.
 4. **ApplicationEngine composition.** Connect the environment relations to pinned handler implementations, native dispatch, conversion, fee charging, contract permissions, hardfork selection, snapshot ownership and rollback. A helper-under-environment theorem is distinct from this correspondence and from complete transaction/caller refinement. Do not label either partial layer as full implementation verification.
 

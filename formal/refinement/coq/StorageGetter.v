@@ -3,9 +3,7 @@
    connected to this source-level outcome by the lane certificate; framework
    cast semantics (little-endian BigInteger, 20-byte UInt160) remain pinned
    contracts, and the ApplicationEngine layer stays an open obligation.
-   getter_outcome reads one key; fallback_outcome reads the active key and
-   falls back to the historical key, which is what the legacy-compatibility
-   getters (the escrow owner-cancel readers and getVerifyScopeTarget) do. *)
+   getter_outcome reads one key, which is what every pinned getter does. *)
 From Coq Require Import ZArith List Bool Lia PeanoNat.
 Require Import IntegerSemantics.
 Import ListNotations.
@@ -65,23 +63,3 @@ Definition getter_outcome
 Definition zeros (n : nat) : bytes := repeat 0%nat n.
 
 Definition hash160_default : bytes := zeros 20.
-
-(* Legacy-compatibility read: the active key is authoritative and the legacy
-   key is consulted only when the active key is unbound. The read order is
-   part of the pinned contract, not an implementation detail: the getters
-   below all prefer the active prefix and fall back to the historical one. *)
-Definition read_fallback (active legacy : bytes) (sto : storage) (account : bytes)
-  : option bytes :=
-  match sto (active ++ account) with
-  | Some payload => Some payload
-  | None => sto (legacy ++ account)
-  end.
-
-(* The fallback twin of getter_outcome, for a single scalar projection. *)
-Definition fallback_outcome
-           (active legacy : bytes) (default : GVal) (decode : bytes -> Outcome)
-           (sto : storage) (account : bytes) : Outcome :=
-  match read_fallback active legacy sto account with
-  | None => OK default
-  | Some payload => decode payload
-  end.

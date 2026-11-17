@@ -73,7 +73,7 @@ ABI method by name with the arity the manifest declares, and single-steps the
 call. The receipt keeps, per method, the offset the engine entered, whether the
 declared entry point was executed, the final state and fault, the syscall
 sequence, and the shape of the value the call left on the stack. The gate requires
-all 105 entries to be measured against the same manifest the inventory trusts, 103
+all 109 entries to be measured against the same manifest the inventory trusts, 107
 of them to dispatch onto their declared offset, `_deploy` and `_initialize` to be
 refused when called by name, and every completed call to have been judged against
 the declared return type — one result of the mapped stack type, with the exact
@@ -85,7 +85,7 @@ every run, so a receipt of zero problems cannot come from a face that compares
 nothing; an engine error, a step-limit trip, an unresolvable syscall, a
 wrong-shaped result or a dump bound to another manifest fails the run.
 
-That block also carries the other half of the dispatch rule: 394 probes of calls
+That block also carries the other half of the dispatch rule: 408 probes of calls
 the manifest does not describe, and the gate requires the probe *set* to be the one
 the manifest implies — every method's parameter count minus one and plus one,
 minus the counts a sibling overload declares, plus one shape probe per non-`Any`
@@ -96,7 +96,7 @@ entered no callee frame at all; the two counts `finalizeEscape` declares have to
 land on the two different offsets, which is what makes "name and arity select" a
 measurement; a refusal whose text is the callee's rather than the boundary's fails.
 A wrong-shaped argument is the one thing the gate does *not* require to be refused,
-because it is not: 91 of them enter the callee on this engine, 84 fail there and 7
+because it is not: 94 of them enter the callee on this engine, 87 fail there and 7
 answer, so the receipt carries `shapeEnforcedAtBoundary: false` and the gate reads
 it as a measurement instead of failing a correct artifact for a rule the engine
 never had. Seven mutations of the probes have to be caught on every run.
@@ -112,19 +112,19 @@ to fall in exactly one byte range of an inventory that partitions the script, an
 the byte methods entered have to be among the ones that entry's dependency graph
 reaches. The last one is the direction that must hold. Reachability is a may-set, so
 the members it lists and a zero-argument call never enters are counted and printed —
-607 of 960 on this artifact — and are never read as disagreement. Eight mutations,
+634 of 996 on this artifact — and are never read as disagreement. Eight mutations,
 on both the measurement and the model, have to be caught on every run; one that
 cannot be built is recorded as skipped and fails the run rather than shrinking the
-self test. The face compares no values, so it says nothing about the 65 methods that
+self test. The face compares no values, so it says nothing about the 67 methods that
 fault on zero arguments.
 
 An `abiScenario` block is the layer under that one, and the only one so far that
-sends values. `formal/refinement/scenarios/aa-account-roundtrip.json` declares 30
+sends values. `formal/refinement/scenarios/aa-account-roundtrip.json` declares 29
 calls — literal arguments, named signers, the ending each call expects, and which
 earlier argument a result must equal — and the exporter runs them in order over one
 deployment. The gate requires: the scenario's sha256 and the deployment's address to
-be the ones in the receipt, all 30 frames to be byte-identical to an encoder written
-here against the opcode table, all 30 calls to end where the scenario says, all four
+be the ones in the receipt, all 29 frames to be byte-identical to an encoder written
+here against the opcode table, all 29 calls to end where the scenario says, all four
 expected faults to carry the declared reason, a shape judgement for every halted
 call, every declared integer, boolean and array length to match, all five read links
 to hold byte for byte, and no step to read a call that faulted. Eleven mutations, on
@@ -198,11 +198,17 @@ and the three escrow transitions are reached through the caller and are
 evidenced by the state they change — an account id that resolves through its proxy
 index, a backup owner that moved to the rotation's new owner, a listing id that is
 present and then cleared. The receipt counts those apart from the entries a step
-names, and the numbers below say which is which. Three entries are declared
+names, and the numbers below say which is which. Fourteen entries are declared
 unreached and are not counted as covered: `_deploy/2` and `_initialize/0`, which
 `System.Contract.Call` refuses to invoke because their names begin with an
-underscore (the run records the host's own message), and `rotatePlatformAccountOwner/3`,
-a one-line alias whose target the mock calls instead.
+underscore (the run records the host's own message), and twelve operational
+entries no scenario step drives — the freeze lifecycle (`freezeAccount/1`,
+`unfreezeAccount/1`, `isAccountFrozen/1`), the dependency writers
+(`setHookDependencies/2`, `setVerifierDependencies/2`,
+`clearVerifierDependencies/1`), the child-hook forwarder `callHookChild/4`, the
+simulation read `simulateValidation/2` and the reads `describeAccount/1`,
+`getPlatformAccountBinding/1`, `isMarketService/1` and
+`isUserOpExecutionActive/0`.
 
 `cancelPlatformRegistrar` is a successful control in the current artifact. The
 call waits for its timelock, deletes the pending registrar state, and emits the
@@ -219,35 +225,35 @@ arguments rather than a zero-length one, and `returnTypesUnexercised` is empty o
 as that union. No face's own list is empty, which is the point: one face's gap is
 not papered over by another's success.
 
-The current artifact was remeasured on 2026-10-31 without a public network.
-Its dispatch face reads 105/105 methods, 103 entered offsets, two reserved names
-refused, 40 completed return shapes matched, 65 zero-argument faults, 394 boundary
-probes (195/195 arity refusals, two overload probes on their declared siblings,
-91 type probes with 84 in-callee faults and seven answers), and all seventeen
-self-checks rejected. Its footprint reads 30,097 bytes, 10,462 instructions, 226
-ranges, 353 entered byte methods inside a 960-method closure, 607 reachable and
+The current artifact was remeasured on 2026-11-17 without a public network.
+Its dispatch face reads 109/109 methods, 107 entered offsets, two reserved names
+refused, 42 completed return shapes matched, 67 zero-argument faults, 408 boundary
+probes (202/202 arity refusals, two overload probes on their declared siblings,
+94 type probes with 87 in-callee faults and seven answers), and all seventeen
+self-checks rejected. Its footprint reads 30,678 bytes, 10,594 instructions, 238
+ranges, 362 entered byte methods inside a 996-method closure, 634 reachable and
 not entered, with zero unknown, unowned, outside-closure or missing-entry
 offsets. Foreign-script offsets are counted separately from this contract's
-footprint; the receipt records 859 of them and does not treat them as owned
-contract instructions. The four scenario files together read 227 calls, 185
-halts, 42 expected faults, 38 read links, ten deployed module artifacts, 26
-module steps, 19 block times and 14 time-sensitive pairs. Those measurements
-keep `fullUnprovedCount` at 105 and `implementationVerified` false. The four
+footprint; the receipt records 887 of them and does not treat them as owned
+contract instructions. The four scenario files together read 228 calls, 186
+halts, 42 expected faults, 38 read links, ten deployed module artifacts, 28
+module steps, 24 block times and 14 time-sensitive pairs. Those measurements
+keep `fullUnprovedCount` at 109 and `implementationVerified` false. The four
 corresponding scenario receipt hashes are
-`e9d2ac13…` (roundtrip), `80aa16a9…` (windows), `a86d2b83…` (plugins), and
-`04c09fe0…` (registrar). The dispatch and footprint receipt hashes are
-`623b0a21…` and `0acfbb88…`.
+`081104cc…` (roundtrip), `76814f19…` (windows), `20660340…` (plugins), and
+`be1ec7b9…` (registrar). The dispatch and footprint receipt hashes are
+`f75e1226…` and `20833d64…`.
 
 The final integrated run for this revision is recorded in
-[`aa-closure-gate-20261031.json`](reports/aa-closure-gate-20261031.json). It
-selected twenty-two scopes, snapshotted 130 tool files, 256 input hashes, 122
+[`aa-closure-gate-20261117.json`](reports/aa-closure-gate-20261117.json). It
+selected twenty-two scopes, snapshotted 130 tool files, 263 input hashes, 129
 project-input hashes and 24 raw-receipt hashes, and executed 27 command records
 with no non-zero exit and no timeout. The result remains `NO-GO` with
-`selectedScopeStatus: PASS`, `fullUnprovedCount: 105`,
+`selectedScopeStatus: PASS`, `fullUnprovedCount: 109`,
 `verifiedEntrypoints: []` and `fullImplementationVerified: false`; the current
-entrypoint split is 0 fully closed, 34 body-level refined and 71
+entrypoint split is 0 fully closed, 34 body-level refined and 75
 dispatch-level only. The result, commands and snapshot hashes are
-`2f0cd672…`, `98d468ad…` and `afbbfaee…`. This is the current closure status;
+`d68e2ce1…`, `310d48f7…` and `a60cdca7…`. This is the current closure status;
 the `fullUnprovedCount: 100` values in gates 33-37 are historical snapshots and
 must not be read as the count for this revision.
 
@@ -538,7 +544,7 @@ dispatch targets without overriding behavior, disabled diagnostics and
 noninterfering external operations; successful external calls alone do not
 establish these conditions. It keeps
 `sourceFrontendVerified:false`, `applicationEngineVerified:false` and
-`vmCorrespondenceProven:false`; all 105 ABI entries still lack complete
+`vmCorrespondenceProven:false`; all 109 ABI entries still lack complete
 implementation proofs. ABI admission does not establish bytecode relocation,
 initializer execution/return, caller continuation, gas/resources, faults,
 transaction rollback or full source-to-runtime correspondence.
@@ -684,11 +690,13 @@ The selected receipts must pin the artifact the other lanes are proving, not jus
 any plausible trace: `crosscheck_runtime` rejects a receipt whose `nefSha256` or
 `manifestSha256` differs from the pinned artifact with `Runtime artifact
 mismatch`. That check is what kept this lane failing closed after the contract
-rename invalidated the 2026-10-13 capture, and the lane stayed red until the
-producer test was re-run against NEF `be43cd05…`. The reviewed five-shape capture
+rename invalidated the 2026-10-13 capture, and again after the 2026-11-16
+design-phase legacy-compatibility sweep changed the ordinary core artifact;
+each time the lane stayed red until the producer test was re-run against the
+fresh artifact (currently NEF `9f714866…`). The reviewed five-shape capture
 is archived in-repo as
 `formal/refinement/fixtures/helper-gas-runtime-live-receipts.json.gz`
-(SHA256 `d464f706…`); the superseded pre-rename capture is kept beside it and its
+(SHA256 `6d141d14…`); the superseded pre-rename capture is kept beside it and its
 refusal is asserted by `ArchivedReceiptStalenessTests`. Re-pointing this lane at
 a new artifact therefore requires a new capture, never an edited hash.
 
@@ -728,9 +736,11 @@ shared private callees listed in `closure.STORAGE_GETTER_SHARED_CALLEES` (the
 account-state, market-escrow owner-cancel and pending-module-call readers) by name,
 region and projection kind, joins every
 getter's ABI descriptor, region bytes and trace-coverage classes to the fresh
-inventory, requires at least the two independent read-order controls that back
-the legacy-compatibility read order, and requires each bytecode control to carry
-an accepted unmutated twin plus a positive kernel rejection. Every written
+inventory, and requires kernel-rejected semantic controls at both levels: the
+source-level controls mutate each escrow getter's storage prefix or default
+binding, and the bytecode-level controls form a non-empty, uniquely named
+roster in which every control is bound to a verified getter and carries an
+accepted unmutated twin plus a positive kernel rejection. Every written
 module is joined by hashing its bytes and re-parsing its declaration inventory,
 and the composed certificate bytes are independently regenerated from the fresh
 inventory; a receipt alone never replaces that regeneration.

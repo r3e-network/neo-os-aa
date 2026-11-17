@@ -12,8 +12,8 @@ class InitializerSourceTests(unittest.TestCase):
 
     def test_every_static_field_source_bound_without_target(self):
         result = source.project_source(self.inventory)
-        self.assertEqual(len(result["initializers"]), 53)
-        self.assertEqual(len({i["fieldId"] for i in result["initializers"]}), 53)
+        self.assertEqual(len(result["initializers"]), 57)
+        self.assertEqual(len({i["fieldId"] for i in result["initializers"]}), 57)
         self.assertEqual(result["staticConstructor"]["id"], source.STATIC_CONSTRUCTOR)
         self.assertNotIn("nef", self.inventory)
 
@@ -43,7 +43,7 @@ class InitializerSourceTests(unittest.TestCase):
         binary["boundMetadata"]["IBinaryOperation.OperatorKind"] = "Add"
         with self.assertRaises(ValueError):
             source.project_source(self.inventory)  # original folded constant now lies
-        self.assertEqual(len(before["initializers"]), 53)
+        self.assertEqual(len(before["initializers"]), 57)
 
     def test_unknown_initializer_effect_rejected(self):
         op = self.inventory["source"]["initializers"][0]["operations"][0]

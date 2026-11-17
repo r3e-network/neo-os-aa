@@ -170,8 +170,8 @@ class MethodProofTests(unittest.TestCase):
         self.assertEqual(bound["manifestSha256"], self.inventory["manifest"]["sha256"])
 
     def test_complete_method_is_bound(self):
-        self.assertEqual(self.program["start"], 17762)
-        self.assertEqual(self.program["end"], 18043)
+        self.assertEqual(self.program["start"], 18900)
+        self.assertEqual(self.program["end"], 19181)
         self.assertEqual(len(self.program["bytes"]), 281)
         self.assertEqual(len(self.program["instructions"]), 116)
 
@@ -307,13 +307,13 @@ class MethodProofTests(unittest.TestCase):
     def test_partial_helper_boundary_rejected(self):
         inventory = copy.deepcopy(self.inventory)
         entry = next(item for item in inventory["sourceMap"]["focusedMethods"] if item["id"] == method.METHOD)
-        entry["range"] = "17872-17893"
+        entry["range"] = "19030-19060"
         with self.assertRaisesRegex(ValueError, "boundary"):
             method.bind_method(inventory)
 
     def test_exported_instruction_drift_rejected(self):
         inventory = copy.deepcopy(self.inventory)
-        entry = next(item for item in inventory["nef"]["instructions"] if item["offset"] == 17872)
+        entry = next(item for item in inventory["nef"]["instructions"] if item["offset"] == 19030)
         entry["opcode"] = 255
         with self.assertRaisesRegex(ValueError, "inventory differs"):
             method.bind_method(inventory)
@@ -327,7 +327,7 @@ class MethodProofTests(unittest.TestCase):
 
     def test_min_to_max_control_has_observable_semantic_difference(self):
         mutated = list(self.program["bytes"])
-        mutated[17892-method.START] = 0xba
+        mutated[19030-method.START] = 0xba
         result = method.execute(mutated, requested=90, system_fee=50, network_fee=10,
                                 tx_hash=bytes([1])*32, stored=None)
         self.assertEqual((result["status"], result["result"], result["stored"].reserved), ("HALT", 90, 90))
@@ -370,7 +370,7 @@ class MethodProofTests(unittest.TestCase):
             self.assertIs(receipt["kernelChecked"], True)
             self.assertIs(receipt["referenceRefinementVerified"], True)
             self.assertIs(receipt["fullImplementationVerified"], False)
-            self.assertEqual(receipt["methodRange"], [17762, 18043])
+            self.assertEqual(receipt["methodRange"], [18900, 19181])
             self.assertEqual((receipt["byteCount"], receipt["instructionCount"]), (281, 116))
             self.assertEqual(len(receipt["semanticControls"]), 6)
             self.assertTrue(all(item["definitionsCompiled"] and item["certificateRejected"]

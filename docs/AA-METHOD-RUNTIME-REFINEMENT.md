@@ -1,7 +1,7 @@
 # Complete reimbursement helper runtime checks
 
 These tests execute the original private `CapReimbursementToActualCost` method in
-the reviewed ordinary NEF, from PC 17762 through RET at PC 18042. They extend the
+the reviewed ordinary NEF, from PC 18900 through RET at PC 19180. They extend the
 22-instruction arithmetic checks with transaction fields, initial storage, default
 record construction, transaction-hash reset, actual native deserialize/serialize,
 assertion, heap update and Storage.Put. They are concrete runtime correspondence
@@ -18,17 +18,20 @@ there is no source surrogate, copied arithmetic script or replacement native
 codec. This private-method seam does not prove the two public entrypoint guards
 or their complete caller paths.
 
-NEF SHA256: `6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3`.
-Manifest SHA256: `8b6bd9623ab4ed293ad9b6fda27402aaf3100d0b2a9d5c44658edb7e83fb0c29`.
-Script SHA256: `b7fa49f95cf7ba5fbc9676de60bc7917331687b6dd6d2dfc52a2fbcee1b95913`.
-Every offset in this file is inside `[17762,18043)`, the helper's current
+NEF SHA256: `9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`.
+Manifest SHA256: `a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31`.
+Script SHA256: `909ba759b66a4d84a4bd2aa2a2a78ef611c8b27e834b460a90f8ff83d387e1cd`.
+Every offset in this file is inside `[18900,19181)`, the helper's current
 281-byte, 116-instruction interval. The current build includes the VM-integer margin guard and the expanded helper
 frame; the earlier 208-byte/96-instruction candidate is historical and is not
 the artifact pinned by this document. Older revisions pinned NEF
 `083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a` /
-manifest `e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156`,
-whose script was 10 bytes longer than the rename build and 83 bytes shorter than
-this one.
+manifest `e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156`
+(pre-rename), and NEF
+`6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3` /
+manifest `8b6bd9623ab4ed293ad9b6fda27402aaf3100d0b2a9d5c44658edb7e83fb0c29`
+(the 2026-10-30 build the 2026-11-16 legacy-compatibility sweep superseded);
+neither is the artifact pinned by this document.
 The runtime packages remain Neo/Neo.VM/Neo.SmartContract.Testing 3.10.1, locked by
 the existing project. Relevant source commits are Neo
 `d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d`, VM
@@ -79,8 +82,8 @@ Malformed data, nonpositive settlement, arithmetic overflow, read-only call flag
 and insufficient execution GAS must fault without committing the new budget.
 The estimation case additionally needs a representable aggregate reservation; the
 headroom branch compares `reserved <= (2^255-1) - settled` and rejects a violation
-with its own ABORTMSG at 18011, so `reserved+settled >= 2^255` is a contract
-rejection rather than a CLR integer-size exception escaping the ADD at 18017.
+with its own ABORTMSG at 19149, so `reserved+settled >= 2^255` is a contract
+rejection rather than a CLR integer-size exception escaping the ADD at 19155.
 The 73-byte guard exists precisely because the accumulator ADD would otherwise
 overflow outside the certified arithmetic region. No universal
 zero-estimation completion guarantee is claimed.

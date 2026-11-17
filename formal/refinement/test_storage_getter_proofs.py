@@ -204,8 +204,8 @@ class GrammarRejectionTests(unittest.TestCase):
         self.assertEqual(len(getter_source.TARGETS), 31)
         self.assertEqual(sorted(bound['methods']), sorted(getter_source.TARGETS))
         # Three shared private callees now back the lane: the debug-only state
-        # reader, the pending-module-call record reader, and the
-        # legacy-compatibility reader.
+        # reader, the pending-module-call record reader, and the escrow
+        # owner-cancel raw reader.
         self.assertEqual(sorted(bound['callees']),
                          ['getAccountState', 'getMarketEscrowOwnerCancelInitiated',
                           'getPendingModuleCallRecord'])
@@ -217,8 +217,9 @@ class GrammarRejectionTests(unittest.TestCase):
             self.assertTrue(callee['debugName'].startswith('SmartAccount.SmartAccount,'), name)
         # Kinds map onto exactly the callee each one is proved to call.
         for name, entry in projection.items():
-            # The two legacy raw/listing getters carry no explicit kind; the
-            # binder treats them as 'direct' and they must not call.
+            # The keyed direct getters (the market escrow pair and
+            # getVerifyScopeTarget) carry no explicit kind; the binder treats
+            # them as 'direct' and they must not call.
             kind = entry.get('kind', 'direct')
             expected = proofs.CALLEE_KINDS.get(kind)
             self.assertEqual(bound['methods'][name]['kind'], kind, name)
@@ -270,58 +271,49 @@ class GrammarRejectionTests(unittest.TestCase):
         # They read distinct prefixes, so neither can stand in for the other.
         self.assertNotEqual(inline['getPendingHookUpdateTime']['prefixBytes'],
                             inline['getPendingVerifierUpdateTime']['prefixBytes'])
-        # The legacy-compatibility family pins BOTH keys: the active prefix and
-        # the historical one its read falls back to. The inline accessor pins
-        # them in its own projection; the two delegating accessors pin neither
-        # and read them out of the shared reader they call, so the projection
-        # has to be resolved from the callee - while still binding the pair
-        # separately for each caller.
-        fallback = {name: entry for name, entry in projection.items()
-                    if entry.get('kind') in ('inline-fallback',
-                                             'fallback-call-presence',
-                                             'fallback-call-offset')}
-        self.assertEqual(sorted(fallback), [
-            'getMarketEscrowOwnerCancelTime', 'getVerifyScopeTarget',
-            'hasMarketEscrowOwnerCancel'])
-        scope = fallback['getVerifyScopeTarget']
+        # getVerifyScopeTarget is a standard keyed direct getter over its own
+        # pinned prefix, projecting the raw payload to a UInt160 under the
+        # reviewed 20-byte zero default.
+        scope = projection['getVerifyScopeTarget']
+        self.assertEqual(scope.get('kind', 'direct'), 'direct')
         self.assertEqual(scope['prefixBytes'], [28])
-        self.assertEqual(scope['legacyBytes'], [18])
         self.assertEqual(scope['decode'], 'hash160')
         self.assertEqual(scope['default'], {'kind': 'bytes', 'value': [0] * 20})
         self.assertNotIn('offset', scope)
-        # The epoch accessor casts the raw payload and adds the pinned timelock;
-        # the presence accessor only tests the raw result against null.
-        epoch = fallback['getMarketEscrowOwnerCancelTime']
+        self.assertNotIn('callee', scope)
+        # The escrow owner-cancel accessors delegate the raw single-key read to
+        # the shared reader: the presence accessor tests the raw result against
+        # null and the epoch accessor casts it and adds the pinned timelock, so
+        # neither caller pins a prefix of its own.
+        raw = {name: entry for name, entry in projection.items()
+               if entry.get('kind') in ('raw-call-presence', 'raw-call-offset')}
+        self.assertEqual(sorted(raw), [
+            'getMarketEscrowOwnerCancelTime', 'hasMarketEscrowOwnerCancel'])
+        epoch = raw['getMarketEscrowOwnerCancelTime']
+        self.assertEqual(epoch['callee'], 'getMarketEscrowOwnerCancelInitiated')
         self.assertEqual(epoch['offset'], 604800000)
         self.assertEqual(epoch['decode'], 'integer')
         self.assertEqual(epoch['default'], {'kind': 'integer', 'value': 0})
-        presence = fallback['hasMarketEscrowOwnerCancel']
+        self.assertNotIn('prefixBytes', epoch)
+        presence = raw['hasMarketEscrowOwnerCancel']
+        self.assertEqual(presence['callee'], 'getMarketEscrowOwnerCancelInitiated')
         self.assertNotIn('offset', presence)
         self.assertNotIn('decode', presence)
+        self.assertNotIn('prefixBytes', presence)
         reader = getter_source.project_callee(inventory)
         self.assertEqual(reader['getMarketEscrowOwnerCancelInitiated']['prefixBytes'], [29])
-        self.assertEqual(reader['getMarketEscrowOwnerCancelInitiated']['legacyBytes'], [19])
+        self.assertNotIn('legacyBytes', reader['getMarketEscrowOwnerCancelInitiated'])
         self.assertTrue(reader['getMarketEscrowOwnerCancelInitiated']['nullOnMissingKey'])
-        # A fallback accessor must not read its fallback key from the byte string
-        # it prefers: that would make the fallback dead code.
-        for name, active, legacy in (('getVerifyScopeTarget', [28], [18]),
-                                     ('hasMarketEscrowOwnerCancel', [29], [19]),
-                                     ('getMarketEscrowOwnerCancelTime', [29], [19])):
-            bound_active, bound_legacy = proofs._fallback_prefixes(bound, name)
-            self.assertEqual(bound_active, active, name)
-            self.assertEqual(bound_legacy, legacy, name)
-            self.assertNotEqual(bound_active, bound_legacy, name)
         # The static table must be rendered in canonical role order, so a
         # program's table depends on which roles it pins rather than on the
         # order its loads appear in: the delegating epoch accessor adds the
-        # timelock in its OWN frame, after the shared reader's two prefix loads.
+        # timelock in its OWN frame, ahead of the shared reader's prefix load.
         rows = proofs.nef_decode.decode_script(
             bytes.fromhex(inventory['nef']['scriptHex']),
             len(inventory['nef']['tokens']))
-        for name, roles in (('getVerifyScopeTarget', ['prefix', 'legacy']),
-                            ('hasMarketEscrowOwnerCancel', ['prefix', 'legacy']),
-                            ('getMarketEscrowOwnerCancelTime',
-                             ['prefix', 'legacy', 'delay'])):
+        for name, roles in (('getVerifyScopeTarget', ['prefix']),
+                            ('hasMarketEscrowOwnerCancel', ['prefix']),
+                            ('getMarketEscrowOwnerCancelTime', ['prefix', 'delay'])):
             parts, _, statics, _ = proofs.build_program(bound, rows, name)
             plan = proofs._static_plan(bound, name, parts)
             self.assertEqual([role for _, role in plan], roles, name)
@@ -356,8 +348,8 @@ class GrammarRejectionTests(unittest.TestCase):
 
 
     @unittest.skipUnless(INVENTORY_PATH, 'Actual artifact binding needs STORAGE_GETTER_INVENTORY')
-    def test_legacy_compatibility_drift_is_refused(self):
-        """A fallback projection that drifts from its bytecode fails closed."""
+    def test_raw_reader_drift_is_refused(self):
+        """A raw-reader projection that drifts from its bytecode fails closed."""
         inventory = json.loads(Path(INVENTORY_PATH).read_text())
         projection = getter_source.project(inventory)
         callee_projection = getter_source.project_callee(inventory)
@@ -367,22 +359,24 @@ class GrammarRejectionTests(unittest.TestCase):
         bound = proofs.bind_entries(inventory, projection, callee_projection)
         build = lambda state, name: proofs.build_program(state, rows, name)
 
-        # The inline reader performs TWO reads, so a projection that forgets the
-        # historical key describes a program with one static load.
+        # getVerifyScopeTarget performs ONE read over its own prefix, so a
+        # projection that forgets the prefix describes a program with one
+        # static load too few.
+        parts = build(bound, 'getVerifyScopeTarget')[0]
         drifted = copy.deepcopy(bound)
-        drifted['methods']['getVerifyScopeTarget']['projection'].pop('legacyBytes')
+        drifted['methods']['getVerifyScopeTarget']['projection'].pop('prefixBytes')
         with self.assertRaises(Exception):
-            build(drifted, 'getVerifyScopeTarget')
-        # ... and one that adds an offset it does not encode.
+            proofs._static_plan(drifted, 'getVerifyScopeTarget', parts)
+        # ... and one that adds an offset the region does not encode.
         drifted = copy.deepcopy(bound)
         drifted['methods']['getVerifyScopeTarget']['projection']['offset'] = 1
         with self.assertRaises(Exception):
-            build(drifted, 'getVerifyScopeTarget')
-        # A shared reader that forgets its historical prefix describes three
-        # loads for a program that makes three (the caller's delay included).
+            proofs._static_plan(drifted, 'getVerifyScopeTarget', parts)
+        # A shared reader that forgets its prefix describes one static load
+        # fewer than the combined program makes (the caller's delay included).
         drifted = copy.deepcopy(bound)
         drifted['callees']['getMarketEscrowOwnerCancelInitiated'][
-            'projection'].pop('legacyBytes')
+            'projection'].pop('prefixBytes')
         with self.assertRaises(Exception):
             build(drifted, 'getMarketEscrowOwnerCancelTime')
         # The delegating epoch accessor casts the payload and adds a delay: a

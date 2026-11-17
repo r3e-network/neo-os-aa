@@ -28,7 +28,7 @@ UNPROVED = [
  'Trusted C# extraction, compiler/CLR correspondence, API bindings and deployed-state readback.',
  'Initializer/body execution, absolute-PC opcode composition, shared and distinct-stack RET, ContextUnloaded and caller continuation.',
  'Gas, resources, all exceptions, transaction rollback, host callbacks and aliased mutable-object effects.',
- 'Whole ApplicationEngine execution and all 105 complete public entrypoints.'
+ 'Whole ApplicationEngine execution and all 109 complete public entrypoints.'
 ]
 TCB = ['Strict complete-method C# grammar and field/symbol binding.',
        'C# object allocation/default-field semantics and framework dictionary/stack APIs.',

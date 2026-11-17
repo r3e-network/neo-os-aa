@@ -15,7 +15,7 @@ import method_proofs as method
 import nef_decode
 
 ROOT = Path(__file__).resolve().parent
-START, END = 29415, 30097
+START, END = 29996, 30678
 SCOPE = "complete-initializer-reference-refinement"
 # The kernel is the long pole and this host is shared with unrelated workloads.
 # The old 1800s budget was exceeded on 2026-10-20 by a loaded host rather than by
@@ -66,8 +66,8 @@ Theorem actual_initializer_complete : forall hp st,
  init_stack final = st /\
  init_pc final = 681%nat /\
  lookup_init_static final 38 = Some (VBuffer [33%nat]) /\
- lookup_init_static final 18 = Some (VRef (length hp)) /\
- lookup_init_static final 20 = Some (VRef (length (hp++[first]))) /\
+ lookup_init_static final 19 = Some (VRef (length hp)) /\
+ lookup_init_static final 21 = Some (VRef (length (hp++[first]))) /\
  (exists slots, init_slots final = Some slots /\ length slots = 57%nat).
 Proof.
  intros hp st. vm_compute.
@@ -138,14 +138,14 @@ def render_certificate(program):
 
 
 def semantic_controls(program, work):
-    model = (work / "CapContext.v").read_text()
+    model = (work / "CapContext.v").read_bytes().decode()
     changes = []
-    # The VM-integer headroom assertion grew the helper by 73 bytes, which moved
-    # every later script offset by the same amount without changing the
-    # initializer's 682 bytes, so the two mutation targets keep their positions
-    # relative to START; they are written as absolute pcs to stay readable in a
-    # disassembly of the current artifact (29915/29911 in the current initializer).
-    for name, offset, value in [("WrongStaticSlot",29915,39), ("WrongKey",29911,34)]:
+    # The initializer stores Prefix_TransactionReimbursement by pushing the
+    # one-byte data [33] with PUSHDATA1, converting it to a Buffer, and storing
+    # it with STSFLD 38. The mutations retarget the stored buffer (33 -> 34)
+    # and the destination slot (38 -> 39); both offsets are absolute pcs of the
+    # operand bytes in the current initializer (30499/30503).
+    for name, offset, value in [("WrongStaticSlot",30503,39), ("WrongKey",30499,34)]:
         changed=copy.deepcopy(program)
         changed["bytes"][offset-START]=value
         changes.append((name, changed, model))
@@ -159,15 +159,15 @@ def semantic_controls(program, work):
         for file in work.iterdir():
             if file.suffix in (".vo", ".vos", ".vok", ".glob") and file.is_file():
                 shutil.copy2(file,directory/file.name)
-        (directory/"CapContext.v").write_text(changed_model)
+        (directory/"CapContext.v").write_bytes(changed_model.encode())
         compiled,log=method._kernel_command(["coqc","-q","CapContext.v"],directory,"model.log")
         method._require_kernel_success(compiled,log)
         certificate=render_certificate(changed)
         definitions=certificate.split("Theorem actual_initializer_complete",1)[0]
-        (directory/"MutantDefinitions.v").write_text(definitions)
+        (directory/"MutantDefinitions.v").write_bytes(definitions.encode())
         compiled,log=method._kernel_command(["coqc","-q","MutantDefinitions.v"],directory,"definitions.log")
         method._require_kernel_success(compiled,log)
-        (directory/"MutantCertificate.v").write_text(certificate)
+        (directory/"MutantCertificate.v").write_bytes(certificate.encode())
         rejected,log=method._kernel_command(["coqc","-q","MutantCertificate.v"],directory,"rejected.log")
         message=rejected.stdout+rejected.stderr
         require(rejected.returncode!=0 and any(marker in message for marker in
@@ -194,15 +194,15 @@ def run_proofs(inventory, output_dir, controls=False):
     work=Path(tempfile.mkdtemp(prefix="cap-context-kernel-",dir=str(output)))
     hashes={};declarations={}
     for module in MODELS:
-        source=(ROOT/"coq"/(module+".v")).read_text()
+        raw=(ROOT/"coq"/(module+".v")).read_bytes();source=raw.decode()
         require(not re.search(r"\b(?:Admitted|Axiom|Axioms|admit|Parameter|Parameters|Abort)\b",source),"Proof escape in "+module)
-        hashes[module]=digest(source.encode());declarations[module]=method.declared_names(source)
-        (work/(module+".v")).write_text(source)
+        hashes[module]=digest(raw);declarations[module]=method.declared_names(source)
+        (work/(module+".v")).write_bytes(raw)
         result,log=method._kernel_command(["coqc","-q",module+".v"],work,module+".log")
         method._require_kernel_success(result,log)
     certificate=render_certificate(program)
     require(not re.search(r"\b(?:Admitted|Axiom|Axioms|admit|Parameter|Parameters|Abort)\b", certificate), "Certificate proof escape")
-    (work/"CapContextArtifact.v").write_text(certificate)
+    (work/"CapContextArtifact.v").write_bytes(certificate.encode())
     declarations["CapContextArtifact"]=method.declared_names(certificate)
     require(set(THEOREM_NAMES)<=set(declarations["CapContextArtifact"]),"Missing claimed theorem")
     result,log=method._kernel_command(["coqc","-q","CapContextArtifact.v"],work,"artifact.log")
@@ -211,7 +211,7 @@ def run_proofs(inventory, output_dir, controls=False):
     method._require_kernel_success(result,log)
     assumptions="Require Import "+" ".join(MODELS+["CapContextArtifact"])+".\n"
     assumptions+="\n".join("Print Assumptions "+module+"."+name+"." for module,names in declarations.items() for name in names)+"\n"
-    (work/"ContextAssumptions.v").write_text(assumptions)
+    (work/"ContextAssumptions.v").write_bytes(assumptions.encode())
     result,log=method._kernel_command(["coqc","-q","ContextAssumptions.v"],work,"assumptions.log")
     method._require_kernel_success(result,log)
     closed=sum(line.strip()=="Closed under the global context" for line in result.stdout.splitlines())
@@ -234,7 +234,7 @@ def run_proofs(inventory, output_dir, controls=False):
                              f"{static_slots} source-mapped static slots; the certificate pins the helper slot 38 and allocated slots 18 and 20",
                              "arbitrary existing heap objects preserved", "two fresh array references", "arbitrary stack suffix preserved"],
                 excludedCorrespondence=["actual ApplicationEngine and resource/gas behavior", "mutable Buffer identity",
-                                        "helper arbitrary caller context and fresh GetScriptContainer allocations", "all 105 public ABI entrypoints"])
+                                        "helper arbitrary caller context and fresh GetScriptContainer allocations", "all 109 public ABI entrypoints"])
 
 
 # Complete caller-context path proofs. All use actual byte decoding and
@@ -551,14 +551,14 @@ CONTEXT_THEOREM_NAMES.append("actual_nonempty_caller_frame")
 
 
 def contextual_semantic_controls(program, work):
-    model=(work/"CapContext.v").read_text()
+    model=(work/"CapContext.v").read_bytes().decode()
     dropped=copy.deepcopy(program)
-    # The write that installs the updated reservation is the SETITEM at 18021;
+    # The write that installs the updated reservation is the SETITEM at 19159;
     # replacing it with DROP leaves the caller heap object at its stored value.
-    # The old target (13743) predates the 73-byte headroom assertion and now lands
-    # inside that assertion's shift count, where the same byte change no longer
-    # touches the write and the control would prove nothing.
-    dropped["bytes"][18021-method.START]=0x45
+    # The pre-sweep target (18021) predates the 2026-11-16 design-phase legacy
+    # sweep, which moved the helper to [18900,19181); applying the old offset
+    # now lands outside the method body, and the control would prove nothing.
+    dropped["bytes"][19159-method.START]=0x45
     return_site="Halt value (with_stack s (pc s+width)%nat (value::rest))"
     getter_site="Continue (with_stack allocated (pc s+width)%nat (reference::stack s))"
     require(model.count(return_site)==1 and model.count(getter_site)==1,"Context control sites changed")
@@ -571,21 +571,21 @@ def contextual_semantic_controls(program, work):
         for path in work.iterdir():
             if path.is_file() and path.suffix in (".vo",".vos",".vok",".glob"):
                 shutil.copy2(path,directory/path.name)
-        (directory/"CapContext.v").write_text(changed_model)
+        (directory/"CapContext.v").write_bytes(changed_model.encode())
         result,log=method._kernel_command(["coqc","-q","CapContext.v"],directory,"model.log")
         method._require_kernel_success(result,log)
         definitions=render_helper_header(changed,"IntegerSemantics CapArithmetic CapMethodVm CapContext")+COUNTER_DEFINITIONS
-        (directory/"MutantDefinitions.v").write_text(definitions)
+        (directory/"MutantDefinitions.v").write_bytes(definitions.encode())
         result,log=method._kernel_command(["coqc","-q","MutantDefinitions.v"],directory,"definitions.log")
         method._require_kernel_success(result,log)
         refutation=definitions+"\nExample mutant_changes_caller_observation : caller_example <> expected_caller_example.\nProof. vm_compute. congruence. Qed.\nPrint Assumptions mutant_changes_caller_observation.\n"
-        (directory/"MutantRefutation.v").write_text(refutation)
+        (directory/"MutantRefutation.v").write_bytes(refutation.encode())
         result,log=method._kernel_command(["coqc","-q","MutantRefutation.v"],directory,"refutation.log")
         method._require_kernel_success(result,log)
         require("Closed under the global context" in result.stdout,"Mutant refutation is not closed")
         result,log=method._kernel_command(["coqchk","-silent","MutantRefutation"],directory,"refutation-coqchk.log")
         method._require_kernel_success(result,log)
-        (directory/"MutantPositive.v").write_text(definitions+COUNTER_PROOF)
+        (directory/"MutantPositive.v").write_bytes((definitions+COUNTER_PROOF).encode())
         rejected,log=method._kernel_command(["coqc","-q","MutantPositive.v"],directory,"rejected.log")
         message=rejected.stdout+rejected.stderr
         require(rejected.returncode!=0 and "Unable to unify" in message and
@@ -610,7 +610,7 @@ def run_complete_proofs(inventory, output_dir, controls=False):
     artifact_hashes={}
     for module,source in artifacts.items():
         require(not re.search(r"\b(?:Admitted|Axiom|Axioms|admit|Parameter|Parameters|Abort)\b",source),"Context proof escape")
-        (work/(module+".v")).write_text(source)
+        (work/(module+".v")).write_bytes(source.encode())
         declarations[module]=method.declared_names(source)
         artifact_hashes[module]=digest(source.encode())
         result,log=method._kernel_command(["coqc","-q",module+".v"],work,module+".log",timeout=KERNEL_TIMEOUT)
@@ -620,7 +620,7 @@ def run_complete_proofs(inventory, output_dir, controls=False):
     method._require_kernel_success(result,log)
     assumptions="Require Import "+" ".join(declarations)+".\n"+"\n".join(
         "Print Assumptions "+module+"."+name+"." for module,names in declarations.items() for name in names)+"\n"
-    (work/"CompleteContextAssumptions.v").write_text(assumptions)
+    (work/"CompleteContextAssumptions.v").write_bytes(assumptions.encode())
     result,log=method._kernel_command(["coqc","-q","CompleteContextAssumptions.v"],work,"complete-assumptions.log")
     method._require_kernel_success(result,log)
     closed=sum(line.strip()=="Closed under the global context" for line in result.stdout.splitlines())
@@ -641,7 +641,7 @@ def run_complete_proofs(inventory, output_dir, controls=False):
             "legal-domain observations equal the isolated helper", "initializer establishes the helper static precondition"],
         excludedCorrespondence=["actual ApplicationEngine and resource/gas behavior", "mutable Buffer identity",
             "actual native binary codecs and storage handlers", "caller reachability and valid persisted budget invariant",
-            "actual C# CALL frame/heap correspondence", "all 105 public ABI entrypoints"])
+            "actual C# CALL frame/heap correspondence", "all 109 public ABI entrypoints"])
     return receipt
 
 def main():

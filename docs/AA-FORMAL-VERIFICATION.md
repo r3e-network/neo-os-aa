@@ -2,20 +2,24 @@
 
 ## Status
 
-### Pending fixture refresh (2026-11-16)
+### Fixture refresh (2026-11-16)
 
 The 2026-11-16 design-phase legacy-compatibility sweep changed the ordinary
 core source (legacy storage-prefix fallbacks, the rotation-migration surface
 and the dependency backfill were removed; the recovery verifier's v3 action
 ticket was dropped and `submitActionTicketV4` renamed to `submitActionTicket`).
-The refinement fixtures under `formal/refinement/fixtures/` and the model specs
-that reference them still pin the pre-sweep candidate and stay internally
-consistent (the host-side suite passes against them). Before the next formal
-sign-off, rerun the RefinementExport inventory against the fresh candidate and
-re-distill `cap-method-source.json`, `initializer-source.json` and
-`current-initializer-source.json`; `storage_getter_source.py` keeps a
-`legacy_symbol` / `inline-fallback` shape for the pre-sweep getters that the
-refreshed inventory will retire.
+The refinement fixtures under `formal/refinement/fixtures/` were re-distilled
+against the post-sweep candidate: the RefinementExport inventory was rerun,
+`cap-method-source.json`, `initializer-source.json` and
+`current-initializer-source.json` were re-distilled, the current-method-proof
+receipt was regenerated against the fresh kernel, the method/context lane
+constants were re-pinned, and the five-shape helper-gas runtime capture was
+regenerated against the new artifact (NEF `9f714866…`, manifest `a6533d47…`).
+The retired pre-sweep getter shapes are gone: `storage_getter_source.py` no
+longer carries the `legacy_symbol` / `inline-fallback` forms, the lane's
+source-level semantic controls are now the prefix/default binding mutants, and
+the legacy read-order controls were removed from the lane, the closure gate
+and the regression suite.
 
 ### Current private validation refresh (2026-10-31)
 

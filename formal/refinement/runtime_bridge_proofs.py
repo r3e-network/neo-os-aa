@@ -247,15 +247,15 @@ def semantic_controls(output,inventory,cache):
         (folder/'mutated.cs').write_bytes(changed.encode())
         definition=f'Definition mutant : list Action := {body}.\n'
         name_module='Control_'+identifier.replace('-','_')
-        source_file=output/(name_module+'.v');source_file.write_text(PRELUDE+definition)
+        source_file=output/(name_module+'.v');source_file.write_bytes((PRELUDE+definition).encode())
         command(['coqc','-q',source_file.name],output,folder/'definition.log')
         st=concrete_state(name);width=2 if name.startswith('JMP') else 1;operand=3 if name.startswith('JMP') else 0
         target={'SUB':'(Binary Sub)','MIN':'(Binary Min)','GT':'Greater','TUCK':'Tuck','ROT':'Rot','LDLOC0':'(LoadLocal 0)','JMP':'(Jump (signed_byte 3))','JMPIFNOT':'(JumpIf false (signed_byte 3))'}[name]
         example=f'Example counterexample : source_step mutant {width} {st} {operand} 20 0 <> instruction_observation (vm_step {target} {width} {st}).\nProof. vm_compute. discriminate. Qed.\nPrint Assumptions counterexample.\n'
-        source_file.write_text(PRELUDE+definition+example)
+        source_file.write_bytes((PRELUDE+definition+example).encode())
         command(['coqc','-q',source_file.name],output,folder/'counterexample.log')
         modules.append(name_module)
-        false_file=output/(name_module+'_false.v');false_file.write_text(PRELUDE+certificate_for(name,body))
+        false_file=output/(name_module+'_false.v');false_file.write_bytes((PRELUDE+certificate_for(name,body)).encode())
         rejected=command(['coqc','-q',false_file.name],output,folder/'rejected.log',False)
         require(rejected.returncode!=0 and 'Error:' in rejected.stderr,'Semantic mutant incorrectly certified '+identifier)
         receipts.append(dict(name=identifier,opcode=name,sourceSha256=sha(changed.encode()),programSha256=sha(body.encode()),kernelCounterexampleChecked=True,sourceDefinitionCompiled=True,correspondenceRejected=True))
@@ -281,7 +281,7 @@ def _run(output,report,cache=None):
     certificate+=''.join(slot_certificate(name,programs[name]) for name in programs if name.startswith(('LDLOC','STLOC','LDARG')))
     certificate+=static_certificate(programs['LDSFLD'])
     certificate+=''.join(branch_certificate(name,programs[name]) for name in ('JMP','JMPIF','JMPIFNOT'))
-    (output/'RuntimeSourceCertificate.v').write_text(certificate)
+    (output/'RuntimeSourceCertificate.v').write_bytes(certificate.encode())
     command(['coqc','-q','RuntimeSourceCertificate.v'],output,output/'certificate.log')
     command(['coqchk','-silent','RuntimeSourceCertificate'],output,output/'coqchk.log')
     controls=semantic_controls(output,inventory,cache)

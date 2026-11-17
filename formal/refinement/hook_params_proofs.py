@@ -167,11 +167,11 @@ def run_proofs(inventory,output_dir):
         require(not re.search(r'\b(?:Admitted|Axiom|Axioms|admit|Parameter|Parameters|Abort)\b',text),'Proof escape')
         models[str(path)]=sha(raw);names[module]=declarations(text);(work/path.name).write_bytes(raw)
         kernel(['coqc','-q',path.name],work,work/(module+'.log'))
-    certificate=render_certificate(bound);(work/'HookArtifact.v').write_text(certificate);names['HookArtifact']=declarations(certificate)
+    certificate=render_certificate(bound);(work/'HookArtifact.v').write_bytes(certificate.encode());names['HookArtifact']=declarations(certificate)
     kernel(['coqc','-q','HookArtifact.v'],work,work/'artifact.log')
     kernel(['coqchk','-silent','HookArtifact'],work,work/'coqchk.log')
     audit='Require Import '+' '.join(names)+'.\n'+'\n'.join('Print Assumptions '+m+'.'+n+'.' for m,ns in names.items() for n in ns)
-    (work/'Assumptions.v').write_text(audit);_,log=kernel(['coqc','-q','Assumptions.v'],work,work/'assumptions.log')
+    (work/'Assumptions.v').write_bytes(audit.encode());_,log=kernel(['coqc','-q','Assumptions.v'],work,work/'assumptions.log')
     require(log.count('Closed under the global context')==sum(map(len,names.values())),'Incomplete assumption audit')
     controls=semantic_controls(bound,inventory,work)
     require(bind_method(inventory)==bound,'Artifact drift during proof')
@@ -216,7 +216,7 @@ def semantic_controls(bound,inventory,work):
         certificate=render_certificate(altered,projection)
         definitions='From Coq Require Import ZArith List.\nRequire Import CapMethodVm HookParams.\nImport ListNotations. Open Scope Z_scope.\n'
         definitions+='\n'.join(line for line in certificate.splitlines() if line.startswith('Definition '))+'\n'
-        module='HookDefinitions'+str(index);(work/(module+'.v')).write_text(definitions)
+        module='HookDefinitions'+str(index);(work/(module+'.v')).write_bytes(definitions.encode())
         kernel(['coqc','-q',module+'.v'],work,work/(module+'.log'))
         counter='HookCounterexample'+str(index)
         text=(f'From Coq Require Import ZArith List.\nRequire Import CapMethodVm HookParams {module}.\n'
@@ -226,7 +226,7 @@ def semantic_controls(bound,inventory,work):
               'Example original_semantics : hook_observe (run_vm 24 hook_code (hook_vm_initial (VRef 0) (VRef 1) objects VNull (fun _=>None))) =\n'
               'hook_observe (run_source 2 hook_source (hook_source_initial (VRef 0) (VRef 1) objects VNull (fun _=>None))).\n'
               'Proof. vm_compute. reflexivity. Qed.\n')
-        (work/(counter+'.v')).write_text(text)
+        (work/(counter+'.v')).write_bytes(text.encode())
         code,log=kernel(['coqc','-q',counter+'.v'],work,work/(counter+'.log'),success=False)
         require(code!=0 and 'Error: Unable to unify' in log,
                 'Semantic control did not reject the concrete result equality: '+name)

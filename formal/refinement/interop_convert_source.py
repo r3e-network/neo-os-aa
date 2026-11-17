@@ -72,7 +72,7 @@ UNPROVED = [
     'recorded.',
     'Reference counting, disposables added by Convert(object?), and payload aliasing between the '
     'caller and the handler.',
-    'Trusted C# extraction and compiler/CLR correspondence; all 105 public entrypoints.',
+    'Trusted C# extraction and compiler/CLR correspondence; all 109 public entrypoints.',
 ]
 TCB = ['Strict complete-method C# grammar and field/symbol binding.',
        'C# switch-expression dispatch, reflection over the handler signature and LINQ OfType/Select.',

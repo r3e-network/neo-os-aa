@@ -20,7 +20,9 @@ class NativeCodecSourceTests(unittest.TestCase):
         cls.directory = tempfile.TemporaryDirectory()
         cls.source = codec.source_evidence()['BinarySerializer']['source']
         path = Path(cls.directory.name)/'BinarySerializer.cs'
-        path.write_text(cls.source)
+        # The pin covers the exact upstream bytes; text-mode writing would
+        # translate newlines on Windows and silently change the hashed input.
+        path.write_bytes(cls.source.encode())
         _, cls.inventory, cls.projection = native.export_inventory(path, Path(cls.directory.name)/'inventory.json')
 
     @classmethod

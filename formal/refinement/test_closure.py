@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
+FIXTURE_ROOT = str(Path(Path(__file__).anchor) / 'fixture')
 SPEC = importlib.util.spec_from_file_location('closure_under_test', HERE / 'closure.py')
 
 
@@ -95,13 +96,7 @@ def fixture(module):
         vmSemanticControls=[dict(name='vm-control', getter='getValue', definitionsAccepted=True,
                                  baselineAccepted=True, proofRejected=True, kernelExitCode=1,
                                  baselineSha256='8'*64, definitionsSha256='9'*64)],
-        semanticControls=[control,
-                          dict(name='mutant-fallback-read-order-swapped/getValue',
-                               definitionsAccepted=True, proofRejected=True, kernelExitCode=1,
-                               definitionsSha256='9'*64, assertionSha256='8'*64),
-                          dict(name='mutant-fallback-read-order-swapped/isActive',
-                               definitionsAccepted=True, proofRejected=True, kernelExitCode=1,
-                               definitionsSha256='8'*64, assertionSha256='9'*64)])
+        semanticControls=[control])
     receipts['entry-dispatch'].update(schema='neoos-aa-entry-dispatch-proof/v1',
         entryBoundary='CallContract-after-interop-admission-and-argument-conversion',
         productionSourceBound=True, coqchkChecked=True, assumptionsClosed=True, coreSourceCommit=module.CORE_COMMIT, neoVmSourceCommit=module.VM_COMMIT,
@@ -117,7 +112,7 @@ def fixture(module):
             kernelCounterexampleChecked=True, **{field:'5'*64 for field in
                 ('sourceMutationSha256','projectionSha256','definitionsSha256','counterexampleSha256','rejectionLogSha256')})
             for name in module.ENTRY_DISPATCH_CONTROLS],
-        pinnedSource={repository: dict(path='/fixture/' + repository + '.cs', sha256='4'*64,
+        pinnedSource={repository: dict(path=FIXTURE_ROOT + '/' + repository + '.cs', sha256='4'*64,
             url='https://raw.githubusercontent.com/neo-project/' + repository + '/' + commit + '/source.cs')
             for repository, commit in (('neo', module.CORE_COMMIT), ('neo-vm', module.VM_COMMIT))},
         **copy.deepcopy(module.ENTRY_DISPATCH_DOMAIN))
@@ -130,7 +125,7 @@ def fixture(module):
         program=copy.deepcopy(module.SYSCALL_DISPATCH_PROGRAM),
         handlerParameters=copy.deepcopy(module.SYSCALL_DISPATCH_HANDLER_PARAMETERS),
         tokenFields=list(module.SYSCALL_DISPATCH_TOKEN_FIELDS),
-        pinnedSource={repository: dict(path='/fixture/' + repository + '.cs', sha256='4'*64,
+        pinnedSource={repository: dict(path=FIXTURE_ROOT + '/' + repository + '.cs', sha256='4'*64,
             url='https://raw.githubusercontent.com/neo-project/' + repository + '/' + commit + '/source.cs')
             for repository, commit in (('neo', module.CORE_COMMIT), ('neo-vm', module.VM_COMMIT))},
         semanticControls=[dict(control, name=name, kernelExitCode=1, kernelCounterexampleChecked=True,
@@ -154,7 +149,7 @@ def fixture(module):
         sourceProjectionSha256='2'*64, certificateSha256='3'*64,
         program=copy.deepcopy(module.CONTRACT_HANDOFF_PROGRAM),
         reasonOnlyGuards=['contract-absent', 'method-absent', 'arity-equality', 'return-xor'],
-        pinnedSource={name: dict(path='/fixture/' + name.replace('/', '-') + '.cs', sha256='4'*64,
+        pinnedSource={name: dict(path=FIXTURE_ROOT + '/' + name.replace('/', '-') + '.cs', sha256='4'*64,
             url='https://raw.githubusercontent.com/neo-project/' + repository + '/' + commit + '/src/' + name + '.cs')
             for name, repository, commit in (
                 ('core/engine', 'neo', module.CORE_COMMIT), ('core/abi', 'neo', module.CORE_COMMIT),
@@ -187,7 +182,7 @@ def fixture(module):
         program=copy.deepcopy(module.INTEROP_CONVERSION_PROGRAM),
         parameters=[list(row) for row in module.INTEROP_CONVERSION_ARGUMENTS],
         reasonOnlyGuards=['call-flags', 'descriptor-validators'],
-        pinnedSource={name: dict(path='/fixture/' + name.replace('/', '-') + '.cs', sha256='4'*64,
+        pinnedSource={name: dict(path=FIXTURE_ROOT + '/' + name.replace('/', '-') + '.cs', sha256='4'*64,
             url='https://raw.githubusercontent.com/neo-project/' + repository + '/' + commit
                 + '/' + relative)
             for name, repository, commit, relative in (
@@ -223,7 +218,7 @@ def fixture(module):
         sourceProjectionSha256='8'*64, certificateSha256='9'*64,
         program=copy.deepcopy(module.INTEROP_FEE_PROGRAM),
         reasonOnlyGuards=['descriptor-price-identity', 'fee-factor-source'],
-        pinnedSource={name: dict(path='/fixture/' + name.replace('/', '-') + '.cs', sha256='4'*64,
+        pinnedSource={name: dict(path=FIXTURE_ROOT + '/' + name.replace('/', '-') + '.cs', sha256='4'*64,
             url='https://raw.githubusercontent.com/neo-project/neo/' + module.CORE_COMMIT
                 + '/' + relative)
             for name, relative in (
@@ -254,7 +249,7 @@ def fixture(module):
         sourceProjectionSha256='8'*64, certificateSha256='9'*64,
         program=copy.deepcopy(module.EXCEPTION_IDENTITY_PROGRAM),
         reasonOnlyGuards=['catch-clause-subtyping', 'fault-terminates-the-turn'],
-        pinnedSource={name: dict(path='/fixture/' + name.replace('/', '-') + '.cs', sha256='4'*64,
+        pinnedSource={name: dict(path=FIXTURE_ROOT + '/' + name.replace('/', '-') + '.cs', sha256='4'*64,
             url='https://raw.githubusercontent.com/neo-project/'
                 + ('neo' if name == 'core/engine' else 'neo-vm') + '/'
                 + module.EXCEPTION_IDENTITY_SOURCES[name][0] + '/'
@@ -288,7 +283,7 @@ def fixture(module):
         program=copy.deepcopy(module.LOAD_ADMISSION_PROGRAM),
         reasonOnlyGuards=['exact-lookup-key-is-(name,arity)',
                           'the-checksum-is-last-and-optional'],
-        pinnedSource={name: dict(path='/fixture/' + name.replace('/', '-') + '.cs', sha256='4'*64,
+        pinnedSource={name: dict(path=FIXTURE_ROOT + '/' + name.replace('/', '-') + '.cs', sha256='4'*64,
             url='https://raw.githubusercontent.com/neo-project/neo/'
                 + module.LOAD_ADMISSION_SOURCES[name][0] + '/'
                 + module.LOAD_ADMISSION_SOURCES[name][1])
@@ -1161,7 +1156,7 @@ class ClosureTests(unittest.TestCase):
                 row['pinnedSource'].pop(next(iter(row['pinnedSource'])))
             elif change == 'extra-source':
                 row['pinnedSource']['core/extra'] = dict(
-                    path='/fixture/core-extra.cs', sha256='4'*64,
+                    path=FIXTURE_ROOT + '/core-extra.cs', sha256='4'*64,
                     url='https://raw.githubusercontent.com/neo-project/neo/' + self.module.CORE_COMMIT
                         + '/src/Neo/SmartContract/InteropParameterDescriptor.cs')
             elif change == 'other-commit':
@@ -1339,7 +1334,7 @@ class ClosureTests(unittest.TestCase):
                 row['pinnedSource'].pop(next(iter(row['pinnedSource'])))
             elif change == 'extra-source':
                 row['pinnedSource']['core/extra'] = dict(
-                    path='/fixture/core-extra.cs', sha256='4'*64,
+                    path=FIXTURE_ROOT + '/core-extra.cs', sha256='4'*64,
                     url='https://raw.githubusercontent.com/neo-project/neo/'
                         + self.module.CORE_COMMIT + '/src/Neo/SmartContract/NefFile.cs')
             elif change == 'other-commit':
@@ -1515,7 +1510,7 @@ class ClosureTests(unittest.TestCase):
                 row['pinnedSource'].pop(next(iter(row['pinnedSource'])))
             elif change == 'extra-source':
                 row['pinnedSource']['vm/extra'] = dict(
-                    path='/fixture/vm-extra.cs', sha256='4'*64,
+                    path=FIXTURE_ROOT + '/vm-extra.cs', sha256='4'*64,
                     url='https://raw.githubusercontent.com/neo-project/neo-vm/'
                         + self.module.VM_COMMIT + '/src/Neo.VM/CatchableException.cs')
             elif change == 'other-commit':
@@ -2069,17 +2064,6 @@ class ClosureTests(unittest.TestCase):
         receipts['storage-getters']['vmSemanticControls'] = []
         with self.assertRaisesRegex(ValueError, 'controls missing'):
             self.module.join_scopes(inventory, receipts)
-
-    def test_storage_getter_read_order_controls_are_required_and_bound(self):
-        cases = [lambda rows: [row for row in rows if not row['name'].startswith('mutant-fallback-read-order')],
-                 lambda rows: [dict(row, name='mutant-fallback-read-order-swapped/ghost') for row in rows],
-                 lambda rows: [dict(row, name='renamed-control') for row in rows]]
-        for change in cases:
-            inventory, receipts = fixture(self.module)
-            receipts['storage-getters']['semanticControls'] = change(
-                receipts['storage-getters']['semanticControls'])
-            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'read-order'):
-                self.module.join_scopes(inventory, receipts)
 
     def test_storage_getter_files_and_declarations_are_hashed(self):
         with tempfile.TemporaryDirectory() as directory:

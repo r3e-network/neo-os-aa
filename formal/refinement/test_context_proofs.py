@@ -32,7 +32,7 @@ class ContextProofTests(unittest.TestCase):
         cls.program = context.bind_initializer(cls.inventory)
 
     def test_full_initializer_identity(self):
-        self.assertEqual((self.program['start'],self.program['end']), (29415,30097))
+        self.assertEqual((self.program['start'],self.program['end']), (29996,30678))
         self.assertEqual(len(self.program['bytes']),682)
         self.assertEqual(len(self.program['instructions']),182)
 
@@ -102,7 +102,7 @@ class ContextProofTests(unittest.TestCase):
             self.assertTrue(receipt['initializerReferenceVerified'])
             self.assertTrue(receipt['helperContextVerified'])
             self.assertFalse(receipt['fullImplementationVerified'])
-            self.assertEqual(receipt['methodRange'],[17762,18043])
+            self.assertEqual(receipt['methodRange'],[18900,19181])
             self.assertEqual((receipt['methodByteCount'],receipt['methodInstructionCount']),(281,116))
             self.assertEqual(len(receipt['semanticControls']),6)
             self.assertTrue(all(c['refutationKernelChecked'] for c in receipt['semanticControls'][3:]))

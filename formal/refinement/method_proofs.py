@@ -18,10 +18,11 @@ import re
 import tempfile
 
 import nef_decode
+from method_source import project_method, render_program
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
-START, END = 17762, 18043
+START, END = 18900, 19181
 METHOD = "SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
 LIMIT = 1 << 255
 ERROR = b"Reimbursement exceeds actual gas cost"
@@ -585,7 +586,6 @@ Print Assumptions actual_zero_estimation_overflow_margin_rejected.
 """
 
 def render_certificate(program, projection):
-    from method_source import render_program
     header = "From Coq Require Import ZArith List Bool Lia.\nRequire Import IntegerSemantics CapArithmetic CapMethodVm.\nImport ListNotations.\nOpen Scope Z_scope.\n"
     header += "Definition artifact : list nat := [" + ";".join(str(x)+"%nat" for x in program["bytes"]) + "].\n"
     header += "Definition source : list Stmt := " + render_program(projection) + ".\n"
@@ -622,12 +622,12 @@ def semantic_controls(program, projection, work):
     """
     import copy
     mutants = []
-    for name, offset, opcode in [("MinToMax", 17892, 0xba),
-                                 ("ReverseAssertBranch", 17897, 0x26),
+    for name, offset, opcode in [("MinToMax", 19030, 0xba),
+                                 ("ReverseAssertBranch", 19035, 0x26),
                                  # The drop after the reservation write: replacing it with a
                                  # duplicate leaves the written value on the stack, so the
                                  # helper no longer halts with a single result.
-                                 ("DropReservationWrite", 18022, 0x4a)]:
+                                 ("DropReservationWrite", 19160, 0x4a)]:
         mutated = copy.deepcopy(program)
         mutated["bytes"][offset-START] = opcode
         mutants.append((name, mutated, projection))
@@ -647,11 +647,11 @@ def semantic_controls(program, projection, work):
         # source IR. The first proof is deliberately not part of this check.
         definitions = certificate.split("Ltac source_norm", 1)[0]
         definitions_name = "Mutant" + name + "Definitions"
-        (work / (definitions_name + ".v")).write_text(definitions)
+        (work / (definitions_name + ".v")).write_bytes(definitions.encode())
         result, log = _kernel_command(["coqc", "-q", definitions_name + ".v"], work, definitions_name + ".log")
         _require_kernel_success(result, log)
         module = "Mutant" + name
-        (work / (module + ".v")).write_text(certificate)
+        (work / (module + ".v")).write_bytes(certificate.encode())
         rejected, reject_log = _kernel_command(["coqc", "-q", module + ".v"], work, module + ".log")
         failure = rejected.stdout + rejected.stderr
         semantic_error = any(marker in failure for marker in
@@ -666,7 +666,6 @@ def semantic_controls(program, projection, work):
 
 
 def run_proofs(inventory, output_dir, controls=False):
-    from method_source import project_method
     require(shutil.which("coqc") and shutil.which("coqchk"), "coqc and coqchk are required")
     tool_paths = [ROOT / name for name in ("method_proofs.py", "method_source.py", "nef_decode.py", "verify.py")]
     tool_hashes = {path.name:digest(path.read_bytes()) for path in tool_paths}
@@ -680,17 +679,18 @@ def run_proofs(inventory, output_dir, controls=False):
     declarations = {}
     for module in models:
         original = ROOT / "coq" / (module + ".v")
-        source = original.read_text()
+        raw = original.read_bytes()
+        source = raw.decode()
         require(not re.search(r"\b(?:Admitted|Axiom|Axioms|admit|Parameter|Parameters|Abort)\b", source), "Untrusted proof escape in " + module)
-        model_hashes[module] = digest(source.encode())
+        model_hashes[module] = digest(raw)
         declarations[module] = declared_names(source)
-        (work / original.name).write_text(source)
+        (work / original.name).write_bytes(raw)
         result, log = _kernel_command(["coqc", "-q", original.name], work, module + ".log")
         _require_kernel_success(result, log)
     certificate = render_certificate(bound, projection)
     require(not re.search(r"\b(?:Admitted|Axiom|Axioms|admit|Parameter|Parameters|Abort)\b", certificate), "Untrusted certificate escape")
     artifact_file = work / "CapMethodArtifact.v"
-    artifact_file.write_text(certificate)
+    artifact_file.write_bytes(certificate.encode())
     declarations["CapMethodArtifact"] = declared_names(certificate)
     require(set(THEOREM_NAMES) <= set(declarations["CapMethodArtifact"]), "Reported theorem is missing from certificate")
     result, log = _kernel_command(["coqc", "-q", artifact_file.name], work, "CapMethodArtifact.log")
@@ -700,7 +700,7 @@ def run_proofs(inventory, output_dir, controls=False):
     assumptions = "Require Import " + " ".join(models + ["CapMethodArtifact"]) + ".\n"
     assumptions += "\n".join("Print Assumptions " + module + "." + name + "."
                             for module, names in declarations.items() for name in names) + "\n"
-    (work / "CapMethodAssumptions.v").write_text(assumptions)
+    (work / "CapMethodAssumptions.v").write_bytes(assumptions.encode())
     checked, assumptions_log = _kernel_command(["coqc", "-q", "CapMethodAssumptions.v"], work, "assumptions.log")
     _require_kernel_success(checked, assumptions_log)
     closed_count = sum(line.strip() == "Closed under the global context" for line in checked.stdout.splitlines())
@@ -736,7 +736,7 @@ def run_proofs(inventory, output_dir, controls=False):
                 staticEntryInvariant="Static slot 38 is Buffer[0x21]; _initialize is outside this theorem",
                 excludedCorrespondence=["actual ApplicationEngine and resource/gas behavior", "native binary codec",
                                         "Roslyn/compiler/source frontend correctness", "arbitrary CLR reference equality",
-                                        "caller reachability and typed persisted-storage invariant", "all 105 public ABI entrypoints"],
+                                        "caller reachability and typed persisted-storage invariant", "all 109 public ABI entrypoints"],
                 semanticControls=control_results)
 
 

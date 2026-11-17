@@ -108,7 +108,10 @@ def helper_inputs(report, report_directory):
     require(len(code) == 281 and sha(code) == report.get('methodSha256'), 'Helper artifact byte identity mismatch')
     for path, expected in report.get('toolInputSha256', {}).items():
         current = Path(path)
-        if not current.is_file():
+        if not current.is_absolute():
+            # Resolve relative tool names against this lane's own directory: under
+            # closure those are the pinned snapshot copies, never whatever the
+            # inherited host working directory happens to hold.
             current = ROOT / current.name
         require(current.is_file(), 'Missing helper proof tool: '+str(current))
         raw = current.read_bytes()
@@ -161,7 +164,7 @@ def prepare(helper_report, output_dir):
     assumption_source = 'Require Import '+' '.join(MODULES+[MODEL.stem])+'.\n'
     assumption_source += '\n'.join('Print Assumptions '+module+'.'+name+'.'
         for module,names in inventory.items() for name in names)+'\n'
-    (work/'CompositionAssumptions.v').write_text(assumption_source)
+    (work/'CompositionAssumptions.v').write_bytes(assumption_source.encode())
     _, audit = command([coqc,'-q','CompositionAssumptions.v'],work,'assumptions.log')
     count = audit.count('Closed under the global context')
     require(count == sum(map(len,inventory.values())) and 'Axioms:' not in audit,
@@ -215,10 +218,10 @@ def semantic_controls(bundle):
             for extension in ['.v','.vo']:
                 shutil.copyfile(work/(module+extension),case/(module+extension))
         mutant = prefix.replace(old,new)
-        (case/'Definitions.v').write_text(mutant)
+        (case/'Definitions.v').write_bytes(mutant.encode())
         command([coqc,'-q','Definitions.v'],case,'definitions.log')
-        (case/'Reject.v').write_text('Require Import Definitions.\nFrom Coq Require Import ZArith List.\n'
-           'Require Import CapMethodVm CapMethodArtifact IntegerSemantics.\nImport ListNotations.\nOpen Scope Z_scope.\n'+claim+'\n')
+        (case/'Reject.v').write_bytes(('Require Import Definitions.\nFrom Coq Require Import ZArith List.\n'
+           'Require Import CapMethodVm CapMethodArtifact IntegerSemantics.\nImport ListNotations.\nOpen Scope Z_scope.\n'+claim+'\n').encode())
         code, log = command([coqc,'-q','Reject.v'],case,'rejection.log',False)
         require(code > 0 and 'Error:' in log and 'Syntax error' not in log,
                 'Mutation did not receive semantic proof rejection: '+name)

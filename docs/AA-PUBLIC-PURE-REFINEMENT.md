@@ -4,14 +4,14 @@ This lane certifies the complete bodies of three public ABI methods in the
 ordinary candidate under declared reference semantics. It independently
 projects their typed source, decodes their exact NEF bytes, and kernel-checks
 source results, terminal behavior and frame preservation. It does not certify
-ApplicationEngine, ABI dispatch, gas or public deployment. All 105 ABI entries
+ApplicationEngine, ABI dispatch, gas or public deployment. All 109 ABI entries
 remain unproved for full implementation acceptance.
 
 | Public method | Exact byte range, end exclusive | Bytes / instructions |
 | --- | --- | --- |
-| `getAccountImplementationId/0` | `[17906,17949)` | 43 / 3 |
-| `supportsExecutionMode/1` | `[17949,18000)` | 51 / 18 |
-| `supportsModuleType/1` | `[18000,18049)` | 49 / 18 |
+| `getAccountImplementationId/0` | `[22447,22480)` | 33 / 3 |
+| `supportsExecutionMode/1` | `[22480,22531)` | 51 / 18 |
+| `supportsModuleType/1` | `[22531,22580)` | 49 / 18 |
 
 The source-only frontend reads `inventory.source`; it never consults bytecode,
 offsets or expected target results. It checks the complete MethodBody, Block and

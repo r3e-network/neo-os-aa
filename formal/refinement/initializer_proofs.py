@@ -86,20 +86,21 @@ def run_proofs(inventory, output_dir, controls=True):
     raw = {path: path.read_bytes() for path in paths}
     inputs = {str(path): digest(data) for path, data in raw.items()}
     bound = bind(inventory)
-    artifacts = {module: raw[HERE / "coq" / (module + ".v")].decode("utf-8") for module in MODULES}
-    artifacts["CapContextArtifact"] = context_proofs.render_certificate(bound["initializer"])
-    artifacts["InitializerSourceArtifact"] = render(bound)
+    artifacts = {module: raw[HERE / "coq" / (module + ".v")] for module in MODULES}
+    artifacts["CapContextArtifact"] = context_proofs.render_certificate(bound["initializer"]).encode("utf-8")
+    artifacts["InitializerSourceArtifact"] = render(bound).encode("utf-8")
     require(shutil.which("coqc") and shutil.which("coqchk"), "Missing Coq kernel")
     names = {}
-    for module, source in artifacts.items():
+    for module, source_bytes in artifacts.items():
+        source = source_bytes.decode("utf-8")
         require(not re.search(r"\b(?:Admitted|Axiom|Parameter|admit|Abort)\b", source), "Proof escape")
         names[module] = declarations(source)
-        (work / (module + ".v")).write_text(source)
+        (work / (module + ".v")).write_bytes(source_bytes)
         command(["coqc", "-q", module + ".v"], work, work / (module + ".log"))
     command(["coqchk", "-silent", "InitializerSourceArtifact"], work, work / "coqchk.log")
     checks = "Require Import " + " ".join(artifacts) + ".\n" + "\n".join(
         "Print Assumptions " + module + "." + name + "." for module, declarations_ in names.items() for name in declarations_)
-    (work / "Assumptions.v").write_text(checks)
+    (work / "Assumptions.v").write_bytes(checks.encode())
     _, audited = command(["coqc", "-q", "Assumptions.v"], work, work / "assumptions.log")
     count = sum(map(len, names.values()))
     require(audited.count("Closed under the global context") == count and "Axioms:" not in audited, "Incomplete assumption audit")
@@ -124,9 +125,9 @@ def run_proofs(inventory, output_dir, controls=True):
             for path in work.glob("*.vo"):
                 shutil.copyfile(path, case / path.name)
             definitions = certificate.split("Theorem all_static_source_values", 1)[0]
-            (case / "Definitions.v").write_text(definitions)
+            (case / "Definitions.v").write_bytes(definitions.encode())
             command(["coqc", "-q", "Definitions.v"], case, case / "definitions.log")
-            (case / "Mutant.v").write_text(certificate)
+            (case / "Mutant.v").write_bytes(certificate.encode())
             code, message = command(["coqc", "-q", "Mutant.v"], case, case / "rejection.log", False)
             require(code != 0 and "Error:" in message and "Syntax error" not in message, "Semantic mutation escaped: " + name)
             rejected.append({"name": name, "definitionsCompiled": True, "certificateRejected": True})
@@ -137,7 +138,7 @@ def run_proofs(inventory, output_dir, controls=True):
         "nefSha256": bound["initializer"]["nefSha256"], "scriptSha256": bound["initializer"]["scriptSha256"],
         "initializerSha256": bound["initializer"]["initializerSha256"],
         "sourceProjectionSha256": bound["source"]["sourceProjectionSha256"],
-        "certificateSha256": digest(artifacts["InitializerSourceArtifact"].encode()), "inputSha256": inputs,
+        "certificateSha256": digest(artifacts["InitializerSourceArtifact"]), "inputSha256": inputs,
         "closedDeclarations": names, "closedAssumptionCount": count, "semanticControls": rejected,
         "fieldCount": len(bound["source"]["initializers"]), "slots": bound["slots"],
         "sourceProjection": bound["source"], "outputDirectory": str(work),

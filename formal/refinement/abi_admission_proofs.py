@@ -283,13 +283,25 @@ def render_certificate(projection):
 def render_control_sources(name, mutant):
     expression, expected = CONTROL_CASES[name]
     header = PRELUDE
+    if expected.isdigit():
+        # A nat counterexample whose mutant value can be large (the manifest cap
+        # mutant is 131070) must not ask the kernel to convert a deep unary
+        # numeral: `vm_compute` on `x <> 65535` leaves `discriminate` a proof
+        # whose final kernel re-check recurses to the full magnitude and
+        # overflows the smaller Windows process stack. The decidable equality
+        # keeps the whole computation inside the bytecode VM, so the kernel only
+        # checks `eq_refl : false = false`.
+        changed = ('Example changed_behavior : Nat.eqb (' + expression + ') (' + expected + ') = false.\n'
+                   'Proof. vm_compute. reflexivity. Qed.\n')
+    else:
+        changed = ('Example changed_behavior : ' + expression + ' <> ' + expected + '.\n'
+                   'Proof. vm_compute. discriminate. Qed.\n')
     return {
      'Definitions.v': header + 'Definition mutant_program := '
                       + program_expression(mutant['program']) + '.\n',
      'OriginalBehavior.v': PRELUDE + 'Require Import Definitions.\nExample original_behavior : '
                            + expression + ' = ' + expected + '.\nProof. vm_compute. reflexivity. Qed.\n',
-     'Counterexample.v': PRELUDE + 'Require Import Definitions.\nExample changed_behavior : '
-                         + expression + ' <> ' + expected + '.\nProof. vm_compute. discriminate. Qed.\n'
+     'Counterexample.v': PRELUDE + 'Require Import Definitions.\n' + changed +
                          'Print Assumptions changed_behavior.\n',
     }
 
@@ -338,7 +350,7 @@ def regenerate_certificate(report, evidence_dir):
 
 def regenerate_controls(report, evidence_dir):
     source.project_captured(report['pinnedSource'])
-    contents = {k: Path(v['path']).read_text() for k, v in report['pinnedSource'].items()}
+    contents = {k: Path(v['path']).read_text(encoding='utf-8') for k, v in report['pinnedSource'].items()}
     rows = report.get('semanticControls')
     require(isinstance(rows, list) and len(rows) == len(EXPECTED_CONTROLS),
             'Incomplete semantic controls')
@@ -375,7 +387,7 @@ def regenerate_controls(report, evidence_dir):
 
 
 def semantic_controls(rows, directory):
-    contents = {k: Path(v['path']).read_text() for k, v in rows.items()}
+    contents = {k: Path(v['path']).read_text(encoding='utf-8') for k, v in rows.items()}
     reports = []
     generated = {}
     logs = {}
@@ -386,7 +398,7 @@ def semantic_controls(rows, directory):
         shutil.copy2(directory / (MODULE + '.vo'), case / (MODULE + '.vo'))
         rendered = render_control_sources(name, mutant)
         for filename, text in rendered.items():
-            (case / filename).write_text(text)
+            (case / filename).write_bytes(text.encode())
         definitions = rendered['Definitions.v']
         counter = rendered['Counterexample.v']
         run_command(['coqc', '-q', 'Definitions.v'], case, case / 'definitions.log')
@@ -426,7 +438,7 @@ def run(output, report_path):
             'Unexpected capitalised parameter declaration in the load admission model')
     (output / (MODULE + '.v')).write_bytes(model)
     certificate = render_certificate(projection)
-    (output / (ARTIFACT + '.v')).write_text(certificate)
+    (output / (ARTIFACT + '.v')).write_bytes(certificate.encode())
     run_command(['coqc', '-q', MODULE + '.v'], output, output / 'model.log')
     run_command(['coqc', '-q', ARTIFACT + '.v'], output, output / 'certificate.log')
     run_command(['coqchk', '-silent', ARTIFACT], output, output / 'coqchk.log')

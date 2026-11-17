@@ -12,54 +12,54 @@
  "needleLiterals": 648,
  "needleBelowAnchorFloor": 133,
  "needleDivergent": 0,
- "abiDispatchMethods": 105,
- "abiDispatchOnDeclaredOffset": 103,
+ "abiDispatchMethods": 109,
+ "abiDispatchOnDeclaredOffset": 107,
  "abiDispatchReservedRefused": 2,
  "abiDispatchMismatches": 0,
- "abiReturnShapesChecked": 40,
+ "abiReturnShapesChecked": 42,
  "abiReturnShapeMismatches": 0,
  "abiReturnNulls": 0,
  "abiDispatchReturnTypesUnexercised": ["Any", "Array"],
  "abiSemanticsMeasured": false,
- "abiBoundaryProbes": 394,
+ "abiBoundaryProbes": 408,
  "abiBoundaryProbeSetMatches": true,
- "abiBoundaryControls": 105,
- "abiBoundaryControlsEntered": 103,
+ "abiBoundaryControls": 109,
+ "abiBoundaryControlsEntered": 107,
  "abiBoundaryControlsRefused": 2,
- "abiBoundaryArityProbes": 195,
- "abiBoundaryArityRefused": 195,
+ "abiBoundaryArityProbes": 202,
+ "abiBoundaryArityRefused": 202,
  "abiBoundaryOverloadProbes": 2,
  "abiBoundaryOverloadLandedOnSibling": 2,
- "abiBoundaryTypeProbes": 91,
- "abiBoundaryTypeEntered": 91,
+ "abiBoundaryTypeProbes": 94,
+ "abiBoundaryTypeEntered": 94,
  "abiBoundaryTypeCompleted": 7,
  "abiBoundaryShapeEnforced": false,
  "abiBoundaryAbsentNameRefused": true,
  "abiBoundaryBehaviourProven": false,
- "footprintMethodsCompared": 103,
- "footprintEnteredByteMethods": 353,
+ "footprintMethodsCompared": 107,
+ "footprintEnteredByteMethods": 362,
  "footprintOutsideStaticClosure": 0,
  "footprintUnownedOffsets": 0,
- "footprintReachableNotEntered": 607,
+ "footprintReachableNotEntered": 634,
  "scenarioFiles": 4,
- "scenarioSteps": 227,
- "scenarioStepsOnDeclaredArguments": 227,
- "scenarioStepsAtDeclaredBlockTime": 227,
- "scenarioEntrypointsNamedByAStep": 89,
- "scenarioEntrypointsCalledThroughACaller": 8,
- "scenarioEntrypointsReachedThroughPluginCallbacks": 5,
- "scenarioEntrypointsUnreached": 3,
+ "scenarioSteps": 228,
+ "scenarioStepsOnDeclaredArguments": 228,
+ "scenarioStepsAtDeclaredBlockTime": 228,
+ "scenarioEntrypointsNamedByAStep": 88,
+ "scenarioEntrypointsCalledThroughACaller": 6,
+ "scenarioEntrypointsReachedThroughPluginCallbacks": 1,
+ "scenarioEntrypointsUnreached": 14,
  "scenarioFaultsAsExpected": 42,
- "scenarioReturnNulls": 3,
+ "scenarioReturnNulls": 2,
  "scenarioReadLinksHeld": 38,
- "scenarioDistinctBlockTimes": 19,
+ "scenarioDistinctBlockTimes": 24,
  "scenarioTimeSensitivePairs": 14,
  "scenarioModulesDeclared": 10,
  "scenarioModulesDeployed": 10,
- "scenarioStepsOnModules": 26,
+ "scenarioStepsOnModules": 28,
  "scenarioReturnTypesExercised": ["Any", "Array", "Boolean", "ByteArray", "Hash160", "Integer", "String", "Void"],
  "returnTypesUnexercised": [],
- "declaredArgumentCallsMeasured": 227,
+ "declaredArgumentCallsMeasured": 228,
  "declaredArgumentBehaviourProven": false,
  "executionSemanticsMeasured": false,
  "strictReaderConfirmedFiles": 22,
@@ -488,7 +488,7 @@ are established by different mechanisms at different strengths:
 | --- | --- | --- |
 | C# project -> NEF bytes | `formal/refinement/export` recompiles `contracts/SmartAccount.csproj` with the pinned NCCS 3.9.1 and requires `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`, plus `JsonNode.DeepEquals` on the manifest | byte identity, every gate run |
 | C# text -> what the lanes read | this harness | agreement between two independent readers on a measured corpus |
-| ABI -> what a real engine dispatches | `export --abi-dispatch` plus `abi_dispatch.py` | 103 of 105 entries dispatched onto the declared offset, the two engine entry points refused by name |
+| ABI -> what a real engine dispatches | `export --abi-dispatch` plus `abi_dispatch.py` | 107 of 109 entries dispatched onto the declared offset, the two engine entry points refused by name |
 | C# semantics -> VM semantics | still nothing beyond the dispatch path, and nothing here claims it | open |
 
 The first leg is stronger than the second and predates it. `verify.py` builds
@@ -545,20 +545,22 @@ they should. That sixth question is the section below this one.
 | syscalls observed | 355, every one resolved by the interop table |
 | lazy initializer invocations | 98 (the compiler's static-init guard runs `_initialize` from inside each method) |
 
-The current artifact was remeasured on 2026-10-30: 105 of 105 methods matched the
-manifest, 103 entered their declared offset, `_deploy` and `_initialize` were the
-two refused names, 40 completed calls matched their declared return shape, and 65
-faulted on zero arguments. The receipt recorded 400 resolved syscalls and
-`receiptSha256: 623b0a2132f37f22af7c33031b0d255f47eb307fb508726158727240e09da4e4`;
+The current artifact was remeasured on 2026-11-17: 109 of 109 methods matched the
+manifest, 107 entered their declared offset, `_deploy` and `_initialize` were the
+two refused names, 42 completed calls matched their declared return shape, and 67
+faulted on zero arguments. The receipt recorded 399 resolved syscalls and
+`receiptSha256: f75e1226fd445b31112003f84f609486cbfbb9d92c8eacc902a72642650a046c`;
 its seventeen self-checks all rejected their mutations. The corresponding
-footprint is 30,097 bytes / 10,462 instructions, 226 ranges, 353 entered byte
-methods all inside the 960-method static closure, 607 reachable methods not
-entered, zero foreign or unowned executed offsets, and
-`receiptSha256: 0acfbb888895c3978681249cd32d7abfe06bc5ebe4e1f011969b010ee05fcff1`.
+footprint is 30,678 bytes / 10,594 instructions, 238 ranges, 362 entered byte
+methods all inside the 996-method static closure, 634 reachable methods not
+entered, zero unknown, unowned or outside-closure executed offsets — the 887
+foreign-script offsets are counted separately, not as owned contract
+instructions — and
+`receiptSha256: 20833d6456d0cd4ebba05bd0b5356e2e834960063a4f9e0fa2487671baf2d847`.
 
 The fault count is the honest part of that table. A call with `0`/`null` arguments
 is not a call the contract was written for, so 61 methods abort in the historical
-gate-32 artifact and 65 in the current one; what the receipt establishes is *where
+gate-32 artifact and 67 in the current one; what the receipt establishes is *where
 the engine went*, not that the method succeeded. A face that required `HALT` would
 have been a face that required a fixture nobody has.
 
@@ -614,17 +616,17 @@ correct". A matching shape is not a matching value: `getContractAdmin` returning
 Every measurement above describes a call that **matches** the manifest. A dispatch
 rule has two halves, and the second — what the engine does with a call the manifest
 does not describe — was unmeasured, which is how a face ends up agreeing about the
-easy direction only. The same exporter mode now also runs 394 probes that no
+easy direction only. The same exporter mode now also runs 408 probes that no
 manifest would accept, and records what happened without deciding what should
 have:
 
 | Probe | Count | What the engine did |
 | --- | --- | --- |
-| the call the dispatch face makes, re-run | 105 | 103 entered the declared offset; the 2 engine entry points were refused |
-| a parameter count no overload of that name declares | 195 | 195 refused before a callee frame existed, 0 entered |
-| a parameter count a *sibling* overload declares | 2 | 2 entered — `finalizeEscape/2` at 10988, `finalizeEscape/3` at 11000 |
+| the call the dispatch face makes, re-run | 109 | 107 entered the declared offset; the 2 engine entry points were refused |
+| a parameter count no overload of that name declares | 202 | 202 refused before a callee frame existed, 0 entered |
+| a parameter count a *sibling* overload declares | 2 | 2 entered — `finalizeEscape/2` at 11096, `finalizeEscape/3` at 11108 |
 | a name no method declares | 1 | refused |
-| an argument of a shape the manifest says cannot arrive | 91 | 91 entered; 84 faulted inside, 7 answered |
+| an argument of a shape the manifest says cannot arrive | 94 | 94 entered; 87 faulted inside, 7 answered |
 
 The refusals are not folklore: each carries the engine's own message, and the face
 pins it. A parameter count that no overload has comes back as
@@ -644,10 +646,10 @@ would not select, and arity alone would not either. That is the one place in thi
 artifact where the (name, arity) pair the manifest declares can be shown to be the
 pair the engine dispatches on.
 
-The 91 wrong-shaped arguments are the finding, and they are not what the first
+The 94 wrong-shaped arguments are the finding, and they are not what the first
 draft of this face expected. **Not one is refused at the boundary.** An empty array
 passed where a `Hash160`, a `ByteString` or an `Integer` is declared reaches the
-callee anyway: 84 of those calls then fail *inside* the contract — 37 with
+callee anyway: 87 of those calls then fail *inside* the contract — 38 with
 `Specified cast is not valid` at `StackItem.GetInteger`, the rest on the entry's
 own abort (`Account id required`, `Account not found`, `Platform registrar not
 set`, …) — and 7 answer normally: the two `supports*` predicates, `computeArgsHash`
@@ -697,7 +699,7 @@ methods its dependency graph reaches, plus the initializer's closure.
 
 Across the 98 dispatched calls the engine entered 315 byte methods — a helper
 entered by several calls counts once per call — and every one of them is in that
-entry's closure. The static closures list 657 members in all, so 342 were reachable
+entry's closure. The static closures list 996 members in all, so 634 were reachable
 and not entered on this run. That number is reported and is deliberately **not** a
 failure: `reachable` is a may-set, it lists every method some path could reach, and
 a zero-argument call takes one path. A face that required equality would be
@@ -709,7 +711,7 @@ Two details are worth naming because the first draft had both wrong:
 - Frame membership is decided by the **running script's hash**, not by stack depth.
   A native contract call pushes its own context, and its instruction pointers are
   numbered from zero in a different script, so a depth rule can credit this contract
-  with an offset it never ran. Filtering by hash also keeps the 818 offsets executed
+  with an offset it never ran. Filtering by hash also keeps the 887 offsets executed
   in other scripts out of the comparison instead of quietly mixing them in.
 - "The declared entry ran" is tested against the **offset**, not against the owning
   byte range. An owner set says "this method ran"; the question here is "the offset
@@ -722,7 +724,7 @@ engine demonstrably entered. A mutant that cannot be built on the pair at hand i
 recorded as **skipped** and fails the run, because a self test that silently shrinks
 to what still fits would certify the input it did not examine. The receipt also
 records the largest group of methods with byte-identical footprints; it is 1 on the
-pinned artifact, so this is 98 traces and not one trace relabelled 98 times.
+pinned artifact, so this is 107 traces and not one trace relabelled 107 times.
 
 What the footprint adds, and what it does not: it says *which instructions were
 entered* by a call whose arguments are all zero. It says nothing about the values
@@ -732,7 +734,7 @@ a proof. `fullImplementationVerified` stays `false`.
 ### The layer under the footprint
 
 Both layers above call every entry once, with arity-matched zeros. That is what
-makes them comparable across all 105 entries, and it is also their limit. On the
+makes them comparable across all 109 entries, and it is also their limit. On the
 historical gate-32 artifact cited below, 61 of the 98 dispatched calls stop at
 their first argument guard; the current gate must remeasure that count rather
 than inherit it. A body that refuses zero and a body that works are
@@ -771,9 +773,9 @@ Eight questions, and each one has a way to fail:
   measurable at all: a harness frozen at one instant can show that a call before a
   window refuses, and can never show that the same call at the window succeeds.
 - **ending.** Each call ends where the scenario says, and a call expected to fault
-  faults with the declared reason. Twenty-six of the hundred and forty-five steps
-  are expected faults — a timelock that has not elapsed, a proposal that does not
-  exist, a recovery that is permanent — so the failing path is measured as
+  faults with the declared reason. Forty-two of the two hundred and twenty-eight
+  steps are expected faults — a timelock that has not elapsed, a proposal that does
+  not exist, a recovery that is permanent — so the failing path is measured as
   deliberately as the succeeding one. A fault may also pin a `detail`: the reason
   is what the target script aborted with, the detail is what the host recorded
   underneath it, and pinning both is pinning two different layers. A scenario that
@@ -785,7 +787,7 @@ Eight questions, and each one has a way to fail:
   twice in two places. The manifest is the one belonging to the contract the step
   called.
 - **values.** The integers, booleans and array lengths the scenario declares are
-  the ones the engine produced, and every declared read link holds: twenty-seven
+  the ones the engine produced, and every declared read link holds: thirty-eight
   links tie a result to an argument byte for byte. Among them are the account ids
   derived by a pure function to the identity a later call registers, the backup
   owner, verifier data and metadata URI read back after they were written, the
@@ -823,10 +825,10 @@ signer with `0x7777…`, which happened to be the signer the first step already 
 so it changed nothing and the face correctly reported no difference. It now picks a
 value the row does not carry.
 
-What it measured on the pinned artifact: 227 calls over four files, 185 halted, 42
-faults with the expected reasons, 227 of 227 frames byte-identical to the
-independent encoder, 227 of 227 at their declared block time and under their
-declared signer, 180 returned shapes matching their declaration and 3 nulls where a
+What it measured on the pinned artifact: 228 calls over four files, 186 halted, 42
+faults with the expected reasons, 228 of 228 frames byte-identical to the
+independent encoder, 228 of 228 at their declared block time and under their
+declared signer, 184 returned shapes matching their declaration and 2 nulls where a
 reference type was declared, 38 of 38 read links holding, and every declared
 integer, boolean and array length matching. Those are the numbers of the gate runs
 as well. The first file's receipt is `1b757ffe…` from gate 33, `4593d9c5…` from
@@ -840,10 +842,9 @@ files, ran 27 jobs with none non-zero, and returned the same `NO-GO` with
 while the three older scenario receipts, the dispatch face (`24aac44d…`) and the
 footprint (`48556e2a…`) did not move at all. Gate 35 snapshotted 121 tool files, ran
 26 jobs with none non-zero, and also returned `NO-GO` with
-`fullImplementationVerified false` and `fullUnprovedCount 105`. The three nulls are
+`fullImplementationVerified false` and `fullUnprovedCount 105`. The two nulls are
 named rather than counted:
-`read-pending-verifier-update`, `read-pending-hook-update`,
-`read-pending-platform-rotation`. The two types the
+`read-pending-verifier-update`, `read-pending-hook-update`. The two types the
 dispatch face could not exercise are exercised here: `Array` by a batch execution
 and by a read-only preview that returned five items, `Any` by a user operation
 whose result was the string the self-call returned. `returnTypesUnexercised` is
@@ -854,8 +855,8 @@ one for `Any` and `ByteArray`, the plugin scenario supplies `Array` and `Any`
 again from a different direction and leaves `String` to the others, the registrar
 scenario leaves `Array` and `String` to the others again, and the dispatch face
 alone leaves `Any` and `Array` unexercised. Each face keeps its own non-empty gap:
-`['Any','Array']`, `['ByteArray']`, `['Any','Array']`, `['Array','String']`,
-`['String']`.
+`['Any','Array']`, `['ByteArray']`, `['Any','Array']`, `['String']`,
+`['Array','String']`.
 
 #### Plugins beside the account
 
@@ -922,11 +923,14 @@ hash, the owner rotation is proposed, refused before its window, cancelled, refu
 again for having nothing pending, proposed again and confirmed by the new owner's
 witness; the escrow is opened over three listings by the market and then driven
 through both exits — the owner's timelocked force-cancel and the market's cancel
-and settle. Those eight entries execute inside the account and are evidenced by
+and settle. Those six entries execute inside the account and are evidenced by
 the state they change rather than by a step landing on them, which is why the
-status block counts them separately from the 89 a step names directly.
+status block counts them separately from the 88 a step names directly. One
+further entry, `clearHookDependencies/1`, is reached by a plugin callback:
+`MultiHook`'s `clearAccount` calls back into the core unconditionally, so the
+two-phase cleanup path runs even though no step names the entry.
 
-Three entries are still unreached and are declared as such rather than counted:
+Fourteen entries are still unreached and are declared as such rather than counted:
 
 - `_deploy/2` and `_initialize/0` are in the manifest ABI and cannot be called at
   all. `System.Contract.Call` rejects any method name beginning with an underscore
@@ -934,9 +938,15 @@ Three entries are still unreached and are declared as such rather than counted:
   message, `Method name '_deploy' cannot start with underscore`. They are the
   platform's deployment hooks. A scenario that "covered" them would be measuring
   the engine's argument check and calling it coverage.
-- `rotatePlatformAccountOwner/3` is a one-line alias of
-  `proposePlatformAccountOwnerRotation/3`, and the mock calls the latter. Driving
-  the alias would add a name to a list and no behaviour to the receipt.
+- Twelve further entries no current scenario drives: the account freeze lifecycle
+  (`freezeAccount/1`, `unfreezeAccount/1`, `isAccountFrozen/1`), the dependency
+  configuration writers (`setHookDependencies/2`, `setVerifierDependencies/2`,
+  `clearVerifierDependencies/1`), the child-hook forwarder `callHookChild/4`,
+  the simulation read `simulateValidation/2`, and the reads `describeAccount/1`,
+  `getPlatformAccountBinding/1`, `isMarketService/1` and
+  `isUserOpExecutionActive/0`. Each is an ordinary authorised entry the scenario
+  files simply do not call — a coverage statement, not a defect — and the gate
+  counts them as unreached rather than papering over the gap.
 
 `cancelPlatformRegistrar` is a successful control in the current artifact. At the
 configured timelock it deletes the pending proposal and timelock and emits the
@@ -977,10 +987,10 @@ takes verifier parameters per account, which is what makes two ids distinct unde
 one backup owner — the batch registers two accounts with `01` and `02` and reads
 the same backup owner back from both.
 
-What it does not do: the four files together say nothing about 3 of the 105
+What it does not do: the four files together say nothing about 14 of the 109
 entries — `_deploy/2` and `_initialize/0`, which the engine refuses to invoke
-through `System.Contract.Call` at all, and `rotatePlatformAccountOwner/3`, an alias
-whose target the mock calls instead — and nothing about argument values outside
+through `System.Contract.Call` at all, and the twelve operational entries listed
+above that no scenario step drives — and nothing about argument values outside
 these files, and nothing about a second call sequence over the same state. It also
 cannot prove the *choice* of what to call is meaningful — a scenario of trivial
 getters would satisfy every question above while measuring nothing worth knowing.
@@ -1031,11 +1041,11 @@ that, but they bound it, they do not remove it.
   of scope, and the eight plumbing functions it skips are printed in the receipt
   rather than left to memory.
 - The footprint says which instructions the engine entered, not what they
-  computed. Arguments are all zero, so 65 of the 103 dispatched calls end in
+  computed. Arguments are all zero, so 67 of the 107 dispatched calls end in
   `FAULT`; the face compares instruction identity and is silent about values.
 - The boundary face says which calls the engine refuses and where the accepted
   ones land. It does not say whether a contract *should* have rejected a
-  wrong-shaped argument itself: 7 of the 91 entered and answered normally, and
+  wrong-shaped argument itself: 7 of the 94 entered and answered normally, and
   whether that is defensible is a property of those seven entries, not of the
   engine. The receipt counts them (`boundaryTypeCompleted`) and leaves the
   judgement to whoever reads the entry. It also measures one engine version, so
@@ -1072,7 +1082,7 @@ that, but they bound it, they do not remove it.
   would be a different and larger piece of equipment.
 - The static model the footprint is confronted with is the same structural graph
   the entrypoint inventory publishes. Containment therefore tests that graph's
-  soundness on one path per entry point, not its completeness: 342 reachable
+  soundness on one path per entry point, not its completeness: 634 reachable
   members were never entered, and nothing here says the graph listed everything a
   different set of arguments could reach.
 - `implementationVerified` and `fullImplementationVerified` remain `false`.

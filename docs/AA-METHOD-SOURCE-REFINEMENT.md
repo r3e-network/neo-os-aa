@@ -71,9 +71,9 @@ callees, conversion flags, field layouts and constructor bindings. The projector
 never compares its source program against the NEF before choosing semantics.
 
 The checked fixture is drawn from the inventory with SHA-256
-`8bb204b40d14eb1f4b1bd7d7ebcd37e99ce55d0722e6d82d09e14a4b3843309b`.
-Its 12 top-level statements and seven typed locals produce source projection
-`28a24f8e2ba8211b12b4dd0b1242b65d2c314510668a432af5e4ba696130f97e`.
+`65a73399659594d72b8ae063f14fc64ed18120719111165b69f03785f81d7195`.
+Its 14 top-level statements and eight typed locals produce source projection
+`11f8b6974dd5278de323078483fd2d0312a4c6d028465831e83e0cfd96c2af31`.
 The focused source-projection suite has 15 passing tests, including the original
 missing-module red run and subsequent rejected incomplete array metadata and
 malformed semantic-container controls. This result establishes checked frontend

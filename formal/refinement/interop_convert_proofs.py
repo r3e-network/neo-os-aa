@@ -448,7 +448,7 @@ def regenerate_certificate(report,evidence_dir):
 
 def regenerate_controls(report,evidence_dir):
     source.project_captured(report['pinnedSource'])
-    contents={k:Path(v['path']).read_text() for k,v in report['pinnedSource'].items()}
+    contents={k:Path(v['path']).read_text(encoding='utf-8') for k,v in report['pinnedSource'].items()}
     rows=report.get('semanticControls')
     require(isinstance(rows,list) and len(rows)==len(EXPECTED_CONTROLS),
             'Incomplete semantic controls')
@@ -482,14 +482,14 @@ def regenerate_controls(report,evidence_dir):
     return expected
 
 def semantic_controls(rows,directory):
-    contents={k:Path(v['path']).read_text() for k,v in rows.items()}
+    contents={k:Path(v['path']).read_text(encoding='utf-8') for k,v in rows.items()}
     reports=[];generated={};logs={}
     for name in EXPECTED_CONTROLS:
         mutant,source_hash=source.mutated_projection(contents,name)
         case=directory/name;case.mkdir()
         shutil.copy2(directory/(MODULE+'.vo'),case/(MODULE+'.vo'))
         rendered=render_control_sources(name,mutant)
-        for filename,text in rendered.items():(case/filename).write_text(text)
+        for filename,text in rendered.items():(case/filename).write_bytes(text.encode())
         definitions=rendered['Definitions.v'];counter=rendered['Counterexample.v']
         run_command(['coqc','-q','Definitions.v'],case,case/'definitions.log')
         rejection=run_command(['coqc','-q','OriginalBehavior.v'],case,case/'rejection.log',
@@ -521,7 +521,7 @@ def run(output,report_path):
     require(b'Parameter' not in model,
             'Unexpected Parameter declaration in the interop conversion model')
     (output/(MODULE+'.v')).write_bytes(model)
-    certificate=render_certificate(projection);(output/(ARTIFACT+'.v')).write_text(certificate)
+    certificate=render_certificate(projection);(output/(ARTIFACT+'.v')).write_bytes(certificate.encode())
     run_command(['coqc','-q',MODULE+'.v'],output,output/'model.log')
     run_command(['coqc','-q',ARTIFACT+'.v'],output,output/'certificate.log')
     run_command(['coqchk','-silent',ARTIFACT],output,output/'coqchk.log')

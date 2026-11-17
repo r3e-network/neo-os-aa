@@ -57,7 +57,7 @@ def command(arguments, work, log, positive=True):
 def snapshot():
     paths = [*DEPENDENCIES, MODEL, Path(__file__), ROOT / "test_reservation_proofs.py"]
     raw = {path: path.read_bytes() for path in paths}
-    hashes = {str(path.relative_to(REPO)): hashlib.sha256(value).hexdigest() for path, value in raw.items()}
+    hashes = {path.relative_to(REPO).as_posix(): hashlib.sha256(value).hexdigest() for path, value in raw.items()}
     return raw, hashes
 
 
@@ -119,9 +119,9 @@ def run_semantic_controls(output_dir):
             for suffix in (".v", ".vo"):
                 shutil.copyfile(work / (dependency.stem + suffix), case / (dependency.stem + suffix))
         prefix = re.split(r"^(?:Lemma|Theorem|Example) ", mutant, maxsplit=1, flags=re.MULTILINE)[0]
-        (case / "Definitions.v").write_text(prefix)
+        (case / "Definitions.v").write_bytes(prefix.encode())
         command([coqc, "-q", "Definitions.v"], case, case / "definitions.log")
-        (case / MODEL.name).write_text(mutant)
+        (case / MODEL.name).write_bytes(mutant.encode())
         rc, output = command([coqc, "-q", MODEL.name], case, case / "rejection.log", False)
         require(rc != 0 and "Error:" in output and "Syntax error" not in output,
                 "Semantic mutation escaped or failed without proof rejection: " + name)

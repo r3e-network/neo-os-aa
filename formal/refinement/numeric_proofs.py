@@ -150,7 +150,7 @@ MUTATIONS = {
 def run_semantic_controls(output_dir):
     tool_hash = digest(__file__)
     directory, coqc, _, hashes, _ = setup(output_dir)
-    original = (directory / 'NumericCoercions.v').read_text()
+    original = (directory / 'NumericCoercions.v').read_bytes().decode()
     prefix, suffix = re.split(r'^Lemma ', original, maxsplit=1, flags=re.MULTILINE)
     reports = {}
     for name, (old, new, counterexample) in MUTATIONS.items():
@@ -159,15 +159,15 @@ def run_semantic_controls(output_dir):
         subdir = directory / name; subdir.mkdir(exist_ok=True)
         shutil.copyfile(directory / 'IntegerSemantics.v', subdir / 'IntegerSemantics.v')
         command([coqc, '-q', 'IntegerSemantics.v'], subdir, subdir / 'integer.log')
-        definition_file = subdir / 'NumericDefinitions.v'; definition_file.write_text(mutated)
+        definition_file = subdir / 'NumericDefinitions.v'; definition_file.write_bytes(mutated.encode())
         command([coqc, '-q', definition_file.name], subdir, subdir / 'definitions.log')
         assertion = subdir / 'NumericCounterexample.v'
-        assertion.write_text('From Coq Require Import ZArith List.\nRequire Import NumericDefinitions.\n'
+        assertion.write_bytes(('From Coq Require Import ZArith List.\nRequire Import NumericDefinitions.\n'
             'Import ListNotations. Open Scope Z_scope.\nExample original_semantics : ' + counterexample +
-            '.\nProof. vm_compute. reflexivity. Qed.\n')
+            '.\nProof. vm_compute. reflexivity. Qed.\n').encode())
         rc, text = command([coqc, '-q', assertion.name], subdir, subdir / 'counterexample.log', False)
         require(rc != 0 and 'Error:' in text and 'Syntax error' not in text, 'Semantic counterexample escaped: ' + name)
-        full = subdir / 'NumericCoercions.v'; full.write_text(mutated + 'Lemma ' + suffix)
+        full = subdir / 'NumericCoercions.v'; full.write_bytes((mutated + 'Lemma ' + suffix).encode())
         rc, text = command([coqc, '-q', full.name], subdir, subdir / 'full-proof.log', False)
         require(rc != 0 and 'Error:' in text and 'Syntax error' not in text, 'Mutated model theorem escaped: ' + name)
         reports[name] = {'definitionsCompiled': True, 'counterexampleRejected': True,

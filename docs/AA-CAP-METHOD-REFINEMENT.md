@@ -1,7 +1,7 @@
 # Complete reimbursement-helper reference refinement
 
 The certificate covers all **281 bytes / 116 instructions / 52 opcode names** at
-`[17762,18043)` of `CapReimbursementToActualCost`. It compares the complete
+`[18900,19181)` of `CapReimbursementToActualCost`. It compares the complete
 14-statement source program, independently projected from the typed source
 inventory, with an executable reference VM that decodes the actual NEF bytes.
 No expected settlement is passed to a native-call oracle or substituted for a
@@ -112,5 +112,5 @@ The receipt uses `scope: complete-helper-reference-refinement` and
 `fullImplementationVerified: false`. This is a complete private-helper reference
 proof under the stated contracts. It does not prove actual ApplicationEngine,
 native binary codecs, gas accounting, compiler correctness, caller composition
-or any of the **105 public ABI entrypoints**, all of which remain outside this
+or any of the **109 public ABI entrypoints**, all of which remain outside this
 certificate.

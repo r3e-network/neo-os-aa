@@ -55,7 +55,16 @@ def certificate(model, mutation=None):
     if mutation == 'omit-storage-price':
         pc = storage_site()
         nodes[pc] = dict(nodes[pc], storage=False)
-    if mutation == 'omit-hash-equal-branch': cfg[17840] = [17842]
+    if mutation == 'omit-hash-equal-branch':
+        # The branch under mutation is the recorded-vs-current transaction hash
+        # test (JMPIFNOT at the second of the helper's four conditional sites)
+        # whose taken edge enters the reservation reset block; dropping that edge
+        # must make CFG enumeration incomplete. The artifact is hash-pinned in
+        # bind_artifact, so the site cannot move silently — and this guard keeps
+        # the control from degrading into a no-op if the CFG shape ever changes.
+        site = 18978
+        trace.require(sorted(cfg.get(site, [])) == [18980, 18994], 'Hash-equal branch site changed')
+        cfg[site] = [18980]
     if mutation == 'lower-storage-bound': storage = 70
     actual_cfg = '[' + ';'.join('(gas_node %s [%s])' % (event(nodes[pc]), ';'.join(map(str,cfg[pc]))) for pc in sorted(nodes)) + ']'
     paths = '[' + ';'.join(events(p['events']) for p in model['paths']) + ']'
@@ -84,7 +93,7 @@ Theorem actual_cfg_prices_agree_with_extracted_source :
  map node_event actual_cfg = actual_source_prices.
 Proof. vm_compute. reflexivity. Qed.
 Theorem actual_cfg_enumeration_complete :
- enumerate_cfg %d actual_cfg 17762 = Some actual_paths.
+ enumerate_cfg %d actual_cfg 18900 = Some actual_paths.
 Proof. vm_compute. reflexivity. Qed.
 Theorem actual_path_price_checks : forallb (safe_path actual_maximum) actual_paths = true.
 Proof. vm_compute. reflexivity. Qed.
@@ -158,12 +167,12 @@ def run_proofs(directory, runtime_receipts, controls=True):
     names={}
     for name,text in sources.items():
         trace.require(re.search(r'\b(?:Admitted|Axiom|Parameter|admit|Abort)\b',text) is None,'Unsupported proof declaration')
-        (directory/(name+'.v')).write_text(text)
+        (directory/(name+'.v')).write_bytes(text.encode())
         command([coqc,'-q',name+'.v'],directory,directory/(name+'.log'))
         names[name]=declarations(text)
     command([coqchk,'-silent',*sources],directory,directory/'coqchk.log')
     audit='Require Import '+ ' '.join(sources)+'.\n'+'\n'.join('Print Assumptions '+m+'.'+n+'.' for m,items in names.items() for n in items)+'\n'
-    (directory/'Assumptions.v').write_text(audit)
+    (directory/'Assumptions.v').write_bytes(audit.encode())
     _,audit_result=command([coqc,'-q','Assumptions.v'],directory,directory/'assumptions.log')
     count=sum(map(len,names.values()))
     trace.require(audit_result.count('Closed under the global context')==count and 'Axioms:' not in audit_result,'Assumption audit failed')
@@ -175,9 +184,9 @@ def run_proofs(directory, runtime_receipts, controls=True):
                 for suffix in ['.v','.vo']: shutil.copyfile(directory/(module+suffix),case/(module+suffix))
             mutated=certificate(model,mutation)
             defs=mutated.split('Theorem actual_cfg_prices_agree_with_extracted_source')[0]
-            (case/'Definitions.v').write_text(defs)
+            (case/'Definitions.v').write_bytes(defs.encode())
             command([coqc,'-q','Definitions.v'],case,case/'definitions.log')
-            (case/'HelperGasArtifact.v').write_text(mutated)
+            (case/'HelperGasArtifact.v').write_bytes(mutated.encode())
             rc,output=command([coqc,'-q','HelperGasArtifact.v'],case,case/'rejection.log',False)
             trace.require(rc!=0 and 'Error:' in output and 'Syntax error' not in output,'Semantic price/CFG control escaped: '+mutation)
             mutants.append(dict(name=mutation,definitionsCompiled=True,certificateRejected=True))

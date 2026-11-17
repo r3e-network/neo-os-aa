@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strict typed-source frontend for the two direct storage-key getters.
+"""Strict typed-source frontend for the direct storage-key getters.
 
 Fails closed on any operation shape outside the pinned grammar below. Only
 `inventory.source` and inventory input bytes are read. This declares what the
@@ -41,15 +41,13 @@ SHARED_CALLEES = {
         source_id=GET_PENDING_MODULE_CALL_RECORD_CALLEE,
         prefix_parameter='prefix',
         account_parameter='accountId'),
-    # Private, debug-only legacy-compatibility reader shared by the escrow
-    # owner-cancel pair. Unlike the record reader above it carries both of its
-    # storage prefixes as pinned fields and takes only the account argument: it
-    # reads the active key and falls back to the historical one, returning the
-    # raw payload (no deserialize, so the pair uses no token oracle).
+    # Private, debug-only raw reader shared by the escrow owner-cancel pair.
+    # It concatenates its pinned prefix field with the account argument and
+    # returns the raw payload verbatim (no deserialize, so the pair consumes
+    # no token oracle), the null item included.
     'getMarketEscrowOwnerCancelInitiated': dict(
         source_id=GET_MARKET_ESCROW_OWNER_CANCEL_INITIATED_CALLEE,
         prefix_symbol='F:SmartAccount.SmartAccount.Prefix_MarketEscrowCancelInitiated',
-        legacy_symbol='F:SmartAccount.SmartAccount.LegacyStoragePrefix13',
         account_parameter='accountId'),
 }
 
@@ -235,26 +233,25 @@ TARGETS = {
         record_owner='PendingConfigUpdate',
         item_symbol='F:SmartAccount.SmartAccount.PendingConfigUpdate.InitiatedAt',
         offset_symbol='F:SmartAccount.SmartAccount.ConfigUpdateTimelockMs'),
-    # Legacy-compatibility getters. Every one of them reads the active key and
-    # consults the historical key only when the active key is unbound; the read
-    # order is part of the pinned contract, not an implementation detail.
-    # GetVerifyScopeTarget performs the fallback inline and projects the raw
-    # payload to a UInt160 with the reviewed 20-byte zero default; the escrow
-    # owner-cancel pair delegates both the fallback and the read to the shared
-    # private reader above, so neither caller pins a prefix of its own.
+    # GetVerifyScopeTarget is a standard keyed direct getter over its pinned
+    # prefix, projecting the raw payload to a UInt160 with the reviewed
+    # 20-byte zero default.
     'getVerifyScopeTarget': dict(
         source_id='M:SmartAccount.SmartAccount.GetVerifyScopeTarget(Neo.SmartContract.Framework.UInt160)',
-        kind='inline-fallback',
         prefix_symbol='F:SmartAccount.SmartAccount.Prefix_VerifyScopeTarget',
-        legacy_symbol='F:SmartAccount.SmartAccount.LegacyStoragePrefix12',
-        decode='hash160',
-        default={'kind': 'bytes', 'value': [0] * 20}),
+        prefix_length=1, decode='hash160',
+        default={'kind': 'bytes', 'value': [0] * 20},
+        data_symbol='value'),
+    # Escrow owner-cancel accessors. Both delegate the key build and the raw
+    # read to the shared private reader above, so neither caller pins a prefix
+    # of its own: the presence accessor tests the raw result against null and
+    # the epoch accessor casts it and adds the pinned timelock.
     'hasMarketEscrowOwnerCancel': dict(
         source_id='M:SmartAccount.SmartAccount.HasMarketEscrowOwnerCancel(Neo.SmartContract.Framework.UInt160)',
-        kind='fallback-call-presence', callee='getMarketEscrowOwnerCancelInitiated'),
+        kind='raw-call-presence', callee='getMarketEscrowOwnerCancelInitiated'),
     'getMarketEscrowOwnerCancelTime': dict(
         source_id='M:SmartAccount.SmartAccount.GetMarketEscrowOwnerCancelTime(Neo.SmartContract.Framework.UInt160)',
-        kind='fallback-call-offset', callee='getMarketEscrowOwnerCancelInitiated',
+        kind='raw-call-offset', callee='getMarketEscrowOwnerCancelInitiated',
         decode='integer', default={'kind': 'integer', 'value': 0},
         offset_symbol='F:SmartAccount.SmartAccount.MarketEscrowOwnerCancelTimelockMs'),
 }
@@ -301,19 +298,14 @@ def _literal(node):
     return constant.get('value')
 
 
-def _concat_binding(node, target, symbol_field='prefix_symbol'):
-    """key = Helper.Concat(<prefix field>, (byte[])accountId).
-
-    symbol_field selects which pinned prefix field of the target the first
-    operand must be; the legacy-compatibility getters name the active and the
-    historical prefix separately, so the same shape is checked against either.
-    """
+def _concat_binding(node, target):
+    """key = Helper.Concat(<prefix field>, (byte[])accountId)."""
     require(isinstance(node, dict) and node.get('kind') == 'Invocation', 'Expected concat invocation')
     require(node.get('details', {}).get('callee') == CONCAT_CALLEE, 'Unexpected concat callee')
     require(node.get('details', {}).get('virtual') is False, 'Unexpected virtual concat dispatch')
     require(len(_children(node)) == 2, 'Concat must have exactly two arguments')
     first = _argument(_children(node)[0], 'first')
-    require(_symbol(first) == target[symbol_field], 'Unexpected storage key prefix field')
+    require(_symbol(first) == target['prefix_symbol'], 'Unexpected storage key prefix field')
     second = _argument(_children(node)[1], 'second')
     operand = _conversion(second, identity=False, nullable=False)
     require(_symbol(operand) == 'accountId', 'Concat second operand must be accountId')
@@ -1035,97 +1027,33 @@ def _state_field_access(node, target):
             'AccountId parameter ordinal mismatch')
 
 
-def _inline_storage_binding(node, target, symbol_field):
-    """Storage.Get(CurrentContext, Helper.Concat(<prefix field>, accountId)).
-
-    The legacy-compatibility readers write the fallback read as a single
-    expression rather than binding a local key first, so the key operand is
-    the concat invocation itself and the same pinned-prefix check is applied
-    to it directly.
-    """
-    require(isinstance(node, dict) and node.get('kind') == 'Invocation', 'Expected storage invocation')
-    require(node.get('details', {}).get('callee') == STORAGE_GET_CALLEE, 'Unexpected Storage.Get callee')
-    require(len(_children(node)) == 2, 'Storage.Get must have exactly two arguments')
-    context = _argument(_children(node)[0], 'context')
-    require(_symbol(context) == CURRENT_CONTEXT_SYMBOL, 'Storage context must be CurrentContext')
-    key = _argument(_children(node)[1], 'key')
-    _concat_binding(key, target, symbol_field)
-
-
 def _single_argument_callee(node, target):
     """`GetMarketEscrowOwnerCancelInitiated(accountId)` argument binding."""
     require(isinstance(node, dict) and node.get('kind') == 'Invocation',
-            'Expected the shared fallback reader invocation')
+            'Expected the shared raw reader invocation')
     require(node.get('details', {}).get('callee') == SHARED_CALLEES[target['callee']]['source_id'],
-            'Unexpected shared fallback reader')
+            'Unexpected shared raw reader')
     require(node.get('details', {}).get('virtual') is False,
-            'Unexpected virtual fallback reader dispatch')
-    require(len(_children(node)) == 1, 'Shared fallback reader takes exactly the account argument')
+            'Unexpected virtual raw reader dispatch')
+    require(len(_children(node)) == 1, 'Shared raw reader takes exactly the account argument')
     account = _children(node)[0]
     require(account.get('kind') == 'Argument' and
             account.get('details', {}).get('parameter') == 'accountId',
-            'Unexpected fallback reader argument')
+            'Unexpected raw reader argument')
     require(len(_children(account)) == 1, 'Argument must wrap one value')
     operand = _children(account)[0]
     require(_symbol(operand) == 'accountId' and operand.get('details', {}).get('ordinal') == 0,
             'AccountId parameter ordinal mismatch')
 
 
-def _fallback_return_local(node):
-    """`if (value != null) return value;` — the compiled two-child Conditional.
-
-    The shared fallback reader is written without braces and without an else
-    branch, so the node carries exactly the condition and one Return of the
-    raw read local; the payload is returned verbatim, with no cast.
-    """
-    require(isinstance(node, dict) and node.get('kind') == 'Conditional',
-            'Expected the active-key guard')
-    require(len(_children(node)) == 2, 'Active-key guard must have no else branch')
-    condition, when_true = _children(node)
-    _null_comparison(condition, 'NotEquals', 'value')
-    require(isinstance(when_true, dict) and when_true.get('kind') == 'Return' and
-            len(_children(when_true)) == 1, 'Active-key guard must return the raw payload')
-    returned = _children(when_true)[0]
-    require(isinstance(returned, dict) and returned.get('kind') == 'LocalReference' and
-            _symbol(returned) == 'value', 'Active-key guard must return the read local')
-
-
-def _fallback_block(node, target):
-    """`if (value == null) { var legacyKey = Concat(<legacy>, acct); value = Storage.Get(ctx, legacyKey); }`
-
-    The inline fallback branch is braced, so it is a Block of exactly the
-    legacy key declaration and the re-read assignment back into the same read
-    local. The assignment target is checked so the second read can only ever
-    reach the local the following projection consumes.
-    """
-    require(isinstance(node, dict) and node.get('kind') == 'Block',
-            'Inline fallback branch must be a block')
-    inner = _children(node)
-    require(len(inner) == 2, 'Fallback block must declare the legacy key and re-read it')
-    _concat_binding(_declaration_value(inner[0], 'legacyKey'), target, 'legacy_symbol')
-    statement = inner[1]
-    require(isinstance(statement, dict) and statement.get('kind') == 'ExpressionStatement' and
-            len(_children(statement)) == 1, 'Fallback block must assign the re-read value')
-    assignment = _children(statement)[0]
-    require(isinstance(assignment, dict) and assignment.get('kind') == 'SimpleAssignment' and
-            len(_children(assignment)) == 2, 'Fallback block must be a simple assignment')
-    lhs, rhs = _children(assignment)
-    require(isinstance(lhs, dict) and lhs.get('kind') == 'LocalReference' and
-            _symbol(lhs) == 'value', 'Fallback must assign the value local')
-    _storage_binding(rhs, 'legacyKey')
-
-
 def _market_escrow_owner_cancel_projection(inventory, target):
     """Project the shared GetMarketEscrowOwnerCancelInitiated callee.
 
-    Grammar: key = Helper.Concat(<active prefix field>, (byte[])accountId);
-    value = Storage.Get(CurrentContext, key); if (value != null) return value;
-    return Storage.Get(CurrentContext, Helper.Concat(<legacy prefix field>,
-    (byte[])accountId)); Both prefixes are pinned fields of this callee, so
-    the callers pass no key material; the observable behavior is exactly
-    "the active key when bound, otherwise the historical key, otherwise
-    null", returning the raw payload. No deserialize is involved, so this
-    callee consumes no token oracle.
+    Grammar: key = Helper.Concat(<prefix field>, (byte[])accountId); return
+    Storage.Get(CurrentContext, key). The raw payload is returned verbatim,
+    the null item included (no guard, no deserialize), so this callee consumes
+    no token oracle: its observable behavior is exactly "the stored payload
+    when the key is bound, otherwise null".
     """
     candidates = [m for m in inventory['source']['methods'] if m['id'] == target['source_id']]
     require(len(candidates) == 1,
@@ -1138,19 +1066,15 @@ def _market_escrow_owner_cancel_projection(inventory, target):
     body = method['operations'][0]['children'][0]
     require(isinstance(body, dict) and body.get('kind') == 'Block', 'Expected method body block')
     statements = _children(body)
-    require(len(statements) == 4, 'Callee body must be key/value/guard/fallback-return')
+    require(len(statements) == 2, 'Callee body must be key/return')
     _concat_binding(_declaration_value(statements[0], 'key'), target)
-    _storage_binding(_declaration_value(statements[1], 'value'), 'key')
-    _fallback_return_local(statements[2])
-    fallback = statements[3]
-    require(fallback.get('kind') == 'Return', 'Fallback branch must be a return statement')
-    require(len(_children(fallback)) == 1, 'Return must wrap one value')
-    _inline_storage_binding(_children(fallback)[0], target, 'legacy_symbol')
-    return dict(sourceId=target['source_id'], kind='fallback-record',
+    return_statement = statements[1]
+    require(return_statement.get('kind') == 'Return', 'Expected the raw read return')
+    require(len(_children(return_statement)) == 1, 'Return must wrap one value')
+    _storage_binding(_children(return_statement)[0], 'key')
+    return dict(sourceId=target['source_id'], kind='raw-reader',
                 prefixSymbol=target['prefix_symbol'],
                 prefixBytes=resolve_prefix(inventory, target['prefix_symbol']),
-                legacySymbol=target['legacy_symbol'],
-                legacyBytes=resolve_prefix(inventory, target['legacy_symbol']),
                 accountParameter=target['account_parameter'],
                 nullOnMissingKey=True)
 
@@ -1416,46 +1340,12 @@ def project(inventory):
                 default={'kind': 'integer', 'value': 0},
                 offset=resolve_integer_field(inventory, target['offset_symbol']),
                 offsetSymbol=target['offset_symbol'])
-        elif target['kind'] == 'inline-fallback':
-            # Inline legacy-compatibility getter: five statements — the active
-            # key concatenation, the active read, the braced `if (value ==
-            # null)` fallback block that re-reads the historical key into the
-            # same local, and the null-coalescing projection of the read local.
-            # Both prefixes and the reviewed default are pinned from the inputs.
-            candidates = [m for m in inventory['source']['methods'] if m['id'] == target['source_id']]
-            require(len(candidates) == 1, 'Missing or ambiguous source method: ' + name)
-            method = candidates[0]
-            require(method.get('origin') == 'repository-source', 'Non-repository getter source')
-            require(len(method.get('parameters', [])) == 1 and
-                    method['parameters'][0]['name'] == 'accountId' and
-                    method['parameters'][0]['ordinal'] == 0, 'Unexpected getter signature')
-            body = method['operations'][0]['children'][0]
-            require(isinstance(body, dict) and body.get('kind') == 'Block',
-                    'Expected method body block')
-            statements = _children(body)
-            require(len(statements) == 4,
-                    'Inline fallback getter body must be key/value/fallback/return')
-            _concat_binding(_declaration_value(statements[0], 'key'), target)
-            _storage_binding(_declaration_value(statements[1], 'value'), 'key')
-            guard = statements[2]
-            require(isinstance(guard, dict) and guard.get('kind') == 'Conditional' and
-                    len(_children(guard)) == 2, 'Expected the single-branch fallback guard')
-            _null_comparison(_children(guard)[0], 'Equals', 'value')
-            _fallback_block(_children(guard)[1], target)
-            shaped = dict(target, data_symbol='value')
-            _conditional_return(statements[3], shaped)
-            prefix = resolve_prefix(inventory, target['prefix_symbol'])
-            legacy = resolve_prefix(inventory, target['legacy_symbol'])
-            result[name] = dict(
-                sourceId=target['source_id'], kind='inline-fallback',
-                prefixSymbol=target['prefix_symbol'], prefixBytes=prefix,
-                legacySymbol=target['legacy_symbol'], legacyBytes=legacy,
-                decode=target['decode'], default=target['default'])
-        elif target['kind'] == 'fallback-call-presence':
-            # Delegating legacy-compatibility presence getter: the body is one
+        elif target['kind'] == 'raw-call-presence':
+            # Delegating raw presence getter: the body is one
             # `return GetMarketEscrowOwnerCancelInitiated(accountId) != null;`.
-            # The callee owns both prefixes and the read, so the projection
-            # pins no key material here; the semantics is the two-key null test.
+            # The callee owns the prefix and the read, so the projection
+            # pins no key material here; the semantics is the null test over
+            # the reader's single-key raw result.
             candidates = [m for m in inventory['source']['methods'] if m['id'] == target['source_id']]
             require(len(candidates) == 1, 'Missing or ambiguous source method: ' + name)
             method = candidates[0]
@@ -1468,7 +1358,7 @@ def project(inventory):
                     'Expected method body block')
             statements = _children(body)
             require(len(statements) == 1,
-                    'Delegating fallback presence getter body must be a single return')
+                    'Delegating raw presence getter body must be a single return')
             statement = statements[0]
             require(statement.get('kind') == 'Return' and len(_children(statement)) == 1,
                     'Expected a single return of the presence test')
@@ -1478,18 +1368,18 @@ def project(inventory):
                     condition.get('details', {}).get('checked') is False and
                     condition.get('details', {}).get('operatorMethod') is None and
                     len(_children(condition)) == 2,
-                    'Fallback presence condition must be a plain NotEquals')
+                    'Raw presence condition must be a plain NotEquals')
             lhs, rhs = _children(condition)
             require(isinstance(lhs, dict) and lhs.get('kind') == 'Conversion' and
                     len(_children(lhs)) == 1, 'Presence operand must be a conversion')
             _single_argument_callee(_children(lhs)[0], target)
             require(isinstance(rhs, dict) and rhs.get('kind') == 'Conversion' and
                     len(_children(rhs)) == 1 and _literal(_children(rhs)[0]) is None,
-                    'Fallback presence test must compare against null')
+                    'Raw presence test must compare against null')
             result[name] = dict(sourceId=target['source_id'],
-                                kind='fallback-call-presence', callee=target['callee'])
-        elif target['kind'] == 'fallback-call-offset':
-            # Delegating legacy-compatibility epoch getter: the body binds the
+                                kind='raw-call-presence', callee=target['callee'])
+        elif target['kind'] == 'raw-call-offset':
+            # Delegating raw epoch getter: the body binds the
             # shared reader's raw payload to a local and returns the pinned
             # integer default on a miss, otherwise the payload's little-endian
             # value plus the pinned owner-cancel timelock. The delay constant is
@@ -1507,12 +1397,12 @@ def project(inventory):
                     'Expected method body block')
             statements = _children(body)
             require(len(statements) == 2,
-                    'Delegating fallback epoch getter body must be initiated/return')
+                    'Delegating raw epoch getter body must be initiated/return')
             _single_argument_callee(_declaration_value(statements[0], 'initiated'), target)
             shaped = dict(target, data_symbol='initiated')
             _conditional_return_offset(statements[1], shaped)
             result[name] = dict(
-                sourceId=target['source_id'], kind='fallback-call-offset',
+                sourceId=target['source_id'], kind='raw-call-offset',
                 callee=target['callee'], decode=target['decode'],
                 default=target['default'],
                 offset=resolve_integer_field(inventory, target['offset_symbol']),

@@ -265,6 +265,10 @@ internal static class Program
     }
     private static void BindInput(Dictionary<string, string> inputs, string path)
     {
+        // Canonicalize separators first: NuGet/MSBuild hand the same package
+        // file back with mixed directory separators, which must not appear as
+        // two distinct input identities for one byte string.
+        path = Path.GetFullPath(path);
         string digest = Hash(File.ReadAllBytes(path));
         if (inputs.TryGetValue(path, out var initial) && initial != digest)
             throw new InvalidDataException("Input changed during export: " + path);
@@ -273,7 +277,7 @@ internal static class Program
     private static void SnapshotFrameworkPackage(Dictionary<string, string> inputs)
     {
         var pin = JsonNode.Parse(File.ReadAllText(Path.Combine(SourceRoot, "contracts/neo-platform-packages.json")))!;
-        string packages = Environment.GetEnvironmentVariable("NUGET_PACKAGES") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget/packages");
+        string packages = Environment.GetEnvironmentVariable("NUGET_PACKAGES") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
         string package = Path.Combine(packages, "neo.smartcontract.framework", pin["frameworkVersion"]!.GetValue<string>());
         string nupkg = Path.Combine(package, "neo.smartcontract.framework." + pin["frameworkVersion"]!.GetValue<string>() + ".nupkg");
         string expected = ((JsonArray)pin["packages"]!).Single(p => p!["id"]!.GetValue<string>() == "Neo.SmartContract.Framework")!["sha256"]!.GetValue<string>();

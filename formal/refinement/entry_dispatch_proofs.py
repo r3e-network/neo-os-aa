@@ -147,7 +147,7 @@ def regenerate_controls(report, evidence_dir):
     # Re-derive mutations from the same complete pinned C# input, then compare
     # every Coq source and each preserved kernel log by its exact filename.
     source.project_captured(report['pinnedSource'])
-    contents={k:Path(v['path']).read_text() for k,v in report['pinnedSource'].items()}
+    contents={k:Path(v['path']).read_text(encoding='utf-8') for k,v in report['pinnedSource'].items()}
     rows=report.get('semanticControls')
     require(isinstance(rows,list) and len(rows)==len(EXPECTED_CONTROLS), 'Incomplete semantic controls')
     require([row.get('name') for row in rows]==list(EXPECTED_CONTROLS), 'Wrong semantic control inventory')
@@ -171,12 +171,12 @@ def regenerate_controls(report, evidence_dir):
 
 
 def semantic_controls(projection,rows,directory):
-    contents={k:Path(v['path']).read_text() for k,v in rows.items()};reports=[];generated={};logs={}
+    contents={k:Path(v['path']).read_text(encoding='utf-8') for k,v in rows.items()};reports=[];generated={};logs={}
     for name in EXPECTED_CONTROLS:
         mutant,source_hash=source.mutated_projection(contents,name);case=directory/name;case.mkdir()
         shutil.copy2(directory/'EntryDispatch.vo',case/'EntryDispatch.vo')
         rendered=render_control_sources(name,mutant)
-        for filename,body in rendered.items():(case/filename).write_text(body)
+        for filename,body in rendered.items():(case/filename).write_bytes(body.encode())
         definitions=rendered['Definitions.v'];counter=rendered['Counterexample.v']
         run_command(['coqc','-q','Definitions.v'],case,case/'definitions.log')
         rejection=run_command(['coqc','-q','OriginalBehavior.v'],case,case/'rejection.log',expect_rejection=True)
@@ -217,7 +217,7 @@ def run(inventory_path,output,report_path):
     (output/'source-projection.json').write_bytes(canonical(projection))
     model=(HERE/'coq/EntryDispatch.v').read_bytes();require(not re.search(rb'\b(?:Admitted|Axiom|admit)\b',model),'Unclosed dispatch model')
     (output/'EntryDispatch.v').write_bytes(model)
-    certificate=render_certificate(bound,projection);(output/'EntryDispatchArtifact.v').write_text(certificate)
+    certificate=render_certificate(bound,projection);(output/'EntryDispatchArtifact.v').write_bytes(certificate.encode())
     run_command(['coqc','-q','EntryDispatch.v'],output,output/'model.log')
     run_command(['coqc','-q','EntryDispatchArtifact.v'],output,output/'certificate.log')
     run_command(['coqchk','-silent','EntryDispatchArtifact'],output,output/'coqchk.log')
