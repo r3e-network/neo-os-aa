@@ -226,7 +226,7 @@ public class Fix_RecoveryCleanup_Tests
     [TestMethod]
     public void RecoveryVerifier_DeclaresTheV3CleanupSurface()
     {
-        string v3Source = File.ReadAllText(Path.Combine(RepoRoot, "contracts", "recovery", "MorpheusSocialRecoveryVerifier.V3.cs"));
+        string v3Source = File.ReadAllText(Path.Combine(RepoRoot, "contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.V3.cs"));
         StringAssert.Contains(v3Source, "public static void ClearAccount(UInt160 accountId)");
         StringAssert.Contains(v3Source, "AssertV3ConfigCaller(accountId);");
         StringAssert.Contains(v3Source, "\"canConfigureVerifier\"");
@@ -235,7 +235,7 @@ public class Fix_RecoveryCleanup_Tests
             "consumed action nullifiers are replay protection and must not be cleared");
         StringAssert.Contains(v3Source, "DeleteAccountPrefixFamily(Key(PREFIX_APPROVAL, accountId));");
 
-        string fixedSource = File.ReadAllText(Path.Combine(RepoRoot, "contracts", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs"));
+        string fixedSource = File.ReadAllText(Path.Combine(RepoRoot, "contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs"));
         StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"canConfigureVerifier\")");
         StringAssert.Contains(fixedSource, "[DisplayName(\"RecoveryCleared\")]");
     }

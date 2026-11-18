@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parent.parent
 
 class NativeRestrictedProfileTests(unittest.TestCase):
     def test_profile_and_linked_sources_are_explicit(self):
-        profiles=json.loads((ROOT/'contracts/native/profiles.json').read_text())
+        profiles=json.loads((ROOT/'contracts/plugins/native-profile/profiles.json').read_text())
         self.assertEqual(
             {
                 'project': 'TokenRestrictedHook.Native.csproj',
@@ -19,12 +19,12 @@ class NativeRestrictedProfileTests(unittest.TestCase):
             },
             profiles['TokenRestrictedHook'],
         )
-        project=ET.parse(ROOT/'contracts/native/TokenRestrictedHook.Native.csproj')
+        project=ET.parse(ROOT/'contracts/plugins/native-profile/TokenRestrictedHook.Native.csproj')
         self.assertEqual({'NativeAuthority.cs','../hooks/HookAuthority.cs','../hooks/TokenRestrictedHook.cs'},
                          {v.attrib['Include'] for v in project.findall('.//Compile')})
 
     def test_native_guards_cover_every_phase_and_snapshot_cleanup(self):
-        source=(ROOT/'contracts/hooks/TokenRestrictedHook.cs').read_text()
+        source=(ROOT/'contracts/plugins/hooks/TokenRestrictedHook.cs').read_text()
         for phase in ('preExecute','postExecute','cleanup'):
             self.assertIn('NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "'+phase+'")',source)
         self.assertIn('"getAccountAddress"',source)

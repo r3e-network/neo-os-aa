@@ -16,6 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\contracts\SmartAccount.csproj" />
+    <ProjectReference Include="..\..\contracts\custom\SmartAccount.csproj" />
   </ItemGroup>
 </Project>

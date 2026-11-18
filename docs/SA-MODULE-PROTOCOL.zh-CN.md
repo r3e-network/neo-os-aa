@@ -3,7 +3,7 @@
 本文件是 Neo Smart Account（SA）模块模型的**唯一共同规范**，供两个 kernel 批次实施：
 
 - 普通合约版 kernel —— 任务 #39（`contracts/`）
-- 原生合约版 kernel —— 任务 #40（`implementations/native/core/SmartAccount/`）
+- 原生合约版 kernel —— 任务 #40（`contracts/native/SmartAccount/`）
 
 本文定义的 DTO、profile、存储布局、上限、错误码、事件与 gas 预算对两版**完全一致**；
 任何一版 kernel 不得偏离或自行重新设计。凡两版运行时确有差异之处（如 caller/阶段
@@ -19,8 +19,8 @@
 - `docs/SA-MIGRATION-MANIFEST.md` —— 旧→新迁移 manifest 设计（§14）。
 - `tests/fixtures/sa-module-protocol/README.md` —— golden 向量/拒绝回归 fixture
   格式与 kernel 验证矩阵。
-- `contracts/SmartAccount.ModuleProtocol.cs` 与
-  `implementations/native/core/SmartAccount/SmartAccountModuleProtocol.cs` ——
+- `contracts/custom/SmartAccount.ModuleProtocol.cs` 与
+  `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` ——
   成对常量文件，承载本文全部数值（§15）。两个文件必须始终携带相同数值。
 
 ## 1. 范围与术语迁移
@@ -469,8 +469,8 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 
 | 工件 | 路径 |
 | --- | --- |
-| 普通版常量 | `contracts/SmartAccount.ModuleProtocol.cs`（partial `SmartAccount`） |
-| 原生版常量 | `implementations/native/core/SmartAccount/SmartAccountModuleProtocol.cs`（internal static `SmartAccountModuleProtocol`，经 `scripts/sync_native_smartaccount.py` 同步到 neo-native-core） |
+| 普通版常量 | `contracts/custom/SmartAccount.ModuleProtocol.cs`（partial `SmartAccount`） |
+| 原生版常量 | `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`（internal static `SmartAccountModuleProtocol`，经 `scripts/sync_native_smartaccount.py` 同步到 neo-native-core） |
 | fixture 骨架 | `tests/fixtures/sa-module-protocol/`（README + schema + 模板） |
 
 两个常量文件对以下数值保持一致：协议版本 4；模块类型码 1/4；§3 全部上限；13
@@ -488,7 +488,7 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 
 | 规范章节 | 普通版需创建/修改的文件 |
 | --- | --- |
-| §2/§3/§7 常量 | 消费 `contracts/SmartAccount.ModuleProtocol.cs`（本批已加入 `SmartAccount.csproj`） |
+| §2/§3/§7 常量 | 消费 `contracts/custom/SmartAccount.ModuleProtocol.cs`（本批已加入 `SmartAccount.csproj`） |
 | §7.1/§7.4 前缀 | 在 `SmartAccount.cs` STORAGE PREFIX MAP 注释中追加 0x50–0x5E 行；把 `SmartAccount.ModuleProtocol.cs` 加入 `tests/SmartAccount.Contracts.Tests/StoragePrefixMapTests.cs` 的 `WalletPartials`，**与首次键使用同一批次**（DeriveShape 要求使用证据） |
 | §4/§5 envelope + 摘要 | `SmartAccount.Execution.cs`（13 字段解码、摘要、batch）；如拆分则新建 `SmartAccount.Intents.cs` |
 | §6 nonce | `SmartAccount.Internal.cs`/新 nonce partial（0x56/0x5C，与旧 0x03 合并） |
@@ -499,7 +499,7 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 | F-1（verify scope） | `SmartAccount.VerifyContext.cs` —— 删除 `verifyScopeTarget` 授权、阶段门 |
 | F-7（阶段门） | `SmartAccount.VerifyContext.cs` + `SmartAccount.Execution.cs`（0x58 上下文、只读回调用直接 caller + ReadOnly + 严格域检查） |
 | 事件 | `SmartAccount.Events.cs`（§18 表；保留既有无 AA 事件） |
-| 插件 | `contracts/verifiers/*`、`contracts/hooks/*` 按 §1.2 改名；MultiHook 停止安装 |
+| 插件 | `contracts/plugins/verifiers/*`、`contracts/plugins/hooks/*` 按 §1.2 改名；MultiHook 停止安装 |
 
 ### 16.2 原生 kernel（#40，与 #29 共享修改批次）
 

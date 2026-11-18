@@ -303,7 +303,7 @@ stateDiagram-v2
 
 两个已部署入口都接受账户 id，`finalizeEscape` 还接受账户回退到的
 verifier（`contracts/build/SmartAccountV3.manifest.json`；实现在
-`contracts/SmartAccount.Escape.cs`，其中 C# 方法以大写字母开头——
+`contracts/custom/SmartAccount.Escape.cs`，其中 C# 方法以大写字母开头——
 那种写法不命名任何导出的方法，因此这里没有按代码格式化）。
 
 **特性：**

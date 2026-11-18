@@ -2,8 +2,10 @@
 
 > 中文版本与 `docs/ORGANIZATION.md` 同构。若两者冲突，以英文版本为准。
 
-更新至 2026-10-13 的 ordinary/native 布局。更早的 2026-09-27 组织快照已随部署前的
-兼容面一并删除，因此本文件是唯一被跟踪的布局声明；当前布局与归属规则如下。
+2026-11-18 更新为三目录合约布局（`contracts/custom`、`contracts/native`、
+`contracts/plugins`），它取代了 2026-10-13 的 `implementations/` 入口。更早的
+2026-09-27 组织快照已随部署前的兼容面一并删除，因此本文件是唯一被跟踪的布局声明；
+当前布局与归属规则如下。
 
 ## 用途
 
@@ -21,39 +23,57 @@ Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
 
 ## 目录结构
 
-    implementations/ordinary/ user-contract 交付配置与入口
-    implementations/native/   native ABI 2 提交配置与入口
-    .github/                 CI 工作流
     contracts/               Neo N3 SA 合约源码
+      custom/                user-contract（ordinary）实现
+        market/              SAAddressMarket 托管合约
+        paymaster/           SAPaymaster 合约
+        registrar/           SAPlatformRegistrar 合约
+      native/                native ABI 2 实现
+        SmartAccount/        共识 SmartAccount 服务的真源
+        Runtime/             与其一同编译的运行时叠加
+      plugins/               两个实现共用的插件合约
+        verifiers/           verifier 插件
+        hooks/               hook 插件
+        recovery/            社交恢复 verifier
+        templates/           第三方插件起点
+        native-profile/      共用插件的 native 配置构建
+      build/                 公开部署的固定工件
+      compile.sh             把全部合约构建到 contracts/bin/（已忽略）
+    tests/                   测试套件
+      mocks/                 测试套件部署的 mock 合约
     formal/                  形式验证输入与检查
     frontend/                SA 应用与服务端路由
     sdk/                     SA SDK 面
     shared/                  共享的 SA 类型与辅助函数
     supabase/                SA 数据库迁移
-    tests/                   测试套件
     scripts/                 仓库工具
     docs/                    项目文档
-    SmartAccount.sln .NET 解决方案
+    .github/                 CI 工作流
+    SmartAccount.sln         .NET 解决方案
     README.md                公开项目与边界文档
 
-`implementations/ordinary/` 与 `implementations/native/` 是同一分支上的两个
-实现入口。它们通过 `profile.json` 有意指向既有的、构建兼容的源码位置；源码
-文件不重复。ordinary 配置是当前 user-contract 的交付路径。native 配置包含为
-标准提交准备的 native 模块、SDK 与 UI 配置，而共识层的
-`SmartAccount` 服务仍保留在对应的 Neo core 仓库中。
+`contracts/custom/` 与 `contracts/native/` 存放同一分支上的两个实现；
+`contracts/plugins/` 存放两者都会绑定的 verifier 与 hook 合约。每个实现目录带有一份
+`profile.json`，记录其源码根、工件与验证命令；源码文件不重复。ordinary 配置
+（`contracts/custom/`）是当前 user-contract 的交付路径。native 配置
+（`contracts/native/`）存放为标准提交准备的共识 `SmartAccount` 服务真源；对应的
+Neo core 仓库携带由它生成的副本，并拥有 native VM 的强制执行。
 
 ## 文件组织规则
 
-- 合约源码与合约专属检查保留在 contracts/ 下。
-- 第三方插件起点保留在 contracts/templates/ 下；模板针对
-  共享插件层（contracts/verifiers/Verifier*.cs、
-  contracts/hooks/HookAuthority.cs）编译，scripts/check_plugin_templates.mjs 使
+- 合约源码与合约专属检查保留在 contracts/ 下，且只属于 custom/、native/ 或
+  plugins/ 其中之一。只有一个实现使用的合约归该实现；两个实现都能绑定的插件归
+  plugins/。
+- mock 与探针合约保留在 tests/mocks/ 下；它们是测试夹具，不属于任何一个实现。
+- 第三方插件起点保留在 contracts/plugins/templates/ 下；模板针对
+  共享插件层（contracts/plugins/verifiers/Verifier*.cs、
+  contracts/plugins/hooks/HookAuthority.cs）编译，scripts/check_plugin_templates.mjs 使
   其 manifest 与核心的绑定期 ABI 门禁保持一致。
-- 使用 `implementations/ordinary/profile.json` 与
-  `implementations/native/profile.json` 选择实现配置；
+- 使用 `contracts/custom/profile.json` 与
+  `contracts/native/profile.json` 选择实现配置；
   不要从部署标签或共享的工件目录推断配置身份。
 - 仅 native 使用的模块与客户端代码保留在
-  `implementations/native/profile.json` 列出的 native 根目录下；ordinary 源码不得通过导入
+  `contracts/native/profile.json` 列出的 native 根目录下；ordinary 源码不得通过导入
   native 入口来证明 native 已激活。
 - 前端路由、UI 与前端配置保留在 frontend/ 下。
 - SA 客户端类型与构建器保留在 sdk/ 与 shared/ 下。

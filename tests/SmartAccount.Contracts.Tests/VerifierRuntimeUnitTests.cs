@@ -10,7 +10,7 @@ public class VerifierRuntimeUnitTests
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    private static readonly string VerifiersDir = Path.Combine(RepoRoot, "contracts", "verifiers");
+    private static readonly string VerifiersDir = Path.Combine(RepoRoot, "contracts", "plugins", "verifiers");
 
     private static string Read(string fileName) =>
         File.ReadAllText(Path.Combine(VerifiersDir, fileName));

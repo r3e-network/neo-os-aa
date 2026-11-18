@@ -15,6 +15,9 @@ public class ContractTests
 
     private static readonly string ContractsDir = Path.Combine(RepoRoot, "contracts");
 
+    // The user-contract core: its partials are named bare, as SmartAccount.csproj lists them.
+    private static readonly string CoreDir = Path.Combine(ContractsDir, "custom");
+
     private static readonly string[] SmartAccountFiles =
     {
         "SmartAccount.cs",
@@ -34,48 +37,48 @@ public class ContractTests
 
     private static readonly string[] HookFiles =
     {
-        "hooks/HookAuthority.cs",
-        "hooks/WhitelistHook.cs",
-        "hooks/DailyLimitHook.cs",
-        "hooks/TokenRestrictedHook.cs",
-        "hooks/MultiHook.cs",
-        "hooks/NeoDIDCredentialHook.cs"
+        "plugins/hooks/HookAuthority.cs",
+        "plugins/hooks/WhitelistHook.cs",
+        "plugins/hooks/DailyLimitHook.cs",
+        "plugins/hooks/TokenRestrictedHook.cs",
+        "plugins/hooks/MultiHook.cs",
+        "plugins/hooks/NeoDIDCredentialHook.cs"
     };
 
     private static readonly string[] VerifierFiles =
     {
-        "verifiers/VerifierAuthority.cs",
-        "verifiers/Web3AuthVerifier.cs",
-        "verifiers/TEEVerifier.cs",
-        "verifiers/WebAuthnVerifier.cs",
-        "verifiers/SessionKeyVerifier.cs",
-        "verifiers/MultiSigVerifier.cs",
-        "verifiers/SubscriptionVerifier.cs",
-        "verifiers/ZKEmailVerifier.cs",
-        "verifiers/ZkLoginVerifier.cs"
+        "plugins/verifiers/VerifierAuthority.cs",
+        "plugins/verifiers/Web3AuthVerifier.cs",
+        "plugins/verifiers/TEEVerifier.cs",
+        "plugins/verifiers/WebAuthnVerifier.cs",
+        "plugins/verifiers/SessionKeyVerifier.cs",
+        "plugins/verifiers/MultiSigVerifier.cs",
+        "plugins/verifiers/SubscriptionVerifier.cs",
+        "plugins/verifiers/ZKEmailVerifier.cs",
+        "plugins/verifiers/ZkLoginVerifier.cs"
     };
 
     private static readonly string[] ContractProjectFiles =
     {
-        "SmartAccount.csproj",
-        "hooks/DailyLimitHook.csproj",
-        "hooks/MultiHook.csproj",
-        "hooks/NeoDIDCredentialHook.csproj",
-        "hooks/TokenRestrictedHook.csproj",
-        "hooks/WhitelistHook.csproj",
-        "market/SAAddressMarket.csproj",
-        "mocks/MarkerOnlyModule.csproj",
-        "mocks/MockTransferTarget.csproj",
-        "paymaster/Paymaster.csproj",
-        "registrar/PlatformRegistrar.csproj",
-        "verifiers/MultiSigVerifier.csproj",
-        "verifiers/SessionKeyVerifier.csproj",
-        "verifiers/SubscriptionVerifier.csproj",
-        "verifiers/TEEVerifier.csproj",
-        "verifiers/Web3AuthVerifier.csproj",
-        "verifiers/WebAuthnVerifier.csproj",
-        "verifiers/ZKEmailVerifier.csproj",
-        "verifiers/ZkLoginVerifier.csproj",
+        "custom/SmartAccount.csproj",
+        "plugins/hooks/DailyLimitHook.csproj",
+        "plugins/hooks/MultiHook.csproj",
+        "plugins/hooks/NeoDIDCredentialHook.csproj",
+        "plugins/hooks/TokenRestrictedHook.csproj",
+        "plugins/hooks/WhitelistHook.csproj",
+        "custom/market/SAAddressMarket.csproj",
+        "../tests/mocks/MarkerOnlyModule.csproj",
+        "../tests/mocks/MockTransferTarget.csproj",
+        "custom/paymaster/Paymaster.csproj",
+        "custom/registrar/PlatformRegistrar.csproj",
+        "plugins/verifiers/MultiSigVerifier.csproj",
+        "plugins/verifiers/SessionKeyVerifier.csproj",
+        "plugins/verifiers/SubscriptionVerifier.csproj",
+        "plugins/verifiers/TEEVerifier.csproj",
+        "plugins/verifiers/Web3AuthVerifier.csproj",
+        "plugins/verifiers/WebAuthnVerifier.csproj",
+        "plugins/verifiers/ZKEmailVerifier.csproj",
+        "plugins/verifiers/ZkLoginVerifier.csproj",
     };
 
     private static Type ContractType => typeof(global::SmartAccount.SmartAccount);
@@ -101,8 +104,11 @@ public class ContractTests
     private static string ReadContractFile(string fileName) =>
         NormalizeLineEndings(File.ReadAllText(Path.Combine(ContractsDir, fileName)));
 
+    private static string ReadCoreFile(string fileName) =>
+        NormalizeLineEndings(File.ReadAllText(Path.Combine(CoreDir, fileName)));
+
     private static string ReadCombinedSource() =>
-        string.Join("\n\n", SmartAccountFiles.Select(ReadContractFile));
+        string.Join("\n\n", SmartAccountFiles.Select(ReadCoreFile));
 
     private static string ExtractSourceBlock(string source, string startMarker, string endMarker)
     {
@@ -185,18 +191,18 @@ public class ContractTests
     [TestMethod]
     public void SmartAccountProjectCompilesAllPartialModules()
     {
-        string projectFile = File.ReadAllText(Path.Combine(ContractsDir, "SmartAccount.csproj"));
+        string projectFile = File.ReadAllText(Path.Combine(CoreDir, "SmartAccount.csproj"));
         foreach (string fileName in SmartAccountFiles)
         {
             StringAssert.Contains(projectFile, $"<Compile Include=\"{fileName}\" />");
-            Assert.IsTrue(File.Exists(Path.Combine(ContractsDir, fileName)), $"Missing source file: {fileName}");
+            Assert.IsTrue(File.Exists(Path.Combine(CoreDir, fileName)), $"Missing source file: {fileName}");
         }
     }
 
     [TestMethod]
     public void ExecutionPathKeepsFixedCallFlagsAll()
     {
-        string executionSource = ReadContractFile("SmartAccount.Execution.cs");
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
 
         StringAssert.Contains(
             executionSource,
@@ -216,7 +222,7 @@ public class ContractTests
     [TestMethod]
     public void RegisterAccountBindsAccountIdToRegistrationParameters()
     {
-        string accountsSource = ReadContractFile("SmartAccount.Accounts.cs");
+        string accountsSource = ReadCoreFile("SmartAccount.Accounts.cs");
 
         StringAssert.Contains(accountsSource, "Account id required");
         StringAssert.Contains(accountsSource, "Account already exists");
@@ -233,7 +239,7 @@ public class ContractTests
     [TestMethod]
     public void VerifierAllowlistBlocksImmediateKeyRotationMethods()
     {
-        string accountsSource = ReadContractFile("SmartAccount.Accounts.cs");
+        string accountsSource = ReadCoreFile("SmartAccount.Accounts.cs");
         string allowlistBlock = ExtractSourceBlock(
             accountsSource,
             "private static readonly string[] AllowedVerifierMethods = new string[]",
@@ -245,7 +251,7 @@ public class ContractTests
     [TestMethod]
     public void PluginConfigurationCallsRequireReplayAfterTimelock()
     {
-        string accountsSource = ReadContractFile("SmartAccount.Accounts.cs");
+        string accountsSource = ReadCoreFile("SmartAccount.Accounts.cs");
 
         StringAssert.Contains(accountsSource, "PendingModuleCall pending = new PendingModuleCall");
         StringAssert.Contains(accountsSource, "ComputeModuleCallHash(string method, object[] args)");
@@ -257,7 +263,7 @@ public class ContractTests
     [TestMethod]
     public void ExecutionPathAppliesVerifierPostExecutionEffectsAfterSuccessfulCalls()
     {
-        string executionSource = ReadContractFile("SmartAccount.Execution.cs");
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
 
         StringAssert.Contains(
             executionSource,
@@ -275,7 +281,7 @@ public class ContractTests
         // No published Neo.SmartContract.Framework declares Contract.CallWithGasLimit, so the
         // contract declares the syscall itself. The compiled bytes are checked separately in
         // CompiledCoreSyscallTests; this pins the source shape.
-        string executionSource = ReadContractFile("SmartAccount.Execution.cs");
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
 
         StringAssert.Contains(executionSource, "[Syscall(\"System.Contract.CallWithGasLimit\")]");
         StringAssert.Contains(executionSource, "public static extern object CallWithGasLimit(");
@@ -299,7 +305,7 @@ public class ContractTests
     [TestMethod]
     public void HookCallbacksUseTheCanonicalOperationTupleForPreAndPostPhases()
     {
-        string executionSource = ReadContractFile("SmartAccount.Execution.cs");
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
         string preHookBlock = ExtractSourceBlock(
             executionSource,
             "// [Hook phase] pre-execution hook",
@@ -340,7 +346,7 @@ public class ContractTests
     [TestMethod]
     public void MultiHookIsolatesMutableOperationArraysBetweenChildren()
     {
-        string source = File.ReadAllText(Path.Combine(ContractsDir, "hooks", "MultiHook.cs"));
+        string source = File.ReadAllText(Path.Combine(ContractsDir, "plugins", "hooks", "MultiHook.cs"));
 
         StringAssert.Contains(source, "private static object[] CloneHookParams(object[] opParams)");
         Assert.AreEqual(2, CountOccurrences(source, "CloneHookParams(opParams)"));
@@ -353,7 +359,7 @@ public class ContractTests
     [TestMethod]
     public void CallbackResultIsolationDocumentsUnsupportedInteropBoundary()
     {
-        string executionSource = ReadContractFile("SmartAccount.Execution.cs");
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
         string securityModel = File.ReadAllText(Path.Combine(RepoRoot, "docs", "SECURITY_MODEL.md"));
 
         StringAssert.Contains(executionSource, "StdLib.Deserialize(StdLib.Serialize(value))");
@@ -364,7 +370,7 @@ public class ContractTests
     [TestMethod]
     public void MarketEscrowSettlementWipesInheritedVerifierAndHookState()
     {
-        string marketSource = ReadContractFile("SmartAccount.MarketEscrow.cs");
+        string marketSource = ReadCoreFile("SmartAccount.MarketEscrow.cs");
 
         StringAssert.Contains(marketSource, "state.Verifier = UInt160.Zero;");
         StringAssert.Contains(marketSource, "state.HookId = UInt160.Zero;");
@@ -399,20 +405,20 @@ public class ContractTests
                 $"Direct caller-controlled authority call still present in {fileName}");
         }
 
-        StringAssert.Contains(ReadContractFile("hooks/WhitelistHook.cs"), "HookAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("hooks/WhitelistHook.cs"), "HookAuthority.ValidateExecutionCaller");
-        StringAssert.Contains(ReadContractFile("hooks/DailyLimitHook.cs"), "HookAuthority.ValidateExecutionCaller");
-        StringAssert.Contains(ReadContractFile("hooks/MultiHook.cs"), "HookAuthority.ValidateExecutionCaller");
-        StringAssert.Contains(ReadContractFile("hooks/NeoDIDCredentialHook.cs"), "HookAuthority.ValidateExecutionCaller");
-        StringAssert.Contains(ReadContractFile("hooks/TokenRestrictedHook.cs"), "HookAuthority.ValidateExecutionCaller");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/WhitelistHook.cs"), "HookAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/WhitelistHook.cs"), "HookAuthority.ValidateExecutionCaller");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/DailyLimitHook.cs"), "HookAuthority.ValidateExecutionCaller");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/MultiHook.cs"), "HookAuthority.ValidateExecutionCaller");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/NeoDIDCredentialHook.cs"), "HookAuthority.ValidateExecutionCaller");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/TokenRestrictedHook.cs"), "HookAuthority.ValidateExecutionCaller");
     }
 
     [TestMethod]
     public void WalletTracksHookExecutionContextForTrustedPluginCalls()
     {
-        string internalSource = ReadContractFile("SmartAccount.Internal.cs");
-        string verifyContextSource = ReadContractFile("SmartAccount.VerifyContext.cs");
-        string executionSource = ReadContractFile("SmartAccount.Execution.cs");
+        string internalSource = ReadCoreFile("SmartAccount.Internal.cs");
+        string verifyContextSource = ReadCoreFile("SmartAccount.VerifyContext.cs");
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
 
         StringAssert.Contains(internalSource, "Prefix_HookExecutionContext");
         StringAssert.Contains(internalSource, "SetHookExecutionContext");
@@ -427,11 +433,11 @@ public class ContractTests
     {
         string[] hookProjects =
         {
-            "hooks/WhitelistHook.csproj",
-            "hooks/DailyLimitHook.csproj",
-            "hooks/TokenRestrictedHook.csproj",
-            "hooks/MultiHook.csproj",
-            "hooks/NeoDIDCredentialHook.csproj",
+            "plugins/hooks/WhitelistHook.csproj",
+            "plugins/hooks/DailyLimitHook.csproj",
+            "plugins/hooks/TokenRestrictedHook.csproj",
+            "plugins/hooks/MultiHook.csproj",
+            "plugins/hooks/NeoDIDCredentialHook.csproj",
         };
 
         foreach (string project in hookProjects)
@@ -444,7 +450,7 @@ public class ContractTests
     [TestMethod]
     public void DailyLimitHookAlwaysMetersActualOutflow()
     {
-        string source = ReadContractFile("hooks/DailyLimitHook.cs");
+        string source = ReadContractFile("plugins/hooks/DailyLimitHook.cs");
 
         StringAssert.Contains(source, "public static void PostExecute");
         Assert.IsFalse(source.Contains("if (!DidExecutionSucceed(result)) return;", StringComparison.Ordinal));
@@ -461,7 +467,7 @@ public class ContractTests
     [TestMethod]
     public void MultiHookRejectsUnsafeHookTopologies()
     {
-        string source = ReadContractFile("hooks/MultiHook.cs");
+        string source = ReadContractFile("plugins/hooks/MultiHook.cs");
 
         StringAssert.Contains(source, "hooks allowed");
         StringAssert.Contains(source, "Self hook not allowed");
@@ -473,7 +479,7 @@ public class ContractTests
     [TestMethod]
     public void NeoDidHookUsesRegistryBackedChecksInsteadOfLocalCredentialFlags()
     {
-        string source = ReadContractFile("hooks/NeoDIDCredentialHook.cs");
+        string source = ReadContractFile("plugins/hooks/NeoDIDCredentialHook.cs");
 
         StringAssert.Contains(source, "SetRegistry");
         StringAssert.Contains(source, "\"getBinding\"");
@@ -489,7 +495,7 @@ public class ContractTests
     [TestMethod]
     public void ZkLoginConfigBlobRejectsTrailingBytes()
     {
-        string source = ReadContractFile("verifiers/ZkLoginVerifier.cs");
+        string source = ReadContractFile("plugins/verifiers/ZkLoginVerifier.cs");
 
         // Configuration is a signed protocol envelope.  The parser must consume the
         // entire byte string so two encodings cannot map to the same stored tuple.
@@ -503,7 +509,7 @@ public class ContractTests
     [TestMethod]
     public void ZkLoginProviderUsesTheOneByteWireLengthBound()
     {
-        string source = ReadContractFile("verifiers/ZkLoginVerifier.cs");
+        string source = ReadContractFile("plugins/verifiers/ZkLoginVerifier.cs");
 
         StringAssert.Contains(source, "encoded.Length > 0 && encoded.Length <= 255");
         StringAssert.Contains(source, "Provider must be 1-255 bytes");
@@ -521,14 +527,14 @@ public class ContractTests
                 $"Direct caller-controlled verifier authority call still present in {fileName}");
         }
 
-        StringAssert.Contains(ReadContractFile("verifiers/Web3AuthVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("verifiers/TEEVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("verifiers/WebAuthnVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("verifiers/SessionKeyVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("verifiers/MultiSigVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("verifiers/SubscriptionVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("verifiers/ZKEmailVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("verifiers/ZkLoginVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/verifiers/Web3AuthVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/verifiers/TEEVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/verifiers/WebAuthnVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/verifiers/SessionKeyVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/verifiers/MultiSigVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/verifiers/SubscriptionVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/verifiers/ZKEmailVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/verifiers/ZkLoginVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
     }
 
     [TestMethod]
@@ -539,7 +545,7 @@ public class ContractTests
         // every update, so returning false rejects binding up front instead of
         // letting an account attach to a verifier whose validateSignature always
         // faults (which previously forced a 7-90 day escape to recover).
-        string source = ReadContractFile("verifiers/ZKEmailVerifier.cs");
+        string source = ReadContractFile("plugins/verifiers/ZKEmailVerifier.cs");
         StringAssert.Contains(source, "public static bool SupportsV3() => false;");
         StringAssert.Contains(source, "ZKEmailVerifier disabled pending real proof verification");
     }
@@ -550,7 +556,7 @@ public class ContractTests
         // Wallets and explorers probe counterfactual accounts before registration,
         // so both reads must be Safe and must report instead of faulting on an
         // unknown account id.
-        string source = ReadContractFile("SmartAccount.State.cs");
+        string source = ReadCoreFile("SmartAccount.State.cs");
         StringAssert.Contains(source, "public static object[] DescribeAccount(UInt160 accountId)");
         StringAssert.Contains(source, "public static object[] SimulateValidation(UInt160 accountId, UserOperation op)");
         StringAssert.Contains(source, "if (data == null)");
@@ -565,7 +571,7 @@ public class ContractTests
     {
         // The core delivers registration verifierParams to setPublicKey; decoding and
         // storing must reuse the timelocked path's validation instead of duplicating it.
-        string source = ReadContractFile("verifiers/SessionKeyVerifier.cs");
+        string source = ReadContractFile("plugins/verifiers/SessionKeyVerifier.cs");
         StringAssert.Contains(source, "public static void SetPublicKey(UInt160 accountId, ByteString initialKeyBlob)");
         StringAssert.Contains(source, "\"Unsupported session key blob version\"");
         StringAssert.Contains(source, "SetSessionKey(accountId, pubKey, targetContract, method, validUntil, spendingLimit, description);");
@@ -574,8 +580,8 @@ public class ContractTests
     [TestMethod]
     public void SessionAndSubscriptionVerifiersKeepValidateSignatureReadOnlyAndPersistStateInPostExecute()
     {
-        string sessionSource = ReadContractFile("verifiers/SessionKeyVerifier.cs");
-        string subscriptionSource = ReadContractFile("verifiers/SubscriptionVerifier.cs");
+        string sessionSource = ReadContractFile("plugins/verifiers/SessionKeyVerifier.cs");
+        string subscriptionSource = ReadContractFile("plugins/verifiers/SubscriptionVerifier.cs");
 
         string sessionValidateBlock = ExtractSourceBlock(
             sessionSource,
@@ -595,7 +601,7 @@ public class ContractTests
     [TestMethod]
     public void MultiSigPropagatesVerifierPostExecutionEffectsToChildVerifiers()
     {
-        string source = ReadContractFile("verifiers/MultiSigVerifier.cs");
+        string source = ReadContractFile("plugins/verifiers/MultiSigVerifier.cs");
 
         StringAssert.Contains(source, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
         StringAssert.Contains(
@@ -608,9 +614,9 @@ public class ContractTests
     {
         string[] sources =
         {
-            ReadContractFile("SmartAccount.Accounts.cs"),
-            ReadContractFile("SmartAccount.Escape.cs"),
-            ReadContractFile("SmartAccount.MarketEscrow.cs")
+            ReadCoreFile("SmartAccount.Accounts.cs"),
+            ReadCoreFile("SmartAccount.Escape.cs"),
+            ReadCoreFile("SmartAccount.MarketEscrow.cs")
         };
 
         // Swallowing clearAccount faults would hand a buyer a shell whose old plugin storage can
@@ -628,7 +634,7 @@ public class ContractTests
     [TestMethod]
     public void HookLifecycleRequiresTheV3MarkerBeforeBinding()
     {
-        string accountsSource = ReadContractFile("SmartAccount.Accounts.cs");
+        string accountsSource = ReadCoreFile("SmartAccount.Accounts.cs");
         StringAssert.Contains(accountsSource, "private static void AssertV3Hook(UInt160 hook)");
         StringAssert.Contains(accountsSource, "AssertV3Hook(hookId)");
         StringAssert.Contains(accountsSource, "AssertV3Hook(newHookId)");
@@ -639,7 +645,7 @@ public class ContractTests
         StringAssert.Contains(accountsSource, "Verifier V3 cleanup ABI missing");
         StringAssert.Contains(accountsSource, "Hook V3 cleanup ABI missing");
 
-        foreach (string fileName in HookFiles.Where(path => path != "hooks/HookAuthority.cs"))
+        foreach (string fileName in HookFiles.Where(path => path != "plugins/hooks/HookAuthority.cs"))
         {
             StringAssert.Contains(
                 ReadContractFile(fileName),
@@ -651,8 +657,8 @@ public class ContractTests
     [TestMethod]
     public void SessionAndSubscriptionPostExecuteEnforceTransferResultLocally()
     {
-        string sessionSource = ReadContractFile("verifiers/SessionKeyVerifier.cs");
-        string subscriptionSource = ReadContractFile("verifiers/SubscriptionVerifier.cs");
+        string sessionSource = ReadContractFile("plugins/verifiers/SessionKeyVerifier.cs");
+        string subscriptionSource = ReadContractFile("plugins/verifiers/SubscriptionVerifier.cs");
 
         StringAssert.Contains(sessionSource, "if (op.Method == \"transfer\")");
         StringAssert.Contains(sessionSource, "result is bool accepted && accepted");
@@ -678,14 +684,14 @@ public class ContractTests
     {
         string[] verifierProjects =
         {
-            "verifiers/Web3AuthVerifier.csproj",
-            "verifiers/TEEVerifier.csproj",
-            "verifiers/WebAuthnVerifier.csproj",
-            "verifiers/SessionKeyVerifier.csproj",
-            "verifiers/MultiSigVerifier.csproj",
-            "verifiers/SubscriptionVerifier.csproj",
-            "verifiers/ZKEmailVerifier.csproj",
-            "verifiers/ZkLoginVerifier.csproj",
+            "plugins/verifiers/Web3AuthVerifier.csproj",
+            "plugins/verifiers/TEEVerifier.csproj",
+            "plugins/verifiers/WebAuthnVerifier.csproj",
+            "plugins/verifiers/SessionKeyVerifier.csproj",
+            "plugins/verifiers/MultiSigVerifier.csproj",
+            "plugins/verifiers/SubscriptionVerifier.csproj",
+            "plugins/verifiers/ZKEmailVerifier.csproj",
+            "plugins/verifiers/ZkLoginVerifier.csproj",
         };
 
         foreach (string project in verifierProjects)
@@ -722,7 +728,7 @@ public class ContractTests
     [TestMethod]
     public void RegistrarContractHasCorrectMetadata()
     {
-        string source = ReadContractFile("registrar/PlatformRegistrar.cs");
+        string source = ReadContractFile("custom/registrar/PlatformRegistrar.cs");
 
         StringAssert.Contains(source, "[DisplayName(\"SAPlatformRegistrar\")]");
         StringAssert.Contains(source, "Platform Account Registrar Service for Neo N3 SA");
@@ -732,7 +738,7 @@ public class ContractTests
     [TestMethod]
     public void RegistrarExposesAllRequiredEntrypoints()
     {
-        string source = ReadContractFile("registrar/PlatformRegistrar.cs");
+        string source = ReadContractFile("custom/registrar/PlatformRegistrar.cs");
 
         string[] requiredMethods =
         {
@@ -765,7 +771,7 @@ public class ContractTests
     [TestMethod]
     public void RegistrarRotationProposalIsTimelocked()
     {
-        string source = ReadContractFile("registrar/PlatformRegistrar.cs");
+        string source = ReadContractFile("custom/registrar/PlatformRegistrar.cs");
 
         // Rotation proposals sit behind the 7-day timelock before confirmation.
         StringAssert.Contains(source, "RotationTimelockMs = 7L * 24 * 60 * 60 * 1000");
@@ -775,7 +781,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterContractHasCorrectMetadata()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         StringAssert.Contains(source, "[DisplayName(\"SAPaymaster\")]");
         StringAssert.Contains(source, "On-Chain Paymaster for Sponsored Transactions on Neo N3 SA");
@@ -785,7 +791,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterExposesAllRequiredEntrypoints()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         string[] requiredMethods =
         {
@@ -815,7 +821,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterOnlyAcceptsGAS()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         StringAssert.Contains(source, "Runtime.CallingScriptHash == GAS.Hash");
         StringAssert.Contains(source, "Only GAS accepted");
@@ -824,7 +830,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterSettlementOnlyCallableByCore()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         StringAssert.Contains(source, "PaymasterAuthority.ValidateCoreCaller()");
     }
@@ -832,7 +838,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterFollowsChecksEffectsInteractionsPattern()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         // In SettleReimbursement: deposit deducted BEFORE GAS transfer
         int deductIndex = source.IndexOf("SetSponsorDeposit(sponsor!, deposit - amount)", StringComparison.Ordinal);
@@ -844,7 +850,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterHasOverflowProtection()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         StringAssert.Contains(source, "Deposit overflow");
         StringAssert.Contains(source, "Daily spend overflow");
@@ -854,7 +860,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterStoragePrefixesAreUnique()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         var expectedPrefixes = new (byte Value, string Name)[]
         {
@@ -876,8 +882,8 @@ public class ContractTests
     [TestMethod]
     public void PaymasterAuthorityPrefixesDoNotCollideWithPaymasterPrefixes()
     {
-        string authoritySource = ReadContractFile("paymaster/PaymasterAuthority.cs");
-        string paymasterSource = ReadContractFile("paymaster/Paymaster.cs");
+        string authoritySource = ReadContractFile("custom/paymaster/PaymasterAuthority.cs");
+        string paymasterSource = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         // Authority uses 0xD0-0xD3, Paymaster uses 0x01-0x05 — no collision
         StringAssert.Contains(authoritySource, "0xD0");
@@ -892,7 +898,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterProjectCompilesSharedAuthorityHelper()
     {
-        string projectFile = ReadContractFile("paymaster/Paymaster.csproj");
+        string projectFile = ReadContractFile("custom/paymaster/Paymaster.csproj");
 
         StringAssert.Contains(projectFile, "<Compile Include=\"PaymasterAuthority.cs\" />");
         StringAssert.Contains(projectFile, "<Compile Include=\"Paymaster.cs\" />");
@@ -901,7 +907,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterAuthorityUsesTimelockForAdminRotation()
     {
-        string source = ReadContractFile("paymaster/PaymasterAuthority.cs");
+        string source = ReadContractFile("custom/paymaster/PaymasterAuthority.cs");
 
         StringAssert.Contains(source, "AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000");
         StringAssert.Contains(source, "Admin rotation timelock not expired");
@@ -911,8 +917,8 @@ public class ContractTests
     [TestMethod]
     public void VerifierAndHookAuthorityUseRuntimeMillisecondsForAdminRotation()
     {
-        string verifierSource = ReadContractFile("verifiers/VerifierAuthority.cs");
-        string hookSource = ReadContractFile("hooks/HookAuthority.cs");
+        string verifierSource = ReadContractFile("plugins/verifiers/VerifierAuthority.cs");
+        string hookSource = ReadContractFile("plugins/hooks/HookAuthority.cs");
 
         StringAssert.Contains(verifierSource, "AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000");
         StringAssert.Contains(hookSource, "AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000");
@@ -923,8 +929,8 @@ public class ContractTests
     [TestMethod]
     public void VerifierAndHookAuthorityRequireNewAdminWitnessForRotationConfirmation()
     {
-        string verifierSource = ReadContractFile("verifiers/VerifierAuthority.cs");
-        string hookSource = ReadContractFile("hooks/HookAuthority.cs");
+        string verifierSource = ReadContractFile("plugins/verifiers/VerifierAuthority.cs");
+        string hookSource = ReadContractFile("plugins/hooks/HookAuthority.cs");
 
         StringAssert.Contains(verifierSource, "Runtime.CheckWitness(newAdmin)");
         StringAssert.Contains(hookSource, "Runtime.CheckWitness(newAdmin)");
@@ -933,7 +939,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterEventsAreComplete()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         string[] requiredEvents =
         {
@@ -950,7 +956,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterValidatePaymasterOpIsSafe()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         // Extract the block from [Safe] to the next public method
         int safeIdx = source.IndexOf("[Safe]\n        public static bool ValidatePaymasterOp", StringComparison.Ordinal);
@@ -978,7 +984,7 @@ public class ContractTests
     [TestMethod]
     public void SponsoredExecutionEntrypointsExistInCore()
     {
-        string source = ReadContractFile("SmartAccount.Paymaster.cs");
+        string source = ReadCoreFile("SmartAccount.Paymaster.cs");
 
         StringAssert.Contains(source, "public static object ExecuteSponsoredUserOp(");
         StringAssert.Contains(source, "public static object[] ExecuteSponsoredUserOps(");
@@ -1003,7 +1009,7 @@ public class ContractTests
     [TestMethod]
     public void SponsoredExecutionEventDeclaredInEvents()
     {
-        string source = ReadContractFile("SmartAccount.Events.cs");
+        string source = ReadCoreFile("SmartAccount.Events.cs");
 
         StringAssert.Contains(source, "SponsoredUserOpExecutedDelegate");
         StringAssert.Contains(source, "[DisplayName(\"SponsoredUserOpExecuted\")]");
@@ -1013,7 +1019,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterGasPermissionIsTightened()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         // Must use specific GAS hash, not wildcard
         StringAssert.Contains(source,
@@ -1023,7 +1029,7 @@ public class ContractTests
     [TestMethod]
     public void PaymasterSupportsGlobalPolicyFallback()
     {
-        string source = ReadContractFile("paymaster/Paymaster.cs");
+        string source = ReadContractFile("custom/paymaster/Paymaster.cs");
 
         StringAssert.Contains(source, "ResolvePolicy(sponsor, accountId, out UInt160 spendingKey)");
         StringAssert.Contains(source, "ReadPolicy(sponsor, UInt160.Zero)");

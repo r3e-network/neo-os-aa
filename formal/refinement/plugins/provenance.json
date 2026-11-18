@@ -17,23 +17,23 @@
   "plugins": [
     {
       "name": "MultiSigVerifier",
-      "project": "contracts/verifiers/MultiSigVerifier.csproj",
+      "project": "contracts/plugins/verifiers/MultiSigVerifier.csproj",
       "projectSha256": "7ea0f896fc2348ef3e46c605f013144c91ec4a700d22ce9812106a5ed8bde1f0",
       "sources": [
         {
-          "path": "contracts/verifiers/VerifierAuthority.cs",
+          "path": "contracts/plugins/verifiers/VerifierAuthority.cs",
           "sha256": "87b4bb35def35d072f7c190780f82626fd2b8dbf6ed10f7b973e7f1d42993c95"
         },
         {
-          "path": "contracts/verifiers/VerifierModels.cs",
+          "path": "contracts/plugins/verifiers/VerifierModels.cs",
           "sha256": "2dd36b691fdaf4ba015eb27205dd20b776d7123a0f9e4bfe771d1eca7c0bdd3d"
         },
         {
-          "path": "contracts/verifiers/SignerDomain.cs",
+          "path": "contracts/plugins/verifiers/SignerDomain.cs",
           "sha256": "8cf186502b7b45654ee46902f05fa848888ad940bbea4959a36717e84972a4cf"
         },
         {
-          "path": "contracts/verifiers/MultiSigVerifier.cs",
+          "path": "contracts/plugins/verifiers/MultiSigVerifier.cs",
           "sha256": "75854b9e50d1405cc1003839765841d68c89771325c42d3e25c8dfcf9341d2d8"
         }
       ],
@@ -53,15 +53,15 @@
     },
     {
       "name": "NeoDIDCredentialHook",
-      "project": "contracts/hooks/NeoDIDCredentialHook.csproj",
+      "project": "contracts/plugins/hooks/NeoDIDCredentialHook.csproj",
       "projectSha256": "3729ca53d3d612c09bc14ad0eed3795ee1f748d970e0fd42b3e1d2086be8e6a4",
       "sources": [
         {
-          "path": "contracts/hooks/HookAuthority.cs",
+          "path": "contracts/plugins/hooks/HookAuthority.cs",
           "sha256": "110ef6756b7b8208a912bd88cac067c519c5811e3d5419f27e2c79e8c4ac20dd"
         },
         {
-          "path": "contracts/hooks/NeoDIDCredentialHook.cs",
+          "path": "contracts/plugins/hooks/NeoDIDCredentialHook.cs",
           "sha256": "65fb66c2b9cfdc7fd745d822d9793247d64ec54289af0aff1c30a0c67b059b3a"
         }
       ],
@@ -81,15 +81,15 @@
     },
     {
       "name": "MultiHook",
-      "project": "contracts/hooks/MultiHook.csproj",
+      "project": "contracts/plugins/hooks/MultiHook.csproj",
       "projectSha256": "07d13f326572c6c0004eb842760419cf551e1d169166d58917e89864958cba22",
       "sources": [
         {
-          "path": "contracts/hooks/HookAuthority.cs",
+          "path": "contracts/plugins/hooks/HookAuthority.cs",
           "sha256": "110ef6756b7b8208a912bd88cac067c519c5811e3d5419f27e2c79e8c4ac20dd"
         },
         {
-          "path": "contracts/hooks/MultiHook.cs",
+          "path": "contracts/plugins/hooks/MultiHook.cs",
           "sha256": "11b2fdbf20a6a9abeafd305dfb40df477ae68701be782db7bd29a3a7a3adc3a4"
         }
       ],
@@ -109,15 +109,15 @@
     },
     {
       "name": "SAPlatformRegistrar",
-      "project": "contracts/registrar/PlatformRegistrar.csproj",
+      "project": "contracts/custom/registrar/PlatformRegistrar.csproj",
       "projectSha256": "1a904f50b17a93d7c1525b4849025804ce2bf14f725e7be10551aade688c2ac6",
       "sources": [
         {
-          "path": "contracts/registrar/PlatformRegistrarAuthority.cs",
+          "path": "contracts/custom/registrar/PlatformRegistrarAuthority.cs",
           "sha256": "c1540950345e1ad867ac29018fe4b734335596604b049c8e3c6b076d7fb0a6ee"
         },
         {
-          "path": "contracts/registrar/PlatformRegistrar.cs",
+          "path": "contracts/custom/registrar/PlatformRegistrar.cs",
           "sha256": "8ea38d8f1933be37f69e79971fe0fb5750c668ddbb6c7728e3fb181876671c1b"
         }
       ],
@@ -138,11 +138,11 @@
     },
     {
       "name": "MockVerifierCore",
-      "project": "contracts/mocks/MockVerifierCore.csproj",
+      "project": "tests/mocks/MockVerifierCore.csproj",
       "projectSha256": "d8e4363563ececd72ab5109f1747e44443406b497dca7bc4489558fabba9d03c",
       "sources": [
         {
-          "path": "contracts/mocks/MockVerifierCore.cs",
+          "path": "tests/mocks/MockVerifierCore.cs",
           "sha256": "7f4299a33895a91c1e76bdba6fbbef5ca4033c289286254670124b6619aa8609"
         }
       ],
@@ -163,15 +163,15 @@
     },
     {
       "name": "SAPaymaster",
-      "project": "contracts/paymaster/Paymaster.csproj",
+      "project": "contracts/custom/paymaster/Paymaster.csproj",
       "projectSha256": "db4eb4f1980fcaf349d6ae42e081773bcb7d28187e3188275a263b2aeae7a89a",
       "sources": [
         {
-          "path": "contracts/paymaster/Paymaster.cs",
+          "path": "contracts/custom/paymaster/Paymaster.cs",
           "sha256": "3a7c95159bfe126e5b52c958d3d22951def46b7f866f92c1190ad0fad4880a27"
         },
         {
-          "path": "contracts/paymaster/PaymasterAuthority.cs",
+          "path": "contracts/custom/paymaster/PaymasterAuthority.cs",
           "sha256": "4a1c08f6b382a85f2561d0583f389dee50d762f5d93f7f120ec269040db9c355"
         }
       ],

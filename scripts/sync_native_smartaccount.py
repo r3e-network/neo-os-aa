@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the neo-native-core SmartAccount copies from the SA true source.
 
-`implementations/native/core/SmartAccount/` in neo-os-sa is the only editable
+`contracts/native/SmartAccount/` in neo-os-sa is the only editable
 home of the SmartAccount native contract. The neo-native-core checkout needs
 its own copies of those ten files to build the node standalone, so it carries
 generated ones: this script rewrites them, byte-deterministically, from the
@@ -52,7 +52,7 @@ TRUE_SOURCE_BLOCK = (
     "// regenerate it via scripts/sync_native_smartaccount.py.\n"
 )
 
-SA_TRUE_SOURCE_DIR = Path("implementations/native/core/SmartAccount")
+SA_TRUE_SOURCE_DIR = Path("contracts/native/SmartAccount")
 NC_NATIVE_DIR = Path("src/Neo/SmartContract/Native")
 
 # Suffix of the staged files a regeneration swaps in; it keeps them out of the

@@ -10,14 +10,14 @@
   cleanup cannot rotate the module pointer.
 
   Concrete correspondence points:
-    contracts/SmartAccount.Execution.cs
-    contracts/SmartAccount.Accounts.cs
-    contracts/SmartAccount.Internal.cs
-    contracts/SmartAccount.Models.cs
-    contracts/SmartAccount.VerifyContext.cs
-    contracts/hooks/MultiHook.cs
-    contracts/verifiers/MultiSigVerifier.cs
-    contracts/verifiers/VerifierPayload.cs
+    contracts/custom/SmartAccount.Execution.cs
+    contracts/custom/SmartAccount.Accounts.cs
+    contracts/custom/SmartAccount.Internal.cs
+    contracts/custom/SmartAccount.Models.cs
+    contracts/custom/SmartAccount.VerifyContext.cs
+    contracts/plugins/hooks/MultiHook.cs
+    contracts/plugins/verifiers/MultiSigVerifier.cs
+    contracts/plugins/verifiers/VerifierPayload.cs
 
   The byte/string fields below are abstract atoms.  Their equality is the
   equality supplied by the NeoVM/serialization layer; this file intentionally

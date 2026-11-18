@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Neo</AssemblyName>
+    <RootNamespace>Neo</RootNamespace>
+    <VersionPrefix>3.10.2</VersionPrefix>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <IsPackable>false</IsPackable>
+    <NeoCoreRoot Condition="'$(NeoCoreRoot)' == ''">$(MSBuildThisFileDirectory)../../../neo-native-core/src/Neo</NeoCoreRoot>
+    <NeoSourceRoot Condition="'$(NeoSourceRoot)' == ''">$(MSBuildThisFileDirectory)../../../neo-native-core/src</NeoSourceRoot>
+  </PropertyGroup>
+
+  <!-- The overlay compiles the pinned native core in full and replaces exactly
+       three groups of its files with SA-owned true source:
+         1. Native/NativeContract.cs      - the overlay variant registers SmartAccount
+            and gates its HF_SmartAccountV1 activation;
+         2. Native/SmartAccount*.cs       - generated sync copies of the editable true
+            source in SmartAccount/ (scripts/sync_native_smartaccount.py);
+         3. ApplicationEngine.Runtime.cs - the overlay engine gates permissionless
+            native dispatch.
+       Core build outputs (obj/bin) are never compile inputs. NeoCoreRoot and
+       NeoSourceRoot are regular MSBuild properties and can be overridden by
+       environment variables of the same name. -->
+  <ItemGroup>
+    <Compile Include="$(NeoCoreRoot)/**/*.cs"
+             Exclude="$(NeoCoreRoot)/obj/**;$(NeoCoreRoot)/bin/**;$(NeoCoreRoot)/SmartContract/Native/NativeContract.cs;$(NeoCoreRoot)/SmartContract/Native/SmartAccount*.cs;$(NeoCoreRoot)/SmartContract/ApplicationEngine.Runtime.cs" />
+    <Compile Include="Runtime/ApplicationEngine.Runtime.cs" />
+    <Compile Include="SmartAccount/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The core wordlist resources live outside this project directory, so the
+         manifest resource name must be pinned explicitly to the name the core's
+         generated Resources.Designer.cs looks up (Neo.Properties.Resources). -->
+    <EmbeddedResource Include="$(NeoCoreRoot)/Properties/Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <LogicalName>Neo.Properties.Resources.resources</LogicalName>
+    </EmbeddedResource>
+    <None Include="$(NeoCoreRoot)/Resources/**/*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Akka" Version="1.5.70" />
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
+    <PackageReference Include="K4os.Compression.LZ4" Version="1.3.8" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.21.0" />
+    <PackageReference Include="Neo.Cryptography.BLS12_381" Version="3.9.0" />
+    <PackageReference Include="Neo.VM" Version="[3.10.2-CI00390]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(NeoSourceRoot)/Neo.Extensions/Neo.Extensions.csproj" />
+    <ProjectReference Include="$(NeoSourceRoot)/Neo.IO/Neo.IO.csproj" />
+    <ProjectReference Include="$(NeoSourceRoot)/Neo.Json/Neo.Json.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Neo.UnitTests" />
+    <InternalsVisibleTo Include="Neo.SmartContract.Testing" />
+    <InternalsVisibleTo Include="Neo.SmartContract.TestEngine" />
+    <InternalsVisibleTo Include="Neo.Plugins.RpcServer.Tests" />
+    <InternalsVisibleTo Include="Neo.Plugins.OracleService.Tests" />
+    <InternalsVisibleTo Include="neodebug-3-adapter" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+</Project>

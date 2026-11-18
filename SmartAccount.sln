@@ -5,9 +5,9 @@ VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "contracts", "contracts", "{A73F2606-6D4C-3EEE-1759-0E59DCFEF523}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartAccount", "contracts\SmartAccount.csproj", "{495D7606-0F5B-A996-8B59-6B6A670143BC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartAccount", "contracts\custom\SmartAccount.csproj", "{495D7606-0F5B-A996-8B59-6B6A670143BC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Paymaster", "contracts\paymaster\Paymaster.csproj", "{B8E4D1A2-5C3F-4A9E-8D7B-6F2E1C0A9D3E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Paymaster", "contracts\custom\paymaster\Paymaster.csproj", "{B8E4D1A2-5C3F-4A9E-8D7B-6F2E1C0A9D3E}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject

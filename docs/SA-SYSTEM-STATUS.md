@@ -34,7 +34,7 @@ callbacks, witness fee estimation for supported signer shapes and signed-transac
 [workspace](NATIVE_ACCOUNT_WORKSPACE.md). It requires the matching native runtime
 and activation; public V3 deployment is not evidence of native availability.
 
-Source custody: `implementations/native/core/SmartAccount/` in this
+Source custody: `contracts/native/SmartAccount/` in this
 repository is the only editable copy of the native `SmartAccount` contract
 (the true source); the SHA-pinned Neo core checkout used by the
 [native VM workflow](../.github/workflows/native-profile.yml) carries
@@ -130,7 +130,7 @@ The committed ordinary source candidate extracts the platform services out of
 the core: market escrow settlement (`abandonListing`) lives on `SAAddressMarket`,
 paymaster reimbursement (`settleReimbursement`) on `SAPaymaster`, and
 platform-account registration plus the owner-rotation timelocks on the
-standalone `SAPlatformRegistrar` (`contracts/registrar/`). On top of the
+standalone `SAPlatformRegistrar` (`contracts/custom/registrar/`). On top of the
 2026-11-13 security remediation, the candidate adds the backup-owner-gated freeze
 surface (`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`), not part of
 the pinned public artifact.

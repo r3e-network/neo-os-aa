@@ -180,7 +180,7 @@ test("session builder requires finite future expiry, explicit cap, specific tran
     );
 });
 test("native multisig limits track native source markers and the pinned profile", () => {
-  const source = readFileSync(new URL("../../contracts/verifiers/MultiSigVerifier.cs", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../../contracts/plugins/verifiers/MultiSigVerifier.cs", import.meta.url), "utf8");
   const nativeCaps = /#if SMARTACCOUNT_NATIVE\s+private const int MaxChildVerifiers = (\d+);\s+private const int MaxApprovedChildren = (\d+);/.exec(source);
   assert.ok(nativeCaps, "native compile-time cap markers must remain explicit");
   const profile = JSON.parse(readFileSync(new URL("../../docs/proposals/smartaccount-native-profile-v2-parameters.json", import.meta.url), "utf8"));

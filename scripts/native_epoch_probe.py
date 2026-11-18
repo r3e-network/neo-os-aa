@@ -32,7 +32,7 @@ def main():
             for name in ('Directory.Build.props', 'nuget.config'):
                 shutil.copyfile(root / name, scratch / name)
                 report['sourceSha256'][name] = digest(root / name)
-            profiles = json.loads((root / 'contracts/native/profiles.json').read_text())
+            profiles = json.loads((root / 'contracts/plugins/native-profile/profiles.json').read_text())
             for source in (root / 'contracts').rglob('*'):
                 if not source.is_file() or (source.suffix not in ('.cs', '.csproj') and not source.name.endswith('.lock.json')) or any(part in ('obj', 'bin') for part in source.relative_to(root).parts):
                     continue
@@ -57,7 +57,7 @@ def main():
             report['testSourceSha256']['tests/SmartAccount.Contracts.Tests/RuntimeTestSupport.cs'] = digest(support)
             raw = scratch / 'artifacts'
             raw.mkdir()
-            projects = [scratch / 'contracts/native' / spec['project'] for spec in profiles.values()]
+            projects = [scratch / 'contracts/plugins/native-profile' / spec['project'] for spec in profiles.values()]
             projects.append(scratch / 'tests/NativeEpochProbe/contracts/NativeEpochCore.csproj')
             host_project = scratch / 'tests/NativeEpochProbe/NativeEpochProbe.csproj'
             for project in [*projects, host_project]:

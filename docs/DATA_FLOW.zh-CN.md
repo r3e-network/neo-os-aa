@@ -206,7 +206,7 @@ sequenceDiagram
 | `Prefix_DependencyMaintenance` | `0x25` | 裸槽位：依赖维护标记。 |
 | `Prefix_ConfigurationContextDepth` | `0x26` | 裸槽位：配置上下文嵌套深度。 |
 
-上表以 `contracts/SmartAccount.Internal.cs`（按账户键）与 `contracts/SmartAccount.Admin.cs`、`contracts/SmartAccount.PlatformRegistrar.cs`（裸槽位）为准；一个键要么是前缀本身，要么是前缀拼接 20 字节 `accountId`。
+上表以 `contracts/custom/SmartAccount.Internal.cs`（按账户键）与 `contracts/custom/SmartAccount.Admin.cs`、`contracts/custom/SmartAccount.PlatformRegistrar.cs`（裸槽位）为准；一个键要么是前缀本身，要么是前缀拼接 20 字节 `accountId`。
 
 ## `.matrix` 域名边界
 

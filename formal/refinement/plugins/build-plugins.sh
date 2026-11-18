@@ -38,25 +38,25 @@ fi
 mkdir -p "$OUT"
 build() {
   local dir="$1" project="$2" prefix="$3"
-  ( cd "$REPO/contracts/$dir" && "$NCCS_BIN" "./$project.csproj" -o "$OUT" ) >/dev/null
+  ( cd "$REPO/$dir" && "$NCCS_BIN" "./$project.csproj" -o "$OUT" ) >/dev/null
   echo "  $prefix"
 }
 
 echo "Building plugin artifacts with nccs $observed -> $OUT"
-build verifiers MultiSigVerifier     MultiSigVerifier
-build hooks     NeoDIDCredentialHook NeoDIDCredentialHook
-build hooks     MultiHook            MultiHook
+build contracts/plugins/verifiers MultiSigVerifier     MultiSigVerifier
+build contracts/plugins/hooks     NeoDIDCredentialHook NeoDIDCredentialHook
+build contracts/plugins/hooks     MultiHook            MultiHook
 # Not a plugin: the caller side of the platform-registrar channel. The account
 # only runs registerPlatformAccount, registerStablePlatformAccount and the
 # platform owner-rotation apply when the caller is the registrar it recorded,
 # so that path deploys the registrar service contract itself, with its bytes
 # pinned like everything else in this directory.
-build registrar PlatformRegistrar   SAPlatformRegistrar
+build contracts/custom/registrar PlatformRegistrar   SAPlatformRegistrar
 # Nor these two: the caller side of the market escrow (a forwarder with a
 # blanket permission, so the market's own cancel and settle calls have somebody
 # to come from) and the sponsor side of the sponsored paths.
-build mocks     MockVerifierCore       MockVerifierCore
-build paymaster Paymaster              SAPaymaster
+build tests/mocks                MockVerifierCore    MockVerifierCore
+build contracts/custom/paymaster Paymaster           SAPaymaster
 
 # Compare against the recorded hashes. python3 is used rather than shasum so the
 # comparison is byte-for-byte on binary files without depending on the coreutils

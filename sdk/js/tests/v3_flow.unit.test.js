@@ -840,11 +840,11 @@ test('pending maintenance helpers read pending verifier and hook calls through i
 });
 
 test('contract and docs expose a generic module lifecycle alongside legacy verifier and hook events', () => {
-  const eventsSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.Events.cs'), 'utf8');
-  const accountsSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.Accounts.cs'), 'utf8');
-  const stateSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.State.cs'), 'utf8');
-  const escapeSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.Escape.cs'), 'utf8');
-  const marketSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.MarketEscrow.cs'), 'utf8');
+  const eventsSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'custom', 'SmartAccount.Events.cs'), 'utf8');
+  const accountsSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'custom', 'SmartAccount.Accounts.cs'), 'utf8');
+  const stateSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'custom', 'SmartAccount.State.cs'), 'utf8');
+  const escapeSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'custom', 'SmartAccount.Escape.cs'), 'utf8');
+  const marketSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'custom', 'SmartAccount.MarketEscrow.cs'), 'utf8');
   const architectureDoc = fs.readFileSync(path.join(repoRoot, 'docs', 'architecture.md'), 'utf8');
 
   assert.match(eventsSource, /DisplayName\("ModuleInstalled"\)/);
@@ -869,7 +869,7 @@ test('contract and docs expose a generic module lifecycle alongside legacy verif
 });
 
 test('contract state exposes pending verifier and hook maintenance-call getters', () => {
-  const stateSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'SmartAccount.State.cs'), 'utf8');
+  const stateSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'custom', 'SmartAccount.State.cs'), 'utf8');
 
   assert.match(stateSource, /HasPendingVerifierCall/);
   assert.match(stateSource, /HasPendingHookCall/);
@@ -882,14 +882,14 @@ test('contract state exposes pending verifier and hook maintenance-call getters'
 });
 
 test('native secp256r1 verifiers share one canonical payload builder', () => {
-  const helperSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'VerifierPayload.cs'), 'utf8');
-  const modelSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'VerifierModels.cs'), 'utf8');
-  const sessionKeySource = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'SessionKeyVerifier.cs'), 'utf8');
-  const teeSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'TEEVerifier.cs'), 'utf8');
-  const webAuthnSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'WebAuthnVerifier.cs'), 'utf8');
-  const sessionKeyProject = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'SessionKeyVerifier.csproj'), 'utf8');
-  const teeProject = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'TEEVerifier.csproj'), 'utf8');
-  const webAuthnProject = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'WebAuthnVerifier.csproj'), 'utf8');
+  const helperSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'VerifierPayload.cs'), 'utf8');
+  const modelSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'VerifierModels.cs'), 'utf8');
+  const sessionKeySource = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'SessionKeyVerifier.cs'), 'utf8');
+  const teeSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'TEEVerifier.cs'), 'utf8');
+  const webAuthnSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'WebAuthnVerifier.cs'), 'utf8');
+  const sessionKeyProject = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'SessionKeyVerifier.csproj'), 'utf8');
+  const teeProject = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'TEEVerifier.csproj'), 'utf8');
+  const webAuthnProject = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'WebAuthnVerifier.csproj'), 'utf8');
 
   assert.match(helperSource, /internal static class VerifierPayload/);
   assert.match(helperSource, /internal static byte\[\] BuildPayload/);
@@ -925,8 +925,8 @@ test('native secp256r1 verifiers share one canonical payload builder', () => {
 });
 
 test('web3auth verifier also uses the shared verifier operation model', () => {
-  const web3AuthSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'Web3AuthVerifier.cs'), 'utf8');
-  const web3AuthProject = fs.readFileSync(path.join(repoRoot, 'contracts', 'verifiers', 'Web3AuthVerifier.csproj'), 'utf8');
+  const web3AuthSource = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'Web3AuthVerifier.cs'), 'utf8');
+  const web3AuthProject = fs.readFileSync(path.join(repoRoot, 'contracts', 'plugins', 'verifiers', 'Web3AuthVerifier.csproj'), 'utf8');
 
   assert.doesNotMatch(web3AuthSource, /class UserOperation/);
   assert.match(web3AuthProject, /<Compile Include="VerifierModels\.cs" \/>/);

@@ -2,7 +2,7 @@
   NeoOS formal verification -- proxy witness transaction-script shape.
 
   Source correspondence (read 2026-10-08):
-    ../neo-os-sa/contracts/SmartAccount.VerifyContext.cs
+    ../neo-os-sa/contracts/custom/SmartAccount.VerifyContext.cs
       ScriptIsSingleExecuteCall, ScriptPrefixIsDataPushes, DataPushInstructionSize
 
   A proxy verification script carries no secret, so the verification trigger

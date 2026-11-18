@@ -41,13 +41,13 @@ Runtime and deployment boundaries:
 - The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
 - The canonical shared testnet SA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
-The two implementation versions live on this branch behind explicit directory
-entrypoints: [ordinary user-contract](implementations/ordinary/README.md) and
-[native SmartAccount profile](implementations/native/README.md). Their
-`profile.json` files map canonical source roots, compatibility paths, artifacts
-and profile-specific verification commands. Source stays in the existing
-build-compatible directories so current tooling and artifact checks address the
-same files.
+The two implementation versions live on this branch, each in its own directory
+under `contracts/`: the [ordinary user-contract](contracts/custom/README.md) in
+`contracts/custom/` and the [native SmartAccount profile](contracts/native/README.md)
+in `contracts/native/`. The verifier, hook and recovery plugins that both
+implementations bind live in `contracts/plugins/`. Each `profile.json` maps its
+implementation's canonical source roots, compatibility paths, artifacts and
+profile-specific verification commands.
 
 ## Architecture authority
 
@@ -343,7 +343,7 @@ The suite writes JSON artifacts under `sdk/docs/reports/`.
 
 ### Platform Registrar Service
 
-The platform services are extracted from the core: the registrar ships as the standalone `SAPlatformRegistrar` (`contracts/registrar/`), configured through the core's timelocked `proposePlatformRegistrar` / `confirmPlatformRegistrar` admin path. Once the pointer is set, the registrar owns platform-account owner-rotation proposals and the core re-validates every state write it drives.
+The platform services are extracted from the core: the registrar ships as the standalone `SAPlatformRegistrar` (`contracts/custom/registrar/`), configured through the core's timelocked `proposePlatformRegistrar` / `confirmPlatformRegistrar` admin path. Once the pointer is set, the registrar owns platform-account owner-rotation proposals and the core re-validates every state write it drives.
 
 ### Build
 
@@ -357,7 +357,7 @@ cd frontend && npm run build
 
 The last verifier / hook matrix is a **historical record**: it ran on **Neo N3 testnet** on
 **March 13, 2026** against a deployment set that is not the current canonical one. Every positive
-execution targeted `MockTransferTarget` (`contracts/mocks/MockTransferTarget.cs`), the
+execution targeted `MockTransferTarget` (`tests/mocks/MockTransferTarget.cs`), the
 repository's test-only target whose `transfer` returns true without moving an asset, so the record
 proves the authorization path and its negative cases and never value movement. It is not the state
 of this repository's acceptance today, and it is not reproduced here.
@@ -383,11 +383,19 @@ verbatim in
 [`docs/reports/testnet-validation-v1v2-2026-03.md`](docs/reports/testnet-validation-v1v2-2026-03.md).
 
 ## Structure
-- `contracts/`: C# Smart Contract implementation of the Master Entry Contract.
-- `contracts/verifiers/`: Verifier plugins (Web3Auth, TEE, WebAuthn, SessionKey, MultiSig, etc.).
-- `contracts/hooks/`: Hook plugins (DailyLimit, Whitelist, TokenRestricted, MultiHook, NeoDIDCredential).
-- `contracts/paymaster/`: On-chain Paymaster contract for sponsored/gasless transactions.
-- `contracts/registrar/`: Standalone `SAPlatformRegistrar` service contract for platform-account registration and owner-rotation timelocks, extracted from the core.
+- `contracts/custom/`: C# Smart Contract implementation of the Master Entry Contract (the user-contract `SmartAccountV3` core) and its service contracts.
+- `contracts/native/`: True source of the native consensus `SmartAccount` service and the overlay Neo core project that compiles it.
+- `contracts/plugins/`: Plugin contracts shared by both implementations.
+- `contracts/plugins/verifiers/`: Verifier plugins (Web3Auth, TEE, WebAuthn, SessionKey, MultiSig, etc.).
+- `contracts/plugins/hooks/`: Hook plugins (DailyLimit, Whitelist, TokenRestricted, MultiHook, NeoDIDCredential).
+- `contracts/plugins/recovery/`: Morpheus social-recovery verifier.
+- `contracts/plugins/templates/`: Starting points for third-party verifier and hook plugins.
+- `contracts/plugins/native-profile/`: Native-profile builds of the shared plugins.
+- `contracts/custom/paymaster/`: On-chain Paymaster contract for sponsored/gasless transactions.
+- `contracts/custom/market/`: Standalone `SAAddressMarket` escrow contract.
+- `contracts/custom/registrar/`: Standalone `SAPlatformRegistrar` service contract for platform-account registration and owner-rotation timelocks, extracted from the core.
+- `contracts/build/`: Pinned artifacts of the public deployments; `contracts/compile.sh` writes the current source candidate to `contracts/bin/`.
+- `tests/`: Contract, native and local-chain test suites, with the mock contracts they deploy in `tests/mocks/`.
 - `frontend/`: Vue components demonstrating Account creation and signature workflows.
 - `sdk/js/`: JavaScript/TypeScript SDK for dApp integration.
 - `docs/`: Protocol design and specification standards.

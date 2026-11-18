@@ -33,7 +33,7 @@ class ExportTests(unittest.TestCase):
         cls.command = ['dotnet', str(PROJECT.parent / 'bin/Debug/net10.0/RefinementExport.dll'),
                        '--compiler-tool-dir', str(COMPILER),
                        '--source-root', str(ROOT), '--project',
-                       str(ROOT / 'contracts/SmartAccount.csproj'),
+                       str(ROOT / 'contracts/custom/SmartAccount.csproj'),
                        '--nef', str(NEF), '--manifest', str(MANIFEST)]
 
     def actual_inventory(self):
@@ -272,14 +272,14 @@ Console.WriteLine("COLLECTION_IDENTITY_CONTROLS_PASS");
                             ignore=shutil.ignore_patterns('bin', 'obj', 'build'))
             for name in ['Directory.Build.props', 'nuget.config']:
                 shutil.copy2(ROOT / name, mirror / name)
-            changed = mirror / 'contracts/SmartAccount.Paymaster.cs'
+            changed = mirror / 'contracts/custom/SmartAccount.Paymaster.cs'
             source = changed.read_text()
             old = 'BigInteger cap = BigInteger.Max(actualCost - budget.Reserved, 0) + estimationFlag * requested;'
             self.assertIn(old, source)
             changed.write_text(source.replace(old, old.replace(' + estimationFlag', ' - estimationFlag')))
             command = list(self.command)
             command[command.index('--source-root') + 1] = str(mirror)
-            command[command.index('--project') + 1] = str(mirror / 'contracts/SmartAccount.csproj')
+            command[command.index('--project') + 1] = str(mirror / 'contracts/custom/SmartAccount.csproj')
             result = subprocess.run(command, capture_output=True, text=True, timeout=120)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('source/nef pair mismatch', result.stderr.lower())
@@ -291,17 +291,17 @@ Console.WriteLine("COLLECTION_IDENTITY_CONTROLS_PASS");
                             ignore=shutil.ignore_patterns('bin', 'obj', 'build'))
             for name in ['Directory.Build.props', 'nuget.config']:
                 shutil.copy2(ROOT / name, mirror / name)
-            original = mirror / 'contracts/SmartAccount.Paymaster.cs'
+            original = mirror / 'contracts/custom/SmartAccount.Paymaster.cs'
             marker = '// race-control-' + uuid.uuid4().hex
             original.write_text(original.read_text() + '\n' + marker + '\n')
             command = list(self.command)
             command[command.index('--source-root') + 1] = str(mirror)
-            command[command.index('--project') + 1] = str(mirror / 'contracts/SmartAccount.csproj')
+            command[command.index('--project') + 1] = str(mirror / 'contracts/custom/SmartAccount.csproj')
             process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             deadline = time.monotonic() + 30
             changed = False
             while time.monotonic() < deadline and process.poll() is None:
-                for scratch in Path(tempfile.gettempdir()).glob('sa-refinement-export-*/contracts/SmartAccount.Paymaster.cs'):
+                for scratch in Path(tempfile.gettempdir()).glob('sa-refinement-export-*/contracts/custom/SmartAccount.Paymaster.cs'):
                     try:
                         if marker in scratch.read_text():
                             original.write_text(original.read_text() + '// changed after snapshot\n')

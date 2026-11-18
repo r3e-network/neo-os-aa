@@ -23,7 +23,7 @@ import sys
 import tempfile
 
 SA = Path(__file__).resolve().parents[2]
-DEFAULT_PROJECT = SA / "contracts/SmartAccount.csproj"
+DEFAULT_PROJECT = SA / "contracts/custom/SmartAccount.csproj"
 
 GAS_BOUNDED_SYSCALL = "System.Contract.CallWithGasLimit"
 FAULT_MARKER = "The given key '1371299780' was not present in the dictionary."

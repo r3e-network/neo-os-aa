@@ -2,8 +2,8 @@
 
 Fixture home for the shared SA module-protocol (v4) verification work. The
 specification is `docs/SA-MODULE-PROTOCOL.md`; the paired constants are
-`contracts/SmartAccount.ModuleProtocol.cs` (ordinary, kernel #39) and
-`implementations/native/core/SmartAccount/SmartAccountModuleProtocol.cs`
+`contracts/custom/SmartAccount.ModuleProtocol.cs` (ordinary, kernel #39) and
+`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`
 (native, kernel #40). These are **skeletons**: expected outputs are left as
 `"TODO(kernel39|40)"` markers and are filled by the kernel batches.
 

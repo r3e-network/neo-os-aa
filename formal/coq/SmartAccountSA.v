@@ -2,9 +2,9 @@
   NeoOS formal verification -- SmartAccount SA execution core.
 
   Source correspondence (read 2026-09-18):
-    ../neo-os-sa/contracts/SmartAccount.Execution.cs
-    ../neo-os-sa/contracts/SmartAccount.Models.cs
-    ../neo-os-sa/contracts/SmartAccount.Escape.cs
+    ../neo-os-sa/contracts/custom/SmartAccount.Execution.cs
+    ../neo-os-sa/contracts/custom/SmartAccount.Models.cs
+    ../neo-os-sa/contracts/custom/SmartAccount.Escape.cs
 
   This is a hand-written abstract model of the stable application-phase
   operation boundary. It models execution locking, verifier/native-owner

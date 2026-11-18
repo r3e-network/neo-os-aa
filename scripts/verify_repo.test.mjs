@@ -205,7 +205,7 @@ test('native VM workflow triggers every native source family', () => {
   const workflow = readWorkflow(new URL('../.github/workflows/native-profile.yml', import.meta.url));
   const triggers = workflow.slice(workflow.indexOf('on:'), workflow.indexOf('workflow_dispatch:'));
   for (const pattern of [
-    'implementations/native/**',
+    'contracts/native/**',
     'shared/native*.mjs',
     'frontend/src/features/native/**',
     'frontend/src/shared/native*.mjs',

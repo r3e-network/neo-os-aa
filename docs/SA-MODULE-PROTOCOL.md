@@ -4,7 +4,7 @@ This document is the **single shared specification** for the Neo Smart Account (
 module model that the two kernel batches implement:
 
 - ordinary (user-contract) kernel — task #39 (`contracts/`)
-- native kernel — task #40 (`implementations/native/core/SmartAccount/`)
+- native kernel — task #40 (`contracts/native/SmartAccount/`)
 
 The DTOs, profiles, storage layout, limits, error codes, events and gas budget
 defined here are **common to both versions**. Neither kernel may deviate from or
@@ -23,8 +23,8 @@ Companion documents:
 - `docs/SA-MIGRATION-MANIFEST.md` — legacy→v4 migration manifest design (§14).
 - `tests/fixtures/sa-module-protocol/README.md` — golden-vector / rejection
   fixture formats and the kernel verification matrix.
-- `contracts/SmartAccount.ModuleProtocol.cs` and
-  `implementations/native/core/SmartAccount/SmartAccountModuleProtocol.cs` — the
+- `contracts/custom/SmartAccount.ModuleProtocol.cs` and
+  `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` — the
   paired constant files carrying every numeric value in this spec (§15). Both
   files MUST carry identical values at all times.
 
@@ -564,8 +564,8 @@ never authorization sources.
 
 | Artifact | Path |
 | --- | --- |
-| ordinary constants | `contracts/SmartAccount.ModuleProtocol.cs` (partial `SmartAccount`) |
-| native constants | `implementations/native/core/SmartAccount/SmartAccountModuleProtocol.cs` (internal static `SmartAccountModuleProtocol`, synced to neo-native-core via `scripts/sync_native_smartaccount.py`) |
+| ordinary constants | `contracts/custom/SmartAccount.ModuleProtocol.cs` (partial `SmartAccount`) |
+| native constants | `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` (internal static `SmartAccountModuleProtocol`, synced to neo-native-core via `scripts/sync_native_smartaccount.py`) |
 | fixture skeletons | `tests/fixtures/sa-module-protocol/` (README + schemas + templates) |
 
 Both constant files carry identical numeric values for: protocol version 4;
@@ -584,7 +584,7 @@ the same key builders: `UInt64ToBigEndian`, per-prefix composite key builders).
 
 | Spec section | Ordinary files to create/modify |
 | --- | --- |
-| §2/§3/§7 constants | consume `contracts/SmartAccount.ModuleProtocol.cs` (already added; add to `SmartAccount.csproj` — done in this batch) |
+| §2/§3/§7 constants | consume `contracts/custom/SmartAccount.ModuleProtocol.cs` (already added; add to `SmartAccount.csproj` — done in this batch) |
 | §7.1/§7.4 prefixes | extend the STORAGE PREFIX MAP comment in `SmartAccount.cs` with the 0x50–0x5E rows; add `SmartAccount.ModuleProtocol.cs` to `WalletPartials` in `tests/SmartAccount.Contracts.Tests/StoragePrefixMapTests.cs` **together with first key usages** (DeriveShape requires usage) |
 | §4/§5 envelope + digest | `SmartAccount.Execution.cs` (13-field decode, digest, batch), new `SmartAccount.Intents.cs` if split |
 | §6 nonce | `SmartAccount.Internal.cs`/new nonce partial (0x56/0x5C, merge with legacy 0x03) |
@@ -595,7 +595,7 @@ the same key builders: `UInt64ToBigEndian`, per-prefix composite key builders).
 | F-1 (verify scope) | `SmartAccount.VerifyContext.cs` — delete `verifyScopeTarget` authorization, phase gates |
 | F-7 (phase gates) | `SmartAccount.VerifyContext.cs` + `SmartAccount.Execution.cs` (0x58 context, direct-caller + ReadOnly + strict domain checks for read-only callbacks) |
 | events | `SmartAccount.Events.cs` (§10bis table; keep existing AA-free events) |
-| plugins | `contracts/verifiers/*`, `contracts/hooks/*` renamed per §1.2; MultiHook stops install |
+| plugins | `contracts/plugins/verifiers/*`, `contracts/plugins/hooks/*` renamed per §1.2; MultiHook stops install |
 
 ### 16.2 Native kernel (#40, shares its batch with #29)
 

@@ -10,7 +10,7 @@ From the repository root:
 dotnet build formal/refinement/export/RefinementExport.csproj --nologo
 dotnet formal/refinement/export/bin/Debug/net10.0/RefinementExport.dll \
   --source-root "$PWD" \
-  --project "$PWD/contracts/SmartAccount.csproj" \
+  --project "$PWD/contracts/custom/SmartAccount.csproj" \
   --nef "$PWD/contracts/bin/v3/SmartAccountV3.nef" \
   --manifest "$PWD/contracts/bin/v3/SmartAccountV3.manifest.json" \
   > /tmp/sa-refinement-inventory.json

@@ -89,7 +89,7 @@
 - [ETHEREUM_AA_COMPARISON.zh-CN.md](ETHEREUM_AA_COMPARISON.zh-CN.md) · [EN](ETHEREUM_AA_COMPARISON.md) — 与以太坊 AA（4337/7702/7579/7715）的对齐点与刻意分歧
 - [FRONTEND_DEPENDENCY_SECURITY.zh-CN.md](FRONTEND_DEPENDENCY_SECURITY.zh-CN.md) · [EN](FRONTEND_DEPENDENCY_SECURITY.md) — 前端依赖的暴露面
 - [PLUGIN_DEVELOPER_GUIDE.zh-CN.md](PLUGIN_DEVELOPER_GUIDE.zh-CN.md) · [EN](PLUGIN_DEVELOPER_GUIDE.md) — 受支持的验证器 / 钩子插件、生命周期与清理
-- [contracts/templates/](../contracts/templates/) — 最小验证器 / 钩子起点（目录内有 `README.md`）
+- [contracts/plugins/templates/](../contracts/plugins/templates/) — 最小验证器 / 钩子起点（目录内有 `README.md`）
 - [proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.zh-CN.md](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.zh-CN.md) · [EN](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md) — NeoVM / DevPack 验证器预算扩展
 - [proposals/nep-smartaccount-entry-verifier.mediawiki](proposals/nep-smartaccount-entry-verifier.mediawiki) — 入口验证器的 NEP 草案
 

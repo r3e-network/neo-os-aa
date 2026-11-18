@@ -23,9 +23,9 @@ if [[ "${1:-}" == "--platform" ]]; then
   trap 'rm -rf "$profile_dir"' EXIT
   mkdir -p "$profile_dir/contracts"
   cp "$ROOT_DIR/Directory.Build.props" "$ROOT_DIR/nuget.config" "$profile_dir/"
-  cp "$ROOT_DIR/contracts/SmartAccount.csproj" "$ROOT_DIR/contracts/packages.lock.json" \
+  cp "$ROOT_DIR/contracts/custom/SmartAccount.csproj" "$ROOT_DIR/contracts/custom/packages.lock.json" \
     "$profile_dir/contracts/"
-  for source in "$ROOT_DIR"/contracts/*.cs; do
+  for source in "$ROOT_DIR"/contracts/custom/*.cs; do
     { printf '#define PLATFORM\n'; cat "$source"; } \
       > "$profile_dir/contracts/$(basename "$source")"
   done
@@ -35,31 +35,36 @@ if [[ "${1:-}" == "--platform" ]]; then
 fi
 
 echo "Cleaning stale build intermediates..."
-find "$ROOT_DIR/contracts" -type d -name obj -prune -exec rm -rf {} +
+find "$ROOT_DIR/contracts/custom" "$ROOT_DIR/contracts/plugins" "$ROOT_DIR/tests/mocks" \
+  -type d -name obj -prune -exec rm -rf {} +
 
+# Every project writes into contracts/bin/v3 whatever directory it lives in, so the artifact
+# layout the tests, the SDK and the deploy scripts read does not follow the source layout.
 echo "Compiling SmartAccount V3 Core..."
-"$NCCS_BIN" SmartAccount.csproj -o bin/v3
+pushd custom >/dev/null
+"$NCCS_BIN" SmartAccount.csproj -o ../bin/v3
+popd >/dev/null
 
 echo "Compiling Verifiers..."
-pushd verifiers >/dev/null
-"$NCCS_BIN" ./Web3AuthVerifier.csproj -o ../bin/v3/verifiers
-"$NCCS_BIN" ./TEEVerifier.csproj -o ../bin/v3/verifiers
-"$NCCS_BIN" ./SessionKeyVerifier.csproj -o ../bin/v3/verifiers
-"$NCCS_BIN" ./WebAuthnVerifier.csproj -o ../bin/v3/verifiers
-"$NCCS_BIN" ./ZKEmailVerifier.csproj -o ../bin/v3/verifiers
-"$NCCS_BIN" ./ZkLoginVerifier.csproj -o ../bin/v3/verifiers
-"$NCCS_BIN" ./MultiSigVerifier.csproj -o ../bin/v3/verifiers
-"$NCCS_BIN" ./SubscriptionVerifier.csproj -o ../bin/v3/verifiers
-"$NCCS_BIN" ./NeoNativeVerifier.csproj -o ../bin/v3/verifiers
+pushd plugins/verifiers >/dev/null
+"$NCCS_BIN" ./Web3AuthVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./TEEVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./SessionKeyVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./WebAuthnVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./ZKEmailVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./ZkLoginVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./MultiSigVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./SubscriptionVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./NeoNativeVerifier.csproj -o ../../bin/v3/verifiers
 popd >/dev/null
 
 echo "Compiling Hooks..."
-pushd hooks >/dev/null
-"$NCCS_BIN" ./DailyLimitHook.csproj -o ../bin/v3/hooks
-"$NCCS_BIN" ./NeoDIDCredentialHook.csproj -o ../bin/v3/hooks
-"$NCCS_BIN" ./WhitelistHook.csproj -o ../bin/v3/hooks
-"$NCCS_BIN" ./MultiHook.csproj -o ../bin/v3/hooks
-"$NCCS_BIN" ./TokenRestrictedHook.csproj -o ../bin/v3/hooks
+pushd plugins/hooks >/dev/null
+"$NCCS_BIN" ./DailyLimitHook.csproj -o ../../bin/v3/hooks
+"$NCCS_BIN" ./NeoDIDCredentialHook.csproj -o ../../bin/v3/hooks
+"$NCCS_BIN" ./WhitelistHook.csproj -o ../../bin/v3/hooks
+"$NCCS_BIN" ./MultiHook.csproj -o ../../bin/v3/hooks
+"$NCCS_BIN" ./TokenRestrictedHook.csproj -o ../../bin/v3/hooks
 popd >/dev/null
 
 # Test-support mocks. The contract test suite deploys all seven from bin/v3
@@ -73,40 +78,41 @@ popd >/dev/null
 # for compatibility with older runbooks but no longer changes the output.
 # Phase 1b: PlatformRegistrarMock was removed — the registrar suites now deploy the
 # real SAPlatformRegistrar service contract built below.
+# The mock sources live with the tests (tests/mocks), not under contracts/.
 echo "Compiling test-support mocks..."
-pushd mocks >/dev/null
-"$NCCS_BIN" ./MockVerifierCore.csproj -o ../bin/v3
-"$NCCS_BIN" ./MockTransferTarget.csproj -o ../bin/v3
-"$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../bin/v3
-"$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../bin/v3
-"$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../bin/v3
-"$NCCS_BIN" ./PolicyExecutionProbe.csproj -o ../bin/v3
+pushd "$ROOT_DIR/tests/mocks" >/dev/null
+"$NCCS_BIN" ./MockVerifierCore.csproj -o ../../contracts/bin/v3
+"$NCCS_BIN" ./MockTransferTarget.csproj -o ../../contracts/bin/v3
+"$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../../contracts/bin/v3
+"$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../../contracts/bin/v3
+"$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../../contracts/bin/v3
+"$NCCS_BIN" ./PolicyExecutionProbe.csproj -o ../../contracts/bin/v3
 popd >/dev/null
 
 echo "Compiling Market Contracts..."
-pushd market >/dev/null
-"$NCCS_BIN" ./SAAddressMarket.csproj -o ../bin/v3
+pushd custom/market >/dev/null
+"$NCCS_BIN" ./SAAddressMarket.csproj -o ../../bin/v3
 popd >/dev/null
 
 # Phase 1b: the paymaster service contract settles sponsored reimbursements and is
 # deployed by the runtime test suite from bin/v3 (SAPaymaster.nef), so it is built
 # alongside the other service contracts instead of relying on a manual nccs run.
 echo "Compiling Paymaster Contracts..."
-pushd paymaster >/dev/null
-"$NCCS_BIN" ./Paymaster.csproj -o ../bin/v3
+pushd custom/paymaster >/dev/null
+"$NCCS_BIN" ./Paymaster.csproj -o ../../bin/v3
 popd >/dev/null
 
 # Phase 1b: the platform registrar service owns pending platform-account owner
 # rotations and is deployed by the runtime test suite from bin/v3
 # (SAPlatformRegistrar.nef) with the core hash as deploy data.
 echo "Compiling Registrar Contracts..."
-pushd registrar >/dev/null
-"$NCCS_BIN" ./PlatformRegistrar.csproj -o ../bin/v3
+pushd custom/registrar >/dev/null
+"$NCCS_BIN" ./PlatformRegistrar.csproj -o ../../bin/v3
 popd >/dev/null
 
 echo "Compiling Recovery Contracts..."
-pushd recovery >/dev/null
-"$NCCS_BIN" ./MorpheusSocialRecoveryVerifier.csproj -o ../bin/v3
+pushd plugins/recovery >/dev/null
+"$NCCS_BIN" ./MorpheusSocialRecoveryVerifier.csproj -o ../../bin/v3
 popd >/dev/null
 
 echo "Compiling the private PLATFORM core into its separate artifact directory..."

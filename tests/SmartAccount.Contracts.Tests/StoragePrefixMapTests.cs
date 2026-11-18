@@ -39,7 +39,7 @@ public class StoragePrefixMapTests
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    private static readonly string ContractsDir = Path.Combine(RepoRoot, "contracts");
+    private static readonly string CoreDir = Path.Combine(RepoRoot, "contracts", "custom");
 
     /// <summary>Every partial-class file of SmartAccount that may declare storage prefixes.</summary>
     private static readonly string[] WalletPartials =
@@ -74,7 +74,7 @@ public class StoragePrefixMapTests
 
     private sealed record PrefixDecl(string Name, byte Value, string Partial);
 
-    private static string ReadPartial(string fileName) => File.ReadAllText(Path.Combine(ContractsDir, fileName));
+    private static string ReadPartial(string fileName) => File.ReadAllText(Path.Combine(CoreDir, fileName));
 
     private static string ReadAllPartials() => string.Join("\n\n", WalletPartials.Select(ReadPartial));
 

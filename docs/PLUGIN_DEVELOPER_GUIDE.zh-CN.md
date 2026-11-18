@@ -17,8 +17,8 @@
 最快的正确路径是复制一个模板，而不是从空文件开始：
 
 ```text
-contracts/templates/verifier/   minimal verifier (single-key secp256r1 authorization)
-contracts/templates/hook/       minimal hook (fail-closed per-account target gate)
+contracts/plugins/templates/verifier/   minimal verifier (single-key secp256r1 authorization)
+contracts/plugins/templates/hook/       minimal hook (fail-closed per-account target gate)
 ```
 
 每个模板都针对随附插件所用的同一共享层编译
@@ -26,7 +26,7 @@ contracts/templates/hook/       minimal hook (fail-closed per-account target gat
 hook 用 `HookAuthority`），暴露核心绑定期门禁所要求的精确 ABI，
 并接好带时间锁的治理轨道（自升级、admin 轮换、核心重指向）。复制目录、重命名类与
 `DisplayName`、替换被标记的策略方法，然后编译。分步演练与五个容易踩坑的规则见
-[`contracts/templates/README.md`](../contracts/templates/README.md)。
+[`contracts/plugins/templates/README.md`](../contracts/plugins/templates/README.md)。
 
 `node scripts/check_plugin_templates.mjs` 会重新编译两个模板，并断言
 其 manifest 仍满足绑定 ABI；仓库验证门禁在每次合约构建时运行它，
@@ -562,15 +562,15 @@ public static void SetPublicKey(UInt160 accountId, ByteString pubKey)
 - **安全模型：** `docs/SECURITY_MODEL.md`
 - **以太坊对比：** `docs/ETHEREUM_AA_COMPARISON.md`
 - **协议覆盖：** `docs/PROTOCOL_COMPLETENESS_AUDIT.md`
-- **核心合约：** `contracts/SmartAccount.cs`
+- **核心合约：** `contracts/custom/SmartAccount.cs`
 - **Verifier 示例：**
-  - `contracts/verifiers/Web3AuthVerifier.cs`
-  - `contracts/verifiers/WebAuthnVerifier.cs`
-  - `contracts/verifiers/SessionKeyVerifier.cs`
+  - `contracts/plugins/verifiers/Web3AuthVerifier.cs`
+  - `contracts/plugins/verifiers/WebAuthnVerifier.cs`
+  - `contracts/plugins/verifiers/SessionKeyVerifier.cs`
 - **Hook 示例：**
-  - `contracts/hooks/WhitelistHook.cs`
-  - `contracts/hooks/DailyLimitHook.cs`
-  - `contracts/hooks/MultiHook.cs`
+  - `contracts/plugins/hooks/WhitelistHook.cs`
+  - `contracts/plugins/hooks/DailyLimitHook.cs`
+  - `contracts/plugins/hooks/MultiHook.cs`
 
 ---
 

@@ -65,7 +65,7 @@ def check_module_build(compiled, artifacts, contracts):
     require(compiled.get("status") == "PASS" and compiled.get("reproducible") is True and len(compiled.get("builds", [])) == 2,
             "A successful native two-build receipt is required")
     require(compiled["builds"][0], "Native artifact certificate is empty")
-    profiles = validate_descriptor(json.loads((contracts / "native/profiles.json").read_text()))
+    profiles = validate_descriptor(json.loads((contracts / "plugins/native-profile/profiles.json").read_text()))
     files = {name + suffix for name in profiles for suffix in (".nef", ".manifest.json")}
     files.add("native-profile-packaging.json")
     require(set(compiled["builds"][0]) == files and compiled["builds"][0] == compiled["builds"][1], "Native artifact roster or replay mismatch")
@@ -84,7 +84,7 @@ def check_module_build(compiled, artifacts, contracts):
     require(packaging.get("profileParametersSha256") == sha256(parameters) and
             packaging.get("profileDigest") == parameter_digest,
             "Native packaged profile parameters or digest are stale")
-    require(packaging.get("descriptorSha256") == sha256(contracts / "native/profiles.json") and
+    require(packaging.get("descriptorSha256") == sha256(contracts / "plugins/native-profile/profiles.json") and
             packaging.get("recipeSha256") == compiled["packagingRecipeSha256"],
             "Native packaging descriptor or recipe changed")
     require(type(packaging.get("artifacts")) is dict and set(packaging["artifacts"]) == set(profiles),

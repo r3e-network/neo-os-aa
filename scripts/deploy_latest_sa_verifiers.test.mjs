@@ -53,7 +53,7 @@ test('verifier release loads the current public build instead of historical fixt
 
 test('recovery manifest, runtime version and deployment selector agree', () => {
   const source = fs.readFileSync(
-    'contracts/recovery/MorpheusSocialRecoveryVerifier.Fixed.cs',
+    'contracts/plugins/recovery/MorpheusSocialRecoveryVerifier.Fixed.cs',
     'utf8',
   );
   const manifestVersion = source.match(/ManifestExtra\("Version", "([^"]+)"\)/)?.[1];

@@ -89,7 +89,7 @@ Huyao 之前的兼容实现不强制这些边界，不得被视为
 
 ### 1. 插件生命周期（安装/更新/移除）✓
 
-**实现位置：** `contracts/SmartAccount.Accounts.cs`
+**实现位置：** `contracts/custom/SmartAccount.Accounts.cs`
 
 **特性：**
 - **安装：** `registerAccount()` 设置初始 verifier 与 hook
@@ -112,7 +112,7 @@ Huyao 之前的兼容实现不强制这些边界，不得被视为
 
 ### 2. Neo 二维 Nonce 管理（191 位通道 + 64 位序列）✓
 
-**实现位置：** `contracts/SmartAccount.Execution.cs`（`IsNonceAcceptable` / `ConsumeNonce`）
+**实现位置：** `contracts/custom/SmartAccount.Execution.cs`（`IsNonceAcceptable` / `ConsumeNonce`）
 
 **规范 nonce 域：**
 ```csharp
@@ -145,7 +145,7 @@ BigInteger sequence = nonce & 0xFFFFFFFFFFFFFFFF;
 
 ### 3. 逃生机制（timelock、冷却、最终化）✓
 
-**实现位置：** `contracts/SmartAccount.Escape.cs`
+**实现位置：** `contracts/custom/SmartAccount.Escape.cs`
 
 **流程：**
 ```mermaid
@@ -159,7 +159,7 @@ stateDiagram-v2
 
 已部署的名称携带账户 id：`initiateEscape(accountId)` 与
 `finalizeEscape(accountId, newVerifier)` 是
-`contracts/build/SmartAccountV3.manifest.json` 中的两个 ABI 方法（`contracts/SmartAccount.Escape.cs`）。
+`contracts/build/SmartAccountV3.manifest.json` 中的两个 ABI 方法（`contracts/custom/SmartAccount.Escape.cs`）。
 
 **特性：**
 - **时间锁：** 可配置 7-90 天（604,800-7,776,000 秒）
@@ -212,7 +212,7 @@ stateDiagram-v2
 
 ### 5. 账户状态管理（原子）✓
 
-**实现位置：** `contracts/SmartAccount.State.cs`
+**实现位置：** `contracts/custom/SmartAccount.State.cs`
 
 **状态结构：**
 ```csharp
@@ -252,7 +252,7 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 
 ### 6. 市场托管（取消、过期、争议）✓
 
-**实现位置：** `contracts/SmartAccount.MarketEscrow.cs`
+**实现位置：** `contracts/custom/SmartAccount.MarketEscrow.cs`
 
 **特性：**
 - **进入：** `enterMarketEscrow(accountId, marketContract, listingId)`
@@ -268,7 +268,7 @@ ExecutionEngine.Assert(!isMarketEscrowActive(accountId), "Account locked in mark
 ```
 该调用按部署 ABI 的拼写书写（`isMarketEscrowActive`，位于
 `contracts/build/SmartAccountV3.manifest.json`）。C# 源码定义时首字母大写
-（IsMarketEscrowActive, contracts/SmartAccount.State.cs:143）；那种写法命名的是
+（IsMarketEscrowActive, contracts/custom/SmartAccount.State.cs:143）；那种写法命名的是
 部署并不导出的方法，因此这里没有按代码格式化。
 - 在挂单激活期间阻止并发操作
 
@@ -290,7 +290,7 @@ ExecutionEngine.Assert(!isMarketEscrowActive(accountId), "Account locked in mark
 
 ### 7. 校验脚本集成 ✓
 
-**实现位置：** `contracts/verifiers/` 中的多个 verifier 插件
+**实现位置：** `contracts/plugins/verifiers/` 中的多个 verifier 插件
 
 **插件接口：**
 ```csharp
@@ -335,7 +335,7 @@ ClearVerifyContext(accountId);
 
 ### 8. Paymaster/赞助流程 ✓
 
-**实现位置：** `contracts/SmartAccount.Paymaster.cs`、`contracts/paymaster/Paymaster.cs`，以及可选的 Morpheus 授权服务
+**实现位置：** `contracts/custom/SmartAccount.Paymaster.cs`、`contracts/custom/paymaster/Paymaster.cs`，以及可选的 Morpheus 授权服务
 
 中继支付外层 N3 交易的系统费用与网络费用。对于链上赞助路径，核心检查所选 paymaster
 是否绑定到它，执行操作，然后在同一交易中调用 `settleReimbursement`。

@@ -33,7 +33,7 @@ public class Fix_DailyLimitHook_Tests
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
     private static string ReadHook(string fileName) =>
-        File.ReadAllText(Path.Combine(RepoRoot, "contracts", "hooks", fileName));
+        File.ReadAllText(Path.Combine(RepoRoot, "contracts", "plugins", "hooks", fileName));
 
     /// <summary>
     /// PreExecute must snapshot the balance of EVERY configured-limit token by iterating the

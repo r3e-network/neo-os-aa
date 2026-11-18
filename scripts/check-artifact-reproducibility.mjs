@@ -35,6 +35,8 @@ const isSkippedDirectory = (source) => SKIP_DIRS.test(source.replaceAll(path.sep
 export const RESTORE_POLICY_FILES = ["Directory.Build.props", "nuget.config"];
 export const ARTIFACT_PROFILES = ["v3", "platform"];
 const RECIPE_SUPPORT_FILES = ["scripts/dotnet_env.sh", "scripts/check_neo_platform_packages.mjs"];
+// Every tree compile.sh reads: the contracts, and the mock contracts that live with the tests.
+export const SOURCE_ROOTS = ["contracts", "tests/mocks"];
 
 /** Recursively lists nef/manifest files relative to a directory.
  * Keys are normalized to '/' so the certificate is identical on Windows and Linux
@@ -83,7 +85,7 @@ export function sourceSnapshot(dir, root = dir) {
 /** Hash the copied sources and restore inputs, including native module sources.
  * This inventory records their bytes; public/platform replay does not compile native modules. */
 export function buildInputSnapshot(root = repoRoot) {
-  const inputs = sourceSnapshot(path.join(root, "contracts"), root);
+  const inputs = Object.assign({}, ...SOURCE_ROOTS.map((dir) => sourceSnapshot(path.join(root, dir), root)));
   for (const file of [...RESTORE_POLICY_FILES, ...RECIPE_SUPPORT_FILES]) {
     inputs[file] = sha256Text(path.join(root, file));
   }
@@ -165,10 +167,12 @@ export function compareProfiles(expectedBin, actualBin) {
 /** Copies the sources, lock files and restore policy that determine the artifacts into a new scratch directory. */
 export function prepareScratch() {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sa-repro-"));
-  fs.cpSync(path.join(repoRoot, "contracts"), path.join(scratch, "contracts"), {
-    recursive: true,
-    filter: (source) => !isSkippedDirectory(source),
-  });
+  for (const dir of SOURCE_ROOTS) {
+    fs.cpSync(path.join(repoRoot, dir), path.join(scratch, dir), {
+      recursive: true,
+      filter: (source) => !isSkippedDirectory(source),
+    });
+  }
   for (const file of RESTORE_POLICY_FILES) fs.copyFileSync(path.join(repoRoot, file), path.join(scratch, file));
   fs.mkdirSync(path.join(scratch, "scripts"), { recursive: true });
   for (const file of ["dotnet_env.sh", "check_neo_platform_packages.mjs"]) {

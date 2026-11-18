@@ -32,13 +32,13 @@ public class SourceInvariantTests
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    private static readonly string ContractsDir = Path.Combine(RepoRoot, "contracts");
+    private static readonly string CoreDir = Path.Combine(RepoRoot, "contracts", "custom");
 
     // Source pins use "\n" line endings; the repository may be checked out with
     // CRLF on Windows, so normalize every read before pattern matching.
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n").Replace("\r", "\n");
 
-    private static string Read(string fileName) => NormalizeLineEndings(File.ReadAllText(Path.Combine(ContractsDir, fileName)));
+    private static string Read(string fileName) => NormalizeLineEndings(File.ReadAllText(Path.Combine(CoreDir, fileName)));
     private static string ReadCombined() => string.Join("\n\n", new[]
     {
         "SmartAccount.Accounts.cs",
@@ -58,10 +58,10 @@ public class SourceInvariantTests
     }.Select(Read));
 
     private static string ReadPaymaster(string fileName) =>
-        NormalizeLineEndings(File.ReadAllText(Path.Combine(ContractsDir, "paymaster", fileName)));
+        NormalizeLineEndings(File.ReadAllText(Path.Combine(CoreDir, "paymaster", fileName)));
 
     private static string ReadHook(string fileName) =>
-        NormalizeLineEndings(File.ReadAllText(Path.Combine(ContractsDir, "hooks", fileName)));
+        NormalizeLineEndings(File.ReadAllText(Path.Combine(RepoRoot, "contracts", "plugins", "hooks", fileName)));
 
     private static string ReadRepo(params string[] relativeSegments) =>
         NormalizeLineEndings(File.ReadAllText(Path.Combine(new[] { RepoRoot }.Concat(relativeSegments).ToArray())));
@@ -731,10 +731,10 @@ public class SourceInvariantTests
     {
         var directUpdateSources = new[]
         {
-            ("contracts/SmartAccount.Admin.cs", "Runtime.CheckWitness(adminHash)"),
-            ("contracts/paymaster/Paymaster.cs", "Runtime.CheckWitness(admin)"),
-            ("contracts/market/SAAddressMarket.cs", "ValidateAdmin();"),
-            ("contracts/mocks/MockTransferTarget.cs", "ValidateAdmin();"),
+            ("contracts/custom/SmartAccount.Admin.cs", "Runtime.CheckWitness(adminHash)"),
+            ("contracts/custom/paymaster/Paymaster.cs", "Runtime.CheckWitness(admin)"),
+            ("contracts/custom/market/SAAddressMarket.cs", "ValidateAdmin();"),
+            ("tests/mocks/MockTransferTarget.cs", "ValidateAdmin();"),
         };
 
         foreach (var (path, guard) in directUpdateSources)
@@ -756,14 +756,14 @@ public class SourceInvariantTests
             StringAssert.Contains(code, "public static void Update(ByteString nef, string manifest) => HookAuthority.Update(nef, manifest);", $"{hook} delegates update");
         }
 
-        string verifierAuthority = ReadRepo("contracts", "verifiers", "VerifierAuthority.cs");
+        string verifierAuthority = ReadRepo("contracts", "plugins", "verifiers", "VerifierAuthority.cs");
         StringAssert.Contains(verifierAuthority, "internal static void Update(ByteString nef, string manifest)");
         StringAssert.Contains(verifierAuthority, "ValidateAdmin();");
         StringAssert.Contains(verifierAuthority, "ContractManagement.Update(nef, manifest)");
 
         foreach (string verifier in new[] { "MultiSigVerifier.cs", "NeoNativeVerifier.cs", "SessionKeyVerifier.cs", "SubscriptionVerifier.cs", "TEEVerifier.cs", "Web3AuthVerifier.cs", "WebAuthnVerifier.cs", "ZKEmailVerifier.cs", "ZkLoginVerifier.cs" })
         {
-            string code = ReadRepo("contracts", "verifiers", verifier);
+            string code = ReadRepo("contracts", "plugins", "verifiers", verifier);
             StringAssert.Contains(code, "public static void Update(ByteString nef, string manifest) => VerifierAuthority.Update(nef, manifest);", $"{verifier} delegates update");
         }
 
@@ -773,7 +773,7 @@ public class SourceInvariantTests
         // VerifierAuthority idiom — proposeUpdate + update/confirmUpdate behind the 7-day
         // window, and rotateAdmin/confirmAdminRotation/cancelAdminRotation in place of the
         // removed instant transferAdmin/setAdmin hand-offs.
-        string marketSource = ReadRepo("contracts", "market", "SAAddressMarket.cs");
+        string marketSource = ReadRepo("contracts", "custom", "market", "SAAddressMarket.cs");
         StringAssert.Contains(marketSource, "public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash)", "H6: market exposes proposeUpdate");
         StringAssert.Contains(marketSource, "Update timelock not expired", "H6: market update enforces the 7-day window");
         StringAssert.Contains(marketSource, "public static void RotateAdmin(UInt160 newAdmin)", "H6: market exposes timelocked rotateAdmin");
@@ -781,7 +781,7 @@ public class SourceInvariantTests
         Assert.IsFalse(marketSource.Contains("public static void SetAdmin", StringComparison.Ordinal),
             "H6: the instant setAdmin hand-off must be removed");
 
-        string recoverySource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
+        string recoverySource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
         StringAssert.Contains(recoverySource, "public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash)", "H5: recovery verifier exposes proposeUpdate");
         StringAssert.Contains(recoverySource, "Update timelock not expired", "H5: recovery update enforces the 7-day window");
         StringAssert.Contains(recoverySource, "public static void RotateAdmin(UInt160 newAdmin)", "SA-04: recovery verifier exposes timelocked rotateAdmin");
@@ -845,12 +845,12 @@ public class SourceInvariantTests
         // The fix pins the canonical SA core (contract-admin gated, initial-set-only,
         // re-pointing timelocked — mirroring the VerifierAuthority M-7 surface) and requires
         // the core's getBackupOwner registry to attest the claimed owner at setup.
-        string flowsSource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Flows.cs");
+        string flowsSource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Flows.cs");
         StringAssert.Contains(flowsSource, "saContract is not the authorized core", "SA-06: setup pins the authorized core");
         StringAssert.Contains(flowsSource, "owner does not control account", "SA-06: setup attests the registered backup owner");
         StringAssert.Contains(flowsSource, "\"getBackupOwner\"", "SA-06: ownership is attested via the core registry");
 
-        string fixedSource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
+        string fixedSource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
         StringAssert.Contains(fixedSource, "public static void SetAuthorizedCore(UInt160 coreContract)", "SA-06: admin-gated initial core bind exists");
         StringAssert.Contains(fixedSource, "core already set; use ProposeAuthorizedCore", "SA-06: instant core re-pointing is rejected");
         StringAssert.Contains(fixedSource, "public static void ProposeAuthorizedCore(UInt160 coreContract)", "SA-06: timelocked core re-pointing exists");
@@ -867,7 +867,7 @@ public class SourceInvariantTests
         // Audit fix SA-03: the wildcard ContractPermission("*", "*") is replaced by
         // five method-scoped grants covering the verified call surface — any future
         // wildcard reintroduction or dropped grant must fail here.
-        string fixedSource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
+        string fixedSource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
         Assert.IsFalse(fixedSource.Contains("ContractPermission(\"*\", \"*\")", StringComparison.Ordinal), "SA-03: no wildcard contract permission");
         StringAssert.Contains(fixedSource, "ContractPermission(\"0xfffdc93764dbaddd97c48f252a53ea4643faa3fd\", \"update\")", "SA-03: ContractManagement.update grant (timelocked self-upgrade)");
         StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"getBackupOwner\")", "SA-03: core getBackupOwner grant (SA-06 attestation)");
@@ -879,7 +879,7 @@ public class SourceInvariantTests
     [TestMethod, Timeout(120_000)]
     public void SourceInvariant_RecoveryVerifier_ImplementsGuardedV3Surface()
     {
-        string v3Source = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.V3.cs");
+        string v3Source = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.V3.cs");
         StringAssert.Contains(v3Source, "public static bool SupportsV3() => true");
         StringAssert.Contains(v3Source, "public static bool ValidateSignature(UInt160 accountId, UserOperation op)");
         StringAssert.Contains(v3Source, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
@@ -896,11 +896,11 @@ public class SourceInvariantTests
     [TestMethod, Timeout(120_000)]
     public void SourceInvariant_SignedPayloadsBindAuthorizedAaCore()
     {
-        string sharedPayload = ReadRepo("contracts", "verifiers", "VerifierPayload.cs");
+        string sharedPayload = ReadRepo("contracts", "plugins", "verifiers", "VerifierPayload.cs");
         StringAssert.Contains(sharedPayload, "VerifierAuthority.AuthorizedCore()",
             "shared verifier payload must bind the authorized SA core");
 
-        string web3Auth = ReadRepo("contracts", "verifiers", "Web3AuthVerifier.cs");
+        string web3Auth = ReadRepo("contracts", "plugins", "verifiers", "Web3AuthVerifier.cs");
         StringAssert.Contains(web3Auth, "ToBytes20Word(VerifierAuthority.AuthorizedCore())",
             "Web3Auth struct hash must bind the authorized SA core");
         StringAssert.Contains(web3Auth, "UserOperationTypeHash",
@@ -908,7 +908,7 @@ public class SourceInvariantTests
         StringAssert.Contains(web3Auth, "CryptoLib.RecoverSecp256K1(hash, signature!)",
             "Web3Auth ERC-1271 verification must consume the supplied digest directly");
 
-        string zkLogin = ReadRepo("contracts", "verifiers", "ZkLoginVerifier.cs");
+        string zkLogin = ReadRepo("contracts", "plugins", "verifiers", "ZkLoginVerifier.cs");
         StringAssert.Contains(zkLogin, "(byte[])VerifierAuthority.AuthorizedCore()",
             "ZkLogin payload must bind the authorized SA core");
     }
@@ -923,18 +923,18 @@ public class SourceInvariantTests
         // Audit low: several no-op PostExecute bodies previously had no caller guard —
         // harmless today, but a future edit could add logic to an unguarded path. The
         // estate invariant is that EVERY PostExecute validates its caller, even a no-op.
-        string neoDid = ReadRepo("contracts", "hooks", "NeoDIDCredentialHook.cs");
+        string neoDid = ReadRepo("contracts", "plugins", "hooks", "NeoDIDCredentialHook.cs");
         StringAssert.Contains(neoDid, "HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
             "NeoDIDCredentialHook.PostExecute validates its caller");
-        string whitelist = ReadRepo("contracts", "hooks", "WhitelistHook.cs");
+        string whitelist = ReadRepo("contracts", "plugins", "hooks", "WhitelistHook.cs");
         StringAssert.Contains(whitelist, "HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
             "WhitelistHook.PostExecute validates its caller");
-        string neoNative = ReadRepo("contracts", "verifiers", "NeoNativeVerifier.cs");
+        string neoNative = ReadRepo("contracts", "plugins", "verifiers", "NeoNativeVerifier.cs");
         StringAssert.Contains(neoNative, "VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
             "NeoNativeVerifier.PostExecute validates its caller");
         foreach (string verifier in new[] { "TEEVerifier.cs", "Web3AuthVerifier.cs", "WebAuthnVerifier.cs", "ZKEmailVerifier.cs", "ZkLoginVerifier.cs" })
         {
-            string source = ReadRepo("contracts", "verifiers", verifier);
+            string source = ReadRepo("contracts", "plugins", "verifiers", verifier);
             StringAssert.Contains(source, "VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
                 $"{verifier}.PostExecute validates its caller");
         }
@@ -952,7 +952,7 @@ public class SourceInvariantTests
         // 604800–7776000 seconds pinned in section 1/5 — is 7–90 days. The recovery verifier
         // must enforce the same window in Runtime.Time milliseconds (604800000–7776000000)
         // in BOTH SetupRecovery and UpdateRecoveryConfig.
-        string flowsSource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Flows.cs");
+        string flowsSource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Flows.cs");
         StringAssert.Contains(flowsSource, "MIN_TIMELOCK = 604800000", "Recovery min timelock is 7 days in ms");
         StringAssert.Contains(flowsSource, "MAX_TIMELOCK = 7776000000", "Recovery max timelock is 90 days in ms");
         Assert.AreEqual(2, CountOccurrences(flowsSource, "\"Timelock below minimum\""),

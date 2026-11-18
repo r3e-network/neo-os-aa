@@ -63,7 +63,7 @@ def build_diagnostic(compiler,cache,root):
         repository=Path(__file__).resolve().parent.parent
         for policy in ('Directory.Build.props','Directory.Packages.props','Directory.Build.targets'):
             if (repository/policy).is_file():shutil.copyfile(repository/policy,project/policy)
-        shutil.copyfile(repository/'contracts/verifiers/packages.NeoNativeVerifier.lock.json',project/'packages.lock.json')
+        shutil.copyfile(repository/'contracts/plugins/verifiers/packages.NeoNativeVerifier.lock.json',project/'packages.lock.json')
         config=ET.Element('configuration');feeds=ET.SubElement(config,'packageSources');ET.SubElement(feeds,'clear')
         ET.SubElement(feeds,'add',key='offline',value=str(cache));ET.ElementTree(config).write(project/'NuGet.Config')
         lock_digest=sha256(project/'packages.lock.json')
@@ -101,7 +101,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,compil
             repository=Path(__file__).resolve().parent.parent
             framework_version=ET.parse(repository/'Directory.Build.props').find('.//NeoSmartContractFrameworkVersion').text
             report['diagnosticBuild']={'builds':builds,'compilerSha256':sha256(compiler),
-                'dependencyPolicySha256':sha256(repository/'Directory.Build.props'),'packageLockSha256':sha256(repository/'contracts/verifiers/packages.NeoNativeVerifier.lock.json'),
+                'dependencyPolicySha256':sha256(repository/'Directory.Build.props'),'packageLockSha256':sha256(repository/'contracts/plugins/verifiers/packages.NeoNativeVerifier.lock.json'),
                 'frameworkArchiveSha256':sha256(cache/'neo.smartcontract.framework'/framework_version/('neo.smartcontract.framework.'+framework_version+'.nupkg'))}
             require(report['diagnosticBuild']['compilerSha256']==compiled['compilerLauncherSha256'] and
                     report['diagnosticBuild']['frameworkArchiveSha256']==compiled['frameworkArchiveSha256'],'Diagnostic toolchain mismatch')

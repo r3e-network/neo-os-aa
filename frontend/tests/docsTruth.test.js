@@ -162,8 +162,8 @@ const NO_SNAPSHOT_AUDIT_DOCS = [];
 // The native ABI 2 profile is a separate runtime with its own documents (DS-CU-163 section 2.2),
 // and NativeSmartAccountClient declares the exact method set it validates a deployment against.
 // Only these documents are read against that artefact; a name that merely coincides with a native
-// method (callVerifierChild is also defined in contracts/SmartAccount.VerifierChildren.cs and
-// absent from the deployed manifest) is still judged by the deployed ABI everywhere else.
+// method (callVerifierChild was also defined in the since-deleted SmartAccount.VerifierChildren.cs
+// and absent from the deployed manifest) is still judged by the deployed ABI everywhere else.
 const NATIVE_PROFILE_DOCS = ['docs/NATIVE_SDK.md', 'docs/NATIVE_ACCOUNT_WORKSPACE.md'];
 const nativeAbiNames = new Set(Object.keys(NATIVE_REQUIRED_ABI));
 const NO_NAMES = new Set();
@@ -196,12 +196,12 @@ const V2_DEBT = {
   },
   'frontend/src/assets/docs/custom-verifiers.md': {
     names: ['spelling:Admin->admin'],
-    reason: 'The sentence binds a custom verifier to an account "by an existing Admin of the account": the role is the ABI method the paymaster, the market and the mock target export as admin (contracts/paymaster/Paymaster.cs:93, contracts/market/SAAddressMarket.cs:83, contracts/mocks/MockTransferTarget.cs:36, and the internal HookAuthority.Admin at contracts/hooks/HookAuthority.cs:63), so the C# spelling is a claim about a name the deployment spells admin and it stays recorded (DS-CU-212 section 4).',
+    reason: 'The sentence binds a custom verifier to an account "by an existing Admin of the account": the role is the ABI method the paymaster, the market and the mock target export as admin (contracts/custom/paymaster/Paymaster.cs:93, contracts/custom/market/SAAddressMarket.cs:83, tests/mocks/MockTransferTarget.cs:36, and the internal HookAuthority.Admin at contracts/plugins/hooks/HookAuthority.cs:63), so the C# spelling is a claim about a name the deployment spells admin and it stays recorded (DS-CU-212 section 4).',
   },
 };
 
 // Framework and service calls that share a name with a contract method but are not one.
-// ContractManagement is the Neo native contract: contracts/SmartAccount.Accounts.cs:404 calls
+// ContractManagement is the Neo native contract: contracts/custom/SmartAccount.Accounts.cs:404 calls
 // ContractManagement.GetContract and tests/SmartAccount.Contracts.Tests/*.cs invoke the native
 // "getContract" by string, so a document that reads a NEF back that way names no SA entrypoint.
 // CallFlags is the SmartContract.Framework enum used as the third argument of Contract.Call; it is a
@@ -209,7 +209,7 @@ const V2_DEBT = {
 // entry by entry (DS-CU-210 section 3).
 const FRAMEWORK_RECEIVERS = new Set(['Runtime', 'Contract', 'ContractManagement', 'System', 'CryptoLib', 'Storage', 'Helper', 'ExecutionEngine', 'Neo', 'CallFlags']);
 // Inline code that looks like an entrypoint but is a parameter, a field or a service name.
-// callHash is a field of the pending-module-call record (contracts/SmartAccount.Models.cs:65),
+// callHash is a field of the pending-module-call record (contracts/custom/SmartAccount.Models.cs:65),
 // not a callable; DS-CU-202 section 4.
 const NON_CALLABLES = new Set(['create_sa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash']);
 
@@ -265,17 +265,19 @@ const skipped = (entry) => SKIP_DIRS.has(entry.name) || (entry.isDirectory() && 
     else tracked.push(relative.split(path.sep).join('/'));
   }
 })('.');
+const MOCK_CONTRACTS = 'tests/mocks/';
 for (const file of tracked) {
   if (!/\.(cs|js|mjs|ts|py|sql|json)$/.test(file)) continue;
-  // Test drivers are not the product surface, and docs are prose about it.
-  if (file.startsWith('docs/') || file.startsWith('frontend/tests/') || file.startsWith('tests/') || file.startsWith('sdk/js/tests/')) continue;
+  // Test drivers are not the product surface, and docs are prose about it. The mock contracts in
+  // tests/mocks are the exception: compile.sh builds them like any other contract.
+  if (file.startsWith('docs/') || file.startsWith('frontend/tests/') || (file.startsWith('tests/') && !file.startsWith(MOCK_CONTRACTS)) || file.startsWith('sdk/js/tests/')) continue;
   const text = read(file);
   // A call is a call whether or not it is optional-chained: frontend/src/features/native/
   // nativeWorkspace.js calls `provider.getNetworks?.()`.
   for (const match of text.matchAll(/([A-Za-z_]\w*)\s*\??\.?\s*\(/g)) definedNames.add(match[1]);
   for (const match of text.matchAll(/DisplayName\("([^"]+)"\)/g)) definedNames.add(match[1]);
   // A contract may only call what its permissions name, and the pinned native authority calls the
-  // service by string (contracts/native/NativeAuthority.cs). Both spellings are live names, and the
+  // service by string (contracts/plugins/native-profile/NativeAuthority.cs). Both spellings are live names, and the
   // scanner above cannot see them because the method is a string literal, not a call.
   for (const line of text.split('\n')) {
     if (!/ContractPermission|Contract\.Call/.test(line)) continue;
@@ -289,7 +291,10 @@ for (const file of tracked) {
 // (DS-CU-211, DEC-DS-5) instead of inferring it from the shape of the name.
 const sourceDefinitions = new Set();
 for (const file of tracked) {
-  if (!file.startsWith('contracts/') || !file.endsWith('.cs')) continue;
+  if (!(file.startsWith('contracts/') || file.startsWith(MOCK_CONTRACTS)) || !file.endsWith('.cs')) continue;
+  // contracts/native is the consensus-native service: the node's compiler builds it, not nccs, so
+  // it exports nothing under the spelling rule below and its members are not manifest names.
+  if (file.startsWith('contracts/native/')) continue;
   for (const match of read(file).matchAll(/^\s*(?:\[[^\]]*\]\s*)*(?:public|private|protected|internal)\s+(?:static\s+)?(?:async\s+)?[\w<>[\],.?\s]+?\s+([A-Za-z_]\w*)\s*\(/gm)) {
     sourceDefinitions.add(match[1]);
   }
@@ -612,7 +617,7 @@ const HISTORICAL_SNIPPET_SCOPE = /retained as historical security context|as a d
 //     previous rule asked `deployedAbiLower.has(name.toLowerCase())` and therefore judged
 //     `CanExecuteHook` live while every manifest exports `canExecuteHook`;
 //   * a C# definition no manifest exports is live as source. `CallVerifierChild`
-//     (contracts/SmartAccount.VerifierChildren.cs) is the recorded example: the pinned build
+//     (SmartAccount.VerifierChildren.cs, deleted by the core split) was the recorded example: the pinned build
 //     does not export it (DS-CU-202 finding F1), and a document that names it names real code.
 //
 // The two halves are why the rule keys on the artifact rather than on letter case: refusing every
@@ -1208,9 +1213,13 @@ function digestReportInventoryAllowances() {
   return [
     // Re-triaged when the AA -> SA rename changed the schema string to sa-formal-source-lock/v2 and
     // renamed coq/SmartAccountAA.v to coq/SmartAccountSA.v: same 349 digest lines, new bytes.
+    // Re-triaged again when the contracts moved under contracts/{custom,plugins}: 45 keys renamed,
+    // every digest value unchanged. The same change dropped the two pins of the deleted
+    // SmartAccount.HookChildren.cs / SmartAccount.VerifierChildren.cs partials and re-pinned
+    // scripts/build_native_modules.py for its path rewrite: 347 digest lines.
     entry('sa-formal-source-lock-content-digests',
-      'formal/source-lock.json', 349,
-      '347f3d49316749473cf391619919c56dd3a8e7f3f705aae33e375921bd232306'),
+      'formal/source-lock.json', 347,
+      'f6cc642dae05a68511be2e719a56500b32d90080daf5b6ea04ec110895f817ac'),
     entry('sa-artifact-reproducibility-20261025-content-digests',
       'docs/reports/sa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
@@ -1894,7 +1903,7 @@ test('CU-163: VULN-002 records local evidence without claiming public deployment
 // The reviewed path is the Huyao implementation with r/s bounds; the pre-Huyao compatibility
 // implementation remains outside the deployment profile even though it exposes the same method.
 test('CU-163: Web3Auth ERC-1271 documents its Huyao deployment requirement', () => {
-  const web3auth = read('contracts/verifiers/Web3AuthVerifier.cs');
+  const web3auth = read('contracts/plugins/verifiers/Web3AuthVerifier.cs');
   assert.match(web3auth, /CryptoLib\.RecoverSecp256K1\(hash, signature!\)/,
     'the message adapter no longer consumes the supplied digest directly');
 
@@ -2703,8 +2712,8 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   //    build manifest: the members that artifact exported left the divergent class together with
   //    the artifact that carried them, which is exactly the move a derivation exists to record.
   //    It moved 194 -> 191 when the AA -> SA rename spelled SetAllowedAA / IsAllowedAA / GetAAContract
-  //    as SetAllowedSA / IsAllowedSA / GetSAContract in contracts/market/SAAddressMarket.cs and
-  //    contracts/recovery/MorpheusSocialRecoveryVerifier.Queries.cs. The pinned contracts/build
+  //    as SetAllowedSA / IsAllowedSA / GetSAContract in contracts/custom/market/SAAddressMarket.cs and
+  //    contracts/plugins/recovery/MorpheusSocialRecoveryVerifier.Queries.cs. The pinned contracts/build
   //    manifests still export the AA spelling, so the three renamed members have no camelCase export
   //    to diverge from until the artifacts are regenerated: the class measures the build it is given,
   //    and this is the build on disk.

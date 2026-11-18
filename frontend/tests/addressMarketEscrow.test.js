@@ -9,7 +9,7 @@ const marketDocPath = path.resolve('src/assets/docs/address-market.md');
 const patternInputPath = path.resolve('src/features/market/components/PatternInputSection.vue');
 const i18nEnPath = path.resolve('src/i18n/index.js');
 const i18nZhPath = path.resolve('src/i18n/zh-CN.js');
-const marketContractPath = path.resolve('..', 'contracts', 'market', 'SAAddressMarket.cs');
+const marketContractPath = path.resolve('..', 'contracts', 'custom', 'market', 'SAAddressMarket.cs');
 
 // Markup from a parent SFC was extracted into colocated child components living
 // in a sibling folder named after the parent (e.g. `AddressMarketView.vue` ->
@@ -31,7 +31,7 @@ function readComponentTree(parentVuePath) {
 }
 
 function readSmartAccountSource() {
-  const contractsDir = path.resolve('..', 'contracts');
+  const contractsDir = path.resolve('..', 'contracts', 'custom');
   const files = fs.readdirSync(contractsDir)
     .filter((name) => name.startsWith('SmartAccount') && name.endsWith('.cs'))
     .sort();

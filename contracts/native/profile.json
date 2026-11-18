@@ -1,0 +1,76 @@
+{
+  "id": "native-smart-account",
+  "version": 1,
+  "kind": "native-protocol-submission",
+  "status": "draft-unactivated",
+  "implementationVerified": false,
+  "description": "The native SmartAccount ABI 2 profile, modules, SDK and UI prepared for standard submission.",
+  "canonicalSourceRoots": [
+    "contracts/native",
+    "contracts/plugins/native-profile",
+    "frontend/src/features/native",
+    "frontend/src/shared/nativeSmartAccount.mjs",
+    "frontend/src/shared/nativeSmartAccountClient.mjs",
+    "frontend/src/shared/nativeTransactionArtifact.mjs",
+    "frontend/src/shared/nativeWalletWitness.mjs",
+    "sdk/js/src/native",
+    "shared/nativeSmartAccount.mjs",
+    "shared/nativeSmartAccountClient.mjs",
+    "shared/nativeTransactionArtifact.mjs",
+    "shared/nativeWalletWitness.mjs"
+  ],
+  "excludedSourceRoots": [
+    "contracts/custom/SmartAccount.cs",
+    "contracts/plugins/verifiers",
+    "contracts/plugins/hooks",
+    "contracts/custom/paymaster",
+    "contracts/custom/market",
+    "frontend/src/features/studio",
+    "frontend/src/features/operations",
+    "sdk/js/src/v3"
+  ],
+  "compatibilityPaths": [
+    "contracts/native",
+    "contracts/plugins/native-profile",
+    "frontend/src/features/native",
+    "frontend/src/shared",
+    "sdk/js/src/native",
+    "shared"
+  ],
+  "entrypoints": [
+    "contracts/native/Neo.csproj",
+    "contracts/plugins/native-profile/profiles.json",
+    "frontend/src/features/native/NativeAccountWorkspace.vue",
+    "sdk/js/src/native/client.js",
+    "shared/nativeSmartAccountClient.mjs"
+  ],
+  "artifactRoots": [
+    "contracts/build",
+    "docs/reports"
+  ],
+  "verification": {
+    "profile": "native",
+    "commands": [
+      "./scripts/verify_repo.sh --profile native --contracts-only",
+      "cd frontend && npm run test:native:browser"
+    ]
+  },
+  "externalBoundaries": [
+    "neo-project/neo: the native VM enforcement and the generated SmartAccount copies carried by the core checkout are maintained outside this repository; contracts/native/SmartAccount/ here is the only editable true source, and the SHA-pinned core is kept in sync by scripts/sync_native_smartaccount.py --check in the native CI lane",
+    "neo-project/proposals#243: ABI 2 proposal and review acceptance are external protocol gates",
+    "Hardfork activation, node integration, formal refinement and public-network readback remain required before native status can change"
+  ],
+  "openGates": [
+    "CURRENT-PROFILE-ARTIFACT-READBACK",
+    "EXTERNAL-PROTOCOL-ACCEPTANCE",
+    "FORMAL-NEOVM-COMPILER-REFINEMENT",
+    "FORMAL-NATIVE-FEE-RESOURCE-REFINEMENT",
+    "PUBLIC-HARDFORK-ACTIVATION"
+  ],
+  "localAuthorityAdmission": {
+    "status": "implemented-in-local-candidate",
+    "scope": "Registered native proxies are rejected in current and pending authority slots; each newly introduced nonzero address requires a witness, while retained pending promotion remains permissionless.",
+    "parameterSource": "docs/proposals/smartaccount-native-profile-v2-parameters.json#authorityAdmission",
+    "evidenceBoundary": "Current-digest runtime builds, module packaging and deployed-byte readback must be verified independently. Earlier digests and receipts remain historical; local remediation does not establish public activation or complete formal refinement."
+  }
+}

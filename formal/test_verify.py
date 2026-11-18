@@ -111,7 +111,7 @@ class VerificationGateTests(unittest.TestCase):
                      'every_restriction_must_hold', 'false_result_does_not_bypass',
                      'removal_preserves_other_tokens', 'cleanup_clears_both_prefixes'):
             self.assertIn(name, verify.coq_declarations(model))
-        self.assertIn('contracts/hooks/TokenRestrictedHook.cs', verify.SOURCE_FILES)
+        self.assertIn('contracts/plugins/hooks/TokenRestrictedHook.cs', verify.SOURCE_FILES)
         self.assertEqual(8,len(verify.COQ_MODULES['NativeRestrictedPolicy.v']))
 
     def test_native_session_scope_has_uncapped_and_key_reuse_controls(self):
@@ -137,7 +137,7 @@ class VerificationGateTests(unittest.TestCase):
                         'failed_balance_query_rejected', 'accepted_balance_is_nonnegative',
                         'rejected_observation_aborts_delta', 'accepted_delta_exact'):
             self.assertIn(theorem,verify.coq_declarations(model))
-        self.assertIn('contracts/hooks/DailyLimitHook.cs',verify.SOURCE_FILES)
+        self.assertIn('contracts/plugins/hooks/DailyLimitHook.cs',verify.SOURCE_FILES)
         self.assertEqual(15,len(verify.COQ_MODULES['NativeDailyPolicy.v']))
 
     def test_budget_model_is_bounded_profiles_only(self):
@@ -180,24 +180,24 @@ class VerificationGateTests(unittest.TestCase):
             'OG_018_delay_is_seven_days_in_milliseconds'):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinaryGovernance.v'])
-        self.assertIn('contracts/SmartAccount.PlatformRegistrar.cs', verify.SOURCE_FILES)
+        self.assertIn('contracts/custom/SmartAccount.PlatformRegistrar.cs', verify.SOURCE_FILES)
         self.assertEqual(14, len(verify.COQ_MODULES['OrdinaryGovernance.v']))
-        for path in ('contracts/SmartAccount.Admin.cs', 'contracts/SmartAccount.MarketEscrow.cs'):
+        for path in ('contracts/custom/SmartAccount.Admin.cs', 'contracts/custom/SmartAccount.MarketEscrow.cs'):
             self.assertIn(path, verify.SOURCE_FILES)
 
     def test_ordinary_governance_millisecond_and_cleanup_correspondence(self):
         self.assertEqual(604800000, verify.check_ordinary_governance_correspondence()['delayMilliseconds'])
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for name in ('formal/coq/OrdinaryGovernance.v', 'contracts/SmartAccount.Admin.cs',
-                         'contracts/SmartAccount.PlatformRegistrar.cs', 'contracts/registrar/PlatformRegistrar.cs',
-                         'contracts/SmartAccount.Escape.cs',
-                         'contracts/SmartAccount.MarketEscrow.cs'):
+            for name in ('formal/coq/OrdinaryGovernance.v', 'contracts/custom/SmartAccount.Admin.cs',
+                         'contracts/custom/SmartAccount.PlatformRegistrar.cs', 'contracts/custom/registrar/PlatformRegistrar.cs',
+                         'contracts/custom/SmartAccount.Escape.cs',
+                         'contracts/custom/SmartAccount.MarketEscrow.cs'):
                 destination = root / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(verify.ROOT.parent / name, destination)
             verify.check_ordinary_governance_correspondence(root)
-            source = root / 'contracts/SmartAccount.Admin.cs'
+            source = root / 'contracts/custom/SmartAccount.Admin.cs'
             source.write_text(source.read_text().replace('7L * 24 * 60 * 60 * 1000', '6L * 24 * 60 * 60 * 1000'))
             with self.assertRaisesRegex(ValueError, 'millisecond delay'):
                 verify.check_ordinary_governance_correspondence(root)
@@ -218,9 +218,9 @@ class VerificationGateTests(unittest.TestCase):
         self.assertTrue(verify.check_ordinary_sponsorship_correspondence()['reservationBeforeCallbacks'])
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            target = root / 'contracts/SmartAccount.Paymaster.cs'
+            target = root / 'contracts/custom/SmartAccount.Paymaster.cs'
             target.parent.mkdir(parents=True)
-            source = (verify.ROOT.parent / 'contracts/SmartAccount.Paymaster.cs').read_text()
+            source = (verify.ROOT.parent / 'contracts/custom/SmartAccount.Paymaster.cs').read_text()
             target.write_text(source.replace('BigInteger.Max(actualCost - budget.Reserved, 0)', 'actualCost'))
             with self.assertRaisesRegex(ValueError, 'reservation source guard'):
                 verify.check_ordinary_sponsorship_correspondence(root)
@@ -547,7 +547,7 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation, verify.NATIVE_INVOCATION_COQ_MUTATIONS)
         for theorem in ("module_rejects_wrong_service", "module_requires_context", "module_matching_context_is_reachable"):
             self.assertIn(theorem, verify.coq_declarations(model))
-        self.assertIn("contracts/native/NativeAuthority.cs", verify.SOURCE_FILES)
+        self.assertIn("contracts/plugins/native-profile/NativeAuthority.cs", verify.SOURCE_FILES)
 
     def test_native_session_policy_is_registered(self):
         self.assertIn("coq/NativeSessionPolicy.v", verify.ARTIFACTS)
@@ -560,8 +560,8 @@ class VerificationGateTests(unittest.TestCase):
                         "application_clock_uses_persisting_block"):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertEqual(19,len(verify.COQ_MODULES["NativeSessionPolicy.v"]))
-        self.assertIn("contracts/verifiers/SessionKeyVerifier.cs",verify.SOURCE_FILES)
-        self.assertIn("contracts/verifiers/VerifierClock.cs",verify.SOURCE_FILES)
+        self.assertIn("contracts/plugins/verifiers/SessionKeyVerifier.cs",verify.SOURCE_FILES)
+        self.assertIn("contracts/plugins/verifiers/VerifierClock.cs",verify.SOURCE_FILES)
 
     def test_native_session_lifecycle_and_zero_cap_are_registered(self):
         model=(verify.ROOT / "coq/NativeSessionPolicy.v").read_text()
@@ -699,7 +699,7 @@ class VerificationGateTests(unittest.TestCase):
                     "sources": {name: hashlib.sha256((repo / name).read_bytes()).hexdigest() for name in verify.SOURCE_FILES}}
             (formal / "source-lock.json").write_text(json.dumps(lock))
             verify.check_inventory(formal)
-            (repo / "contracts/SmartAccount.Execution.cs").write_text("// drift\n")
+            (repo / "contracts/custom/SmartAccount.Execution.cs").write_text("// drift\n")
             with self.assertRaisesRegex(ValueError, "Source drift"):
                 verify.check_inventory(formal)
 

@@ -28,7 +28,7 @@
     },
     "constantsRevision": {
       "type": "string",
-      "description": "Git blob sha (or commit) of contracts/SmartAccount.ModuleProtocol.cs the vector was generated against."
+      "description": "Git blob sha (or commit) of contracts/custom/SmartAccount.ModuleProtocol.cs the vector was generated against."
     },
     "input": {
       "type": "object",

@@ -143,7 +143,7 @@ class NativeModuleProfileTests(unittest.TestCase):
             self.package_manifest(session, "verifier", ["setConfig"])
 
     def test_native_session_uses_the_profile_call_flag_for_canonicalization(self):
-        source = (ROOT / "contracts/verifiers/SessionKeyVerifier.cs").read_text(encoding="utf-8")
+        source = (ROOT / "contracts/plugins/verifiers/SessionKeyVerifier.cs").read_text(encoding="utf-8")
         method = source.split("public static void SetSessionKey", 1)[1]
         native_block = method.split("#endif", 1)[0]
         self.assertIn('"canonicalP256PublicKey"', native_block)

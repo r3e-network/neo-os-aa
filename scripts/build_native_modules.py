@@ -35,12 +35,12 @@ def checked_input(root, path):
 def collect_inputs(contracts):
     """Pin inputs using repository paths, including files governing locked restore."""
     root = contracts.parent
-    descriptor = checked_input(contracts, contracts / "native/profiles.json")
+    descriptor = checked_input(contracts, contracts / "plugins/native-profile/profiles.json")
     profiles = validate_descriptor(json.loads(descriptor.read_text()))
-    inputs = {"Directory.Build.props", "nuget.config", "contracts/native/profiles.json",
+    inputs = {"Directory.Build.props", "nuget.config", "contracts/plugins/native-profile/profiles.json",
               "docs/proposals/smartaccount-native-profile-v2-parameters.json"}
     for spec in profiles.values():
-        project = checked_input(contracts, contracts / "native" / spec["project"])
+        project = checked_input(contracts, contracts / "plugins/native-profile" / spec["project"])
         # Directory.Build.props selects the lock name by sibling project count.
         # Copy all project names so the scratch tree preserves that same decision.
         siblings = list(project.parent.glob("*.csproj"))
@@ -104,7 +104,7 @@ def build(contracts, compiler, cache, output, receipt):
                 env = {**os.environ, "NUGET_PACKAGES": str(cache), "RestoreLockedMode": "true",
                        "RestorePackagesWithLockFile": "true"}
                 for spec in profiles.values():
-                    result = subprocess.run([str(compiler), str(scratch / "contracts/native" / spec["project"]),
+                    result = subprocess.run([str(compiler), str(scratch / "contracts/plugins/native-profile" / spec["project"]),
                                              "-o", str(raw)], cwd=scratch, env=env,
                                             capture_output=True, text=True, timeout=180)
                     if result.returncode:
@@ -112,7 +112,7 @@ def build(contracts, compiler, cache, output, receipt):
                 if snapshot != {name: digest(scratch / name) for name in pins}:
                     raise ValueError("Native compiler changed a pinned build input or lock")
                 packaged = scratch / "packaged"
-                package(raw, packaged, scratch / "contracts/native/profiles.json",
+                package(raw, packaged, scratch / "contracts/plugins/native-profile/profiles.json",
                         scratch / "docs/proposals/smartaccount-native-profile-v2-parameters.json")
                 artifacts.append({p.name: digest(p) for p in packaged.iterdir() if p.suffix in (".nef", ".json")})
                 if index == 1:

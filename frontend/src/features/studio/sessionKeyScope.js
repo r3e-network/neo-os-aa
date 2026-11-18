@@ -1,7 +1,7 @@
 // Session-key value-exposure analysis shared by the Permissions panel and its tests.
 //
 // A SessionKeyVerifier key only carries an enforceable spending cap when its method is the literal
-// "transfer" AND its spending limit is positive (see contracts/verifiers/SessionKeyVerifier.cs:
+// "transfer" AND its spending limit is positive (see contracts/plugins/verifiers/SessionKeyVerifier.cs:
 // the on-chain ExtractTransferValue path is the only one the limit is checked against). Every other
 // configuration — a wildcard ("*") method, or any key with a zero/absent spending limit — is
 // VALUE-UNCAPPED: the delegated signer can move the whole balance on a value-bearing target. The

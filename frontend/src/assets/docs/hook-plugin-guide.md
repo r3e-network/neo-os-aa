@@ -204,7 +204,7 @@ Operational notes:
 
 ## Paymaster + Hook Combinations
 
-The on-chain `SAPaymaster` contract (`contracts/paymaster/Paymaster.cs`) lets sponsors cover relay fees for accounts, but it never authorizes execution. Verifier and hook plugins still run independently. This separation makes it safe to combine Paymaster sponsorship with any policy stack.
+The on-chain `SAPaymaster` contract (`contracts/custom/paymaster/Paymaster.cs`) lets sponsors cover relay fees for accounts, but it never authorizes execution. Verifier and hook plugins still run independently. This separation makes it safe to combine Paymaster sponsorship with any policy stack.
 
 ### Sponsored Consumer Wallet
 

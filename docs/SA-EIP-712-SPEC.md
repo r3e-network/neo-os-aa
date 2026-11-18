@@ -2,7 +2,7 @@
 
 Canonical reference for the EIP-712-style signing surface the V3 verifiers
 hash and check on-chain. The byte-level source of truth is
-`contracts/verifiers/Web3AuthVerifier.cs`; the SDK mirrors it in
+`contracts/plugins/verifiers/Web3AuthVerifier.cs`; the SDK mirrors it in
 `shared/metaTxCore.mjs` (typed-data shape) and `sdk/js/src/metaTx.js`
 (byte-exact payload builders). Where the layout intentionally deviates from
 strict EIP-712 the deviation is listed in [Deviations](#deviations-from-strict-eip-712).

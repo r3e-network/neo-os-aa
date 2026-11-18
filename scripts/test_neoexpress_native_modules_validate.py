@@ -44,20 +44,20 @@ class NativeModuleMatrixTests(unittest.TestCase):
         from native_module_profile import package
         from test_native_module_profile import manifest
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp); contracts = root / 'contracts'; (contracts / 'native').mkdir(parents=True)
+            root = Path(tmp); contracts = root / 'contracts'; (contracts / 'plugins/native-profile').mkdir(parents=True)
             parameters = root / 'docs/proposals/smartaccount-native-profile-v2-parameters.json'
             parameters.parent.mkdir(parents=True)
             parameters.write_bytes((Path(__file__).resolve().parent.parent / parameters.relative_to(root)).read_bytes())
             profiles = {'NeoNativeVerifier': {'project': 'NeoNativeVerifier.Native.csproj', 'role': 'verifier',
                 'configurationMethods': ['setConfig'], 'compositeVerifier': False, 'compositeProfile': ''}}
-            descriptor = contracts / 'native/profiles.json'; descriptor.write_text(json.dumps(profiles))
+            descriptor = contracts / 'plugins/native-profile/profiles.json'; descriptor.write_text(json.dumps(profiles))
             raw = root / 'raw'; raw.mkdir(); artifacts = root / 'artifacts'
             body = b'NEF3' + bytes(64) + bytes(5) + b'\x01\x40'
             (raw / 'NeoNativeVerifier.nef').write_bytes(body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4])
             (raw / 'NeoNativeVerifier.manifest.json').write_text(json.dumps(manifest()))
             package(raw, artifacts, descriptor, parameters)
             source_pins = {n: hashlib.sha256((root / n).read_bytes()).hexdigest() for n in
-                ('contracts/native/profiles.json', 'docs/proposals/smartaccount-native-profile-v2-parameters.json')}
+                ('contracts/plugins/native-profile/profiles.json', 'docs/proposals/smartaccount-native-profile-v2-parameters.json')}
             scripts = Path(__file__).parent
             receipt = {'schema': 'smartaccount-native-module-build/v2', 'sourceRoot': 'repository',
                 'restoreLockedMode': True, 'packageSourcesPolicy': 'nuget.config', 'status': 'PASS', 'reproducible': True,

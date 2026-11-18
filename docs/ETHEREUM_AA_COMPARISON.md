@@ -303,7 +303,7 @@ stateDiagram-v2
 
 The two deployed entrypoints take the account id, and `finalizeEscape` also takes the verifier the
 account falls back to (`contracts/build/SmartAccountV3.manifest.json`; implemented in
-`contracts/SmartAccount.Escape.cs`, where the C# methods are spelled with a leading capital —
+`contracts/custom/SmartAccount.Escape.cs`, where the C# methods are spelled with a leading capital —
 that form names no exported method, which is why it is not code-formatted here).
 
 **Features:**

@@ -23,9 +23,10 @@
     <RestoreLockedMode Condition="'$(RestoreLockedMode)' == ''">true</RestoreLockedMode>
 
     <!--
-      A lock file belongs to one project. contracts/hooks, contracts/verifiers and contracts/mocks
-      hold several projects each, which would share one packages.lock.json, so a project in a
-      directory with other projects gets packages.ProjectName.lock.json instead.
+      A lock file belongs to one project. contracts/plugins/hooks, contracts/plugins/verifiers,
+      contracts/plugins/native-profile and tests/mocks hold several projects each, which would
+      share one packages.lock.json, so a project in a directory with other projects gets
+      packages.ProjectName.lock.json instead.
     -->
     <NuGetLockFilePath Condition="$([System.IO.Directory]::GetFiles('$(MSBuildProjectDirectory)', '*.csproj').Length) &gt; 1">packages.$(MSBuildProjectName).lock.json</NuGetLockFilePath>
   </PropertyGroup>

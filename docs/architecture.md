@@ -93,16 +93,16 @@ The V3 core is intentionally small: authorization is delegated to verifier plugi
 
 | File | Responsibility |
 | --- | --- |
-| `contracts/SmartAccount.cs` | Core V3 account state, `verify`, `executeUserOp`, nonce handling, backup-owner escape, hook/verifier config |
-| `contracts/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` verification |
-| `contracts/verifiers/TEEVerifier.cs` | TEE-signed authorization |
-| `contracts/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn authorization |
-| `contracts/verifiers/SessionKeyVerifier.cs` | Short-lived delegated keys |
-| `contracts/verifiers/MultiSigVerifier.cs` | Plugin multisig |
-| `contracts/verifiers/ZKEmailVerifier.cs` | Email-based authorization extension |
-| `contracts/hooks/*.cs` | Optional policies such as daily limits, token restrictions, and credential gating |
-| `contracts/paymaster/Paymaster.cs` | On-chain Paymaster for sponsored/gasless transactions (GAS deposits, policies, settlement) |
-| `contracts/paymaster/PaymasterAuthority.cs` | Paymaster admin + authorized core validation |
+| `contracts/custom/SmartAccount.cs` | Core V3 account state, `verify`, `executeUserOp`, nonce handling, backup-owner escape, hook/verifier config |
+| `contracts/plugins/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` verification |
+| `contracts/plugins/verifiers/TEEVerifier.cs` | TEE-signed authorization |
+| `contracts/plugins/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn authorization |
+| `contracts/plugins/verifiers/SessionKeyVerifier.cs` | Short-lived delegated keys |
+| `contracts/plugins/verifiers/MultiSigVerifier.cs` | Plugin multisig |
+| `contracts/plugins/verifiers/ZKEmailVerifier.cs` | Email-based authorization extension |
+| `contracts/plugins/hooks/*.cs` | Optional policies such as daily limits, token restrictions, and credential gating |
+| `contracts/custom/paymaster/Paymaster.cs` | On-chain Paymaster for sponsored/gasless transactions (GAS deposits, policies, settlement) |
+| `contracts/custom/paymaster/PaymasterAuthority.cs` | Paymaster admin + authorized core validation |
 
 ## 7. Module Lifecycle
 

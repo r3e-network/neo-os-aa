@@ -95,16 +95,16 @@ V3 核心刻意保持精简：授权委托给验证器插件，策略委托给�
 
 | 文件 | 职责 |
 | --- | --- |
-| `contracts/SmartAccount.cs` | 核心 V3 账户状态、`verify`、`executeUserOp`、nonce 处理、备份所有者逃生、钩子 / 验证器配置 |
-| `contracts/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` 验证 |
-| `contracts/verifiers/TEEVerifier.cs` | TEE 签名授权 |
-| `contracts/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn 授权 |
-| `contracts/verifiers/SessionKeyVerifier.cs` | 短期委托密钥 |
-| `contracts/verifiers/MultiSigVerifier.cs` | 插件化多签 |
-| `contracts/verifiers/ZKEmailVerifier.cs` | 基于邮箱的授权扩展 |
-| `contracts/hooks/*.cs` | 可选策略，如每日限额、代币限制、凭证门控 |
-| `contracts/paymaster/Paymaster.cs` | 赞助 / 免 Gas 交易的链上 Paymaster（GAS 存款、策略、结算） |
-| `contracts/paymaster/PaymasterAuthority.cs` | Paymaster 管理与核心授权校验 |
+| `contracts/custom/SmartAccount.cs` | 核心 V3 账户状态、`verify`、`executeUserOp`、nonce 处理、备份所有者逃生、钩子 / 验证器配置 |
+| `contracts/plugins/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` 验证 |
+| `contracts/plugins/verifiers/TEEVerifier.cs` | TEE 签名授权 |
+| `contracts/plugins/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn 授权 |
+| `contracts/plugins/verifiers/SessionKeyVerifier.cs` | 短期委托密钥 |
+| `contracts/plugins/verifiers/MultiSigVerifier.cs` | 插件化多签 |
+| `contracts/plugins/verifiers/ZKEmailVerifier.cs` | 基于邮箱的授权扩展 |
+| `contracts/plugins/hooks/*.cs` | 可选策略，如每日限额、代币限制、凭证门控 |
+| `contracts/custom/paymaster/Paymaster.cs` | 赞助 / 免 Gas 交易的链上 Paymaster（GAS 存款、策略、结算） |
+| `contracts/custom/paymaster/PaymasterAuthority.cs` | Paymaster 管理与核心授权校验 |
 
 ## 7. 模块生命周期
 

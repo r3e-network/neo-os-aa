@@ -15,8 +15,8 @@ This guide is for developers building Verifier or Hook plugins for the Neo N3 Sm
 The fastest correct path is to copy a template, not to start from a blank file:
 
 ```text
-contracts/templates/verifier/   minimal verifier (single-key secp256r1 authorization)
-contracts/templates/hook/       minimal hook (fail-closed per-account target gate)
+contracts/plugins/templates/verifier/   minimal verifier (single-key secp256r1 authorization)
+contracts/plugins/templates/hook/       minimal hook (fail-closed per-account target gate)
 ```
 
 Each template compiles against the same shared layer the shipped plugins use
@@ -26,7 +26,7 @@ bind-time gate demands, and wires the timelocked governance rails (self-upgrade,
 admin rotation, core re-pointing). Copy the directory, rename the class and
 `DisplayName`, replace the marked policy method, and compile. The step-by-step
 walkthrough and the five rules that bite are in
-[`contracts/templates/README.md`](../contracts/templates/README.md).
+[`contracts/plugins/templates/README.md`](../contracts/plugins/templates/README.md).
 
 `node scripts/check_plugin_templates.mjs` recompiles both templates and asserts
 their manifests still satisfy the binding ABI; the repository verification gate
@@ -567,15 +567,15 @@ For official plugin listing, provide:
 - **Security Model:** `docs/SECURITY_MODEL.md`
 - **Ethereum Comparison:** `docs/ETHEREUM_AA_COMPARISON.md`
 - **Protocol Coverage:** `docs/PROTOCOL_COMPLETENESS_AUDIT.md`
-- **Core Contract:** `contracts/SmartAccount.cs`
+- **Core Contract:** `contracts/custom/SmartAccount.cs`
 - **Verifier Examples:**
-  - `contracts/verifiers/Web3AuthVerifier.cs`
-  - `contracts/verifiers/WebAuthnVerifier.cs`
-  - `contracts/verifiers/SessionKeyVerifier.cs`
+  - `contracts/plugins/verifiers/Web3AuthVerifier.cs`
+  - `contracts/plugins/verifiers/WebAuthnVerifier.cs`
+  - `contracts/plugins/verifiers/SessionKeyVerifier.cs`
 - **Hook Examples:**
-  - `contracts/hooks/WhitelistHook.cs`
-  - `contracts/hooks/DailyLimitHook.cs`
-  - `contracts/hooks/MultiHook.cs`
+  - `contracts/plugins/hooks/WhitelistHook.cs`
+  - `contracts/plugins/hooks/DailyLimitHook.cs`
+  - `contracts/plugins/hooks/MultiHook.cs`
 
 ---
 

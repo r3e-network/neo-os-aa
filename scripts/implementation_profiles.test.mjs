@@ -10,8 +10,12 @@ import { fileURLToPath } from 'node:url';
 // portable conversion.
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
+// Each profile lives with the contracts it describes: the user-contract ("ordinary")
+// implementation in contracts/custom, the consensus-native one in contracts/native.
+const profileDirectories = { ordinary: 'contracts/custom', native: 'contracts/native' };
+
 function readProfile(name) {
-  const profilePath = path.join(repoRoot, 'implementations', name, 'profile.json');
+  const profilePath = path.join(repoRoot, profileDirectories[name], 'profile.json');
   assert.ok(fs.existsSync(profilePath), `missing implementation profile: ${profilePath}`);
   return {
     path: profilePath,
@@ -128,7 +132,7 @@ test('ordinary artifact identity does not certify the newer source fixes or a pu
 
 test('implementation README entrypoints and profile metadata stay discoverable', () => {
   for (const name of ['ordinary', 'native']) {
-    const directory = path.join(repoRoot, 'implementations', name);
+    const directory = path.join(repoRoot, profileDirectories[name]);
     const readme = fs.readFileSync(path.join(directory, 'README.md'), 'utf8');
     const profile = JSON.parse(fs.readFileSync(path.join(directory, 'profile.json'), 'utf8'));
     assert.match(readme, /profile\.json/);

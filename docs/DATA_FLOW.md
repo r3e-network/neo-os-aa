@@ -236,7 +236,7 @@ This keeps long-lived drafts explainable and reviewable without letting metadata
 | `Prefix_DependencyMaintenance` | `0x25` | Bare slot: dependency maintenance marker. |
 | `Prefix_ConfigurationContextDepth` | `0x26` | Bare slot: configuration-context nesting depth. |
 
-The prefixes above are the source of truth in `contracts/SmartAccount.Internal.cs` (per-account keys) and `contracts/SmartAccount.Admin.cs` / `contracts/SmartAccount.PlatformRegistrar.cs` (bare slots); a key is the prefix alone or the prefix concatenated with the 20-byte `accountId`.
+The prefixes above are the source of truth in `contracts/custom/SmartAccount.Internal.cs` (per-account keys) and `contracts/custom/SmartAccount.Admin.cs` / `contracts/custom/SmartAccount.PlatformRegistrar.cs` (bare slots); a key is the prefix alone or the prefix concatenated with the 20-byte `accountId`.
 
 
 ## Matrix Domain Boundary

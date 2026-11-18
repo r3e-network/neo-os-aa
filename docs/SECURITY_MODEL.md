@@ -588,7 +588,7 @@ stateDiagram-v2
 
 Both entrypoints take the account id; `finalizeEscape` also takes the verifier the account falls
 back to (`contracts/build/SmartAccountV3.manifest.json`, implemented in
-`contracts/SmartAccount.Escape.cs`).
+`contracts/custom/SmartAccount.Escape.cs`).
 
 ### 9.2 Security Properties
 

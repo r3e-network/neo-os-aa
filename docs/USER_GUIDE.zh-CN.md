@@ -89,7 +89,7 @@ const accountId = client.deriveRegistrationAccountIdHash({
 
 **关键行为：**
 
-- 注册要求备份所有者的见证（`contracts/SmartAccount.Accounts.cs:75`）
+- 注册要求备份所有者的见证（`contracts/custom/SmartAccount.Accounts.cs:75`）
 - 每个账户自带验证器、钩子与备份所有者；没有共享治理状态
 - 单笔交易降低费用
 - 原子操作：全部创建成功，或全部失败
@@ -105,7 +105,7 @@ const accountId = client.deriveRegistrationAccountIdHash({
 - `docs/HOW_IT_WORKS.md`
 - `docs/WORKFLOWS.md`
 - `docs/DATA_FLOW.md`
-- `contracts/recovery/TESTNET_VALIDATION_2026-03-09.md`
+- `contracts/plugins/recovery/TESTNET_VALIDATION_2026-03-09.md`
 - `docs/MORPHEUS_PRIVATE_ACTIONS.md`
 
 ## 通过 `.matrix` 加载

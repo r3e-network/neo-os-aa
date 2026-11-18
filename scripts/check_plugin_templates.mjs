@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-// Compiles the plugin templates under contracts/templates/ into a throwaway
+// Compiles the plugin templates under contracts/plugins/templates/ into a throwaway
 // directory and asserts their manifests still satisfy the exact ABI the SA core
 // requires at bind time (AssertV3Verifier / AssertV3Hook in
-// contracts/SmartAccount.Accounts.cs). The templates are the documented starting
+// contracts/custom/SmartAccount.Accounts.cs). The templates are the documented starting
 // point for third-party plugins; if the shared plugin layer
-// (contracts/verifiers/Verifier*.cs, contracts/hooks/HookAuthority.cs) or the core
+// (contracts/plugins/verifiers/Verifier*.cs, contracts/plugins/hooks/HookAuthority.cs) or the core
 // binding gate ever drifts, this gate fails before a developer copies a broken
 // skeleton.
 //
@@ -43,17 +43,17 @@ const CORE_BINDING_ABI = {
 const TEMPLATES = [
   {
     kind: "verifier",
-    project: path.join(rootDir, "contracts", "templates", "verifier", "VerifierTemplate.csproj"),
+    project: path.join(rootDir, "contracts", "plugins", "templates", "verifier", "VerifierTemplate.csproj"),
     manifest: "VerifierTemplate.manifest.json",
     // The template must ride on the shared plugin layer, not a private copy.
-    source: path.join(rootDir, "contracts", "templates", "verifier", "VerifierTemplate.cs"),
+    source: path.join(rootDir, "contracts", "plugins", "templates", "verifier", "VerifierTemplate.cs"),
     sharedLayer: ["VerifierAuthority.", "VerifierPayload.", "SignerDomain."],
   },
   {
     kind: "hook",
-    project: path.join(rootDir, "contracts", "templates", "hook", "HookTemplate.csproj"),
+    project: path.join(rootDir, "contracts", "plugins", "templates", "hook", "HookTemplate.csproj"),
     manifest: "HookTemplate.manifest.json",
-    source: path.join(rootDir, "contracts", "templates", "hook", "HookTemplate.cs"),
+    source: path.join(rootDir, "contracts", "plugins", "templates", "hook", "HookTemplate.cs"),
     sharedLayer: ["HookAuthority."],
   },
 ];

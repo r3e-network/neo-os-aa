@@ -48,7 +48,7 @@ flowchart LR
 V3 没有管理员、经理、阈值状态，也没有反向索引：这套 V1/V2 角色模型在 V3 重写中已被移除，SDK 中保留的 `getAccountsByAdmin` / `getAccountsByManager` 只是抛出 `LEGACY_V3_REMOVED` 的存根。账户状态通过 `getAccountState(accountIdHash)` 逐账户读取。
 
 - **批量创建：** 主合约上的 `registerAccounts` 在一个交易中注册多个账户；SDK 没有批量载荷构造器，因此按账户分别构造 `createAccountPayload`，再通过该入口提交。
-- **注册权限：** `registerAccount` 要求 `backupOwner` 参数（`contracts/SmartAccount.Accounts.cs:75`）的见证，而不是交易发送者的见证。
+- **注册权限：** `registerAccount` 要求 `backupOwner` 参数（`contracts/custom/SmartAccount.Accounts.cs:75`）的见证，而不是交易发送者的见证。
 
 ## 3. 选择正确的路径
 

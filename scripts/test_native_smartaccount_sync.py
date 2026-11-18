@@ -1,6 +1,6 @@
 """The neo-native-core SmartAccount copies are generated, not forked.
 
-The SA checkout owns the true source in implementations/native/core/SmartAccount/
+The SA checkout owns the true source in contracts/native/SmartAccount/
 and scripts/sync_native_smartaccount.py regenerates the eleven copies the core
 needs to build the node standalone. These tests pin the sync contract itself
 on synthetic trees: regeneration must be byte-deterministic and idempotent,

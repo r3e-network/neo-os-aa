@@ -358,7 +358,7 @@ stateDiagram-v2
     Reset --> Normal: 通过备份所有者进行新配置
 ```
 
-两个入口都接收账户 id；`finalizeEscape` 还接收账户回退到的验证器（`contracts/build` 下的核心清单，实现在 `contracts/SmartAccount.Escape.cs`）。
+两个入口都接收账户 id；`finalizeEscape` 还接收账户回退到的验证器（`contracts/build` 下的核心清单，实现在 `contracts/custom/SmartAccount.Escape.cs`）。
 
 ### 9.2 安全属性
 

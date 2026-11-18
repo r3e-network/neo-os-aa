@@ -86,7 +86,7 @@ const accountId = client.deriveRegistrationAccountIdHash({
 ```
 
 **Key behaviors:**
-- Registration requires the backup owner's witness (`contracts/SmartAccount.Accounts.cs:75`)
+- Registration requires the backup owner's witness (`contracts/custom/SmartAccount.Accounts.cs:75`)
 - Every account carries its own verifier, hook and backup owner; there is no shared governance state
 - Single transaction reduces fees
 - Atomic operation: all accounts created or none
@@ -101,7 +101,7 @@ const accountId = client.deriveRegistrationAccountIdHash({
 - `docs/HOW_IT_WORKS.md`
 - `docs/WORKFLOWS.md`
 - `docs/DATA_FLOW.md`
-- `contracts/recovery/TESTNET_VALIDATION_2026-03-09.md`
+- `contracts/plugins/recovery/TESTNET_VALIDATION_2026-03-09.md`
 - `docs/MORPHEUS_PRIVATE_ACTIONS.md`
 
 

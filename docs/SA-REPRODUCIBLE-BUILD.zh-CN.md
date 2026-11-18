@@ -122,7 +122,7 @@ diff "$A.sha256" "$B/deeper.sha256" && echo reproduced
 2026-11-16 对设计阶段遗留兼容性清理（移除存储回退、一次性轮换迁移与 v3 恢复票据；候选 ABI 现在
 为 109 个方法）的重放同样匹配，无漂移、无缺失；其证书为
 [`sa-artifact-reproducibility-20261116.json`](reports/sa-artifact-reproducibility-20261116.json)，
-该证书在孤儿文件 `contracts/mocks/packages.PlatformRegistrarMock.lock.json` 离开代码树后于当日
+该证书在孤儿文件 `tests/mocks/packages.PlatformRegistrarMock.lock.json` 离开代码树后于当日
 重新生成（132 个源码输入；清理提交的回执此前早生成了 `SmartAccount.MarketEscrow.cs` 的一次修订，
 本次重新生成也一并纠正），它所认证的候选／公开 ABI 差异为
 [`sa-ordinary-candidate-compatibility-20261116.json`](reports/sa-ordinary-candidate-compatibility-20261116.json)。

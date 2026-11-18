@@ -383,7 +383,7 @@ require(not frontend_receipt['knownGaps']['slicedGaps'], ...)
 
 | 腿 | 由什么确立 | 强度 |
 | --- | --- | --- |
-| C# 项目 -> NEF 字节 | `formal/refinement/export` 用固定的 NCCS 3.9.1 重新编译 `contracts/SmartAccount.csproj`，并要求 `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`，外加对 manifest 的 `JsonNode.DeepEquals` | 每次门禁运行的字节身份 |
+| C# 项目 -> NEF 字节 | `formal/refinement/export` 用固定的 NCCS 3.9.1 重新编译 `contracts/custom/SmartAccount.csproj`，并要求 `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`，外加对 manifest 的 `JsonNode.DeepEquals` | 每次门禁运行的字节身份 |
 | C# 文本 -> 泳道读取的内容 | 本测试装置 | 两个独立读取器在实测语料上的一致 |
 | ABI -> 真实引擎派发的内容 | `export --abi-dispatch` 加 `abi_dispatch.py` | 109 个条目中 107 个派发到声明偏移，两个引擎入口点按名称拒绝 |
 | C# 语义 -> VM 语义 | 仍只有派发路径之外的空无，本文不主张任何东西 | 开放 |

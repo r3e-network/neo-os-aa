@@ -102,7 +102,7 @@ entrypoints is the honest state, not a regression.
 - [ETHEREUM_AA_COMPARISON.md](ETHEREUM_AA_COMPARISON.md) · [中文](ETHEREUM_AA_COMPARISON.zh-CN.md) — Ethereum AA (4337/7702/7579/7715) alignment and deliberate divergences
 - [FRONTEND_DEPENDENCY_SECURITY.md](FRONTEND_DEPENDENCY_SECURITY.md) · [中文](FRONTEND_DEPENDENCY_SECURITY.zh-CN.md) — frontend dependency exposure
 - [PLUGIN_DEVELOPER_GUIDE.md](PLUGIN_DEVELOPER_GUIDE.md) · [中文](PLUGIN_DEVELOPER_GUIDE.zh-CN.md) — supported verifier/hook plugins, lifecycle and cleanup
-- [contracts/templates/](../contracts/templates/) — minimal verifier/hook starting points (`README.md` inside)
+- [contracts/plugins/templates/](../contracts/plugins/templates/) — minimal verifier/hook starting points (`README.md` inside)
 - [proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md) · [中文](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.zh-CN.md) — NeoVM/DevPack verifier-budget extension
 - [proposals/nep-smartaccount-entry-verifier.mediawiki](proposals/nep-smartaccount-entry-verifier.mediawiki) — NEP draft for the entry verifier
 

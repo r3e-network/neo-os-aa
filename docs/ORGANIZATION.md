@@ -1,9 +1,11 @@
 # Repository Organization
 
-Updated for the ordinary/native layout on 2026-10-13. The earlier 2026-09-27
-organization snapshot was deleted with the pre-deployment compatibility surfaces,
-so this file is the only tracked layout statement; the current layout and ownership
-rules are below.
+Updated on 2026-11-18 for the three-directory contract layout
+(`contracts/custom`, `contracts/native`, `contracts/plugins`), which replaced the
+2026-10-13 `implementations/` entrypoints. The earlier 2026-09-27 organization
+snapshot was deleted with the pre-deployment compatibility surfaces, so this file
+is the only tracked layout statement; the current layout and ownership rules are
+below.
 
 ## Purpose
 
@@ -22,42 +24,63 @@ Smart Accounts.
 
 ## Directory Structure
 
-    implementations/ordinary/ user-contract delivery profile and entrypoint
-    implementations/native/   native ABI 2 submission profile and entrypoint
-    .github/                 CI workflows
     contracts/               Neo N3 SA contract sources
+      custom/                user-contract (ordinary) implementation
+        market/              SAAddressMarket escrow contract
+        paymaster/           SAPaymaster contract
+        registrar/           SAPlatformRegistrar contract
+      native/                native ABI 2 implementation
+        SmartAccount/        true source of the consensus SmartAccount service
+        Runtime/             runtime overlay compiled with it
+      plugins/               plugin contracts shared by both implementations
+        verifiers/           verifier plugins
+        hooks/               hook plugins
+        recovery/            social-recovery verifier
+        templates/           third-party plugin starting points
+        native-profile/      native-profile builds of the shared plugins
+      build/                 pinned artifacts of the public deployments
+      compile.sh             builds every contract into contracts/bin/ (ignored)
+    tests/                   test suites
+      mocks/                 mock contracts the suites deploy
     formal/                  formal verification inputs and checks
     frontend/                SA application and server routes
     sdk/                     SA SDK surfaces
     shared/                  shared SA types and helpers
     supabase/                SA database migrations
-    tests/                   test suites
     scripts/                 repository tooling
     docs/                    project documentation
-    SmartAccount.sln .NET solution
+    .github/                 CI workflows
+    SmartAccount.sln         .NET solution
     README.md                public project and boundary documentation
 
-`implementations/ordinary/` and `implementations/native/` are the two
-implementation entrypoints on the same branch. They intentionally point at
-the existing build-compatible source locations through `profile.json`; source
-files are not duplicated. The ordinary profile is the current user-contract
-delivery path. The native profile contains the native modules, SDK and UI
-profile prepared for standard submission, while the consensus
-`SmartAccount` service remains in the matching Neo core repository.
+`contracts/custom/` and `contracts/native/` hold the two implementations on
+the same branch; `contracts/plugins/` holds the verifier and hook contracts
+both of them bind. Each implementation directory carries a `profile.json` that
+names its source roots, artifacts and verification commands; source files are
+not duplicated. The ordinary profile (`contracts/custom/`) is the current
+user-contract delivery path. The native profile (`contracts/native/`) holds the
+true source of the consensus `SmartAccount` service prepared for standard
+submission; the matching Neo core repository carries generated copies of it and
+owns native VM enforcement.
 
 ## File Organization Rules
 
-- Keep contract sources and contract-specific checks under contracts/.
-- Keep third-party plugin starting points under contracts/templates/; templates
-  compile against the shared plugin layer (contracts/verifiers/Verifier*.cs,
-  contracts/hooks/HookAuthority.cs) and scripts/check_plugin_templates.mjs keeps
+- Keep contract sources and contract-specific checks under contracts/, in
+  exactly one of custom/, native/ or plugins/. A contract only one
+  implementation uses belongs to that implementation; a plugin both can bind
+  belongs to plugins/.
+- Keep mock and probe contracts under tests/mocks/; they are test fixtures, not
+  part of either implementation.
+- Keep third-party plugin starting points under contracts/plugins/templates/; templates
+  compile against the shared plugin layer (contracts/plugins/verifiers/Verifier*.cs,
+  contracts/plugins/hooks/HookAuthority.cs) and scripts/check_plugin_templates.mjs keeps
   their manifests aligned with the core's bind-time ABI gate.
-- Use `implementations/ordinary/profile.json` and
-  `implementations/native/profile.json` to select the implementation profile;
+- Use `contracts/custom/profile.json` and
+  `contracts/native/profile.json` to select the implementation profile;
   do not infer profile identity from a deployment label or a shared artifact
   directory.
 - Keep native-only modules and client code under the native roots listed by
-  `implementations/native/profile.json`; ordinary source must not import native
+  `contracts/native/profile.json`; ordinary source must not import native
   entrypoints as proof of native activation.
 - Keep frontend routes, UI, and frontend configuration under frontend/.
 - Keep SA client types and builders under sdk/ and shared/.

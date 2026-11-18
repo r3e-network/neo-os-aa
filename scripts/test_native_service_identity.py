@@ -17,7 +17,7 @@ DIGEST = "ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a"
 
 class NativeServiceIdentityTests(unittest.TestCase):
     def test_native_authority_pins_exactly_the_canonical_service_hash(self):
-        source = (ROOT / 'contracts/native/NativeAuthority.cs').read_text(encoding='utf-8')
+        source = (ROOT / 'contracts/plugins/native-profile/NativeAuthority.cs').read_text(encoding='utf-8')
         self.assertEqual([SERVICE], re.findall(r'InitialValue\("0x([0-9a-f]{40})"', source))
 
     def test_native_module_contract_permissions_pin_the_canonical_service_hash(self):

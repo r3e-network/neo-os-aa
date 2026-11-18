@@ -127,9 +127,9 @@ if [[ $run_contracts -eq 1 ]]; then
   node scripts/check_neo_platform_packages.mjs --compiler-only
   if [[ $run_ordinary -eq 1 ]]; then
     if [[ $skip_contract_build -eq 0 ]]; then
-      dotnet build contracts/SmartAccount.csproj -c Release -p:WarningsAsErrors=nullable -nologo
+      dotnet build contracts/custom/SmartAccount.csproj -c Release -p:WarningsAsErrors=nullable -nologo
       bash contracts/compile.sh
-      # The plugin templates under contracts/templates/ are the documented starting point
+      # The plugin templates under contracts/plugins/templates/ are the documented starting point
       # for third-party verifiers/hooks: keep them compiling against the shared plugin
       # layer and matching the core's bind-time ABI gate.
       node scripts/check_plugin_templates.mjs

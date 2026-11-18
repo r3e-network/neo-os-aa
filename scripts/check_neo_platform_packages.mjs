@@ -34,11 +34,14 @@ export const PATHS = {
   nugetConfig: "nuget.config",
   testsProject: "tests/SmartAccount.Contracts.Tests/SmartAccount.Contracts.Tests.csproj",
   contractsDir: "contracts",
+  mocksDir: "tests/mocks",
+  nativeCoreDir: "contracts/native",
+  nativeModulesDir: "contracts/plugins/native-profile",
   nativeProbeProject: "tests/NativeEpochProbe/NativeEpochProbe.csproj",
   nativeProbeContractProject: "tests/NativeEpochProbe/contracts/NativeEpochCore.csproj",
   nativeRuntimeProbeProject: "tests/NativeModuleProbe/NativeModuleProbe.csproj",
   nativeMultiSigProbeProject: "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj",
-  coreAssets: "contracts/obj/project.assets.json",
+  coreAssets: "contracts/custom/obj/project.assets.json",
   testsAssets: "tests/SmartAccount.Contracts.Tests/obj/project.assets.json",
   manifest: "contracts/neo-platform-packages.json",
   doc: "docs/SA-REPRODUCIBLE-BUILD.md",
@@ -123,12 +126,16 @@ export function listProjects(root = repoRoot, { includeNative = false } = {}) {
     for (const entry of fs.readdirSync(path.join(root, relative), { withFileTypes: true })) {
       if (entry.name === "bin" || entry.name === "obj" || entry.name === "node_modules") continue;
       const child = `${relative}/${entry.name}`;
-      if (!includeNative && child === "contracts/native") continue;
+      // The overlay Neo core project restores the node's own dependency graph, not the
+      // contract framework, so it is outside this gate in either scope.
+      if (child === PATHS.nativeCoreDir) continue;
+      if (!includeNative && child === PATHS.nativeModulesDir) continue;
       if (entry.isDirectory()) walk(child);
       else if (entry.name.endsWith(".csproj")) found.push(child);
     }
   };
   walk(PATHS.contractsDir);
+  walk(PATHS.mocksDir);
   return [...found.sort(), PATHS.testsProject, ...(includeNative
     ? [PATHS.nativeProbeProject, PATHS.nativeProbeContractProject,
       PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject]
@@ -137,7 +144,7 @@ export function listProjects(root = repoRoot, { includeNative = false } = {}) {
 
 /**
  * The lock file that belongs to a project file. A directory that holds several projects
- * (contracts/hooks, contracts/verifiers, contracts/mocks) would share one packages.lock.json, so its
+ * (contracts/plugins/hooks, contracts/plugins/verifiers, tests/mocks) would share one packages.lock.json, so its
  * projects use packages.ProjectName.lock.json, as Directory.Build.props configures.
  */
 export function lockFileFor(project, projects) {

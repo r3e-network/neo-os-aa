@@ -134,7 +134,7 @@ class NativeProfileCiTests(unittest.TestCase):
             for changed in (".editorconfig", "global.json", "Directory.Build.props", "Directory.Build.targets", "nuget.config",
                     "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md", "docs/proposals/smartaccount-native-profile-v2-parameters.json",
                     "docs/proposals/test_native_profile_v2.py", "docs/reports/sa-native-ci-probe-consistency-20261009.json",
-                    "implementations/native/profile.json", "shared/nativeSmartAccountClient.mjs",
+                    "contracts/native/profile.json", "shared/nativeSmartAccountClient.mjs",
                     "frontend/src/features/native/NativeAccountWorkspace.vue", "frontend/tests/fixtures/nativeRpcFixture.js",
                     "sdk/js/src/native.js", "sdk/js/tests/fixtures/native-signed-execution.json",
                     "scripts/native_profile_ci.py", "scripts/native-profile-core-locks.json", "tests/NativeMultiSigProbe/Program.cs",

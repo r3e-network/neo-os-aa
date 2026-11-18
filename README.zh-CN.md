@@ -34,12 +34,12 @@
 8. [docs/SECURITY_MODEL.zh-CN.md](docs/SECURITY_MODEL.zh-CN.md) —— 威胁模型与信任假设
 9. [docs/SA-SPEC.zh-CN.md](docs/SA-SPEC.zh-CN.md) —— 仅有英文的规范与形式化章节导读
 
-同一主分支保留两个实现入口：
-[用户合约实现](implementations/ordinary/README.md) 和
-[原生 SmartAccount 提交实现](implementations/native/README.md)。
+同一主分支保留两个实现，各自位于 `contracts/` 下的独立目录：
+[用户合约实现](contracts/custom/README.md)（`contracts/custom/`）和
+[原生 SmartAccount 提交实现](contracts/native/README.md)（`contracts/native/`）。
+两个实现共用的验证器、钩子与恢复插件位于 `contracts/plugins/`。
 两个目录中的 `profile.json` 记录各自的源码根、兼容路径、构建产物和
-验证命令。源码继续放在现有构建路径中，避免破坏当前工具链；原生
-SmartAccount 共识服务仍属于对应的 Neo core 仓库。
+验证命令；原生 SmartAccount 共识执行仍属于对应的 Neo core 仓库。
 
 ## 说明
 
@@ -47,12 +47,19 @@ SmartAccount 共识服务仍属于对应的 Neo core 仓库。
 
 ## 项目结构
 
-- `implementations/ordinary/`：当前可用的 `SmartAccountV3` 用户合约实现入口。
-- `implementations/native/`：原生 ABI 2 标准提交实现入口，当前为 draft/unactivated。
-- `contracts/`：C# 主入口合约实现。
-- `contracts/verifiers/`：验证器插件（Web3Auth、TEE、WebAuthn、SessionKey、MultiSig 等）。
-- `contracts/hooks/`：钩子插件（DailyLimit、Whitelist、TokenRestricted、MultiHook、NeoDIDCredential）。
-- `contracts/paymaster/`：链上 Paymaster 合约，用于赞助/无 GAS 交易。
+- `contracts/custom/`：当前可用的 `SmartAccountV3` 用户合约实现（C# 主入口合约）及其服务合约。
+- `contracts/native/`：原生 ABI 2 标准提交实现，包含原生共识 `SmartAccount` 服务的真源与编译它的 Neo core 叠加工程，当前为 draft/unactivated。
+- `contracts/plugins/`：两个实现共用的插件合约。
+- `contracts/plugins/verifiers/`：验证器插件（Web3Auth、TEE、WebAuthn、SessionKey、MultiSig 等）。
+- `contracts/plugins/hooks/`：钩子插件（DailyLimit、Whitelist、TokenRestricted、MultiHook、NeoDIDCredential）。
+- `contracts/plugins/recovery/`：Morpheus 社交恢复验证器。
+- `contracts/plugins/templates/`：第三方验证器与钩子插件的起点模板。
+- `contracts/plugins/native-profile/`：共用插件的 native 配置构建。
+- `contracts/custom/paymaster/`：链上 Paymaster 合约，用于赞助/无 GAS 交易。
+- `contracts/custom/registrar/`：独立的 `SAPlatformRegistrar` 服务合约，负责平台账户注册与所有者轮换时间锁。
+- `contracts/custom/market/`：独立的 `SAAddressMarket` 托管合约。
+- `contracts/build/`：公开部署的固定工件；`contracts/compile.sh` 把当前源码候选写入 `contracts/bin/`。
+- `tests/`：合约、native 与本地链测试套件，其部署的 mock 合约位于 `tests/mocks/`。
 - `frontend/`：Vue 前端组件，演示账户创建与签名工作流。
 - `sdk/js/`：JavaScript/TypeScript SDK，用于 dApp 集成。
 - `docs/`：协议设计与规范标准文档。

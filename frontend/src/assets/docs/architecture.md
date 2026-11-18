@@ -164,15 +164,15 @@ The relay trust boundary is explicit:
 
 | File | Responsibility |
 | --- | --- |
-| `contracts/SmartAccount.cs` | V3 core account state, nonce handling, `verify`, `executeUserOp`, hook/verifier config, backup-owner escape |
-| `contracts/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` verification for secp256k1/Web3Auth flows |
-| `contracts/verifiers/TEEVerifier.cs` | TEE-signed authorization |
-| `contracts/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn authorization |
-| `contracts/verifiers/SessionKeyVerifier.cs` | Short-lived delegated execution keys |
-| `contracts/verifiers/ZkLoginVerifier.cs` | Morpheus NeoDID / Web2 identity-root authorization with operation-bound zklogin tickets |
-| `contracts/verifiers/MultiSigVerifier.cs` | Plugin-based multisig authorization |
-| `contracts/hooks/*.cs` | Optional execution policies such as daily limits, token restrictions, credential gating, and hook composition |
-| `contracts/paymaster/Paymaster.cs` | `SAPaymaster`: on-chain GAS deposit pool and policy engine for sponsored/gasless transactions |
+| `contracts/custom/SmartAccount.cs` | V3 core account state, nonce handling, `verify`, `executeUserOp`, hook/verifier config, backup-owner escape |
+| `contracts/plugins/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` verification for secp256k1/Web3Auth flows |
+| `contracts/plugins/verifiers/TEEVerifier.cs` | TEE-signed authorization |
+| `contracts/plugins/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn authorization |
+| `contracts/plugins/verifiers/SessionKeyVerifier.cs` | Short-lived delegated execution keys |
+| `contracts/plugins/verifiers/ZkLoginVerifier.cs` | Morpheus NeoDID / Web2 identity-root authorization with operation-bound zklogin tickets |
+| `contracts/plugins/verifiers/MultiSigVerifier.cs` | Plugin-based multisig authorization |
+| `contracts/plugins/hooks/*.cs` | Optional execution policies such as daily limits, token restrictions, credential gating, and hook composition |
+| `contracts/custom/paymaster/Paymaster.cs` | `SAPaymaster`: on-chain GAS deposit pool and policy engine for sponsored/gasless transactions |
 
 ## 12. Security Invariants
 

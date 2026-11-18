@@ -83,7 +83,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 ### 1. Plugin Lifecycle (install/update/remove) ✓
 
-**Implementation Location:** `contracts/SmartAccount.Accounts.cs`
+**Implementation Location:** `contracts/custom/SmartAccount.Accounts.cs`
 
 **Features:**
 - **Installation:** `registerAccount()` sets initial verifier and hook
@@ -106,7 +106,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 ### 2. Neo 2D Nonce Management (191-bit channel + 64-bit sequence) ✓
 
-**Implementation Location:** `contracts/SmartAccount.Execution.cs` (`IsNonceAcceptable` / `ConsumeNonce`)
+**Implementation Location:** `contracts/custom/SmartAccount.Execution.cs` (`IsNonceAcceptable` / `ConsumeNonce`)
 
 **Canonical nonce domain:**
 ```csharp
@@ -139,7 +139,7 @@ are republished; that read boundary does not make such a channel executable.
 
 ### 3. Escape Hatch Mechanism (timelock, cooldown, finalization) ✓
 
-**Implementation Location:** `contracts/SmartAccount.Escape.cs`
+**Implementation Location:** `contracts/custom/SmartAccount.Escape.cs`
 
 **Flow:**
 ```mermaid
@@ -153,7 +153,7 @@ stateDiagram-v2
 
 The deployed names carry the account id: `initiateEscape(accountId)` and
 `finalizeEscape(accountId, newVerifier)` are the two ABI methods in
-`contracts/build/SmartAccountV3.manifest.json` (`contracts/SmartAccount.Escape.cs`).
+`contracts/build/SmartAccountV3.manifest.json` (`contracts/custom/SmartAccount.Escape.cs`).
 
 **Features:**
 - **Timelock:** Configurable 7-90 days (604,800-7,776,000 seconds)
@@ -206,7 +206,7 @@ The deployed names carry the account id: `initiateEscape(accountId)` and
 
 ### 5. Account State Management (atomic) ✓
 
-**Implementation Location:** `contracts/SmartAccount.State.cs`
+**Implementation Location:** `contracts/custom/SmartAccount.State.cs`
 
 **State Structure:**
 ```csharp
@@ -246,7 +246,7 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 
 ### 6. Market Escrow (cancellation, expiry, dispute) ✓
 
-**Implementation Location:** `contracts/SmartAccount.MarketEscrow.cs`
+**Implementation Location:** `contracts/custom/SmartAccount.MarketEscrow.cs`
 
 **Features:**
 - **Entry:** `enterMarketEscrow(accountId, marketContract, listingId)`
@@ -262,7 +262,7 @@ ExecutionEngine.Assert(!isMarketEscrowActive(accountId), "Account locked in mark
 ```
 The call is written as the deployed ABI spells it (`isMarketEscrowActive`, in
 `contracts/build/SmartAccountV3.manifest.json`). The C# source defines it with a leading
-capital (IsMarketEscrowActive, contracts/SmartAccount.State.cs:143); that form names a method
+capital (IsMarketEscrowActive, contracts/custom/SmartAccount.State.cs:143); that form names a method
 the deployment does not export, which is why it is not code-formatted here.
 - Prevents concurrent operations during active listing
 
@@ -284,7 +284,7 @@ the deployment does not export, which is why it is not code-formatted here.
 
 ### 7. Verification Scripts Integration ✓
 
-**Implementation Location:** Multiple verifier plugins in `contracts/verifiers/`
+**Implementation Location:** Multiple verifier plugins in `contracts/plugins/verifiers/`
 
 **Plugin Interfaces:**
 ```csharp
@@ -329,7 +329,7 @@ ClearVerifyContext(accountId);
 
 ### 8. Paymaster/Sponsor Flow ✓
 
-**Implementation Locations:** `contracts/SmartAccount.Paymaster.cs`, `contracts/paymaster/Paymaster.cs`, and the optional Morpheus authorization service
+**Implementation Locations:** `contracts/custom/SmartAccount.Paymaster.cs`, `contracts/custom/paymaster/Paymaster.cs`, and the optional Morpheus authorization service
 
 The relay pays the enclosing N3 transaction's system and network fees. For the
 on-chain sponsored path, the core checks that the selected paymaster is bound to

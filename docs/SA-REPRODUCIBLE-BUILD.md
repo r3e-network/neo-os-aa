@@ -148,7 +148,7 @@ the one-time rotation migration and the v3 recovery ticket removed; the candidat
 ABI is now 109 methods) matched again with no drift and no missing artifacts; its
 certificate is
 [`sa-artifact-reproducibility-20261116.json`](reports/sa-artifact-reproducibility-20261116.json),
-regenerated the same day after the orphaned `contracts/mocks/packages.PlatformRegistrarMock.lock.json`
+regenerated the same day after the orphaned `tests/mocks/packages.PlatformRegistrarMock.lock.json`
 left the tree (132 source inputs; the sweep commit's receipt had been generated one
 `SmartAccount.MarketEscrow.cs` revision early, which the regeneration also corrects),
 and the candidate/public ABI delta it certifies is

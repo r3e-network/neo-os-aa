@@ -131,7 +131,7 @@ class NativeDailyTests(unittest.TestCase):
             self.assertEqual('FAIL',json.loads(receipt.read_text())['status'])
 
     def test_daily_profile_is_explicit(self):
-        profiles=json.loads((Path(__file__).resolve().parent.parent/'contracts/native/profiles.json').read_text())
+        profiles=json.loads((Path(__file__).resolve().parent.parent/'contracts/plugins/native-profile/profiles.json').read_text())
         self.assertEqual('hook',profiles['DailyLimitHook']['role'])
         self.assertEqual(['setDailyLimit'],profiles['DailyLimitHook']['configurationMethods'])
 

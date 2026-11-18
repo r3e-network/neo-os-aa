@@ -11,7 +11,8 @@ on:
       - 'Directory.Build.targets'
       - 'nuget.config'
       - 'contracts/**'
-      - 'implementations/native/**'
+      - 'contracts/native/**'
+      - 'tests/SmartAccount.Native.Tests/**'
       - 'docs/proposals/*native*'
       - 'docs/proposals/SMARTACCOUNT-NATIVE*'
       - 'docs/reports/sa-native-ci-probe-consistency-20261009.json'
@@ -40,7 +41,8 @@ on:
       - 'Directory.Build.targets'
       - 'nuget.config'
       - 'contracts/**'
-      - 'implementations/native/**'
+      - 'contracts/native/**'
+      - 'tests/SmartAccount.Native.Tests/**'
       - 'docs/proposals/*native*'
       - 'docs/proposals/SMARTACCOUNT-NATIVE*'
       - 'docs/reports/sa-native-ci-probe-consistency-20261009.json'
@@ -117,7 +119,7 @@ jobs:
           printf 'NUGET_PACKAGES=%s\n' "$RUNNER_TEMP/native-profile-packages" >> "$GITHUB_ENV"
           printf 'NCCS_BIN=%s\n' "$RUNNER_TEMP/native-profile-tools/nccs" >> "$GITHUB_ENV"
       - name: Gate the core SmartAccount copies on the true source
-        # implementations/native/core/SmartAccount/ is the only editable copy;
+        # contracts/native/SmartAccount/ is the only editable copy;
         # the pinned core must carry exactly its regenerated copies or the lane
         # fails here, before any build or test work is spent.
         run: |

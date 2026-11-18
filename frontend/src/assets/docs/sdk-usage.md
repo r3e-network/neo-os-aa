@@ -91,7 +91,7 @@ const signature = await signer.signTypedData(
 
 ## 5. Paymaster / Sponsored Execution
 
-The SDK provides helpers for building sponsored (gasless) transactions that settle relay fees through the on-chain `SAPaymaster` contract (`contracts/paymaster/Paymaster.cs`). Sponsors deposit GAS into the Paymaster via NEP-17 transfer, then create policies that define which accounts, contracts, and methods they are willing to fund.
+The SDK provides helpers for building sponsored (gasless) transactions that settle relay fees through the on-chain `SAPaymaster` contract (`contracts/custom/paymaster/Paymaster.cs`). Sponsors deposit GAS into the Paymaster via NEP-17 transfer, then create policies that define which accounts, contracts, and methods they are willing to fund.
 
 ### Query a Sponsor Balance
 

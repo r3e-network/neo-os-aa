@@ -140,7 +140,7 @@ const MUST_BE_IGNORED = [
   // .NET and nccs build output at every depth.
   "contracts/bin/v3/SmartAccount.nef",
   "contracts/obj/project.assets.json",
-  "contracts/verifiers/bin/sc/SessionKeyVerifier.nef",
+  "contracts/plugins/verifiers/bin/sc/SessionKeyVerifier.nef",
   "tests/SmartAccount.Contracts.Tests/bin/Release/net10.0/SmartAccount.Contracts.Tests.dll",
   "tests/SmartAccount.Contracts.Tests/obj/project.assets.json",
   // JavaScript build, coverage and test output at every depth.
@@ -192,11 +192,11 @@ const MUST_NOT_BE_IGNORED = [
   ".codegraph/.gitignore",
   "contracts/build/SmartAccount.nef",
   "contracts/build/SmartAccount.manifest.json",
-  "contracts/SmartAccount.csproj",
+  "contracts/custom/SmartAccount.csproj",
   "Directory.Build.props",
   "nuget.config",
-  "contracts/packages.lock.json",
-  "contracts/verifiers/packages.SessionKeyVerifier.lock.json",
+  "contracts/custom/packages.lock.json",
+  "contracts/plugins/verifiers/packages.SessionKeyVerifier.lock.json",
   "tests/SmartAccount.Contracts.Tests/packages.lock.json",
   "tests/SmartAccount.Contracts.Tests/fixtures/deployed-mainnet/SmartAccountV3.nef",
   "frontend/package.json",

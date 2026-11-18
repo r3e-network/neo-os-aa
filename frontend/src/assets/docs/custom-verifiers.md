@@ -62,7 +62,7 @@ await walletService.invoke(payload);
 ```
 
 `updateVerifier(accountId, newVerifier, verifierParams)` is the deployed entrypoint
-(`contracts/SmartAccount.Accounts.cs:249`, in every pinned
+(`contracts/custom/SmartAccount.Accounts.cs:249`, in every pinned
 `contracts/build/SmartAccountV3.manifest.json`); the studio calls it the same way in
 `frontend/src/features/studio/useStudioController.js:498`. `verifierParams` is an empty `ByteArray`
 for a verifier that takes no configuration.

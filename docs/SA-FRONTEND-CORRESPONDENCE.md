@@ -486,7 +486,7 @@ are established by different mechanisms at different strengths:
 
 | Leg | What establishes it | Strength |
 | --- | --- | --- |
-| C# project -> NEF bytes | `formal/refinement/export` recompiles `contracts/SmartAccount.csproj` with the pinned NCCS 3.9.1 and requires `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`, plus `JsonNode.DeepEquals` on the manifest | byte identity, every gate run |
+| C# project -> NEF bytes | `formal/refinement/export` recompiles `contracts/custom/SmartAccount.csproj` with the pinned NCCS 3.9.1 and requires `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`, plus `JsonNode.DeepEquals` on the manifest | byte identity, every gate run |
 | C# text -> what the lanes read | this harness | agreement between two independent readers on a measured corpus |
 | ABI -> what a real engine dispatches | `export --abi-dispatch` plus `abi_dispatch.py` | 107 of 109 entries dispatched onto the declared offset, the two engine entry points refused by name |
 | C# semantics -> VM semantics | still nothing beyond the dispatch path, and nothing here claims it | open |

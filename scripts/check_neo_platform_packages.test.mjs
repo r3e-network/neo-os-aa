@@ -25,27 +25,27 @@ const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath)
 const manifest = parseManifest(read(PATHS.manifest));
 const projects = listProjects(repoRoot);
 
-// Captured from `dotnet restore --force` of contracts/SmartAccount.csproj against a lock file
+// Captured from `dotnet restore --force` of contracts/custom/SmartAccount.csproj against a lock file
 // that was edited by hand (2026-10-04, paths shortened).
 const STALE_LOCK_RESTORE = `
   Determining projects to restore...
-/w/contracts/SmartAccount.csproj : error NU1004: The package reference Neo.SmartContract.Framework version has changed from [3.10.0, ) to [3.10.1, ).The packages lock file is inconsistent with the project dependencies so restore can't be run in locked mode. Disable the RestoreLockedMode MSBuild property or pass an explicit --force-evaluate option to run restore to update the lock file.
-  Failed to restore /w/contracts/SmartAccount.csproj (in 72 ms).
+/w/contracts/custom/SmartAccount.csproj : error NU1004: The package reference Neo.SmartContract.Framework version has changed from [3.10.0, ) to [3.10.1, ).The packages lock file is inconsistent with the project dependencies so restore can't be run in locked mode. Disable the RestoreLockedMode MSBuild property or pass an explicit --force-evaluate option to run restore to update the lock file.
+  Failed to restore /w/contracts/custom/SmartAccount.csproj (in 72 ms).
 `;
 
 const FORGED_LOCK_RESTORE = `
   Determining projects to restore...
-/w/contracts/SmartAccount.csproj : error NU1403: Package content hash validation failed for Neo.SmartContract.Framework.3.10.1. The package is different than the last restore.
-/w/contracts/SmartAccount.csproj : error NU1403:
-  Failed to restore /w/contracts/SmartAccount.csproj (in 487 ms).
+/w/contracts/custom/SmartAccount.csproj : error NU1403: Package content hash validation failed for Neo.SmartContract.Framework.3.10.1. The package is different than the last restore.
+/w/contracts/custom/SmartAccount.csproj : error NU1403:
+  Failed to restore /w/contracts/custom/SmartAccount.csproj (in 487 ms).
 `;
 
 // Captured from `dotnet restore` of a project that pins a version nuget.org does not have.
 const MISSING_VERSION_RESTORE = `
   Determining projects to restore...
-/w/contracts/SmartAccount.csproj : error NU1102: Unable to find package Neo.SmartContract.Framework with version (>= 3.10.2-CI00384)
-/w/contracts/SmartAccount.csproj : error NU1102:   - Found 35 version(s) in nuget.org [ Nearest version: 3.10.1 ]
-  Failed to restore /w/contracts/SmartAccount.csproj (in 5.54 sec).
+/w/contracts/custom/SmartAccount.csproj : error NU1102: Unable to find package Neo.SmartContract.Framework with version (>= 3.10.2-CI00384)
+/w/contracts/custom/SmartAccount.csproj : error NU1102:   - Found 35 version(s) in nuget.org [ Nearest version: 3.10.1 ]
+  Failed to restore /w/contracts/custom/SmartAccount.csproj (in 5.54 sec).
 `;
 
 function locksFromRepository() {
@@ -120,7 +120,7 @@ test("every project that restores Neo packages has a committed lock file that ag
 
 test("public restore gate excludes native projects while explicit native scope includes six modules and the epoch probe", () => {
   const all = listProjects(repoRoot, { includeNative: true });
-  const native = all.filter((project) => project.startsWith("contracts/native/"));
+  const native = all.filter((project) => project.startsWith("contracts/plugins/native-profile/"));
   assert.equal(projects.length, 28);
   assert.equal(all.length, 38);
   assert.ok(all.includes("tests/NativeEpochProbe/NativeEpochProbe.csproj"));
@@ -171,18 +171,18 @@ test("epoch probe locks the actual Testing and Framework dependencies independen
 test("projects that share a directory get their own lock file, the others use packages.lock.json", () => {
   const files = projects.map((project) => lockFileFor(project, projects));
   assert.equal(new Set(files).size, projects.length, "no two projects may share a lock file");
-  assert.equal(lockFileFor("contracts/SmartAccount.csproj", projects), "contracts/packages.lock.json");
+  assert.equal(lockFileFor("contracts/custom/SmartAccount.csproj", projects), "contracts/custom/packages.lock.json");
   assert.equal(lockFileFor(PATHS.testsProject, projects), "tests/SmartAccount.Contracts.Tests/packages.lock.json");
-  assert.equal(lockFileFor("contracts/hooks/MultiHook.csproj", projects), "contracts/hooks/packages.MultiHook.lock.json");
-  assert.equal(lockFileFor("contracts/verifiers/ZkLoginVerifier.csproj", projects), "contracts/verifiers/packages.ZkLoginVerifier.lock.json");
+  assert.equal(lockFileFor("contracts/plugins/hooks/MultiHook.csproj", projects), "contracts/plugins/hooks/packages.MultiHook.lock.json");
+  assert.equal(lockFileFor("contracts/plugins/verifiers/ZkLoginVerifier.csproj", projects), "contracts/plugins/verifiers/packages.ZkLoginVerifier.lock.json");
 });
 
 test("a missing lock file, a different version and different bytes in a lock file are reported", () => {
   const framework = manifest.packages.find((pkg) => pkg.id === "Neo.SmartContract.Framework");
   const lockWith = (entry) => ({ version: 1, dependencies: { "net10.0": { "Neo.SmartContract.Framework": entry } } });
   const good = { type: "Direct", requested: `[${framework.version}, )`, resolved: framework.version, contentHash: framework.sha512 };
-  const project = "contracts/market/SAAddressMarket.csproj";
-  const file = "contracts/market/packages.lock.json";
+  const project = "contracts/custom/market/SAAddressMarket.csproj";
+  const file = "contracts/custom/market/packages.lock.json";
   assert.deepEqual(lockFileProblems([{ project, file, lock: lockWith(good) }], manifest), []);
   assert.deepEqual(lockFileProblems([{ project, file, lock: null }], manifest), [
     `${file} is missing; every project that restores Neo packages commits its lock file`,
@@ -197,7 +197,7 @@ test("a missing lock file, a different version and different bytes in a lock fil
 test("a lock file must lock the framework, the tests lock must lock the test engine, and no unlisted Neo package may appear", () => {
   const framework = manifest.packages.find((pkg) => pkg.id === "Neo.SmartContract.Framework");
   const empty = { version: 1, dependencies: { "net10.0": {} } };
-  assert.deepEqual(lockFileProblems([{ project: "contracts/market/SAAddressMarket.csproj", file: "m.lock.json", lock: empty }], manifest), [
+  assert.deepEqual(lockFileProblems([{ project: "contracts/custom/market/SAAddressMarket.csproj", file: "m.lock.json", lock: empty }], manifest), [
     "m.lock.json does not lock Neo.SmartContract.Framework",
   ]);
   const frameworkOnly = {
@@ -213,7 +213,7 @@ test("a lock file must lock the framework, the tests lock must lock the test eng
   ]);
   const extra = structuredClone(frameworkOnly);
   extra.dependencies["net10.0"]["Neo.Plugins.Example"] = { type: "Transitive", resolved: "1.0.0", contentHash: "x" };
-  assert.deepEqual(lockFileProblems([{ project: "contracts/market/SAAddressMarket.csproj", file: "m.lock.json", lock: extra }], manifest), [
+  assert.deepEqual(lockFileProblems([{ project: "contracts/custom/market/SAAddressMarket.csproj", file: "m.lock.json", lock: extra }], manifest), [
     `m.lock.json locks Neo.Plugins.Example 1.0.0, which is not in ${PATHS.manifest}`,
   ]);
 });
@@ -365,7 +365,7 @@ test("verify_repo.sh runs the package and compiler gates before the first contra
   const compiler = script.search(/^.*node scripts\/check_neo_platform_packages\.mjs --compiler-only[ \t]*$/m);
   assert.notEqual(gate, -1);
   assert.notEqual(compiler, -1);
-  for (const first of ["dotnet build contracts/SmartAccount.csproj", "bash contracts/compile.sh", "dotnet test SmartAccount.sln"]) {
+  for (const first of ["dotnet build contracts/custom/SmartAccount.csproj", "bash contracts/compile.sh", "dotnet test SmartAccount.sln"]) {
     assert.ok(gate < script.indexOf(first), `the package gate must run before ${first}`);
     assert.ok(compiler < script.indexOf(first), `the compiler gate must run before ${first}`);
   }

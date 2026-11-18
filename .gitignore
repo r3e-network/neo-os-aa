@@ -43,7 +43,7 @@ bin/
 obj/
 # Plugin-template local verification output (contracts/build/ stays tracked:
 # it pins the deployed artifacts, while template builds are reproducible checks)
-contracts/templates/build/
+contracts/plugins/templates/build/
 # Isolated NuGet restore cache (README: Restoring with an isolated package cache)
 nuget-isolated/
 nuget-isolated1/

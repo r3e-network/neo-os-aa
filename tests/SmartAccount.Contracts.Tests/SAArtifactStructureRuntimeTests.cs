@@ -122,7 +122,8 @@ public class SAArtifactStructureRuntimeTests
     [DataRow(true)]
     public void SameNameAndArityCannotBeOverloadedByTypes(bool changeParameterType)
     {
-        string nefPath = Directory.GetFiles(CompiledContractsDir, "*.nef")[0];
+        // Named, not "the first artifact": the mutation needs a method that takes a parameter.
+        string nefPath = Path.Combine(CompiledContractsDir, "SmartAccount.nef");
         var manifest = ContractManifest.Parse(File.ReadAllText(Path.ChangeExtension(nefPath, ".manifest.json")));
         var original = manifest.Abi.Methods.First(method => method.Parameters.Length > 0);
         var duplicate = ContractMethodDescriptor.FromJson(original.ToJson());

@@ -36,7 +36,7 @@ if [[ "$MISSING" -ne 0 ]]; then
   echo "environment not ready: the SourceInvariant suite deploys SmartAccount and" >&2
   echo "environment not ready: MockTransferTarget from contracts/bin/v3 before it can run." >&2
   echo "environment not ready: build the artifacts with:" >&2
-  echo "environment not ready:   dotnet build contracts/SmartAccount.csproj -c Release -nologo" >&2
+  echo "environment not ready:   dotnet build contracts/custom/SmartAccount.csproj -c Release -nologo" >&2
   echo "environment not ready:   bash contracts/compile.sh" >&2
   echo "environment not ready: (or run ./scripts/verify_repo.sh). Exiting 2; no invariant counterexample was found." >&2
   exit 2

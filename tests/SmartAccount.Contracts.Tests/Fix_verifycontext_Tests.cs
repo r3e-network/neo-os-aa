@@ -30,10 +30,10 @@ public class FixVerifyContextTests
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    private static readonly string ContractsDir = Path.Combine(RepoRoot, "contracts");
+    private static readonly string CoreDir = Path.Combine(RepoRoot, "contracts", "custom");
 
     private static string VerifyContextSource() =>
-        File.ReadAllText(Path.Combine(ContractsDir, "SmartAccount.VerifyContext.cs"));
+        File.ReadAllText(Path.Combine(CoreDir, "SmartAccount.VerifyContext.cs"));
 
     /// <summary>
     /// Isolates the body of <c>Verify</c> so assertions about the native-asset branch are not

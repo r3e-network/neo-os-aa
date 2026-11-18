@@ -175,7 +175,7 @@ public class Fix_MarketNotify_Tests
     {
         // Source pin: the only NeoVM defence against a missing contract or method is to inspect
         // the manifest before calling, because try/catch cannot intercept those faults.
-        string source = File.ReadAllText(Path.Combine(RepoRoot, "contracts", "SmartAccount.MarketEscrow.cs"));
+        string source = File.ReadAllText(Path.Combine(RepoRoot, "contracts", "custom", "SmartAccount.MarketEscrow.cs"));
         StringAssert.Contains(source, "if (!MarketExposesAbandonListing(market)) return;");
         StringAssert.Contains(source, "ContractManagement.GetContract(market)");
         StringAssert.Contains(source, "methods[i].Parameters.Length == MarketAbandonListingParameterCount");

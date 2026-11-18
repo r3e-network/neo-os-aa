@@ -626,11 +626,11 @@ manifest-group 签名，或整个 NeoVM。
 - **31 个文件只是重命名。** 在此前固定的内容中把 `SmartAccount` / `UnifiedSmartWallet` /
   `abstract-account` 替换为 `SmartAccount` / `smart-account`，即可逐字节复现当前文件，因此对应
   陈述未变。
-- **`contracts/SmartAccount.Paymaster.cs`** 增加了 73 字节的 VM 整数余量断言（`vmMax` 加上
+- **`contracts/custom/SmartAccount.Paymaster.cs`** 增加了 73 字节的 VM 整数余量断言（`vmMax` 加上
   `budget.Reserved <= vmMax - settled`）。该断言位于完整上下文证书所建模的 helper 内部；精化泳道
   证明该守卫在合法域上成功（`legal_update_fits`、`vm_leb_margin_of_fits`），所以固定的对应关系
   对新文本仍然成立。
-- **`contracts/SmartAccount.State.cs`** 只改变 `AccountImplementationId` 字符串常量，没有可执行
+- **`contracts/custom/SmartAccount.State.cs`** 只改变 `AccountImplementationId` 字符串常量，没有可执行
   逻辑。
 - **`formal/verify.py` 与 `scripts/verify_repo.sh`** 携带相同的重命名，以及针对被重命名模型的
   变异体表条目；该差异既不增加也不删除任何 `require(...)` 调用，因此没有放宽门禁断言。

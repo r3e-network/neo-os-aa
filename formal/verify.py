@@ -63,42 +63,40 @@ NATIVE_CORE_REQUIRED_FILES = {
         "SmartAccountInvocationContext.cs", "SmartAccountEnvelope.cs")},
 }
 
-SOURCE_FILES = {"contracts/compile.sh", "contracts/SmartAccount.csproj",
-                "contracts/SmartAccount.cs",
-                "contracts/SmartAccount.HookChildren.cs",
-                "contracts/SmartAccount.VerifierChildren.cs",
-                "contracts/SmartAccount.Execution.cs",
-                "contracts/SmartAccount.Accounts.cs",
-                "contracts/SmartAccount.PlatformRegistrar.cs",
-                "contracts/registrar/PlatformRegistrar.cs",
-                "contracts/registrar/PlatformRegistrarAuthority.cs",
-                "contracts/SmartAccount.Admin.cs",
-                "contracts/SmartAccount.MarketEscrow.cs",
-                "contracts/SmartAccount.Internal.cs",
-                "contracts/SmartAccount.Models.cs",
-                "contracts/SmartAccount.State.cs",
-                "contracts/SmartAccount.Escape.cs",
-                "contracts/SmartAccount.Paymaster.cs",
-                "contracts/paymaster/Paymaster.cs",
-                "contracts/verifiers/VerifierPayload.cs",
-                "contracts/verifiers/SignerDomain.cs",
-                "contracts/verifiers/MultiSigVerifier.cs",
-                "contracts/hooks/MultiHook.cs",
-                "contracts/native/NativeAuthority.cs",
-                "contracts/verifiers/VerifierAuthority.cs",
-                "contracts/verifiers/NeoNativeVerifier.cs",
-                "contracts/verifiers/SessionKeyVerifier.cs",
-                "contracts/verifiers/NativeOperation.cs",
-                "contracts/verifiers/VerifierClock.cs",
-                "contracts/hooks/HookAuthority.cs",
-                "contracts/hooks/WhitelistHook.cs",
-                "contracts/hooks/DailyLimitHook.cs",
-                "contracts/hooks/TokenRestrictedHook.cs",
-                "contracts/SmartAccount.VerifyContext.cs",
+SOURCE_FILES = {"contracts/compile.sh", "contracts/custom/SmartAccount.csproj",
+                "contracts/custom/SmartAccount.cs",
+                "contracts/custom/SmartAccount.Execution.cs",
+                "contracts/custom/SmartAccount.Accounts.cs",
+                "contracts/custom/SmartAccount.PlatformRegistrar.cs",
+                "contracts/custom/registrar/PlatformRegistrar.cs",
+                "contracts/custom/registrar/PlatformRegistrarAuthority.cs",
+                "contracts/custom/SmartAccount.Admin.cs",
+                "contracts/custom/SmartAccount.MarketEscrow.cs",
+                "contracts/custom/SmartAccount.Internal.cs",
+                "contracts/custom/SmartAccount.Models.cs",
+                "contracts/custom/SmartAccount.State.cs",
+                "contracts/custom/SmartAccount.Escape.cs",
+                "contracts/custom/SmartAccount.Paymaster.cs",
+                "contracts/custom/paymaster/Paymaster.cs",
+                "contracts/plugins/verifiers/VerifierPayload.cs",
+                "contracts/plugins/verifiers/SignerDomain.cs",
+                "contracts/plugins/verifiers/MultiSigVerifier.cs",
+                "contracts/plugins/hooks/MultiHook.cs",
+                "contracts/plugins/native-profile/NativeAuthority.cs",
+                "contracts/plugins/verifiers/VerifierAuthority.cs",
+                "contracts/plugins/verifiers/NeoNativeVerifier.cs",
+                "contracts/plugins/verifiers/SessionKeyVerifier.cs",
+                "contracts/plugins/verifiers/NativeOperation.cs",
+                "contracts/plugins/verifiers/VerifierClock.cs",
+                "contracts/plugins/hooks/HookAuthority.cs",
+                "contracts/plugins/hooks/WhitelistHook.cs",
+                "contracts/plugins/hooks/DailyLimitHook.cs",
+                "contracts/plugins/hooks/TokenRestrictedHook.cs",
+                "contracts/custom/SmartAccount.VerifyContext.cs",
                 "docs/proposals/smartaccount-native-profile-v2-parameters.json",
                 "docs/proposals/smartaccount-native-profile-v2-vectors.json",
                 "scripts/native_module_profile.py", "scripts/build_native_modules.py",
-                "contracts/native/profiles.json"}
+                "contracts/plugins/native-profile/profiles.json"}
 SOURCE_FILES.update({"Directory.Build.props", "nuget.config", "contracts/neo-platform-packages.json",
                      "scripts/verify_repo.sh", "scripts/check_neo_platform_packages.mjs",
                      "formal/verify.py", "formal/verify-in-docker.sh", "formal/Dockerfile",
@@ -108,10 +106,10 @@ SOURCE_FILES.update({"Directory.Build.props", "nuget.config", "contracts/neo-pla
                      "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md",
                      "docs/proposals/validate-native-smartaccount-profile.py"})
 for _module in ("NeoNativeVerifier", "SessionKeyVerifier", "MultiSigVerifier", "WhitelistHook", "DailyLimitHook", "TokenRestrictedHook"):
-    SOURCE_FILES.add(f"contracts/native/{_module}.Native.csproj")
-    SOURCE_FILES.add(f"contracts/native/packages.{_module}.Native.lock.json")
+    SOURCE_FILES.add(f"contracts/plugins/native-profile/{_module}.Native.csproj")
+    SOURCE_FILES.add(f"contracts/plugins/native-profile/packages.{_module}.Native.lock.json")
 
-MULTISIG_SOURCE = "contracts/verifiers/MultiSigVerifier.cs"
+MULTISIG_SOURCE = "contracts/plugins/verifiers/MultiSigVerifier.cs"
 MULTISIG_SOURCE_GUARDS = {
     "non_empty": "verifiers != null && verifiers.Length > 0",
     "maximum_size": 'ExecutionEngine.Assert(verifiers.Length <= MaxChildVerifiers, $"Maximum {MaxChildVerifiers} child verifiers allowed")',
@@ -902,7 +900,7 @@ def check_inventory(root=ROOT):
 
 def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
     """Narrow reviewed source guards, not a C#/VM refinement theorem."""
-    admin = (repo_root / "contracts/SmartAccount.Admin.cs").read_text()
+    admin = (repo_root / "contracts/custom/SmartAccount.Admin.cs").read_text()
     model = (repo_root / "formal/coq/OrdinaryGovernance.v").read_text()
     factors = re.search(r"MinUpgradeDelayMs\s*=\s*(\d+)L\s*\*\s*(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*;", admin)
     require(factors is not None, "Ordinary governance source delay expression changed")
@@ -915,20 +913,20 @@ def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
     # Phase 1b: owner-cancellation moved to the registrar service contract. The
     # witness guard keeps the same shape — the owner path checks the owner's
     # witness, independent of the caller — only relocated.
-    registrar = (repo_root / "contracts/registrar/PlatformRegistrar.cs").read_text()
+    registrar = (repo_root / "contracts/custom/registrar/PlatformRegistrar.cs").read_text()
     require("bool owner = currentOwner != UInt160.Zero && Runtime.CheckWitness(currentOwner);" in registrar,
             "Ordinary owner cancellation witness source guard changed")
     # The core no longer deletes a registrar-owned pending key on escape or market
     # settlement; ApplyPlatformAccountOwnerRotation instead rejects a record whose
     # previousOwner no longer matches the live account state, so a stale record can
     # never be confirmed against a sold or re-registered account.
-    core_registrar = (repo_root / "contracts/SmartAccount.PlatformRegistrar.cs").read_text()
+    core_registrar = (repo_root / "contracts/custom/SmartAccount.PlatformRegistrar.cs").read_text()
     require("previousOwner == state.BackupOwner," in core_registrar
             and '"Platform owner rotation stale"' in core_registrar,
             "Ordinary pending rotation staleness guard changed")
     for name, marker in (("Escape", "// Phase 1b: pending platform owner rotations live in the registrar service's"),
                          ("MarketEscrow", "// Phase 1b: a pre-sale pending platform owner rotation lives in the registrar")):
-        source = (repo_root / f"contracts/SmartAccount.{name}.cs").read_text()
+        source = (repo_root / f"contracts/custom/SmartAccount.{name}.cs").read_text()
         require(marker in source,
                 f"Ordinary pending rotation registrar-ownership marker missing: {name}")
     return {"delayMilliseconds": source_delay, "ownerWitnessIndependentOfCaller": True,
@@ -937,7 +935,7 @@ def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
 
 def check_ordinary_sponsorship_correspondence(repo_root=ROOT.parent):
     """Bind the cumulative model to selected reviewed source expressions/order."""
-    source = (repo_root / "contracts/SmartAccount.Paymaster.cs").read_text()
+    source = (repo_root / "contracts/custom/SmartAccount.Paymaster.cs").read_text()
     for fragment in ("if (budget.TransactionHash != transactionHash)", "budget.Reserved = 0;",
                      "BigInteger.Max(actualCost - budget.Reserved, 0) + estimationFlag * requested",
                      "BigInteger settled = BigInteger.Min(requested, cap);", "budget.Reserved += settled;",
@@ -955,7 +953,7 @@ def check_ordinary_sponsorship_correspondence(repo_root=ROOT.parent):
 
 def check_ordinary_recovery_correspondence(repo_root=ROOT.parent):
     """Selected guards only; arbitrary storage/entrypoint refinement remains external."""
-    source = (repo_root / "contracts/SmartAccount.Escape.cs").read_text()
+    source = (repo_root / "contracts/custom/SmartAccount.Escape.cs").read_text()
     begin = source.index("public static void FinalizeEscapeToOwner(")
     end = source.index("public static void InitiateEscape(", begin)
     recovery = source[begin:end]
@@ -972,7 +970,7 @@ def check_ordinary_recovery_correspondence(repo_root=ROOT.parent):
             "Ordinary irreversible installation latch source guard changed")
     require("Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_OwnerOnlyRecovery" not in source,
             "Ordinary recovery source may not remove permanent latch")
-    accounts = (repo_root / "contracts/SmartAccount.Accounts.cs").read_text()
+    accounts = (repo_root / "contracts/custom/SmartAccount.Accounts.cs").read_text()
     for argument in ("newHookId", "pending.NewHookId", "newVerifier", "pending.NewVerifier"):
         require(f"AssertPluginInstallationAllowed(accountId, {argument});" in accounts,
                 "Ordinary module installation source guard missing: " + argument)

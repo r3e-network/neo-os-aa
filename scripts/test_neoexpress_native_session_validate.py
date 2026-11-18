@@ -84,7 +84,7 @@ class NativeSessionTests(unittest.TestCase):
                 driver.send('invalid-witness',CORE,'executeUserOp',args,admission_rejection=True,**options)
 
     def test_profile_is_explicit_and_declares_configuration(self):
-        profiles=json.loads((Path(__file__).resolve().parent.parent/'contracts/native/profiles.json').read_text())
+        profiles=json.loads((Path(__file__).resolve().parent.parent/'contracts/plugins/native-profile/profiles.json').read_text())
         self.assertEqual(['setSessionKey','clearSessionKey'], profiles['SessionKeyVerifier']['configurationMethods'])
 
     def test_signing_input_matches_published_native_vector(self):

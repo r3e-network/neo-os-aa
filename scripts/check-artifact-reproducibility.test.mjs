@@ -85,9 +85,10 @@ test("the scratch copy carries the sources, the lock files and the restore polic
   const scratch = prepareScratch();
   try {
     for (const file of RESTORE_POLICY_FILES) assert.ok(fs.existsSync(path.join(scratch, file)), `${file} is missing from the scratch copy`);
-    assert.ok(fs.existsSync(path.join(scratch, "contracts", "SmartAccount.Execution.cs")));
-    assert.ok(fs.existsSync(path.join(scratch, "contracts", "packages.lock.json")));
-    assert.ok(fs.existsSync(path.join(scratch, "contracts", "verifiers", "packages.SessionKeyVerifier.lock.json")));
+    assert.ok(fs.existsSync(path.join(scratch, "contracts", "custom", "SmartAccount.Execution.cs")));
+    assert.ok(fs.existsSync(path.join(scratch, "contracts", "custom", "packages.lock.json")));
+    assert.ok(fs.existsSync(path.join(scratch, "contracts", "plugins", "verifiers", "packages.SessionKeyVerifier.lock.json")));
+    assert.ok(fs.existsSync(path.join(scratch, "tests", "mocks", "MockTransferTarget.csproj")), "compile.sh builds the mocks from tests/mocks");
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "dotnet_env.sh")));
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "check_neo_platform_packages.mjs")));
     assert.equal(fs.readFileSync(path.join(scratch, "contracts", "compile.sh"), "utf8"), fs.readFileSync(new URL("../contracts/compile.sh", import.meta.url), "utf8"));
@@ -134,9 +135,9 @@ test("source snapshot excludes generated trees and uses repository-relative name
 
 test("certificate inputs include root restore policy, locks, native sources, and the actual recipe", () => {
   const expected = scratchTree({
-    "contracts/native/NativeAuthority.cs": "native",
-    "contracts/native/profiles.json": "{}",
-    "contracts/native/packages.Verifier.Native.lock.json": "{}",
+    "contracts/plugins/native-profile/NativeAuthority.cs": "native",
+    "contracts/plugins/native-profile/profiles.json": "{}",
+    "contracts/plugins/native-profile/packages.Verifier.Native.lock.json": "{}",
     "contracts/neo-platform-packages.json": "{}",
     "contracts/compile.sh": "recipe",
     "Directory.Build.props": "props", "nuget.config": "feed",
@@ -145,9 +146,10 @@ test("certificate inputs include root restore policy, locks, native sources, and
   try {
     const snapshot = reproducibility.buildInputSnapshot(expected);
     assert.deepEqual(Object.keys(snapshot).sort(), [
-      "Directory.Build.props", "contracts/compile.sh", "contracts/native/NativeAuthority.cs",
-      "contracts/native/packages.Verifier.Native.lock.json", "contracts/native/profiles.json",
-      "contracts/neo-platform-packages.json", "nuget.config", "scripts/check_neo_platform_packages.mjs", "scripts/dotnet_env.sh",
+      "Directory.Build.props", "contracts/compile.sh", "contracts/neo-platform-packages.json",
+      "contracts/plugins/native-profile/NativeAuthority.cs",
+      "contracts/plugins/native-profile/packages.Verifier.Native.lock.json", "contracts/plugins/native-profile/profiles.json",
+      "nuget.config", "scripts/check_neo_platform_packages.mjs", "scripts/dotnet_env.sh",
     ]);
     fs.writeFileSync(path.join(expected, "nuget.config"), "different feed");
     assert.notDeepEqual(reproducibility.buildInputSnapshot(expected), snapshot);

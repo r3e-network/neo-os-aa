@@ -22,7 +22,7 @@
 
 原生 ABI 2 实现具备独立的托管恢复、权限 epoch 模块存储、执行中显式的 epoch / 配置承诺、有界回调、受支持签名形态的见证费用估算，以及已签名交易预览。参见[原生架构](NATIVE_SYSTEM_ARCHITECTURE.md)、[SDK](NATIVE_SDK.md) 与[工作台](NATIVE_ACCOUNT_WORKSPACE.md)。它需要匹配的原生运行时与激活；公开 V3 部署不是原生可用性的证据。
 
-源码托管：本仓库的 `implementations/native/core/SmartAccount/` 是原生 `SmartAccount` 合约唯一可编辑副本（真实源码）；[原生 VM 工作流](../.github/workflows/native-profile.yml) 使用的、按 SHA 固定的 Neo 核心检出版本携带这些文件的生成副本，该工作流在任何构建或测试之前运行 `scripts/sync_native_smartaccount.py --check`，因此漂移、缺失或未纳管的副本会在此失败。该固定版本现已记录重新生成的标记提交。这一“真实源码 / 同步”结构及其 CI 门禁属于仓库机制，不会改变下文列出的外部激活、验收与回读边界。
+源码托管：本仓库的 `contracts/native/SmartAccount/` 是原生 `SmartAccount` 合约唯一可编辑副本（真实源码）；[原生 VM 工作流](../.github/workflows/native-profile.yml) 使用的、按 SHA 固定的 Neo 核心检出版本携带这些文件的生成副本，该工作流在任何构建或测试之前运行 `scripts/sync_native_smartaccount.py --check`，因此漂移、缺失或未纳管的副本会在此失败。该固定版本现已记录重新生成的标记提交。这一“真实源码 / 同步”结构及其 CI 门禁属于仓库机制，不会改变下文列出的外部激活、验收与回读边界。
 
 发现流程绑定[当前配置参数](proposals/smartaccount-native-profile-v2-parameters.json)及其摘要，而不仅仅是 `getVersion() == 2`。身份推导仍是版本 1；授权与精确的 14 字段账户记录是版本 2。执行接收四个参数，包括当前权限 epoch 与配置 nonce。原生复合限额为三个子模块、两个批准 / 阈值与三个聚合签名域。验证器回调预算为 1 GAS；钩子与维护各 2.5 GAS。这些边界并不保证最大批次能满足网络的全局验证预算。
 
@@ -65,7 +65,7 @@
 
 ## 当前源码：平台服务、冻结与发现读取
 
-已提交的普通源码候选把平台服务从核心中抽出：市场托管结算（`abandonListing`）位于 `SAAddressMarket`，Paymaster 报销（`settleReimbursement`）位于 `SAPaymaster`，平台账户注册与所有者轮换时间锁位于独立的 `SAPlatformRegistrar`（`contracts/registrar/`）。在 2026-11-13 安全修复之上，该候选新增了备份所有者门控的冻结面（`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`），它不属于已固定的公开工件。
+已提交的普通源码候选把平台服务从核心中抽出：市场托管结算（`abandonListing`）位于 `SAAddressMarket`，Paymaster 报销（`settleReimbursement`）位于 `SAPaymaster`，平台账户注册与所有者轮换时间锁位于独立的 `SAPlatformRegistrar`（`contracts/custom/registrar/`）。在 2026-11-13 安全修复之上，该候选新增了备份所有者门控的冻结面（`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`），它不属于已固定的公开工件。
 
 2026-11-16 的 Ethereum-AA 对齐修订在该候选之上新增两个安全读取：`describeAccount(accountId)` 聚合完整账户描述符（ERC-7579 风格的能力发现）；`simulateValidation(accountId, op)` ——以 ERC-4337 的 EntryPoint 命名，便于 4337 工具找到熟悉的入口——是非故障的执行检查预检（不含签名与钩子执行），同时报告托管闩锁与原生备份所有者见证。同一修订让 `SessionKeyVerifier.setPublicKey` 在注册验证器参数中接受版本 0x01 的初始密钥数据块，使会话密钥账户在第一天即可使用；之后的密钥变更仍受 24 小时轮换冷却约束。SDK 暴露 `describeAccount` / `simulateValidation` / `createSessionKeyAccountPayload`，以及 ERC-4337 形态（`toErc4337UserOperation`、`estimateUserOperationGas`）与 ERC-7715 形态（`buildSessionKeyPermission`）的适配器；类型化数据签名布局见 [SA-EIP-712-SPEC.md](SA-EIP-712-SPEC.md)。
 

@@ -927,13 +927,13 @@ pins were refreshed only after classifying every one of the 35:
   `UnifiedSmartWallet` / `abstract-account` with `SmartAccount` /
   `smart-account` in the previously pinned content reproduces the current file
   byte for byte, so the correspondence statements are unchanged.
-- **`contracts/SmartAccount.Paymaster.cs`** gains the 73-byte VM-integer
+- **`contracts/custom/SmartAccount.Paymaster.cs`** gains the 73-byte VM-integer
   headroom assertion (`vmMax` plus `budget.Reserved <= vmMax - settled`). That
   assertion is inside the helper the complete-context certificate models; the
   refinement lanes prove the guard succeeds on the legal domain
   (`legal_update_fits`, `vm_leb_margin_of_fits`), so the pinned correspondence
   still holds for the new text.
-- **`contracts/SmartAccount.State.cs`** changes only the
+- **`contracts/custom/SmartAccount.State.cs`** changes only the
   `AccountImplementationId` string constant, no executable logic.
 - **`formal/verify.py` and `scripts/verify_repo.sh`** carry the same rename plus
   mutation-table entries for the renamed models; the diff adds and removes no

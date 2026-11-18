@@ -3,7 +3,7 @@
 > 中文版本与 `docs/SA-EIP-712-SPEC.md` 同构。若两者冲突，以英文版本为准。
 
 本页是 V3 验证器在链上哈希并校验的 EIP-712 风格签名面的规范参考。字节层面的唯一事实来源是
-`contracts/verifiers/Web3AuthVerifier.cs`；SDK 在 `shared/metaTxCore.mjs`（类型化数据形状）与
+`contracts/plugins/verifiers/Web3AuthVerifier.cs`；SDK 在 `shared/metaTxCore.mjs`（类型化数据形状）与
 `sdk/js/src/metaTx.js`（字节精确的 payload 构造）中镜像它。凡本布局刻意偏离严格 EIP-712 之处，
 都列在 [与严格 EIP-712 的偏离](#与严格-eip-712-的偏离) 一节。
 
