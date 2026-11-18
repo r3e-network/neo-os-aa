@@ -20,7 +20,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: ZkLoginVerifier.cs" Importance="high" />
-    <Exec Command="nccs ./ZkLoginVerifier.csproj -o ../../bin/v3/verifiers" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./ZkLoginVerifier.csproj -o ../../bin/public/verifiers" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

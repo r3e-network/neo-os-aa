@@ -15,7 +15,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
 DEPENDENCIES = [ROOT / "coq/IntegerSemantics.v", ROOT / "coq/CapArithmetic.v",
-                REPO / "formal/coq/OrdinarySponsorship.v"]
+                REPO / "formal/coq/CustomSponsorship.v"]
 MODEL = ROOT / "coq/ReservationArithmetic.v"
 MUTATIONS = {
     "zero-charge-admitted": ("if 0 <? settled then checked_binary Add reserved settled else None",

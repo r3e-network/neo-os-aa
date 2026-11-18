@@ -3,7 +3,7 @@
 
 Creates a fresh single-node NeoExpress chain in a scratch directory, deploys the
 private PLATFORM core from contracts/bin/platform and the public modules from
-contracts/bin/v3 with the same deploy data the production tooling uses. Each
+contracts/bin/public with the same deploy data the production tooling uses. Each
 deployment records its profile so provenance cannot join the public core to a
 bounded-callback receipt. The validator drives real transactions (native backup-owner path,
 escape hatch, bounded hook callbacks, lifecycle-ABI pre-checks, session-key relay
@@ -47,7 +47,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 ROOT = Path(__file__).resolve().parent.parent
-BIN = ROOT / "contracts" / "bin" / "v3"
+BIN = ROOT / "contracts" / "bin" / "public"
 PLATFORM_BIN = ROOT / "contracts" / "bin" / "platform"
 ZERO = "0x0000000000000000000000000000000000000000"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -609,7 +609,7 @@ class Chain:
     def deploy_all(self):
         core = None
         for name, relative, needs_core in ARTIFACTS:
-            profile = "platform" if name == "SmartAccount" else "v3"
+            profile = "platform" if name == "SmartAccount" else "public"
             nef = (PLATFORM_BIN if profile == "platform" else BIN) / relative
             manifest = nef.with_name(nef.name.replace(".nef", ".manifest.json"))
             args = ["contract", "deploy", str(nef), "genesis", "-j"]
@@ -1549,7 +1549,7 @@ def scenario_multisig(c, workdir):
                 [H(account), A(H("0x1111111111111111111111111111111111111111")), I(1)],
                 expect_fault="Child verifier is not deployed")
     # The native-only supportsComposition marker and its negative vector live in
-    # neoexpress_native_multisig_validate.py, not the public-v3 module profile.
+    # neoexpress_native_multisig_validate.py, not the public module profile.
 
     c.check(c.results("SessionKeyVerifier", "getSessionKey", H(account)) is not None,
             "SessionKey leaf has durable state before topology maintenance")
@@ -1999,7 +1999,7 @@ def main():
         "schema": "neoos-sa-neoexpress-validation/v1",
         "observedOn": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "scope": "Fresh isolated single-node NeoExpress chain: deployment of the contracts/bin/platform core, every "
-                 "contracts/bin/v3 public module and the sibling NeoDIDRegistry build, a hand-signed SA proxy-witness "
+                 "contracts/bin/public public module and the sibling NeoDIDRegistry build, a hand-signed SA proxy-witness "
                  "transaction that consumes a NeoDID action ticket, "
                  "protocol flows driven by real transactions, and JSON-RPC readback of every deployed contract. "
                  "No public network, no production deployment, no signing or broadcast outside the private chain.",

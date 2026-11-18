@@ -63,9 +63,9 @@ function artifactPaths(baseName) {
   // Deployment names may select a nested public module, never an alternate
   // profile or filesystem path. In particular ../platform must not be usable.
   if (typeof baseName !== 'string' || !/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(baseName)) {
-    throw new Error('Invalid public artifact name; select an artifact under contracts/bin/v3');
+    throw new Error('Invalid public artifact name; select an artifact under contracts/bin/public');
   }
-  const base = path.resolve(REPO_ROOT, 'contracts', 'bin', 'v3');
+  const base = path.resolve(REPO_ROOT, 'contracts', 'bin', 'public');
   return {
     nef: path.join(base, `${baseName}.nef`),
     manifest: path.join(base, `${baseName}.manifest.json`),
@@ -206,7 +206,7 @@ async function invokePersisted({ client, account, networkMagic, rpcUrl, contract
 }
 
 /**
- * Deploys a contracts/bin/v3 artifact (optionally renamed with a unique
+ * Deploys a contracts/bin/public artifact (optionally renamed with a unique
  * manifest suffix) and waits for the HALTed deployment log.
  */
 async function deployArtifact({ client, account, networkMagic, rpcUrl, baseName, uniqueSuffix = '' }) {

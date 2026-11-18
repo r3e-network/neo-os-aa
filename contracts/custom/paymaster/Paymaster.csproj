@@ -19,7 +19,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: Paymaster.cs" Importance="high" />
-    <Exec Command="nccs ./Paymaster.csproj -o ../../bin/v3/paymaster" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./Paymaster.csproj -o ../../bin/public/paymaster" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

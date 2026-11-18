@@ -98,8 +98,8 @@ test('the real npm tarball is a self-contained, reproducible production package'
     `], consumer);
   });
 
-  await t.test('installed ordinary client builds direct recovery and strictly reads verified permanent mode', async () => {
-    const fixture = JSON.parse(await fs.readFile(path.join(__dirname, 'fixtures', 'ordinary-owner-only-contract-state.json'), 'utf8'));
+  await t.test('installed custom client builds direct recovery and strictly reads verified permanent mode', async () => {
+    const fixture = JSON.parse(await fs.readFile(path.join(__dirname, 'fixtures', 'custom-owner-only-contract-state.json'), 'utf8'));
     run(process.execPath, ['--input-type=commonjs', '-e', `
       const assert = require('node:assert/strict');
       const { SmartAccountClient } = require('@r3e-network/neo-smart-account');

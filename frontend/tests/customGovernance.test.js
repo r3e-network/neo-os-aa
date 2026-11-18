@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getAddressFromScriptHash } from '../src/utils/neo.js';
 import { validateRegistrationOwner, decodePendingUpdate, buildGovernanceAction, assertGovernanceReviewCurrent, readGovernanceSnapshot, supportsOwnerOnlyRecovery } from '../src/features/studio/governance.js';
-import { createOrdinaryGovernanceFixture, ordinaryAccountId, ordinaryCore } from './fixtures/ordinaryGovernanceFixture.js';
+import { createCustomGovernanceFixture, customAccountId, customCore } from './fixtures/customGovernanceFixture.js';
 const owner = '11'.repeat(20), accountId = '22'.repeat(20), verifier = '33'.repeat(20), hook = '44'.repeat(20);
 const pending = { module: '55'.repeat(20), params: '03abcd', initiatedAt: 1000, matureAt: 86401000 };
 const base = () => ({ accountId, backupOwner: owner, verifier, hook, escapeTimelock: 604800, escapeTriggeredAt: 0, escapeActive: false, marketEscrow: false, chain: { height: 10, hash: 'aa'.repeat(32), time: pending.matureAt }, pendingVerifier: { exists: true, full: true, ...pending }, pendingHook: { exists: false, full: true } });
@@ -88,10 +88,10 @@ test('permanent recovery binds deployed support, explicit acknowledgement, owner
 });
 
 test('permanent owner mode blocks plugin reconfiguration and is read only when deployed support exists', async () => {
-  const fixture = createOrdinaryGovernanceFixture();
-  const actualRead = (method, args) => fixture.send('invokefunction', ['0x' + ordinaryCore, method, args]);
+  const fixture = createCustomGovernanceFixture();
+  const actualRead = (method, args) => fixture.send('invokefunction', ['0x' + customCore, method, args]);
   const readClock = async () => ({ height: fixture.state.height, hash: 'aa'.repeat(32), time: fixture.state.time });
-  const old = await readGovernanceSnapshot({ accountId: ordinaryAccountId, read: actualRead, readClock });
+  const old = await readGovernanceSnapshot({ accountId: customAccountId, read: actualRead, readClock });
   assert.equal(old.ownerOnlyRecoverySupported, false);
   assert.equal(fixture.state.calls.some(({ params }) => params[1] === 'isOwnerOnlyRecovery'), false);
   fixture.state.ownerOnlyRecoverySupported = true;
@@ -100,11 +100,11 @@ test('permanent owner mode blocks plugin reconfiguration and is read only when d
   fixture.state.hook = '00'.repeat(20);
   fixture.state.pendingVerifier = null;
   fixture.state.pendingHook = null;
-  const snapshot = await readGovernanceSnapshot({ accountId: ordinaryAccountId, read: actualRead, readClock, ownerOnlyRecoverySupported: true });
+  const snapshot = await readGovernanceSnapshot({ accountId: customAccountId, read: actualRead, readClock, ownerOnlyRecoverySupported: true });
   assert.equal(snapshot.ownerOnlyRecovery, true);
   for (const operation of ['updateVerifier', 'updateHook', 'initiateEscape', 'finalizeEscape', 'finalizeEscapeToOwner']) {
     assert.throws(() => buildGovernanceAction(snapshot, operation, { module: verifier, mode: 'verifier', verifier, params: '02abcd', irreversibleAcknowledged: true }), /permanently/);
   }
   fixture.state.verifier = verifier;
-  await assert.rejects(() => readGovernanceSnapshot({ accountId: ordinaryAccountId, read: actualRead, readClock, ownerOnlyRecoverySupported: true }), /Invalid owner-only/);
+  await assert.rejects(() => readGovernanceSnapshot({ accountId: customAccountId, read: actualRead, readClock, ownerOnlyRecoverySupported: true }), /Invalid owner-only/);
 });

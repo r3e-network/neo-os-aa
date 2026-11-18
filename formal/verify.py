@@ -15,9 +15,9 @@ import tempfile
 ROOT = Path(__file__).resolve().parent
 ARTIFACTS = {"coq/SmartAccountSA.v", "coq/MultiSigPolicy.v",
              "coq/ProxyWitnessScript.v",
-             "coq/OrdinaryGovernance.v",
-             "coq/OrdinarySponsorship.v",
-             "coq/OrdinaryRecovery.v",
+             "coq/CustomGovernance.v",
+             "coq/CustomSponsorship.v",
+             "coq/CustomRecovery.v",
              "coq/CallbackPluginTopology.v", "coq/VerifierGasBudget.v",
              "coq/AuthorizationEvidence.v", "coq/WitnessRuleSemantics.v",
              "coq/NeoVmCallSubset.v", "coq/AttestationProofBinding.v",
@@ -35,7 +35,7 @@ ARTIFACTS = {"coq/SmartAccountSA.v", "coq/MultiSigPolicy.v",
 # Scope is part of the fail-closed source correspondence record. Successful
 # abstract budget proofs must never be attributed to standard public Call.
 RUNTIME_PROFILES = {
-    "v3": {"artifactDirectory": "contracts/bin/v3", "define": None,
+    "public": {"artifactDirectory": "contracts/bin/public", "define": None,
            "verifierCall": "System.Contract.Call", "verifierChildBudgetEnforced": False},
     "platform": {"artifactDirectory": "contracts/bin/platform", "define": "PLATFORM",
                  "verifierCall": "System.Contract.CallWithGasLimit", "verifierChildBudgetEnforced": True},
@@ -45,12 +45,12 @@ RUNTIME_PROFILES = {
                "verifierBudgetDatoshi": 100000000, "hookBudgetDatoshi": 250000000},
 }
 PUBLIC_MODELS = {"coq/SmartAccountSA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
-                 "coq/OrdinaryGovernance.v",
-                 "coq/OrdinarySponsorship.v",
-                 "coq/OrdinaryRecovery.v",
+                 "coq/CustomGovernance.v",
+                 "coq/CustomSponsorship.v",
+                 "coq/CustomRecovery.v",
                  "tla/SmartAccountSA.tla", "tla/SmartAccountSA.cfg", "smt/sa_core.smt2"}
 MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
-                         ["v3", "platform"] if name in PUBLIC_MODELS else ["native"])
+                         ["public", "platform"] if name in PUBLIC_MODELS else ["native"])
                   for name in sorted(ARTIFACTS)}
 # The core checkout is external: no host path is committed or trusted as identity.
 # Hash the full selected Neo source graph, not only SmartAccount partials.
@@ -213,7 +213,7 @@ CALLBACK_PLUGIN_COQ_MUTATIONS = {
     "callback-installed-verifier-result": (
         "(if verifier then verifier_post_ok else true)", "true"),
 }
-ORDINARY_GOVERNANCE_COQ_MUTATIONS = {
+CUSTOM_GOVERNANCE_COQ_MUTATIONS = {
     # These mutations remove one source-candidate owner-rotation invariant.
     # The model is a bounded state machine: registrar identity, witnesses,
     # time, binding and escrow state are explicit abstract inputs; storage and
@@ -261,7 +261,7 @@ ORDINARY_GOVERNANCE_COQ_MUTATIONS = {
         "Definition min_upgrade_delay : Z := 604800000.",
         "Definition min_upgrade_delay : Z := 7."),
 }
-ORDINARY_SPONSORSHIP_COQ_MUTATIONS = {
+CUSTOM_SPONSORSHIP_COQ_MUTATIONS = {
     "sponsorship-resets-same-transaction-spend": (
         "then ledger_spent before else 0.", "then 0 else 0."),
     "sponsorship-retains-old-transaction-spend": (
@@ -283,7 +283,7 @@ ORDINARY_SPONSORSHIP_COQ_MUTATIONS = {
     "sponsorship-list-skips-first-reservation": (
         "Some next => reserve_many tx cost rest next", "Some next => reserve_many tx cost rest before"),
 }
-ORDINARY_RECOVERY_COQ_MUTATIONS = {
+CUSTOM_RECOVERY_COQ_MUTATIONS = {
     "recovery-trusts-old-plugin": (
         "if mature && owner_witness && negb locked && negb escrow",
         "if mature && owner_witness && negb locked && negb escrow && old_plugin_ok"),
@@ -797,9 +797,9 @@ COQ_MODULES = {
     "NativeDailyPolicy.v": NATIVE_DAILY_COQ_MUTATIONS,
     "NativeSessionPolicy.v": NATIVE_SESSION_COQ_MUTATIONS,
     "SmartAccountSA.v": COQ_MUTATIONS,
-    "OrdinaryGovernance.v": ORDINARY_GOVERNANCE_COQ_MUTATIONS,
-    "OrdinarySponsorship.v": ORDINARY_SPONSORSHIP_COQ_MUTATIONS,
-    "OrdinaryRecovery.v": ORDINARY_RECOVERY_COQ_MUTATIONS,
+    "CustomGovernance.v": CUSTOM_GOVERNANCE_COQ_MUTATIONS,
+    "CustomSponsorship.v": CUSTOM_SPONSORSHIP_COQ_MUTATIONS,
+    "CustomRecovery.v": CUSTOM_RECOVERY_COQ_MUTATIONS,
     "MultiSigPolicy.v": MULTISIG_COQ_MUTATIONS,
     "ProxyWitnessScript.v": PROXY_WITNESS_COQ_MUTATIONS,
     "CallbackPluginTopology.v": CALLBACK_PLUGIN_COQ_MUTATIONS,
@@ -898,24 +898,24 @@ def check_inventory(root=ROOT):
         require(actual == expected, f"Source drift: {name}; review correspondence before updating pins")
 
 
-def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
+def check_custom_governance_correspondence(repo_root=ROOT.parent):
     """Narrow reviewed source guards, not a C#/VM refinement theorem."""
     admin = (repo_root / "contracts/custom/SmartAccount.Admin.cs").read_text()
-    model = (repo_root / "formal/coq/OrdinaryGovernance.v").read_text()
+    model = (repo_root / "formal/coq/CustomGovernance.v").read_text()
     factors = re.search(r"MinUpgradeDelayMs\s*=\s*(\d+)L\s*\*\s*(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*\*\s*(\d+)\s*;", admin)
-    require(factors is not None, "Ordinary governance source delay expression changed")
+    require(factors is not None, "Custom governance source delay expression changed")
     source_delay = 1
     for factor in factors.groups():
         source_delay *= int(factor)
     model_delay = re.search(r"Definition min_upgrade_delay : Z := (\d+)\.", model)
     require(model_delay is not None and source_delay == int(model_delay.group(1)) == 604800000,
-            "Ordinary governance millisecond delay correspondence changed")
+            "Custom governance millisecond delay correspondence changed")
     # Phase 1b: owner-cancellation moved to the registrar service contract. The
     # witness guard keeps the same shape — the owner path checks the owner's
     # witness, independent of the caller — only relocated.
     registrar = (repo_root / "contracts/custom/registrar/PlatformRegistrar.cs").read_text()
     require("bool owner = currentOwner != UInt160.Zero && Runtime.CheckWitness(currentOwner);" in registrar,
-            "Ordinary owner cancellation witness source guard changed")
+            "Custom owner cancellation witness source guard changed")
     # The core no longer deletes a registrar-owned pending key on escape or market
     # settlement; ApplyPlatformAccountOwnerRotation instead rejects a record whose
     # previousOwner no longer matches the live account state, so a stale record can
@@ -923,35 +923,35 @@ def check_ordinary_governance_correspondence(repo_root=ROOT.parent):
     core_registrar = (repo_root / "contracts/custom/SmartAccount.PlatformRegistrar.cs").read_text()
     require("previousOwner == state.BackupOwner," in core_registrar
             and '"Platform owner rotation stale"' in core_registrar,
-            "Ordinary pending rotation staleness guard changed")
+            "Custom pending rotation staleness guard changed")
     for name, marker in (("Escape", "// Phase 1b: pending platform owner rotations live in the registrar service's"),
                          ("MarketEscrow", "// Phase 1b: a pre-sale pending platform owner rotation lives in the registrar")):
         source = (repo_root / f"contracts/custom/SmartAccount.{name}.cs").read_text()
         require(marker in source,
-                f"Ordinary pending rotation registrar-ownership marker missing: {name}")
+                f"Custom pending rotation registrar-ownership marker missing: {name}")
     return {"delayMilliseconds": source_delay, "ownerWitnessIndependentOfCaller": True,
             "boundary": "Reviewed source fragments and arithmetic equality; binding, witness and VM refinement external"}
 
 
-def check_ordinary_sponsorship_correspondence(repo_root=ROOT.parent):
+def check_custom_sponsorship_correspondence(repo_root=ROOT.parent):
     """Bind the cumulative model to selected reviewed source expressions/order."""
     source = (repo_root / "contracts/custom/SmartAccount.Paymaster.cs").read_text()
     for fragment in ("if (budget.TransactionHash != transactionHash)", "budget.Reserved = 0;",
                      "BigInteger.Max(actualCost - budget.Reserved, 0) + estimationFlag * requested",
                      "BigInteger settled = BigInteger.Min(requested, cap);", "budget.Reserved += settled;",
                      "Storage.Put(Storage.CurrentContext, Prefix_TransactionReimbursement, StdLib.Serialize(budget));"):
-        require(fragment in source, "Ordinary sponsorship reservation source guard changed: " + fragment)
+        require(fragment in source, "Custom sponsorship reservation source guard changed: " + fragment)
     entries = re.split(r"public static object(?:\[\])? ExecuteSponsoredUserOps?\(", source)[1:]
-    require(len(entries) == 2, "Ordinary sponsorship entrypoint roster changed")
+    require(len(entries) == 2, "Custom sponsorship entrypoint roster changed")
     for entry in entries:
         require(entry.index("CapReimbursementToActualCost(reimbursementAmount)") < entry.index("Contract.Call("),
-                "Ordinary sponsorship reservation must precede external discovery/execution")
+                "Custom sponsorship reservation must precede external discovery/execution")
     return {"ledgerScope": "oneCoreOneTransactionAllAccountsSponsorsPaymasters",
             "reservationBeforeCallbacks": True, "zeroFeeEstimationIsRealFeeProof": False,
             "boundary": "Reviewed expression/order fragments; storage, tx identity, fees and VM rollback external"}
 
 
-def check_ordinary_recovery_correspondence(repo_root=ROOT.parent):
+def check_custom_recovery_correspondence(repo_root=ROOT.parent):
     """Selected guards only; arbitrary storage/entrypoint refinement remains external."""
     source = (repo_root / "contracts/custom/SmartAccount.Escape.cs").read_text()
     begin = source.index("public static void FinalizeEscapeToOwner(")
@@ -961,19 +961,19 @@ def check_ordinary_recovery_correspondence(repo_root=ROOT.parent):
     require("GetConfigurationContextDepth() == 0" in source[
                 source.index("private static void AssertRecoveryIdle("):
                 source.index("public static void FinalizeEscapeToOwner(")],
-            "Ordinary recovery must reject every active global configuration context")
+            "Custom recovery must reject every active global configuration context")
     for fragment in ("AssertNoMarketEscrow(accountId);", "AssertRecoveryIdle(accountId);",
                      "Runtime.CheckWitness(state.BackupOwner)", "state.Verifier = UInt160.Zero;",
                      "state.HookId = UInt160.Zero;", "Helper.Concat(Prefix_OwnerOnlyRecovery, (byte[])accountId), new byte[] { 1 }"):
-        require(fragment in recovery, "Ordinary callback-free recovery source guard changed: " + fragment)
+        require(fragment in recovery, "Custom callback-free recovery source guard changed: " + fragment)
     require("module == UInt160.Zero || !HasOwnerOnlyRecovery(accountId)" in source,
-            "Ordinary irreversible installation latch source guard changed")
+            "Custom irreversible installation latch source guard changed")
     require("Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_OwnerOnlyRecovery" not in source,
-            "Ordinary recovery source may not remove permanent latch")
+            "Custom recovery source may not remove permanent latch")
     accounts = (repo_root / "contracts/custom/SmartAccount.Accounts.cs").read_text()
     for argument in ("newHookId", "pending.NewHookId", "newVerifier", "pending.NewVerifier"):
         require(f"AssertPluginInstallationAllowed(accountId, {argument});" in accounts,
-                "Ordinary module installation source guard missing: " + argument)
+                "Custom module installation source guard missing: " + argument)
     return {"callbackFree": True, "latch": "irreversibleOwnerOnlyNoEpoch",
             "boundary": "Reviewed source guards; all-entrypoint/storage/nonce/witness/VM refinement external"}
 
@@ -1032,7 +1032,7 @@ def check_multisig_bounded(repo_root=ROOT.parent):
                             f"MultiSig acceptance model mismatch: count={count}, threshold={threshold}, "
                             f"signature_count={signature_count}, mask={mask}")
                     acceptance_cases += 1
-    return {"profiles": ["v3", "platform"], "configCases": config_cases, "acceptanceCases": acceptance_cases,
+    return {"profiles": ["public", "platform"], "configCases": config_cases, "acceptanceCases": acceptance_cases,
             "sourceGuards": len(MULTISIG_SOURCE_GUARDS),
             "sourceMutationsRejected": list(MULTISIG_SOURCE_MUTATIONS)}
 
@@ -1347,9 +1347,9 @@ def main():
         check_inventory()
         source_lock = json.loads((ROOT / "source-lock.json").read_text())
         report["nativeCoreSourceSha256"] = check_native_core_sources(source_lock, args.native_core_root)
-        report["ordinaryGovernanceCorrespondence"] = check_ordinary_governance_correspondence()
-        report["ordinarySponsorshipCorrespondence"] = check_ordinary_sponsorship_correspondence()
-        report["ordinaryRecoveryCorrespondence"] = check_ordinary_recovery_correspondence()
+        report["customGovernanceCorrespondence"] = check_custom_governance_correspondence()
+        report["customSponsorshipCorrespondence"] = check_custom_sponsorship_correspondence()
+        report["customRecoveryCorrespondence"] = check_custom_recovery_correspondence()
         report["multisigBoundedModel"] = check_multisig_bounded()
         report["nativeCompositeBoundedModel"] = check_native_composite_bounded()
         coqc = executable("COQC", "coqc")

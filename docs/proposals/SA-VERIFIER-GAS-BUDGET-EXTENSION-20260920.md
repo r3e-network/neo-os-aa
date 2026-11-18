@@ -19,7 +19,7 @@ by all descendants. It is intended to let the SA core call a verifier without
 allowing that verifier to consume the whole transaction budget.
 
 The implementation has been prototyped in isolated Neo core and DevPack
-worktrees and integrated into the current `neo-os-aa` artifact with
+worktrees and integrated into the current `neo-os-sa` artifact with
 `Neo.SmartContract.Framework` 3.10.2-CI00384. A matching private NeoExpress
 runtime activates `HF_SmartAccountV1` at block 0 and reads the resulting artifacts back
 over JSON-RPC. No public activation, deployment or broadcast is claimed.

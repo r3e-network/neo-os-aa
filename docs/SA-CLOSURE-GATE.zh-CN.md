@@ -115,7 +115,7 @@ NEF、manifest 名称**与**签名者的函数，三者中两者相符而第三�
 那些工件是带有记录推导过程的固定输入，不是证明。`formal/refinement/plugins/provenance.json` 指明
 编译器（`nccs 3.9.1`，因为 NEF 头部写明了它，且其代码生成决定字节）、每个项目文件、喂给它的
 每个源码文件，以及全部十二个工件的 sha256；`formal/refinement/plugins/build-plugins.sh` 是记录的
-构建步骤，若重建结果与这些哈希不符则以非零退出。这与 `contracts/bin/v3` 对主合约的既有地位完全
+构建步骤，若重建结果与这些哈希不符则以非零退出。这与 `contracts/bin/public` 对主合约的既有地位完全
 相同，并不是在主张这些插件正确。
 
 第四个块 `abiScenarioRegistrar` 用相同检查运行
@@ -225,7 +225,7 @@ NEF、manifest 名称**与**签名者的函数，三者中两者相符而第三�
 
 第 35 号门禁加入第三个场景。它快照了 121 个工具文件，运行 26 个命令作业，无一非零或超时，并返回
 同样的 `NO-GO`，同样四项义务未闭合且 `fullUnprovedCount 100`。（两个计数分别从 `snapshot.json`
-与 `result.json` 读出：快照总数包含合约 NEF 与 manifest、`OrdinarySponsorship.v` 以及五份 helper
+与 `result.json` 读出：快照总数包含合约 NEF 与 manifest、`CustomSponsorship.v` 以及五份 helper
 gas 运行时回执，其中 113 个位于 `formal/refinement` 下；作业数是 `commands` 块，它比
 `commands.json` 大五，因为该文件只记录被捕获的泳道。弄错任一个都会误报本次运行覆盖了什么。）
 `abiScenarioPlugins` 读到 62/62 帧逐字节一致、62/62 落在其声明的区块时间与签名者上、52 次停机与
@@ -303,7 +303,7 @@ false`，而不是记为工件失败。`problems []`，十七种突变全部被�
 网络变得无关，而不是放松检查。
 
 工具首先快照被调用泳道的 Python 导入／字面资源、导出器源项目成员（排除生成的 `bin/obj` 文件）、
-被引用的 Coq 模型、固定样例以及被导入的 `OrdinarySponsorship.v`。对每个被捕获的输入，一次读取
+被引用的 Coq 模型、固定样例以及被导入的 `CustomSponsorship.v`。对每个被捕获的输入，一次读取
 同时提供哈希与复制的可执行字节。复制的验证器与复制的证明器从这个快照运行。源码根与生产
 NEF／manifest 保持为当前仓库输入；新建的导出器记录与严格验证器检查它们的精确哈希。工具在写出
 成功的限界结果之前，会重复源码成员、清单／回执字节以及原始／复制工具与模型两侧的检查。未被选中的
@@ -320,7 +320,7 @@ NEF／manifest 保持为当前仓库输入；新建的导出器记录与严格�
 | Initializer 源码 | `source-to-complete-initializer-reference-refinement` | 同一 initializer、源码投影、字段计数与捕获的模型 |
 | 组合 | `caller-ledger-composition` | 精确的全新 helper 证书与方法哈希 |
 | 公开纯方法 | `public-pure-reference-refinement` | 精确的全新 ABI 描述符、完整方法字节与类型化投影 |
-| 公开安全入口帧 | `ordinary-safe-public-abi-entry-frame-source-bridge` | 完全相同的三个公开纯方法描述符与 initializer；固定的普通 Core／VM 源码、严格源码投影与全新证书 |
+| 公开安全入口帧 | `custom-safe-public-abi-entry-frame-source-bridge` | 完全相同的三个公开纯方法描述符与 initializer；固定的普通 Core／VM 源码、严格源码投影与全新证书 |
 | 系统调用准入桥 | `system-contract-call-and-callt-admission-bridge` | 固定的 neo `System.Contract.Call` 注册与 `CallContract`/`OnCallT`/`OnSysCall` 源码、推导出的准入记录与全新证书；只交接给 `CallContractInternal` |
 | 合约内部交接 | `contract-internal-handoff-and-frame-construction` | 固定的 neo `CallContractInternal`/`LoadContract`/`LoadScript`/`GetMethod`/`CanCall`/`IsBlocked` 与 neo-vm `ExecutionContext.Clone` 源码、推导出的交接记录与全新证书；止于构造出的帧，在被调用者执行之前 |
 | interop 转换 | `interop-argument-conversion` | 固定的 neo `OnSysCall`/两个 `Convert` 重载/`InteropParameterDescriptor`/`CallContract` 声明与 neo-vm `ExecutionEngineLimits.MaxStackSize`、推导出的转换记录与全新证书；止于转换后的参数向量，在处理器方法体运行之前 |
@@ -457,7 +457,7 @@ helper gas 回执在精确独立枚举的 helper CFG 上证明一个参数化上
 被选中的回执必须固定其他泳道正在证明的工件，而不只是任何看起来合理的 trace：`crosscheck_runtime`
 会以 `Runtime artifact mismatch` 拒绝 `nefSha256` 或 `manifestSha256` 与固定工件不同的回执。正是
 这项检查让该泳道在合约改名使 2026-10-13 的捕获失效之后继续失败关闭，也在 2026-11-16 设计阶段
-遗留兼容性清理改变普通核心工件之后再次如此；每一次该泳道都保持红色，直到生产测试针对全新工件
+遗留兼容性清理改变custom 核心工件之后再次如此；每一次该泳道都保持红色，直到生产测试针对全新工件
 重跑（当前为 NEF `9f714866…`）。经复核的五形状捕获以
 `formal/refinement/fixtures/helper-gas-runtime-live-receipts.json.gz` 归档在仓库内（SHA256
 `6d141d14…`）；被取代的改名之前捕获保存在它旁边，其拒绝由 `ArchivedReceiptStalenessTests` 断言。

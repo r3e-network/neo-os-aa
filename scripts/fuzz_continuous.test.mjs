@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const scriptPath = path.join(repoRoot, "scripts", "fuzz_continuous.sh");
 
-// The artifacts the SourceInvariant_ suite deploys from contracts/bin/v3 (the
+// The artifacts the SourceInvariant_ suite deploys from contracts/bin/public (the
 // directory contracts/compile.sh writes with nccs).
 const REQUIRED_ARTIFACTS = [
   "SmartAccount.nef",
@@ -42,7 +42,7 @@ function makeSandbox({ withArtifacts }) {
   mkdirSync(stubBin);
   copyFileSync(scriptPath, path.join(scriptsDir, "fuzz_continuous.sh"));
   if (withArtifacts) {
-    const binDir = path.join(sandbox, "contracts", "bin", "v3");
+    const binDir = path.join(sandbox, "contracts", "bin", "public");
     mkdirSync(binDir, { recursive: true });
     for (const name of REQUIRED_ARTIFACTS) {
       writeFileSync(path.join(binDir, name), name.endsWith(".nef") ? "NEF" : "{}");
@@ -94,7 +94,7 @@ test("a missing compiled artifact is reported as environment-not-ready (exit 2),
 
   assert.equal(status, 2, `expected exit 2, got ${status}; output:\n${output}`);
   assert.match(output, /environment not ready/);
-  assert.match(output, /contracts\/bin\/v3\/SmartAccount\.nef/);
+  assert.match(output, /contracts\/bin\/public\/SmartAccount\.nef/);
   assert.match(output, /contracts\/compile\.sh/, "must point at the remediation step");
   assert.doesNotMatch(output, /FAILURE DETECTED/);
   assert.doesNotMatch(output, /Failed seed/);

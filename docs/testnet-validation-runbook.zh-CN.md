@@ -39,16 +39,16 @@
 ./run_testnet_validation_suite.sh
 ```
 
-套件把机器可读的 JSON 报告写到 `sdk/docs/reports/`。
+套件把机器可读的 JSON 报告写到 `docs/reports/`。
 
 ## 有序脚本
 
-1. `tests/v3_testnet_smoke.js`
-2. `tests/v3_testnet_plugin_matrix.js`
-3. `tests/v3_testnet_market_escrow.js`
-4. `tests/v3_testnet_paymaster_onchain.mjs`
-5. `tests/v3_testnet_paymaster_policy.mjs`，当 `MORPHEUS_RUNTIME_TOKEN` 或 `PHALA_API_TOKEN` 存在时
-6. `tests/v3_testnet_paymaster_relay.mjs`，当 `MORPHEUS_RUNTIME_TOKEN` 或 `PHALA_API_TOKEN` 存在时
+1. `tests/testnet_smoke.js`
+2. `tests/testnet_plugin_matrix.js`
+3. `tests/testnet_market_escrow.js`
+4. `tests/testnet_paymaster_onchain.mjs`
+5. `tests/testnet_paymaster_policy.mjs`，当 `MORPHEUS_RUNTIME_TOKEN` 或 `PHALA_API_TOKEN` 存在时
+6. `tests/testnet_paymaster_relay.mjs`，当 `MORPHEUS_RUNTIME_TOKEN` 或 `PHALA_API_TOKEN` 存在时
 
 ## 单条命令
 
@@ -67,7 +67,7 @@ npm run testnet:validate:report
 - runner 遇到第一个失败即停止。
 - 若干脚本会部署合约或广播真实的测试网交易，并改变链上状态。
 - 测试网验证器有意忽略通用的 `NEO_RPC_URL`；只使用 `TESTNET_RPC_URL` / `TESTNET_RPC_URLS`。每个在线脚本在广播前都会校验 Neo N3 测试网的 network magic。
-- plugin matrix 会部署全新的 verifier 与 hook 工件，并在 `sdk/docs/reports/` 下记录 JSON 报告。
+- plugin matrix 会部署全新的 verifier 与 hook 工件，并在 `docs/reports/` 下记录 JSON 报告。
 - paymaster 策略验证器会覆盖显式拒绝路径，例如错误的 `dapp_id`、错误的 `account_id`、错误的 `target_contract`、错误的 `method`、缺失的 `operation_hash`，以及超出限额的 gas。
 - paymaster 验证器可以复用固定的允许列表账户，也可以注册新账户并在线更新 worker 允许列表。
 - 公共 paymaster 端点允许实施托管方的反滥用控制。本地 handler 验证证明策略逻辑与中继接线，且不削弱该生产边界。

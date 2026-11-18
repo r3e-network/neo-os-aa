@@ -122,5 +122,5 @@ below rather than by a generic EIP-712 implementation.
 - `SmartAccountClient.computeArgsHash(args)` — asks the core for the
   canonical `argsHash` instead of re-implementing the serialization.
 
-A golden-vector test (`sdk/js/tests/v3_flow.unit.test.js`, "EIP-712 typed
+A golden-vector test (`sdk/js/tests/flow.unit.test.js`, "EIP-712 typed
 data hash matches expected test vector") pins the byte layout end to end.

@@ -9,7 +9,7 @@
 
 ## 用途
 
-neo-os-aa 是 NeoOS 的账户抽象（account abstraction）仓库。它包含用于创建和使用
+neo-os-sa 是 NeoOS 的账户抽象（account abstraction）仓库。它包含用于创建和使用
 Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
 
 ## 权限边界
@@ -24,7 +24,7 @@ Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
 ## 目录结构
 
     contracts/               Neo N3 SA 合约源码
-      custom/                user-contract（ordinary）实现
+      custom/                user-contract（custom）实现
         market/              SAAddressMarket 托管合约
         paymaster/           SAPaymaster 合约
         registrar/           SAPlatformRegistrar 合约
@@ -54,7 +54,7 @@ Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
 
 `contracts/custom/` 与 `contracts/native/` 存放同一分支上的两个实现；
 `contracts/plugins/` 存放两者都会绑定的 verifier 与 hook 合约。每个实现目录带有一份
-`profile.json`，记录其源码根、工件与验证命令；源码文件不重复。ordinary 配置
+`profile.json`，记录其源码根、工件与验证命令；源码文件不重复。custom 配置
 （`contracts/custom/`）是当前 user-contract 的交付路径。native 配置
 （`contracts/native/`）存放为标准提交准备的共识 `SmartAccount` 服务真源；对应的
 Neo core 仓库携带由它生成的副本，并拥有 native VM 的强制执行。
@@ -73,7 +73,7 @@ Neo core 仓库携带由它生成的副本，并拥有 native VM 的强制执行
   `contracts/native/profile.json` 选择实现配置；
   不要从部署标签或共享的工件目录推断配置身份。
 - 仅 native 使用的模块与客户端代码保留在
-  `contracts/native/profile.json` 列出的 native 根目录下；ordinary 源码不得通过导入
+  `contracts/native/profile.json` 列出的 native 根目录下；custom 源码不得通过导入
   native 入口来证明 native 已激活。
 - 前端路由、UI 与前端配置保留在 frontend/ 下。
 - SA 客户端类型与构建器保留在 sdk/ 与 shared/ 下。

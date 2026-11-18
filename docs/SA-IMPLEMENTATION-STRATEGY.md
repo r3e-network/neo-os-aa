@@ -15,7 +15,7 @@ implements; passing its tests is not acceptance of a Neo standard.
 
 | Path | Starting implementation | Delivery boundary |
 | --- | --- | --- |
-| Deployed contract | `SmartAccountV3`, its public `v3` modules, `SmartAccountClient` and app | Deployable on the published Neo N3 runtime after artifact, integration and release validation |
+| Deployed contract | `SmartAccount`, its `public` modules, `SmartAccountClient` and app | Deployable on the published Neo N3 runtime after artifact, integration and release validation |
 | Native contract | `SmartAccount`, native ABI 2 modules, `NativeSmartAccountClient` and `/native` | Matching node implementation, protocol review and hardfork activation |
 | Runtime experiments | Private `PLATFORM` build | Research and controlled validation only; not a third public product |
 
@@ -39,7 +39,7 @@ encoding has been implemented and verified on both paths. In particular:
 
 | Boundary | Public deployed V3 | Native ABI 2 |
 | --- | --- | --- |
-| Availability | Ordinary deployment and matching modules | Consensus activation of the native contract |
+| Availability | Custom deployment and matching modules | Consensus activation of the native contract |
 | Account and asset identity | V3 account registration and proxy script | Native account derivation and canonical native proxy script |
 | Operation authorization | V3 verifier-specific signatures and witness rules | Native contract/network/account/epoch/configuration commitment |
 | Callback resources | Transaction budget and reviewed module behavior; no isolated child budget | Platform-enforced verifier, hook and maintenance child budgets |
@@ -64,7 +64,7 @@ state remaining restrictions in the SDK, UI and integration contract.
    semantic change identifies affected profiles, expected outcomes and migration
    implications; profile-specific improvements are labelled as such.
 4. Continue native correctness, resource accounting, modules, SDK and proposal
-   review independently. Ordinary deployment is neither native activation nor
+   review independently. Custom deployment is neither native activation nor
    permission to advertise the draft as an adopted standard.
 
 ## Release and migration

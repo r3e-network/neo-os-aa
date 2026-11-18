@@ -21,7 +21,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: MultiSigVerifier.cs" Importance="high" />
-    <Exec Command="nccs ./MultiSigVerifier.csproj -o ../../bin/v3/verifiers" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./MultiSigVerifier.csproj -o ../../bin/public/verifiers" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

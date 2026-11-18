@@ -1,7 +1,7 @@
 // zh-CN translations — dynamically loaded by i18n/index.js
 // Extracted to reduce initial bundle size (was ~100KB inline).
 export default {
-    ordinary: {
+    custom: {
       ownerMismatch: '请连接 Neo 备用所有者钱包。当前注册流程只请求已连接钱包的交易见证。',
       ownerInvalid: '请输入有效的 Neo N3 地址或 Neo script hash，不能使用 Ethereum 地址。',
       walletRequired: '请先连接 Neo 备用所有者钱包。',

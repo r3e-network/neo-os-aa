@@ -16,7 +16,7 @@
  *  10. Withdraw remaining deposit
  *
  * Usage:
- *   TEST_WIF=Kx... node tests/v3_testnet_paymaster_onchain.mjs
+ *   TEST_WIF=Kx... node tests/testnet_paymaster_onchain.mjs
  */
 
 import fs from 'fs';
@@ -82,8 +82,8 @@ function buildConfig(account, networkMagic) {
 
 function artifactPaths(baseName) {
   return {
-    nef: path.join(repoRoot, 'contracts', 'bin', 'v3', `${baseName}.nef`),
-    manifest: path.join(repoRoot, 'contracts', 'bin', 'v3', `${baseName}.manifest.json`),
+    nef: path.join(repoRoot, 'contracts', 'bin', 'public', `${baseName}.nef`),
+    manifest: path.join(repoRoot, 'contracts', 'bin', 'public', `${baseName}.manifest.json`),
   };
 }
 

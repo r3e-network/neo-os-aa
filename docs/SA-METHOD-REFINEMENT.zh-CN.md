@@ -2,7 +2,7 @@
 
 > 中文版本与 `docs/SA-METHOD-REFINEMENT.md` 同构。若两者冲突，以英文版本为准。
 
-本文件收纳普通 SmartAccount 候选的全部方法级精化泳道。它取代此前并列在 `docs/` 中的十三份泳道
+本文件收纳custom SmartAccount 候选的全部方法级精化泳道。它取代此前并列在 `docs/` 中的十三份泳道
 文档，下面每条泳道的文字都未改动：只是标题层级下移了一级，使十三段彼此独立的论证读起来像一份
 有序文档。
 
@@ -61,7 +61,7 @@ Buffer）、`30502: 6726`（STSFLD 38）。（清理前的构建 `6c347dac…` �
 下面的详细表格记录更早的 2026-10-13 候选及其 `[13557,13838)` 布局。它作为历史清单泳道的溯源保留；
 其偏移与槽 34 不得套用到当前工件上。
 
-公开普通候选 NEF 的 SHA256 为
+公开custom 候选 NEF 的 SHA256 为
 `4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`。其经复核的 debug 映射
 在闭区间 **13557–13837** 标识 `CapReimbursementToActualCost(BigInteger)`：**281 字节、116 条
 指令、52 个不同操作码**。全部 116 条指令列在下面，包括前缀、断言故障路径、预留更新、序列化、
@@ -103,7 +103,7 @@ python3 formal/refinement/method_inventory.py \
 
 ### 固定的普通 ApplicationEngine 边界
 
-目标 Neo 核心：[`d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d`](https://github.com/neo-project/neo/tree/d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d)；Neo VM：[`004cd6070a940405818d9357638277dd44407e2e`](https://github.com/neo-project/neo-vm/tree/004cd6070a940405818d9357638277dd44407e2e)。这些是公开普通轨道，与原生 SA 分叉不同。下面的源码哈希证明的是本计划所检视的文件，不是其运行时行为的证明。
+目标 Neo 核心：[`d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d`](https://github.com/neo-project/neo/tree/d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d)；Neo VM：[`004cd6070a940405818d9357638277dd44407e2e`](https://github.com/neo-project/neo-vm/tree/004cd6070a940405818d9357638277dd44407e2e)。这些是公开custom 轨道，与原生 SA 分叉不同。下面的源码哈希证明的是本计划所检视的文件，不是其运行时行为的证明。
 
 | 边界 | 固定的实现与义务 |
 | --- | --- |
@@ -391,7 +391,7 @@ gas 记账、编译器正确性、调用方组合，也不证明 **109 个公开
 
 ## 完整报销 helper 运行时检查
 
-这些测试在经复核的普通 NEF 中执行原始私有 `CapReimbursementToActualCost` 方法，从 PC 18900 直到
+这些测试在经复核的custom NEF 中执行原始私有 `CapReimbursementToActualCost` 方法，从 PC 18900 直到
 PC 19180 的 RET。它们把 22 条指令的算术检查扩展到交易字段、初始存储、默认记录构造、交易哈希重置、
 真实原生反序列化／序列化、断言、堆更新与 Storage.Put。它们是具体的运行时对应证据，不是全称翻译
 证书，也不是公开部署批准。
@@ -490,7 +490,7 @@ OnPersist 都不执行。
 ### 当前算术结果
 
 `formal/refinement/coq/ReservationArithmetic.v` 包含 24 个闭合声明。专门的宿主运行器把它与来自
-`IntegerSemantics`、`CapArithmetic` 以及真实的现有 `OrdinarySponsorship` 的 29 个被导入声明一起
+`IntegerSemantics`、`CapArithmetic` 以及真实的现有 `CustomSponsorship` 的 29 个被导入声明一起
 编译，审计每个 `Print Assumptions`，并用 `coqchk` 重新检查全部四个已编译模块。两个运行器测试与
 六个定义有效、证明被拒的语义对照通过。这些是算术／协议结果；`suffixBytecodeVerified`、
 `fullHelperVerified` 与 `fullImplementationVerified` 保持 false。
@@ -505,7 +505,7 @@ OnPersist 都不执行。
 
 ### 预期陈述
 
-用预留的正费用守卫、其 VM 整数余量守卫与有符号 256 位加法扩展现有费用区域证明。经复核的当前普通
+用预留的正费用守卫、其 VM 整数余量守卫与有符号 256 位加法扩展现有费用区域证明。经复核的当前custom
 NEF 在 `[17860,17882)` 包含费用区域，在 `[17882,18011)` 包含随后的守卫／更新后缀。该后缀把
 local6 与零比较，成功时从 17885 分支到 17927，否则在 17926 执行 `ABORTMSG`。成功路径从 17927 起
 把 `vmMax = 2^254 - 1 + 2^254` 物化到 local7，然后在 17950 附近的头寸分支把预算 field1 与
@@ -519,7 +519,7 @@ local6 与零比较，成功时从 17885 分支到 17927，否则在 17926 执�
 原因。
 
 第一层定理将在 Integer 类型值上执行守卫与受检查加法。其结果区分成功的新预留额度、零费用拒绝与
-有符号整数溢出。它将导入现有的 `OrdinarySponsorship.charge`、`reserve` 与 `reserve_many`，而不是
+有符号整数溢出。它将导入现有的 `CustomSponsorship.charge`、`reserve` 与 `reserve_many`，而不是
 重新定义它们的协议含义。
 
 对一笔正费用的已付费交易，假定 `0 < cost < 2^255`、`0 < requested < 2^255` 且
@@ -627,7 +627,7 @@ python3 formal/refinement/numeric_proofs.py --output-dir /tmp/aa-numeric-proof \
 
 ## 公开纯方法参考精化
 
-本泳道在声明的参考语义下为普通候选中的三个公开 ABI 方法出具完整方法体证书。它独立投影其类型化
+本泳道在声明的参考语义下为custom 候选中的三个公开 ABI 方法出具完整方法体证书。它独立投影其类型化
 源码、解码其精确 NEF 字节，并对源码结果、终止行为与帧保持做内核检查。它不认证 ApplicationEngine、
 ABI 派发、gas 或公开部署。全部 109 个 ABI 条目对完整实现接受仍然未证明。
 

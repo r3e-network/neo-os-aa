@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "sa-module-protocol/golden-vector.schema.json",
   "title": "SA module-protocol v4 golden vector",
-  "description": "Skeleton schema for golden vectors consumed by both kernels (ordinary #39, native #40). 'TODO(kernel39|40)' values are placeholders filled by the kernel batches.",
+  "description": "Skeleton schema for golden vectors consumed by both kernels (custom #39, native #40). 'TODO(kernel39|40)' values are placeholders filled by the kernel batches.",
   "type": "object",
   "required": [
     "vectorId",
@@ -38,7 +38,7 @@
       "type": "object",
       "description": "Expected byte-level outputs: hex serializations, digests, key bytes, and per-kernel results."
     },
-    "expected.ordinary": {
+    "expected.custom": {
       "type": "object"
     },
     "expected.native": {

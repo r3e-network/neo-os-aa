@@ -191,10 +191,10 @@ function sponsoredUserOpParameter(op, depth) {
   }
 }
 
-// This optional ordinary ABI is checked against the deployed manifest before
+// This optional custom ABI is checked against the deployed manifest before
 // reading its permanent mode. Missing/incompatible methods are unsupported;
 // invalid RPC data is an error, never a false capability or mode value.
-function supportsOrdinaryOwnerOnlyRecovery(contractState, expectedCore) {
+function supportsCustomOwnerOnlyRecovery(contractState, expectedCore) {
   if (contractState?.state === 'FAULT') {
     throw createError(EC.CONTRACT_VM_FAULT, { exception: contractState.exception });
   }
@@ -204,7 +204,7 @@ function supportsOrdinaryOwnerOnlyRecovery(contractState, expectedCore) {
   if (typeof contractState?.hash !== 'string'
       || !/^(?:0x)?[0-9a-f]{40}$/i.test(contractState.hash)
       || sanitizeHex(contractState.hash) !== expectedCore || !Array.isArray(methods)) {
-    throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Malformed or mismatched ordinary contract state' });
+    throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Malformed or mismatched custom contract state' });
   }
   for (const method of methods) {
     if (!method || typeof method.name !== 'string' || !method.name
@@ -214,7 +214,7 @@ function supportsOrdinaryOwnerOnlyRecovery(contractState, expectedCore) {
         || method.parameters.some((parameter) => !parameter
           || typeof parameter.name !== 'string' || !parameter.name
           || !abiTypes.has(parameter.type) || parameter.type === 'Void')) {
-      throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Malformed ordinary ABI descriptor' });
+      throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Malformed custom ABI descriptor' });
     }
   }
   return [
@@ -305,7 +305,7 @@ class SmartAccountClient {
   }
 
   /**
-   * Builds a direct core call for irreversible ordinary owner-only recovery.
+   * Builds a direct core call for irreversible custom owner-only recovery.
    * This is not a UserOperation and must be signed by the backup owner after
    * the escape timelock. It never installs a replacement module.
    * @param {Object} options Exactly one accountScriptHash/accountAddress (account ID, not asset proxy).
@@ -331,7 +331,7 @@ class SmartAccountClient {
   }
 
   /**
-   * Reads deployed ordinary owner-only recovery capability and permanent mode.
+   * Reads deployed custom owner-only recovery capability and permanent mode.
    * Unsupported manifests return a null mode; malformed state, RPC errors, VM
    * faults and non-Boolean mode responses throw. No capability is cached.
    * @param {string} accountHashOrAddress Account ID hash or equivalent address, never the asset proxy.
@@ -345,7 +345,7 @@ class SmartAccountClient {
     validateHash160(this.masterContractHash);
     const contractState = await invokeRpcReadWithRetry(() =>
       this.rpcClient.send('getcontractstate', [`0x${this.masterContractHash}`]));
-    if (!supportsOrdinaryOwnerOnlyRecovery(contractState, this.masterContractHash)) {
+    if (!supportsCustomOwnerOnlyRecovery(contractState, this.masterContractHash)) {
       return { supported: false, ownerOnlyRecovery: null };
     }
     const response = await this.invokeFunctionWithRetry(this.masterContractHash,

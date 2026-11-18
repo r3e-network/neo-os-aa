@@ -21,7 +21,7 @@ namespace SmartAccount.Contracts.Tests;
 //
 // These assertions are source-level (mirroring the existing SourceInvariantTests style)
 // so they pin the security invariant against the contract source authoritatively and
-// without relying on a bespoke malicious target contract being compiled into bin/v3.
+// without relying on a bespoke malicious target contract being compiled into bin/public.
 // ---------------------------------------------------------------------------
 
 [TestClass]

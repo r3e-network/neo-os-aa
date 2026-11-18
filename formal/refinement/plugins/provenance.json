@@ -2,7 +2,7 @@
   "schema": "sa-plugin-provenance/v1",
   "note": [
     "AssertV3Verifier and AssertV3Hook read a deployed contract's manifest, so the plugin admission check is a claim about bytes rather than about a source file. These bytes are pinned by hash below, and the gate reads the hashes.",
-    "That the pinned compiler turns these sources into these bytes is a recorded build step, not something any run re-derives. build-plugins.sh is that step: it refuses to run against a different compiler and exits non-zero if any artifact it produces hashes differently from what is written here. This is the same standing contracts/bin/v3 has for the main contract, and no stronger.",
+    "That the pinned compiler turns these sources into these bytes is a recorded build step, not something any run re-derives. build-plugins.sh is that step: it refuses to run against a different compiler and exits non-zero if any artifact it produces hashes differently from what is written here. This is the same standing contracts/bin/public has for the main contract, and no stronger.",
     "Nothing here proves the plugins are correct, or that they are what a deployed chain would run. It says which bytes the scenario deployed and where they came from.",
     "The fourth entry is not a plugin. It is the caller side of the platform-registrar channel: the account only runs its registrar-gated calls when the caller is the registrar it recorded, so measuring that channel means deploying the registrar service contract itself, driven as its own admin. Same rule applies to it - name the bytes."
   ],

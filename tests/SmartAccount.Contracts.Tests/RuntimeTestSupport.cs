@@ -20,7 +20,7 @@ namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
 /// Shared VM harness for behavioral suites that execute the compiled contracts under
-/// <c>contracts/bin/v3</c> through a real Neo execution engine. It extends the pattern of
+/// <c>contracts/bin/public</c> through a real Neo execution engine. It extends the pattern of
 /// <c>RuntimeWalletHarness</c> in <c>RuntimeExecutionTests.cs</c> with multi-contract deploys,
 /// explicit transaction signers (Global witness scope so witnesses survive nested contract
 /// calls), nested-array argument marshalling, and GAS funding/balance helpers.
@@ -30,7 +30,7 @@ internal sealed class RuntimeFixture
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "v3");
+    private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "public");
 
     private static readonly FieldInfo FeeAmountField =
         typeof(ApplicationEngine).GetField("_feeAmount", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -50,7 +50,7 @@ internal sealed class RuntimeFixture
     }
 
     /// <summary>
-    /// Deploys a compiled artifact from contracts/bin/v3 (the directory the deploy
+    /// Deploys a compiled artifact from contracts/bin/public (the directory the deploy
     /// tooling reads), with logical names such as verifiers/SessionKeyVerifier.
     /// </summary>
     public UInt160 Deploy(string baseName, object? data = null)

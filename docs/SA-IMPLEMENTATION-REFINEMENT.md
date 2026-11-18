@@ -1,15 +1,15 @@
-# Ordinary implementation refinement
+# Custom implementation refinement
 
 ## Acceptance objective
 
-The target is the ordinary `SmartAccountV3` source and its exact compiled
+The target is the custom `SmartAccount` source and its exact compiled
 NEF/manifest, including all public entrypoints and their reachable helpers. The
 required result is semantic preservation from typed C# operations to decoded
 NeoVM execution, followed by preservation of the protocol properties already
-proved in the ordinary models. A passing handwritten model, matching hash,
+proved in the custom models. A passing handwritten model, matching hash,
 compiler build, trace sample or differential test cannot supply that theorem.
 
-The existing ordinary candidate acceptance remains valid for its documented
+The existing custom candidate acceptance remains valid for its documented
 scope. Full implementation refinement remains unverified until the requirements
 below have independently checked certificates. No production contract behavior,
 compiler pin, public deployment or original user changes are modified to make a
@@ -68,8 +68,8 @@ must not be added together as if each receipt contained disjoint proofs.
 
 | Lane | Checked statement and boundary |
 | --- | --- |
-| Protocol models | `formal/verify.py` checks the declared ordinary/native abstractions. Its model receipts do not establish source-to-NEF refinement. |
-| Arithmetic region | `prove.py` binds the original charge instructions to signed-256 reference arithmetic and `OrdinarySponsorship.charge`. Its scope remains the local region. |
+| Protocol models | `formal/verify.py` checks the declared custom/native abstractions. Its model receipts do not establish source-to-NEF refinement. |
+| Arithmetic region | `prove.py` binds the original charge instructions to signed-256 reference arithmetic and `CustomSponsorship.charge`. Its scope remains the local region. |
 | [Numeric coercions](SA-METHOD-REFINEMENT.md#numeric-coercion-refinement) | Models GetInteger decoding and its value relation, including Boolean and ByteString. This does not prove ABI admission or actual runtime correspondence. |
 | [Reservation arithmetic](SA-METHOD-REFINEMENT.md#reservation-arithmetic-refinement) | Adds positivity, representable reservation updates and protocol fee bounds. It records the zero-fee overflow disagreement with unbounded arithmetic. |
 | [Complete helper reference refinement](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-reference-refinement) | Compares the complete typed-source projection with a byte-decoding reference VM for `CapReimbursementToActualCost`, under declared input and environment contracts. It does not certify ApplicationEngine or public entrypoints. |
@@ -104,7 +104,7 @@ named obligations. A receipt must retain them rather than present its dialect
 theorem as preservation of general .NET behavior.
 
 The [reimbursement policy](SECURITY_MODEL.md) requires one reservation ceiling
-per transaction within each ordinary core. The helper reference theorem assumes
+per transaction within each custom core. The helper reference theorem assumes
 a stable 32-byte transaction hash, nonnegative signed-64-bit fees and either no
 ledger or a well-formed two-field ledger with a 32-byte hash and nonnegative,
 representable reservation. A chain-level composition must establish that
@@ -113,7 +113,7 @@ identify the same transaction across calls. The policy does not itself prove
 these codec and identity contracts. Malformed externally supplied storage must
 not be treated as an admitted reachable state or silently repaired by a proof
 oracle. The [native profile draft](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)
-sets `nativeSponsorship: false`; this ordinary reimbursement proof is not a
+sets `nativeSponsorship: false`; this custom reimbursement proof is not a
 native sponsorship standard or activation claim.
 
 ## Evidence and error behavior

@@ -26,8 +26,8 @@ if HERE not in sys.path:
 import abi_dispatch as ad
 
 REPO = os.path.dirname(os.path.dirname(HERE))
-NEF = os.path.join(REPO, 'contracts', 'bin', 'v3', 'SmartAccountV3.nef')
-MANIFEST = os.path.join(REPO, 'contracts', 'bin', 'v3', 'SmartAccountV3.manifest.json')
+NEF = os.path.join(REPO, 'contracts', 'bin', 'public', 'SmartAccountV3.nef')
+MANIFEST = os.path.join(REPO, 'contracts', 'bin', 'public', 'SmartAccountV3.manifest.json')
 EXPORTER = os.path.join(HERE, 'export', 'bin', 'Debug', 'net10.0', 'RefinementExport.dll')
 
 # Small enough to read, structured like the artifact: two reserved entry points,

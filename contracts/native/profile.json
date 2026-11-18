@@ -27,7 +27,7 @@
     "contracts/custom/market",
     "frontend/src/features/studio",
     "frontend/src/features/operations",
-    "sdk/js/src/v3"
+    "sdk/js/src/custom"
   ],
   "compatibilityPaths": [
     "contracts/native",

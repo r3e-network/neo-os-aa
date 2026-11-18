@@ -148,7 +148,7 @@ flowchart TD
 - Neo 的有界通道 + sequence ≈ ERC-4337 的顺序 nonce 通道
 - Neo 只保留一条规范 nonce 路径，不暴露独立的 UUID/salt 模式
 
-当前的 ordinary 源码还把 `getNonce` 的通道读取限制为 `0 <= channel < 2^191`。
+当前的 custom 源码还把 `getNonce` 的通道读取限制为 `0 <= channel < 2^191`。
 较旧的已部署基础工件在重新发布之前可能接受高半部分通道用于读取；在签名操作边界下，
 这些只读值仍然不可执行。
 
@@ -302,7 +302,7 @@ stateDiagram-v2
 ```
 
 两个已部署入口都接受账户 id，`finalizeEscape` 还接受账户回退到的
-verifier（`contracts/build/SmartAccountV3.manifest.json`；实现在
+verifier（`contracts/build/SmartAccount.manifest.json`；实现在
 `contracts/custom/SmartAccount.Escape.cs`，其中 C# 方法以大写字母开头——
 那种写法不命名任何导出的方法，因此这里没有按代码格式化）。
 
@@ -377,7 +377,7 @@ relayMetaInvocation({ scriptHash: aaContract, operation: "executeUserOps", args:
 
 ## 11a. 标准对齐面（2026-11-16）
 
-ordinary 源码候选缩小了与以太坊 AA 工具面的实际互操作差距。在治理升级落地之前，
+custom 源码候选缩小了与以太坊 AA 工具面的实际互操作差距。在治理升级落地之前，
 所有这些都位于未变的 upgrade-required 边界之后：
 
 - **ERC-4337 `simulateValidation` = `simulateValidation(accountId, op)`：**
@@ -402,7 +402,7 @@ ordinary 源码候选缩小了与以太坊 AA 工具面的实际互操作差距�
 有意不采纳：EIP-7702 EOA 委派（Neo 没有以太坊意义上的 EOA ——
 虚拟账户代理已经覆盖该目标）、mempool
 规则 / ERC-7562（Neo 没有需要治理的替代 mempool）、initCode（账户是
-零部署的），以及 BLS 聚合签名（ordinary 面上没有原生配对预编译）。
+零部署的），以及 BLS 聚合签名（custom 面上没有原生配对预编译）。
 
 ---
 

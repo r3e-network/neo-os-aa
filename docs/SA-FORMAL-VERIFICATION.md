@@ -4,7 +4,7 @@
 
 ### Fixture refresh (2026-11-16)
 
-The 2026-11-16 design-phase legacy-compatibility sweep changed the ordinary
+The 2026-11-16 design-phase legacy-compatibility sweep changed the custom
 core source (legacy storage-prefix fallbacks, the rotation-migration surface
 and the dependency backfill were removed; the recovery verifier's v3 action
 ticket was dropped and `submitActionTicketV4` renamed to `submitActionTicket`).
@@ -72,7 +72,7 @@ source-built runner receipt is
 and runner receipts remain historical evidence for their recorded source set
 and must not be used as current provenance.
 
-Separately, the ordinary SA protocol suite was rerun end to end with the same
+Separately, the custom SA protocol suite was rerun end to end with the same
 source-built NeoExpress runtime. The current receipt at
 `docs/reports/sa-neoexpress-validation-20261031.json` reports `PASS` and is
 release-evidence eligible for the private chain: 25 deployed artifacts
@@ -118,7 +118,7 @@ A host-side discovery run of
 skips are not counted as proof, and this discovery run does not replace the
 fail-closed closure gate or move `implementationVerified`.
 
-The remaining boundary is explicit: ordinary public v3 still calls verifiers
+The remaining boundary is explicit: custom public profile still calls verifiers
 through `System.Contract.Call` without an independent child gas cap. Public
 deployment and public artifact parity are outside this private-only run. The
 formal and runtime evidence also retain the cryptography, complete WitnessRule
@@ -178,7 +178,7 @@ now binds typed Roslyn operations, a byte-identical NCCS rebuild, the complete
 certificate. The proved region is the reimbursement arithmetic at PC
 `[13667,13689)`: 22 original instructions, with signed-256 bounds, typed entry
 conditions, result equality, argument/local-frame preservation and equality to
-the existing `OrdinarySponsorship.charge` definition.
+the existing `CustomSponsorship.charge` definition.
 
 Host Rocq 9.2 and pinned-container Coq 8.18 independently accept the same generated
 certificate and recheck it with `coqchk`. Each checks **38 closed declarations**:
@@ -200,7 +200,7 @@ remaining method obligations.
 
 ### Historical source-candidate host closure (2026-10-13)
 
-The frozen ordinary source-candidate snapshot passed the host model gate:
+The frozen custom source-candidate snapshot passed the host model gate:
 **29 Coq modules, 490 closed declarations, 287 rejected semantic mutations**
 (283 Coq and four TLA), **61,460 TLC distinct states**, and **seven SMT obligations
 with seven controls**. The gate checks 59 SA source inputs and 310 native-core
@@ -213,7 +213,7 @@ it is byte-identical to
 The host used Rocq 9.2, Z3 5.1.0, OpenJDK 26.0.2.1, and the reviewed TLA jar
 with SHA-256 `7beec0f04818732a62fa193731711a99aa4f11279499b2360a7d156c519ea78d`.
 
-This closes **GO for the declared ordinary protocol abstractions and reviewed
+This closes **GO for the declared custom protocol abstractions and reviewed
 source-snapshot checks**: governance authorization and delay, cumulative
 transaction sponsorship reservations, and permanent owner-only recovery are
 included. `implementationVerified` remains **false**. Source-fragment checks
@@ -257,10 +257,10 @@ receipt's original tool versions.
 
 ### Previous host snapshot (2026-10-13)
 
-The previous ordinary-governance source and model snapshot passed the host formal gate:
+The previous custom-governance source and model snapshot passed the host formal gate:
 **27 Coq modules, 460 closed declarations, 258 rejected semantic mutations,
 61,460 TLC distinct states, six SMT obligations and six controls**, with the
-native core roster checked at 310 exact source files. The tracked ordinary-governance
+native core roster checked at 310 exact source files. The tracked custom-governance
 receipt is `reports/sa-formal-ordinary-go-20261013.json` (not included in this
 checkout)
 (SHA-256 `a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21`).
@@ -282,8 +282,8 @@ container run is recorded under Current source-candidate host closure above;
 it certifies that later pinned snapshot without retroactively changing this
 historical receipt.
 
-The ordinary public profile also retains two protocol-level NO-GO boundaries:
-public `v3` callbacks use standard `System.Contract.Call` without an isolated
+The custom public profile also retains two protocol-level NO-GO boundaries:
+`public` callbacks use standard `System.Contract.Call` without an isolated
 child budget, and the pinned public ABI still exposes immediate platform-account
 backup-owner rotation. The source candidate now contains a two-stage
 proposal/confirmation/cancellation path with a new-owner witness, but closing
@@ -291,8 +291,8 @@ the public boundary requires an ABI migration from the pinned 90-entry artifact
 to the reviewed source-candidate ABI, an upgraded artifact, and public
 readback; this repository does not relabel it as closed based on static tests.
 
-The ordinary source candidate now has an explicit Coq governance model
-(`OrdinaryGovernance.v`) covering registrar and owner authorization, duplicate
+The custom source candidate now has an explicit Coq governance model
+(`CustomGovernance.v`) covering registrar and owner authorization, duplicate
 pending proposals, seven-day confirmation delay, new-owner witness, escape and
 escrow exclusion, cancellation, boundary cleanup, and failed-transition
 atomicity. This is a bounded state-machine correspondence model; it does not
@@ -307,7 +307,7 @@ UInt160 values and matching account bindings are preconditions of the projection
 Governance failure proofs preserve the governance record, which does not model
 nonce storage. They do not prove current-owner consent to a registrar proposal.
 
-`OrdinarySponsorship.v` models one ledger per core and transaction shared across
+`CustomSponsorship.v` models one ledger per core and transaction shared across
 accounts, sponsors, paymasters, single calls, batches and nested execution.
 Reservations precede external callbacks; repeated successful reservations sum
 to at most the positive enclosing transaction fee. A theorem relates the
@@ -316,7 +316,7 @@ retains requested quotes and has no persisted-fee-bound claim. Transaction hash
 identity, fees, stored ledger integrity, enclosing-transaction rollback and actual
 token settlement remain implementation correspondence obligations.
 
-`OrdinaryRecovery.v` models the source candidate's callback-free recovery to an
+`CustomRecovery.v` models the source candidate's callback-free recovery to an
 irreversible owner-only latch. It proves independence from old plugin outcomes,
 maturity/witness/lock/escrow guards, root/context/intent detachment, retained
 identity and nonce projections, rejection of repeated recovery, and rejection
@@ -332,8 +332,8 @@ are outside that claim.
 The active native target is SmartAccount ABI 2, with identity derivation
 version 1, authorization/account-record version 2, and separate authority epoch
 and configuration nonce. Native recovery revokes old module generations without
-external cleanup. The six native modules use epoch-scoped state. Ordinary public
-`v3` and private `PLATFORM` sources are retained as separate profiles; native
+external cleanup. The six native modules use epoch-scoped state. Custom 
+`public` and private `PLATFORM` sources are retained as separate profiles; native
 claims must bind the external Neo core sources, not the old deployed-core prototype.
 
 The unreleased ABI 2 profile now requires the exact profile fingerprint and a
@@ -341,7 +341,7 @@ strict verifier-composition marker on every module. Its native composite model
 uses a transient three-field receipt, first-threshold selection, at most three
 children/two approvals/two threshold/three signer domains, fresh per-operation
 ownership, all-active binding checks and pre/post policy equality. The public
-`MultiSigPolicy.v` ten-child/repeated-validation model applies only to `v3` and
+`MultiSigPolicy.v` ten-child/repeated-validation model applies only to `public` and
 `PLATFORM`; `NativeCompositePhase.v` covers the separate native receipt design.
 Session's epoch-scoped prefix `0x05` stores deterministic signer-domain
 configuration, and prefix `0x06` holds the independently updated last-use time;
@@ -382,7 +382,7 @@ Exact model/source/tool hashes and profile applicability are in
 `NativeAuthorityEpoch.v` contributes 44 closed declarations and 22 mutations for
 checked counters, callback-free recovery, namespace separation and the four-argument
 execution commitment. Domain hashing, exact byte keys and VM transaction-witness
-behavior remain source/runtime correspondence obligations. The ordinary TLC and
+behavior remain source/runtime correspondence obligations. The custom TLC and
 SMT checks retain their public/private contract scope. Formal models remain
 hand-written abstractions, not C#/VM/NEF refinement or deployment attestations;
 the result therefore retains `implementationVerified: false`. Counts below identify the dated snapshot that produced them; an ABI 2 label
@@ -653,7 +653,7 @@ nor Colima context returned a successful bounded daemon probe. The current statu
 `HOST_PASS_CONTAINER_UNAVAILABLE`; an earlier container PASS is not reused for
 changed model bytes.
 
-### Historical ordinary-contract evidence
+### Historical custom-contract evidence
 
 The historical fail-closed SA-local gate passed on 2026-09-21: **5 Coq modules,
 72 closed declarations, 30 semantic mutations rejected, 61,460 TLC distinct
@@ -669,21 +669,21 @@ with **23/23** runner tests. Exact source/model/tool hashes and versions are rec
 [`sa-formal-gate-20261008.json`](reports/sa-formal-gate-20261008.json). The Docker gate was
 not rerun; its pin is unchanged.
 
-The 2026-10-08 source separates public `v3` and private `PLATFORM` execution. The
+The 2026-10-08 source separates `public` and private `PLATFORM` execution. The
 source lock and every new gate result include `runtimeProfiles` and `modelProfiles`;
 the runner rejects missing or changed scope metadata. `VerifierGasBudget.v` applies
-only to bounded `PLATFORM` and native callbacks. Public `v3` uses standard `System.Contract.Call` and has **no
-per-verifier child gas budget**. `ProxyWitnessScript.v` models only the ordinary public/private direct-call parser.
+only to bounded `PLATFORM` and native callbacks. `public` uses standard `System.Contract.Call` and has **no
+per-verifier child gas budget**. `ProxyWitnessScript.v` models only the custom public/private direct-call parser.
 Native-specific lifecycle, registry, witness and module models are labelled
 `native`; only the shared bounded MultiSig policy abstraction spans all profiles.
-The ordinary execution/escape model, TLC state machine and uint256/paymaster
+The custom execution/escape model, TLC state machine and uint256/paymaster
 SMT file remain public/private-contract scope. Native integer, lifecycle and
 dispatch obligations use the dedicated native models instead. No scope label establishes source/VM refinement or deployment parity.
 
 The native source correspondence includes a separately supplied core checkout.
 `--native-core-root` (or `NEOOS_NATIVE_CORE_SOURCE`) is mandatory for a complete
 gate. Its reviewed source roster and hashes are checked before and after proofs;
-missing files, extra files, changed bytes or absent provenance reject. The ordinary
+missing files, extra files, changed bytes or absent provenance reject. The custom
 SmartAccount contract source is never used as a substitute for the native
 SmartAccount core source.
 `NativeAuthorityEpoch.v` checks separate bounded counters, callback-free recovery,
@@ -887,13 +887,13 @@ models under `verified/` for its own `verify.sh`.
 |---|---|
 | `formal/coq/SmartAccountAA.v` (sibling: `verified/coq/`) | Closed Coq proofs for authorization, exact channel nonce use, rollback, reentrancy, escape-owner gating, success-only state transitions, and the rule that an absent hook/verifier cannot fail a callback phase |
 | `formal/coq/MultiSigPolicy.v` | **Public V3/PLATFORM only:** bounded ten-child configuration, exact signature cardinality and threshold support; child identity is abstract |
-| `formal/coq/OrdinaryGovernance.v` | **Public V3/PLATFORM source candidate:** owner-witness cancellation independent of caller, exact millisecond delay, pending rotation and rollback; binding/identity validity is a precondition |
-| `formal/coq/OrdinarySponsorship.v` | **Public V3/PLATFORM source candidate:** transaction-wide cumulative reservation cap, request bound, zero-fee estimation control and failure rollback; no storage/fee/VM refinement |
-| `formal/coq/OrdinaryRecovery.v` | **Public V3/PLATFORM source candidate:** callback-free recovery and irreversible owner-only latch with projected identity/nonce retention; no storage or all-entrypoint refinement |
+| `formal/coq/CustomGovernance.v` | **Public V3/PLATFORM source candidate:** owner-witness cancellation independent of caller, exact millisecond delay, pending rotation and rollback; binding/identity validity is a precondition |
+| `formal/coq/CustomSponsorship.v` | **Public V3/PLATFORM source candidate:** transaction-wide cumulative reservation cap, request bound, zero-fee estimation control and failure rollback; no storage/fee/VM refinement |
+| `formal/coq/CustomRecovery.v` | **Public V3/PLATFORM source candidate:** callback-free recovery and irreversible owner-only latch with projected identity/nonce retention; no storage or all-entrypoint refinement |
 | `formal/coq/NativeCompositePhase.v` | **Native ABI 2 only:** first-threshold selection, one-operation receipt ownership and discard, approved-child grants, all-active pins, and pre/post policy equality under bounds 3/2/2/3; no byte-copy, hash, crypto or gas-feasibility refinement |
 | `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected direct `executeUserOp`/`executeUserOps` call with its two-argument pack, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
 | `formal/coq/CallbackPluginTopology.v` | Closed abstract correspondence model for the six-field hook callback tuple, configured-vs-absent callback phases, success/callback ordering, CalledByEntry/Custom target binding, and fail-closed plugin cleanup/rotation; it is not a proof of NeoVM dispatch or arbitrary plugin storage |
-| `formal/coq/VerifierGasBudget.v` | **Bounded PLATFORM/native profiles only:** closed abstract model of bounded callback charging: every charge checks the callback and all ancestor budgets before mutation, exhaustion is atomic, and nested callbacks cannot escape an ancestor cap; inapplicable to public `v3` |
+| `formal/coq/VerifierGasBudget.v` | **Bounded PLATFORM/native profiles only:** closed abstract model of bounded callback charging: every charge checks the callback and all ancestor budgets before mutation, exhaustion is atomic, and nested callbacks cannot escape an ancestor cap; inapplicable to `public` |
 | `formal/coq/AuthorizationEvidence.v` | Closed protocol-level binding and replay model for cryptographic, native-witness, attestation and proof evidence; primitive validity is an explicit oracle, so this is not a proof of ECDSA, witness-rule evaluation, attestation or ZK soundness |
 | `formal/coq/AttestationProofBinding.v` | Closed protocol-envelope model for attestation and zero-knowledge evidence: account, target, nonce, issuer, measurement commitment, non-zero nullifier and single-use binding; primitive cryptographic and proof validity remain explicit oracle inputs |
 | `formal/coq/WitnessRuleSemantics.v` | Closed bounded model of Neo's first-match rule decision, default deny, allow/deny precedence, entry/direct-child scope, condition composition, and parser depth/child limits; it is not a refinement proof of `ApplicationEngine` or group-key cryptography |
@@ -905,7 +905,7 @@ models under `verified/` for its own `verify.sh`.
 | `formal/coq/AbiManifestProjection.v` | Closed finite, order-independent ABI projection model requiring exact source/manifest coverage, unique `(name, arity)` dispatch keys, parameter/return/safe equality, and the generated initializer |
 | `formal/coq/SignerDomainSeparation.v` | Closed binding model requiring exact authorization domain and payload equality; it rejects cross-domain replay but does not prove private-key independence or primitive cryptographic soundness |
 | `formal/coq/SignerIndependence.v` | Closed finite countermodel showing that distinct public signer domains do not imply private-key independence; this is an explicit trust-boundary proof, not a key-generation proof |
-| `formal/coq/PluginLifecycle.v` | **Native profile only:** closed finite countermodel showing that a lifecycle ABI does not imply complete cleanup of arbitrary future-plugin storage, plus a conditional theorem for a certified cleanup function; ordinary V3 lifecycle claims remain runtime/artifact evidence |
+| `formal/coq/PluginLifecycle.v` | **Native profile only:** closed finite countermodel showing that a lifecycle ABI does not imply complete cleanup of arbitrary future-plugin storage, plus a conditional theorem for a certified cleanup function; custom V3 lifecycle claims remain runtime/artifact evidence |
 | `formal/tla/SmartAccountAA.tla` (sibling: `verified/tla/`) | Finite state-machine exploration of Begin/success/failure/Tick transitions |
 | `formal/tla/SmartAccountAA.cfg` | TLC bounds and safety invariants |
 | `formal/smt/aa_core.smt2` (sibling: `verified/smt/`) | Nonce arithmetic, cursor advancement, rollback equalities, reimbursement cap and budget arithmetic |
@@ -970,7 +970,7 @@ full-semantics or compiler-refinement proof.
 
 The private `PLATFORM` source branch and `contracts/bin/platform` core call verifiers
 through `System.Contract.CallWithGasLimit`, with a 1,000,000,000-datoshi (10 GAS)
-callback budget. Public `contracts/bin/v3` uses standard `System.Contract.Call`:
+callback budget. Public `contracts/bin/public` uses standard `System.Contract.Call`:
 validation is read-only, post-execution accounting retains write access, and neither
 callback has an isolated child budget. Input bounds, total transaction gas ceilings
 and module admission do not supply the missing public runtime capability.
@@ -1015,14 +1015,14 @@ policy model also proves that its abstract post-callback roster is unique,
 configured, and threshold-supported; this remains separate from concrete
 callback refinement.
 
-For the ordinary deployed public/PLATFORM profiles:
+For the custom deployed public/PLATFORM profiles:
 
 The cleanup model proves fail-closed state transitions, not recovery availability:
 `finalizeEscape` still depends on successful cleanup by the old verifier and hook.
 The 2026-10-08 source validates the replacement verifier before these callbacks, but
 does not introduce emergency detach or guarantee progress past a malicious old module.
 `CallVerifierChild` and its explicit `getChildVerifierConfig` capability are absent from the
-deployed core manifest (`contracts/build/SmartAccountV3.manifest.json`) although they are
+deployed core manifest (`contracts/build/SmartAccount.manifest.json`) although they are
 recorded in the source snapshot and tested in NeoVM; both are outside the current abstract models.
 Those models do not prove the child configuration ABI, core/topology binding,
 pending-call serialization or timelock enforcement for this new route. The project file
@@ -1055,14 +1055,14 @@ nonzero valid target, method length 1--128 UTF-8 bytes, argument count at most
 64, canonical argument serialization at most 4096 bytes, signature at most
 1024 bytes, non-empty batch of at most 32 operations, and nonce/deadline in
 the non-negative signed-256-bit domain (`0 <= value < 2^255`). Therefore an
-executable nonce has 191 channel bits, not 192. The current ordinary source
+executable nonce has 191 channel bits, not 192. The current custom source
 applies the same signed-VM bound to `getNonce` reads. A historical deployed
 foundation artifact may still admit a wider, unsigned-192-bit query range until
 it is republished; that does not make those upper-half channels executable and
 is not native-profile conformance. The native codec rejects channels at or above
 `2^191`.
 
-The ordinary execution model scopes callback predicates to the configured
+The custom execution model scopes callback predicates to the configured
 modules: an absent hook or verifier has no callback phase that can reject the
 operation, while an installed module must return normally. This closes the
 previously implicit `hookInstalled` state in the abstract model. Callback
@@ -1214,7 +1214,7 @@ canonical TestNet/MainNet artifacts differ from the current local artifact; depl
 current artifact remains a separate approval-gated operation.
 
 A full private-chain validation on 2026-10-06 (`scripts/neoexpress_validate.py`, opt-in
-through `scripts/verify_repo.sh --neoexpress`) deployed all 24 `contracts/bin/v3` artifacts
+through `scripts/verify_repo.sh --neoexpress`) deployed all 24 `contracts/bin/public` artifacts
 plus the sibling `NeoDIDRegistry` artifact (25 deployments total) to a fresh single-node NeoExpress chain, drove
 14 scenarios with 106 HALT and 2 FAULT persisted transactions (38 expected negative cases, including 36
 preflight refusals), checked 84 on-chain
@@ -1293,7 +1293,7 @@ historical, from before the zero-fee estimation regression test was added.
 
 The historical 2026-09-21 source-to-artifact replay independently compiled the scratch tree
 with the matching private compiler and compared **76/76** NEF/manifest files
-byte-for-byte with `contracts/bin/v3`; no artifact was missing or drifted. The
+byte-for-byte with `contracts/bin/public`; no artifact was missing or drifted. The
 historical `contracts/build` tree remains an explicitly reported provenance
 anchor rather than an expected match. See
 `docs/reports/sa-artifact-reproducibility-20261006.json`.

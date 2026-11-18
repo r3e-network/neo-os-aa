@@ -3,7 +3,7 @@
 This document is the **single shared specification** for the Neo Smart Account (SA)
 module model that the two kernel batches implement:
 
-- ordinary (user-contract) kernel — task #39 (`contracts/`)
+- custom (user-contract) kernel — task #39 (`contracts/`)
 - native kernel — task #40 (`contracts/native/SmartAccount/`)
 
 The DTOs, profiles, storage layout, limits, error codes, events and gas budget
@@ -160,7 +160,7 @@ out-of-domain values where the field declares a domain) are rejected.
 
 The canonical byte form of the unsigned operation is the NeoVM binary
 stack-item serialization of the same 13-field Array with `[11] signature`
-replaced by an **empty ByteString**. The ordinary kernel produces it via
+replaced by an **empty ByteString**. The custom kernel produces it via
 `StdLib.Serialize`, the native kernel via `Neo.VM.BinarySerializer.Serialize`;
 the two serializers emit identical bytes for these shapes, and golden vectors
 (§15 fixture set) pin that equality.
@@ -172,7 +172,7 @@ domain := UTF8("NeoSmartAccount/UserOperation")        // 29 bytes
          || U1 (version = 4)
          || U32LE (network magic)
          || coreHash (20 raw bytes, the *actual* executing core hash;
-                       the ordinary kernel must NOT substitute the native
+                       the custom kernel must NOT substitute the native
                        ServiceHash constant, and vice versa)
          || accountId (20 raw UInt160 bytes)
          || U64BE (validatorId)
@@ -302,7 +302,7 @@ commit; an address re-deploy does not inherit authorization.
 
 ### 7.4 Legacy regions
 
-**Ordinary kernel:**
+**Custom kernel:**
 - 0x01 legacy five-field AccountState rows are **kept as migration input /
   historical evidence**; new state is written only under 0x51. New code never
   routes through the old Verifier/HookId fields; a legacy decoder exists solely
@@ -564,7 +564,7 @@ never authorization sources.
 
 | Artifact | Path |
 | --- | --- |
-| ordinary constants | `contracts/custom/SmartAccount.ModuleProtocol.cs` (partial `SmartAccount`) |
+| custom constants | `contracts/custom/SmartAccount.ModuleProtocol.cs` (partial `SmartAccount`) |
 | native constants | `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` (internal static `SmartAccountModuleProtocol`, synced to neo-native-core via `scripts/sync_native_smartaccount.py`) |
 | fixture skeletons | `tests/fixtures/sa-module-protocol/` (README + schemas + templates) |
 
@@ -580,9 +580,9 @@ the same key builders: `UInt64ToBigEndian`, per-prefix composite key builders).
 
 ## 16. Kernel implementation mapping (tasks #39 / #40)
 
-### 16.1 Ordinary kernel (#39, shares its batch with #25)
+### 16.1 Custom kernel (#39, shares its batch with #25)
 
-| Spec section | Ordinary files to create/modify |
+| Spec section | Custom files to create/modify |
 | --- | --- |
 | §2/§3/§7 constants | consume `contracts/custom/SmartAccount.ModuleProtocol.cs` (already added; add to `SmartAccount.csproj` — done in this batch) |
 | §7.1/§7.4 prefixes | extend the STORAGE PREFIX MAP comment in `SmartAccount.cs` with the 0x50–0x5E rows; add `SmartAccount.ModuleProtocol.cs` to `WalletPartials` in `tests/SmartAccount.Contracts.Tests/StoragePrefixMapTests.cs` **together with first key usages** (DeriveShape requires usage) |

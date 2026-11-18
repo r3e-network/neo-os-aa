@@ -1,5 +1,5 @@
 (*
-  NeoOS formal verification -- ordinary platform owner governance.
+  NeoOS formal verification -- custom platform owner governance.
 
   This is a scoped state-machine model of the source-candidate platform owner
   rotation path. Registrar identity, owner witness, account binding, time,

@@ -27,7 +27,7 @@ public class SAArtifactStructureRuntimeTests
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
     private static readonly string CompiledContractsDir =
-        Path.Combine(RepoRoot, "contracts", "bin", "v3");
+        Path.Combine(RepoRoot, "contracts", "bin", "public");
 
     [TestMethod]
     public void EveryCompiledArtifactHasStrictVmAndAbiEntryPoints()

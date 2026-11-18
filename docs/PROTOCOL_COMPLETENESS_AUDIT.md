@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-13
 **Auditor:** NeoOS protocol remediation review
-**Status:** Conditional. Current source checks pass for the ordinary profile's
+**Status:** Conditional. Current source checks pass for the custom profile's
 specified behavior. Full protocol conformance and release remain blocked by the
 resource-isolation and deployment gates below. Passing the declared checks does
 not establish that the protocol has no remaining defects.
@@ -14,9 +14,9 @@ not establish that the protocol has no remaining defects.
 > `docs/AA-FORMAL-VERIFICATION.md`, and the dated build receipt under
 > `docs/reports/`.
 
-### Current ordinary-profile boundary (2026-11-16)
+### Current custom-profile boundary (2026-11-16)
 
-The ordinary source protocol is internally consistent for its executable nonce
+The custom source protocol is internally consistent for its executable nonce
 domain, operation-shape isolation, plugin lifecycle and bounded policy
 cardinality. The current source candidate is compiled and runtime-tested, while
 the pinned public artifact remains the separately verified deployment identity.
@@ -40,7 +40,7 @@ Three release gates remain explicit:
 | Platform-account backup-owner rotation | **NO-GO** | The source candidate has delayed propose/confirm/cancel semantics with current-owner cancellation and new-owner authorization. The final source-built artifact passes the private NeoExpress state-invariance scenario, but public closure still requires ABI migration, upgraded artifact and live readback |
 | Source candidate versus pinned public artifact | **UPGRADE REVIEW** | Fresh artifact certificate, compatibility review, deployment transaction and independent RPC readback |
 
-The host and container formal model gates and the fresh ordinary source-chain
+The host and container formal model gates and the fresh custom source-chain
 acceptance do not close these external or deployment boundaries. The pinned
 public artifact has historical identity evidence, not acceptance against the
 newly fixed sponsorship and recovery issues. The current candidate may be
@@ -97,7 +97,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 **Comparison to ERC-7579:**
 - ERC-7579 `onInstall(bytes32)` → Neo's `registerAccount()` with direct call
 - ERC-7579 `onUninstall(bytes32)` → Neo's authorization-based removal
-- ERC-7579 does not prescribe this waiting period; the ordinary core waits 24 hours for replacement of an installed plugin
+- ERC-7579 does not prescribe this waiting period; the custom core waits 24 hours for replacement of an installed plugin
 - Core artifact upgrades and platform-owner rotation use a separate seven-day delay; neither is the per-account plugin replacement timer
 
 **Assessment:** ✓ Source-verified lifecycle implementation; this does not certify every future plugin or the pinned public artifact
@@ -153,7 +153,7 @@ stateDiagram-v2
 
 The deployed names carry the account id: `initiateEscape(accountId)` and
 `finalizeEscape(accountId, newVerifier)` are the two ABI methods in
-`contracts/build/SmartAccountV3.manifest.json` (`contracts/custom/SmartAccount.Escape.cs`).
+`contracts/build/SmartAccount.manifest.json` (`contracts/custom/SmartAccount.Escape.cs`).
 
 **Features:**
 - **Timelock:** Configurable 7-90 days (604,800-7,776,000 seconds)
@@ -261,7 +261,7 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 ExecutionEngine.Assert(!isMarketEscrowActive(accountId), "Account locked in market escrow");
 ```
 The call is written as the deployed ABI spells it (`isMarketEscrowActive`, in
-`contracts/build/SmartAccountV3.manifest.json`). The C# source defines it with a leading
+`contracts/build/SmartAccount.manifest.json`). The C# source defines it with a leading
 capital (IsMarketEscrowActive, contracts/custom/SmartAccount.State.cs:143); that form names a method
 the deployment does not export, which is why it is not code-formatted here.
 - Prevents concurrent operations during active listing
@@ -506,7 +506,7 @@ verifier/hook admission policy before funding transactions.
 
 8. **Document Nonce Space Constraints**
    - Keep the signed NeoVM boundary (`0 <= nonce < 2^255`) and resulting 191-bit channel limit visible to SDK callers
-   - Keep deployed-artifact read-boundary differences explicit until the next ordinary artifact publication
+   - Keep deployed-artifact read-boundary differences explicit until the next custom artifact publication
 
 9. **Document Sponsor Funding and Admission**
    - Explain GAS deposits, scoped sponsorship policy and relay reimbursement

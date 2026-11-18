@@ -144,7 +144,7 @@ regexes = ['''^[[:space:]]*"SessionKeyVerifier": "(0x)?[0-9a-f]{40}",?[[:space:]
 
 [[allowlists]]
 description = """\
-Current formal source lock. Its maps associate repository-relative ordinary, PLATFORM and native-core \
+Current formal source lock. Its maps associate repository-relative custom, PLATFORM and native-core \
 source files with the SHA-256 of those public files. generic-api-key reports 18 members because \
 file and symbol names such as SmartAccountEnvelope.cs, SmartAccount.Modules.cs and SessionKeyVerifier \
 contain the rule's keyword; every reported value is a 64-character lower-case content digest, not a \

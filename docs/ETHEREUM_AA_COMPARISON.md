@@ -148,7 +148,7 @@ public-network activation claim.
 - Neo bounded channel + sequence ≈ ERC-4337 sequential nonce lanes
 - Neo keeps one canonical nonce path and does not expose a separate UUID/salt mode
 
-The current ordinary source also bounds `getNonce` channel reads to `0 <= channel < 2^191`.
+The current custom source also bounds `getNonce` channel reads to `0 <= channel < 2^191`.
 An older deployed foundation artifact may accept an upper-half channel for a read until it is
 republished; those read-only values remain non-executable under the signed operation boundary.
 
@@ -302,7 +302,7 @@ stateDiagram-v2
 ```
 
 The two deployed entrypoints take the account id, and `finalizeEscape` also takes the verifier the
-account falls back to (`contracts/build/SmartAccountV3.manifest.json`; implemented in
+account falls back to (`contracts/build/SmartAccount.manifest.json`; implemented in
 `contracts/custom/SmartAccount.Escape.cs`, where the C# methods are spelled with a leading capital —
 that form names no exported method, which is why it is not code-formatted here).
 
@@ -377,7 +377,7 @@ relayMetaInvocation({ scriptHash: aaContract, operation: "executeUserOps", args:
 
 ## 11a. Standards Alignment Surface (2026-11-16)
 
-The ordinary source candidate narrows the practical interop gap with the
+The custom source candidate narrows the practical interop gap with the
 Ethereum AA tooling surface. All of it stays behind the unchanged
 upgrade-required boundary until the governed upgrade lands:
 
@@ -406,7 +406,7 @@ Deliberately not adopted: EIP-7702 EOA delegation (Neo has no EOAs in the
 Ethereum sense — the virtual-account proxy already covers the goal), mempool
 rules / ERC-7562 (Neo has no alt-mempool to police), initCode (accounts are
 zero-deployment), and BLS aggregate signatures (no native pairing precompile
-on the ordinary surface).
+on the custom surface).
 
 ---
 

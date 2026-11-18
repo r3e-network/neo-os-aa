@@ -53,8 +53,8 @@ function repoRoot() {
 
 function artifactPaths(baseName) {
   return {
-    nef: path.join(repoRoot(), 'contracts', 'bin', 'v3', `${baseName}.nef`),
-    manifest: path.join(repoRoot(), 'contracts', 'bin', 'v3', `${baseName}.manifest.json`),
+    nef: path.join(repoRoot(), 'contracts', 'bin', 'public', `${baseName}.nef`),
+    manifest: path.join(repoRoot(), 'contracts', 'bin', 'public', `${baseName}.manifest.json`),
   };
 }
 

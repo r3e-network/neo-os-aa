@@ -252,7 +252,7 @@ class SourceReceiptGateTest(unittest.TestCase):
         receipt["contracts"] = {name: "0x" + format(index + 1, "040x")
                                 for index, name in enumerate(source_build.REQUIRED_ARTIFACTS)}
         receipt["sourceArtifactRuntime"] = {
-            "schema": "neoos-sa-ordinary-source-artifact-runtime/v1", "publicNetwork": False,
+            "schema": "neoos-sa-custom-source-artifact-runtime/v1", "publicNetwork": False,
             "scope": "8 deployed artifacts only", "artifacts": artifacts,
             "runnerSourceSha256": suite.source_runner_snapshot(),
             "readback": [{"contractName": artifact["contractName"],

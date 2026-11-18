@@ -26,7 +26,7 @@ manifest 字节。
 dotnet tool install -g neo.compiler.csharp --version 3.9.1
 node scripts/check_neo_platform_packages.mjs                  # pins, lock files, locked restore, package hashes
 node scripts/check_neo_platform_packages.mjs --compiler-only  # the installed nccs is the pinned package
-bash contracts/compile.sh                                     # every contract into contracts/bin/v3
+bash contracts/compile.sh                                     # every contract into contracts/bin/public
 dotnet test SmartAccount.sln -c Release
 ```
 
@@ -35,7 +35,7 @@ dotnet test SmartAccount.sln -c Release
 
 ### 选择验证画像
 
-`./scripts/verify_repo.sh --profile ordinary` 是默认值。它运行公开合约构建与测试、部署工具回归、
+`./scripts/verify_repo.sh --profile custom` 是默认值。它运行公开合约构建与测试、部署工具回归、
 前端检查与 SDK 检查，但不还原原生探测项目，也不构建原生 epoch VM 固定样例。
 `--contracts-only`、`--frontend-only` 与 `--sdk-only` 仍然用于选择要验证的组件。共享的确定性
 前端／SDK 单元测试保留在两个画像中；它们不需要原生节点。
@@ -50,22 +50,22 @@ dotnet test SmartAccount.sln -c Release
 代码、SDK 与前端测试的改动都会选中浏览器门禁，而无需原生节点。
 
 `--formal` 显式加入聚合形式化检查及其源码锁要求。`--neoexpress` 在一次性发布的 NeoExpress 链上
-选择公开 v3 当前源码验收，适用于 `ordinary` 或 `all`。它先重建两个工件画像，然后把
-`contracts/bin/v3` 交给 `tests/localchain/run.py --variant source`。`NEOOS_NEOXP`（否则
+选择公开 profile 当前源码验收，适用于 `custom` 或 `all`。它先重建两个工件画像，然后把
+`contracts/bin/public` 交给 `tests/localchain/run.py --variant source`。`NEOOS_NEOXP`（否则
 `NEOXP`、PATH 或用户工具目录）选择已发布的运行器；该路径不启用任何私有分叉。
 
-`scripts/check-ordinary-runtime-provenance.mjs` 把重建证书与当前源码快照、八个已部署模块的精确
+`scripts/check-custom-runtime-provenance.mjs` 把重建证书与当前源码快照、八个已部署模块的精确
 NEF 哈希、校验和、完整 manifest 与 RPC script 回读连接起来。它复用源码套件已有的验收预言机。
 这是经过测量的子集，不是对整个模块目录或公开部署的证明。独立的
 `scripts/neoexpress_validate.py` 与 `verify-private-artifact-provenance.mjs` 仍然是私有 PLATFORM
-的全模块矩阵。该未被选中的矩阵上报为 NOT RUN，并且不增加普通门禁。原生全链验证遵循其单独的
+的全模块矩阵。该未被选中的矩阵上报为 NOT RUN，并且不增加custom 门禁。原生全链验证遵循其单独的
 文档化运行器。可选的已选中检查在未被选中时保留其显式的 NOT RUN 消息。
 
 ## 复现
 
 ### 公开与私有画像
 
-`contracts/bin/v3` 中的默认核心使用已发布的 `System.Contract.Call`：签名验证为只读，而验证器的
+`contracts/bin/public` 中的默认核心使用已发布的 `System.Contract.Call`：签名验证为只读，而验证器的
 `postExecute` 保留写权限用于记账。它不发出任何 `System.Contract.CallWithGasLimit`。四个验证器
 回调测试运行在已发布的 TestEngine 上；`tests/localchain/test_public_profile.py` 在一次性发布的
 neoxp 上执行一次已签名操作。
@@ -78,12 +78,12 @@ neoxp 上执行一次已签名操作。
 公开画像不对验证器 gas 设上限。生命周期 ABI 准入不是验证器信任策略或资源策略。公开中继在赞助
 之前必须自行施加经复核的模块策略、模拟与有限交易费用上限；这些控制不确立协议级子预算。无限制
 的受赞助准入仍然不安全。`contracts/build` 仍然是历史已部署工件固定样例。公开部署／升级 helper
-选择 `contracts/bin/v3`，并拒绝逃逸出该目录的路径；`contracts/bin/platform` 永远不是公开发布源。
+选择 `contracts/bin/public`，并拒绝逃逸出该目录的路径；`contracts/bin/platform` 永远不是公开发布源。
 
 ### 公开验证器发布选择
 
 `scripts/deploy_latest_aa_verifiers.js` 与其他公开部署脚本一样，通过同一个受限工件路径 helper，从
-`contracts/bin/v3/verifiers/` 选择 SessionKeyVerifier，从 `contracts/bin/v3/` 选择
+`contracts/bin/public/verifiers/` 选择 SessionKeyVerifier，从 `contracts/bin/public/` 选择
 SocialRecoveryVerifier。若那对经复核的公开 NEF／manifest 缺失，它必须失败；它绝不能回退到历史
 `contracts/build` 固定样例或私有／原生画像。被选中的 manifest 必须匹配预期的模块名、版本与
 账户 ID ABI。在现有的授权核心绑定检查能够成功之前，部署回读必须匹配被选中的 NEF script 与完整
@@ -103,9 +103,9 @@ diff "$A.sha256" "$B/deeper.sha256" && echo reproduced
 ```
 
 `node scripts/check-artifact-reproducibility.mjs` 在临时副本中重放规范的 `contracts/compile.sh`，
-并比较 **两个**画像：`contracts/bin/v3` 与 `contracts/bin/platform`，各自给出独立的画像结论。
+并比较 **两个**画像：`contracts/bin/public` 与 `contracts/bin/platform`，各自给出独立的画像结论。
 任一画像缺失核心、目录为空、出现多余工件或字节漂移，门禁都会失败。它不会仅凭可复现性推断
-运行时兼容性。2026-10-08 的重放匹配 **80/80** 个文件：`bin/v3` 下 **78** 个、`bin/platform` 下
+运行时兼容性。2026-10-08 的重放匹配 **80/80** 个文件：`bin/public` 下 **78** 个、`bin/platform` 下
 **2** 个，无漂移、无缺失。原生集成源码的精确摘要与画像结论见
 [`sa-native-abi2-public-platform-reproducibility-20261008.json`](reports/sa-native-abi2-public-platform-reproducibility-20261008.json)。
 2026-10-31 的当前源码重放同样匹配 **80/80** 个文件，画像划分仍是 **78 + 2**，无漂移、无缺失。
@@ -137,7 +137,7 @@ NEF 不携带源码路径或 URL，其头部的编译器字符串为 `Neo.Compil
 锁使用同样已发布的 Framework 3.10.1，每个打包后的 manifest 都要求原生 ABI 2 授权服务。两次
 干净构建匹配了全部六个 NEF、六个打包 manifest 与打包证书；当前的输入／输出映射见
 [`sa-native-abi2-module-build-20261008.json`](reports/sa-native-abi2-module-build-20261008.json)。
-回执同时标识原始源码与显式的原生预处理配方。这些模块依赖 SmartAccount，不是公开 `v3` 工件。
+回执同时标识原始源码与显式的原生预处理配方。这些模块依赖 SmartAccount，不是 `public` 工件。
 
 原生节点／NeoExpress 运行时有一套独立的源码构建与私有链门禁，记录在
 [原生验证](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md)中。模块可复现性与仅测试用的公开
@@ -202,7 +202,7 @@ VM epoch 探测都不确立原生链行为或公开激活。
 复现了它们的 12 个 NEF／manifest 文件与打包证书。使用方针对全部 13 个打包文件重新校验了当前
 参数字节、画像摘要、描述符、配方、能力元数据与生命周期 ABI。
 
-普通的 `v3` 与 `PLATFORM` 输出在全部 80 个工件上仍保持逐字节相同。最终公开运行时回归通过 396 个
+custom `public` 与 `PLATFORM` 输出在全部 80 个工件上仍保持逐字节相同。最终公开运行时回归通过 396 个
 测试且无跳过；所需的外部 NeoDID 工件已提供。早前的 `sa-native-abi2-runner-build-20261009.json`
 与 `sa-native-abi2-rpc-runtime-20261009.json` 描述的是中间源码快照，不是最终的复合构建。私有链／
 SDK 回执另行确立集成行为；这些构建结果不确立公开网络上的激活，也不确立编译器正确性。

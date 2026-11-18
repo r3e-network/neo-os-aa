@@ -45,7 +45,7 @@ const FIXTURE_RULES = [
   ["frontend/.env.production.local", false, true],
   [".env.example", false, false],
   ["frontend/.env.example", false, false],
-  ["contracts/bin/v3/SmartAccount.nef", false, true],
+  ["contracts/bin/public/SmartAccount.nef", false, true],
   ["Graph/Graph.csproj", false, false],
   ["bin/Graph.csproj", false, true],
   ["Graph/keep.csproj", false, false],

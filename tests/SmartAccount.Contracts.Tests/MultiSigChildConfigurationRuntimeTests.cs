@@ -382,7 +382,7 @@ public class MultiSigChildConfigurationRuntimeTests
         }
         else
         {
-            string artifacts = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/v3"));
+            string artifacts = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/public"));
             var manifest = Neo.SmartContract.Manifest.ContractManifest.Parse(File.ReadAllText(Path.Combine(artifacts, "MockVerifierCore.manifest.json")));
             string omitted = kind == 2 ? "getSignerDomains" : "supportsComposition";
             manifest.Name = "LeafWithout" + omitted;

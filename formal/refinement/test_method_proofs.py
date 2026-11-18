@@ -17,7 +17,7 @@ import nef_decode
 import verify as refinement_verify
 
 ROOT = Path(__file__).resolve().parents[2]
-CURRENT_ARTIFACT_DIR = ROOT / "contracts/bin/v3"
+CURRENT_ARTIFACT_DIR = ROOT / "contracts/bin/public"
 CURRENT_METADATA = ROOT / "formal/refinement/fixtures/current-initializer-source.json"
 
 

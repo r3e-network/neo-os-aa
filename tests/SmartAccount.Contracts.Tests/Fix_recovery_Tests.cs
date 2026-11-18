@@ -24,7 +24,7 @@ namespace SmartAccount.Contracts.Tests;
 ///      the estate-standard 7–90 day window (rejecting both shorter and longer timelocks),
 ///      matching the SA core escape-hatch bounds. Previously 1h minimum / no maximum
 ///      (audit finding: recovery timelock bounds).
-/// Executed against the compiled contract under <c>contracts/bin/v3</c> through a real Neo VM.
+/// Executed against the compiled contract under <c>contracts/bin/public</c> through a real Neo VM.
 /// </summary>
 [TestClass]
 public partial class FixRecoveryTests

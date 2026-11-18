@@ -16,7 +16,7 @@
 
 本项目包含：
 
-- Neo N3 智能账户主合约（`SmartAccount`，V3 交付名 `SmartAccountV3`）
+- Neo N3 智能账户主合约（`SmartAccount`）
 - 前端操作工作区与协作草稿流
 - JavaScript SDK 与测试网验证脚本
 
@@ -30,7 +30,7 @@
 4. [docs/DATA_FLOW.zh-CN.md](docs/DATA_FLOW.zh-CN.md) —— 浏览器 / Supabase / 中继 / 链 的边界
 5. [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) —— 技术架构
 6. [docs/SA-SYSTEM-STATUS.zh-CN.md](docs/SA-SYSTEM-STATUS.zh-CN.md) —— 已建成、已部署、已验证，以及尚未成立的部分
-7. [docs/ORDINARY_ACCOUNT_WORKSPACE.zh-CN.md](docs/ORDINARY_ACCOUNT_WORKSPACE.zh-CN.md) —— 普通账户工作区
+7. [docs/CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md](docs/CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md) —— custom 账户工作区
 8. [docs/SECURITY_MODEL.zh-CN.md](docs/SECURITY_MODEL.zh-CN.md) —— 威胁模型与信任假设
 9. [docs/SA-SPEC.zh-CN.md](docs/SA-SPEC.zh-CN.md) —— 仅有英文的规范与形式化章节导读
 
@@ -47,7 +47,7 @@
 
 ## 项目结构
 
-- `contracts/custom/`：当前可用的 `SmartAccountV3` 用户合约实现（C# 主入口合约）及其服务合约。
+- `contracts/custom/`：当前可用的 `SmartAccount` 用户合约实现（C# 主入口合约）及其服务合约。
 - `contracts/native/`：原生 ABI 2 标准提交实现，包含原生共识 `SmartAccount` 服务的真源与编译它的 Neo core 叠加工程，当前为 draft/unactivated。
 - `contracts/plugins/`：两个实现共用的插件合约。
 - `contracts/plugins/verifiers/`：验证器插件（Web3Auth、TEE、WebAuthn、SessionKey、MultiSig 等）。

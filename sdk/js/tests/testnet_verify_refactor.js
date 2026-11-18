@@ -4,7 +4,7 @@
  * Testnet verification for Neo Smart Account.
  * Deploys existing pre-compiled NEFs and exercises core flows.
  *
- * Usage: TEST_WIF=Kzja... node v3_testnet_verify_refactor.js
+ * Usage: TEST_WIF=Kzja... node testnet_verify_refactor.js
  */
 
 const fs = require('fs');
@@ -45,8 +45,8 @@ async function retry(label, fn, n = 5) {
 
 function load(name, suffix) {
   const root = path.resolve(__dirname, '..', '..', '..');
-  const nef = sc.NEF.fromBuffer(fs.readFileSync(path.join(root, 'contracts', 'bin', 'v3', `${name}.nef`)));
-  const mj = JSON.parse(fs.readFileSync(path.join(root, 'contracts', 'bin', 'v3', `${name}.manifest.json`), 'utf8'));
+  const nef = sc.NEF.fromBuffer(fs.readFileSync(path.join(root, 'contracts', 'bin', 'public', `${name}.nef`)));
+  const mj = JSON.parse(fs.readFileSync(path.join(root, 'contracts', 'bin', 'public', `${name}.manifest.json`), 'utf8'));
   mj.name = `${mj.name}-${suffix}`;
   return { nef, manifest: sc.ContractManifest.fromJson(mj) };
 }

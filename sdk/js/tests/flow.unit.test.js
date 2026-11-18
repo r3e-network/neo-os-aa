@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { buildV3UserOp, buildEIP712PayloadForWeb3AuthVerifier } = require('../src/v3/UserOp');
+const { buildV3UserOp, buildEIP712PayloadForWeb3AuthVerifier } = require('../src/custom/UserOp');
 const {
   SmartAccountClient,
   buildV3UserOperationTypedData,
@@ -403,11 +403,11 @@ test('SDK registration and verifier update helpers reject malformed verifier par
 });
 
 test('testnet validators derive registration-bound account ids with the contract minimum escape timelock', () => {
-  const smokeSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_smoke.js'), 'utf8');
-  const marketEscrowSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_market_escrow.js'), 'utf8');
-  const pluginMatrixSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_plugin_matrix.js'), 'utf8');
-  const paymasterRelaySource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_paymaster_relay.mjs'), 'utf8');
-  const paymasterOnchainSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_paymaster_onchain.mjs'), 'utf8');
+  const smokeSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_smoke.js'), 'utf8');
+  const marketEscrowSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_market_escrow.js'), 'utf8');
+  const pluginMatrixSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_plugin_matrix.js'), 'utf8');
+  const paymasterRelaySource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_paymaster_relay.mjs'), 'utf8');
+  const paymasterOnchainSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_paymaster_onchain.mjs'), 'utf8');
 
   assert.match(smokeSource, /deriveRegistrationAccountIdHash\(\{/);
   assert.match(smokeSource, /backupOwnerAddress: account\.scriptHash/);
@@ -453,8 +453,8 @@ test('testnet validators derive registration-bound account ids with the contract
 });
 
 test('testnet validation suite includes smoke, plugin matrix, market escrow, and on-chain paymaster lanes', () => {
-  const suiteSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_validation_suite.mjs'), 'utf8');
-  const mainnetReadonlySource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_mainnet_readonly.mjs'), 'utf8');
+  const suiteSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_validation_suite.mjs'), 'utf8');
+  const mainnetReadonlySource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'mainnet_readonly.mjs'), 'utf8');
   const sdkPackage = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'package.json'), 'utf8');
   const readme = fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
 
@@ -466,15 +466,15 @@ test('testnet validation suite includes smoke, plugin matrix, market escrow, and
   assert.match(mainnetReadonlySource, /api\/runtime\/catalog/);
   assert.doesNotMatch(mainnetReadonlySource, /deployContract|executeUserOp\(/);
   assert.match(sdkPackage, /mainnet:validate:readonly/);
-  assert.match(readme, /v3_testnet_market_escrow\.js/);
-  assert.match(readme, /v3_testnet_paymaster_onchain\.mjs/);
+  assert.match(readme, /testnet_market_escrow\.js/);
+  assert.match(readme, /testnet_paymaster_onchain\.mjs/);
   assert.match(readme, /testnet:validate:market/);
   assert.match(readme, /testnet:validate:paymaster-onchain/);
 });
 
 test('paymaster validators use the direct authorize path without the retired Phala tooling', () => {
-  const paymasterPolicySource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_paymaster_policy.mjs'), 'utf8');
-  const paymasterRelaySource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_paymaster_relay.mjs'), 'utf8');
+  const paymasterPolicySource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_paymaster_policy.mjs'), 'utf8');
+  const paymasterRelaySource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_paymaster_relay.mjs'), 'utf8');
   const localPaymasterHandlerSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'local-paymaster-handler.js'), 'utf8');
 
   assert.match(paymasterPolicySource, /return callDirectPaymaster\(payload\);/);
@@ -497,10 +497,10 @@ test('paymaster validators use the direct authorize path without the retired Pha
 });
 
 test('live testnet deploy scripts use entropy-backed deployment tags for reruns', () => {
-  const smokeSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_smoke.js'), 'utf8');
-  const pluginMatrixSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_plugin_matrix.js'), 'utf8');
-  const marketEscrowSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_market_escrow.js'), 'utf8');
-  const paymasterOnchainSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'v3_testnet_paymaster_onchain.mjs'), 'utf8');
+  const smokeSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_smoke.js'), 'utf8');
+  const pluginMatrixSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_plugin_matrix.js'), 'utf8');
+  const marketEscrowSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_market_escrow.js'), 'utf8');
+  const paymasterOnchainSource = fs.readFileSync(path.join(repoRoot, 'sdk', 'js', 'tests', 'testnet_paymaster_onchain.mjs'), 'utf8');
   const runbook = fs.readFileSync(path.join(repoRoot, 'docs', 'testnet-validation-runbook.md'), 'utf8');
 
   assert.match(smokeSource, /crypto\.randomBytes\(3\)\.toString\('hex'\)/);
@@ -519,8 +519,8 @@ test('live testnet deploy scripts use entropy-backed deployment tags for reruns'
   assert.match(runbook, /seed1/);
   assert.doesNotMatch(runbook, /NEO_RPC_URL` to force/);
   assert.match(runbook, /ignore generic `NEO_RPC_URL`/);
-  assert.match(runbook, /v3_testnet_market_escrow\.js/);
-  assert.match(runbook, /v3_testnet_paymaster_onchain\.mjs/);
+  assert.match(runbook, /testnet_market_escrow\.js/);
+  assert.match(runbook, /testnet_paymaster_onchain\.mjs/);
 });
 
 test('legacy market deploy scripts refuse non-testnet RPC magic before writing', () => {

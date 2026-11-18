@@ -17,8 +17,8 @@ const path = require('node:path');
 const { SmartAccountClient } = require('../src/index');
 const neonCompat = require('../src/neonCompat');
 const { createHash } = require('node:crypto');
-const recoveryStateFixture = require('./fixtures/ordinary-owner-only-contract-state.json');
-const discoveryStateFixture = require('./fixtures/ordinary-candidate-discovery-contract-state.json');
+const recoveryStateFixture = require('./fixtures/custom-owner-only-contract-state.json');
+const discoveryStateFixture = require('./fixtures/custom-candidate-discovery-contract-state.json');
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const indexSourcePath = path.join(repoRoot, 'sdk', 'js', 'src', 'index.js');
@@ -44,7 +44,7 @@ const paymasterAbi = loadAbiMethods('SAPaymaster.manifest.json');
 
 // Optional methods are backed by the complete candidate manifest and its
 // source-to-artifact receipt, not promoted into the deployed 90-method ABI.
-const candidateFixturePath = path.join(__dirname, 'fixtures', 'ordinary-owner-only-candidate.manifest.json');
+const candidateFixturePath = path.join(__dirname, 'fixtures', 'custom-owner-only-candidate.manifest.json');
 const candidateBytes = fs.readFileSync(candidateFixturePath);
 const candidateManifest = JSON.parse(candidateBytes);
 const candidateRecoveryMethods = recoveryStateFixture.manifest.abi.methods;

@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { ARTIFACT_PROFILES, buildInputSnapshot, listArtifacts } from "./check-artifact-reproducibility.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const releaseDir = path.join(repoRoot, "contracts", "bin", "v3");
+const releaseDir = path.join(repoRoot, "contracts", "bin", "public");
 const reportsDir = path.join(repoRoot, "docs", "reports");
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
@@ -150,11 +150,11 @@ export function verifyReleaseCertificate(repro, releaseRoot = releaseDir) {
     throw new Error("rebuild certificate is not byte-identical");
   }
 
-  // v3 is the deployed module set, but its source certificate also attests the
+  // public is the deployed module set, but its source certificate also attests the
   // isolated platform core. Validate both profile inventories before chain joining.
   const binRoot = path.dirname(releaseRoot);
   const disk = ARTIFACT_PROFILES.flatMap((profile) => {
-    const directory = profile === "v3" ? releaseRoot : path.join(binRoot, profile);
+    const directory = profile === "public" ? releaseRoot : path.join(binRoot, profile);
     const files = listArtifacts(directory);
     const entry = repro.profiles?.[profile];
     if (entry?.matches_fresh_build !== true || entry?.required_core_present !== true
@@ -177,7 +177,7 @@ export function verifyReleaseCertificate(repro, releaseRoot = releaseDir) {
       throw new Error(`rebuild certificate fresh/release mismatch: ${artifact}`);
     }
     const [profile, ...relative] = artifact.split("/");
-    const directory = profile === "v3" ? releaseRoot : path.join(binRoot, profile);
+    const directory = profile === "public" ? releaseRoot : path.join(binRoot, profile);
     const actual = sha256(fs.readFileSync(path.join(directory, ...relative)));
     if (actual !== release[artifact]) {
       throw new Error(`rebuild certificate does not match release bytes: ${artifact}`);
@@ -228,8 +228,8 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
   const readback = Object.fromEntries(receipt.rpcReadback.contracts.map((row) => [row.contractName, row]));
   const rows = [];
   for (const [name, relative] of Object.entries(LOCAL_ARTIFACTS)) {
-    const profile = name === "SmartAccount" ? "platform" : "v3";
-    const artifactRoot = profile === "v3" ? releaseRoot : path.join(path.dirname(releaseRoot), profile);
+    const profile = name === "SmartAccount" ? "platform" : "public";
+    const artifactRoot = profile === "public" ? releaseRoot : path.join(path.dirname(releaseRoot), profile);
     const nefPath = path.join(artifactRoot, relative);
     const manifestPath = nefPath.replace(/\.nef$/, ".manifest.json");
     const nef = fs.readFileSync(nefPath);

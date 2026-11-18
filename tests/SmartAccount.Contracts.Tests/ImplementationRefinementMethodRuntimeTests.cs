@@ -39,8 +39,8 @@ public class ImplementationRefinementMethodRuntimeTests
         public Harness(long systemFee, long networkFee, bool outerFault = false)
         {
             string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
-            byte[] nefBytes = File.ReadAllBytes(Path.Combine(root, "contracts/bin/v3/SmartAccount.nef"));
-            byte[] manifestBytes = File.ReadAllBytes(Path.Combine(root, "contracts/bin/v3/SmartAccount.manifest.json"));
+            byte[] nefBytes = File.ReadAllBytes(Path.Combine(root, "contracts/bin/public/SmartAccount.nef"));
+            byte[] manifestBytes = File.ReadAllBytes(Path.Combine(root, "contracts/bin/public/SmartAccount.manifest.json"));
             Assert.AreEqual(NefHash, Convert.ToHexString(SHA256.HashData(nefBytes)).ToLowerInvariant());
             Assert.AreEqual(ManifestHash, Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant());
             Assert.AreEqual(new Version(3, 10, 1, 0), typeof(ApplicationEngine).Assembly.GetName().Version);

@@ -131,7 +131,7 @@ class ToolFailureTests(unittest.TestCase):
             root = Path(temp)
             refinement = root / "refinement"
             refinement.mkdir()
-            protocol = root / "OrdinarySponsorship.v"
+            protocol = root / "CustomSponsorship.v"
             protocol.write_text("original protocol")
             fixture = refinement / "cap-region.json"
             fixture.write_text("{}")

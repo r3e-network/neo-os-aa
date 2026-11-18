@@ -4,7 +4,7 @@
 
 **日期：** 2026-09-13
 **审计方：** NeoOS 协议补救评审
-**状态：** 有条件通过。ordinary 配置的既定行为通过了当前源码检查。完整协议一致性
+**状态：** 有条件通过。custom 配置的既定行为通过了当前源码检查。完整协议一致性
 与发布仍被下面的资源隔离与部署门禁阻塞。通过所声明的检查
 并不确立该协议没有剩余缺陷。
 
@@ -13,9 +13,9 @@
 > 形式证据与显式未解边界，请使用 `docs/SECURITY_MODEL.md`、
 > `docs/AA-FORMAL-VERIFICATION.md` 以及 `docs/reports/` 下带日期的构建回执。
 
-### 当前 ordinary 配置边界（2026-11-16）
+### 当前 custom 配置边界（2026-11-16）
 
-ordinary 源码协议在其可执行 nonce 域、操作形状隔离、插件生命周期与有界策略
+custom 源码协议在其可执行 nonce 域、操作形状隔离、插件生命周期与有界策略
 基数方面是内部一致的。当前源码候选已编译并经过运行时测试，而
 固定版本的公开工件仍是单独验证过的部署身份。
 源码候选当前有 109 条 ABI（由于保留了一个重载条目，实为 108 个唯一方法名）；
@@ -37,7 +37,7 @@ ordinary 源码协议在其可执行 nonce 域、操作形状隔离、插件生�
 | 平台账户 backup-owner 轮换 | **NO-GO** | 源码候选具备延迟的 propose/confirm/cancel 语义，带当前 owner 取消与新 owner 授权。最终的源码构建工件通过了私有 NeoExpress 状态不变场景，但公开闭合仍需要 ABI 迁移、升级后的工件与在线回读 |
 | 源码候选与固定公开工件 | **UPGRADE REVIEW** | 新的工件证书、兼容性评审、部署交易与独立 RPC 回读 |
 
-宿主与容器的形式模型门禁、以及新一轮 ordinary 源码链验收，都不闭合这些外部或部署边界。
+宿主与容器的形式模型门禁、以及新一轮 custom 源码链验收，都不闭合这些外部或部署边界。
 固定版本的公开工件具有历史身份证据，而不是针对新修复的赞助与恢复问题的验收。
 当前候选可以在其声明配置内评估内部使用；在声称已部署修复之前，
 仍需要公开升级批准与独立回读。
@@ -103,7 +103,7 @@ Huyao 之前的兼容实现不强制这些边界，不得被视为
 **与 ERC-7579 的对比：**
 - ERC-7579 `onInstall(bytes32)` → Neo 的 `registerAccount()` 直接调用
 - ERC-7579 `onUninstall(bytes32)` → Neo 基于授权的移除
-- ERC-7579 不规定该等待期；ordinary 核心在替换已安装插件时等待 24 小时
+- ERC-7579 不规定该等待期；custom 核心在替换已安装插件时等待 24 小时
 - 核心工件升级与平台 owner 轮换使用独立的七天延迟；两者都不是按账户的插件替换计时器
 
 **评估：** ✓ 源码验证的生命周期实现；这不认证每个未来插件，也不认证固定版本的公开工件
@@ -159,7 +159,7 @@ stateDiagram-v2
 
 已部署的名称携带账户 id：`initiateEscape(accountId)` 与
 `finalizeEscape(accountId, newVerifier)` 是
-`contracts/build/SmartAccountV3.manifest.json` 中的两个 ABI 方法（`contracts/custom/SmartAccount.Escape.cs`）。
+`contracts/build/SmartAccount.manifest.json` 中的两个 ABI 方法（`contracts/custom/SmartAccount.Escape.cs`）。
 
 **特性：**
 - **时间锁：** 可配置 7-90 天（604,800-7,776,000 秒）
@@ -267,7 +267,7 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 ExecutionEngine.Assert(!isMarketEscrowActive(accountId), "Account locked in market escrow");
 ```
 该调用按部署 ABI 的拼写书写（`isMarketEscrowActive`，位于
-`contracts/build/SmartAccountV3.manifest.json`）。C# 源码定义时首字母大写
+`contracts/build/SmartAccount.manifest.json`）。C# 源码定义时首字母大写
 （IsMarketEscrowActive, contracts/custom/SmartAccount.State.cs:143）；那种写法命名的是
 部署并不导出的方法，因此这里没有按代码格式化。
 - 在挂单激活期间阻止并发操作
@@ -509,7 +509,7 @@ ClearVerifyContext(accountId);
 
 8. **记录 Nonce 空间约束**
    - 让 SDK 调用方持续看到有符号 NeoVM 边界（`0 <= nonce < 2^255`）与由此产生的 191 位通道限制
-   - 在下一个 ordinary 工件发布之前，让部署工件的读取边界差异保持显式
+   - 在下一个 custom 工件发布之前，让部署工件的读取边界差异保持显式
 
 9. **记录赞助方出资与准入**
    - 解释 GAS 存款、限定范围的赞助策略与中继补偿

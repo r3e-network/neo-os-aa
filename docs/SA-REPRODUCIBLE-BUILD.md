@@ -25,7 +25,7 @@ with `NU1403`.
 dotnet tool install -g neo.compiler.csharp --version 3.9.1
 node scripts/check_neo_platform_packages.mjs                  # pins, lock files, locked restore, package hashes
 node scripts/check_neo_platform_packages.mjs --compiler-only  # the installed nccs is the pinned package
-bash contracts/compile.sh                                     # every contract into contracts/bin/v3
+bash contracts/compile.sh                                     # every contract into contracts/bin/public
 dotnet test SmartAccount.sln -c Release
 ```
 
@@ -34,7 +34,7 @@ check. To prove a clean restore, point `NUGET_PACKAGES` at an empty directory fi
 
 ### Select the validation profile
 
-`./scripts/verify_repo.sh --profile ordinary` is the default. It runs the public
+`./scripts/verify_repo.sh --profile custom` is the default. It runs the public
 contract build and tests, deployment-tool regressions, frontend checks and SDK
 checks without restoring native probe projects or building the native epoch VM
 fixture. `--contracts-only`, `--frontend-only` and `--sdk-only` still select the
@@ -56,21 +56,21 @@ workflow has no path filter, so native UI, shared code, SDK and frontend test
 changes all select the browser gate without needing a native node.
 
 `--formal` explicitly adds the aggregate formal checks and their source-lock
-requirements. `--neoexpress` selects public v3 current-source acceptance on a
-disposable published NeoExpress chain and is accepted for `ordinary` or `all`.
-It first rebuilds both artifact profiles, then passes `contracts/bin/v3` to
+requirements. `--neoexpress` selects public-profile current-source acceptance on a
+disposable published NeoExpress chain and is accepted for `custom` or `all`.
+It first rebuilds both artifact profiles, then passes `contracts/bin/public` to
 `tests/localchain/run.py --variant source`. `NEOOS_NEOXP` (else `NEOXP`, PATH, or
 the user tool directory) selects the published runner; no private hardfork is
 enabled by this path.
 
-`scripts/check-ordinary-runtime-provenance.mjs` joins the rebuild certificate to
+`scripts/check-custom-runtime-provenance.mjs` joins the rebuild certificate to
 the current source snapshot and the eight deployed modules' exact NEF hashes,
 checksums, full manifests and RPC script readback. It reuses the source suite's
 existing acceptance oracle. This is a measured subset, not proof of the entire
 module catalog or public deployment. The separate
 `scripts/neoexpress_validate.py` and `verify-private-artifact-provenance.mjs`
 remain the private PLATFORM full-module matrix. That unselected matrix is
-reported as NOT RUN and does not add an ordinary gate. Native full-chain
+reported as NOT RUN and does not add a custom gate. Native full-chain
 validation follows its separate documented runner. Optional selected checks
 keep their explicit NOT RUN messages when they are not selected.
 
@@ -78,7 +78,7 @@ keep their explicit NOT RUN messages when they are not selected.
 
 ### Public and private profiles
 
-The default core in `contracts/bin/v3` uses published `System.Contract.Call`: signature validation
+The default core in `contracts/bin/public` uses published `System.Contract.Call`: signature validation
 is read-only, while verifier `postExecute` retains write access for accounting. It emits no
 `System.Contract.CallWithGasLimit`. The four verifier-callback tests run on the published TestEngine;
 `tests/localchain/test_public_profile.py` exercises a signed operation on disposable published neoxp.
@@ -93,13 +93,13 @@ The public profile does not bound verifier gas. Lifecycle ABI admission is not a
 resource policy. Public relays must apply their own reviewed module policy, simulation and finite
 transaction-fee limits before sponsorship; these controls do not establish a protocol-level child
 budget. Unrestricted sponsored admission remains unsafe. `contracts/build` remains the historical
-deployed-artifact fixture. Public deploy/upgrade helpers select `contracts/bin/v3` and reject paths
+deployed-artifact fixture. Public deploy/upgrade helpers select `contracts/bin/public` and reject paths
 escaping that directory; `contracts/bin/platform` is never a public release source.
 
 ### Public verifier release selection
 
 `scripts/deploy_latest_aa_verifiers.js` selects SessionKeyVerifier from
-`contracts/bin/v3/verifiers/` and SocialRecoveryVerifier from `contracts/bin/v3/`
+`contracts/bin/public/verifiers/` and SocialRecoveryVerifier from `contracts/bin/public/`
 through the same constrained artifact-path helper as the other public deployment
 scripts. It must fail if that reviewed public NEF/manifest pair is absent; it
 must never fall back to historical `contracts/build` fixtures or a private/native
@@ -122,10 +122,10 @@ diff "$A.sha256" "$B/deeper.sha256" && echo reproduced
 ```
 
 `node scripts/check-artifact-reproducibility.mjs` replays the canonical `contracts/compile.sh` in a
-scratch copy and compares **both** `contracts/bin/v3` and `contracts/bin/platform`, with separate
+scratch copy and compares **both** `contracts/bin/public` and `contracts/bin/platform`, with separate
 profile verdicts. A missing core, empty directory, extra artifact or byte drift in either profile
 fails the gate. It does not infer runtime compatibility from reproducibility alone.
-The 2026-10-08 replay matched **80/80** files: **78** under `bin/v3` and **2** under
+The 2026-10-08 replay matched **80/80** files: **78** under `bin/public` and **2** under
 `bin/platform`, with no drift or missing artifacts. Exact digests and the profile verdicts
 for the native integration source are in
 [`sa-native-abi2-public-platform-reproducibility-20261008.json`](reports/sa-native-abi2-public-platform-reproducibility-20261008.json).
@@ -170,7 +170,7 @@ service. Two clean builds matched all six NEFs, six packaged manifests and the
 packaging certificate; the current input/output maps are in
 [`sa-native-abi2-module-build-20261008.json`](reports/sa-native-abi2-module-build-20261008.json).
 The receipt identifies both original sources and the explicit native preprocessing
-recipe. These modules require SmartAccount and are not public `v3` artifacts.
+recipe. These modules require SmartAccount and are not `public` artifacts.
 
 The native node/NeoExpress runtime has a separate source build and private-chain
 gate, documented in [native validation](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md).
@@ -242,7 +242,7 @@ reproduced their 12 NEF/manifest files and packaging certificate. The consumer
 revalidated current parameter bytes, profile digest, descriptor, recipes,
 capability metadata and lifecycle ABI against all 13 packaged files.
 
-The ordinary `v3` and `PLATFORM` outputs remain byte-identical across all 80
+The custom `public` and `PLATFORM` outputs remain byte-identical across all 80
 artifacts. The final public runtime regression passed 396 tests with no skips;
 the required external NeoDID artifact was supplied. The earlier
 `sa-native-abi2-runner-build-20261009.json` and

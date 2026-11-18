@@ -238,7 +238,7 @@ public class PolicySemanticsRuntimeTests
         Assert.AreEqual(new BigInteger(30), h.Fx.CallInteger(verifier, "getSpentAmount", Account));
 
         // Audit fix M-2: lower the cap below what is already spent. A zero-value
-        // operation must still be rejected — the ordinary build previously only
+        // operation must still be rejected — the custom build previously only
         // enforced the cap when operationValue > 0, letting a lowered cap be bypassed
         // by zero-value calls (e.g. approve).
         h.Fx.AdvanceTime(System.TimeSpan.FromHours(24)); // key-rotation cooldown

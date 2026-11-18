@@ -1,7 +1,7 @@
 # neo-os-sa in the NeoOS architecture
 
 This file is a pointer, not an authority. The enforced binding is the `Architecture authority`
-section of `README.md`, declared in `neo-os-web/docs/workspace/neoos-target-architecture.v1.json`
+section of the root `README.md`, declared in `neo-os-web/docs/workspace/neoos-target-architecture.v1.json`
 and checked by `npm run check:architecture-sources` in `neo-os-web`. The proposed successor is
 `neoos-target-architecture.v2.json` (status `PROPOSED`), checked by `npm run check:architecture:v2`;
 its design is `neo-os/claudedocs/NEOOS-TARGET-ARCHITECTURE-V2-20260921.md`.

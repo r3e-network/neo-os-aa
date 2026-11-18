@@ -1,6 +1,6 @@
 # Method-level refinement
 
-This document holds every method-level refinement lane for the ordinary SmartAccount
+This document holds every method-level refinement lane for the custom SmartAccount
 candidate. It replaces the thirteen lane documents that used to sit side by side in
 `docs/`, and each lane's text below is unchanged: only the heading level moved down
 one step, so that thirteen separate arguments read as one ordered document.
@@ -59,7 +59,7 @@ The detailed table below records the earlier 2026-10-13 candidate and its
 inventory lane; its offsets and slot 34 must not be applied to the current
 artifact.
 
-The public ordinary candidate NEF has SHA256 `4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`. Its reviewed debug mapping identifies `CapReimbursementToActualCost(BigInteger)` at inclusive offsets **13557–13837**: **281 bytes, 116 instructions, 52 distinct opcodes**. All 116 instructions are listed below, including the prefix, assertion fault path, reservation update, serialization, storage write, and return. Debug/source identity and source locations are bound exporter evidence, not a compiler-refinement theorem.
+The public custom candidate NEF has SHA256 `4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`. Its reviewed debug mapping identifies `CapReimbursementToActualCost(BigInteger)` at inclusive offsets **13557–13837**: **281 bytes, 116 instructions, 52 distinct opcodes**. All 116 instructions are listed below, including the prefix, assertion fault path, reservation update, serialization, storage write, and return. Debug/source identity and source locations are bound exporter evidence, not a compiler-refinement theorem.
 
 The current arithmetic proof covers `[13667,13689)`. Its complete uncovered prefix is `[13557,13667)` and suffix is `[13689,13838)`. Structural accounting of claimed regions must expose both. `method_inventory.py` independently decodes raw script bytes and rejects incomplete debug boundaries, forged instruction metadata, invalid source points, overlaps, and an arithmetic certificate presented as whole-method evidence. Its output always retains `implementationVerified=false` and `wholeMethodVerified=false`.
 
@@ -81,7 +81,7 @@ python3 formal/refinement/method_inventory.py \
 
 ### Pinned ordinary ApplicationEngine boundary
 
-Target Neo core: [`d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d`](https://github.com/neo-project/neo/tree/d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d); Neo VM: [`004cd6070a940405818d9357638277dd44407e2e`](https://github.com/neo-project/neo-vm/tree/004cd6070a940405818d9357638277dd44407e2e). These are the public ordinary track, separate from the native SA fork. The source hashes below attest the files inspected for this plan, not a proof of their runtime behavior.
+Target Neo core: [`d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d`](https://github.com/neo-project/neo/tree/d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d); Neo VM: [`004cd6070a940405818d9357638277dd44407e2e`](https://github.com/neo-project/neo-vm/tree/004cd6070a940405818d9357638277dd44407e2e). These are the public custom track, separate from the native SA fork. The source hashes below attest the files inspected for this plan, not a proof of their runtime behavior.
 
 | Boundary | Pinned implementation and obligation |
 | --- | --- |
@@ -432,7 +432,7 @@ certificate.
 ## Complete reimbursement helper runtime checks
 
 These tests execute the original private `CapReimbursementToActualCost` method in
-the reviewed ordinary NEF, from PC 18900 through RET at PC 19180. They extend the
+the reviewed custom NEF, from PC 18900 through RET at PC 19180. They extend the
 22-instruction arithmetic checks with transaction fields, initial storage, default
 record construction, transaction-hash reset, actual native deserialize/serialize,
 assertion, heap update and Storage.Put. They are concrete runtime correspondence
@@ -572,7 +572,7 @@ public-entrypoint certificate.
 `formal/refinement/coq/ReservationArithmetic.v` contains 24 closed declarations.
 The dedicated host runner compiles it together with 29 imported declarations
 from `IntegerSemantics`, `CapArithmetic`, and the actual existing
-`OrdinarySponsorship`, audits every `Print Assumptions`, and rechecks all four
+`CustomSponsorship`, audits every `Print Assumptions`, and rechecks all four
 compiled modules with `coqchk`. Two runner tests and six definition-valid,
 proof-rejected semantic controls pass. These are arithmetic/protocol results;
 `suffixBytecodeVerified`, `fullHelperVerified`, and
@@ -591,7 +591,7 @@ the representable-success result into an unproved source/target fault claim.
 
 Extend the existing charge-region proof with the reservation's positive-charge
 guard, its VM-integer headroom guard and signed 256-bit addition. The reviewed
-current ordinary NEF contains the charge region at `[17860,17882)` and the
+current custom NEF contains the charge region at `[17860,17882)` and the
 following guard/update suffix at `[17882,18011)`. The suffix compares local6
 with zero, branches from 17885 to 17927 on success, otherwise executes `ABORTMSG`
 at 17926. The success path materialises `vmMax = 2^254 - 1 + 2^254` into local7
@@ -612,7 +612,7 @@ rather than deleted.
 The first theorem layer will execute the guard and checked addition over
 Integer-typed values. Its results distinguish a successful new reserved amount
 from a zero-charge rejection and from a signed-integer overflow. It will import
-the existing `OrdinarySponsorship.charge`, `reserve`, and `reserve_many` rather
+the existing `CustomSponsorship.charge`, `reserve`, and `reserve_many` rather
 than redefine their protocol meaning.
 
 For a positive paid transaction, assume `0 < cost < 2^255`,
@@ -765,7 +765,7 @@ rejection.
 ## Public pure-method reference refinement
 
 This lane certifies the complete bodies of three public ABI methods in the
-ordinary candidate under declared reference semantics. It independently
+custom candidate under declared reference semantics. It independently
 projects their typed source, decodes their exact NEF bytes, and kernel-checks
 source results, terminal behavior and frame preservation. It does not certify
 ApplicationEngine, ABI dispatch, gas or public deployment. All 109 ABI entries

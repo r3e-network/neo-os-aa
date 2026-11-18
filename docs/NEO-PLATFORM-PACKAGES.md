@@ -38,18 +38,18 @@ action below instead of a bare `NU1102` from deep inside the build.
 
 | Profile | Artifact directory | Verifier callback | Runtime requirement |
 | --- | --- | --- | --- |
-| Public `v3` | `contracts/bin/v3` | Standard `System.Contract.Call`; validation is read-only and post-execution accounting retains write access | Published Neo runtime; no isolated verifier child gas budget |
+| `public` | `contracts/bin/public` | Standard `System.Contract.Call`; validation is read-only and post-execution accounting retains write access | Published Neo runtime; no isolated verifier child gas budget |
 | Native ABI 2 | Explicit native-module build output | SmartAccount bounded native callbacks: verifier 1 GAS, hook/maintenance 2.5 GAS | Source-built native contract, `HF_SmartAccountV1`, ABI 2 metadata and epoch-aware modules |
 | Private `PLATFORM` | `contracts/bin/platform` | `System.Contract.CallWithGasLimit`, 10 GAS per verifier callback | Matching private runtime and activation; cannot run on an ordinary public node |
 
-`bash contracts/compile.sh` builds public `v3` and private `PLATFORM` profiles from the pinned published compiler and
+`bash contracts/compile.sh` builds `public` and private `PLATFORM` profiles from the pinned published compiler and
 framework. The script defines `PLATFORM` only in a disposable copy of the execution source;
-`--platform` builds only the private core. Public deploy/upgrade helpers select `bin/v3`.
+`--platform` builds only the private core. Public deploy/upgrade helpers select `bin/public`.
 The two-profile reproducibility gate compares both output directories; byte identity alone
 does not establish runtime support or deployment parity.
 
 For private NeoExpress validation, `scripts/neoexpress_validate.py` deploys the core from
-`bin/platform` and the modules from `bin/v3`, and records the profile of every deployment.
+`bin/platform` and the modules from `bin/public`, and records the profile of every deployment.
 The provenance join independently selects the same profile; a public-core receipt cannot be
 joined to bounded-callback evidence. Set `NEOOS_NEOXP` to a source-built runner that registers
 `System.Contract.CallWithGasLimit` under `HF_SmartAccountV1`; an ordinary published `neoxp`
@@ -111,7 +111,7 @@ The deployed SA cores do not depend on any of this. Public JSON-RPC reads on 202
 The MainNet core is reproducible from public packages: compiling commit `4149496` (the source before
 the gas cap) with the public framework 3.9.1 and `nccs` 3.9.1 from a clean cache gives
 `SmartAccountV3.nef` with checksum 2035992441, byte-identical to the chain and to
-`contracts/build/SmartAccountV3.nef`. The current source has additional contract changes and separate runtime profiles;
+`contracts/build/SmartAccount.nef`. The current source has additional contract changes and separate runtime profiles;
 current public deployment parity requires a fresh source/artifact/RPC comparison.
 
 ## Historical private packages

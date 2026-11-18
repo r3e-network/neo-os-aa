@@ -1,6 +1,6 @@
 # Pending configuration update reads
 
-The ordinary deployed-contract profile adds two safe methods. They are additive
+The custom deployed-contract profile adds two safe methods. They are additive
 to the existing pending flags, maturity-time getters, and update/confirm/cancel
 methods; they do not change storage or authorization.
 
@@ -34,5 +34,5 @@ This ABI describes newly compiled source. Existing deployments that do not
 advertise these method names continue to expose only the older reads. A client
 must check the manifest or handle a missing-method response; it must not present
 the selected target or parameters as chain-verified when only a local form or a
-transaction draft supplied them. Build output under `contracts/bin/v3` is local
+transaction draft supplied them. Build output under `contracts/bin/public` is local
 validation output and is not evidence of a deployed upgrade.

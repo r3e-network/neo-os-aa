@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { startOrdinaryBrowserServer } from './fixtures/ordinaryBrowserServer.mjs';
+import { startCustomBrowserServer } from './fixtures/customBrowserServer.mjs';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -8,31 +8,31 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { getAddressFromScriptHash } from '../src/utils/neo.js';
 import {
-  createOrdinaryGovernanceFixture,
-  ordinaryOwner,
-  ordinaryOtherOwner,
-  ordinaryAccountId,
-  ordinaryCore,
-  ordinaryRpcUrl,
-  ordinaryMagic,
-} from './fixtures/ordinaryGovernanceFixture.js';
+  createCustomGovernanceFixture,
+  customOwner,
+  customOtherOwner,
+  customAccountId,
+  customCore,
+  customRpcUrl,
+  customMagic,
+} from './fixtures/customGovernanceFixture.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const evidenceDir = process.env.ORDINARY_METADATA_EVIDENCE_DIR || join(tmpdir(), 'sa-ordinary-metadata');
+const evidenceDir = process.env.CUSTOM_METADATA_EVIDENCE_DIR || join(tmpdir(), 'sa-custom-metadata');
 
 async function withWorkspace(name, run, setup = () => {}) {
-  const fixture = createOrdinaryGovernanceFixture();
+  const fixture = createCustomGovernanceFixture();
   setup(fixture);
   const errors = [];
   const env = {
-    VITE_SA_RPC_URL: ordinaryRpcUrl,
-    VITE_SA_HASH: ordinaryCore,
-    VITE_SA_NETWORK_MAGIC: String(ordinaryMagic),
+    VITE_SA_RPC_URL: customRpcUrl,
+    VITE_SA_HASH: customCore,
+    VITE_SA_NETWORK_MAGIC: String(customMagic),
   };
   const previousEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   Object.assign(process.env, env);
   await mkdir(evidenceDir, { recursive: true });
-  const server = await startOrdinaryBrowserServer(root);
+  const server = await startCustomBrowserServer(root);
   let browser;
   let page;
   try {
@@ -49,18 +49,18 @@ async function withWorkspace(name, run, setup = () => {}) {
       if (message.type() === 'error' && !message.text().includes('ERR_BLOCKED_BY_CLIENT.Inspector')) errors.push(message.text());
     });
     await page.route('**/*', (route) => fixture.route(route, origin));
-    await page.exposeFunction('ordinaryWalletInvoke', (request) => fixture.invoke(request));
+    await page.exposeFunction('customWalletInvoke', (request) => fixture.invoke(request));
     await page.addInitScript(({ address, hash, magic }) => {
       localStorage.setItem('sa_locale', 'en');
       let override = null;
-      try { override = JSON.parse(localStorage.getItem('ordinary-wallet-override') || 'null'); } catch (_) { /* fixture storage only */ }
-      window.__ordinaryWallet = override?.address && override?.hash ? override : { address, hash };
+      try { override = JSON.parse(localStorage.getItem('custom-wallet-override') || 'null'); } catch (_) { /* fixture storage only */ }
+      window.__customWallet = override?.address && override?.hash ? override : { address, hash };
       window.neo3Dapi = {
-        getAccount: async () => window.__ordinaryWallet,
+        getAccount: async () => window.__customWallet,
         getNetwork: async () => ({ magic }),
-        invoke: (request) => window.ordinaryWalletInvoke(request),
+        invoke: (request) => window.customWalletInvoke(request),
       };
-    }, { address: getAddressFromScriptHash(ordinaryOwner), hash: ordinaryOwner, magic: ordinaryMagic });
+    }, { address: getAddressFromScriptHash(customOwner), hash: customOwner, magic: customMagic });
     await page.goto(`${origin}/app`);
     await page.getByRole('heading', { name: /Smart Account Workspace/i }).waitFor();
     await page.locator('#main-content').getByRole('button', { name: 'Connect Wallet', exact: true }).click();
@@ -94,7 +94,7 @@ async function withWorkspace(name, run, setup = () => {}) {
   }
 }
 
-async function loadGovernance(page, account = ordinaryAccountId) {
+async function loadGovernance(page, account = customAccountId) {
   await page.locator('#manage-target-account').fill(account);
   await page.getByRole('button', { name: 'Load account', exact: true }).click();
   await page.getByText('Current account configuration loaded.', { exact: true }).last().waitFor();
@@ -185,9 +185,9 @@ async function waitForGovernanceIdle(page) {
 test('metadata save requires the currently connected Neo backup owner', { timeout: 120000 }, async () => {
   await withWorkspace('owner-authorization', async ({ page, fixture }) => {
     await page.evaluate(({ address, hash }) => {
-      window.__ordinaryWallet = { address, hash };
+      window.__customWallet = { address, hash };
       window.dispatchEvent(new CustomEvent('Neo.DapiProvider.ACCOUNT_CHANGED', { detail: { address, hash } }));
-    }, { address: getAddressFromScriptHash(ordinaryOtherOwner), hash: ordinaryOtherOwner });
+    }, { address: getAddressFromScriptHash(customOtherOwner), hash: customOtherOwner });
     await page.waitForFunction(() => {
       const field = document.querySelector('#governance-metadata-uri');
       const button = [...document.querySelectorAll('button')].find((entry) => /save metadata/i.test(entry.getAttribute('aria-label') || entry.textContent || ''));
@@ -202,14 +202,14 @@ test('metadata save requires the currently connected Neo backup owner', { timeou
 test('wallet switch followed by reload keeps metadata unavailable to a non-owner', { timeout: 120000 }, async () => {
   await withWorkspace('owner-reload', async ({ page, fixture }) => {
     await page.evaluate(({ address, hash }) => {
-      localStorage.setItem('ordinary-wallet-override', JSON.stringify({ address, hash }));
-    }, { address: getAddressFromScriptHash(ordinaryOtherOwner), hash: ordinaryOtherOwner });
+      localStorage.setItem('custom-wallet-override', JSON.stringify({ address, hash }));
+    }, { address: getAddressFromScriptHash(customOtherOwner), hash: customOtherOwner });
     await page.reload();
     await page.getByRole('heading', { name: /Smart Account Workspace/i }).waitFor();
     await page.evaluate(({ address, hash }) => {
-      window.__ordinaryWallet = { address, hash };
+      window.__customWallet = { address, hash };
       window.dispatchEvent(new CustomEvent('Neo.DapiProvider.ACCOUNT_CHANGED', { detail: { address, hash } }));
-    }, { address: getAddressFromScriptHash(ordinaryOtherOwner), hash: ordinaryOtherOwner });
+    }, { address: getAddressFromScriptHash(customOtherOwner), hash: customOtherOwner });
     const connect = page.locator('#main-content').getByRole('button', { name: 'Connect Wallet', exact: true });
     if (await connect.count() && await connect.isVisible()) await connect.click();
     await page.getByRole('tab', { name: 'Manage Governance', exact: true }).click();
@@ -222,7 +222,7 @@ test('wallet switch followed by reload keeps metadata unavailable to a non-owner
 
 test('metadata save rechecks fresh account state before asking the wallet', { timeout: 120000 }, async () => {
   await withWorkspace('fresh-state', async ({ page, fixture }) => {
-    fixture.state.backupOwner = ordinaryOtherOwner;
+    fixture.state.backupOwner = customOtherOwner;
     await fillMetadata(page, { metadataUri: 'https://fixture.invalid/stale.json', description: 'stale', logoUrl: '' });
     const button = await saveButton(page);
     assert.equal(await button.isDisabled(), false, 'fixture must exercise the stale-state save path');
@@ -253,7 +253,7 @@ test('metadata mirror waits for a HALT setMetadataUri result and never mirrors F
       await waitForMetadataIdle(page);
       assert.equal(fixture.state.metadataPosts.length, expectedPosts);
       assert.deepEqual(fixture.state.walletRequests[0].args, [
-        { type: 'Hash160', value: ordinaryAccountId },
+        { type: 'Hash160', value: customAccountId },
         { type: 'String', value: expectedUri },
       ]);
       const logIndex = fixture.state.events.findIndex((entry) => entry.type === 'application-log');
@@ -262,7 +262,7 @@ test('metadata mirror waits for a HALT setMetadataUri result and never mirrors F
         assert.ok(logIndex >= 0 && postIndex > logIndex, 'off-chain mirror follows confirmed chain execution');
         assert.deepEqual(fixture.state.metadataPosts[0], {
           action: 'upsert',
-          accountIdHash: ordinaryAccountId,
+          accountIdHash: customAccountId,
           description: name,
           logoUrl: '',
           metadataUri: expectedUri,
@@ -307,16 +307,16 @@ test('account switch while wallet is waiting never mirrors the original account'
     await waitForMetadataBusy(page);
     const txid = await waitForFixtureWallet(fixture, 1);
     await page.evaluate(({ address, hash }) => {
-      window.__ordinaryWallet = { address, hash };
+      window.__customWallet = { address, hash };
       window.dispatchEvent(new CustomEvent('Neo.DapiProvider.ACCOUNT_CHANGED', { detail: { address, hash } }));
-    }, { address: getAddressFromScriptHash(ordinaryOtherOwner), hash: ordinaryOtherOwner });
+    }, { address: getAddressFromScriptHash(customOtherOwner), hash: customOtherOwner });
     await waitForFixtureApplicationLog(fixture, 1, txid);
     await page.getByText(/account or form changed|Refresh the account/i).waitFor();
     await waitForMetadataTerminal(page);
     assert.equal(fixture.state.metadataPosts.length, 0, 'account switch during signing must not mirror old intent');
     assert.equal(fixture.state.walletRequests.length, 1);
-    assert.equal(fixture.state.walletRequests[0].args[0].value, ordinaryAccountId);
-    assert.equal(await page.getByTestId('ordinary-chain-time').count(), 0, 'old account snapshot must be cleared');
+    assert.equal(fixture.state.walletRequests[0].args[0].value, customAccountId);
+    assert.equal(await page.getByTestId('custom-chain-time').count(), 0, 'old account snapshot must be cleared');
   });
 });
 

@@ -11,8 +11,8 @@ dotnet build formal/refinement/export/RefinementExport.csproj --nologo
 dotnet formal/refinement/export/bin/Debug/net10.0/RefinementExport.dll \
   --source-root "$PWD" \
   --project "$PWD/contracts/custom/SmartAccount.csproj" \
-  --nef "$PWD/contracts/bin/v3/SmartAccountV3.nef" \
-  --manifest "$PWD/contracts/bin/v3/SmartAccountV3.manifest.json" \
+  --nef "$PWD/contracts/bin/public/SmartAccountV3.nef" \
+  --manifest "$PWD/contracts/bin/public/SmartAccountV3.manifest.json" \
   > /tmp/sa-refinement-inventory.json
 python3 -m unittest formal/refinement/export/test_export.py
 ```

@@ -1,6 +1,6 @@
 # Neo N3 Smart Account Architecture
 
-The active `main` branch is a **policy-gated** V3 architecture centered on `SmartAccountV3`.
+The active `main` branch is a **policy-gated** V3 architecture centered on `SmartAccount`.
 
 ## 1. Component Map
 
@@ -11,7 +11,7 @@ flowchart LR
   Wallets[Neo Wallet / EVM Wallet / Web3Auth]
   Drafts[Local Store / Supabase]
   Relay[Optional Relay]
-  Core[SmartAccountV3]
+  Core[SmartAccount]
   Verifier[Verifier Plugin]
   Hook[Hook Plugin]
   Paymaster[SAPaymaster]

@@ -5,7 +5,7 @@ This is the NeoOS SA (Smart Account) repository - Neo N3 account abstraction (ER
 Primary responsibilities:
 - C03 account: sole authority for account abstraction - user operations, proxy verification, and recovery (protocol-sa-core)
 - SA decides whether an actor authorized an operation and nothing more
-- SmartAccountV3: deterministic accounts keyed by 20-byte accountId
+- SmartAccount: deterministic accounts keyed by 20-byte accountId
 - Verifier plugin authorization: Web3Auth, TEE, WebAuthn, session keys, multisig
 - Hook plugin policy enforcement: daily limits, token restrictions, credential gates
 - Backup-owner escape hatch with timelocked verifier rotation

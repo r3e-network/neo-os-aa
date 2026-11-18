@@ -9,7 +9,7 @@ below.
 
 ## Purpose
 
-neo-os-aa is the NeoOS account-abstraction repository. It contains the
+neo-os-sa is the NeoOS account-abstraction repository. It contains the
 Neo N3 SA contracts, frontend tooling, and SDK surfaces for creating and using
 Smart Accounts.
 
@@ -25,7 +25,7 @@ Smart Accounts.
 ## Directory Structure
 
     contracts/               Neo N3 SA contract sources
-      custom/                user-contract (ordinary) implementation
+      custom/                user-contract (custom) implementation
         market/              SAAddressMarket escrow contract
         paymaster/           SAPaymaster contract
         registrar/           SAPlatformRegistrar contract
@@ -57,7 +57,7 @@ Smart Accounts.
 the same branch; `contracts/plugins/` holds the verifier and hook contracts
 both of them bind. Each implementation directory carries a `profile.json` that
 names its source roots, artifacts and verification commands; source files are
-not duplicated. The ordinary profile (`contracts/custom/`) is the current
+not duplicated. The custom profile (`contracts/custom/`) is the current
 user-contract delivery path. The native profile (`contracts/native/`) holds the
 true source of the consensus `SmartAccount` service prepared for standard
 submission; the matching Neo core repository carries generated copies of it and
@@ -80,7 +80,7 @@ owns native VM enforcement.
   do not infer profile identity from a deployment label or a shared artifact
   directory.
 - Keep native-only modules and client code under the native roots listed by
-  `contracts/native/profile.json`; ordinary source must not import native
+  `contracts/native/profile.json`; custom source must not import native
   entrypoints as proof of native activation.
 - Keep frontend routes, UI, and frontend configuration under frontend/.
 - Keep SA client types and builders under sdk/ and shared/.

@@ -893,7 +893,7 @@ file that feeds it, and the sha256 of all twelve artifacts.
 `plugins/build-plugins.sh` is the recorded build step: it refuses to run against a
 different compiler and exits non-zero if any artifact it produces hashes
 differently from what the provenance file records. This is exactly the standing
-`contracts/bin/v3` has for the main contract — a pinned input with a recorded
+`contracts/bin/public` has for the main contract — a pinned input with a recorded
 derivation, not something any run re-derives — and it is not a proof that the
 plugins are correct.
 

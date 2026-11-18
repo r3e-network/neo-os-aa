@@ -2,7 +2,7 @@
 
 ## Runtime and authority versions (2026-10-09 convergence)
 
-Ordinary deployed `SmartAccount` remains the public `v3` implementation
+Custom deployed `SmartAccount` remains the `public` implementation
 from the tested main branch; its separate `PLATFORM` build retains 10 GAS bounded
 verifier callbacks. Neither is the native SmartAccount contract. Native ABI 2
 uses a 1 GAS verifier budget (within the 1.5 GAS verification envelope), 2.5 GAS
@@ -31,7 +31,7 @@ domain, preventing those two representations from supplying separate votes.
 Independent control of arbitrary script accounts is not established by that rule.
 
 Historical receipts below identify their own pinned ABI 1, preceding ABI 2, or
-ordinary-contract snapshots. They do not certify this amended ABI 2 source,
+custom-contract snapshots. They do not certify this amended ABI 2 source,
 SDK or runtime. Its three-child/two-approval/three-domain limits require actual
 VM budget evidence, separate from the bounded policy proofs.
 
@@ -326,7 +326,7 @@ back target writes and nonce state on that fault; transaction fees remain charge
 
 ### 5.2 Should-Hold Invariants
 
-1. **Gas Limits on Verifiers:** *(PROFILE DEPENDENT)* The private `PLATFORM` core uses a 10 GAS child budget for each verifier callback on the matching runtime. Public `v3` uses standard `System.Contract.Call` and has no child budget; lifecycle admission, simulation and transaction fee ceilings do not establish one. Historical private runtime evidence requires revalidation after source/runtime changes.
+1. **Gas Limits on Verifiers:** *(PROFILE DEPENDENT)* The private `PLATFORM` core uses a 10 GAS child budget for each verifier callback on the matching runtime. `public` uses standard `System.Contract.Call` and has no child budget; lifecycle admission, simulation and transaction fee ceilings do not establish one. Historical private runtime evidence requires revalidation after source/runtime changes.
 2. **Plugin State Cleanup:** *(PARTIAL)* Current settlement clears known plugin markers and rejects modules whose manifest omits the V3 lifecycle ABI; semantic cleanup/refinement coverage for arbitrary future plugins is pending.
    Every verifier and hook must implement `clearAccount`: the core calls it without a fallback from
    `confirmVerifierUpdate`, `confirmHookUpdate`, `finalizeEscape` and `settleMarketEscrow`, and a
@@ -358,7 +358,7 @@ back target writes and nonce state on that fault; transaction fees remain charge
 
 | ID | Severity | Component | Description | Status |
 | --- | --- | --- | --- |
-| **VULN-001** | Critical | **Verifier Gas DoS** | Public `v3` permits lifecycle-compatible verifier callbacks through standard `Contract.Call` without a child budget | Open for public arbitrary-verifier sponsorship; current private `PLATFORM` artifact has bounded-callback NeoExpress evidence and RPC readback |
+| **VULN-001** | Critical | **Verifier Gas DoS** | `public` permits lifecycle-compatible verifier callbacks through standard `Contract.Call` without a child budget | Open for public arbitrary-verifier sponsorship; current private `PLATFORM` artifact has bounded-callback NeoExpress evidence and RPC readback |
 | **VULN-002** | High | **Escape Hatch Bypass** | Market settlement intentionally clears escape; owner cancellation is timelocked | Source candidate, scoped Coq governance/recovery models, and private NeoExpress escape/market scenarios verified; TestNet/MainNet deployment parity remains pending |
 | **VULN-003** | Medium | **Session Key Ordering** | A signed operation can execute before a later revocation transaction is ordered | Defined execution-order semantics; residual pre-inclusion operational risk |
 | **VULN-004** | Medium | **MultiSig Composition Boundary** | Empty, oversized, invalid-threshold, duplicate, self-referential, incomplete-child, and signer-domain-reuse configurations | Bounded Coq policy + 571 VM tests + private NeoExpress child manifest/domain preflight and revalidation; shipped-profile cryptographic vectors are covered, while private-key independence is not inferable from public keys and arbitrary future plugins remain a declared trust boundary |
@@ -382,7 +382,7 @@ nonce/configuration rollback and 25-artifact RPC readback parity. See
 `docs/reports/sa-neoexpress-gas-cap-20260921.json`. VULN-001 is mitigated for
 this private integrated artifact; public activation and deployment remain
 pending. These dated receipts describe the private artifact tested then, not the
-current public `contracts/bin/v3` build. The source lock scopes
+current public `contracts/bin/public` build. The source lock scopes
 `VerifierGasBudget.v` to bounded `PLATFORM` and native callbacks; native ABI 2
 uses a separate 1 GAS verifier budget and 2.5 GAS hook/maintenance budget. A
 passing formal run does not close public VULN-001.
@@ -402,7 +402,7 @@ active only under the exact installed-root configuration context for the same ac
 and module kind, at global context depth one. Dependency replacement and unscoped root
 calls remain blocked by escrow. Cleanup faults roll back earlier leaf cleanup, seller
 payout and ownership changes. PLATFORM settlement uses the existing root maintenance
-budget; public v3 retains standard contract calls.
+budget; public profile retains standard contract calls.
 MultiSig admits only children exposing a safe `supportsComposition` marker returning
 false and the safe signer-domain ABI. Domain values are read during execution so the
 owner can still publish a leaf roster before configuring its keys. Missing capability
@@ -487,7 +487,7 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 - **SHA256:** Used for payload hashing in most verifiers
 - **Keccak256:** Used for `Web3AuthVerifier` EIP-712 compatibility
 - **Web3Auth ERC-1271:** Direct 32-byte digest recovery requires `HF_Huyao` or later. The pre-Huyao compatibility implementation does not enforce canonical `r`/`s` bounds and is outside the reviewed deployment profile.
-- **Nonce Storage:** Executable nonces have a 191-bit channel and 64-bit sequence. Native-profile keys reserve 24 bytes for the channel with the high bit clear; cursor `2^64` is an explicit exhaustion sentinel. The current ordinary source applies the signed-VM bound to channel reads; the pinned public foundation artifact may retain the wider legacy read boundary until republished.
+- **Nonce Storage:** Executable nonces have a 191-bit channel and 64-bit sequence. Native-profile keys reserve 24 bytes for the channel with the high bit clear; cursor `2^64` is an explicit exhaustion sentinel. The current custom source applies the signed-VM bound to channel reads; the pinned public foundation artifact may retain the wider legacy read boundary until republished.
 
 ### 7.3 Replay Protection Mechanisms
 
@@ -587,7 +587,7 @@ stateDiagram-v2
 ```
 
 Both entrypoints take the account id; `finalizeEscape` also takes the verifier the account falls
-back to (`contracts/build/SmartAccountV3.manifest.json`, implemented in
+back to (`contracts/build/SmartAccount.manifest.json`, implemented in
 `contracts/custom/SmartAccount.Escape.cs`).
 
 ### 9.2 Security Properties

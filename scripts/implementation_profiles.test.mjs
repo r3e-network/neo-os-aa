@@ -10,9 +10,9 @@ import { fileURLToPath } from 'node:url';
 // portable conversion.
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-// Each profile lives with the contracts it describes: the user-contract ("ordinary")
+// Each profile lives with the contracts it describes: the user-contract ("custom")
 // implementation in contracts/custom, the consensus-native one in contracts/native.
-const profileDirectories = { ordinary: 'contracts/custom', native: 'contracts/native' };
+const profileDirectories = { custom: 'contracts/custom', native: 'contracts/native' };
 
 function readProfile(name) {
   const profilePath = path.join(repoRoot, profileDirectories[name], 'profile.json');
@@ -32,17 +32,17 @@ function assertLocalPaths(profile, field) {
   }
 }
 
-test('ordinary and native profiles have separate, existing entrypoints', () => {
-  const ordinary = readProfile('ordinary');
+test('custom and native profiles have separate, existing entrypoints', () => {
+  const custom = readProfile('custom');
   const native = readProfile('native');
 
-  assert.equal(ordinary.data.id, 'ordinary-user-contract');
+  assert.equal(custom.data.id, 'custom-user-contract');
   assert.equal(native.data.id, 'native-smart-account');
-  assert.notEqual(ordinary.data.id, native.data.id);
-  assert.equal(ordinary.data.verification.profile, 'ordinary');
+  assert.notEqual(custom.data.id, native.data.id);
+  assert.equal(custom.data.verification.profile, 'custom');
   assert.equal(native.data.verification.profile, 'native');
 
-  for (const profile of [ordinary, native]) {
+  for (const profile of [custom, native]) {
     assertLocalPaths(profile, 'canonicalSourceRoots');
     assertLocalPaths(profile, 'excludedSourceRoots');
     assertLocalPaths(profile, 'compatibilityPaths');
@@ -51,22 +51,22 @@ test('ordinary and native profiles have separate, existing entrypoints', () => {
     if (profile.data.protocolEvidence) assertLocalPaths(profile, 'protocolEvidence');
   }
 
-  // A broad ordinary root may contain native files for build compatibility, but
+  // A broad custom root may contain native files for build compatibility, but
   // every native canonical root must be explicitly excluded from that profile.
   for (const nativeRoot of native.data.canonicalSourceRoots) {
     assert.ok(
-      ordinary.data.excludedSourceRoots.includes(nativeRoot),
-      `ordinary profile must exclude native root: ${nativeRoot}`,
+      custom.data.excludedSourceRoots.includes(nativeRoot),
+      `custom profile must exclude native root: ${nativeRoot}`,
     );
   }
 
-  // Native source roots are explicit native paths; no ordinary-only root is
+  // Native source roots are explicit native paths; no custom-only root is
   // silently promoted into the native profile.
   for (const nativeRoot of native.data.canonicalSourceRoots) {
     assert.match(nativeRoot, /native/i, `native root is not clearly native: ${nativeRoot}`);
   }
-  for (const ordinaryRoot of native.data.excludedSourceRoots) {
-    assert.doesNotMatch(ordinaryRoot, /native/i, `native profile excludes a native root: ${ordinaryRoot}`);
+  for (const customRoot of native.data.excludedSourceRoots) {
+    assert.doesNotMatch(customRoot, /native/i, `native profile excludes a native root: ${customRoot}`);
   }
 
   assert.ok(native.data.externalBoundaries.length >= 2, 'native external boundary must be documented');
@@ -80,27 +80,27 @@ test('ordinary and native profiles have separate, existing entrypoints', () => {
   assert.ok(native.data.openGates.includes('PUBLIC-HARDFORK-ACTIVATION'));
 });
 
-test('ordinary artifact identity does not certify the newer source fixes or a public upgrade', () => {
-  const ordinary = readProfile('ordinary').data;
-  assert.equal(ordinary.implementationVerified, false);
-  assert.equal(ordinary.artifactIdentityVerified, true);
-  assert.equal(ordinary.status, 'public-artifact-identity-verified-upgrade-required');
-  assert.equal(ordinary.protocolStatus, 'source-checks-passed-conformance-open');
-  assert.match(ordinary.protocolScope, /Full protocol conformance remains open/);
-  assert.deepEqual(ordinary.protocolEvidence, [
+test('custom artifact identity does not certify the newer source fixes or a public upgrade', () => {
+  const custom = readProfile('custom').data;
+  assert.equal(custom.implementationVerified, false);
+  assert.equal(custom.artifactIdentityVerified, true);
+  assert.equal(custom.status, 'public-artifact-identity-verified-upgrade-required');
+  assert.equal(custom.protocolStatus, 'source-checks-passed-conformance-open');
+  assert.match(custom.protocolScope, /Full protocol conformance remains open/);
+  assert.deepEqual(custom.protocolEvidence, [
     'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
     'docs/SA-SYSTEM-STATUS.md',
     'docs/SA-FORMAL-VERIFICATION.md',
   ]);
-  assert.deepEqual(ordinary.releaseBoundaries, [
+  assert.deepEqual(custom.releaseBoundaries, [
     'PUBLIC-CALLBACK-RESOURCE-ISOLATION',
     'PINNED-ARTIFACT-UPGRADE-REVIEW',
     'PUBLIC-DEPLOYMENT-READBACK',
   ]);
-  assert.equal(ordinary.currentSourceCandidate.status, 'source-ahead-of-pinned-public-artifact');
-  assert.equal(ordinary.currentSourceCandidate.releaseGate, 'required-before-public-upgrade');
+  assert.equal(custom.currentSourceCandidate.status, 'source-ahead-of-pinned-public-artifact');
+  assert.equal(custom.currentSourceCandidate.releaseGate, 'required-before-public-upgrade');
 
-  const verified = ordinary.verifiedArtifact;
+  const verified = custom.verifiedArtifact;
   // The published mainnet deployment is an immutable on-chain fact: its manifest
   // still carries the pre-rename contract name, and the pinned sha256 below is
   // the hash of the bytes that are actually deployed. Renaming the local source
@@ -131,7 +131,7 @@ test('ordinary artifact identity does not certify the newer source fixes or a pu
 });
 
 test('implementation README entrypoints and profile metadata stay discoverable', () => {
-  for (const name of ['ordinary', 'native']) {
+  for (const name of ['custom', 'native']) {
     const directory = path.join(repoRoot, profileDirectories[name]);
     const readme = fs.readFileSync(path.join(directory, 'README.md'), 'utf8');
     const profile = JSON.parse(fs.readFileSync(path.join(directory, 'profile.json'), 'utf8'));

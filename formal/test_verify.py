@@ -20,9 +20,9 @@ class VerificationGateTests(unittest.TestCase):
                   for module, mutations in verify.COQ_MODULES.items() for mutation in mutations]
         self.assertEqual(len(labels), len(set(labels)))
         self.assertNotEqual(verify.coq_mutation_label('NativeAuthorityEpoch.v', 'recovery-retains-verifier'),
-                            verify.coq_mutation_label('OrdinaryRecovery.v', 'recovery-retains-verifier'))
+                            verify.coq_mutation_label('CustomRecovery.v', 'recovery-retains-verifier'))
 
-    def test_current_ordinary_receipt_is_tracked_and_source_bound(self):
+    def test_current_custom_receipt_is_tracked_and_source_bound(self):
         receipt_path = verify.ROOT.parent / 'docs/reports/sa-formal-gate-20261031.json'
         self.assertTrue(receipt_path.exists())
         self.assertEqual(
@@ -55,7 +55,7 @@ class VerificationGateTests(unittest.TestCase):
                      'operation_completion_discards_receipt', 'valid_receipt_completes'):
             self.assertIn(name, verify.coq_declarations(model))
         self.assertGreaterEqual(len(verify.COQ_MODULES['NativeCompositePhase.v']), 20)
-        self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/MultiSigPolicy.v'])
+        self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/MultiSigPolicy.v'])
         self.assertEqual(['native'], verify.MODEL_PROFILES['coq/NativeCompositePhase.v'])
 
     def test_native_composite_bounds_and_receipt_lifetime(self):
@@ -144,14 +144,14 @@ class VerificationGateTests(unittest.TestCase):
         profiles = verify.MODEL_PROFILES
         self.assertEqual(["platform", "native"], profiles["coq/VerifierGasBudget.v"])
         self.assertEqual(verify.ARTIFACTS, set(profiles))
-        self.assertFalse(verify.RUNTIME_PROFILES["v3"]["verifierChildBudgetEnforced"])
+        self.assertFalse(verify.RUNTIME_PROFILES["public"]["verifierChildBudgetEnforced"])
         self.assertTrue(verify.RUNTIME_PROFILES["platform"]["verifierChildBudgetEnforced"])
 
     def test_native_scope_and_authority_model_are_explicit(self):
         self.assertTrue(verify.RUNTIME_PROFILES["native"]["verifierChildBudgetEnforced"])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeAuthorityEpoch.v"])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/CallbackPluginTopology.v"])
-        self.assertEqual(["v3", "platform"], verify.MODEL_PROFILES["coq/ProxyWitnessScript.v"])
+        self.assertEqual(["public", "platform"], verify.MODEL_PROFILES["coq/ProxyWitnessScript.v"])
         self.assertEqual(22, len(verify.COQ_MODULES["NativeAuthorityEpoch.v"]))
         # Legacy escape-owner and uint256/paymaster models are not native ABI 2 semantics.
         for model in ("coq/SmartAccountSA.v", "tla/SmartAccountSA.tla", "smt/sa_core.smt2"):
@@ -159,9 +159,9 @@ class VerificationGateTests(unittest.TestCase):
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeIntegerDomain.v"])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/PluginLifecycle.v"])
 
-    def test_ordinary_governance_model_is_registered_and_scoped(self):
-        self.assertIn('coq/OrdinaryGovernance.v', verify.ARTIFACTS)
-        model = (verify.ROOT / 'coq' / 'OrdinaryGovernance.v').read_text()
+    def test_custom_governance_model_is_registered_and_scoped(self):
+        self.assertIn('coq/CustomGovernance.v', verify.ARTIFACTS)
+        model = (verify.ROOT / 'coq' / 'CustomGovernance.v').read_text()
         for theorem in (
             'OG_001_proposal_requires_current_registrar_and_valid_owner',
             'OG_002_duplicate_pending_proposal_is_rejected',
@@ -179,32 +179,32 @@ class VerificationGateTests(unittest.TestCase):
             'OG_017_owner_authorization_requires_witness',
             'OG_018_delay_is_seven_days_in_milliseconds'):
             self.assertIn(theorem, verify.coq_declarations(model))
-        self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinaryGovernance.v'])
+        self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/CustomGovernance.v'])
         self.assertIn('contracts/custom/SmartAccount.PlatformRegistrar.cs', verify.SOURCE_FILES)
-        self.assertEqual(14, len(verify.COQ_MODULES['OrdinaryGovernance.v']))
+        self.assertEqual(14, len(verify.COQ_MODULES['CustomGovernance.v']))
         for path in ('contracts/custom/SmartAccount.Admin.cs', 'contracts/custom/SmartAccount.MarketEscrow.cs'):
             self.assertIn(path, verify.SOURCE_FILES)
 
-    def test_ordinary_governance_millisecond_and_cleanup_correspondence(self):
-        self.assertEqual(604800000, verify.check_ordinary_governance_correspondence()['delayMilliseconds'])
+    def test_custom_governance_millisecond_and_cleanup_correspondence(self):
+        self.assertEqual(604800000, verify.check_custom_governance_correspondence()['delayMilliseconds'])
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for name in ('formal/coq/OrdinaryGovernance.v', 'contracts/custom/SmartAccount.Admin.cs',
+            for name in ('formal/coq/CustomGovernance.v', 'contracts/custom/SmartAccount.Admin.cs',
                          'contracts/custom/SmartAccount.PlatformRegistrar.cs', 'contracts/custom/registrar/PlatformRegistrar.cs',
                          'contracts/custom/SmartAccount.Escape.cs',
                          'contracts/custom/SmartAccount.MarketEscrow.cs'):
                 destination = root / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(verify.ROOT.parent / name, destination)
-            verify.check_ordinary_governance_correspondence(root)
+            verify.check_custom_governance_correspondence(root)
             source = root / 'contracts/custom/SmartAccount.Admin.cs'
             source.write_text(source.read_text().replace('7L * 24 * 60 * 60 * 1000', '6L * 24 * 60 * 60 * 1000'))
             with self.assertRaisesRegex(ValueError, 'millisecond delay'):
-                verify.check_ordinary_governance_correspondence(root)
+                verify.check_custom_governance_correspondence(root)
 
-    def test_ordinary_sponsorship_is_transaction_wide_and_scoped(self):
-        self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinarySponsorship.v'])
-        model = (verify.ROOT / 'coq/OrdinarySponsorship.v').read_text()
+    def test_custom_sponsorship_is_transaction_wide_and_scoped(self):
+        self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/CustomSponsorship.v'])
+        model = (verify.ROOT / 'coq/CustomSponsorship.v').read_text()
         for name in ('OS_001_same_transaction_retains_spend', 'OS_002_new_transaction_starts_at_zero',
                      'OS_005_success_preserves_transaction_and_total_cap',
                      'OS_007_multiple_calls_share_one_total_fee_cap', 'OS_008_exhausted_fee_rejects',
@@ -212,10 +212,10 @@ class VerificationGateTests(unittest.TestCase):
                      'OS_014_estimation_is_not_a_persisted_fee_bound',
                      'OS_015_branch_free_cap_matches_abstract_charge'):
             self.assertIn(name, verify.coq_declarations(model))
-        self.assertEqual(10, len(verify.COQ_MODULES['OrdinarySponsorship.v']))
+        self.assertEqual(10, len(verify.COQ_MODULES['CustomSponsorship.v']))
 
-    def test_ordinary_sponsorship_source_reserves_before_each_callback(self):
-        self.assertTrue(verify.check_ordinary_sponsorship_correspondence()['reservationBeforeCallbacks'])
+    def test_custom_sponsorship_source_reserves_before_each_callback(self):
+        self.assertTrue(verify.check_custom_sponsorship_correspondence()['reservationBeforeCallbacks'])
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             target = root / 'contracts/custom/SmartAccount.Paymaster.cs'
@@ -223,11 +223,11 @@ class VerificationGateTests(unittest.TestCase):
             source = (verify.ROOT.parent / 'contracts/custom/SmartAccount.Paymaster.cs').read_text()
             target.write_text(source.replace('BigInteger.Max(actualCost - budget.Reserved, 0)', 'actualCost'))
             with self.assertRaisesRegex(ValueError, 'reservation source guard'):
-                verify.check_ordinary_sponsorship_correspondence(root)
+                verify.check_custom_sponsorship_correspondence(root)
 
-    def test_ordinary_recovery_is_callback_free_and_irreversible(self):
-        self.assertEqual(['v3', 'platform'], verify.MODEL_PROFILES['coq/OrdinaryRecovery.v'])
-        model = (verify.ROOT / 'coq/OrdinaryRecovery.v').read_text()
+    def test_custom_recovery_is_callback_free_and_irreversible(self):
+        self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/CustomRecovery.v'])
+        model = (verify.ROOT / 'coq/CustomRecovery.v').read_text()
         for name in ('OR_001_recovery_does_not_depend_on_old_plugin',
                      'OR_002_recovery_requires_authority_and_safe_boundary',
                      'OR_003_success_detaches_all_authority', 'OR_004_success_preserves_identity_and_nonce',
@@ -237,7 +237,7 @@ class VerificationGateTests(unittest.TestCase):
                      'OR_008_successful_latched_configuration_has_no_roots',
                      'OR_009_broken_old_plugin_does_not_block_recovery'):
             self.assertIn(name, verify.coq_declarations(model))
-        self.assertEqual(16, len(verify.COQ_MODULES['OrdinaryRecovery.v']))
+        self.assertEqual(16, len(verify.COQ_MODULES['CustomRecovery.v']))
 
     def test_native_core_provenance_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -265,13 +265,13 @@ class VerificationGateTests(unittest.TestCase):
     def test_source_lock_may_not_claim_public_child_budget(self):
         lock = {"runtimeProfiles": copy.deepcopy(verify.RUNTIME_PROFILES), "modelProfiles": copy.deepcopy(verify.MODEL_PROFILES)}
         verify.check_profile_scope(lock)
-        lock["modelProfiles"]["coq/VerifierGasBudget.v"].append("v3")
+        lock["modelProfiles"]["coq/VerifierGasBudget.v"].append("public")
         with self.assertRaisesRegex(ValueError, "Model profile scope"):
             verify.check_profile_scope(lock)
 
     def test_source_lock_may_not_change_runtime_capability(self):
         lock = {"runtimeProfiles": copy.deepcopy(verify.RUNTIME_PROFILES), "modelProfiles": copy.deepcopy(verify.MODEL_PROFILES)}
-        lock["runtimeProfiles"]["v3"]["verifierChildBudgetEnforced"] = True
+        lock["runtimeProfiles"]["public"]["verifierChildBudgetEnforced"] = True
         with self.assertRaisesRegex(ValueError, "Runtime profile scope"):
             verify.check_profile_scope(lock)
 
@@ -328,7 +328,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("| VerifierPost", model)
         self.assertIn("PostHook; VerifierPost; Emit", model)
 
-    def test_ordinary_execution_scopes_optional_callbacks(self):
+    def test_custom_execution_scopes_optional_callbacks(self):
         model = (verify.ROOT / "coq" / "SmartAccountSA.v").read_text()
         declarations = verify.coq_declarations(model)
         self.assertIn("SA_020_disabled_callbacks_do_not_gate_execution", declarations)

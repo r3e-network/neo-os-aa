@@ -19,7 +19,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: PlatformRegistrar.cs" Importance="high" />
-    <Exec Command="nccs ./PlatformRegistrar.csproj -o ../../bin/v3/registrar" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./PlatformRegistrar.csproj -o ../../bin/public/registrar" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

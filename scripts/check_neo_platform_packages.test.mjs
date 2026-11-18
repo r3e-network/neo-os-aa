@@ -359,7 +359,7 @@ test("CI installs exactly the pinned compiler and names the pinned versions", ()
 
 test("verify_repo.sh runs the package and compiler gates before the first contract build", () => {
   // Windows checkouts (core.autocrlf) hand us CRLF and the gate calls are nested inside the
-  // native/ordinary if/else, so match the invocation itself on a line, not a whole bare line.
+  // native/custom if/else, so match the invocation itself on a line, not a whole bare line.
   const script = read("scripts/verify_repo.sh").replace(/\r\n?/g, "\n");
   const gate = script.search(/^.*node scripts\/check_neo_platform_packages\.mjs[ \t]*$/m);
   const compiler = script.search(/^.*node scripts\/check_neo_platform_packages\.mjs --compiler-only[ \t]*$/m);

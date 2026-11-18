@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Reproducibility gate for the artifacts every deploy/upgrade script reads
-// (contracts/bin/v3) and the isolated private core (contracts/bin/platform).
+// (contracts/bin/public) and the isolated private core (contracts/bin/platform).
 // Replays compile.sh itself in a scratch directory and compares each profile
 // byte-for-byte with the generated local artifact directory.
 //
@@ -17,7 +17,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const releaseDir = path.join(repoRoot, "contracts", "bin", "v3");
+const releaseDir = path.join(repoRoot, "contracts", "bin", "public");
 const trackedDir = path.join(repoRoot, "contracts", "build");
 const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
 // Source inputs are TEXT, and the certificate they go into must hold the same digests on an LF
@@ -33,7 +33,7 @@ const isSkippedDirectory = (source) => SKIP_DIRS.test(source.replaceAll(path.sep
 // The restore policy every contract project is built under. Without them the scratch copy would
 // compile against whatever package source and framework version the machine happens to resolve.
 export const RESTORE_POLICY_FILES = ["Directory.Build.props", "nuget.config"];
-export const ARTIFACT_PROFILES = ["v3", "platform"];
+export const ARTIFACT_PROFILES = ["public", "platform"];
 const RECIPE_SUPPORT_FILES = ["scripts/dotnet_env.sh", "scripts/check_neo_platform_packages.mjs"];
 // Every tree compile.sh reads: the contracts, and the mock contracts that live with the tests.
 export const SOURCE_ROOTS = ["contracts", "tests/mocks"];
@@ -204,7 +204,7 @@ async function main() {
       || JSON.stringify(sourceInputs) !== JSON.stringify(buildInputSnapshot(repoRoot))) {
       throw new Error("Build inputs changed during the reproducibility replay");
     }
-    const freshDir = path.join(freshBin, "v3");
+    const freshDir = path.join(freshBin, "public");
     const profiles = compareProfiles(freshBin, path.dirname(releaseDir));
     const rows = Object.entries(profiles).flatMap(([profile, result]) => result.artifacts.map((row) => ({
       ...row, artifact: `${profile}/${row.artifact}`,

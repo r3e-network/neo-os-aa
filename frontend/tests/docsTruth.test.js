@@ -73,11 +73,11 @@ const CURRENT_DOCS = [
   'frontend/src/assets/docs/mixed-multisig.md',
   'frontend/src/assets/docs/architecture.md',
   'docs/PLUGIN_DEVELOPER_GUIDE.md',
-  // The ordinary-account delivery track has a source-level ABI extension whose
+  // The custom-account delivery track has a source-level ABI extension whose
   // compatibility note intentionally distinguishes newly compiled artifacts
   // from older public deployments. Keep these current workflow documents out
   // of the historical dead-entrypoint ratchet.
-  'docs/ORDINARY_ACCOUNT_WORKSPACE.md',
+  'docs/CUSTOM_ACCOUNT_WORKSPACE.md',
   'docs/PENDING_CONFIG_UPDATE_READ_ABI.md',
   // Current protocol and refinement documents introduced with the
   // SmartAccount rename. They describe the source ABI directly, so the
@@ -89,12 +89,12 @@ const CURRENT_DOCS = [
   'docs/SA-METHOD-REFINEMENT.md',
 ];
 
-// The ordinary delivery track has two additive reads in source that are deliberately not copied
+// The custom delivery track has two additive reads in source that are deliberately not copied
 // into contracts/build until a release/deployment review publishes the new artifact. Keep this
 // allowlist file-scoped and caveat-scoped: it is an explicit source-versus-deployment boundary,
 // not a general exemption for undocumented or unshipped entrypoints.
-const SOURCE_ONLY_ORDINARY_READS = new Map([
-  ['docs/ORDINARY_ACCOUNT_WORKSPACE.md', {
+const SOURCE_ONLY_CUSTOM_READS = new Map([
+  ['docs/CUSTOM_ACCOUNT_WORKSPACE.md', {
     names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
     caveat: /旧部署只提供存在性和成熟时间|完整审阅需要部署|older deployments? exposes? only\s+existence and maturity/i,
   }],
@@ -902,10 +902,10 @@ function failures() {
           problems.push(`${where}: ${name} is not a deployed ABI name; the artifact spells it ${deployedAbiLower.get(name.toLowerCase())}`);
           continue;
         }
-        const sourceOnly = SOURCE_ONLY_ORDINARY_READS.get(classFile);
+        const sourceOnly = SOURCE_ONLY_CUSTOM_READS.get(classFile);
         if (sourceOnly?.names.has(name)) {
           if (!sourceOnly.caveat.test(read(file))) {
-            problems.push(`${where}: ${name} is source-only in the ordinary track but the document does not disclose the unshipped-artifact boundary`);
+            problems.push(`${where}: ${name} is source-only in the custom track but the document does not disclose the unshipped-artifact boundary`);
           }
           continue;
         }
@@ -1217,9 +1217,11 @@ function digestReportInventoryAllowances() {
     // every digest value unchanged. The same change dropped the two pins of the deleted
     // SmartAccount.HookChildren.cs / SmartAccount.VerifierChildren.cs partials and re-pinned
     // scripts/build_native_modules.py for its path rewrite: 347 digest lines.
+    // Re-triaged when the public build profile was renamed v3 -> public and the three
+    // coq/Ordinary*.v model keys became coq/Custom*.v: no digest line changed.
     entry('sa-formal-source-lock-content-digests',
       'formal/source-lock.json', 347,
-      'f6cc642dae05a68511be2e719a56500b32d90080daf5b6ea04ec110895f817ac'),
+      'e39acc6645667878665734545b080c8011cebe2a05535c50a203973f7d791024'),
     entry('sa-artifact-reproducibility-20261025-content-digests',
       'docs/reports/sa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
@@ -1888,7 +1890,7 @@ test('CU-163: VULN-002 records local evidence without claiming public deployment
   assert.match(row, /private NeoExpress escape\/market scenarios verified/i);
   assert.match(row, /TestNet\/MainNet deployment parity remains pending/i);
 
-  for (const file of ['formal/coq/OrdinaryGovernance.v', 'formal/coq/OrdinaryRecovery.v']) {
+  for (const file of ['formal/coq/CustomGovernance.v', 'formal/coq/CustomRecovery.v']) {
     assert.ok(exists(file), `VULN-002 cites a missing formal model: ${file}`);
   }
 
@@ -1950,7 +1952,7 @@ test('CU-163: bounded security claims retain their explicit open boundaries', ()
   for (const file of [
     'formal/coq/MultiSigPolicy.v',
     'formal/coq/CallbackPluginTopology.v',
-    'formal/coq/OrdinaryGovernance.v',
+    'formal/coq/CustomGovernance.v',
   ]) {
     assert.ok(exists(file), `bounded security evidence is missing ${file}`);
   }

@@ -242,7 +242,7 @@ only the same eight compiled/deployed artifacts:
 - `SRC-10` registers WebAuthnVerifier plus WhitelistHook, funds the derived proxy
   and starts the escape. After a chain-time jump, the hook administrator confirms
   an authorized-core change to the already-deployed MockTransferTarget. This makes
-  the old hook's `clearAccount` reject the ordinary core. Legacy escape must fail
+  the old hook's `clearAccount` reject the custom core. Legacy escape must fail
   and roll back its earlier verifier cleanup. A signed `finalizeEscapeToOwner`
   transaction must then succeed without callbacks, retain the old verifier's
   stored key, clear active module pointers, and expose permanent owner-only mode.

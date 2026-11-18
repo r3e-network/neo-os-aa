@@ -13,14 +13,14 @@ run_formal=0
 run_neoexpress=0
 skip_contract_build=0
 skip_e2e=0
-verification_profile=ordinary
+verification_profile=custom
 not_run_gates=()
 
 usage() {
   cat <<'EOF'
-Usage: scripts/verify_repo.sh [--profile ordinary|native|all] [--contracts-only|--frontend-only|--sdk-only] [--skip-contract-build] [--skip-e2e] [--formal] [--neoexpress]
+Usage: scripts/verify_repo.sh [--profile custom|native|all] [--contracts-only|--frontend-only|--sdk-only] [--skip-contract-build] [--skip-e2e] [--formal] [--neoexpress]
 
-Profile ordinary (default): published contract, frontend and SDK gates.
+Profile custom (default): published contract, frontend and SDK gates.
 Profile native: native package/profile guards, module epoch VM fixture and browser checks.
 Profile all: both. Shared frontend/SDK unit checks run for either profile.
 The separate native-profile.yml workflow additionally verifies the pinned native core VM.
@@ -39,7 +39,7 @@ Set NEOOS_NATIVE_EPOCH_RECEIPT to retain the native-module VM regression JSON at
 path; otherwise the native contract gate writes and prints a temporary receipt path. This test-only
 public-VM harness does not establish native-chain admission or recovery.
 
-Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) for public v3 source acceptance on
+Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) for public-profile source acceptance on
 a fresh disposable chain using published NeoExpress. It rebuilds both artifact profiles,
 executes the eight-module source suite, joins its RPC readback to the build certificate,
 and writes dated receipts under docs/reports/. NEOOS_NEOXP (else NEOXP, PATH, or
@@ -47,9 +47,9 @@ and writes dated receipts under docs/reports/. NEOOS_NEOXP (else NEOXP, PATH, or
 remains a separate NOT RUN gate; this command never touches a public network.
 
 Runs the selected profile gates:
-- ordinary contracts: public build + solution tests + deployment-tool tests + format verify
+- custom contracts: public build + solution tests + deployment-tool tests + format verify
 - native contracts: profile/runner guards + native-module epoch VM regression
-- optional: aggregate formal checks with --formal; public v3 source private chain with --neoexpress
+- optional: aggregate formal checks with --formal; public-profile source private chain with --neoexpress
 - frontend: test + production dependency audit + build (+ browser e2e unless --skip-e2e)
 - sdk: unit tests + declaration types check + installed-package smoke test + production dependency audit
 EOF
@@ -66,7 +66,7 @@ mark_not_run() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile)
-      [[ $# -ge 2 ]] || { echo "--profile requires ordinary, native or all" >&2; exit 1; }
+      [[ $# -ge 2 ]] || { echo "--profile requires custom, native or all" >&2; exit 1; }
       verification_profile="$2"; shift 2 ;;
     --profile=*)
       verification_profile="${1#*=}"; shift ;;
@@ -93,12 +93,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-run_ordinary=0
+run_custom=0
 run_native=0
 case "$verification_profile" in
-  ordinary) run_ordinary=1 ;;
+  custom) run_custom=1 ;;
   native) run_native=1 ;;
-  all) run_ordinary=1; run_native=1 ;;
+  all) run_custom=1; run_native=1 ;;
   *) echo "Unknown verification profile: $verification_profile" >&2; exit 1 ;;
 esac
 # A complete run must also fail closed on the generated Morpheus artifacts' external
@@ -107,8 +107,8 @@ esac
 if [[ "${NEOOS_REQUIRE_COMPLETE:-0}" == "1" ]]; then
   export NEOOS_REQUIRE_SERVICES_ARTIFACTS=1
 fi
-if [[ $run_ordinary -eq 0 && ( $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ) ]]; then
-  echo "--neoexpress selects public v3 source acceptance; choose ordinary/all or use the dedicated native-chain runner." >&2
+if [[ $run_custom -eq 0 && ( $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ) ]]; then
+  echo "--neoexpress selects public-profile source acceptance; choose custom/all or use the dedicated native-chain runner." >&2
   exit 1
 fi
 
@@ -125,7 +125,7 @@ if [[ $run_contracts -eq 1 ]]; then
     node scripts/check_neo_platform_packages.mjs
   fi
   node scripts/check_neo_platform_packages.mjs --compiler-only
-  if [[ $run_ordinary -eq 1 ]]; then
+  if [[ $run_custom -eq 1 ]]; then
     if [[ $skip_contract_build -eq 0 ]]; then
       dotnet build contracts/custom/SmartAccount.csproj -c Release -p:WarningsAsErrors=nullable -nologo
       bash contracts/compile.sh
@@ -164,7 +164,7 @@ if [[ $run_contracts -eq 1 ]]; then
       scripts/deploy_latest_sa_verifiers.test.mjs \
       scripts/check_neo_platform_packages.test.mjs \
       scripts/check-artifact-reproducibility.test.mjs \
-      scripts/check-ordinary-runtime-provenance.test.mjs \
+      scripts/check-custom-runtime-provenance.test.mjs \
       scripts/fuzz_continuous.test.mjs \
       scripts/repo_hygiene.test.mjs \
       scripts/verify-private-artifact-provenance.test.mjs \
@@ -174,8 +174,8 @@ if [[ $run_contracts -eq 1 ]]; then
   fi
   if [[ $run_native -eq 1 ]]; then
     # Keep the shared profile registry covered even when the native contract
-    # lane is run without the ordinary lane.
-    if [[ $run_ordinary -eq 0 ]]; then
+    # lane is run without the custom lane.
+    if [[ $run_custom -eq 0 ]]; then
       node --test scripts/implementation_profiles.test.mjs
     fi
     python3 docs/proposals/validate-native-smartaccount-profile.py
@@ -212,29 +212,29 @@ if [[ $run_contracts -eq 1 ]]; then
   # The private-chain validation is opt-in for the same reason: it needs the neoxp tool,
   # takes several minutes, and a missing tool must read as NOT RUN, never as a pass.
   if [[ $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ]]; then
-    echo "neoexpress gate: public v3 source acceptance on published NeoExpress (eight deployed modules)"
+    echo "neoexpress gate: public-profile source acceptance on published NeoExpress (eight deployed modules)"
     neoxp_tool="${NEOOS_NEOXP:-${NEOXP:-$(command -v neoxp || true)}}"
     neoxp_tool="${neoxp_tool:-$HOME/.dotnet/tools/neoxp}"
     neoexpress_date="$(date -u +%Y%m%d)"
     repro_receipt="$ROOT_DIR/docs/reports/sa-artifact-reproducibility-$neoexpress_date.json"
-    neoexpress_receipt="$ROOT_DIR/docs/reports/sa-ordinary-source-chain-$neoexpress_date.json"
-    provenance_receipt="$ROOT_DIR/docs/reports/sa-ordinary-runtime-provenance-$neoexpress_date.json"
+    neoexpress_receipt="$ROOT_DIR/docs/reports/sa-custom-source-chain-$neoexpress_date.json"
+    provenance_receipt="$ROOT_DIR/docs/reports/sa-custom-runtime-provenance-$neoexpress_date.json"
     mkdir -p "$ROOT_DIR/docs/reports"
     # Invalidate previous receipts so a failed rerun cannot leave a current-looking PASS.
     rm -f "$neoexpress_receipt" "$provenance_receipt"
     echo "reproducibility gate: rebuilding release artifacts and writing ${repro_receipt#$ROOT_DIR/}"
     node scripts/check-artifact-reproducibility.mjs --json > "$repro_receipt"
     NEOXP="$neoxp_tool" python3 tests/localchain/run.py --variant source \
-      --source-dir "$ROOT_DIR/contracts/bin/v3" --receipt "$neoexpress_receipt"
+      --source-dir "$ROOT_DIR/contracts/bin/public" --receipt "$neoexpress_receipt"
     echo "neoexpress gate: joining source/rebuild certificate to eight-module RPC readback"
-    node scripts/check-ordinary-runtime-provenance.mjs \
+    node scripts/check-custom-runtime-provenance.mjs \
       --repro "$repro_receipt" \
       --receipt "$neoexpress_receipt" > "$provenance_receipt"
     echo "neoexpress gate: provenance receipt written to ${provenance_receipt#$ROOT_DIR/}"
-    echo "unselected PLATFORM matrix: NOT RUN - ordinary source acceptance covers eight deployed modules; full-module validation has a separate runner."
+    echo "unselected PLATFORM matrix: NOT RUN - custom source acceptance covers eight deployed modules; full-module validation has a separate runner."
   else
     mark_not_run "neoexpress"
-    echo "neoexpress gate: NOT RUN - tests/localchain/run.py --variant source (public v3 private-chain acceptance) was skipped."
+    echo "neoexpress gate: NOT RUN - tests/localchain/run.py --variant source (public-profile private-chain acceptance) was skipped."
     echo "neoexpress gate:   pass --neoexpress or set NEOOS_REQUIRE_NEOEXPRESS=1 to run it."
   fi
 fi
@@ -248,9 +248,9 @@ if [[ $run_frontend -eq 1 ]]; then
   npm run audit:all
   npm run build
   if [[ $skip_e2e -eq 0 ]]; then
-    if [[ $run_ordinary -eq 1 ]]; then
+    if [[ $run_custom -eq 1 ]]; then
       npm run test:e2e:browser:built
-      npm run test:ordinary:browser
+      npm run test:custom:browser
       npm run test:operator-recovery:browser
       npm run test:web3auth:browser
       npm run test:docs-security:browser

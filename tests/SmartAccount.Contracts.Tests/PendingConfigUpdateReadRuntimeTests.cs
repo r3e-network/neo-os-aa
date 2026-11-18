@@ -62,7 +62,7 @@ public class PendingConfigUpdateReadRuntimeTests
     {
         string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
         ContractManifest manifest = ContractManifest.Parse(File.ReadAllText(
-            Path.Combine(root, "contracts/bin/v3/SmartAccount.manifest.json")));
+            Path.Combine(root, "contracts/bin/public/SmartAccount.manifest.json")));
         foreach (string method in Getters)
         {
             ContractMethodDescriptor? descriptor = manifest.Abi.GetMethod(method, 1);

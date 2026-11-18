@@ -17,7 +17,7 @@ node "$ROOT_DIR/scripts/check_neo_platform_packages.mjs" --compiler-only
 
 # nccs 3.9.1 does not read MSBuild DefineConstants, and C# #define directives are
 # file-scoped. Define PLATFORM in every disposable source copy; never mutate the
-# public sources or write private bytes to bin/v3.
+# public sources or write private bytes to bin/public.
 if [[ "${1:-}" == "--platform" ]]; then
   profile_dir="$(mktemp -d "${TMPDIR:-/tmp}/sa-platform.XXXXXX")"
   trap 'rm -rf "$profile_dir"' EXIT
@@ -38,42 +38,42 @@ echo "Cleaning stale build intermediates..."
 find "$ROOT_DIR/contracts/custom" "$ROOT_DIR/contracts/plugins" "$ROOT_DIR/tests/mocks" \
   -type d -name obj -prune -exec rm -rf {} +
 
-# Every project writes into contracts/bin/v3 whatever directory it lives in, so the artifact
+# Every project writes into contracts/bin/public whatever directory it lives in, so the artifact
 # layout the tests, the SDK and the deploy scripts read does not follow the source layout.
 echo "Compiling SmartAccount V3 Core..."
 pushd custom >/dev/null
-"$NCCS_BIN" SmartAccount.csproj -o ../bin/v3
+"$NCCS_BIN" SmartAccount.csproj -o ../bin/public
 popd >/dev/null
 
 echo "Compiling Verifiers..."
 pushd plugins/verifiers >/dev/null
-"$NCCS_BIN" ./Web3AuthVerifier.csproj -o ../../bin/v3/verifiers
-"$NCCS_BIN" ./TEEVerifier.csproj -o ../../bin/v3/verifiers
-"$NCCS_BIN" ./SessionKeyVerifier.csproj -o ../../bin/v3/verifiers
-"$NCCS_BIN" ./WebAuthnVerifier.csproj -o ../../bin/v3/verifiers
-"$NCCS_BIN" ./ZKEmailVerifier.csproj -o ../../bin/v3/verifiers
-"$NCCS_BIN" ./ZkLoginVerifier.csproj -o ../../bin/v3/verifiers
-"$NCCS_BIN" ./MultiSigVerifier.csproj -o ../../bin/v3/verifiers
-"$NCCS_BIN" ./SubscriptionVerifier.csproj -o ../../bin/v3/verifiers
-"$NCCS_BIN" ./NeoNativeVerifier.csproj -o ../../bin/v3/verifiers
+"$NCCS_BIN" ./Web3AuthVerifier.csproj -o ../../bin/public/verifiers
+"$NCCS_BIN" ./TEEVerifier.csproj -o ../../bin/public/verifiers
+"$NCCS_BIN" ./SessionKeyVerifier.csproj -o ../../bin/public/verifiers
+"$NCCS_BIN" ./WebAuthnVerifier.csproj -o ../../bin/public/verifiers
+"$NCCS_BIN" ./ZKEmailVerifier.csproj -o ../../bin/public/verifiers
+"$NCCS_BIN" ./ZkLoginVerifier.csproj -o ../../bin/public/verifiers
+"$NCCS_BIN" ./MultiSigVerifier.csproj -o ../../bin/public/verifiers
+"$NCCS_BIN" ./SubscriptionVerifier.csproj -o ../../bin/public/verifiers
+"$NCCS_BIN" ./NeoNativeVerifier.csproj -o ../../bin/public/verifiers
 popd >/dev/null
 
 echo "Compiling Hooks..."
 pushd plugins/hooks >/dev/null
-"$NCCS_BIN" ./DailyLimitHook.csproj -o ../../bin/v3/hooks
-"$NCCS_BIN" ./NeoDIDCredentialHook.csproj -o ../../bin/v3/hooks
-"$NCCS_BIN" ./WhitelistHook.csproj -o ../../bin/v3/hooks
-"$NCCS_BIN" ./MultiHook.csproj -o ../../bin/v3/hooks
-"$NCCS_BIN" ./TokenRestrictedHook.csproj -o ../../bin/v3/hooks
+"$NCCS_BIN" ./DailyLimitHook.csproj -o ../../bin/public/hooks
+"$NCCS_BIN" ./NeoDIDCredentialHook.csproj -o ../../bin/public/hooks
+"$NCCS_BIN" ./WhitelistHook.csproj -o ../../bin/public/hooks
+"$NCCS_BIN" ./MultiHook.csproj -o ../../bin/public/hooks
+"$NCCS_BIN" ./TokenRestrictedHook.csproj -o ../../bin/public/hooks
 popd >/dev/null
 
-# Test-support mocks. The contract test suite deploys all seven from bin/v3
+# Test-support mocks. The contract test suite deploys all seven from bin/public
 # (MockTransferTarget in the execution/market/escrow suites, MockVerifierCore in the
 # verifier suites, and
 # MarkerOnlyModule, WrongLifecycleAbiModule and WrongHookLifecycleAbiModule in
 # the lifecycle-ABI negative suite, plus PolicyExecutionProbe for policy enforcement), so they
 # are always compiled: a clean checkout that skipped them could not run
-# `dotnet test`. bin/v3 is gitignored and the deploy scripts select artifacts by
+# `dotnet test`. bin/public is gitignored and the deploy scripts select artifacts by
 # name, so the mocks never reach a network. INCLUDE_VALIDATION_MOCKS is accepted
 # for compatibility with older runbooks but no longer changes the output.
 # Phase 1b: PlatformRegistrarMock was removed — the registrar suites now deploy the
@@ -81,38 +81,38 @@ popd >/dev/null
 # The mock sources live with the tests (tests/mocks), not under contracts/.
 echo "Compiling test-support mocks..."
 pushd "$ROOT_DIR/tests/mocks" >/dev/null
-"$NCCS_BIN" ./MockVerifierCore.csproj -o ../../contracts/bin/v3
-"$NCCS_BIN" ./MockTransferTarget.csproj -o ../../contracts/bin/v3
-"$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../../contracts/bin/v3
-"$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../../contracts/bin/v3
-"$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../../contracts/bin/v3
-"$NCCS_BIN" ./PolicyExecutionProbe.csproj -o ../../contracts/bin/v3
+"$NCCS_BIN" ./MockVerifierCore.csproj -o ../../contracts/bin/public
+"$NCCS_BIN" ./MockTransferTarget.csproj -o ../../contracts/bin/public
+"$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../../contracts/bin/public
+"$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../../contracts/bin/public
+"$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../../contracts/bin/public
+"$NCCS_BIN" ./PolicyExecutionProbe.csproj -o ../../contracts/bin/public
 popd >/dev/null
 
 echo "Compiling Market Contracts..."
 pushd custom/market >/dev/null
-"$NCCS_BIN" ./SAAddressMarket.csproj -o ../../bin/v3
+"$NCCS_BIN" ./SAAddressMarket.csproj -o ../../bin/public
 popd >/dev/null
 
 # Phase 1b: the paymaster service contract settles sponsored reimbursements and is
-# deployed by the runtime test suite from bin/v3 (SAPaymaster.nef), so it is built
+# deployed by the runtime test suite from bin/public (SAPaymaster.nef), so it is built
 # alongside the other service contracts instead of relying on a manual nccs run.
 echo "Compiling Paymaster Contracts..."
 pushd custom/paymaster >/dev/null
-"$NCCS_BIN" ./Paymaster.csproj -o ../../bin/v3
+"$NCCS_BIN" ./Paymaster.csproj -o ../../bin/public
 popd >/dev/null
 
 # Phase 1b: the platform registrar service owns pending platform-account owner
-# rotations and is deployed by the runtime test suite from bin/v3
+# rotations and is deployed by the runtime test suite from bin/public
 # (SAPlatformRegistrar.nef) with the core hash as deploy data.
 echo "Compiling Registrar Contracts..."
 pushd custom/registrar >/dev/null
-"$NCCS_BIN" ./PlatformRegistrar.csproj -o ../../bin/v3
+"$NCCS_BIN" ./PlatformRegistrar.csproj -o ../../bin/public
 popd >/dev/null
 
 echo "Compiling Recovery Contracts..."
 pushd plugins/recovery >/dev/null
-"$NCCS_BIN" ./MorpheusSocialRecoveryVerifier.csproj -o ../../bin/v3
+"$NCCS_BIN" ./MorpheusSocialRecoveryVerifier.csproj -o ../../bin/public
 popd >/dev/null
 
 echo "Compiling the private PLATFORM core into its separate artifact directory..."

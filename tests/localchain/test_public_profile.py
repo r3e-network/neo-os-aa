@@ -26,7 +26,7 @@ class PublicProfileTest(unittest.TestCase):
                     chain.create(["deployer", "owner", "buyer", "relay"])
                     chain.start()
                     chain.fund(["deployer", "owner", "buyer", "relay"], 3000)
-                    artifacts = ROOT / "contracts/bin/v3"
+                    artifacts = ROOT / "contracts/bin/public"
                     core = chain.deploy("SmartAccount", artifacts / "SmartAccount.nef")
                     chain.deploy("MockTransferTarget", artifacts / "MockTransferTarget.nef")
                     chain.deploy("WebAuthnVerifier", artifacts / "verifiers/WebAuthnVerifier.nef", data_core=core)

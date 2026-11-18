@@ -19,7 +19,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: DailyLimitHook.cs" Importance="high" />
-    <Exec Command="nccs ./DailyLimitHook.csproj -o ../../bin/v3/hooks" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./DailyLimitHook.csproj -o ../../bin/public/hooks" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

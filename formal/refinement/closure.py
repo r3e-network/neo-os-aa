@@ -584,7 +584,7 @@ def tool_paths():
                 for name in statement.split():
                     candidate = HERE/'coq'/(name+'.v')
                     if candidate.is_file(): pending.append(candidate)
-    seen.add((REPO/'formal/coq/OrdinarySponsorship.v').resolve())
+    seen.add((REPO/'formal/coq/CustomSponsorship.v').resolve())
     for project in ('export','native_export'):
         directory = HERE/project
         require(directory.is_dir(), 'selected compiler project missing: ' + project)
@@ -2104,8 +2104,8 @@ def main(argv=None):
         gas_runtime_dir = output/'helper-gas-runtime'
         gas_runtime_snapshot = capture_files(gas_runtime_paths, gas_runtime_dir, args.helper_gas_runtime_receipts.resolve())
         snapshot.update(gas_runtime_snapshot)
-        snapshot.update(capture_files([REPO/'contracts/bin/v3/SmartAccountV3.nef',
-                                       REPO/'contracts/bin/v3/SmartAccountV3.manifest.json'], output/'snapshot', REPO))
+        snapshot.update(capture_files([REPO/'contracts/bin/public/SmartAccountV3.nef',
+                                       REPO/'contracts/bin/public/SmartAccountV3.manifest.json'], output/'snapshot', REPO))
         (output/'snapshot.json').write_text(json.dumps(snapshot, indent=2)+'\n')
         base = output/'base'
         results['base'] = run_command([sys.executable, str(stage/'verify.py'), '--source-root', str(REPO),
@@ -2113,8 +2113,8 @@ def main(argv=None):
                                      output/'base.log', args.timeout_seconds)
         require(results['base']['exitCode'] == 0 and not results['base']['timedOut'], 'fresh base verifier failed')
         inventory, inventory_sha = receipt_file(base/'inventory.json')
-        gate.validate_inventory(inventory, REPO/'contracts/bin/v3/SmartAccountV3.nef',
-                                REPO/'contracts/bin/v3/SmartAccountV3.manifest.json', REPO)
+        gate.validate_inventory(inventory, REPO/'contracts/bin/public/SmartAccountV3.nef',
+                                REPO/'contracts/bin/public/SmartAccountV3.manifest.json', REPO)
         receipts = {}
         raw_receipt_hashes = {}
         receipt_paths = {'arithmetic': base/'proof.json', **{name: base/(name+'-proof.json') for name in ('numeric','reservation','method')}}
@@ -2383,15 +2383,15 @@ def main(argv=None):
         dispatch_result = run_command(
             ['dotnet', str(stage/'export/bin/Debug/net10.0/RefinementExport.dll'),
              '--abi-dispatch', str(dispatch_dump),
-             '--nef', str(REPO/'contracts/bin/v3/SmartAccountV3.nef'),
-             '--manifest', str(REPO/'contracts/bin/v3/SmartAccountV3.manifest.json')],
+             '--nef', str(REPO/'contracts/bin/public/SmartAccountV3.nef'),
+             '--manifest', str(REPO/'contracts/bin/public/SmartAccountV3.manifest.json')],
             output/'abi-dispatch.log', args.timeout_seconds)
         require(dispatch_result['exitCode'] == 0 and not dispatch_result['timedOut'],
                 'ABI dispatch dump failed')
         results['abi-dispatch'] = dispatch_result
         abi_receipt = dispatch.correspond(dispatch_dump,
-                                          REPO/'contracts/bin/v3/SmartAccountV3.manifest.json',
-                                          REPO/'contracts/bin/v3/SmartAccountV3.nef')
+                                          REPO/'contracts/bin/public/SmartAccountV3.manifest.json',
+                                          REPO/'contracts/bin/public/SmartAccountV3.nef')
         require(dispatch.agrees(abi_receipt),
                 'actual ApplicationEngine ABI dispatch mismatch: '
                 + json.dumps(abi_receipt['problems'][:3]
@@ -2485,16 +2485,16 @@ def main(argv=None):
                 ['dotnet', str(stage/'export/bin/Debug/net10.0/RefinementExport.dll'),
                  '--abi-scenario', str(scenario_dump),
                  '--scenario', str(scenario_path),
-                 '--nef', str(REPO/'contracts/bin/v3/SmartAccountV3.nef'),
-                 '--manifest', str(REPO/'contracts/bin/v3/SmartAccountV3.manifest.json')],
+                 '--nef', str(REPO/'contracts/bin/public/SmartAccountV3.nef'),
+                 '--manifest', str(REPO/'contracts/bin/public/SmartAccountV3.manifest.json')],
                 output/(dump_name[:-len('.json')] + '.log'), args.timeout_seconds)
             require(scenario_result['exitCode'] == 0 and not scenario_result['timedOut'],
                     'ABI scenario dump failed: ' + scenario_file)
             results[dump_name[:-len('.json')]] = scenario_result
             receipt = scenario_face.correspond(
                 scenario_path, scenario_dump,
-                REPO/'contracts/bin/v3/SmartAccountV3.manifest.json',
-                REPO/'contracts/bin/v3/SmartAccountV3.nef')
+                REPO/'contracts/bin/public/SmartAccountV3.manifest.json',
+                REPO/'contracts/bin/public/SmartAccountV3.nef')
             require(scenario_face.agrees(receipt),
                     'the engine did not do what ' + scenario_file + ' declares: '
                     + json.dumps(receipt['problems'][:3]
@@ -2569,8 +2569,8 @@ def main(argv=None):
         require(declared_returns <= measured_returns,
                 'return types the manifest declares and no measured call produced: '
                 + json.dumps(sorted(declared_returns - measured_returns)))
-        gate.validate_inventory(inventory, REPO/'contracts/bin/v3/SmartAccountV3.nef',
-                                REPO/'contracts/bin/v3/SmartAccountV3.manifest.json', REPO)
+        gate.validate_inventory(inventory, REPO/'contracts/bin/public/SmartAccountV3.nef',
+                                REPO/'contracts/bin/public/SmartAccountV3.manifest.json', REPO)
         require(gate.project_snapshot(REPO) == project_before, 'compilation input membership drift')
         require(tool_paths() == paths, 'tool/model input membership drift')
         require(sha((base/'inventory.json').read_bytes()) == inventory_sha, 'fresh inventory drift')

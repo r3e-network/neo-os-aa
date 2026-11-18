@@ -813,7 +813,7 @@ export interface AccountScopedOptions {
   accountAddress?: Hash160 | NeoAddress;
 }
 
-/** Deployed ordinary recovery support is distinct from the account's permanent mode. */
+/** Deployed custom recovery support is distinct from the account's permanent mode. */
 export type OwnerOnlyRecoveryStatus =
   | { supported: false; ownerOnlyRecovery: null }
   | { supported: true; ownerOnlyRecovery: boolean };

@@ -1,4 +1,4 @@
-(* Ordinary V3 / PLATFORM source-candidate cumulative sponsorship cap.
+(* Custom V3 / PLATFORM source-candidate cumulative sponsorship cap.
    A single core ledger is shared by all accounts, sponsors and paymasters.
    Transaction identity, nonnegative paid fee and atomic enclosing-transaction
    rollback are correspondence inputs. This model does not prove NeoVM storage,

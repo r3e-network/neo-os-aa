@@ -18,7 +18,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: WrongHookLifecycleAbiModule.cs" Importance="high" />
-    <Exec Command="nccs ./WrongHookLifecycleAbiModule.csproj -o ../../contracts/bin/v3" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./WrongHookLifecycleAbiModule.csproj -o ../../contracts/bin/public" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

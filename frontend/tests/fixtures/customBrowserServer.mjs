@@ -7,7 +7,7 @@ import { build, preview } from 'vite';
 let buildPromise;
 
 async function buildFixtureApp(root) {
-  const outDir = await mkdtemp(join(tmpdir(), 'sa-ordinary-browser-'));
+  const outDir = await mkdtemp(join(tmpdir(), 'sa-custom-browser-'));
   try {
     // Fixture VITE_* variables are set by the caller before the first build.
     // Never reuse production dist: it has a different network/core identity.
@@ -22,7 +22,7 @@ async function buildFixtureApp(root) {
 // Keep one immutable fixture build per test process. A dev server can discover
 // lazy dependencies after the first render and reload /app during a click;
 // ignoring filesystem watches does not disable that optimizer/HMR reload.
-export async function startOrdinaryBrowserServer(root) {
+export async function startCustomBrowserServer(root) {
   buildPromise ||= buildFixtureApp(root);
   const outDir = await buildPromise;
   const server = await preview({

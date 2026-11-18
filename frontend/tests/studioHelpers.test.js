@@ -9,7 +9,7 @@ const controllerPath = path.resolve('src/features/studio/useStudioController.js'
 const governancePath = path.resolve('src/features/studio/governance.js');
 const panelPath = path.resolve('src/features/studio/components/ManageGovernancePanel.vue');
 const manifestCandidates = [
-  path.resolve('../contracts/bin/v3/SmartAccount.manifest.json'),
+  path.resolve('../contracts/bin/public/SmartAccount.manifest.json'),
   path.resolve('../contracts/build/SmartAccount.manifest.json'),
 ];
 const manifestPath = manifestCandidates.find((candidate) => fs.existsSync(candidate)) || manifestCandidates[1];

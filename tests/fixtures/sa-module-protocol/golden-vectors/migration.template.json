@@ -6,7 +6,7 @@
     "manifest": "TODO(kernel39|40): reference into migration-manifest.template.json (accountId + manifestDigest)",
     "classification": "TODO: one of no-plugin | scalar-plugin | multihook | multisig | unknown-plugin | owner-only | market-locked | recovery-pending",
     "legacyExportRow": {
-      "state": "TODO: five-field ordinary row or native 14-slot row, as exported",
+      "state": "TODO: five-field custom row or native 14-slot row, as exported",
       "modules": "TODO: root + children + code identities",
       "threshold": "TODO: members/value for multisig",
       "hookOrder": "TODO: legacy forward order for multihook",

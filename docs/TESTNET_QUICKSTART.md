@@ -19,6 +19,6 @@ When the dry run looks right, execute the live suite:
 npm run testnet:validate
 ```
 
-See the "Live Testnet Validation" section of `README.md` for RPC endpoint
+See the "Live Testnet Validation" section of the root `README.md` for RPC endpoint
 pinning (`TESTNET_RPC_URL` / `TESTNET_RPC_URLS`), the stage list, and
 per-stage commands.

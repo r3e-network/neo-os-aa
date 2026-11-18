@@ -10,7 +10,7 @@
 
 本提案新增 `System.Contract.CallWithGasLimit`。它是平台能力，而不是 SA 合约本地的记账约定。该能力分配一个由执行引擎强制、且被所有后代继承的子预算。其目的是让 SA 核心能够调用验证器，而不允许该验证器消耗整个交易预算。
 
-该实现已在隔离的 Neo core 与 DevPack 工作树中原型化，并配合 `Neo.SmartContract.Framework` 3.10.2-CI00384 集成进当前 `neo-os-aa` 工件。一个匹配的私有 NeoExpress 运行时在区块 0 激活 `HF_SmartAccountV1`，并通过 JSON-RPC 回读产出的工件。本提案不主张任何公共激活、部署或广播。
+该实现已在隔离的 Neo core 与 DevPack 工作树中原型化，并配合 `Neo.SmartContract.Framework` 3.10.2-CI00384 集成进当前 `neo-os-sa` 工件。一个匹配的私有 NeoExpress 运行时在区块 0 激活 `HF_SmartAccountV1`，并通过 JSON-RPC 回读产出的工件。本提案不主张任何公共激活、部署或广播。
 
 ## 动机与威胁模型
 

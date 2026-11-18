@@ -22,7 +22,7 @@ Chinese reading guide to the chapter set.
 
 | Coverage | Documents | Note |
 | --- | --- | --- |
-| Bilingual (EN + `.zh-CN.md`) | Protocol, architecture, account, closure and reference documents | 54 pairs; the four dated `reports/*.md` snapshots remain English-only |
+| Bilingual (EN + `.zh-CN.md`) | Protocol, architecture, account, closure and reference documents | 56 pairs; the four dated `reports/*.md` snapshots remain English-only |
 
 ## Start here
 
@@ -35,6 +35,7 @@ Chinese reading guide to the chapter set.
 | [WORKFLOWS.md](WORKFLOWS.md) | Transaction lifecycle and submission flows | EN · [中文](WORKFLOWS.zh-CN.md) |
 | [DATA_FLOW.md](DATA_FLOW.md) | Browser / Supabase / relay / chain boundaries | EN · [中文](DATA_FLOW.zh-CN.md) |
 | [architecture.md](architecture.md) | Technical architecture details | EN · [中文](architecture.zh-CN.md) |
+| [NEOOS_ARCHITECTURE.md](NEOOS_ARCHITECTURE.md) | Where this repository sits in the NeoOS workspace architecture (pointer) | EN · [中文](NEOOS_ARCHITECTURE.zh-CN.md) |
 | [ORGANIZATION.md](ORGANIZATION.md) | Repository layout and the verification map | EN · [中文](ORGANIZATION.zh-CN.md) |
 | [SA-IMPLEMENTATION-STRATEGY.md](SA-IMPLEMENTATION-STRATEGY.md) | The two implementation paths and their delivery boundaries | EN · [中文](SA-IMPLEMENTATION-STRATEGY.zh-CN.md) |
 
@@ -90,8 +91,9 @@ entrypoints is the honest state, not a regression.
 - [action-sessions.md](action-sessions.md) · [中文](action-sessions.zh-CN.md) — session-key scoping, expiry and reauthorization
 - [MULTISIG_SDK.md](MULTISIG_SDK.md) · [MULTISIG_CHILD_CONFIGURATION.md](MULTISIG_CHILD_CONFIGURATION.md) — multisig bundles and child proofs ([中文](MULTISIG_SDK.zh-CN.md) · [中文](MULTISIG_CHILD_CONFIGURATION.zh-CN.md))
 - [PENDING_CONFIG_UPDATE_READ_ABI.md](PENDING_CONFIG_UPDATE_READ_ABI.md) · [中文](PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md) — config-update read surface
-- [ORDINARY_ACCOUNT_WORKSPACE.md](ORDINARY_ACCOUNT_WORKSPACE.md) · [中文](ORDINARY_ACCOUNT_WORKSPACE.zh-CN.md) — ordinary-profile workspace
+- [CUSTOM_ACCOUNT_WORKSPACE.md](CUSTOM_ACCOUNT_WORKSPACE.md) · [中文](CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md) — custom-profile workspace
 - [mainnet-validation-runbook.md](mainnet-validation-runbook.md) · [中文](mainnet-validation-runbook.zh-CN.md) — read-only mainnet validation
+- [TESTNET_QUICKSTART.md](TESTNET_QUICKSTART.md) · [中文](TESTNET_QUICKSTART.zh-CN.md) — the two commands to run before any live testnet validation
 - [testnet-validation-runbook.md](testnet-validation-runbook.md) · [中文](testnet-validation-runbook.zh-CN.md) — dry-run-first testnet validation
 - [POST_DEPLOY_SMOKE_TEST.md](POST_DEPLOY_SMOKE_TEST.md) · [中文](POST_DEPLOY_SMOKE_TEST.zh-CN.md) — post-deployment frontend checklist
 
@@ -124,7 +126,7 @@ tree. The current pinned set:
 | [sa-artifact-reproducibility-20261116.json](reports/sa-artifact-reproducibility-20261116.json) | byte-identical artifact rebuild |
 | [sa-formal-gate-20261031.json](reports/sa-formal-gate-20261031.json) | Coq gate and mutation set |
 | [sa-neoexpress-validation-20261031.json](reports/sa-neoexpress-validation-20261031.json) | private-chain deployment and readback |
-| [sa-ordinary-candidate-compatibility-20261116.json](reports/sa-ordinary-candidate-compatibility-20261116.json) | ordinary-profile candidate matrix |
+| [sa-ordinary-candidate-compatibility-20261116.json](reports/sa-ordinary-candidate-compatibility-20261116.json) | custom-profile candidate matrix |
 
 Historical and superseded receipts stay only where a guard or a formal scope pins
 them. [reports/testnet-validation-v1v2-2026-03.md](reports/testnet-validation-v1v2-2026-03.md)

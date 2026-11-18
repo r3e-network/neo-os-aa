@@ -32,7 +32,7 @@
           {{ t("studioPanels.identitySection", "Identity") }}
         </div>
         <div class="bg-sa-panel rounded-lg border border-sa-border/60 p-5">
-          <p class="mb-4 text-xs text-sa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
+          <p class="mb-4 text-xs text-sa-muted">{{ t('custom.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-2">
               <label
@@ -262,7 +262,7 @@
           {{ t("studioPanels.pluginsSection", "Plugins") }}
         </div>
         <div class="bg-sa-panel rounded-lg border border-sa-border/60 p-5">
-          <p class="mb-4 text-xs text-sa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
+          <p class="mb-4 text-xs text-sa-muted">{{ t('custom.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-4">
               <div class="space-y-2">
@@ -394,7 +394,7 @@
           {{ t("studioPanels.backupSection", "Backup & Recovery") }}
         </div>
         <div class="bg-sa-panel rounded-lg border border-sa-border/60 p-5">
-          <p class="mb-4 text-xs text-sa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
+          <p class="mb-4 text-xs text-sa-muted">{{ t('custom.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-2">
               <label

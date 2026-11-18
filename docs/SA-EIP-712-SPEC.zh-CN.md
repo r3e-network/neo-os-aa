@@ -117,5 +117,5 @@ digest  = keccak256(payload)
 - `SmartAccountClient.computeArgsHash(args)` —— 向核心索取规范
   `argsHash`，而不是在客户端重新实现序列化。
 
-黄金向量测试（`sdk/js/tests/v3_flow.unit.test.js`，即 "EIP-712 typed
+黄金向量测试（`sdk/js/tests/flow.unit.test.js`，即 "EIP-712 typed
 data hash matches expected test vector"）端到端钉住了这一字节布局。

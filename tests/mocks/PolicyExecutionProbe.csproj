@@ -18,7 +18,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: PolicyExecutionProbe.cs" Importance="high" />
-    <Exec Command="nccs ./PolicyExecutionProbe.csproj -o ../../contracts/bin/v3" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./PolicyExecutionProbe.csproj -o ../../contracts/bin/public" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

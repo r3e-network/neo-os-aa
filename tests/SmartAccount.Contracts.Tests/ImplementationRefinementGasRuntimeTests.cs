@@ -243,7 +243,7 @@ public class ImplementationRefinementGasRuntimeTests
     }
     private static Result Run(string? shape, string? publicMethod, string? argument, long gas)
     {
-        string dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/v3"));
+        string dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/public"));
         byte[] rawNef = File.ReadAllBytes(Path.Combine(dir, "SmartAccount.nef"));
         byte[] rawManifest = File.ReadAllBytes(Path.Combine(dir, "SmartAccount.manifest.json"));
         Assert.AreEqual("9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76", Hash(rawNef));

@@ -23,7 +23,7 @@ namespace SmartAccount.Contracts.Tests;
 // the structural properties that close the bypass and would fail against the
 // pre-fix, direct-target-only implementation. A companion check confirms the fixed
 // source still compiles to valid NeoVM bytecode by being exercised through the
-// runtime suites that load contracts/bin/v3/hooks/DailyLimitHook.nef.
+// runtime suites that load contracts/bin/public/hooks/DailyLimitHook.nef.
 // ---------------------------------------------------------------------------
 
 [TestClass]

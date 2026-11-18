@@ -5,4 +5,4 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-node tests/v3_testnet_validation_suite.mjs "$@"
+node tests/testnet_validation_suite.mjs "$@"

@@ -37,7 +37,7 @@ owned 的 32 字节域。区间从零开始，且在既有输入检查之后长�
 绝不覆盖历史回执，也不把更新的源码 pin 替换进去。
 
 对每个工件目录以 Release 配置运行 `tests/NativeMultiSigProbe`。
-普通验收模式检查真实的模块 NEF、实际的代理
+custom 验收模式检查真实的模块 NEF、实际的代理
 Verification、两个回调预算、基本与最大参数、畸形
 证明、quorum 不足、重复身份、阶段拒绝与原子
 回滚。其交易签名器是合成的，并使用内存存储。
@@ -140,7 +140,7 @@ Release 配置下构建。[验证回执](reports/native-domain-copy-20261009/val
 与每个基准加载的程序集哈希保留了这一区别。
 
 全部 20 个功能控制仍然存在，包括两个跨方案签名器域
-用例。[普通验收回执](reports/native-domain-copy-20261009/candidate-acceptance.json)
+用例。[custom 验收回执](reports/native-domain-copy-20261009/candidate-acceptance.json)
 也通过既有的身份与有限场景验证器。严格
 改进检查拒绝基线与自身比较，并接受
 候选。比较器的 15 个单元测试覆盖畸形或不匹配的回执、
@@ -156,7 +156,7 @@ Release 配置下构建。[验证回执](reports/native-domain-copy-20261009/val
 不支持或循环的结果图仍必须在任何子 post 调用之前失败。
 每个子调用的操作参数仍是独立的深拷贝。
 
-该候选位于 `SMARTACCOUNT_NATIVE` 之内；普通合约路径
+该候选位于 `SMARTACCOUNT_NATIVE` 之内；custom 合约路径
 不变。它保留两处新的策略承诺、当前的域与
 权限读取、阶段与代码检查，以及原子回滚。它不包含
 任何预算、费率表、模块版本或存储格式的改动。
@@ -197,7 +197,7 @@ native 构建复现两次。默认的 20 个控制仍然存在，且
 新的原始样本、构建与语义回执作为独立的审阅
 工件保留。更早提交的回执仍是历史证据。候选 NEF
 在单独的 native 交付之前仍位于公开构建目录之外；
-禁用 `SMARTACCOUNT_NATIVE` 的普通合约源码在本次改动前后
+禁用 `SMARTACCOUNT_NATIVE` 的custom 合约源码在本次改动前后
 完全一致。
 
 ## 进一步的测量边界

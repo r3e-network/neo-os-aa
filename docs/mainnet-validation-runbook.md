@@ -15,4 +15,4 @@ The validator checks:
 - the mainnet SA core, Web3Auth verifier, session-key verifier, and social-recovery verifier contracts are deployed
 - each deployed manifest exposes the required read/write entrypoints for the published architecture
 
-The latest report is written to `sdk/docs/reports/v3-mainnet-readonly.latest.json`.
+The latest report is written to `docs/reports/sa-mainnet-readonly.latest.json`.

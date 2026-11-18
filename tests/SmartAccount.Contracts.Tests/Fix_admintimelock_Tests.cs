@@ -26,7 +26,7 @@ public class Fix_AdminTimelock_Tests
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "v3");
+    private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "public");
 
     private static readonly UInt160 ContractManagementHash =
         UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd");

@@ -36,18 +36,18 @@ runner/runtime 不匹配，而不是回调上限可选的证据；该失败回�
 
 | 配置 | 工件目录 | Verifier 回调 | 运行时要求 |
 | --- | --- | --- | --- |
-| 公开 `v3` | `contracts/bin/v3` | 标准 `System.Contract.Call`；校验只读，执行后记账保留写权限 | 已发布的 Neo 运行时；没有隔离的 verifier 子 gas 预算 |
+| `public` | `contracts/bin/public` | 标准 `System.Contract.Call`；校验只读，执行后记账保留写权限 | 已发布的 Neo 运行时；没有隔离的 verifier 子 gas 预算 |
 | Native ABI 2 | 显式的 native-module 构建输出 | SmartAccount 有界原生回调：verifier 1 GAS，hook/maintenance 2.5 GAS | 源码构建的 native 合约、`HF_SmartAccountV1`、ABI 2 metadata 与 epoch 感知模块 |
 | 私有 `PLATFORM` | `contracts/bin/platform` | `System.Contract.CallWithGasLimit`，每个 verifier 回调 10 GAS | 匹配的私有运行时与激活；无法在普通公开节点上运行 |
 
 `bash contracts/compile.sh` 用固定版本的已发布编译器与
-框架构建公开 `v3` 与私有 `PLATFORM` 配置。脚本只在执行源码的一次性副本中定义 `PLATFORM`；
-`--platform` 只构建私有核心。公开的 deploy/upgrade 辅助脚本选择 `bin/v3`。
+框架构建 `public` 与私有 `PLATFORM` 配置。脚本只在执行源码的一次性副本中定义 `PLATFORM`；
+`--platform` 只构建私有核心。公开的 deploy/upgrade 辅助脚本选择 `bin/public`。
 双配置可复现性门禁会比较两个输出目录；仅有字节一致
 并不确立运行时支持或部署一致性。
 
 对于私有 NeoExpress 验证，`scripts/neoexpress_validate.py` 从
-`bin/platform` 部署核心、从 `bin/v3` 部署模块，并记录每次部署的配置。
+`bin/platform` 部署核心、从 `bin/public` 部署模块，并记录每次部署的配置。
 provenance join 独立选择同一配置；公开核心的回执不能
 与有界回调证据 join。把 `NEOOS_NEOXP` 设置为一个源码构建的 runner，它在
 `HF_SmartAccountV1` 下注册 `System.Contract.CallWithGasLimit`；已发布的普通 `neoxp`
@@ -108,7 +108,7 @@ interop 的运行时上执行。下面这条历史的私有 Neo 3.10.1.1 构建�
 MainNet 核心可由公开包复现：用公开框架 3.9.1 与 `nccs` 3.9.1 在干净缓存下
 编译提交 `4149496`（gas cap 之前的源码），得到校验和为 2035992441 的
 `SmartAccountV3.nef`，与链上及
-`contracts/build/SmartAccountV3.nef` 逐字节一致。当前源码还有额外的合约改动与独立的运行时配置；
+`contracts/build/SmartAccount.nef` 逐字节一致。当前源码还有额外的合约改动与独立的运行时配置；
 当前的公开部署一致性需要一次新的源码/工件/RPC 比较。
 
 ## 历史私有包

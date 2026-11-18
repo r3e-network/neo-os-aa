@@ -135,7 +135,7 @@ class DeploymentArtifactTests(unittest.TestCase):
     def test_private_core_and_public_modules_use_their_own_profiles(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for profile in ("v3", "platform"):
+            for profile in ("public", "platform"):
                 for name in ("SmartAccount", "MockTransferTarget"):
                     directory = root / profile
                     directory.mkdir(exist_ok=True)
@@ -155,18 +155,18 @@ class DeploymentArtifactTests(unittest.TestCase):
             chain.nx = Mock(side_effect=deploy)
             artifacts = [("SmartAccount", "SmartAccount.nef", False),
                          ("MockTransferTarget", "MockTransferTarget.nef", False)]
-            with patch.object(validation, "BIN", root / "v3"), \
+            with patch.object(validation, "BIN", root / "public"), \
                     patch.object(validation, "PLATFORM_BIN", root / "platform"), \
                     patch.object(validation, "ARTIFACTS", artifacts):
                 chain.deploy_all()
 
             self.assertEqual([Path(call.args[2]).parent.name for call in chain.nx.call_args_list],
-                             ["platform", "v3"])
-            self.assertEqual([row["artifactProfile"] for row in chain.deployments], ["platform", "v3"])
+                             ["platform", "public"])
+            self.assertEqual([row["artifactProfile"] for row in chain.deployments], ["platform", "public"])
             self.assertEqual(chain.deployments[0]["localNefSha256"],
                              hashlib.sha256(b"platform:SmartAccount").hexdigest())
             self.assertNotEqual(chain.deployments[0]["localNefSha256"],
-                                hashlib.sha256(b"v3:SmartAccount").hexdigest())
+                                hashlib.sha256(b"public:SmartAccount").hexdigest())
 
 
 class ReadbackTests(unittest.TestCase):

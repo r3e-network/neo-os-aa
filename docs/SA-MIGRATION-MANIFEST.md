@@ -2,7 +2,7 @@
 
 This document specifies the **migration manifest**: the canonical, exportable,
 per-account classification record that drives migration of existing Neo Smart
-Account (SA) accounts from the legacy single-slot model (ordinary five-field
+Account (SA) accounts from the legacy single-slot model (custom five-field
 `0x01` AccountState / native 14-slot Array) to the shared module protocol
 version 4 (`docs/SA-MODULE-PROTOCOL.md`).
 
@@ -145,7 +145,7 @@ Field rules:
 - Once `Active`, a repeat import is rejected unless it quotes the recorded
   digest *and* proposes an empty action set (proving no-op) — otherwise
   `SA_MIGRATION_REQUIRED`-style guards treat it as a normal configuration.
-- Legacy data is never deleted by migration: 0x01 rows (ordinary) and the
+- Legacy data is never deleted by migration: 0x01 rows (custom) and the
   native 14-slot records stay as historical evidence on their contracts; the
   new core only records the invalidation declarations (0x12/0x1C) and
   digests in 0x5A.

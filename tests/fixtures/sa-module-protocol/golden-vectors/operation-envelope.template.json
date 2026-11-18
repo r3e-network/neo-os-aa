@@ -35,7 +35,7 @@
     "domainHex": "TODO(kernel39|40): NeoSmartAccount/UserOperation || U1(4) || U32LE(network) || coreHash || accountId || U64BE(validatorId) || U64BE(credentialGeneration) || U64BE(authorityEpoch) || U64BE(configurationNonce)",
     "digestHex": "TODO(kernel39|40): SHA256(domain || canonicalUnsignedOperation)",
     "equality": {
-      "ordinaryStdLibSerializeHex": "TODO(kernel39): identical to canonicalUnsignedOperationHex",
+      "customStdLibSerializeHex": "TODO(kernel39): identical to canonicalUnsignedOperationHex",
       "nativeBinarySerializerHex": "TODO(kernel40): identical to canonicalUnsignedOperationHex"
     },
     "rejections": [

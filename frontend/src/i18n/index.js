@@ -9,7 +9,7 @@ export const SUPPORTED_LOCALES = Object.freeze([
 
 const MESSAGES = {
   en: {
-    ordinary: {
+    custom: {
       ownerMismatch: 'Connect the Neo backup owner wallet. This registration requests only the connected wallet witness.',
       ownerInvalid: 'Enter a valid Neo N3 address or Neo script hash, not an Ethereum address.',
       walletRequired: 'Connect the Neo backup owner wallet first.',

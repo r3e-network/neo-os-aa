@@ -45,15 +45,15 @@ test("listing ignores non-artifact files and missing directories", () => {
 
 test("public success cannot hide private profile drift or omission", () => {
   const files = {
-    "v3/SmartAccount.nef": "public",
-    "v3/SmartAccount.manifest.json": "{}",
+    "public/SmartAccount.nef": "public",
+    "public/SmartAccount.manifest.json": "{}",
     "platform/SmartAccount.nef": "private",
     "platform/SmartAccount.manifest.json": "{}",
   };
   const expected = scratchTree(files);
   const actual = scratchTree({ ...files, "platform/SmartAccount.nef": "drift" });
   let profiles = compareProfiles(expected, actual);
-  assert.equal(profiles.v3.matches_fresh_build, true);
+  assert.equal(profiles.public.matches_fresh_build, true);
   assert.equal(profiles.platform.matches_fresh_build, false);
   fs.rmSync(path.join(actual, "platform"), { recursive: true });
   profiles = compareProfiles(expected, actual);
@@ -70,7 +70,7 @@ test("two absent or empty profile directories never establish reproducibility", 
 });
 
 test("identical profile trees pass and unexpected artifacts fail", () => {
-  const files = Object.fromEntries(["v3", "platform"].flatMap((profile) => [
+  const files = Object.fromEntries(["public", "platform"].flatMap((profile) => [
     [`${profile}/SmartAccount.nef`, profile],
     [`${profile}/SmartAccount.manifest.json`, "{}"],
   ]));

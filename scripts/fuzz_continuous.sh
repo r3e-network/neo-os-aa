@@ -14,11 +14,11 @@ START=$(date +%s)
 SLN="$(cd "$(dirname "$0")/.." && pwd)/SmartAccount.sln"
 FILTER="FullyQualifiedName~SourceInvariant_"
 
-# The SourceInvariant_ suite deploys the compiled contracts from contracts/bin/v3,
+# The SourceInvariant_ suite deploys the compiled contracts from contracts/bin/public,
 # which only contracts/compile.sh (nccs) produces — `dotnet build` alone does not.
 # A missing artifact would surface inside dotnet test as a Directory/FileNotFound
 # failure and read as an invariant counterexample, so fail fast here instead.
-CONTRACTS_BIN="$(cd "$(dirname "$0")/.." && pwd)/contracts/bin/v3"
+CONTRACTS_BIN="$(cd "$(dirname "$0")/.." && pwd)/contracts/bin/public"
 REQUIRED_ARTIFACTS=(
   "SmartAccount.nef"
   "SmartAccount.manifest.json"
@@ -28,13 +28,13 @@ REQUIRED_ARTIFACTS=(
 MISSING=0
 for artifact in "${REQUIRED_ARTIFACTS[@]}"; do
   if [[ ! -f "$CONTRACTS_BIN/$artifact" ]]; then
-    echo "environment not ready: missing compiled contract artifact: contracts/bin/v3/$artifact" >&2
+    echo "environment not ready: missing compiled contract artifact: contracts/bin/public/$artifact" >&2
     MISSING=1
   fi
 done
 if [[ "$MISSING" -ne 0 ]]; then
   echo "environment not ready: the SourceInvariant suite deploys SmartAccount and" >&2
-  echo "environment not ready: MockTransferTarget from contracts/bin/v3 before it can run." >&2
+  echo "environment not ready: MockTransferTarget from contracts/bin/public before it can run." >&2
   echo "environment not ready: build the artifacts with:" >&2
   echo "environment not ready:   dotnet build contracts/custom/SmartAccount.csproj -c Release -nologo" >&2
   echo "environment not ready:   bash contracts/compile.sh" >&2

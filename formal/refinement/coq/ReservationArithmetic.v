@@ -3,19 +3,19 @@
    functions are imported from the existing model. Array identity, SETITEM,
    serialization, storage and transaction rollback require separate semantics. *)
 From Coq Require Import ZArith Bool List Lia.
-Require Import IntegerSemantics CapArithmetic OrdinarySponsorship.
+Require Import IntegerSemantics CapArithmetic CustomSponsorship.
 Import ListNotations.
 Open Scope Z_scope.
 
 Definition checked_update (reserved settled : Z) : option Z :=
   if 0 <? settled then checked_binary Add reserved settled else None.
 Definition checked_reservation (cost requested reserved : Z) : option Z :=
-  checked_update reserved (OrdinarySponsorship.charge cost requested reserved).
+  checked_update reserved (CustomSponsorship.charge cost requested reserved).
 
 (* A representability-aware lifting of the existing abstract protocol reserve.
    This projection is not a replacement for the actual helper's effect proof. *)
 Definition bounded_reserve (tx : nat) (cost requested : Z) (before : Ledger) : option Ledger :=
-  match OrdinarySponsorship.reserve tx cost requested before with
+  match CustomSponsorship.reserve tx cost requested before with
   | None => None
   | Some next => match checked_integer (ledger_spent next) with
       | None => None
@@ -73,14 +73,14 @@ Proof. intros reserved settled. unfold checked_update.
 
 Lemma paid_charge_formula : forall cost requested reserved,
   cost > 0 -> 0 <= reserved <= cost ->
-  OrdinarySponsorship.charge cost requested reserved = Z.min requested (cost - reserved).
-Proof. intros cost requested reserved Hc Hr. unfold OrdinarySponsorship.charge.
+  CustomSponsorship.charge cost requested reserved = Z.min requested (cost - reserved).
+Proof. intros cost requested reserved Hc Hr. unfold CustomSponsorship.charge.
   assert ((cost =? 0) = false) as E by (apply Z.eqb_neq; lia).
   rewrite E, Z.max_l by lia. reflexivity. Qed.
 
 Lemma paid_charge_positive_iff : forall cost requested reserved,
   cost > 0 -> requested > 0 -> 0 <= reserved <= cost ->
-  0 < OrdinarySponsorship.charge cost requested reserved <-> reserved < cost.
+  0 < CustomSponsorship.charge cost requested reserved <-> reserved < cost.
 Proof. intros cost requested reserved Hc Hq Hr.
   rewrite paid_charge_formula by assumption. split.
   - intro H. pose proof (Z.le_min_r requested (cost - reserved)). lia.
@@ -88,7 +88,7 @@ Proof. intros cost requested reserved Hc Hq Hr.
 
 Lemma paid_updated_reservation_range : forall cost requested reserved,
   cost > 0 -> requested > 0 -> 0 <= reserved <= cost ->
-  reserved <= reserved + OrdinarySponsorship.charge cost requested reserved <= cost.
+  reserved <= reserved + CustomSponsorship.charge cost requested reserved <= cost.
 Proof. intros cost requested reserved Hc Hq Hr.
   pose proof (OS_003_persisted_charge_is_within_remaining_fee cost requested reserved Hc Hr) as Hcap.
   rewrite paid_charge_formula by assumption. split.
@@ -102,7 +102,7 @@ Proof. intros cost requested reserved Hc Hq Hr. unfold checked_reservation. spli
   - intros [next H]. apply checked_update_success_iff in H.
     destruct H as [Hpositive _]. apply (paid_charge_positive_iff cost requested reserved); lia.
   - intro Hremaining.
-    exists (reserved + OrdinarySponsorship.charge cost requested reserved).
+    exists (reserved + CustomSponsorship.charge cost requested reserved).
     apply checked_update_success_iff. split.
     + apply (paid_charge_positive_iff cost requested reserved); lia.
     + split; [reflexivity|].
@@ -122,7 +122,7 @@ Proof. intros cost requested reserved next Hc Hq Hr H.
 Theorem paid_exhaustion_faults : forall cost requested reserved,
   cost > 0 -> reserved >= cost ->
   checked_reservation cost requested reserved = None.
-Proof. intros cost requested reserved Hc Hr. unfold checked_reservation, OrdinarySponsorship.charge.
+Proof. intros cost requested reserved Hc Hr. unfold checked_reservation, CustomSponsorship.charge.
   assert ((cost =? 0) = false) as E by (apply Z.eqb_neq; lia). rewrite E.
   rewrite Z.max_r by lia. apply checked_update_nonpositive_fault.
   apply Z.le_min_r. Qed.
@@ -157,12 +157,12 @@ Theorem estimation_overflow_protocol_disagrees : forall tx requested before,
   0 <= ledger_spent before < integer_limit ->
   ledger_spent before + requested >= integer_limit ->
   bounded_reserve tx 0 requested before = None /\
-  OrdinarySponsorship.reserve tx 0 requested before =
+  CustomSponsorship.reserve tx 0 requested before =
     Some (mkLedger tx (ledger_spent before + requested)).
 Proof. intros tx requested before Htx Hq Hr Ho.
-  assert (Hsource : OrdinarySponsorship.reserve tx 0 requested before =
+  assert (Hsource : CustomSponsorship.reserve tx 0 requested before =
     Some (mkLedger tx (ledger_spent before + requested))).
-  { unfold OrdinarySponsorship.reserve.
+  { unfold CustomSponsorship.reserve.
     rewrite OS_001_same_transaction_retains_spend by exact Htx.
     rewrite OS_011_estimation_uses_requested_quote.
     assert ((0 <? requested) = true) as Eq by (apply Z.ltb_lt; lia).
@@ -172,38 +172,38 @@ Proof. intros tx requested before Htx Hq Hr Ho.
   rewrite integer_overflow_faults; [reflexivity|]. unfold integer_fits. lia. Qed.
 
 Theorem bounded_reserve_refines_protocol_when_sum_fits : forall tx cost requested before next,
-  OrdinarySponsorship.reserve tx cost requested before = Some next ->
+  CustomSponsorship.reserve tx cost requested before = Some next ->
   integer_fits (ledger_spent next) -> bounded_reserve tx cost requested before = Some next.
 Proof. intros tx cost requested before next H Hfit.
   assert (Htx : ledger_tx next = tx).
-  { unfold OrdinarySponsorship.reserve in H.
+  { unfold CustomSponsorship.reserve in H.
     destruct ((0 <=? cost) && (0 <? requested) && (0 <=? spent_for tx before) &&
-      (0 <? OrdinarySponsorship.charge cost requested (spent_for tx before))); [|discriminate].
+      (0 <? CustomSponsorship.charge cost requested (spent_for tx before))); [|discriminate].
     injection H as Hn. subst next. reflexivity. }
   unfold bounded_reserve. rewrite H, checked_integer_in_range by exact Hfit.
   destruct next as [next_tx next_spent]. simpl in Htx. subst next_tx. reflexivity. Qed.
 
 Theorem bounded_reserve_success_refines_protocol : forall tx cost requested before next,
   bounded_reserve tx cost requested before = Some next ->
-  OrdinarySponsorship.reserve tx cost requested before = Some next /\ integer_fits (ledger_spent next).
+  CustomSponsorship.reserve tx cost requested before = Some next /\ integer_fits (ledger_spent next).
 Proof. intros tx cost requested before next H. unfold bounded_reserve in H.
-  destruct (OrdinarySponsorship.reserve tx cost requested before) as [abstract|] eqn:E; [|discriminate].
+  destruct (CustomSponsorship.reserve tx cost requested before) as [abstract|] eqn:E; [|discriminate].
   destruct (checked_integer (ledger_spent abstract)) as [bounded|] eqn:Eb; [|discriminate].
   apply checked_integer_result_is_representable in Eb. destruct Eb as [Hb Hfits].
   injection H as Hnext. subst next. simpl. split; [|exact Hfits].
   assert (Htx : ledger_tx abstract = tx).
-  { unfold OrdinarySponsorship.reserve in E.
+  { unfold CustomSponsorship.reserve in E.
     destruct ((0 <=? cost) && (0 <? requested) && (0 <=? spent_for tx before) &&
-      (0 <? OrdinarySponsorship.charge cost requested (spent_for tx before))); [|discriminate].
+      (0 <? CustomSponsorship.charge cost requested (spent_for tx before))); [|discriminate].
     injection E as Ha. subst abstract. reflexivity. }
   destruct abstract as [abstract_tx abstract_spent]. simpl in *. subst abstract_tx. subst bounded. reflexivity.
 Qed.
 
 Theorem bounded_reserve_paid_agrees_protocol : forall tx cost requested before,
   0 < cost < integer_limit -> 0 <= spent_for tx before <= cost ->
-  bounded_reserve tx cost requested before = OrdinarySponsorship.reserve tx cost requested before.
+  bounded_reserve tx cost requested before = CustomSponsorship.reserve tx cost requested before.
 Proof. intros tx cost requested before Hc Hr.
-  destruct (OrdinarySponsorship.reserve tx cost requested before) as [next|] eqn:E.
+  destruct (CustomSponsorship.reserve tx cost requested before) as [next|] eqn:E.
   - apply bounded_reserve_refines_protocol_when_sum_fits; [exact E|].
     destruct (OS_005_success_preserves_transaction_and_total_cap tx cost requested before next ltac:(lia) Hr E)
       as [_ Hbound]. apply nonnegative_integer_fits. lia.
@@ -216,13 +216,13 @@ Proof. intros tx cost requested before H. unfold apply_bounded_reserve. rewrite 
 
 Theorem same_transaction_iteration_agrees_protocol : forall requests tx cost before,
   0 < cost < integer_limit -> ledger_tx before = tx -> 0 <= ledger_spent before <= cost ->
-  bounded_reserve_many tx cost requests before = OrdinarySponsorship.reserve_many tx cost requests before.
+  bounded_reserve_many tx cost requests before = CustomSponsorship.reserve_many tx cost requests before.
 Proof. induction requests as [|requested rest IH]; intros tx cost before Hc Htx Hr; [reflexivity|].
-  cbn [bounded_reserve_many OrdinarySponsorship.reserve_many].
+  cbn [bounded_reserve_many CustomSponsorship.reserve_many].
   assert (Hspent : 0 <= spent_for tx before <= cost).
   { rewrite OS_001_same_transaction_retains_spend by exact Htx. exact Hr. }
   rewrite bounded_reserve_paid_agrees_protocol by assumption.
-  destruct (OrdinarySponsorship.reserve tx cost requested before) as [reserved|] eqn:E; [|reflexivity].
+  destruct (CustomSponsorship.reserve tx cost requested before) as [reserved|] eqn:E; [|reflexivity].
   destruct (OS_005_success_preserves_transaction_and_total_cap tx cost requested before reserved ltac:(lia) Hspent E)
     as [HnextTx HnextRange]. apply IH; assumption. Qed.
 

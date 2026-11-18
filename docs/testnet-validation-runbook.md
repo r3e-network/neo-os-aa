@@ -37,16 +37,16 @@ From `sdk/js`, run the full ordered suite:
 ./run_testnet_validation_suite.sh
 ```
 
-The suite writes machine-readable JSON reports to `sdk/docs/reports/`.
+The suite writes machine-readable JSON reports to `docs/reports/`.
 
 ## Ordered scripts
 
-1. `tests/v3_testnet_smoke.js`
-2. `tests/v3_testnet_plugin_matrix.js`
-3. `tests/v3_testnet_market_escrow.js`
-4. `tests/v3_testnet_paymaster_onchain.mjs`
-5. `tests/v3_testnet_paymaster_policy.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is present
-6. `tests/v3_testnet_paymaster_relay.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is present
+1. `tests/testnet_smoke.js`
+2. `tests/testnet_plugin_matrix.js`
+3. `tests/testnet_market_escrow.js`
+4. `tests/testnet_paymaster_onchain.mjs`
+5. `tests/testnet_paymaster_policy.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is present
+6. `tests/testnet_paymaster_relay.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is present
 
 ## Individual commands
 
@@ -65,7 +65,7 @@ npm run testnet:validate:report
 - The runner stops on the first failure.
 - Several scripts deploy contracts or broadcast real testnet transactions and mutate live state.
 - Testnet validators intentionally ignore generic `NEO_RPC_URL`; use only `TESTNET_RPC_URL` / `TESTNET_RPC_URLS`. Every live script verifies Neo N3 testnet network magic before it can broadcast.
-- The plugin matrix deploys fresh verifier and hook artifacts and records a JSON report under `sdk/docs/reports/`.
+- The plugin matrix deploys fresh verifier and hook artifacts and records a JSON report under `docs/reports/`.
 - The paymaster policy validator exercises explicit deny paths such as wrong `dapp_id`, wrong `account_id`, wrong `target_contract`, wrong `method`, missing `operation_hash`, and over-limit gas.
 - The paymaster validator can reuse a fixed allowlisted account or register a fresh account and update the worker allowlist live.
 - The public paymaster endpoint is allowed to enforce hosted anti-abuse controls. Local handler validation proves policy logic and relay wiring without weakening that production boundary.

@@ -1,6 +1,6 @@
-# Ordinary contract account workspace
+# Custom contract account workspace
 
-`/app` uses the deployed V3 ordinary contract account and is the main NeoOS
+`/app` uses the deployed V3 custom contract account and is the main NeoOS
 application path. `/native` uses the independent native protocol and node
 capability; account identity, deployment address and signing context must not be
 mixed between them.
@@ -32,7 +32,7 @@ Maturity is judged by the selected node's block time. Refresh after the time
 passes; the local clock does not prove maturity. Read the account, authorities and
 pending record again before submitting, and re-review if anything changed. Another
 device can still alter pending state between wallet confirmation and inclusion;
-the ordinary contract's existing confirm/cancel ABI does not preserve the reviewed
+the custom contract's existing confirm/cancel ABI does not preserve the reviewed
 state.
 
 A complete review requires the deployment to expose the `getPendingVerifierUpdate`

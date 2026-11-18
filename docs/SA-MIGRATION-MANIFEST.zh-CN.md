@@ -1,7 +1,7 @@
 # SA 迁移 Manifest —— 旧版 → 协议 v4（设计）
 
 本文件规定**迁移 manifest**：规范化、可导出的逐账户分类记录，用于把既有 Neo Smart
-Account（SA）账户从旧单槽模型（普通版五字段 `0x01` AccountState / 原生版 14-slot
+Account（SA）账户从旧单槽模型（custom 版五字段 `0x01` AccountState / 原生版 14-slot
 Array）迁移到共同模块协议版本 4（`docs/SA-MODULE-PROTOCOL.md`）。
 
 状态：**已交付设计 + manifest schema + 幂等规则；迁移执行器属于后续批次。**
@@ -125,7 +125,7 @@ Array）迁移到共同模块协议版本 4（`docs/SA-MODULE-PROTOCOL.md`）。
   重试整意图重跑。
 - 一旦 `Active`，重复导入被拒绝 —— 除非同时引用已记录摘要*且*动作集为空（证明
   是 no-op）；否则 `SA_MIGRATION_REQUIRED` 式守卫会把它当作普通配置处理。
-- 迁移绝不删除旧数据：0x01 行（普通版）与原生 14-slot 记录留在其合约上作为历史
+- 迁移绝不删除旧数据：0x01 行（custom 版）与原生 14-slot 记录留在其合约上作为历史
   证据；新核心只在 0x5A 记录失效声明（0x12/0x1C）与摘要。
 - 旧签名、旧 pending 意图、0x12 行与 0x1C 行绝不在新核心上成为授权输入
   （协议 §7.4）。

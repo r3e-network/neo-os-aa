@@ -2,7 +2,7 @@
 
 本文件是 Neo Smart Account（SA）模块模型的**唯一共同规范**，供两个 kernel 批次实施：
 
-- 普通合约版 kernel —— 任务 #39（`contracts/`）
+- custom kernel —— 任务 #39（`contracts/`）
 - 原生合约版 kernel —— 任务 #40（`contracts/native/SmartAccount/`）
 
 本文定义的 DTO、profile、存储布局、上限、错误码、事件与 gas 预算对两版**完全一致**；
@@ -140,7 +140,7 @@ envelope 级上限：单操作编码 ≤16 KiB；单交易 envelope（单笔或 
 ### 4.2 canonical 序列化
 
 未签名操作的 canonical 字节形态 = 同一 13 字段 Array 的 NeoVM 二进制
-stack-item 序列化，其中 `[11] signature` 替换为**空 ByteString**。普通 kernel 用
+stack-item 序列化，其中 `[11] signature` 替换为**空 ByteString**。custom kernel 用
 `StdLib.Serialize` 生成，原生 kernel 用 `Neo.VM.BinarySerializer.Serialize` 生成；
 两个序列化器对这些形态产生相同字节，golden 向量（§15 fixture 集）钉扎该相等性。
 
@@ -151,7 +151,7 @@ domain := UTF8("NeoSmartAccount/UserOperation")        // 29 字节
          || U1 (version = 4)
          || U32LE (network magic)
          || coreHash (20 原始字节，*实际*执行核心哈希；
-                       普通 kernel 不得替换为原生 ServiceHash 常量，反之亦然)
+                       custom kernel 不得替换为原生 ServiceHash 常量，反之亦然)
          || accountId (20 原始 UInt160 字节)
          || U64BE (validatorId)
          || U64BE (credentialGeneration)
@@ -258,7 +258,7 @@ NEF 哈希钉扎代码；profile 哈希钉扎接口能力。每次模块回调�
 
 ### 7.4 旧区域
 
-**普通 kernel：**
+**custom kernel：**
 - 0x01 旧五字段 AccountState 行**保留作迁移输入/历史证据**；新状态只写 0x51。
   新代码绝不经旧 Verifier/HookId 字段路由；legacy decoder 仅为迁移存在。
 - 0x12 与 0x1C **退役**：新授权绝不源自它们。迁移意图为账户的 0x12/0x1C 行记录
@@ -469,7 +469,7 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 
 | 工件 | 路径 |
 | --- | --- |
-| 普通版常量 | `contracts/custom/SmartAccount.ModuleProtocol.cs`（partial `SmartAccount`） |
+| custom 版常量 | `contracts/custom/SmartAccount.ModuleProtocol.cs`（partial `SmartAccount`） |
 | 原生版常量 | `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`（internal static `SmartAccountModuleProtocol`，经 `scripts/sync_native_smartaccount.py` 同步到 neo-native-core） |
 | fixture 骨架 | `tests/fixtures/sa-module-protocol/`（README + schema + 模板） |
 
@@ -484,9 +484,9 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 
 ## 16. Kernel 实施映射（任务 #39 / #40）
 
-### 16.1 普通 kernel（#39，与 #25 共享修改批次）
+### 16.1 custom kernel（#39，与 #25 共享修改批次）
 
-| 规范章节 | 普通版需创建/修改的文件 |
+| 规范章节 | custom 版需创建/修改的文件 |
 | --- | --- |
 | §2/§3/§7 常量 | 消费 `contracts/custom/SmartAccount.ModuleProtocol.cs`（本批已加入 `SmartAccount.csproj`） |
 | §7.1/§7.4 前缀 | 在 `SmartAccount.cs` STORAGE PREFIX MAP 注释中追加 0x50–0x5E 行；把 `SmartAccount.ModuleProtocol.cs` 加入 `tests/SmartAccount.Contracts.Tests/StoragePrefixMapTests.cs` 的 `WalletPartials`，**与首次键使用同一批次**（DeriveShape 要求使用证据） |

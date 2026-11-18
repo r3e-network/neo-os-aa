@@ -4,7 +4,7 @@ Each ordinary verifier requires the pinned SA core to call it with an exact
 per-account configuration context. A MultiSig root forwarding to a child cannot
 satisfy that check. The core source provides a bounded child initialization path.
 `callVerifierChild(accountId, childVerifier, method, args)` and the `getChildVerifierConfig(accountId)` read described below are absent from the pinned
-deployed artifact (`contracts/build/SmartAccountV3.manifest.json` exports
+deployed artifact (`contracts/build/SmartAccount.manifest.json` exports
 neither), so a deployment must be rebuilt before an integrator can call the path
 this document describes (DS-CU-202 finding F1).
 

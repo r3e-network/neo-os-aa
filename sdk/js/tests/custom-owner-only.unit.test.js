@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { SmartAccountClient } = require('../src/index');
-const stateFixture = require('./fixtures/ordinary-owner-only-contract-state.json');
+const stateFixture = require('./fixtures/custom-owner-only-contract-state.json');
 
 const CORE = '11'.repeat(20);
 const ACCOUNT = '22'.repeat(20);
@@ -28,7 +28,7 @@ function clientWithState(state = fixture(), result = { state: 'HALT', stack: [{ 
   return { client, calls };
 }
 
-test('ordinary owner-only payload is a direct core call with one account-id Hash160', () => {
+test('custom owner-only payload is a direct core call with one account-id Hash160', () => {
   const client = new SmartAccountClient('http://127.0.0.1:9', CORE);
   const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: '0x' + ACCOUNT });
   assert.equal(payload.scriptHash, CORE);
@@ -40,7 +40,7 @@ test('ordinary owner-only payload is a direct core call with one account-id Hash
   assert.throws(() => client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: '00'.repeat(20) }), (error) => error.code === 'SDK_007' && /nonzero/i.test(error.details.hint));
 });
 
-test('mode query distinguishes verified ordinary support false and true', async () => {
+test('mode query distinguishes verified custom support false and true', async () => {
   for (const value of [false, true]) {
     const { client, calls } = clientWithState(fixture(), { state: 'HALT', stack: [{ type: 'Boolean', value }] });
     assert.deepEqual(await client.getOwnerOnlyRecoveryStatus(ACCOUNT), { supported: true, ownerOnlyRecovery: value });
@@ -109,7 +109,7 @@ test('RPC faults and malformed Boolean mode values fail closed', async () => {
 });
 
 
-test('ordinary status query consumes actual JSON-RPC contract-state and Boolean wire responses', async (t) => {
+test('custom status query consumes actual JSON-RPC contract-state and Boolean wire responses', async (t) => {
   const { createServer } = require('node:http');
   const requests = [];
   const server = createServer(async (request, response) => {

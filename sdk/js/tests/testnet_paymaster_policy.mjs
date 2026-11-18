@@ -21,7 +21,7 @@ const SKIP_PAYMASTER_ALLOWLIST_UPDATE = process.env.SKIP_PAYMASTER_ALLOWLIST_UPD
 const { resolvePaymasterAuthorizeEndpoint } = paymasterRuntimeConfig;
 const PAYMASTER_ENDPOINT = resolvePaymasterAuthorizeEndpoint(process.env);
 const LOCAL_PAYMASTER_HANDLER_PATH = resolveLocalPaymasterHandlerPath();
-const REPORT_DIR = path.resolve(MODULE_DIR, "..", "..", "docs", "reports");
+const REPORT_DIR = path.resolve(MODULE_DIR, "..", "..", "..", "docs", "reports");
 const LOCAL_PAYMASTER_SIGNER_ENV_KEYS = [
   "NEO_TESTNET_WIF",
   "NEO_N3_WIF",
@@ -254,7 +254,7 @@ async function main() {
   };
 
   await mkdir(REPORT_DIR, { recursive: true });
-  const reportPath = path.join(REPORT_DIR, "v3-testnet-paymaster-policy.latest.json");
+  const reportPath = path.join(REPORT_DIR, "sa-testnet-paymaster-policy.latest.json");
   await writeFile(reportPath, JSON.stringify(report, null, 2));
 
   console.log(JSON.stringify({

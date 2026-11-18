@@ -35,7 +35,7 @@
 **精化与证明**
 
 - `SA-FORMAL-VERIFICATION.md`：总入口。给出 Coq 模型范围、运行时对应关系与**未覆盖边界**。任何"已形式化验证"的说法都必须能在这篇里定位到具体作用域。
-- `SA-IMPLEMENTATION-REFINEMENT.md`：普通合约实现的精化目标与验收条件。
+- `SA-IMPLEMENTATION-REFINEMENT.md`：custom 合约实现的精化目标与验收条件。
 - `SA-METHOD-REFINEMENT.md`：方法级精化的单一文档，13 节各自独立、互不叠加：
   - 第 1 节 工件清单与完整指令表——只做结构对账，明确声明不证明 VM、ApplicationEngine、编译器、存储或整方法语义；
   - 第 2–4 节 报销 helper 的源码投影、参考 VM 证书与固定引擎运行时检查；

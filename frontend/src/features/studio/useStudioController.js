@@ -88,9 +88,9 @@ export function useStudioController() {
   const registrationOwnerError = computed(() => {
     const issue = validateRegistrationOwner(createForm.value.backupOwner, connectedAccount.value);
     if (!createForm.value.backupOwner) return '';
-    if (issue === 'owner-mismatch') return t('ordinary.ownerMismatch', 'Connect the Neo backup owner wallet. This registration requests only the connected wallet witness.');
-    if (issue === 'owner-invalid') return t('ordinary.ownerInvalid', 'Enter a valid Neo N3 address or Neo script hash, not an Ethereum address.');
-    if (issue) return t('ordinary.walletRequired', 'Connect the Neo backup owner wallet first.');
+    if (issue === 'owner-mismatch') return t('custom.ownerMismatch', 'Connect the Neo backup owner wallet. This registration requests only the connected wallet witness.');
+    if (issue === 'owner-invalid') return t('custom.ownerInvalid', 'Enter a valid Neo N3 address or Neo script hash, not an Ethereum address.');
+    if (issue) return t('custom.walletRequired', 'Connect the Neo backup owner wallet first.');
     return '';
   });
   const canCreate = computed(() => {
@@ -512,7 +512,7 @@ export function useStudioController() {
   }
 
   function prepareGovernanceAction(operation) {
-    if (!isGovernanceOwner.value) throw new Error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
+    if (!isGovernanceOwner.value) throw new Error(t('custom.connectOwner', 'Connect the configured Neo backup owner.'));
     const review = buildGovernanceAction(manageSnapshot.value, operation, governanceOptions(operation));
     return { ...review, rpcUrl: resolveRpcUrl(walletService), coreHash: getSmartAccountHash(), wallet: connectedAccount.value };
   }
@@ -530,21 +530,21 @@ export function useStudioController() {
       const sameContext = () => review.rpcUrl === resolveRpcUrl(walletService)
         && review.coreHash === getSmartAccountHash() && review.wallet === connectedAccount.value
         && review.snapshot.accountId === normalizeAccountId(manageForm.value.accountAddress).toLowerCase();
-      if (!sameContext()) throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
+      if (!sameContext()) throw new Error(t('custom.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
       const fresh = await fetchGovernanceSnapshot(review.snapshot.accountId);
-      if (!sameContext()) throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
+      if (!sameContext()) throw new Error(t('custom.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
       assertGovernanceReviewCurrent(review, fresh, connectedAccount.value);
       const current = buildGovernanceAction(fresh, review.operation, governanceOptions(review.operation));
-      if (JSON.stringify(current.args) !== JSON.stringify(review.args)) throw new Error(t('ordinary.requestChanged', 'Governance inputs changed. Review again.'));
-      const label = review.operation === 'finalizeEscapeToOwner' ? t('ordinary.ownerOnlyFinalize', 'Finalize permanent owner-only recovery') : review.operation;
+      if (JSON.stringify(current.args) !== JSON.stringify(review.args)) throw new Error(t('custom.requestChanged', 'Governance inputs changed. Review again.'));
+      const label = review.operation === 'finalizeEscapeToOwner' ? t('custom.ownerOnlyFinalize', 'Finalize permanent owner-only recovery') : review.operation;
       const result = await invokeOperation(label, review.operation, review.args, { waitForConfirmation: true });
       if (result.status === TX_STATUS.CONFIRMED) {
-        governanceOutcome.value = t('ordinary.confirmedRefresh', 'Confirmed on-chain. Refresh account state before the next action.');
+        governanceOutcome.value = t('custom.confirmedRefresh', 'Confirmed on-chain. Refresh account state before the next action.');
         manageSnapshot.value = createManageSnapshotState();
       } else if (result.status === TX_STATUS.FAILED && review.operation === 'finalizeEscape') {
-        governanceOutcome.value = t('ordinary.escapeFailed', 'Recovery failed. A plugin cleanup fault rolls back account changes; this recovery does not transfer assets. A mined failed transaction may still charge fees.');
+        governanceOutcome.value = t('custom.escapeFailed', 'Recovery failed. A plugin cleanup fault rolls back account changes; this recovery does not transfer assets. A mined failed transaction may still charge fees.');
       } else if (result.status === TX_STATUS.PENDING) {
-        governanceOutcome.value = t('ordinary.pendingConfirmation', 'Submitted; confirmation is still unknown. Check the transaction before repeating an action.');
+        governanceOutcome.value = t('custom.pendingConfirmation', 'Submitted; confirmation is still unknown. Check the transaction before repeating an action.');
         manageSnapshot.value = createManageSnapshotState();
       }
     } catch (err) {
@@ -568,7 +568,7 @@ export function useStudioController() {
   async function saveMetadata() {
     if (!requireWallet() || governanceBusy.value || !canManageTarget.value) return;
     if (!isGovernanceOwner.value) {
-      toast.error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
+      toast.error(t('custom.connectOwner', 'Connect the configured Neo backup owner.'));
       return;
     }
 
@@ -611,14 +611,14 @@ export function useStudioController() {
         walletContext: walletService.contextVersion,
       });
 
-      if (!sameContext() || walletService.sessionState !== 'verified') throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
+      if (!sameContext() || walletService.sessionState !== 'verified') throw new Error(t('custom.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
       const fresh = await fetchGovernanceSnapshot(accountIdHash);
-      if (!sameContext() || walletService.sessionState !== 'verified') throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
+      if (!sameContext() || walletService.sessionState !== 'verified') throw new Error(t('custom.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
       if (String(fresh.backupOwner || '').toLowerCase() !== intent.backupOwner) {
-        throw new Error(t('ordinary.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
+        throw new Error(t('custom.reviewChanged', 'Account, wallet or network changed. Load and review again.'));
       }
       if (validateRegistrationOwner(fresh.backupOwner, intent.wallet)) {
-        throw new Error(t('ordinary.connectOwner', 'Connect the configured Neo backup owner.'));
+        throw new Error(t('custom.connectOwner', 'Connect the configured Neo backup owner.'));
       }
 
       // On-chain: set MetadataUri
@@ -632,7 +632,7 @@ export function useStudioController() {
 
       if (result.status !== TX_STATUS.CONFIRMED) {
         if (result.status === TX_STATUS.PENDING) {
-          governanceOutcome.value = t('ordinary.metadataPending', 'Metadata transaction is awaiting confirmation. The off-chain profile was not updated. Refresh before trying again.');
+          governanceOutcome.value = t('custom.metadataPending', 'Metadata transaction is awaiting confirmation. The off-chain profile was not updated. Refresh before trying again.');
         }
         return;
       }
@@ -646,7 +646,7 @@ export function useStudioController() {
         || walletService.sessionState !== 'verified'
         || String(confirmedSnapshot.backupOwner || '').toLowerCase() !== intent.backupOwner
         || validateRegistrationOwner(confirmedSnapshot.backupOwner, intent.wallet)) {
-        toast.warning(t('ordinary.metadataChanged', 'On-chain metadata was confirmed, but the account or form changed while signing. Refresh the account before syncing the off-chain profile.'));
+        toast.warning(t('custom.metadataChanged', 'On-chain metadata was confirmed, but the account or form changed while signing. Refresh the account before syncing the off-chain profile.'));
         return;
       }
 
@@ -699,7 +699,7 @@ export function useStudioController() {
     permissionsBusy.value.verifierCall = true;
     try {
       const accountIdHash = deriveAccountIdHash(normalizeAccountId(permissionsForm.value.accountAddress));
-      if ((await fetchGovernanceSnapshot(accountIdHash)).ownerOnlyRecovery) throw new Error(t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.'));
+      if ((await fetchGovernanceSnapshot(accountIdHash)).ownerOnlyRecovery) throw new Error(t('custom.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.'));
       await invokeOperation('Call verifier plugin', 'callVerifier', [
         { type: 'Hash160', value: accountIdHash },
         { type: 'String', value: permissionsForm.value.verifierMethod.trim() },
@@ -721,7 +721,7 @@ export function useStudioController() {
     permissionsBusy.value.hookCall = true;
     try {
       const accountIdHash = deriveAccountIdHash(normalizeAccountId(permissionsForm.value.accountAddress));
-      if ((await fetchGovernanceSnapshot(accountIdHash)).ownerOnlyRecovery) throw new Error(t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.'));
+      if ((await fetchGovernanceSnapshot(accountIdHash)).ownerOnlyRecovery) throw new Error(t('custom.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.'));
       await invokeOperation('Call hook plugin', 'callHook', [
         { type: 'Hash160', value: accountIdHash },
         { type: 'String', value: permissionsForm.value.hookMethod.trim() },

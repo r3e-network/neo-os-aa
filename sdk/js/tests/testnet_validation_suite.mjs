@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(MODULE_DIR, "..");
-const SDK_REPORT_DIR = path.resolve(ROOT_DIR, "..", "docs", "reports");
+const SDK_REPORT_DIR = path.resolve(ROOT_DIR, "..", "..", "docs", "reports");
 const REPO_REPORT_DIR = path.resolve(ROOT_DIR, "..", "..", "docs");
 const REPO_ROOT = path.resolve(ROOT_DIR, "..", "..");
 const DATE_PREFIX = "2026-03-14";
@@ -28,38 +28,38 @@ const STAGES = [
   {
     id: "smoke",
     title: "V3 Smoke",
-    command: ["node", "tests/v3_testnet_smoke.js"],
+    command: ["node", "tests/testnet_smoke.js"],
     requiredEnv: ["TEST_WIF"],
   },
   {
     id: "plugin_matrix",
     title: "V3 Plugin Matrix",
-    command: ["node", "tests/v3_testnet_plugin_matrix.js"],
+    command: ["node", "tests/testnet_plugin_matrix.js"],
     requiredEnv: ["TEST_WIF"],
   },
   {
     id: "market_escrow",
     title: "V3 Market Escrow",
-    command: ["node", "tests/v3_testnet_market_escrow.js"],
+    command: ["node", "tests/testnet_market_escrow.js"],
     requiredEnv: ["TEST_WIF"],
   },
   {
     id: "paymaster_onchain",
     title: "V3 Paymaster On-Chain",
-    command: ["node", "tests/v3_testnet_paymaster_onchain.mjs"],
+    command: ["node", "tests/testnet_paymaster_onchain.mjs"],
     requiredEnv: ["TEST_WIF"],
   },
   {
     id: "paymaster_policy",
     title: "V3 Paymaster Policy",
-    command: ["node", "tests/v3_testnet_paymaster_policy.mjs"],
+    command: ["node", "tests/testnet_paymaster_policy.mjs"],
     requiredEnvAny: [["MORPHEUS_RUNTIME_TOKEN", "PHALA_API_TOKEN", "PHALA_SHARED_SECRET"]],
     optional: true,
   },
   {
     id: "paymaster",
     title: "V3 Paymaster Relay",
-    command: ["node", "tests/v3_testnet_paymaster_relay.mjs"],
+    command: ["node", "tests/testnet_paymaster_relay.mjs"],
     requiredEnv: ["TEST_WIF"],
     requiredEnvAny: [["MORPHEUS_RUNTIME_TOKEN", "PHALA_API_TOKEN", "PHALA_SHARED_SECRET"]],
     optional: true,
@@ -493,7 +493,7 @@ async function writeReports(report) {
   await mkdir(SDK_REPORT_DIR, { recursive: true });
   await mkdir(REPO_REPORT_DIR, { recursive: true });
 
-  const latestFilename = `v3-testnet-validation-suite.latest.json`;
+  const latestFilename = `sa-testnet-validation-suite.latest.json`;
   const markdownFilename = `TESTNET_VALIDATION_SUMMARY.md`;
 
   const latestPath = path.join(SDK_REPORT_DIR, latestFilename);

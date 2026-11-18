@@ -88,7 +88,7 @@ public class Fix_ModuleAbi_Tests
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccount");
         string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
-        string verifierDir = Path.Combine(root, "contracts", "bin", "v3", "verifiers");
+        string verifierDir = Path.Combine(root, "contracts", "bin", "public", "verifiers");
         byte[] nef = File.ReadAllBytes(Path.Combine(verifierDir, "NeoNativeVerifier.nef"));
         ContractManifest manifest = ContractManifest.Parse(
             File.ReadAllText(Path.Combine(verifierDir, "NeoNativeVerifier.manifest.json")));

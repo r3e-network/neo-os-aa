@@ -136,7 +136,7 @@ def extract_fees(sources):
                 sourceFrontendVerified=False)
 
 def bind_artifact(nef=None, manifest=None):
-    nef = Path(nef) if nef else REPO / 'contracts/bin/v3/SmartAccountV3.nef'
+    nef = Path(nef) if nef else REPO / 'contracts/bin/public/SmartAccountV3.nef'
     manifest = Path(manifest) if manifest else nef.with_suffix('.manifest.json')
     raw, raw_manifest = nef.read_bytes(), manifest.read_bytes()
     require(digest(raw) == NEF_SHA and digest(raw_manifest) == MANIFEST_SHA, 'Unreviewed helper artifact identity')

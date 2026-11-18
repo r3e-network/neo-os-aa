@@ -3,7 +3,7 @@
 `neo-os-sa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Smart Accounts on Neo N3.
 
 The project keeps two implementation tracks for one smart-account protocol.
-`SmartAccountV3` is the current user-contract delivery path for NeoOS;
+The custom `SmartAccount` contract is the current user-contract delivery path for NeoOS;
 the protocol's native `SmartAccount` service is developed in parallel for
 the standard submission path. Start with the [implementation strategy](docs/SA-IMPLEMENTATION-STRATEGY.md)
 and [capability boundaries](docs/SA-SYSTEM-STATUS.md). For the native track,
@@ -36,13 +36,13 @@ Runtime and deployment boundaries:
 
 - This repository retains `SmartAccountV3` compatibility for the public deployments listed below, alongside the native `SmartAccount` implementation.
 - V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
-- The public `v3` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
+- The `public` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
 - [System capability boundaries](docs/SA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
 - The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
 - The canonical shared testnet SA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
 The two implementation versions live on this branch, each in its own directory
-under `contracts/`: the [ordinary user-contract](contracts/custom/README.md) in
+under `contracts/`: the [custom user-contract](contracts/custom/README.md) in
 `contracts/custom/` and the [native SmartAccount profile](contracts/native/README.md)
 in `contracts/native/`. The verifier, hook and recovery plugins that both
 implementations bind live in `contracts/plugins/`. Each `profile.json` maps its
@@ -223,10 +223,10 @@ If you want the clearest end-to-end explanation, read these docs in order:
 - `.NET SDK 10`
 - `Node.js 22.12+`
 - the Neo compiler, pinned: `dotnet tool install -g neo.compiler.csharp --version 3.9.1`
-- access to nuget.org. The ordinary contract and test projects use published packages pinned
+- access to nuget.org. The custom contract and test projects use published packages pinned
   by `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
   `node scripts/check_neo_platform_packages.mjs` checks the pins and
-  `docs/SA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. Public `v3`
+  `docs/SA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. `public`
   verifier callbacks execute on the published TestEngine. Only the separate `PLATFORM` artifact
   requires the private `System.Contract.CallWithGasLimit` extension; its budget guarantees must
   not be attributed to the public build (`docs/NEO-PLATFORM-PACKAGES.md`).
@@ -269,10 +269,10 @@ when requested, a missing tool fails the gate rather than producing a pass:
 ./scripts/verify_repo.sh --contracts-only --formal --neoexpress
 ```
 
-For `ordinary` or `all`, `--neoexpress` uses published NeoExpress for the public
-v3 source suite. Its eight deployed modules are linked to the rebuild certificate
+For `custom` or `all`, `--neoexpress` uses published NeoExpress for the public
+source suite. Its eight deployed modules are linked to the rebuild certificate
 through exact artifact hashes and full RPC readback. It writes distinct
-`sa-ordinary-source-chain-*` and `sa-ordinary-runtime-provenance-*` receipts.
+`sa-custom-source-chain-*` and `sa-custom-runtime-provenance-*` receipts.
 The private PLATFORM full-module matrix and native-chain validators have
 separate entrypoints; this source suite does not establish public deployment.
 
@@ -304,7 +304,7 @@ release-grade cross-repository switch that `verify_repo.sh` also honours) makes 
 
 ### Live Testnet Validation
 
-See `TESTNET_QUICKSTART.md` for the dry-run-first entry point.
+See [`docs/TESTNET_QUICKSTART.md`](docs/TESTNET_QUICKSTART.md) for the dry-run-first entry point.
 
 ```bash
 cd sdk/js
@@ -320,12 +320,12 @@ For the off-chain Morpheus paymaster lanes, the validators also fall back to the
 
 The runner now executes the current V3 live testnet flow in order:
 
-- `v3_testnet_smoke.js`
-- `v3_testnet_plugin_matrix.js`
-- `v3_testnet_market_escrow.js`
-- `v3_testnet_paymaster_onchain.mjs`
-- `v3_testnet_paymaster_policy.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
-- `v3_testnet_paymaster_relay.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
+- `testnet_smoke.js`
+- `testnet_plugin_matrix.js`
+- `testnet_market_escrow.js`
+- `testnet_paymaster_onchain.mjs`
+- `testnet_paymaster_policy.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
+- `testnet_paymaster_relay.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
 
 You can also run the stages individually with:
 
@@ -339,7 +339,7 @@ npm run testnet:validate:paymaster
 npm run testnet:validate:report
 ```
 
-The suite writes JSON artifacts under `sdk/docs/reports/`.
+The suite writes JSON artifacts under `docs/reports/`.
 
 ### Platform Registrar Service
 
@@ -383,7 +383,7 @@ verbatim in
 [`docs/reports/testnet-validation-v1v2-2026-03.md`](docs/reports/testnet-validation-v1v2-2026-03.md).
 
 ## Structure
-- `contracts/custom/`: C# Smart Contract implementation of the Master Entry Contract (the user-contract `SmartAccountV3` core) and its service contracts.
+- `contracts/custom/`: C# Smart Contract implementation of the Master Entry Contract (the user-contract `SmartAccount` core) and its service contracts.
 - `contracts/native/`: True source of the native consensus `SmartAccount` service and the overlay Neo core project that compiles it.
 - `contracts/plugins/`: Plugin contracts shared by both implementations.
 - `contracts/plugins/verifiers/`: Verifier plugins (Web3Auth, TEE, WebAuthn, SessionKey, MultiSig, etc.).

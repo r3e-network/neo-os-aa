@@ -1747,7 +1747,7 @@ def run_source(workdir, port, receipt_path, source_dir=None):
         receipt["source"] = profile
         artifacts = srcbuild.artifact_snapshot(source_dir)
         receipt["sourceArtifactRuntime"] = {
-            "schema": "neoos-sa-ordinary-source-artifact-runtime/v1",
+            "schema": "neoos-sa-custom-source-artifact-runtime/v1",
             "publicNetwork": False, "scope": "8 deployed artifacts only",
             "artifacts": artifacts, "readback": [],
             "runnerSourceSha256": runner_sources,
@@ -2061,7 +2061,7 @@ def validate_source_artifact_runtime(receipt):
     failures = []
     try:
         evidence = receipt["sourceArtifactRuntime"]
-        if evidence["schema"] != "neoos-sa-ordinary-source-artifact-runtime/v1" or evidence["publicNetwork"] is not False:
+        if evidence["schema"] != "neoos-sa-custom-source-artifact-runtime/v1" or evidence["publicNetwork"] is not False:
             return ["source artifact evidence schema and private network"]
         if evidence["scope"] != "8 deployed artifacts only":
             failures.append("source artifact evidence scope")

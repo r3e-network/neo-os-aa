@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(MODULE_DIR, "..", "..", "..");
-const REPORT_DIR = path.resolve(REPO_ROOT, "sdk", "docs", "reports");
+const REPORT_DIR = path.resolve(REPO_ROOT, "docs", "reports");
 const REGISTRY_PATH = path.resolve(REPO_ROOT, "frontend", "src", "config", "generatedMorpheusRegistry.js");
 const NEO_NNS_CONTRACT_HASH = "50ac1c37690cc2cfc594472833cf57505d5f46de";
 const NEO_NNS_ADDRESS_RECORD_TYPE = 16;
@@ -235,7 +235,7 @@ async function main() {
   };
 
   await mkdir(REPORT_DIR, { recursive: true });
-  const reportPath = path.join(REPORT_DIR, "v3-mainnet-readonly.latest.json");
+  const reportPath = path.join(REPORT_DIR, "sa-mainnet-readonly.latest.json");
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 
   process.stdout.write(`${JSON.stringify({

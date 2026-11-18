@@ -22,7 +22,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: SubscriptionVerifier.cs" Importance="high" />
-    <Exec Command="nccs ./SubscriptionVerifier.csproj -o ../../bin/v3/verifiers" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./SubscriptionVerifier.csproj -o ../../bin/public/verifiers" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

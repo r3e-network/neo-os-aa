@@ -21,7 +21,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: NeoNativeVerifier.cs" Importance="high" />
-    <Exec Command="nccs ./NeoNativeVerifier.csproj -o ../../bin/v3/verifiers" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./NeoNativeVerifier.csproj -o ../../bin/public/verifiers" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

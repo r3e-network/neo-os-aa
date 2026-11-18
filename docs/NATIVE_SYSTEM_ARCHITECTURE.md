@@ -8,7 +8,7 @@ small, explicit authorization boundary. The [ABI 2 profile](proposals/SMARTACCOU
 defines the wire contract. The [SDK](NATIVE_SDK.md) and [workspace](NATIVE_ACCOUNT_WORKSPACE.md)
 consume that contract; neither can grant authority the native contract rejects.
 The profile remains a draft until the Neo proposal and activation process is
-complete. Public `SmartAccountV3` and private `PLATFORM` are separate
+complete. The custom `SmartAccount` public build and its private `PLATFORM` build are separate
 runtime profiles with separate account identities and artifacts. Native
 implementation progress does not retire or suspend deployed-contract development.
 

@@ -12,8 +12,8 @@ test('public artifact selection cannot escape into the private profile', () => {
   }
   // path.join yields native separators; the suffix pin must not depend on the host OS.
   const sep = '[\\\\/]';
-  assert.match(artifactPaths('SmartAccount').nef, new RegExp(`contracts${sep}bin${sep}v3${sep}SmartAccount\\.nef$`));
-  assert.match(artifactPaths('verifiers/WebAuthnVerifier').nef, new RegExp(`contracts${sep}bin${sep}v3${sep}verifiers${sep}WebAuthnVerifier\\.nef$`));
+  assert.match(artifactPaths('SmartAccount').nef, new RegExp(`contracts${sep}bin${sep}public${sep}SmartAccount\\.nef$`));
+  assert.match(artifactPaths('verifiers/WebAuthnVerifier').nef, new RegExp(`contracts${sep}bin${sep}public${sep}verifiers${sep}WebAuthnVerifier\\.nef$`));
 });
 
 function stubContract(t, methods) {

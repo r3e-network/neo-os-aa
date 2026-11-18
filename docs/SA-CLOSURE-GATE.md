@@ -175,7 +175,7 @@ the NEF header names it and its code generation decides the bytes), each project
 file, every source file feeding it, and the sha256 of all twelve artifacts;
 `formal/refinement/plugins/build-plugins.sh` is the recorded build step and exits
 non-zero if a rebuild disagrees with those hashes. This is exactly the standing
-`contracts/bin/v3` has for the main contract, and it is not a claim that the plugins
+`contracts/bin/public` has for the main contract, and it is not a claim that the plugins
 are correct.
 
 A fourth block, `abiScenarioRegistrar`, runs
@@ -338,7 +338,7 @@ Gate 35 adds the third scenario. It snapshotted 121 tool files, ran 26 command j
 with none non-zero or timed out, and returned the same `NO-GO` with the same four
 obligations open and `fullUnprovedCount 100`. (Both counts are read off
 `snapshot.json` and `result.json` respectively: the snapshot total includes the
-contract NEF and manifest, `OrdinarySponsorship.v` and the five helper-gas runtime
+contract NEF and manifest, `CustomSponsorship.v` and the five helper-gas runtime
 receipts, of which 113 are under `formal/refinement`; the job count is the
 `commands` block, which is five larger than `commands.json` because that file
 records only the captured lanes. Getting either wrong would misreport what the run
@@ -459,7 +459,7 @@ than to relax the check.
 The tool first snapshots the called lanes' Python imports/literal resources,
 exporter source project membership (excluding generated `bin/obj` files),
 referenced Coq models, fixtures and
-the imported `OrdinarySponsorship.v`. For each captured input, one read supplies
+the imported `CustomSponsorship.v`. For each captured input, one read supplies
 both the hash and copied executable bytes. The copied verifier and copied provers run from this
 snapshot. The source root and production NEF/manifest stay the current repository
 inputs; the fresh exporter records and the strict verifier checks their exact
@@ -691,7 +691,7 @@ any plausible trace: `crosscheck_runtime` rejects a receipt whose `nefSha256` or
 `manifestSha256` differs from the pinned artifact with `Runtime artifact
 mismatch`. That check is what kept this lane failing closed after the contract
 rename invalidated the 2026-10-13 capture, and again after the 2026-11-16
-design-phase legacy-compatibility sweep changed the ordinary core artifact;
+design-phase legacy-compatibility sweep changed the custom core artifact;
 each time the lane stayed red until the producer test was re-run against the
 fresh artifact (currently NEF `9f714866…`). The reviewed five-shape capture
 is archived in-repo as

@@ -10,7 +10,7 @@
     "authorityEpoch": 1,
     "validatorId": 0,
     "credentialGeneration": 1,
-    "legacyCursorSameChannel": "TODO: value previously stored under legacy 0x03 (ordinary) / 0x20 (native) for the same channel",
+    "legacyCursorSameChannel": "TODO: value previously stored under legacy 0x03 (custom) / 0x20 (native) for the same channel",
     "newCursor": 7,
     "sequence": 7
   },

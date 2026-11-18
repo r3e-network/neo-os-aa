@@ -138,7 +138,7 @@ const MUST_BE_IGNORED = [
   "sdk/js/node_modules/pkg/index.js",
   "scripts/node_modules/pkg/index.js",
   // .NET and nccs build output at every depth.
-  "contracts/bin/v3/SmartAccount.nef",
+  "contracts/bin/public/SmartAccount.nef",
   "contracts/obj/project.assets.json",
   "contracts/plugins/verifiers/bin/sc/SessionKeyVerifier.nef",
   "tests/SmartAccount.Contracts.Tests/bin/Release/net10.0/SmartAccount.Contracts.Tests.dll",

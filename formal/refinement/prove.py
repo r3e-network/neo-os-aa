@@ -252,7 +252,7 @@ def generated_proof(program, expression, recipe=None):
     vector = ";".join(str(byte) + "%nat" for byte in program)
     tactic = (recipe if recipe is not None else (ROOT / "proof_tactic.txt").read_text()).replace("PROGRAM_LENGTH", str(len(program)))
     return ("From Coq Require Import ZArith List Bool Lia.\n"
-        "Require Import IntegerSemantics CapArithmetic ArithmeticVm OrdinarySponsorship.\n"
+        "Require Import IntegerSemantics CapArithmetic ArithmeticVm CustomSponsorship.\n"
         "Import ListNotations.\nOpen Scope Z_scope.\n"
         "Definition actual_bytes : list nat := [" + vector + "].\n"
         "Definition actual_source : Expression := " + coq_expression(expression) + ".\n"
@@ -263,7 +263,7 @@ def generated_proof(program, expression, recipe=None):
         "Proof. vm_compute. reflexivity. Qed.\n"
         "Theorem source_ir_refines_protocol : forall cost requested reserved,\n"
         "  cap_domain cost requested reserved -> source_eval actual_source cost requested reserved =\n"
-        "    OrdinarySponsorship.charge cost requested reserved.\nProof.\n"
+        "    CustomSponsorship.charge cost requested reserved.\nProof.\n"
         " intros cost requested reserved [Hc [Hq Hr]].\n"
         " cbn [actual_source source_eval binary_value].\n"
         " apply OS_015_branch_free_cap_matches_abstract_charge; lia.\nQed.\n"
@@ -289,7 +289,7 @@ def prepare_models(output_dir):
     output_dir.mkdir(parents=True, exist_ok=True)
     coqc = shutil.which("coqc")
     require(coqc, "Missing coqc: no simulated kernel success")
-    files = [ROOT / "coq" / name for name in MODULES] + [REPO / "formal/coq/OrdinarySponsorship.v"]
+    files = [ROOT / "coq" / name for name in MODULES] + [REPO / "formal/coq/CustomSponsorship.v"]
     names, hashes = [], {}
     for path in files:
         raw = path.read_bytes()
@@ -311,7 +311,7 @@ def run_model_proofs(output_dir):
     directory, coqc, names, hashes = prepare_models(output_dir)
     coqchk = shutil.which("coqchk")
     require(coqchk, "Missing coqchk")
-    command([coqchk, "-silent", *(Path(m).stem for m in MODULES), "OrdinarySponsorship"], directory, directory / "coqchk.log")
+    command([coqchk, "-silent", *(Path(m).stem for m in MODULES), "CustomSponsorship"], directory, directory / "coqchk.log")
     return {"kernelChecked": True, "closedDeclarations": names, "modelSha256": hashes,
             "fullImplementationVerified": False}
 
@@ -352,7 +352,7 @@ def run_proofs(inventory, output_dir):
     target, _, _ = certify(directory, coqc, program, expression, recipe=recipe.decode("utf-8"))
     names += declarations(target.read_text())
     coqchk = shutil.which("coqchk"); require(coqchk, "Missing coqchk")
-    command([coqchk, "-silent", *(Path(m).stem for m in MODULES), "OrdinarySponsorship", "CapArtifact"],
+    command([coqchk, "-silent", *(Path(m).stem for m in MODULES), "CustomSponsorship", "CapArtifact"],
             directory, directory / "coqchk.log")
     _, version = command([coqc, "--version"], directory, directory / "coqc-version.log")
     require(digest(nef_paths[0]) == inventory["nef"]["sha256"], "NEF changed during proof")
@@ -428,7 +428,7 @@ def run_semantic_controls(output_dir):
         ("unchecked-overflow", "IntegerSemantics.v", "if integer_fitsb z then Some z else None", "Some z"),
         ("wrong-operand-order", "ArithmeticVm.v", "checked_binary operation lhs rhs", "checked_binary operation rhs lhs")):
         separate = directory / name; separate.mkdir()
-        for model in (*MODULES, "OrdinarySponsorship.v"):
+        for model in (*MODULES, "CustomSponsorship.v"):
             shutil.copyfile(directory / model, separate / model)
         path = separate / filename; source = path.read_text()
         require(source.count(old) == 1, "Ambiguous semantic mutation")

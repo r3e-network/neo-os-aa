@@ -44,7 +44,7 @@ const REGISTRATION_VECTOR = {
   escapeTimelock: 2592000,
 };
 // Matches the on-chain ComputeRegistrationAccountId display form and the SDK
-// (sdk/js/tests/v3_flow.unit.test.js pins the same value).
+// (sdk/js/tests/flow.unit.test.js pins the same value).
 const REGISTRATION_VECTOR_DISPLAY_HEX = '27c01243fca45e1b821dc3bb45267a579762d530';
 // Internal little-endian VM byte order, for raw script pushes only.
 const REGISTRATION_VECTOR_CHAIN_HEX = '30d56297577a2645bbc31d821b5ea4fc4312c027';

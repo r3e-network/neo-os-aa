@@ -36,7 +36,7 @@ modules twice and checks byte-for-byte reproduction. Retain both build receipts;
 never overwrite a historical receipt or substitute a newer source pin into it.
 
 Run `tests/NativeMultiSigProbe` in Release configuration against each artifact
-directory. The ordinary acceptance mode checks real module NEFs, actual proxy
+directory. The custom acceptance mode checks real module NEFs, actual proxy
 Verification, both callback budgets, basic and maximum arguments, malformed
 proofs, insufficient quorum, duplicate identities, phase denial and atomic
 rollback. Its transaction signers are synthetic and it uses an in-memory store.
@@ -141,7 +141,7 @@ cost. The [runtime build receipt](reports/native-domain-copy-20261009/runner-bui
 and each benchmark's loaded assembly hashes preserve that distinction.
 
 All 20 functional controls remain present, including two cross-scheme signer-domain
-cases. The [ordinary acceptance receipt](reports/native-domain-copy-20261009/candidate-acceptance.json)
+cases. The [custom acceptance receipt](reports/native-domain-copy-20261009/candidate-acceptance.json)
 also passes the existing identity and finite-scenario validator. The strict
 improvement check rejects the baseline compared with itself and accepts the
 candidate. The comparator's 15 unit tests cover malformed or mismatched receipts,
@@ -157,7 +157,7 @@ path: null, Integer, ByteString, Buffer, Array, Struct and Map receive no shortc
 Unsupported or cyclic result graphs must still fail before any child post call.
 Each child's operation arguments remain an independent deep copy.
 
-This candidate is inside `SMARTACCOUNT_NATIVE`; the ordinary contract path is
+This candidate is inside `SMARTACCOUNT_NATIVE`; the custom contract path is
 unchanged. It preserves both fresh policy commitments, current domain and
 authority reads, phase and code checks, and atomic rollback. No budget, fee
 schedule, module version or storage format change is part of it.
@@ -198,7 +198,7 @@ establish native contract authorization.
 The new raw samples, build and semantic receipts are retained as separate review
 artifacts. Earlier committed receipts remain historical evidence. Candidate NEFs
 remain outside the public build directory pending separate native delivery;
-the ordinary contract's source with `SMARTACCOUNT_NATIVE` disabled is identical
+the custom contract's source with `SMARTACCOUNT_NATIVE` disabled is identical
 before and after this change.
 
 ## Further measurement boundaries

@@ -6,7 +6,7 @@
 
 ### fixture 刷新（2026-11-16）
 
-2026-11-16 的设计阶段遗留兼容性清理改动了普通核心源码（移除了遗留存储前缀回退、轮换迁移面与依赖
+2026-11-16 的设计阶段遗留兼容性清理改动了custom 核心源码（移除了遗留存储前缀回退、轮换迁移面与依赖
 回填；恢复验证器的 v3 action ticket 被删除，`submitActionTicketV4` 重命名为
 `submitActionTicket`）。`formal/refinement/fixtures/` 下的精化 fixture 已针对清理后的候选重新
 蒸馏：RefinementExport 清单重新运行，`cap-method-source.json`、`initializer-source.json` 与
@@ -49,7 +49,7 @@ manifest `a6533d47…`）重新生成。被退役的清理前 getter 形状已�
 `0b81b25601ba7e2ec0b0d9b9cb0ab79ed809af03`、两次逐字节相同的干净构建、104 个运行时文件与 50
 个依赖包。更早的 2026-10-30 模块与 runner 回执仍是其所记录源码集的历史证据，不得用作当前溯源。
 
-另外，普通 SA 协议套件用同一源码构建的 NeoExpress 运行时端到端重跑了一遍。当前回执
+另外，custom SA 协议套件用同一源码构建的 NeoExpress 运行时端到端重跑了一遍。当前回执
 `docs/reports/sa-neoexpress-validation-20261031.json` 报告 `PASS`，并且对该私有链具备发布证据
 资格：25 个部署工件（24 个本地工件加同仓的 `NeoDIDRegistry`）、15 个场景、135 笔持久化交易
 （132 笔 HALT、3 笔 FAULT）、48 个预期负例（其中 45 个在持久化之前被拒绝）、132 条链上断言，
@@ -79,7 +79,7 @@ NeoExpress 回执同样与源码运行时绑定：它记录 PASS 源码构建回
 测试，其中 50 个环境门控跳过，无失败。跳过不计为证明，且该发现式运行不替代故障即闭合的闭合
 门禁，也不移动 `implementationVerified`。
 
-剩余边界是明确的：普通公开 v3 仍通过 `System.Contract.Call` 调用验证器，没有独立的子调用 gas
+剩余边界是明确的：custom 公开 profile 仍通过 `System.Contract.Call` 调用验证器，没有独立的子调用 gas
 上限。公开部署与公开工件一致性不在本次仅限私有的运行范围内。形式化与运行时证据也仍保留下文
 所述的密码学、完整 WitnessRule 与 NeoVM、编译器／精化、密钥独立性以及任意插件清理边界。本次
 刷新没有使用任何公开网络。
@@ -121,7 +121,7 @@ python3 formal/refinement/verify.py --timeout-seconds 1800 --output-dir /tmp/sa-
 单独的[实现精化门禁](SA-IMPLEMENTATION-REFINEMENT.md)现在把类型化 Roslyn 操作、逐字节相同的
 NCCS 重建、完整的 100 项 manifest 与独立解码的候选 NEF 绑定到一份实际的 Coq 证书上。已证明区域
 是 PC `[13667,13689)` 处的报销算术：22 条原始指令，带 signed-256 边界、类型化入口条件、结果
-相等、参数／局部帧保持，以及与既有 `OrdinarySponsorship.charge` 定义的相等。
+相等、参数／局部帧保持，以及与既有 `CustomSponsorship.charge` 定义的相等。
 
 主机 Rocq 9.2 与固定容器中的 Coq 8.18 独立接受同一份生成的证书，并用 `coqchk` 复检。
 各自检查 **38 条闭合声明**：23 条新增／本地声明与 15 条被导入的协议声明。不要把 38 加到历史
@@ -137,7 +137,7 @@ ApplicationEngine 对应关系，对这份历史证书而言仍然开放。其�
 
 ### 历史源码候选的主机闭合（2026-10-13）
 
-冻结的普通源码候选快照通过了主机模型门禁：**29 个 Coq 模块、490 条闭合声明、287 个被拒绝的语义
+冻结的custom 源码候选快照通过了主机模型门禁：**29 个 Coq 模块、490 条闭合声明、287 个被拒绝的语义
 变异体**（283 个 Coq 与四个 TLA）、**61,460 个 TLC 不同状态**，以及**七个 SMT 义务与七个控制**。
 门禁在验证前后各检查 59 个 SA 源码输入与 310 个 native-core 源码输入。runner 回归套件通过 68 个
 测试。受跟踪的回执是 `reports/sa-formal-ordinary-closure-20261013.json`（未包含在本检出中；
@@ -146,7 +146,7 @@ SHA-256 `7ad982a403b7c2b953c946f49ce42fe544be1b87fa3fbdd668078623070bc5b9`）；
 Z3 5.1.0、OpenJDK 26.0.2.1，以及 SHA-256 为
 `7beec0f04818732a62fa193731711a99aa4f11279499b2360a7d156c519ea78d` 的受复核 TLA jar。
 
-这使 **已声明的普通协议抽象与受复核的源码快照检查为 GO**：治理授权与延迟、累积交易赞助预留、
+这使 **已声明的custom 协议抽象与受复核的源码快照检查为 GO**：治理授权与延迟、累积交易赞助预留、
 以及仅所有者可执行的永久恢复都在其中。`implementationVerified` 仍为 **false**。源码片段检查与
 模型证明不确立 C# 到 NEF 再到 NeoVM 的精化、全入口点存储语义、密码学、完整费用记账、任意插件
 活性，或公开激活。
@@ -174,9 +174,9 @@ TLA jar 固定值。镜像构建通过既有的 `TLA_JAR_URL` 参数与一个临
 
 ### 先前的主机快照（2026-10-13）
 
-先前那份普通治理源码与模型快照通过了主机形式门禁：**27 个 Coq 模块、460 条闭合声明、258 个被
+先前那份custom 治理源码与模型快照通过了主机形式门禁：**27 个 Coq 模块、460 条闭合声明、258 个被
 拒绝的语义变异体、61,460 个 TLC 不同状态、六个 SMT 义务与六个控制**，native core 名册按 310 个
-确切源码文件检查。受跟踪的普通治理回执是 `reports/sa-formal-ordinary-go-20261013.json`（未包含在
+确切源码文件检查。受跟踪的custom 治理回执是 `reports/sa-formal-ordinary-go-20261013.json`（未包含在
 本检出中）（SHA-256 `a5becc179de6d55bf688dcede42b402ad4018a69ea061d16179e7ac89cdfae21`）。
 该验证运行还写出 `formal/.runs/ordinary-go-20261013/result.json`；受跟踪的副本保留在该检查点
 验证过的源码／模型身份。它不认证后续的赞助或仅所有者恢复改动。它使用 OpenJDK 26.0.2.1 运行。
@@ -189,12 +189,12 @@ TLA jar 固定值。镜像构建通过既有的 `TLA_JAR_URL` 参数与一个临
 进程不可用。更晚的独立容器运行记录在上面的当前源码候选主机闭合中；它认证那份更晚的固定快照，
 而不追溯改变这份历史回执。
 
-普通公开 profile 还保留两条协议级 NO-GO 边界：公开 `v3` 回调使用标准 `System.Contract.Call`
+custom 公开 profile 还保留两条协议级 NO-GO 边界：`public` 回调使用标准 `System.Contract.Call`
 而没有隔离的子调用预算；固定的公开 ABI 仍暴露即时的平台账户备份所有者轮换。源码候选现在包含
 带新所有者见证的两阶段提议／确认／取消路径，但闭合公开边界需要从固定的 90 条目工件迁移到受复核
 的源码候选 ABI、升级工件并进行公开回读；本仓库不会基于静态测试把它重新标记为已闭合。
 
-普通源码候选现在有显式的 Coq 治理模型（`OrdinaryGovernance.v`），覆盖 registrar 与所有者授权、
+custom 源码候选现在有显式的 Coq 治理模型（`CustomGovernance.v`），覆盖 registrar 与所有者授权、
 重复的待处理提议、七天确认延迟、新所有者见证、逃逸与托管排除、取消、边界清理，以及失败转移的
 原子性。这是一个有界的状态机对应模型；它不证明存储序列化、C# 到 NEF／NeoVM 精化，或公开部署。
 
@@ -204,13 +204,13 @@ TLA jar 固定值。镜像构建通过既有的 `TLA_JAR_URL` 参数与一个临
 治理失败证明保持治理记录不变，而该记录不建模 nonce 存储。它们不证明当前所有者对 registrar 提议
 的同意。
 
-`OrdinarySponsorship.v` 为每个核心建模一本账本，且交易在账户、赞助方、paymaster、单次调用、批量
+`CustomSponsorship.v` 为每个核心建模一本账本，且交易在账户、赞助方、paymaster、单次调用、批量
 与嵌套执行之间共享。预留先于外部回调发生；重复的成功预留之和最多为包含它的正交易费用。有一个
 定理把抽象收费与无分支源码表达式联系起来。零费用 RPC 估算保留请求的报价，并且没有持久化费用
 上限的主张。交易哈希身份、费用、已存储账本完整性、包含它的交易的回滚，以及实际 token 结算仍是
 实施对应义务。
 
-`OrdinaryRecovery.v` 建模源码候选的无回调恢复，直至不可逆的仅所有者锁存。它证明了对旧插件结果
+`CustomRecovery.v` 建模源码候选的无回调恢复，直至不可逆的仅所有者锁存。它证明了对旧插件结果
 的独立性、成熟度／见证／锁／托管守卫、根／上下文／意图的脱离、保留的身份与 nonce 投影、重复
 恢复的拒绝，以及恢复后非零根安装的拒绝。它没有重新打开插件权威的转移，也不主张原生权威纪元语义。
 具体存储清理、全入口点强制与见证有效性需要匹配的源码复核与 VM 测试。不可逆性限于本版本所建模的
@@ -220,13 +220,13 @@ TLA jar 固定值。镜像构建通过既有的 `TLA_JAR_URL` 参数与一个临
 
 活动的原生目标是 SmartAccount ABI 2，身份派生版本 1、授权／账户记录版本 2，并有独立的权威纪元
 与配置 nonce。原生恢复撤销旧的模块代际而无需外部清理。六个原生模块使用纪元作用域状态。普通
-公开 `v3` 与私有 `PLATFORM` 源码作为独立 profile 保留；原生主张必须绑定外部 Neo core 源码，
+`public` 与私有 `PLATFORM` 源码作为独立 profile 保留；原生主张必须绑定外部 Neo core 源码，
 而不是旧的已部署核心原型。
 
 未发布的 ABI 2 profile 现在要求每个模块都具有确切的 profile 指纹与严格的验证器组合标记。其原生
 复合模型使用瞬态三字段回执、首阈值选择、至多三个子项／两个批准／两个阈值／三个签名者域、每次
 操作全新的所有权、全活跃绑定检查，以及前／后策略相等。公开的 `MultiSigPolicy.v` 十字段／重复
-验证模型只适用于 `v3` 与 `PLATFORM`；`NativeCompositePhase.v` 覆盖独立的原生回执设计。Session 的
+验证模型只适用于 `public` 与 `PLATFORM`；`NativeCompositePhase.v` 覆盖独立的原生回执设计。Session 的
 纪元作用域前缀 `0x05` 存储确定性的签名者域配置，前缀 `0x06` 保存独立更新的最后使用时间；两者都
 不存储持久批准。两个模型都不证明字节复制、哈希、密码学、实现精化或 gas 可行性。
 
@@ -424,7 +424,7 @@ runner 测试。其回执是 `docs/reports/sa-formal-gate-20261006-native-intege
 有界守护进程探测。当前状态是 `HOST_PASS_CONTAINER_UNAVAILABLE`；更早的容器 PASS 不会复用于已
 变化的模型字节。
 
-### 历史普通合约证据
+### 历史custom 合约证据
 
 历史故障即闭合的 SA 本地门禁在 2026-09-21 通过：**5 个 Coq 模块、72 条闭合声明、30 个被拒绝的
 语义变异体、61,460 个 TLC 不同状态，以及 6 个 SMT 义务与 6 个控制**。主机运行与缓存基础镜像
@@ -436,18 +436,18 @@ TLC 不同状态、6 个 SMT 义务与 6 个控制**，runner 测试 **23/23**�
 版本记录在 [`sa-formal-gate-20261008.json`](reports/sa-formal-gate-20261008.json)。Docker 门禁
 未重跑；其固定值未变。
 
-2026-10-08 的源码把公开 `v3` 与私有 `PLATFORM` 执行分开。源码锁与每一条新的门禁结果都包含
+2026-10-08 的源码把 `public` 与私有 `PLATFORM` 执行分开。源码锁与每一条新的门禁结果都包含
 `runtimeProfiles` 与 `modelProfiles`；runner 拒绝缺失或改变的作用域元数据。`VerifierGasBudget.v`
-只适用于有界 `PLATFORM` 与原生回调。公开 `v3` 使用标准 `System.Contract.Call`，并且**没有**逐验证器
-的子调用 gas 预算。`ProxyWitnessScript.v` 只建模普通 public/private 直接调用解析器。原生特有的
+只适用于有界 `PLATFORM` 与原生回调。`public` 使用标准 `System.Contract.Call`，并且**没有**逐验证器
+的子调用 gas 预算。`ProxyWitnessScript.v` 只建模custom public/private 直接调用解析器。原生特有的
 生命周期、注册表、见证与模块模型标记为 `native`；只有共享的有界 MultiSig 策略抽象跨越全部
-profile。普通执行／逃逸模型、TLC 状态机与 uint256/paymaster SMT 文件仍属 public/private 合约
+profile。custom 执行／逃逸模型、TLC 状态机与 uint256/paymaster SMT 文件仍属 public/private 合约
 作用域。原生整数、生命周期与派发义务使用专门的原生模型。任何作用域标签都不确立源码／VM 精化或
 部署一致性。
 
 原生源码对应关系包含一份单独提供的 core 检出。`--native-core-root`（或
 `NEOOS_NATIVE_CORE_SOURCE`）对完整门禁是必需的。其受复核的源码名册与哈希在证明前后都被检查；
-缺失文件、多余文件、改变的字节或缺失溯源都会被拒绝。普通 SmartAccount 合约源码从不被用作原生
+缺失文件、多余文件、改变的字节或缺失溯源都会被拒绝。custom SmartAccount 合约源码从不被用作原生
 SmartAccount core 源码的替代。`NativeAuthorityEpoch.v` 检查独立的有界计数器、无回调恢复、被撤销
 的根／依赖／待处理意图、未变的身份／nonce／冻结状态、抽象的代际隔离与陈旧域拒绝。四参数的原生
 执行信封在未签名交易中承诺两个计数器；其守卫适用于托管回退与原生交易见证，也适用于操作签名
@@ -589,13 +589,13 @@ manifest-group 签名，或整个 NeoVM。
 |---|---|
 | `formal/coq/SmartAccountAA.v`（同仓：`verified/coq/`） | 针对授权、确切通道 nonce 使用、回滚、重入、逃逸所有者门控、仅成功状态转移，以及“缺失的 hook／验证器不能让回调阶段失败”这一规则的闭合 Coq 证明 |
 | `formal/coq/MultiSigPolicy.v` | **仅公开 V3/PLATFORM：** 有界十字段配置、确切签名基数与阈值支持；子项身份是抽象的 |
-| `formal/coq/OrdinaryGovernance.v` | **公开 V3/PLATFORM 源码候选：** 独立于调用方的所有者见证取消、确切毫秒延迟、待处理轮换与回滚；绑定／身份有效性是前提 |
-| `formal/coq/OrdinarySponsorship.v` | **公开 V3/PLATFORM 源码候选：** 交易级累积预留上限、请求界、零费用估算控制与失败回滚；没有存储／费用／VM 精化 |
-| `formal/coq/OrdinaryRecovery.v` | **公开 V3/PLATFORM 源码候选：** 无回调恢复与不可逆的仅所有者锁存，并带投影的身份／nonce 保持；没有存储或全入口点精化 |
+| `formal/coq/CustomGovernance.v` | **公开 V3/PLATFORM 源码候选：** 独立于调用方的所有者见证取消、确切毫秒延迟、待处理轮换与回滚；绑定／身份有效性是前提 |
+| `formal/coq/CustomSponsorship.v` | **公开 V3/PLATFORM 源码候选：** 交易级累积预留上限、请求界、零费用估算控制与失败回滚；没有存储／费用／VM 精化 |
+| `formal/coq/CustomRecovery.v` | **公开 V3/PLATFORM 源码候选：** 无回调恢复与不可逆的仅所有者锁存，并带投影的身份／nonce 保持；没有存储或全入口点精化 |
 | `formal/coq/NativeCompositePhase.v` | **仅原生 ABI 2：** 首阈值选择、单操作回执所有权与丢弃、已批准子项授予、全活跃固定，以及 3/2/2/3 界下的前／后策略相等；没有字节复制、哈希、密码学或 gas 可行性精化 |
 | `formal/coq/ProxyWitnessScript.v` | 代理见证交易脚本解析器的字节级模型（`ScriptIsSingleExecuteCall`、`ScriptPrefixIsDataPushes`、`DataPushInstructionSize`）：被接受的脚本是一段 data-push 行走，恰好落在期望的直接 `executeUserOp`/`executeUserOps` 调用及其双参数 pack 上，该行走中的每个指令起点都是 data-push 操作码（因此核心调用之前没有 SYSCALL/CALL/JMP/TRY），接受会绑定账户 id 与核心哈希，规范形状可达，而前导非 push 操作码、外来账户 id、越界 CallFlags push 与尾随指令都会被拒绝 |
 | `formal/coq/CallbackPluginTopology.v` | 六字段 hook 回调元组、已配置与缺失回调阶段、成功／回调顺序、CalledByEntry/Custom 目标绑定，以及故障即闭合的插件清理／轮换的闭合抽象对应模型；它不是 NeoVM 派发或任意插件存储的证明 |
-| `formal/coq/VerifierGasBudget.v` | **仅有界 PLATFORM／原生 profile：** 有界回调收费的闭合抽象模型：每次收费在变更之前检查回调与全部祖先预算，耗尽具有原子性，嵌套回调无法逃出祖先上限；不适用于公开 `v3` |
+| `formal/coq/VerifierGasBudget.v` | **仅有界 PLATFORM／原生 profile：** 有界回调收费的闭合抽象模型：每次收费在变更之前检查回调与全部祖先预算，耗尽具有原子性，嵌套回调无法逃出祖先上限；不适用于 `public` |
 | `formal/coq/AuthorizationEvidence.v` | 针对密码学、原生见证、证明与证明证据的闭合协议级绑定与重放模型；原始有效性是显式 oracle，因此这不是 ECDSA、见证规则求值、证明或 ZK 健全性的证明 |
 | `formal/coq/AttestationProofBinding.v` | 证明与零知识证据的闭合协议信封模型：账户、目标、nonce、发行方、度量承诺、非零 nullifier 与单次使用绑定；原始密码学与证明有效性仍是显式 oracle 输入 |
 | `formal/coq/WitnessRuleSemantics.v` | Neo 首匹配规则决策、默认拒绝、allow/deny 优先级、入口／直接子项作用域、condition 组合，以及解析器深度／子项限制的闭合有界模型；它不是 `ApplicationEngine` 或 group-key 密码学的精化证明 |
@@ -607,7 +607,7 @@ manifest-group 签名，或整个 NeoVM。
 | `formal/coq/AbiManifestProjection.v` | 闭合的有限、顺序无关 ABI 投影模型，要求确切的源码／manifest 覆盖、唯一的 `(name, arity)` 派发键、参数／返回／safe 相等，以及生成的 initializer |
 | `formal/coq/SignerDomainSeparation.v` | 要求确切授权域与载荷相等的闭合绑定模型；它拒绝跨域重放，但不证明私钥独立性或原始密码学健全性 |
 | `formal/coq/SignerIndependence.v` | 闭合的有限反模型，表明不同的公开签名者域并不蕴含私钥独立性；这是显式的信任边界证明，不是密钥生成证明 |
-| `formal/coq/PluginLifecycle.v` | **仅原生 profile：** 闭合的有限反模型，表明生命周期 ABI 并不蕴含对任意未来插件存储的完整清理，外加针对已认证清理函数的条件定理；普通 V3 生命周期主张仍是运行时／工件证据 |
+| `formal/coq/PluginLifecycle.v` | **仅原生 profile：** 闭合的有限反模型，表明生命周期 ABI 并不蕴含对任意未来插件存储的完整清理，外加针对已认证清理函数的条件定理；custom V3 生命周期主张仍是运行时／工件证据 |
 | `formal/tla/SmartAccountAA.tla`（同仓：`verified/tla/`） | Begin／成功／失败／Tick 转移的有限状态机探索 |
 | `formal/tla/SmartAccountAA.cfg` | TLC 边界与安全不变量 |
 | `formal/smt/aa_core.smt2`（同仓：`verified/smt/`） | Nonce 算术、游标推进、回滚等式、报销上限与预算算术 |
@@ -658,7 +658,7 @@ condition 种类派发之前应用该检查，而不只是在经 `Not`、`And` �
 
 私有 `PLATFORM` 源码分支与 `contracts/bin/platform` 核心通过
 `System.Contract.CallWithGasLimit` 调用验证器，回调预算为 1,000,000,000 datoshi（10 GAS）。公开
-`contracts/bin/v3` 使用标准 `System.Contract.Call`：验证是只读的，执行后记账保留写访问，两个回调
+`contracts/bin/public` 使用标准 `System.Contract.Call`：验证是只读的，执行后记账保留写访问，两个回调
 都没有隔离子调用预算。输入边界、交易总 gas 上限与模块准入都不能提供缺失的公开运行时能力。
 
 历史匹配的 Neo core/DevPack 运行时在 `HF_Iara` 处激活该私有系统调用；普通嵌套调用与有界后代消耗
@@ -687,12 +687,12 @@ MultiSig 模型另行证明有限策略层：非空、至多十、非零／不�
 复用负例与配置后复验向量；这些仍是有界 VM 证据，而不是完整 NeoVM 或密码学证明。策略模型也证明
 其抽象的回调后名册是唯一、已配置且受阈值支持的；这仍与具体回调精化分开。
 
-对于已部署的普通 public/PLATFORM profile：
+对于已部署的custom public/PLATFORM profile：
 
 清理模型证明故障即闭合的状态转移，而不是恢复可用性：`finalizeEscape` 仍依赖旧验证器与 hook 的
 成功清理。2026-10-08 的源码在这些回调之前验证替换验证器，但没有引入紧急脱离，也不保证越过恶意
 旧模块取得进展。`CallVerifierChild` 及其显式的 `getChildVerifierConfig` 能力不在已部署核心
-manifest（`contracts/build/SmartAccountV3.manifest.json`）中，尽管它们记录在源码快照中并在 NeoVM
+manifest（`contracts/build/SmartAccount.manifest.json`）中，尽管它们记录在源码快照中并在 NeoVM
 中测试过；两者都在当前抽象模型之外。那些模型不证明这条新路径的子配置 ABI、核心／拓扑绑定、
 待处理调用序列化或时间锁强制。项目文件与 profile 构建 recipe 也被固定，因此改变源码选择会使快照
 失效。哈希固定不是这些实现属性的证明。MultiSig 模型另行只证明有限策略层：非空、至多十、非零／
@@ -710,11 +710,11 @@ manifest（`contracts/build/SmartAccountV3.manifest.json`）中，尽管它们�
 协议边界现在在实现与提案中都是显式的：非零有效目标、方法长度 1--128 个 UTF-8 字节、参数个数
 至多 64、规范参数序列化至多 4096 字节、签名至多 1024 字节、非空批量至多 32 个操作，以及位于非负
 signed-256 位域（`0 <= value < 2^255`）的 nonce／截止时间。因此一个可执行 nonce 有 191 个通道位，
-而不是 192 个。当前普通源码对 `getNonce` 读取应用相同的 signed-VM 边界。一个历史已部署的基础工件
+而不是 192 个。当前custom 源码对 `getNonce` 读取应用相同的 signed-VM 边界。一个历史已部署的基础工件
 在重新发布之前可能仍准入更宽的 unsigned-192 位查询范围；这不会让那些上半通道变为可执行，也不是
 原生 profile 一致性。原生编解码器拒绝位于或高于 `2^191` 的通道。
 
-普通执行模型把回调谓词的作用域限定在已配置模块上：缺失的 hook 或验证器没有能够拒绝操作的
+custom 执行模型把回调谓词的作用域限定在已配置模块上：缺失的 hook 或验证器没有能够拒绝操作的
 回调阶段，而已安装模块必须正常返回。这在抽象模型中闭合了此前隐含的 `hookInstalled` 状态。回调
 非干扰性、回调存储隔离，以及这些谓词到具体 NeoVM 故障的对应关系仍是分开的运行时义务。
 
@@ -803,7 +803,7 @@ keg 与 `PATH`，并跳过 macOS 启动桩），因此在装有 JDK 的机器上
 已知规范 TestNet/MainNet 工件与当前本地工件不同；部署当前工件仍是单独的、需审批的门控操作。
 
 2026-10-06 的一次完整私有链验证（`scripts/neoexpress_validate.py`，通过
-`scripts/verify_repo.sh --neoexpress` 选择加入）把全部 24 个 `contracts/bin/v3` 工件加同仓
+`scripts/verify_repo.sh --neoexpress` 选择加入）把全部 24 个 `contracts/bin/public` 工件加同仓
 `NeoDIDRegistry` 工件（共 25 次部署）部署到全新的单节点 NeoExpress 链，用 106 笔 HALT 与 2 笔
 FAULT 的持久化交易驱动 14 个场景（38 个预期负例，其中 36 个为预检拒绝），检查 84 条链上断言，
 推进 5,619,600 秒模拟区块时间，并通过 JSON-RPC 以逐字节相同的 NEF script、匹配的校验和与语义
@@ -855,7 +855,7 @@ nonce 通道、重放、见证、截止时间与大小边界；带冷却与时�
 零费用估算回归测试之前。
 
 历史 2026-09-21 的源码到工件重放用匹配的私有编译器独立编译 scratch 树，并把 **76/76** 个
-NEF／manifest 文件与 `contracts/bin/v3` 逐字节比较；没有工件缺失或漂移。历史 `contracts/build`
+NEF／manifest 文件与 `contracts/bin/public` 逐字节比较；没有工件缺失或漂移。历史 `contracts/build`
 树仍是被显式报告的溯源锚点，而不是期望匹配项。见
 `docs/reports/sa-artifact-reproducibility-20261006.json`。
 

@@ -22,7 +22,7 @@ const { resolveTestnetRpcUrl } = require("./testnet-rpc");
 let RPC_URL =
   process.env.TESTNET_RPC_URL || "";
 const TEST_WIF = process.env.TEST_WIF || "";
-const REPORT_DIR = path.resolve(__dirname, "..", "..", "docs", "reports");
+const REPORT_DIR = path.resolve(__dirname, "..", "..", "..", "docs", "reports");
 const SELECTED_SCENARIOS = new Set(
   String(process.env.SA_MATRIX_SCENARIOS || "")
     .split(",")
@@ -116,10 +116,10 @@ function artifactPaths(baseName) {
     "NeoDIDCredentialHook",
   ]);
   const artifactDir = verifierNames.has(baseName)
-    ? path.join(repoRoot(), "contracts", "bin", "v3", "verifiers")
+    ? path.join(repoRoot(), "contracts", "bin", "public", "verifiers")
     : hookNames.has(baseName)
-      ? path.join(repoRoot(), "contracts", "bin", "v3", "hooks")
-      : path.join(repoRoot(), "contracts", "bin", "v3");
+      ? path.join(repoRoot(), "contracts", "bin", "public", "hooks")
+      : path.join(repoRoot(), "contracts", "bin", "public");
   return {
     nef: path.join(artifactDir, `${baseName}.nef`),
     manifest: path.join(artifactDir, `${baseName}.manifest.json`),
@@ -646,8 +646,8 @@ async function main() {
     matrix: {},
   };
   const reportFileName = SELECTED_SCENARIOS.size
-    ? `v3-testnet-plugin-matrix.${Array.from(SELECTED_SCENARIOS).join("_")}.json`
-    : "v3-testnet-plugin-matrix.latest.json";
+    ? `sa-testnet-plugin-matrix.${Array.from(SELECTED_SCENARIOS).join("_")}.json`
+    : "sa-testnet-plugin-matrix.latest.json";
   const reportPath = path.join(REPORT_DIR, reportFileName);
   latestReportContext = { results, reportPath };
 

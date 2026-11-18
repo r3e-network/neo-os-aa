@@ -1,20 +1,20 @@
 import assert from 'node:assert/strict';
 
-export const ordinaryOwner = '11'.repeat(19) + '12';
-export const ordinaryOtherOwner = '99'.repeat(19) + '98';
-export const ordinaryAccountId = '22'.repeat(19) + '23';
-export const ordinaryOtherAccountId = 'aa'.repeat(19) + 'ab';
-export const ordinaryCore = 'cc'.repeat(19) + 'cd';
-export const ordinaryRpcUrl = 'https://ordinary.fixture.test/rpc';
-export const ordinaryMagic = 123;
-export const ordinaryZero = '00'.repeat(20);
+export const customOwner = '11'.repeat(19) + '12';
+export const customOtherOwner = '99'.repeat(19) + '98';
+export const customAccountId = '22'.repeat(19) + '23';
+export const customOtherAccountId = 'aa'.repeat(19) + 'ab';
+export const customCore = 'cc'.repeat(19) + 'cd';
+export const customRpcUrl = 'https://custom.fixture.test/rpc';
+export const customMagic = 123;
+export const customZero = '00'.repeat(20);
 const integer = (value) => ({ type: 'Integer', value: String(value) });
 const boolean = (value) => ({ type: 'Boolean', value });
 const bytes = (hex) => ({ type: 'ByteString', value: Buffer.from(hex, 'hex').toString('base64') });
 const hash = (hex) => bytes(Buffer.from(hex, 'hex').reverse().toString('hex'));
 const none = () => ({ type: 'Any', value: null });
 
-export function createOrdinaryGovernanceFixture() {
+export function createCustomGovernanceFixture() {
   const matureAt = 1900000000000;
   const pending = (role) => ({
     module: (role === 'verifier' ? '55'.repeat(19) + '56' : '77'.repeat(19) + '78'),
@@ -28,7 +28,7 @@ export function createOrdinaryGovernanceFixture() {
     fullPendingRoles: ['verifier', 'hook'],
     verifier: '33'.repeat(19) + '34',
     hook: '44'.repeat(19) + '45',
-    backupOwner: ordinaryOwner,
+    backupOwner: customOwner,
     escapeTimelock: 604800,
     escapeTriggeredAt: 0,
     escapeActive: false,
@@ -47,7 +47,7 @@ export function createOrdinaryGovernanceFixture() {
     unexpectedRequests: [],
   };
   function contractState() {
-    return { hash: '0x' + ordinaryCore, manifest: { name: 'SmartAccountV3', abi: { methods: state.fullPendingRoles.map((role) => ({
+    return { hash: '0x' + customCore, manifest: { name: 'SmartAccountV3', abi: { methods: state.fullPendingRoles.map((role) => ({
       name: `getPending${role === 'verifier' ? 'Verifier' : 'Hook'}Update`,
       parameters: [{ name: 'accountId', type: 'Hash160' }],
       returntype: 'Any', safe: true,
@@ -62,7 +62,7 @@ export function createOrdinaryGovernanceFixture() {
   async function send(method, params = []) {
     state.calls.push({ method, params: structuredClone(params) });
     assert.notEqual(method, 'sendrawtransaction', 'browser fixture must never broadcast a raw transaction');
-    if (method === 'getversion') return { protocol: { network: ordinaryMagic } };
+    if (method === 'getversion') return { protocol: { network: customMagic } };
     if (method === 'getcontractstate') return contractState();
     if (method === 'getblockcount') return state.height + 1;
     if (method === 'getblockheader') {
@@ -75,10 +75,10 @@ export function createOrdinaryGovernanceFixture() {
     }
     assert.equal(method, 'invokefunction', `Unstubbed fixture RPC: ${method}`);
     const operation = params[1];
-    assert.equal(String(params[0]).replace(/^0x/, '').toLowerCase(), ordinaryCore);
+    assert.equal(String(params[0]).replace(/^0x/, '').toLowerCase(), customCore);
     assert.equal(params[2]?.length, 1);
     assert.equal(params[2][0].type, 'Hash160');
-    assert.equal(String(params[2][0].value).replace(/^0x/, '').toLowerCase(), ordinaryAccountId);
+    assert.equal(String(params[2][0].value).replace(/^0x/, '').toLowerCase(), customAccountId);
     const values = {
       getVerifier: () => hash(state.verifier), getHook: () => hash(state.hook), getBackupOwner: () => hash(state.backupOwner),
       getEscapeTimelock: () => integer(state.escapeTimelock), getEscapeTriggeredAt: () => integer(state.escapeTriggeredAt),
@@ -106,8 +106,8 @@ export function createOrdinaryGovernanceFixture() {
     } else if (request.operation === 'finalizeEscapeToOwner') {
       assert.equal(state.ownerOnlyRecoverySupported, true);
       state.ownerOnlyRecovery = true;
-      state.verifier = ordinaryZero;
-      state.hook = ordinaryZero;
+      state.verifier = customZero;
+      state.hook = customZero;
       state.escapeActive = false;
       state.escapeTriggeredAt = 0;
       state.pendingVerifier = null;

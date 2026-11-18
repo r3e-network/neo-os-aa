@@ -1,4 +1,4 @@
-(* Ordinary source-candidate callback-free recovery projection.
+(* Custom source-candidate callback-free recovery projection.
    Identity and nonce are ghost projections of retained storage; the model does
    not prove storage layout, compiler/VM refinement or witness validity. Mature
    timer, owner witness, whole-account lock and escrow predicates are abstract.

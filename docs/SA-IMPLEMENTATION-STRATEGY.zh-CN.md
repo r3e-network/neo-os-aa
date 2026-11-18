@@ -10,7 +10,7 @@
 
 | 路径 | 起始实现 | 交付边界 |
 | --- | --- | --- |
-| 已部署合约 | `SmartAccountV3`、其公开 `v3` 模块、`SmartAccountClient` 与应用 | 经工件、集成与发布校验之后，可部署在已发布的 Neo N3 运行时上 |
+| 已部署合约 | `SmartAccount`、其 `public` 模块、`SmartAccountClient` 与应用 | 经工件、集成与发布校验之后，可部署在已发布的 Neo N3 运行时上 |
 | 原生合约 | `SmartAccount`、原生 ABI 2 模块、`NativeSmartAccountClient` 与 `/native` | 匹配的节点实现、协议评审与硬分叉激活 |
 | 运行时实验 | 私有 `PLATFORM` 构建 | 仅用于研究与受控验证；不是第三个公开产品 |
 

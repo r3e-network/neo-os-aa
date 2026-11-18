@@ -12,7 +12,7 @@
 
 | 覆盖情况 | 涉及文档 | 说明 |
 | --- | --- | --- |
-| 双语（EN + `.zh-CN.md`） | 协议、架构、账户、闭合与参考文档 | 54 对；`reports/` 下四份带日期的快照仍仅英文 |
+| 双语（EN + `.zh-CN.md`） | 协议、架构、账户、闭合与参考文档 | 56 对；`reports/` 下四份带日期的快照仍仅英文 |
 
 ## 从这里开始
 
@@ -25,6 +25,7 @@
 | [WORKFLOWS.zh-CN.md](WORKFLOWS.zh-CN.md) | 交易生命周期与提交流程 | 中 · [EN](WORKFLOWS.md) |
 | [DATA_FLOW.zh-CN.md](DATA_FLOW.zh-CN.md) | 浏览器 / Supabase / 中继 / 链 的边界 | 中 · [EN](DATA_FLOW.md) |
 | [architecture.zh-CN.md](architecture.zh-CN.md) | 技术架构细节 | 中 · [EN](architecture.md) |
+| [NEOOS_ARCHITECTURE.zh-CN.md](NEOOS_ARCHITECTURE.zh-CN.md) | 本仓库在 NeoOS 工作区架构中的位置（指针） | 中 · [EN](NEOOS_ARCHITECTURE.md) |
 | [ORGANIZATION.zh-CN.md](ORGANIZATION.zh-CN.md) | 仓库结构与验证地图 | 中 · [EN](ORGANIZATION.md) |
 | [SA-IMPLEMENTATION-STRATEGY.zh-CN.md](SA-IMPLEMENTATION-STRATEGY.zh-CN.md) | 两条实现路径与各自的交付边界 | 中 · [EN](SA-IMPLEMENTATION-STRATEGY.md) |
 
@@ -77,8 +78,9 @@
 - [action-sessions.zh-CN.md](action-sessions.zh-CN.md) · [EN](action-sessions.md) — 会话密钥的作用域、过期与重新授权
 - [MULTISIG_SDK.zh-CN.md](MULTISIG_SDK.zh-CN.md) · [MULTISIG_CHILD_CONFIGURATION.zh-CN.md](MULTISIG_CHILD_CONFIGURATION.zh-CN.md) — 多签打包与子配置证明（[EN](MULTISIG_SDK.md) · [EN](MULTISIG_CHILD_CONFIGURATION.md)）
 - [PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md](PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md) · [EN](PENDING_CONFIG_UPDATE_READ_ABI.md) — 配置更新的读取面
-- [ORDINARY_ACCOUNT_WORKSPACE.zh-CN.md](ORDINARY_ACCOUNT_WORKSPACE.zh-CN.md) · [EN](ORDINARY_ACCOUNT_WORKSPACE.md) — 普通账户工作区
+- [CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md](CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md) · [EN](CUSTOM_ACCOUNT_WORKSPACE.md) — custom 账户工作区
 - [mainnet-validation-runbook.zh-CN.md](mainnet-validation-runbook.zh-CN.md) · [EN](mainnet-validation-runbook.md) — 只读的主网校验
+- [TESTNET_QUICKSTART.zh-CN.md](TESTNET_QUICKSTART.zh-CN.md) · [EN](TESTNET_QUICKSTART.md) — 真实测试网校验之前先跑的两条命令
 - [testnet-validation-runbook.zh-CN.md](testnet-validation-runbook.zh-CN.md) · [EN](testnet-validation-runbook.md) — 先干跑再上链的测试网校验
 - [POST_DEPLOY_SMOKE_TEST.zh-CN.md](POST_DEPLOY_SMOKE_TEST.zh-CN.md) · [EN](POST_DEPLOY_SMOKE_TEST.md) — 部署后的前端冒烟清单
 
@@ -109,7 +111,7 @@
 | [sa-artifact-reproducibility-20261116.json](reports/sa-artifact-reproducibility-20261116.json) | 逐字节一致的工件重建 |
 | [sa-formal-gate-20261031.json](reports/sa-formal-gate-20261031.json) | Coq 门禁与变异集 |
 | [sa-neoexpress-validation-20261031.json](reports/sa-neoexpress-validation-20261031.json) | 私有链部署与回读 |
-| [sa-ordinary-candidate-compatibility-20261116.json](reports/sa-ordinary-candidate-compatibility-20261116.json) | 普通账户候选兼容矩阵 |
+| [sa-ordinary-candidate-compatibility-20261116.json](reports/sa-ordinary-candidate-compatibility-20261116.json) | custom 账户候选兼容矩阵 |
 
 历史与已被取代的回执，只在某道守卫或某个形式化作用域固定它时才保留。[reports/testnet-validation-v1v2-2026-03.md](reports/testnet-validation-v1v2-2026-03.md) 是归档的 V3 前状态。
 

@@ -37,7 +37,7 @@
 
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
     <Message Text="Compiling Neo smart contract: SmartAccount.cs" Importance="high" />
-    <Exec Command="nccs ./SmartAccount.csproj -o ../bin/v3" WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="nccs ./SmartAccount.csproj -o ../bin/public" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
 </Project>

@@ -12,7 +12,7 @@
 
 | 配置 | 实现边界 | 部署要求 |
 | --- | --- | --- |
-| 公开 `v3` | 标准 `System.Contract.Call`；账户 nonce、验证器、钩子与执行在同一笔交易中完成 | 已发布的 Neo 运行时；当前核心与匹配的插件工件 |
+| `public` | 标准 `System.Contract.Call`；账户 nonce、验证器、钩子与执行在同一笔交易中完成 | 已发布的 Neo 运行时；当前核心与匹配的插件工件 |
 | 私有 `PLATFORM` | 增加有界的验证器子调用 | 具备对应私有系统调用的运行时；不能靠选择某个公开 RPC 地址来部署 |
 | 原生 SmartAccount | ABI 2 `SmartAccount`，独立推导身份，按 epoch 划分模块，有界回调 | 对应的 Neo 核心实现与硬分叉激活；公开 V3 部署不会激活它 |
 
@@ -51,7 +51,7 @@
 
 ## 验证与发布
 
-对公开合约、前端、浏览器、SDK 消费方与依赖审计，运行 `scripts/verify_repo.sh --profile ordinary`。原生配置 / 模块检查使用 `--profile native`，两者都要则用 `--profile all`。按各自所需的工具运行形式化与私有链门禁，并检查其记录的作用域与跳过的检查。构建比较必须同时覆盖 `contracts/bin/v3` 与 `contracts/bin/platform`。
+对公开合约、前端、浏览器、SDK 消费方与依赖审计，运行 `scripts/verify_repo.sh --profile custom`。原生配置 / 模块检查使用 `--profile native`，两者都要则用 `--profile all`。按各自所需的工具运行形式化与私有链门禁，并检查其记录的作用域与跳过的检查。构建比较必须同时覆盖 `contracts/bin/public` 与 `contracts/bin/platform`。
 
 独立的[原生 VM 工作流](../.github/workflows/native-profile.yml) 构建一个经评审的不可变核心提交与两份相同的原生模块副本，然后用真实的原生 VM 检查完整的实测复合场景矩阵。它拒绝缺失、重复、未知、失败或超预算的用例；合成交易签名人使这成为宿主测试，而不是内存池或出块确认。原生门禁中的 NativeEpochProbe 使用仅用于测试的 SmartAccount ABI 夹具，属于不同的测试边界。全节点 SDK / 私有链回执仍另行处理。历史报告保留它们当时测试的提交与字节；后续的测试专用核心提交不会改变其中记录的生产运行时身份。
 
@@ -65,7 +65,7 @@
 
 ## 当前源码：平台服务、冻结与发现读取
 
-已提交的普通源码候选把平台服务从核心中抽出：市场托管结算（`abandonListing`）位于 `SAAddressMarket`，Paymaster 报销（`settleReimbursement`）位于 `SAPaymaster`，平台账户注册与所有者轮换时间锁位于独立的 `SAPlatformRegistrar`（`contracts/custom/registrar/`）。在 2026-11-13 安全修复之上，该候选新增了备份所有者门控的冻结面（`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`），它不属于已固定的公开工件。
+已提交的custom 源码候选把平台服务从核心中抽出：市场托管结算（`abandonListing`）位于 `SAAddressMarket`，Paymaster 报销（`settleReimbursement`）位于 `SAPaymaster`，平台账户注册与所有者轮换时间锁位于独立的 `SAPlatformRegistrar`（`contracts/custom/registrar/`）。在 2026-11-13 安全修复之上，该候选新增了备份所有者门控的冻结面（`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`），它不属于已固定的公开工件。
 
 2026-11-16 的 Ethereum-AA 对齐修订在该候选之上新增两个安全读取：`describeAccount(accountId)` 聚合完整账户描述符（ERC-7579 风格的能力发现）；`simulateValidation(accountId, op)` ——以 ERC-4337 的 EntryPoint 命名，便于 4337 工具找到熟悉的入口——是非故障的执行检查预检（不含签名与钩子执行），同时报告托管闩锁与原生备份所有者见证。同一修订让 `SessionKeyVerifier.setPublicKey` 在注册验证器参数中接受版本 0x01 的初始密钥数据块，使会话密钥账户在第一天即可使用；之后的密钥变更仍受 24 小时轮换冷却约束。SDK 暴露 `describeAccount` / `simulateValidation` / `createSessionKeyAccountPayload`，以及 ERC-4337 形态（`toErc4337UserOperation`、`estimateUserOperationGas`）与 ERC-7715 形态（`buildSessionKeyPermission`）的适配器；类型化数据签名布局见 [SA-EIP-712-SPEC.md](SA-EIP-712-SPEC.md)。
 

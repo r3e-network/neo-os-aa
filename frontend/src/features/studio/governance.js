@@ -44,14 +44,14 @@ export function decodePendingUpdate(item) {
 }
 export function supportedPendingRoles(contractState) {
   const methods = contractState?.manifest?.abi?.methods;
-  if (!Array.isArray(methods)) throw new Error('Cannot verify the ordinary contract ABI.');
+  if (!Array.isArray(methods)) throw new Error('Cannot verify the custom contract ABI.');
   return ['verifier', 'hook'].filter((role) => methods.some((method) =>
     method.name === `getPending${role === 'verifier' ? 'Verifier' : 'Hook'}Update`
     && method.safe === true && method.parameters?.length === 1 && method.parameters[0].type === 'Hash160'));
 }
 export function supportsOwnerOnlyRecovery(contractState) {
   const methods = contractState?.manifest?.abi?.methods;
-  if (!Array.isArray(methods)) throw new Error('Cannot verify the ordinary contract ABI.');
+  if (!Array.isArray(methods)) throw new Error('Cannot verify the custom contract ABI.');
   return [['finalizeEscapeToOwner', 'Void', false], ['isOwnerOnlyRecovery', 'Boolean', true]].every(([name, returntype, safe]) => {
     const matching = methods.filter((method) => method.name === name);
     return matching.length === 1 && matching[0].returntype === returntype && matching[0].safe === safe

@@ -21,7 +21,7 @@ public class CompiledCoreSyscallTests
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "v3");
+    private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "public");
 
     private static uint InteropHash(string name) =>
         BinaryPrimitives.ReadUInt32LittleEndian(SHA256.HashData(Encoding.ASCII.GetBytes(name)));

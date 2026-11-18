@@ -87,7 +87,7 @@ Definition callback_trace (authorized well_shaped pre_ok target_ok hook_post_ok 
 
 (* The concrete core only calls an installed hook or verifier.  Keep the
    historical full trace above for the all-configured ordering theorem, and
-   expose the optional phases explicitly for ordinary profile correspondence. *)
+   expose the optional phases explicitly for custom profile correspondence. *)
 Definition configured_callback_trace
     (hook verifier authorized well_shaped pre_ok target_ok hook_post_ok verifier_post_ok : bool)
     : list Phase :=

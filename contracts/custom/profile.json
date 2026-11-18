@@ -1,10 +1,10 @@
 {
-  "id": "ordinary-user-contract",
+  "id": "custom-user-contract",
   "version": 1,
   "kind": "deployed-contract",
   "status": "public-artifact-identity-verified-upgrade-required",
   "protocolStatus": "source-checks-passed-conformance-open",
-  "protocolScope": "Source checks pass for the specified ordinary user-contract behavior. Full protocol conformance remains open because the public runtime lacks isolated callback budgets; candidate deployment and readback remain separate gates.",
+  "protocolScope": "Source checks pass for the specified custom user-contract behavior. Full protocol conformance remains open because the public runtime lacks isolated callback budgets; candidate deployment and readback remain separate gates.",
   "protocolEvidence": [
     "docs/PROTOCOL_COMPLETENESS_AUDIT.md",
     "docs/SA-SYSTEM-STATUS.md",
@@ -52,7 +52,7 @@
   ],
   "artifactRoots": [
     "contracts/build",
-    "contracts/bin/v3"
+    "contracts/bin/public"
   ],
   "verifiedArtifact": {
     "contractName": "UnifiedSmartWalletV3",
@@ -67,7 +67,7 @@
     "abiMethodCount": 90
   },
   "currentSourceCandidate": {
-    "artifactRoot": "contracts/bin/v3",
+    "artifactRoot": "contracts/bin/public",
     "status": "source-ahead-of-pinned-public-artifact",
     "abiMethodCount": 109,
     "releaseGate": "required-before-public-upgrade",
@@ -79,10 +79,10 @@
     }
   },
   "verification": {
-    "profile": "ordinary",
+    "profile": "custom",
     "commands": [
-      "./scripts/verify_repo.sh --profile ordinary",
-      "cd frontend && npm run test:ordinary:browser"
+      "./scripts/verify_repo.sh --profile custom",
+      "cd frontend && npm run test:custom:browser"
     ]
   },
   "nativeBoundary": "This profile does not claim native SmartAccount consensus semantics or native-chain activation.",

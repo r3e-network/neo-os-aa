@@ -47,18 +47,18 @@ function dispatch(t, args = [], failMatch = '', envOverrides = {}) {
     trace: fs.existsSync(trace) ? fs.readFileSync(trace, 'utf8') : '' };
 }
 
-test('ordinary is the default and never selects native package or runtime gates', (t) => {
+test('custom is the default and never selects native package or runtime gates', (t) => {
   const result = dispatch(t);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.trace, /node scripts\/check_neo_platform_packages.mjs\n/);
   assert.match(result.trace, /compile-public/);
   assert.match(result.trace, /dotnet test SmartAccount.sln/);
-  assert.match(result.trace, /npm run test:ordinary:browser/);
+  assert.match(result.trace, /npm run test:custom:browser/);
   assert.match(result.trace, /npm run test:operator-recovery:browser/);
   assert.doesNotMatch(result.trace, /--include-native|native_epoch_probe|test_native_|test:native:browser/);
 });
 
-test('ordinary success is explicitly PARTIAL when optional gates are NOT RUN', (t) => {
+test('custom success is explicitly PARTIAL when optional gates are NOT RUN', (t) => {
   const result = dispatch(t);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /cross-repo gate: NeoDIDRegistry integration proof NOT RUN/);
@@ -68,20 +68,20 @@ test('ordinary success is explicitly PARTIAL when optional gates are NOT RUN', (
   assert.doesNotMatch(result.stdout, /status=PASS/);
 });
 
-test('complete ordinary verification fails closed at the first unavailable gate', (t) => {
+test('complete custom verification fails closed at the first unavailable gate', (t) => {
   const result = dispatch(t, ['--contracts-only'], '', { NEOOS_REQUIRE_COMPLETE: '1' });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /required complete gate unavailable: cross-repo/);
   assert.doesNotMatch(result.trace, /dotnet test smart-account\.sln/);
 });
 
-test('ordinary NeoExpress selects public source acceptance and its bounded evidence join', (t) => {
-  const result = dispatch(t, ['--profile', 'ordinary', '--contracts-only', '--neoexpress'], '', { NEOOS_NEOXP: '/fixture/published-neoxp' });
+test('custom NeoExpress selects public source acceptance and its bounded evidence join', (t) => {
+  const result = dispatch(t, ['--profile', 'custom', '--contracts-only', '--neoexpress'], '', { NEOOS_NEOXP: '/fixture/published-neoxp' });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.trace, /check-artifact-reproducibility\.mjs --json/);
-  assert.match(result.trace, /python3 tests\/localchain\/run\.py --variant source --source-dir .*contracts\/bin\/v3 --receipt/);
+  assert.match(result.trace, /python3 tests\/localchain\/run\.py --variant source --source-dir .*contracts\/bin\/public --receipt/);
   assert.match(result.trace, /selected-NEOXP \/fixture\/published-neoxp/);
-  assert.match(result.trace, /check-ordinary-runtime-provenance\.mjs --repro .* --receipt/);
+  assert.match(result.trace, /check-custom-runtime-provenance\.mjs --repro .* --receipt/);
   assert.doesNotMatch(result.trace, /python3 scripts\/neoexpress_validate\.py|node scripts\/verify-private-artifact-provenance\.mjs/);
   assert.match(result.stdout, /eight deployed modules/);
   assert.match(result.stdout, /unselected PLATFORM matrix: NOT RUN/);
@@ -100,7 +100,7 @@ test('stubbed NeoExpress report redirections stay in the temporary checkout', (t
   const reports = fs.readdirSync(result.reportDir).sort();
   assert.equal(reports.length, 2, 'only the two shell-redirected stub reports exist');
   assert.match(reports[0], /^sa-artifact-reproducibility-\d{8}\.json$/);
-  assert.match(reports[1], /^sa-ordinary-runtime-provenance-\d{8}\.json$/);
+  assert.match(reports[1], /^sa-custom-runtime-provenance-\d{8}\.json$/);
   assert.ok(reports.every((name) => fs.statSync(path.join(result.reportDir, name)).size === 0));
   // The trace is the log of what the stubs were invoked with. Git Bash (MSYS) renders
   // the Windows reportDir argument in its POSIX form (/tmp/<fixture>/docs/reports) when
@@ -113,11 +113,11 @@ test('stubbed NeoExpress report redirections stay in the temporary checkout', (t
 });
 
 test('source-chain and provenance failures stop before a success status', (t) => {
-  for (const command of ['tests/localchain/run.py', 'check-ordinary-runtime-provenance.mjs']) {
+  for (const command of ['tests/localchain/run.py', 'check-custom-runtime-provenance.mjs']) {
     const result = dispatch(t, ['--contracts-only', '--neoexpress'], command);
     assert.equal(result.status, 41);
     assert.doesNotMatch(result.stdout, /status=PASS|status=PARTIAL/);
-    if (command === 'tests/localchain/run.py') assert.doesNotMatch(result.trace, /node scripts\/check-ordinary-runtime-provenance/);
+    if (command === 'tests/localchain/run.py') assert.doesNotMatch(result.trace, /node scripts\/check-custom-runtime-provenance/);
   }
 });
 
@@ -154,8 +154,8 @@ test('all combines both profiles and native probe failure stops the selected gat
   assert.doesNotMatch(failed.stdout, /completed successfully/);
 });
 
-test('ordinary package failure blocks the build and invalid selections fail closed', (t) => {
-  const failed = dispatch(t, ['--profile', 'ordinary', '--contracts-only'], 'check_neo_platform_packages.mjs');
+test('custom package failure blocks the build and invalid selections fail closed', (t) => {
+  const failed = dispatch(t, ['--profile', 'custom', '--contracts-only'], 'check_neo_platform_packages.mjs');
   assert.equal(failed.status, 41);
   assert.doesNotMatch(failed.trace, /compile-public|dotnet test/);
   for (const args of [['--profile', 'unknown'], ['--profile'], ['--profile', 'native', '--neoexpress']]) {
@@ -165,10 +165,10 @@ test('ordinary package failure blocks the build and invalid selections fail clos
   }
 });
 
-test('CI explicitly keeps ordinary and native validation in their respective jobs', () => {
-  const ordinary = readWorkflow(new URL('../.github/workflows/ci.yml', import.meta.url));
+test('CI explicitly keeps custom and native validation in their respective jobs', () => {
+  const custom = readWorkflow(new URL('../.github/workflows/ci.yml', import.meta.url));
   const native = readWorkflow(new URL('../.github/workflows/native-profile.yml', import.meta.url));
-  assert.match(ordinary, /run: \.\/scripts\/verify_repo.sh --profile ordinary/);
+  assert.match(custom, /run: \.\/scripts\/verify_repo.sh --profile custom/);
   assert.match(native, /\.\/scripts\/verify_repo.sh --profile native --contracts-only/);
   assert.match(native, /python3 scripts\/native_profile_ci.py/);
   assert.match(native, /'scripts\/verify_repo\*'/);
@@ -196,9 +196,9 @@ test('every pull request retains an independent native browser gate without repe
   assert.match(ci, browser);
   const at = ci.search(browser);
   assert.ok(ci.indexOf('run: npm run test:e2e:install') < at);
-  assert.ok(at < ci.indexOf('run: ./scripts/verify_repo.sh --profile ordinary'), 'browser fixtures do not depend on the contract/runtime gate completing');
+  assert.ok(at < ci.indexOf('run: ./scripts/verify_repo.sh --profile custom'), 'browser fixtures do not depend on the contract/runtime gate completing');
   assert.equal((ci.match(/run: npm run test:native:browser/g) || []).length, 1);
-  assert.equal((ci.match(/run: \.\/scripts\/verify_repo.sh/g) || []).length, 1, 'reuse the ordinary frontend unit and build checks');
+  assert.equal((ci.match(/run: \.\/scripts\/verify_repo.sh/g) || []).length, 1, 'reuse the custom frontend unit and build checks');
 });
 
 test('native VM workflow triggers every native source family', () => {

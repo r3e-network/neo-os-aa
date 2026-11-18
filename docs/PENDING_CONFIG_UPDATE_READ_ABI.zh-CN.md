@@ -2,7 +2,7 @@
 
 > 中文版本与 `docs/PENDING_CONFIG_UPDATE_READ_ABI.md` 同构。若两者冲突，以英文版本为准。
 
-普通部署合约配置新增两个安全方法。它们是对既有待生效标志、成熟时间 getter 以及
+custom 部署合约配置新增两个安全方法。它们是对既有待生效标志、成熟时间 getter 以及
 update/confirm/cancel 方法的追加；不改变存储，也不改变授权。
 
 | 方法 | 参数 | 结果 |
@@ -30,7 +30,7 @@ owner witness。
 
 本 ABI 描述的是新编译的源码。未声明这些方法名的既有部署仍然只暴露旧的读取。
 客户端必须检查 manifest 或处理 method-missing 响应；当目标或参数只来自本地表单或
-交易草稿时，不得把它呈现为已由链上验证。`contracts/bin/v3` 下的构建产物是本地
+交易草稿时，不得把它呈现为已由链上验证。`contracts/bin/public` 下的构建产物是本地
 验证输出，不是已部署升级的证据。
 
 > 门禁按英文匹配的边界句原文：`This ABI describes newly compiled source. Existing deployments that do not advertise these method names continue to expose only the older reads.`

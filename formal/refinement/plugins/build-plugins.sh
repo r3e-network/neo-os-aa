@@ -5,7 +5,7 @@
 # read a deployed contract's manifest, so the admission check is a statement about
 # bytes. Those bytes are pinned by hash in plugins/provenance.json, and this script is
 # the recorded step that produced them from the sources - the same standing
-# contracts/bin/v3 has for the main contract, and no stronger. The gate reads the
+# contracts/bin/public has for the main contract, and no stronger. The gate reads the
 # hashes; it does not re-run this.
 #
 # Usage:  formal/refinement/plugins/build-plugins.sh [output-directory]

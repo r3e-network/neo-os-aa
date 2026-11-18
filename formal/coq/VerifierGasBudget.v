@@ -7,7 +7,7 @@
   partial state update, and a nested callback cannot escape its ancestor.
 
   Applies to private PLATFORM CallWithGasLimit and bounded native callbacks. The
-  public v3 profile uses standard Contract.Call and has no such child budget.
+  public profile uses standard Contract.Call and has no such child budget.
 
   The model is intentionally independent of cryptography, witness parsing and
   complete NeoVM semantics.  Those remain separate correspondence obligations.

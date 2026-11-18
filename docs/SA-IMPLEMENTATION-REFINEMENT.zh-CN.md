@@ -1,15 +1,15 @@
-# 普通合约实现的精化
+# custom 合约实现的精化
 
 > 中文版本与 `docs/SA-IMPLEMENTATION-REFINEMENT.md` 同构。若两者冲突，以英文版本为准。
 
 ## 验收目标
 
-目标是普通的 `SmartAccountV3` 源码及其逐字节对应的已编译 NEF / manifest，包含全部公开
+目标是 custom `SmartAccount` 源码及其逐字节对应的已编译 NEF / manifest，包含全部公开
 入口点以及它们可达的 helper。要求的结果是：从类型化 C# 操作到已解码 NeoVM 执行的语义保持，
-并在此之上保持普通模型中已经证明过的协议性质。手写模型的通过、哈希一致、编译器构建成功、
+并在此之上保持custom 模型中已经证明过的协议性质。手写模型的通过、哈希一致、编译器构建成功、
 trace 采样或差分测试，都无法提供这条定理。
 
-既有普通候选验收在其已记录的作用域内仍然有效。在下列要求各自具备独立检查过的证书之前，
+既有custom 候选验收在其已记录的作用域内仍然有效。在下列要求各自具备独立检查过的证书之前，
 完整实现精化仍属未验证。不得为了让某道证明门禁通过而修改生产合约行为、编译器固定值、
 公开部署或原始用户改动。
 
@@ -50,8 +50,8 @@ trace 采样或差分测试，都无法提供这条定理。
 
 | 作用域 | 被检查的陈述与边界 |
 | --- | --- |
-| 协议模型 | `formal/verify.py` 检查所声明的普通 / 原生抽象。其模型回执不建立源码到 NEF 的精化。 |
-| 算术区域 | `prove.py` 把原始计费指令绑定到带符号 256 位参考算术与 `OrdinarySponsorship.charge`。其作用域仍是局部区域。 |
+| 协议模型 | `formal/verify.py` 检查所声明的custom / 原生抽象。其模型回执不建立源码到 NEF 的精化。 |
+| 算术区域 | `prove.py` 把原始计费指令绑定到带符号 256 位参考算术与 `CustomSponsorship.charge`。其作用域仍是局部区域。 |
 | [数值强制转换](SA-METHOD-REFINEMENT.md#numeric-coercion-refinement) | 建模 GetInteger 解码及其值关系，包括 Boolean 与 ByteString。这不证明 ABI 准入或实际运行时对应关系。 |
 | [预留算术](SA-METHOD-REFINEMENT.md#reservation-arithmetic-refinement) | 增加正性、可表示的预留更新与协议费用上界。它记录了零费用情形与无界算术之间的溢出分歧。 |
 | [完整 helper 参考精化](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-reference-refinement) | 在声明的输入与环境契约下，把完整类型化源码投影与一个字节解码参考 VM 相比较，对象是 `CapReimbursementToActualCost`。它不认证 ApplicationEngine 或公开入口点。 |
@@ -76,13 +76,13 @@ ByteString 与 UInt256 表示不可变字节值；该解释中的哈希相等比
 GetScriptContainer 读取、静态初始化以及原生编解码行为，仍是被命名的义务。回执必须保留
 这些义务，而不是把它的方言定理呈现为一般 .NET 行为的保持。
 
-[报销策略](SECURITY_MODEL.md)要求每个普通核心在每个交易内只有一个预留上限。helper 参考
+[报销策略](SECURITY_MODEL.md)要求每个custom 核心在每个交易内只有一个预留上限。helper 参考
 定理假设：交易哈希稳定为 32 字节、带符号 64 位费用非负，且要么没有账本，要么账本形式良好
 （两个字段、32 字节哈希、非负且可表示的预留）。链级组合必须建立：可达的持久化记录满足
 该不变式，且相同哈希字节在多次调用之间标识同一交易。策略本身不证明这些编解码与身份契约。
 外部提供的畸形存储不得被当作已准入的可达状态，也不得被证明 oracle 静默修复。
 [原生 profile 草案](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)设置
-`nativeSponsorship: false`；本普通报销证明不是原生赞助标准，也不是激活声明。
+`nativeSponsorship: false`；本custom 报销证明不是原生赞助标准，也不是激活声明。
 
 ## 证据与错误行为
 

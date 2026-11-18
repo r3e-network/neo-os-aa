@@ -169,7 +169,7 @@ test("provenance join rejects a stale source certificate before deployment check
 function certificateFixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "sa-certificate-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const files = Object.fromEntries(["v3", "platform"].flatMap((profile) => [
+  const files = Object.fromEntries(["public", "platform"].flatMap((profile) => [
     [`${profile}/SmartAccount.nef`, profile], [`${profile}/SmartAccount.manifest.json`, "{}"],
   ]));
   const hashes = {};
@@ -178,10 +178,10 @@ function certificateFixture(t) {
     fs.writeFileSync(path.join(root, name), contents);
     hashes[name] = createHash("sha256").update(contents).digest("hex");
   }
-  return { root: path.join(root, "v3"), repro: {
+  return { root: path.join(root, "public"), repro: {
     release_matches_fresh_build: true,
     artifacts_compared: 4, drifted: [], missing: [],
-    profiles: Object.fromEntries(["v3", "platform"].map((profile) => [profile, { artifacts_compared: 2, required_core_present: true, matches_fresh_build: true }])),
+    profiles: Object.fromEntries(["public", "platform"].map((profile) => [profile, { artifacts_compared: 2, required_core_present: true, matches_fresh_build: true }])),
     certificate: {
       byte_equal_release: true,
       fresh_artifact_sha256: { ...hashes },
@@ -197,15 +197,15 @@ test("release certificate compares every fresh/release NEF and manifest to disk"
 
 for (const [name, mutate] of Object.entries({
   "false certificate verdict": (r) => { r.certificate.byte_equal_release = false; },
-  "contradictory drift list": (r) => { r.drifted = ["v3/SmartAccount.nef"]; },
-  "contradictory missing list": (r) => { r.missing = ["v3/SmartAccount.nef"]; },
+  "contradictory drift list": (r) => { r.drifted = ["public/SmartAccount.nef"]; },
+  "contradictory missing list": (r) => { r.missing = ["public/SmartAccount.nef"]; },
   "wrong artifact count": (r) => { r.artifacts_compared = 1; },
-  "missing fresh manifest": (r) => { delete r.certificate.fresh_artifact_sha256["v3/SmartAccount.manifest.json"]; },
-  "missing release manifest": (r) => { delete r.certificate.release_artifact_sha256["v3/SmartAccount.manifest.json"]; },
-  "different fresh bytes": (r) => { r.certificate.fresh_artifact_sha256["v3/SmartAccount.nef"] = "0".repeat(64); },
+  "missing fresh manifest": (r) => { delete r.certificate.fresh_artifact_sha256["public/SmartAccount.manifest.json"]; },
+  "missing release manifest": (r) => { delete r.certificate.release_artifact_sha256["public/SmartAccount.manifest.json"]; },
+  "different fresh bytes": (r) => { r.certificate.fresh_artifact_sha256["public/SmartAccount.nef"] = "0".repeat(64); },
   "matching maps but different disk bytes": (r) => {
-    r.certificate.fresh_artifact_sha256["v3/SmartAccount.manifest.json"] = "0".repeat(64);
-    r.certificate.release_artifact_sha256["v3/SmartAccount.manifest.json"] = "0".repeat(64);
+    r.certificate.fresh_artifact_sha256["public/SmartAccount.manifest.json"] = "0".repeat(64);
+    r.certificate.release_artifact_sha256["public/SmartAccount.manifest.json"] = "0".repeat(64);
   },
   "missing private profile": (r, root) => { fs.rmSync(path.join(root, "../platform"), { recursive: true }); },
   "private profile falsely marked missing": (r) => { r.profiles.platform.required_core_present = false; },
@@ -234,10 +234,10 @@ test("provenance joins the private core and public modules to their exact RPC re
     }
   };
   for (const [contractName, relative] of Object.entries(LOCAL_ARTIFACTS)) {
-    const profile = contractName === "SmartAccount" ? "platform" : "v3";
+    const profile = contractName === "SmartAccount" ? "platform" : "public";
     const artifactNef = profile === "platform" ? platformNef : nef;
     const artifactManifest = profile === "platform" ? platformManifest : manifest;
-    writePair(`v3/${relative}`);
+    writePair(`public/${relative}`);
     deployments.push({ contractName, artifactProfile: profile,
       localNefSha256: hash(artifactNef), localManifestSha256: hash(artifactManifest) });
     contracts.push({ contractName, nefScriptSha256: hash(profile === "platform" ? Buffer.from([0x41]) : script),
@@ -246,7 +246,7 @@ test("provenance joins the private core and public modules to their exact RPC re
   writePair("platform/SmartAccount.nef", platformNef, platformManifest);
   const source = buildInputSnapshot();
   const repro = { release_matches_fresh_build: true, artifacts_compared: 50, drifted: [], missing: [],
-    profiles: { v3: { artifacts_compared: 48, required_core_present: true, matches_fresh_build: true },
+    profiles: { public: { artifacts_compared: 48, required_core_present: true, matches_fresh_build: true },
       platform: { artifacts_compared: 2, required_core_present: true, matches_fresh_build: true } },
     certificate: { schema: "neoos-sa-source-to-artifact-certificate/v1", source_root: "repository",
       source_files: source, source_snapshot_sha256: hash(JSON.stringify(source)), byte_equal_release: true,
@@ -261,26 +261,26 @@ test("provenance joins the private core and public modules to their exact RPC re
       sourceCommits: { core: "4".repeat(40), node: "5".repeat(40), express: "6".repeat(40) },
       sdk: "10.0.400",
     } };
-  const result = verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") });
+  const result = verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "public") });
   assert.equal(result.status, "PASS"); assert.equal(result.releaseToPrivateChain.localArtifactsChecked, 24);
   assert.equal(result.releaseToPrivateChain.rows[0].artifactProfile, "platform");
   assert.equal(result.releaseToPrivateChain.sourceRuntime.runtimeFileCount, 104);
   assert.equal(result.releaseToPrivateChain.sourceRuntime.wrapperSha256, "3".repeat(64));
   const validSourceCommits = { ...receipt.sourceRuntime.sourceCommits };
   receipt.sourceRuntime.sourceCommits.core = "not-a-commit";
-  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }),
+  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "public") }),
     /not bound to a complete source-built runner/);
   receipt.sourceRuntime.sourceCommits = validSourceCommits;
   receipt.sourceRuntime.runtimeFilesMatchedAfter = false;
-  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }),
+  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "public") }),
     /not bound to a complete source-built runner/);
   receipt.sourceRuntime.runtimeFilesMatchedAfter = true;
   deployments[0].localNefSha256 = hash(nef);
-  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }), /private artifact provenance mismatch/);
+  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "public") }), /private artifact provenance mismatch/);
   deployments[0].localNefSha256 = hash(platformNef);
   delete deployments[0].artifactProfile;
-  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }), /private artifact provenance mismatch/);
+  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "public") }), /private artifact provenance mismatch/);
   deployments[0].artifactProfile = "platform";
   receipt.rpcReadback.contracts[0].nefScriptSha256 = "0".repeat(64);
-  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "v3") }), /private artifact provenance mismatch/);
+  assert.throws(() => verifyProvenance({ repro, receipt, releaseRoot: path.join(root, "public") }), /private artifact provenance mismatch/);
 });

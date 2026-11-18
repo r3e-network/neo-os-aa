@@ -359,7 +359,7 @@ public class ImplementationRefinementPublicRuntimeTests
         }
         private static void VerifyArtifact(string name, string nef, string manifest)
         {
-            string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/v3"));
+            string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/public"));
             Assert.AreEqual(nef, Hex(SHA256.HashData(File.ReadAllBytes(Path.Combine(root, name + ".nef")))));
             Assert.AreEqual(manifest, Hex(SHA256.HashData(File.ReadAllBytes(Path.Combine(root, name + ".manifest.json")))));
         }

@@ -17,7 +17,7 @@ from one path does not establish runtime guarantees for the other. See the
 
 | Profile | Implementation boundary | Deployment requirement |
 | --- | --- | --- |
-| Public `v3` | Standard `System.Contract.Call`; account nonce, verifier, hooks and execution in one transaction | Published Neo runtime; current core and matching plugin artifacts |
+| `public` | Standard `System.Contract.Call`; account nonce, verifier, hooks and execution in one transaction | Published Neo runtime; current core and matching plugin artifacts |
 | Private `PLATFORM` | Adds bounded verifier child calls | Runtime with the matching private syscall; not deployable by choosing a public RPC URL |
 | Native SmartAccount | ABI 2 `SmartAccount`, independently derived identity, epoch-scoped modules and bounded callbacks | Corresponding Neo core implementation and hardfork activation; public V3 deployment does not activate it |
 
@@ -85,12 +85,12 @@ the network's global Verification budget.
 
 ## Validation and release
 
-Run `scripts/verify_repo.sh --profile ordinary` for public contracts, frontend,
+Run `scripts/verify_repo.sh --profile custom` for public contracts, frontend,
 browser, SDK consumers and dependency audits. Use `--profile native` for native
 profile/module checks or `--profile all` for both lanes. Run the formal and
 private-chain gates with their required
 tools, and inspect their recorded scope and skipped checks. The build comparison
-must cover both `contracts/bin/v3` and `contracts/bin/platform`.
+must cover both `contracts/bin/public` and `contracts/bin/platform`.
 
 The separate [native VM workflow](../.github/workflows/native-profile.yml) builds a
 reviewed immutable core commit and two identical native module copies, then checks
@@ -126,7 +126,7 @@ and read the chain state before exposing them.
 
 ## Current source: platform services, freeze and discovery reads
 
-The committed ordinary source candidate extracts the platform services out of
+The committed custom source candidate extracts the platform services out of
 the core: market escrow settlement (`abandonListing`) lives on `SAAddressMarket`,
 paymaster reimbursement (`settleReimbursement`) on `SAPaymaster`, and
 platform-account registration plus the owner-rotation timelocks on the

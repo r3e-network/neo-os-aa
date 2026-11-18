@@ -58,7 +58,7 @@ already blocked by the export map and remain unsupported. Build and tarball
 artifacts are disposable; edit canonical source and rebuild. These checks establish
 local package usability, not npm publication or deployed-contract compatibility.
 
-## Ordinary owner-only recovery
+## Custom owner-only recovery
 
 `SmartAccountClient.getOwnerOnlyRecoveryStatus(accountId)` checks the deployed
 core's exact recovery ABI before reading permanent mode. It returns
@@ -80,5 +80,5 @@ Use the account ID, never its asset proxy address. Payload construction does not
 sign, submit or verify deployment support. Successful recovery permanently
 removes both plugin roots and forbids plugin reinstallation, including after an
 owner transfer. It preserves account identity, asset address and nonce channels;
-it does not refund plugin-held balances or revoke external allowances. It is an
-ordinary contract capability and does not use native recovery or a UserOperation.
+it does not refund plugin-held balances or revoke external allowances. It is a
+custom contract capability and does not use native recovery or a UserOperation.

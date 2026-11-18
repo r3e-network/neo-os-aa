@@ -378,8 +378,8 @@
     "src/Neo/Wallets/WalletAccount.cs": "711c61a96f1761629ef4b3bdd88488684198c7ef0255cf19ace2a3809e765cde"
   },
   "runtimeProfiles": {
-    "v3": {
-      "artifactDirectory": "contracts/bin/v3",
+    "public": {
+      "artifactDirectory": "contracts/bin/public",
       "define": null,
       "verifierCall": "System.Contract.Call",
       "verifierChildBudgetEnforced": false
@@ -416,7 +416,7 @@
       "native"
     ],
     "coq/MultiSigPolicy.v": [
-      "v3",
+      "public",
       "platform"
     ],
     "coq/NativeAuthorityEpoch.v": [
@@ -455,23 +455,23 @@
     "coq/NeoVmContinuationSemantics.v": [
       "native"
     ],
-    "coq/OrdinaryGovernance.v": [
-      "v3",
+    "coq/CustomGovernance.v": [
+      "public",
       "platform"
     ],
-    "coq/OrdinaryRecovery.v": [
-      "v3",
+    "coq/CustomRecovery.v": [
+      "public",
       "platform"
     ],
-    "coq/OrdinarySponsorship.v": [
-      "v3",
+    "coq/CustomSponsorship.v": [
+      "public",
       "platform"
     ],
     "coq/PluginLifecycle.v": [
       "native"
     ],
     "coq/ProxyWitnessScript.v": [
-      "v3",
+      "public",
       "platform"
     ],
     "coq/SignerDomainSeparation.v": [
@@ -481,7 +481,7 @@
       "native"
     ],
     "coq/SmartAccountSA.v": [
-      "v3",
+      "public",
       "platform"
     ],
     "coq/VerifierGasBudget.v": [
@@ -498,15 +498,15 @@
       "native"
     ],
     "smt/sa_core.smt2": [
-      "v3",
+      "public",
       "platform"
     ],
     "tla/SmartAccountSA.cfg": [
-      "v3",
+      "public",
       "platform"
     ],
     "tla/SmartAccountSA.tla": [
-      "v3",
+      "public",
       "platform"
     ]
   }
