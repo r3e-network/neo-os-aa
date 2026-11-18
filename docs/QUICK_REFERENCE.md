@@ -125,13 +125,13 @@ const batchPayload = client.createSponsoredBatchPayload({
 | `setPolicy(accountId, target, method, maxPerOp, dailyBudget, totalBudget, validUntil)` | Sponsor witness | Create/update sponsorship policy |
 | `revokePolicy(accountId)` | Sponsor witness | Remove policy + clear counters |
 | `validatePaymasterOp(sponsor, accountId, target, method, amount)` | Safe (anyone) | Read-only preflight check |
-| `settleReimbursement(sponsor, accountId, target, method, relay, amount)` | AA Core only | Atomic settlement after execution |
+| `settleReimbursement(sponsor, accountId, target, method, relay, amount)` | SA Core only | Atomic settlement after execution |
 | `getSponsorDeposit(sponsor)` | Safe | Query deposit balance |
 | `getPolicy(sponsor, accountId)` | Safe | Query policy details |
 | `getDailySpent(sponsor, accountId)` | Safe | Query 24h spending |
 | `getTotalSpent(sponsor, accountId)` | Safe | Query lifetime spending |
 
-The names above are the deployed manifest's, exactly as `contracts/build/AAPaymaster.manifest.json`
+The names above are the deployed manifest's, exactly as `contracts/build/SAPaymaster.manifest.json`
 spells them; Neo ABI names are case-sensitive.
 
 ## Canonical docs

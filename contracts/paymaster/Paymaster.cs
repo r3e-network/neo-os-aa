@@ -10,16 +10,16 @@ using System.ComponentModel;
 namespace SmartAccount
 {
     /// <summary>
-    /// On-chain Paymaster for sponsored/gasless transactions on Neo N3 AA.
+    /// On-chain Paymaster for sponsored/gasless transactions on Neo N3 SA.
     /// Sponsors deposit GAS, create policies for which accounts and operations to fund,
     /// and relays are reimbursed automatically after successful UserOp execution.
     /// </summary>
-    [DisplayName("AAPaymaster")]
+    [DisplayName("SAPaymaster")]
     [ContractPermission("0xd2a4cff31913016155e38e474a2c06d08be276cf", "transfer")]
     // Confused-deputy closure: settlement reads the core's execution-in-flight marker so it
     // can tell the sponsored unwind from an ordinary operation routed to this contract.
     [ContractPermission("*", "isUserOpExecutionActive")]
-    [ManifestExtra("Description", "On-Chain Paymaster for Sponsored Transactions on Neo N3 AA")]
+    [ManifestExtra("Description", "On-Chain Paymaster for Sponsored Transactions on Neo N3 SA")]
     public class Paymaster : SmartContract
     {
         // ========================================================================
@@ -107,7 +107,7 @@ namespace SmartAccount
 
         public static void CancelAdminRotation() => PaymasterAuthority.CancelAdminRotation();
 
-        // AA-D-01: contract upgrade is timelocked. The admin proposes the sha256 of the
+        // SA-D-01: contract upgrade is timelocked. The admin proposes the sha256 of the
         // new NEF and manifest, then can only apply that exact artifact pair after the
         // 7-day window. One-way: once deployed, every future upgrade waits 7 days.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => PaymasterAuthority.ProposeUpdate(nefHash, manifestHash);
@@ -118,7 +118,7 @@ namespace SmartAccount
 
         /// <summary>
         /// Upgrades the Paymaster contract. Admin-only, and only after a matching
-        /// <c>ProposeUpdate</c> has aged past the 7-day timelock (AA-D-01).
+        /// <c>ProposeUpdate</c> has aged past the 7-day timelock (SA-D-01).
         /// </summary>
         public static void Update(ByteString nef, string manifest)
         {
@@ -296,13 +296,13 @@ namespace SmartAccount
         }
 
         // ========================================================================
-        // 4. Settlement (called by AA Core after successful execution)
+        // 4. Settlement (called by SA Core after successful execution)
         // ========================================================================
 
         /// <summary>
         /// Settles a sponsored operation by validating the policy, deducting from the sponsor's
         /// deposit, updating spending counters, and transferring GAS to the relay.
-        /// Only callable by the authorized AA core contract.
+        /// Only callable by the authorized SA core contract.
         /// </summary>
         public static void SettleReimbursement(
             UInt160 sponsor,
@@ -315,7 +315,7 @@ namespace SmartAccount
             PaymasterAuthority.ValidateCoreCaller();
 
             // Confused-deputy closure: one core backs every virtual account, so "the caller is
-            // the AA core" is also true for any account owner's ordinary user operation whose
+            // the SA core" is also true for any account owner's ordinary user operation whose
             // target is this settlement entry. Settlement is only valid after a sponsored
             // execution completed, which is exactly when the core reports no user operation in
             // flight; the check is account-independent, so it also rejects a settlement that

@@ -36,7 +36,7 @@ public class Fix_MarketZombie_Tests
     private const byte StatusCancelled = 3;
 
     // Index of Status within the GetListing tuple:
-    // [Id, AAContract, AccountId, Seller, Price, Title, MetadataUri, Status, Buyer, CreatedAt, UpdatedAt]
+    // [Id, SAContract, AccountId, Seller, Price, Title, MetadataUri, Status, Buyer, CreatedAt, UpdatedAt]
     private const int StatusIndex = 7;
 
     // Must exceed the contract's 7-day MarketEscrowOwnerCancelTimelockMs.
@@ -52,9 +52,9 @@ public class Fix_MarketZombie_Tests
 
         public Harness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
-            Market = Fx.Deploy("AAAddressMarket");
-            Fx.CallVoid(Market, "setAllowedAA", Wallet, true);
+            Wallet = Fx.Deploy("SmartAccount");
+            Market = Fx.Deploy("SAAddressMarket");
+            Fx.CallVoid(Market, "setAllowedSA", Wallet, true);
             // Phase 1b: the core admin registers the market as an approved escrow service.
             Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
@@ -75,7 +75,7 @@ public class Fix_MarketZombie_Tests
         public BigInteger CreateListing(UInt160 accountId)
         {
             Fx.SetSigners(Seller);
-            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "AA address", "");
+            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "SA address", "");
             return Fx.CallInteger(Market, "getListingCount");
         }
 
@@ -169,9 +169,9 @@ public class Fix_MarketZombie_Tests
     }
 
     [TestMethod]
-    public void AbandonListing_OnlyCallableByListedAaContract()
+    public void AbandonListing_OnlyCallableByListedSaContract()
     {
-        // A third party (here the seller) cannot retire an Active listing directly: only the AA
+        // A third party (here the seller) cannot retire an Active listing directly: only the SA
         // contract recorded on the listing may, which is exactly the contract that holds the escrow.
         Harness h = new();
         UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
@@ -180,7 +180,7 @@ public class Fix_MarketZombie_Tests
         h.Fx.SetSigners(Seller);
         TestException blocked = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(h.Market, "abandonListing", accountId, listingId));
-        StringAssert.Contains(blocked.Message, "Only listed AA contract");
+        StringAssert.Contains(blocked.Message, "Only listed SA contract");
         Assert.AreEqual((BigInteger)StatusActive, h.ListingStatus(listingId), "Listing stays Active");
     }
 

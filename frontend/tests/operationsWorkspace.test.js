@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
+import { executeUserOpInvocation } from './fixtures/saChainFixtures.js';
 
 import { createOperationsWorkspace } from '../src/features/operations/useOperationsWorkspace.js';
 import { buildRelayPayloadOptions } from '../src/features/operations/execution.js';
 
-test('workspace holds AA identity, operation body, signers, signatures, and share metadata', () => {
+test('workspace holds SA identity, operation body, signers, signatures, and share metadata', () => {
   const workspace = createOperationsWorkspace();
 
   workspace.loadSmartAccount({
@@ -43,7 +43,7 @@ test('workspace holds AA identity, operation body, signers, signatures, and shar
   assert.equal(workspace.isDraftImmutable.value, true);
 });
 
-test('workspace derives signer and bound-address forms from an AA draft', () => {
+test('workspace derives signer and bound-address forms from an SA draft', () => {
   const workspace = createOperationsWorkspace();
 
   workspace.loadSmartAccount({

@@ -7,8 +7,8 @@
       class="rounded-lg border p-4 text-left transition-all duration-200"
       :class="
         option.id === preset
-          ? 'border-aa-orange bg-aa-orange/15 shadow-md ring-2 ring-aa-orange'
-          : 'border-aa-border bg-aa-panel hover:border-aa-orange hover:shadow-sm'
+          ? 'border-sa-orange bg-sa-orange/15 shadow-md ring-2 ring-sa-orange'
+          : 'border-sa-border bg-sa-panel hover:border-sa-orange hover:shadow-sm'
       "
       @click="$emit('update:preset', option.id)"
     >
@@ -17,7 +17,7 @@
           <svg
             aria-hidden="true"
             v-if="option.id === 'invoke'"
-            class="w-5 h-5 text-aa-muted"
+            class="w-5 h-5 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -32,7 +32,7 @@
           <svg
             aria-hidden="true"
             v-else-if="option.id === 'nep17Transfer'"
-            class="w-5 h-5 text-aa-muted"
+            class="w-5 h-5 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -47,7 +47,7 @@
           <svg
             aria-hidden="true"
             v-else
-            class="w-5 h-5 text-aa-muted"
+            class="w-5 h-5 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -61,8 +61,8 @@
           </svg>
         </div>
         <div class="flex-1 min-w-0">
-          <div class="text-sm font-bold text-aa-text">{{ option.label }}</div>
-          <div class="mt-1 text-xs text-aa-muted line-clamp-2">
+          <div class="text-sm font-bold text-sa-text">{{ option.label }}</div>
+          <div class="mt-1 text-xs text-sa-muted line-clamp-2">
             {{ option.description }}
           </div>
         </div>

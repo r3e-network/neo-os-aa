@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Private-chain validation of the AA protocol on NeoExpress.
+"""Private-chain validation of the SA protocol on NeoExpress.
 
 Creates a fresh single-node NeoExpress chain in a scratch directory, deploys the
 private PLATFORM core from contracts/bin/platform and the public modules from
@@ -17,11 +17,11 @@ Every assertion is fail-closed: the first mismatch aborts the run and the receip
 records the failure. Nothing here touches a public network, and the receipt never
 contains wallet keys or absolute host paths.
 
-The final scenario composes AA with the NeoDID registry: it deploys
+The final scenario composes SA with the NeoDID registry: it deploys
 NeoDIDRegistry.nef/.manifest.json from the sibling neo-os-services pinned vendor tree
 (override the directory with NEOOS_SERVICES_CONTRACT_BUILD; set
 NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to fail instead of recording a skip when the
-artifact is absent) and drives the AA proxy-witness path with hand-built,
+artifact is absent) and drives the SA proxy-witness path with hand-built,
 hand-signed transactions over RPC, because neoxp cannot express a proxy signer.
 NEOOS_VALIDATE_ONLY=did runs deployment plus that scenario alone for iteration;
 its receipt is marked partialRun and is never release evidence.
@@ -54,7 +54,7 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 # name -> (relative nef path, deploy data is the core hash)
 ARTIFACTS = [
-    ("SmartAccountV3", "SmartAccountV3.nef", False),
+    ("SmartAccount", "SmartAccount.nef", False),
     ("MockTransferTarget", "MockTransferTarget.nef", False),
     ("Web3AuthVerifier", "verifiers/Web3AuthVerifier.nef", True),
     ("TEEVerifier", "verifiers/TEEVerifier.nef", True),
@@ -70,11 +70,11 @@ ARTIFACTS = [
     ("WhitelistHook", "hooks/WhitelistHook.nef", True),
     ("MultiHook", "hooks/MultiHook.nef", True),
     ("TokenRestrictedHook", "hooks/TokenRestrictedHook.nef", True),
-    ("AAPaymaster", "AAPaymaster.nef", True),
-    ("AAAddressMarket", "AAAddressMarket.nef", False),
+    ("SAPaymaster", "SAPaymaster.nef", True),
+    ("SAAddressMarket", "SAAddressMarket.nef", False),
     ("SocialRecoveryVerifier", "SocialRecoveryVerifier.nef", False),
     ("MockVerifierCore", "MockVerifierCore.nef", False),
-    ("AAPlatformRegistrar", "AAPlatformRegistrar.nef", True),
+    ("SAPlatformRegistrar", "SAPlatformRegistrar.nef", True),
     ("MarkerOnlyModule", "MarkerOnlyModule.nef", False),
     ("WrongLifecycleAbiModule", "WrongLifecycleAbiModule.nef", False),
     ("WrongHookLifecycleAbiModule", "WrongHookLifecycleAbiModule.nef", False),
@@ -94,7 +94,7 @@ def services_build_directory():
     return ROOT.parent / "neo-os-services" / "vendor" / "neo-os-did" / "contracts" / "build"
 
 
-# The deployed SmartAccountV3 prototype uses this application-trigger
+# The deployed SmartAccount prototype uses this application-trigger
 # callback budget. It is intentionally kept separate from the native profile:
 # native verifier callbacks are specified at 100,000,000 datoshi and Neo's
 # Verification-trigger envelope is 150,000,000 datoshi.
@@ -344,8 +344,8 @@ class RawKey:
         return der_to_rs(der)
 
 
-def aa_proxy_rules(wallet, target):
-    """The single WitnessRules entry SmartAccountV3.verify demands of a proxy signer:
+def sa_proxy_rules(wallet, target):
+    """The single WitnessRules entry SmartAccount.verify demands of a proxy signer:
     Allow when called by the wallet or by the scoped target, nothing else."""
     return [{"action": "Allow", "condition": {"type": "Or", "expressions": [
         {"type": "CalledByContract", "hash": wallet}, {"type": "CalledByContract", "hash": target}]}}]
@@ -544,7 +544,7 @@ class Chain:
     def __init__(self, neoxp, workdir):
         self.neoxp = neoxp
         self.workdir = Path(workdir)
-        self.file = self.workdir / "aa-validation.neo-express"
+        self.file = self.workdir / "sa-validation.neo-express"
         self.env = dict(os.environ)
         self.env.setdefault("DOTNET_ROOT", dotnet_root())
         self.invoke_counter = 0
@@ -609,7 +609,7 @@ class Chain:
     def deploy_all(self):
         core = None
         for name, relative, needs_core in ARTIFACTS:
-            profile = "platform" if name == "SmartAccountV3" else "v3"
+            profile = "platform" if name == "SmartAccount" else "v3"
             nef = (PLATFORM_BIN if profile == "platform" else BIN) / relative
             manifest = nef.with_name(nef.name.replace(".nef", ".manifest.json"))
             args = ["contract", "deploy", str(nef), "genesis", "-j"]
@@ -623,7 +623,7 @@ class Chain:
                 raise ValidationFailure(f"deployed name {result['contract-name']} != {name}")
             self.contracts[name] = result["contract-hash"]
             self.local_artifacts[name] = nef
-            if name == "SmartAccountV3":
+            if name == "SmartAccount":
                 core = result["contract-hash"]
             self.deployments.append({
                 "contractName": name,
@@ -658,7 +658,7 @@ class Chain:
         """
         path = self.invoke_file(contract, operation, list(args))
         command = ["contract", "invoke", str(path), account, "-r", "-j"]
-        if contract == "SmartAccountV3":
+        if contract == "SmartAccount":
             command += ["-g", (PRIVATE_EXECUTE_GAS_ENVELOPE
                                 if operation in PRIVATE_EXECUTE_OPERATIONS
                                 else PRIVATE_CORE_GAS_ENVELOPE)]
@@ -683,7 +683,7 @@ class Chain:
         # explicit private-chain fee envelope so lifecycle and execution tests exercise
         # the child cap itself rather than an underfunded outer transaction. This is
         # NeoExpress-only and never funds a public-network transaction.
-        if contract == "SmartAccountV3":
+        if contract == "SmartAccount":
             command += ["-g", (PRIVATE_EXECUTE_GAS_ENVELOPE
                                 if operation in PRIVATE_EXECUTE_OPERATIONS
                                 else PRIVATE_CORE_GAS_ENVELOPE)]
@@ -764,16 +764,16 @@ class Chain:
         # timelock (the id covers it), which stays inside the core's 7 to 90 day window; the
         # escape scenario reads the timelock it must wait out from this table.
         timelock = ESCAPE_TIMELOCK + len(self.timelocks)
-        account = self.results("SmartAccountV3", "computeRegistrationAccountId",
+        account = self.results("SmartAccount", "computeRegistrationAccountId",
                                H(verifier), B(params), H(hook), H(self.wallets[owner]), I(timelock))
         account = "0x" + account[::-1].hex()
         self.timelocks[account] = timelock
-        self.tx(step, "SmartAccountV3", "registerAccount",
+        self.tx(step, "SmartAccount", "registerAccount",
                 [H(account), H(verifier), B(params), H(hook), H(self.wallets[owner]), I(timelock)],
                 owner, expect_fault=expect_fault)
         if expect_fault:
             return None
-        proxy = "0x" + self.results("SmartAccountV3", "getProxyScriptHash", H(account))[::-1].hex()
+        proxy = "0x" + self.results("SmartAccount", "getProxyScriptHash", H(account))[::-1].hex()
         return account, proxy
 
     def transfer_op(self, target, source, recipient, amount, nonce, deadline=FAR_DEADLINE, signature=b""):
@@ -781,11 +781,11 @@ class Chain:
                  I(nonce), I(deadline), B(signature))
 
     def execute(self, step, account, op, signer, expect_fault=None, scope=None):
-        return self.tx(step, "SmartAccountV3", "executeUserOp", [H(account), op], signer,
+        return self.tx(step, "SmartAccount", "executeUserOp", [H(account), op], signer,
                        scope=scope, expect_fault=expect_fault)
 
     def nonce(self, account, channel=0):
-        return self.results("SmartAccountV3", "getNonce", H(account), I(channel))
+        return self.results("SmartAccount", "getNonce", H(account), I(channel))
 
     def hash_result(self, contract, operation, *args):
         raw = self.results(contract, operation, *args)
@@ -794,27 +794,27 @@ class Chain:
     def two_phase(self, step, account, kind, method, args, signer="owner", expect_fault=None):
         """callVerifier/callHook: first call arms the 24h timelock, the second executes."""
         entry = "callVerifier" if kind == "verifier" else "callHook"
-        first = self.tx(step + " (arm)", "SmartAccountV3", entry, [H(account), S(method), A(*args)], signer)
+        first = self.tx(step + " (arm)", "SmartAccount", entry, [H(account), S(method), A(*args)], signer)
         self.check(first["result"] is False, f"{step}: first call arms the timelock and returns false")
         self.fastfwd(DAY)
-        return self.tx(step + " (execute)", "SmartAccountV3", entry, [H(account), S(method), A(*args)],
+        return self.tx(step + " (execute)", "SmartAccount", entry, [H(account), S(method), A(*args)],
                        signer, expect_fault=expect_fault)
 
     def two_phase_child(self, step, account, child, method, args, signer="owner", expect_fault=None):
         """Provision a composite's leaf through the core-owned child configuration route."""
         entry_args = [H(account), H(child), S(method), A(*args)]
-        first = self.tx(step + " (arm)", "SmartAccountV3", "callVerifierChild", entry_args, signer)
+        first = self.tx(step + " (arm)", "SmartAccount", "callVerifierChild", entry_args, signer)
         self.check(first["result"] is False, f"{step}: first call arms the child timelock and returns false")
         self.fastfwd(DAY)
-        return self.tx(step + " (execute)", "SmartAccountV3", "callVerifierChild", entry_args,
+        return self.tx(step + " (execute)", "SmartAccount", "callVerifierChild", entry_args,
                        signer, expect_fault=expect_fault)
 
     def two_phase_hook_child(self, step, account, child, method, args, signer="owner", expect_fault=None):
         entry_args = [H(account), H(child), S(method), A(*args)]
-        first = self.tx(step + " (arm)", "SmartAccountV3", "callHookChild", entry_args, signer)
+        first = self.tx(step + " (arm)", "SmartAccount", "callHookChild", entry_args, signer)
         self.check(first["result"] is False, f"{step}: first call arms the child timelock and returns false")
         self.fastfwd(DAY)
-        return self.tx(step + " (execute)", "SmartAccountV3", "callHookChild", entry_args,
+        return self.tx(step + " (execute)", "SmartAccount", "callHookChild", entry_args,
                        signer, expect_fault=expect_fault)
 
     # ---- RPC readback -------------------------------------------------------
@@ -1042,14 +1042,14 @@ def scenario_native_execution(c):
     c.scenario("core native backup-owner execution")
     account, proxy = c.register("register native account")
     owner = c.wallets["owner"]
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner, "backup owner recorded")
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == owner, "backup owner recorded")
     target = c.contracts["MockTransferTarget"]
     c.execute("executeUserOp nonce 0", account, c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0), "owner")
     c.check(c.nonce(account) == 1, "channel 0 cursor advanced to 1")
     c.execute("replay nonce 0", account, c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0), "owner",
               expect_fault="Invalid sequence for channel")
     c.check(c.nonce(account) == 1, "replay leaves the cursor unchanged")
-    c.tx("executeUserOps batch nonces 1,2", "SmartAccountV3", "executeUserOps",
+    c.tx("executeUserOps batch nonces 1,2", "SmartAccount", "executeUserOps",
          [H(account), A(c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 1),
                         c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 2))], "owner")
     c.check(c.nonce(account) == 3, "batch consumed two sequential nonces")
@@ -1062,7 +1062,7 @@ def scenario_native_execution(c):
     c.execute("channel 1 sequence 0", account,
               c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 1 << 64), "owner")
     c.check(c.nonce(account, 1) == 1 and c.nonce(account, 0) == 3, "channels are independent lanes")
-    preview = c.results("SmartAccountV3", "previewUserOpValidation", H(account),
+    preview = c.results("SmartAccount", "previewUserOpValidation", H(account),
                         c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 3))
     c.check(preview[0] is True and preview[1] is True and preview[2] is False, "preview reports deadline, nonce, no verifier")
     return account, proxy
@@ -1071,23 +1071,23 @@ def scenario_native_execution(c):
 def scenario_escape(c, account, proxy):
     c.scenario("escape hatch")
     target = c.contracts["MockTransferTarget"]
-    c.tx("initiateEscape", "SmartAccountV3", "initiateEscape", [H(account)], "owner")
-    c.check(c.results("SmartAccountV3", "isEscapeActive", H(account)) is True, "escape active")
+    c.tx("initiateEscape", "SmartAccount", "initiateEscape", [H(account)], "owner")
+    c.check(c.results("SmartAccount", "isEscapeActive", H(account)) is True, "escape active")
     record = c.execute("owner execution cancels escape", account,
                        c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 3), "owner")
     c.check("EscapeCancelled" in record["events"], "EscapeCancelled emitted")
-    c.check(c.results("SmartAccountV3", "isEscapeActive", H(account)) is False, "escape cleared")
-    c.tx("initiateEscape inside cooldown", "SmartAccountV3", "initiateEscape", [H(account)], "owner",
+    c.check(c.results("SmartAccount", "isEscapeActive", H(account)) is False, "escape cleared")
+    c.tx("initiateEscape inside cooldown", "SmartAccount", "initiateEscape", [H(account)], "owner",
          expect_fault="Escape cooldown active")
     c.fastfwd(3600)
-    c.tx("initiateEscape after cooldown", "SmartAccountV3", "initiateEscape", [H(account)], "owner")
-    c.tx("finalizeEscape before timelock", "SmartAccountV3", "finalizeEscape", [H(account), H(ZERO)], "owner",
+    c.tx("initiateEscape after cooldown", "SmartAccount", "initiateEscape", [H(account)], "owner")
+    c.tx("finalizeEscape before timelock", "SmartAccount", "finalizeEscape", [H(account), H(ZERO)], "owner",
          expect_fault="Timelock active")
     c.fastfwd(c.timelocks[account])
-    record = c.tx("finalizeEscape after timelock", "SmartAccountV3", "finalizeEscape",
+    record = c.tx("finalizeEscape after timelock", "SmartAccount", "finalizeEscape",
                   [H(account), H(ZERO)], "owner")
     c.check("EscapeFinalized" in record["events"], "EscapeFinalized emitted")
-    c.check(c.results("SmartAccountV3", "isEscapeActive", H(account)) is False, "escape finalized")
+    c.check(c.results("SmartAccount", "isEscapeActive", H(account)) is False, "escape finalized")
 
 
 def scenario_hook(c):
@@ -1095,7 +1095,7 @@ def scenario_hook(c):
     hook = c.contracts["WhitelistHook"]
     target = c.contracts["MockTransferTarget"]
     account, proxy = c.register("register account with WhitelistHook", hook=hook)
-    c.check(c.hash_result("SmartAccountV3", "getHook", H(account)) == hook, "hook bound")
+    c.check(c.hash_result("SmartAccount", "getHook", H(account)) == hook, "hook bound")
     c.two_phase("setWhitelist", account, "hook", "setWhitelist", [H(account), H(target), BOOL(True)])
     c.check(c.results("WhitelistHook", "isWhitelisted", H(account), H(target)) is True, "target whitelisted")
     c.execute("whitelisted target", account, c.transfer_op(target, proxy, c.wallets["buyer"], 1, 0), "owner")
@@ -1119,7 +1119,7 @@ def scenario_hook_gas_cap(c):
         "owner",
         expect_fault="The bounded contract call gas limit has been exhausted.")
     c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM hook-budget fault is surfaced by the AA invocation")
+            "the NeoVM hook-budget fault is surfaced by the SA invocation")
     c.check(c.nonce(account) == 0, "a hook budget fault rolls back nonce consumption")
     c.tx("enable adversarial post-hook burn", "MockTransferTarget", "setBurnPostGas", [BOOL(True)], "genesis")
     c.tx("disable adversarial pre-hook burn", "MockTransferTarget", "setBurnGas", [BOOL(False)], "genesis")
@@ -1130,26 +1130,26 @@ def scenario_hook_gas_cap(c):
         "owner",
         expect_fault="The bounded contract call gas limit has been exhausted.")
     c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM post-hook budget fault is surfaced by the AA invocation")
+            "the NeoVM post-hook budget fault is surfaced by the SA invocation")
     c.check(c.nonce(account) == 0, "a post-hook budget fault rolls back nonce consumption")
 
     cleanup_account, _ = c.register("register account for bounded module cleanup", hook=hook)
     c.tx("enable adversarial module cleanup burn", "MockTransferTarget", "setBurnClearGas", [BOOL(True)], "genesis")
-    c.tx("propose bounded hook cleanup", "SmartAccountV3", "updateHook",
+    c.tx("propose bounded hook cleanup", "SmartAccount", "updateHook",
          [H(cleanup_account), H(ZERO)], "owner")
     c.fastfwd(DAY)
     record = c.tx(
         "module cleanup callback exceeds its independent budget",
-        "SmartAccountV3",
+        "SmartAccount",
         "confirmHookUpdate",
         [H(cleanup_account)],
         "owner",
         expect_fault="The bounded contract call gas limit has been exhausted.")
     c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
             "the NeoVM maintenance-budget fault is surfaced by the hook transition")
-    c.check(c.hash_result("SmartAccountV3", "getHook", H(cleanup_account)) == hook,
+    c.check(c.hash_result("SmartAccount", "getHook", H(cleanup_account)) == hook,
             "maintenance-budget fault preserves the outgoing hook binding")
-    c.check(c.results("SmartAccountV3", "hasPendingHookUpdate", H(cleanup_account)) is True,
+    c.check(c.results("SmartAccount", "hasPendingHookUpdate", H(cleanup_account)) is True,
             "maintenance-budget fault preserves the pending hook transition")
 
 
@@ -1245,23 +1245,23 @@ def scenario_profile_crypto(c, workdir):
         c.check(c.nonce(account) == 1, "foreign Web3Auth key leaves the nonce unchanged")
         message_hash = hashlib.sha256(b"neo-smartaccount-web3auth-message").digest()
         message_signature = web3auth_key.sign_digest(message_hash)
-        result = c.results("SmartAccountV3", "isValidSignature", H(account), B(message_hash),
+        result = c.results("SmartAccount", "isValidSignature", H(account), B(message_hash),
                            B(message_signature))
         c.check(result == bytes.fromhex("1626ba7e"),
                 "Web3Auth verifies the 32-byte digest directly and returns the ERC-1271 magic value")
         compact_signature = web3auth_key.sign_digest_compact(message_hash)
-        compact_result = c.results("SmartAccountV3", "isValidSignature", H(account), B(message_hash),
+        compact_result = c.results("SmartAccount", "isValidSignature", H(account), B(message_hash),
                                    B(compact_signature))
         c.check(compact_result == bytes.fromhex("1626ba7e"),
                 "Web3Auth accepts EIP-2098 compact message signatures")
         c.check(c.results("Web3AuthVerifier", "supportsMessageSignatures") is True,
                 "Web3Auth advertises the ERC-1271 message-signature capability")
         other_digest = hashlib.sha256(b"neo-smartaccount-web3auth-other-message").digest()
-        invalid = c.results("SmartAccountV3", "isValidSignature", H(account), B(other_digest),
+        invalid = c.results("SmartAccount", "isValidSignature", H(account), B(other_digest),
                             B(message_signature))
         c.check(invalid == bytes.fromhex("ffffffff"),
                 "Web3Auth rejects a message signature under a different digest")
-        malformed = c.results("SmartAccountV3", "isValidSignature", H(account), B(message_hash),
+        malformed = c.results("SmartAccount", "isValidSignature", H(account), B(message_hash),
                               B(bytes([0x11]) * 65))
         c.check(malformed == bytes.fromhex("ffffffff"),
                 "Web3Auth fails closed on a malformed recoverable signature")
@@ -1313,7 +1313,7 @@ def scenario_verifier_gas_cap(c):
         "owner",
         expect_fault="The bounded contract call gas limit has been exhausted.")
     c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM child-budget fault is surfaced by the AA invocation")
+            "the NeoVM child-budget fault is surfaced by the SA invocation")
     c.check(c.nonce(account) == 0, "a verifier budget fault rolls back nonce consumption")
     c.tx("disable adversarial verifier burn", "MockVerifierCore", "setBurnGas", [BOOL(False)], "owner")
     c.tx("enable adversarial verifier post burn", "MockVerifierCore", "setBurnPostGas", [BOOL(True)], "owner")
@@ -1324,7 +1324,7 @@ def scenario_verifier_gas_cap(c):
         "owner",
         expect_fault="The bounded contract call gas limit has been exhausted.")
     c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM verifier post-budget fault is surfaced by the AA invocation")
+            "the NeoVM verifier post-budget fault is surfaced by the SA invocation")
     c.check(c.nonce(account) == 0, "a verifier post-budget fault rolls back nonce consumption")
     c.tx("disable adversarial verifier post burn", "MockVerifierCore", "setBurnPostGas",
          [BOOL(False)], "owner")
@@ -1332,7 +1332,7 @@ def scenario_verifier_gas_cap(c):
          [BOOL(True)], "owner")
     record = c.raw_tx(
         "ERC-1271 verifier callback exceeds its independent budget",
-        "SmartAccountV3",
+        "SmartAccount",
         "isValidSignature",
         [H(account), B(bytes([0x11]) * 32), B(bytes([0x22]) * 65)],
         signer="owner",
@@ -1344,7 +1344,7 @@ def scenario_verifier_gas_cap(c):
          [BOOL(False)], "owner")
     record = c.raw_tx(
         "ERC-1271 verifier callback succeeds within its independent budget",
-        "SmartAccountV3",
+        "SmartAccount",
         "isValidSignature",
         [H(account), B(bytes([0x11]) * 32), B(bytes([0x22]) * 65)],
         signer="owner",
@@ -1379,25 +1379,25 @@ def scenario_session_key_and_paymaster(c, workdir):
                I(1), I(FAR_DEADLINE), B(bytes(64)))
     c.execute("relay submits zero signature", account, forged, "relay", expect_fault="Verifier rejected signature")
 
-    paymaster = c.contracts["AAPaymaster"]
+    paymaster = c.contracts["SAPaymaster"]
     sponsor = c.wallets["sponsor"]
     c.tx("sponsor deposits 100 GAS", "GasToken", "transfer", [H(sponsor), H(paymaster), I(100 * GAS), B(b"")], "sponsor")
-    c.check(c.results("AAPaymaster", "getSponsorDeposit", H(sponsor)) == 100 * GAS, "deposit credited")
-    c.tx("sponsor sets policy", "AAPaymaster", "setPolicy",
+    c.check(c.results("SAPaymaster", "getSponsorDeposit", H(sponsor)) == 100 * GAS, "deposit credited")
+    c.tx("sponsor sets policy", "SAPaymaster", "setPolicy",
          [H(account), H(target), S("transfer"), I(5 * GAS), I(0), I(0), I(0)], "sponsor")
     relay_before = c.gas_balance("relay")
     sponsored = [H(account), signed_op(1), H(paymaster), H(sponsor), I(5 * GAS)]
     # The zero-fee estimation container settles the request; the persisted transaction settles
     # the capped amount. The cap is branch-free so both charge exactly the same gas, which is
     # what lets a relay price a sponsored operation with a plain invokescript.
-    estimated = c.estimate("SmartAccountV3", "executeSponsoredUserOp", sponsored, "relay")
-    record = c.tx("relay executes sponsored op", "SmartAccountV3", "executeSponsoredUserOp", sponsored, "relay")
+    estimated = c.estimate("SmartAccount", "executeSponsoredUserOp", sponsored, "relay")
+    record = c.tx("relay executes sponsored op", "SmartAccount", "executeSponsoredUserOp", sponsored, "relay")
     record["estimatedGas"] = estimated
     c.check(record["gasConsumed"] == estimated,
             f"zero-fee estimation ({estimated}) equals the persisted gas ({record['gasConsumed']}) to the datoshi")
     c.check("SponsoredUserOpExecuted" in record["events"], "SponsoredUserOpExecuted emitted")
     settled = min(5 * GAS, record["systemFee"] + record["networkFee"])
-    deposit = c.results("AAPaymaster", "getSponsorDeposit", H(sponsor))
+    deposit = c.results("SAPaymaster", "getSponsorDeposit", H(sponsor))
     c.check(deposit == 100 * GAS - settled, f"sponsor deposit reduced by the capped reimbursement {settled}")
     relay_after = c.gas_balance("relay")
     c.check(relay_after - relay_before == settled - record["systemFee"] - record["networkFee"],
@@ -1446,24 +1446,24 @@ def scenario_discovery_and_day_one_session_key(c, workdir):
     c.check(c.nonce(account) == 1, "day-one session key consumed nonce 0")
 
     # describeAccount aggregates the wallet discovery surface in one read-only call.
-    description = c.results("SmartAccountV3", "describeAccount", H(account))
+    description = c.results("SmartAccount", "describeAccount", H(account))
     c.check(description[0] is True, "describeAccount reports the account exists")
     c.check("0x" + description[1][::-1].hex() == verifier, "describeAccount reports the bound verifier")
     c.check(description[6] is False and description[9] is False,
             "describeAccount reports no escape and no market escrow")
     unknown = "0x" + "42" * 20
-    missing = c.results("SmartAccountV3", "describeAccount", H(unknown))
+    missing = c.results("SmartAccount", "describeAccount", H(unknown))
     c.check(missing[0] is False and "0x" + missing[1][::-1].hex() == ZERO,
             "describeAccount reports an unknown account without faulting")
 
     # simulateValidation is the non-faulting preflight of the core's execution checks.
-    sim = c.results("SmartAccountV3", "simulateValidation", H(account),
+    sim = c.results("SmartAccount", "simulateValidation", H(account),
                     c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 1))
     c.check(sim[0] is True and sim[1] is True and sim[2] is True and sim[3] is True,
             "simulateValidation clears the account, deadline, nonce and verifier checks")
     c.check(sim[5] is False and sim[6] is False,
             "simulateValidation reports no escrow block and no active escape")
-    sim_missing = c.results("SmartAccountV3", "simulateValidation", H(unknown),
+    sim_missing = c.results("SmartAccount", "simulateValidation", H(unknown),
                             c.transfer_op(target, proxy, c.wallets["buyer"], 1000, 0))
     c.check(all(flag is False for flag in sim_missing),
             "simulateValidation reports an unknown account without faulting")
@@ -1485,14 +1485,14 @@ def scenario_recovery_cleanup(c, workdir):
     c.tx("owner earmarks oracle credit", "GasToken", "transfer",
          [H(c.wallets["owner"]), H(recovery), I(credit), H(account)], "owner")
     c.check(c.results("SocialRecoveryVerifier", "getOracleCredit", H(account)) == credit, "oracle credit earmarked")
-    c.tx("updateVerifier to none", "SmartAccountV3", "updateVerifier", [H(account), H(ZERO), B(b"")], "owner")
-    c.tx("confirm before timelock", "SmartAccountV3", "confirmVerifierUpdate", [H(account)], "owner",
+    c.tx("updateVerifier to none", "SmartAccount", "updateVerifier", [H(account), H(ZERO), B(b"")], "owner")
+    c.tx("confirm before timelock", "SmartAccount", "confirmVerifierUpdate", [H(account)], "owner",
          expect_fault="Timelock not elapsed")
     c.fastfwd(DAY)
     owner_before = c.gas_balance("owner")
-    record = c.tx("confirmVerifierUpdate", "SmartAccountV3", "confirmVerifierUpdate", [H(account)], "owner")
+    record = c.tx("confirmVerifierUpdate", "SmartAccount", "confirmVerifierUpdate", [H(account)], "owner")
     c.check("RecoveryCleared" in record["events"], "RecoveryCleared emitted by the outgoing verifier")
-    c.check(c.hash_result("SmartAccountV3", "getVerifier", H(account)) == ZERO, "verifier detached")
+    c.check(c.hash_result("SmartAccount", "getVerifier", H(account)) == ZERO, "verifier detached")
     c.check(c.hash_result("SocialRecoveryVerifier", "getOwner", H(account)) == ZERO, "recovery owner cleared")
     c.check(c.results("SocialRecoveryVerifier", "getOracleCredit", H(account)) == 0, "credit record cleared")
     owner_after = c.gas_balance("owner")
@@ -1555,7 +1555,7 @@ def scenario_multisig(c, workdir):
             "SessionKey leaf has durable state before topology maintenance")
     c.check(len(c.results("WebAuthnVerifier", "getPublicKey", H(account))) == 33,
             "WebAuthn leaf has durable state before topology maintenance")
-    c.tx("reject non-root dependency mutation", "SmartAccountV3", "setVerifierDependencies",
+    c.tx("reject non-root dependency mutation", "SmartAccount", "setVerifierDependencies",
          [H(account), A(H(session_child))], "owner", expect_fault="Dependency caller is not installed root")
     c.two_phase("remove WebAuthn from MultiSig", account, "verifier",
                 "setConfig", [H(account), A(H(session_child)), I(1)])
@@ -1568,14 +1568,14 @@ def scenario_multisig(c, workdir):
     # dependency registry. Detaching the composite must invoke every registered
     # leaf cleanup before removing the root binding; a fault in any child would
     # abort this confirmation and leave the root installed.
-    c.tx("update MultiSig verifier to native fallback", "SmartAccountV3", "updateVerifier",
+    c.tx("update MultiSig verifier to native fallback", "SmartAccount", "updateVerifier",
          [H(account), H(ZERO), B(b"")], "owner")
-    c.tx("confirm MultiSig cleanup before timelock", "SmartAccountV3", "confirmVerifierUpdate",
+    c.tx("confirm MultiSig cleanup before timelock", "SmartAccount", "confirmVerifierUpdate",
          [H(account)], "owner", expect_fault="Timelock not elapsed")
     c.fastfwd(DAY)
-    c.tx("confirm MultiSig cleanup after timelock", "SmartAccountV3", "confirmVerifierUpdate",
+    c.tx("confirm MultiSig cleanup after timelock", "SmartAccount", "confirmVerifierUpdate",
          [H(account)], "owner")
-    c.check(c.hash_result("SmartAccountV3", "getVerifier", H(account)) == ZERO,
+    c.check(c.hash_result("SmartAccount", "getVerifier", H(account)) == ZERO,
             "composite verifier detached only after child cleanup")
     c.check(c.results("SessionKeyVerifier", "getSessionKey", H(account)) is None,
             "detaching MultiSig clears the remaining SessionKey leaf")
@@ -1595,9 +1595,9 @@ def scenario_multihook(c):
     c.check(len(c.results("MultiHook", "getHooks", H(account))) == 2, "two child hooks stored")
     c.two_phase("setHooks with marker-only child", account, "hook", "setHooks",
                 [H(account), A(H(c.contracts["MarkerOnlyModule"]))], expect_fault="Child hook pre ABI missing")
-    c.tx("reject non-root hook dependency mutation", "SmartAccountV3", "setHookDependencies",
+    c.tx("reject non-root hook dependency mutation", "SmartAccount", "setHookDependencies",
          [H(account), A(H(whitelist))], "owner", expect_fault="Dependency caller is not installed root")
-    c.tx("reject malformed child hook configuration", "SmartAccountV3", "callHookChild",
+    c.tx("reject malformed child hook configuration", "SmartAccount", "callHookChild",
          [H(account), H(whitelist), S("setWhitelist"), A(H(account), H(target))], "owner",
          expect_fault="Invalid child hook configuration arguments")
     c.two_phase_hook_child("provision Whitelist leaf", account, whitelist, "setWhitelist",
@@ -1613,13 +1613,13 @@ def scenario_multihook(c):
                            [H(account), H(target), BOOL(True)])
     c.check(c.results("WhitelistHook", "isWhitelisted", H(account), H(target)) is True,
             "reprovisioned Whitelist leaf has durable state before detach")
-    c.tx("detach MultiHook", "SmartAccountV3", "updateHook", [H(account), H(ZERO)], "owner")
-    c.tx("confirm MultiHook cleanup before timelock", "SmartAccountV3", "confirmHookUpdate",
+    c.tx("detach MultiHook", "SmartAccount", "updateHook", [H(account), H(ZERO)], "owner")
+    c.tx("confirm MultiHook cleanup before timelock", "SmartAccount", "confirmHookUpdate",
          [H(account)], "owner", expect_fault="Timelock not elapsed")
     c.fastfwd(DAY)
-    c.tx("confirm MultiHook cleanup after timelock", "SmartAccountV3", "confirmHookUpdate",
+    c.tx("confirm MultiHook cleanup after timelock", "SmartAccount", "confirmHookUpdate",
          [H(account)], "owner")
-    c.check(c.hash_result("SmartAccountV3", "getHook", H(account)) == ZERO,
+    c.check(c.hash_result("SmartAccount", "getHook", H(account)) == ZERO,
             "MultiHook detached after child cleanup")
     c.check(c.results("WhitelistHook", "isWhitelisted", H(account), H(target)) is False,
             "detaching MultiHook clears the remaining Whitelist leaf")
@@ -1629,52 +1629,52 @@ def scenario_multihook(c):
 
 def scenario_market(c):
     c.scenario("market escrow: sale, owner escape, silent market")
-    market = c.contracts["AAAddressMarket"]
+    market = c.contracts["SAAddressMarket"]
     target = c.contracts["MockTransferTarget"]
-    c.tx("admin allowlists the core", "AAAddressMarket", "setAllowedAA", [H(c.core), BOOL(True)], "genesis")
+    c.tx("admin allowlists the core", "SAAddressMarket", "setAllowedSA", [H(c.core), BOOL(True)], "genesis")
 
     account, proxy = c.register("register account for sale")
-    c.tx("createListing", "AAAddressMarket", "createListing",
-         [H(c.core), H(account), I(GAS), S("AA address"), S("")], "owner", scope="Global")
-    listing = c.results("AAAddressMarket", "getListingCount")
-    c.check(c.results("SmartAccountV3", "isMarketEscrowActive", H(account)) is True, "escrow armed")
+    c.tx("createListing", "SAAddressMarket", "createListing",
+         [H(c.core), H(account), I(GAS), S("SA address"), S("")], "owner", scope="Global")
+    listing = c.results("SAAddressMarket", "getListingCount")
+    c.check(c.results("SmartAccount", "isMarketEscrowActive", H(account)) is True, "escrow armed")
     c.execute("execution while escrowed", account, c.transfer_op(target, proxy, c.wallets["buyer"], 1, 0), "owner",
               expect_fault="Account locked in market escrow")
     c.tx("buyer pays the price", "GasToken", "transfer",
          [H(c.wallets["buyer"]), H(market), I(GAS), I(listing)], "buyer")
-    c.check(c.results("AAAddressMarket", "getPendingPaymentOf", I(listing), H(c.wallets["buyer"])) == GAS,
+    c.check(c.results("SAAddressMarket", "getPendingPaymentOf", I(listing), H(c.wallets["buyer"])) == GAS,
             "payment escrowed by the market")
-    record = c.tx("settleListing", "AAAddressMarket", "settleListing",
+    record = c.tx("settleListing", "SAAddressMarket", "settleListing",
                   [I(listing), H(c.wallets["buyer"]), H(c.wallets["buyer"])], "buyer")
     c.check("MarketEscrowSettled" in record["events"], "MarketEscrowSettled emitted")
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == c.wallets["buyer"],
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == c.wallets["buyer"],
             "buyer owns the shell")
-    c.check(c.results("SmartAccountV3", "isMarketEscrowActive", H(account)) is False, "escrow cleared")
+    c.check(c.results("SmartAccount", "isMarketEscrowActive", H(account)) is False, "escrow cleared")
     c.execute("buyer controls the account", account, c.transfer_op(target, proxy, c.wallets["owner"], 1, 0), "buyer")
 
     account, _ = c.register("register account for owner escape")
-    c.tx("createListing (stuck)", "AAAddressMarket", "createListing",
+    c.tx("createListing (stuck)", "SAAddressMarket", "createListing",
          [H(c.core), H(account), I(GAS), S("stuck"), S("")], "owner", scope="Global")
-    listing = c.results("AAAddressMarket", "getListingCount")
-    c.tx("initiateMarketEscrowCancel", "SmartAccountV3", "initiateMarketEscrowCancel", [H(account)], "owner")
-    c.tx("forceCancel before timelock", "SmartAccountV3", "forceCancelMarketEscrow", [H(account)], "owner",
+    listing = c.results("SAAddressMarket", "getListingCount")
+    c.tx("initiateMarketEscrowCancel", "SmartAccount", "initiateMarketEscrowCancel", [H(account)], "owner")
+    c.tx("forceCancel before timelock", "SmartAccount", "forceCancelMarketEscrow", [H(account)], "owner",
          expect_fault="Owner cancel timelock active")
     c.fastfwd(7 * DAY)
-    c.tx("forceCancelMarketEscrow", "SmartAccountV3", "forceCancelMarketEscrow", [H(account)], "owner")
-    c.check(c.results("SmartAccountV3", "isMarketEscrowActive", H(account)) is False, "owner reclaimed the account")
-    c.check(c.results("AAAddressMarket", "getListing", I(listing))[7] == 3, "market listing flipped to Cancelled")
+    c.tx("forceCancelMarketEscrow", "SmartAccount", "forceCancelMarketEscrow", [H(account)], "owner")
+    c.check(c.results("SmartAccount", "isMarketEscrowActive", H(account)) is False, "owner reclaimed the account")
+    c.check(c.results("SAAddressMarket", "getListing", I(listing))[7] == 3, "market listing flipped to Cancelled")
 
     account, _ = c.register("register account for silent market")
     silent = c.contracts["MockVerifierCore"]
     c.tx("silent market arms the escrow", "MockVerifierCore", "forward",
          [H(c.core), S("enterMarketEscrow"), A(H(account), H(silent), I(1))], "owner", scope="Global")
-    c.check(c.results("SmartAccountV3", "isMarketEscrowActive", H(account)) is True, "silent escrow armed")
-    c.tx("initiateMarketEscrowCancel (silent)", "SmartAccountV3", "initiateMarketEscrowCancel",
+    c.check(c.results("SmartAccount", "isMarketEscrowActive", H(account)) is True, "silent escrow armed")
+    c.tx("initiateMarketEscrowCancel (silent)", "SmartAccount", "initiateMarketEscrowCancel",
          [H(account)], "owner")
     c.fastfwd(7 * DAY)
-    c.tx("forceCancelMarketEscrow (silent market lacks abandonListing)", "SmartAccountV3",
+    c.tx("forceCancelMarketEscrow (silent market lacks abandonListing)", "SmartAccount",
          "forceCancelMarketEscrow", [H(account)], "owner")
-    c.check(c.results("SmartAccountV3", "isMarketEscrowActive", H(account)) is False,
+    c.check(c.results("SmartAccount", "isMarketEscrowActive", H(account)) is False,
             "owner escaped a market without abandonListing")
 
 
@@ -1712,99 +1712,99 @@ def scenario_subscription(c):
 
 def scenario_platform_owner_rotation(c):
     c.scenario("platform account owner rotation")
-    registrar = c.contracts["AAPlatformRegistrar"]
+    registrar = c.contracts["SAPlatformRegistrar"]
     binding = b"neo-miniapps-platform:owner-rotation"
     owner = c.wallets["owner"]
     rotated_owner = c.wallets["merchant"]
 
-    c.tx("propose platform registrar", "SmartAccountV3", "proposePlatformRegistrar", [H(registrar)], "genesis")
-    c.tx("confirm platform registrar before timelock", "SmartAccountV3", "confirmPlatformRegistrar", [],
+    c.tx("propose platform registrar", "SmartAccount", "proposePlatformRegistrar", [H(registrar)], "genesis")
+    c.tx("confirm platform registrar before timelock", "SmartAccount", "confirmPlatformRegistrar", [],
          "genesis", expect_fault="Platform registrar timelock not expired")
     c.fastfwd(7 * DAY)
-    c.tx("confirm platform registrar", "SmartAccountV3", "confirmPlatformRegistrar", [], "genesis")
-    c.check(c.hash_result("SmartAccountV3", "getPlatformRegistrar") == registrar,
+    c.tx("confirm platform registrar", "SmartAccount", "confirmPlatformRegistrar", [], "genesis")
+    c.check(c.hash_result("SmartAccount", "getPlatformRegistrar") == registrar,
             "platform registrar activated")
 
-    account_raw = c.results("SmartAccountV3", "computePlatformAccountId",
+    account_raw = c.results("SmartAccount", "computePlatformAccountId",
                             B(binding), H(owner), I(ESCAPE_TIMELOCK))
     account = "0x" + account_raw[::-1].hex()
-    c.tx("registrar creates platform account", "AAPlatformRegistrar", "registerPlatformAccount",
+    c.tx("registrar creates platform account", "SAPlatformRegistrar", "registerPlatformAccount",
          [B(binding), H(owner), I(ESCAPE_TIMELOCK)], "genesis")
-    proxy = c.hash_result("SmartAccountV3", "getProxyScriptHash", H(account))
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+    proxy = c.hash_result("SmartAccount", "getProxyScriptHash", H(account))
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == owner,
             "platform account starts under the original owner")
-    c.check(c.hash_result("SmartAccountV3", "getAccountIdByProxy", H(proxy)) == account,
+    c.check(c.hash_result("SmartAccount", "getAccountIdByProxy", H(proxy)) == account,
             "platform proxy binding resolves to the account")
 
-    proposed = c.tx("registrar proposes owner rotation", "AAPlatformRegistrar",
+    proposed = c.tx("registrar proposes owner rotation", "SAPlatformRegistrar",
                     "proposePlatformAccountOwnerRotation",
                     [H(account), B(binding), H(rotated_owner)], "genesis")
     c.check("PlatformOwnerRotationProposed" in proposed["events"],
             "owner rotation proposal emits the expected event")
-    pending = c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
+    pending = c.results("SAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
     c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
             "rotation is pending on the proposed owner")
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == owner,
             "proposal does not change the current owner")
 
-    c.tx("stranger cancels pending rotation", "AAPlatformRegistrar",
+    c.tx("stranger cancels pending rotation", "SAPlatformRegistrar",
          "cancelPlatformAccountOwnerRotation", [H(account), B(binding)], "stranger",
          expect_fault="Unauthorized platform owner rotation cancellation")
-    pending = c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
+    pending = c.results("SAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
     c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
             "unauthorized cancellation preserves the pending rotation")
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == owner,
             "unauthorized cancellation preserves the current owner")
 
-    cancelled = c.tx("current owner cancels pending rotation", "AAPlatformRegistrar",
+    cancelled = c.tx("current owner cancels pending rotation", "SAPlatformRegistrar",
                      "cancelPlatformAccountOwnerRotation", [H(account), B(binding)], "owner")
     c.check("PlatformOwnerRotationCancelled" in cancelled["events"],
             "owner cancellation emits the expected event")
-    c.check(c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account)) is None,
+    c.check(c.results("SAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account)) is None,
             "owner cancellation clears the pending rotation")
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == owner,
             "cancellation preserves the current owner")
 
-    c.tx("registrar re-proposes owner rotation", "AAPlatformRegistrar",
+    c.tx("registrar re-proposes owner rotation", "SAPlatformRegistrar",
          "proposePlatformAccountOwnerRotation",
          [H(account), B(binding), H(rotated_owner)], "genesis")
-    c.tx("confirm rotation before timelock", "AAPlatformRegistrar",
+    c.tx("confirm rotation before timelock", "SAPlatformRegistrar",
          "confirmPlatformAccountOwnerRotation", [H(account), B(binding)], "merchant",
          expect_fault="Platform owner rotation timelock not expired")
-    pending = c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
+    pending = c.results("SAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
     c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
             "early confirmation preserves the pending rotation")
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == owner,
             "early confirmation preserves the current owner")
     c.fastfwd(7 * DAY)
-    c.tx("confirm rotation without new-owner witness", "AAPlatformRegistrar",
+    c.tx("confirm rotation without new-owner witness", "SAPlatformRegistrar",
          "confirmPlatformAccountOwnerRotation", [H(account), B(binding)], "genesis",
          expect_fault="New platform owner witness required")
-    pending = c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
+    pending = c.results("SAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account))
     c.check(pending is not None and "0x" + pending[0][::-1].hex() == rotated_owner,
             "confirmation without the new-owner witness preserves the pending rotation")
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == owner,
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == owner,
             "confirmation without the new-owner witness preserves the current owner")
-    rotated = c.tx("confirm rotation with new-owner witness", "AAPlatformRegistrar",
+    rotated = c.tx("confirm rotation with new-owner witness", "SAPlatformRegistrar",
                    "confirmPlatformAccountOwnerRotation", [H(account), B(binding)], "merchant", scope="Global")
     c.check("PlatformAccountOwnerRotated" in rotated["events"],
             "rotation confirmation emits the expected event")
-    c.check(c.hash_result("SmartAccountV3", "getBackupOwner", H(account)) == rotated_owner,
+    c.check(c.hash_result("SmartAccount", "getBackupOwner", H(account)) == rotated_owner,
             "new owner is persisted")
-    c.check(c.results("AAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account)) is None,
+    c.check(c.results("SAPlatformRegistrar", "getPendingPlatformOwnerRotation", H(account)) is None,
             "successful rotation clears the pending record")
-    c.check(c.hash_result("SmartAccountV3", "getProxyScriptHash", H(account)) == proxy,
+    c.check(c.hash_result("SmartAccount", "getProxyScriptHash", H(account)) == proxy,
             "owner rotation preserves the proxy address")
 
 
 def scenario_did_action_ticket(c, workdir):
-    """AA proxy witness consuming a NeoDID action ticket with real transactions: the wallet's
+    """SA proxy witness consuming a NeoDID action ticket with real transactions: the wallet's
     verification-trigger path (WitnessRules proxy signer scoped to the registry) that neoxp
     invoke cannot express, so the transactions are built, signed and broadcast by hand."""
     build = services_build_directory()
     nef = build / "NeoDIDRegistry.nef"
     manifest = build / "NeoDIDRegistry.manifest.json"
-    scenario = c.scenario("AA proxy witness consumes a NeoDID action ticket")
+    scenario = c.scenario("SA proxy witness consumes a NeoDID action ticket")
     if not (nef.is_file() and manifest.is_file()):
         if os.environ.get("NEOOS_REQUIRE_SERVICES_ARTIFACTS") == "1":
             raise ValidationFailure(f"NeoDIDRegistry artifact missing from {build}")
@@ -1825,10 +1825,10 @@ def scenario_did_action_ticket(c, workdir):
     verifier = P256Key(workdir, "did-verifier")
     c.tx("registry admin sets the action verifier key", "NeoDIDRegistry", "setVerifier", [B(verifier.compressed)], "genesis")
     account, proxy = c.register("register native account for the ticket", owner="owner")
-    wallet = c.contracts["SmartAccountV3"]
-    c.tx("wallet admin binds the account's verify scope to the registry", "SmartAccountV3",
+    wallet = c.contracts["SmartAccount"]
+    c.tx("wallet admin binds the account's verify scope to the registry", "SmartAccount",
          "setVerifyScopeTarget", [H(account), H(registry)], "genesis")
-    c.check(c.hash_result("SmartAccountV3", "getVerifyScopeTarget", H(account)) == registry, "verify scope target recorded")
+    c.check(c.hash_result("SmartAccount", "getVerifyScopeTarget", H(account)) == registry, "verify scope target recorded")
     # Everything below runs against the live node over JSON-RPC.
     c.start_node()
     owner = RawKey(workdir, "owner-raw", c.wallet_private_key("owner"))
@@ -1840,14 +1840,14 @@ def scenario_did_action_ticket(c, workdir):
                     + hash_le(wallet) + bytes.fromhex("41627d5b52"))
     c.check("0x" + hash160(proxy_script)[::-1].hex() == proxy, "locally built proxy verification script hashes to the core's proxy hash")
     signers = [{"account": c.wallets["owner"], "scopes": "CalledByEntry"},
-               {"account": proxy, "scopes": "WitnessRules", "rules": aa_proxy_rules(wallet, registry)}]
+               {"account": proxy, "scopes": "WitnessRules", "rules": sa_proxy_rules(wallet, registry)}]
     action_id = "neoos|private-chain|ticket|1"
 
     def ticket(step, nullifier, signature, nonce, target_action=action_id, expect_fault=None):
         op = A(H(registry), S("useActionTicket"), A(H(proxy), S(target_action), B(nullifier), B(signature)),
                I(nonce), I(FAR_DEADLINE), B(b""))
         args = [H(account), op]
-        record = {"step": step, "contract": "SmartAccountV3", "operation": "executeUserOp", "signer": "owner",
+        record = {"step": step, "contract": "SmartAccount", "operation": "executeUserOp", "signer": "owner",
                   "witnessScope": "owner CalledByEntry + proxy WitnessRules(CalledByContract wallet|registry)",
                   "nestedCall": "NeoDIDRegistry.useActionTicket"}
         try:
@@ -1862,7 +1862,7 @@ def scenario_did_action_ticket(c, workdir):
         nonce_value = int.from_bytes(os.urandom(4), "little")
         sysfee = gas + 2_000_000
         # NeoExpress's calculatenetworkfee endpoint resolves every signer through an
-        # opened wallet.  The AA proxy is deliberately not a wallet account: its
+        # opened wallet.  The SA proxy is deliberately not a wallet account: its
         # verification script is carried by the witness itself.  Ask the endpoint
         # for a lower-bound owner-only estimate, then add a deliberately conservative
         # test-only margin for the proxy signer/script.  The final transaction still
@@ -1975,7 +1975,7 @@ def main():
     parser.add_argument("--dotnet", type=Path, default=shutil.which("dotnet"),
                         help="dotnet host used with --runtime-dir")
     parser.add_argument("--workdir", default=None, help="scratch directory for the chain (default: temp)")
-    parser.add_argument("--output", default=None, help="receipt path (default: docs/reports/aa-neoexpress-validation-<date>.json)")
+    parser.add_argument("--output", default=None, help="receipt path (default: docs/reports/sa-neoexpress-validation-<date>.json)")
     parser.add_argument("--keep", action="store_true", help="keep the scratch chain after the run")
     args = parser.parse_args()
 
@@ -1985,8 +1985,8 @@ def main():
         parser.error("--dotnet is required with a source-built runtime")
 
     today = dt.date.today().strftime("%Y%m%d")
-    output = Path(args.output) if args.output else ROOT / "docs" / "reports" / f"aa-neoexpress-validation-{today}.json"
-    workdir = Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="aa-neoxp-"))
+    output = Path(args.output) if args.output else ROOT / "docs" / "reports" / f"sa-neoexpress-validation-{today}.json"
+    workdir = Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="sa-neoxp-"))
     workdir.mkdir(parents=True, exist_ok=True)
     neoxp = Path(args.neoxp)
     runtime_binding = None
@@ -1996,10 +1996,10 @@ def main():
         )
     chain = Chain(str(neoxp), workdir)
     receipt = {
-        "schema": "neoos-aa-neoexpress-validation/v1",
+        "schema": "neoos-sa-neoexpress-validation/v1",
         "observedOn": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "scope": "Fresh isolated single-node NeoExpress chain: deployment of the contracts/bin/platform core, every "
-                 "contracts/bin/v3 public module and the sibling NeoDIDRegistry build, a hand-signed AA proxy-witness "
+                 "contracts/bin/v3 public module and the sibling NeoDIDRegistry build, a hand-signed SA proxy-witness "
                  "transaction that consumes a NeoDID action ticket, "
                  "protocol flows driven by real transactions, and JSON-RPC readback of every deployed contract. "
                  "No public network, no production deployment, no signing or broadcast outside the private chain.",

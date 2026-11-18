@@ -58,7 +58,7 @@ internal static class AbiScenario
         var manifest = ContractManifest.Parse(Encoding.UTF8.GetString(manifestBytes));
 
         var root = JsonDocument.Parse(scenarioBytes).RootElement;
-        if (root.GetProperty("schema").GetString() != "aa-abi-scenario-input/v1")
+        if (root.GetProperty("schema").GetString() != "sa-abi-scenario-input/v1")
             throw new InvalidDataException("unsupported scenario schema");
         string name = root.GetProperty("name").GetString()!;
         ulong blockTimestamp = root.GetProperty("blockTimestamp").GetUInt64();
@@ -201,7 +201,7 @@ internal static class AbiScenario
 
         var report = new Dictionary<string, object?>
         {
-            ["schema"] = "aa-abi-scenario/v1",
+            ["schema"] = "sa-abi-scenario/v1",
             ["scenario"] = new { path = scenarioPath, sha256 = Sha(scenarioBytes), name, steps = steps.Count },
             ["nef"] = new { path = nefPath, sha256 = Sha(nefBytes), scriptLength = nef.Script.Length },
             ["script"] = new

@@ -25,7 +25,32 @@ current-digest runtime/module builds and deployed-byte readback remain separate
 evidence gates, as do formal refinement and public activation.
 
 Historical evidence for earlier draft revisions is recorded in
-[`aa-native-protocol-review-20261009.json`](../../docs/reports/aa-native-protocol-review-20261009.json)
-and [`aa-native-open-boundaries-20261008.json`](../../docs/reports/aa-native-open-boundaries-20261008.json).
+[`sa-native-protocol-review-20261009.json`](../../docs/reports/sa-native-protocol-review-20261009.json)
+and [`sa-native-open-boundaries-20261008.json`](../../docs/reports/sa-native-open-boundaries-20261008.json).
 Those receipts retain their original source and digest identities; they do not
 validate the current revision.
+
+## Neo core checkout location
+
+The overlay core project ([`core/Neo.csproj`](core/Neo.csproj)) and the native
+test project
+([`tests/SmartAccount.Tests/SmartAccount.Tests.csproj`](tests/SmartAccount.Tests/SmartAccount.Tests.csproj))
+compile the pinned Neo core from a checkout outside this repository. By default
+that checkout is a directory named `neo-native-core` next to this repository's
+root, and three MSBuild properties point into it:
+
+- `NeoSourceRoot`, read by both projects: `../neo-native-core/src`
+- `NeoCoreRoot`, read by the core project: `../neo-native-core/src/Neo`
+- `NeoTestsRoot`, read by the test project: `../neo-native-core/tests/Neo.UnitTests`
+
+The paths are written relative to this repository's root. Each default applies
+only while its property is empty, so for any other layout pass the property on
+the command line or export an environment variable of the same name. From the
+repository root:
+
+```bash
+dotnet test implementations/native/tests/SmartAccount.Tests/SmartAccount.Tests.csproj \
+  -p:NeoSourceRoot=/path/to/neo/src \
+  -p:NeoCoreRoot=/path/to/neo/src/Neo \
+  -p:NeoTestsRoot=/path/to/neo/tests/Neo.UnitTests
+```

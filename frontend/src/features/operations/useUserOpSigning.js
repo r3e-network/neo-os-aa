@@ -32,7 +32,7 @@ export const USER_OP_DEADLINE_MS = 60 * 60 * 1000;
  */
 export async function prepareV3UserOpContext({
   rpcUrl,
-  aaContractHash,
+  saContractHash,
   accountIdHash,
   operationBody = {},
   missingAccountError = EC.v3AccountIdHashMissing,
@@ -53,12 +53,12 @@ export async function prepareV3UserOpContext({
   const deadline = Date.now() + deadlineMs;
   const argsHashHex = await computeArgsHashImpl({
     rpcUrl,
-    aaContractHash,
+    saContractHash,
     args: operationBody?.args || [],
   });
   const verifierHash = await fetchV3VerifierImpl({
     rpcUrl,
-    aaContractHash,
+    saContractHash,
     accountIdHash,
   });
   if (!verifierHash) {
@@ -66,7 +66,7 @@ export async function prepareV3UserOpContext({
   }
   const nonce = await fetchV3NonceImpl({
     rpcUrl,
-    aaContractHash,
+    saContractHash,
     accountIdHash,
     channel: 0n,
   });
@@ -85,7 +85,7 @@ export async function prepareV3UserOpContext({
  */
 export async function signUserOpWithEvm({
   rpcUrl,
-  aaContractHash,
+  saContractHash,
   accountIdHash,
   operationBody = {},
   signerId,
@@ -102,7 +102,7 @@ export async function signUserOpWithEvm({
 
   const { argsHashHex, verifierHash, nonce, deadline } = await prepareV3UserOpContext({
     rpcUrl,
-    aaContractHash,
+    saContractHash,
     accountIdHash,
     operationBody,
     missingAccountError,
@@ -115,7 +115,7 @@ export async function signUserOpWithEvm({
     chainId,
     verifyingContract: verifierHash,
     accountIdHash,
-    coreContractHash: aaContractHash,
+    coreContractHash: saContractHash,
     targetContract: operationBody?.targetContract,
     method: operationBody?.method,
     argsHashHex,
@@ -131,7 +131,7 @@ export async function signUserOpWithEvm({
   });
 
   const metaInvocation = buildExecuteUserOpInvocation({
-    aaContractHash,
+    saContractHash,
     accountIdHash,
     targetContract: operationBody?.targetContract,
     method: operationBody?.method,

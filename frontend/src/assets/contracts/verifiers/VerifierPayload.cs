@@ -54,7 +54,7 @@ namespace SmartAccount.Verifiers
         /// <summary>
         /// Constructs the canonical signed message payload for UserOperation verification.
         /// </summary>
-        /// <param name="accountId">The AA account identifier</param>
+        /// <param name="accountId">The SA account identifier</param>
         /// <param name="targetContract">The contract being called</param>
         /// <param name="method">The method name being invoked</param>
         /// <param name="args">The arguments to the method</param>

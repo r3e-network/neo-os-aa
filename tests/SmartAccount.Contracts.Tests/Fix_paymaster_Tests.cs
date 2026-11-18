@@ -64,7 +64,7 @@ public class FixPaymasterTests
         public PolicyHarness()
         {
             Core = Fx.Deploy("MockVerifierCore");
-            Paymaster = Fx.Deploy("AAPaymaster", Core.ToArray());
+            Paymaster = Fx.Deploy("SAPaymaster", Core.ToArray());
         }
 
         public void SetPolicy(UInt160 accountId, BigInteger maxPerOp, BigInteger dailyBudget, BigInteger totalBudget)
@@ -145,14 +145,14 @@ public class FixPaymasterTests
 
         public SponsoredHarness(BigInteger depositAmount)
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
+            Wallet = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
             // The paymaster's authorizedCore must point back at the wallet so the wallet's
             // ExecuteSponsoredUserOp passes the "Paymaster not bound to this core" check and the
             // paymaster's settlement accepts the wallet as the authorized caller.
-            Paymaster = Fx.Deploy("AAPaymaster", Wallet.ToArray());
+            Paymaster = Fx.Deploy("SAPaymaster", Wallet.ToArray());
 
-            // Register an AA account whose native-fallback path is authorized by the backup owner.
+            // Register an SA account whose native-fallback path is authorized by the backup owner.
             ExecAccount = Fx.CallUInt160(
                 Wallet, "computeRegistrationAccountId",
                 UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
@@ -354,7 +354,7 @@ public class FixPaymasterTests
         h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
         UInt160 second = RegisterSecondAccount(h);
         h.Fx.SetSigners(Recipient); // A distinct deployer produces a second contract hash.
-        UInt160 secondPaymaster = h.Fx.Deploy("AAPaymaster", h.Wallet.ToArray());
+        UInt160 secondPaymaster = h.Fx.Deploy("SAPaymaster", h.Wallet.ToArray());
         Assert.AreNotEqual(h.Paymaster, secondPaymaster);
         h.Fx.SetSigners(Sponsor);
         h.Fx.TransferGas(Sponsor, secondPaymaster, 50 * OneGas, null);

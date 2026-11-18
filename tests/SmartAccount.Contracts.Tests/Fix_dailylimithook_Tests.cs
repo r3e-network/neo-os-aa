@@ -58,7 +58,7 @@ public class Fix_DailyLimitHook_Tests
             "snapshot must iterate the configured-limit set");
         StringAssert.Contains(source, "BigInteger before = TokenBalanceOf(token, AssetAddressOf(accountId));",
             "snapshot records each configured token's pre-execution balance at the address that holds it");
-        // The accountId never holds a balance: a virtual AA account keeps its assets at
+        // The accountId never holds a balance: a virtual SA account keeps its assets at
         // the core's proxy script hash, so metering the id charged nothing against the limit.
         StringAssert.Contains(source, "HookAuthority.AuthorizedCore()",
             "the holding address must be derived from the authorized core, not assumed");

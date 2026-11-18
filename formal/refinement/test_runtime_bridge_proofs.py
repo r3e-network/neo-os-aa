@@ -24,7 +24,7 @@ class KernelTests(unittest.TestCase):
     def test_kernel_and_actual_source_semantic_controls(self):
         import tempfile
         from pathlib import Path
-        with tempfile.TemporaryDirectory(prefix='aa-runtime-bridge-test-') as temporary:
+        with tempfile.TemporaryDirectory(prefix='sa-runtime-bridge-test-') as temporary:
             receipt=bridge.run(Path(temporary),Path(temporary)/'receipt.json')
             self.assertTrue(receipt['kernelChecked'])
             self.assertEqual(set(receipt['provenOpcodes']),set(source.HANDLERS))

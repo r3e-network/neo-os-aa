@@ -9,8 +9,8 @@ const panelPath = path.resolve(
 const panelSource = fs.readFileSync(panelPath, "utf8");
 
 test("account discovery lists registered accounts from the NeoOS read API", () => {
-  assert.match(panelSource, /discoverAAAccountsForWallet/);
-  assert.match(panelSource, /isAAReadApiConfigured/);
+  assert.match(panelSource, /discoverSAAccountsForWallet/);
+  assert.match(panelSource, /isSAReadApiConfigured/);
   assert.match(panelSource, /registeredAccounts/);
   assert.match(panelSource, /discoveredRegisteredAccounts/);
   // The wallet address is the backup owner the read API filters on, and the
@@ -24,7 +24,7 @@ test("the address market listing scan is optional, not the discovery gate", () =
     /const isConfigured = computed\(\(\) => ([^)]*)\)/,
   );
   assert.ok(configuredGate, "the panel must declare its configuration gate");
-  assert.match(configuredGate[1], /isAAReadApiConfigured/);
+  assert.match(configuredGate[1], /isSAReadApiConfigured/);
   assert.doesNotMatch(configuredGate[1], /isAddressMarketConfigured/);
   assert.match(panelSource, /isAddressMarketConfigured\(\)/);
 });

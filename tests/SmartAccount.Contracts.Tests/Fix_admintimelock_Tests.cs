@@ -10,7 +10,7 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral VM tests for the AA-D-01 core-wallet upgrade hardening
+/// Behavioral VM tests for the SA-D-01 core-wallet upgrade hardening
 /// (<c>SmartAccount.Admin.cs</c>).
 ///
 /// The core <c>update(nef, manifest)</c> used to gate only on the admin witness and instantly
@@ -39,7 +39,7 @@ public class Fix_AdminTimelock_Tests
 
     private static readonly TimeSpan Window = TimeSpan.FromDays(7);
 
-    private const string WalletArtifact = "SmartAccountV3";
+    private const string WalletArtifact = "SmartAccount";
 
     private static (byte[] Nef, string Manifest) ReadArtifact(string baseName)
     {
@@ -284,7 +284,7 @@ public class Fix_AdminTimelock_Tests
     }
 
     // ------------------------------------------------------------------------------------------
-    // AA-D-02: the contract admin role transfer is itself timelocked + new-admin-confirmed.
+    // SA-D-02: the contract admin role transfer is itself timelocked + new-admin-confirmed.
     //
     // The old TransferAdmin did an instant Storage.Put with only the current-admin witness —
     // a single leaked admin key could silently and instantly burn the role to an address nobody

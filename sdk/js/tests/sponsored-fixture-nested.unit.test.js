@@ -1,4 +1,4 @@
-// The AA-11 comparison claims to prove that the SDK-composed sponsored payload reproduces the
+// The SA-11 comparison claims to prove that the SDK-composed sponsored payload reproduces the
 // requested operation. Before this fix it compared nested ByteArray bytes and then reported success
 // for every other nested type: a reviewer changed a nested Integer(7) to Integer(999) and the fixture
 // still answered ok=true. These tests plant one mutation per nested kind into the payload while the
@@ -244,7 +244,7 @@ function fixtureRequest(args) {
 }
 
 function runFixture(args) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aa-fixture-nested-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-fixture-nested-'));
   const file = path.join(dir, 'request.json');
   fs.writeFileSync(file, JSON.stringify(fixtureRequest(args)));
   try {

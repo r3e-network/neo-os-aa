@@ -92,7 +92,7 @@ namespace SmartAccount.Verifiers
         public static void ConfirmAuthorizedCore(UInt160 coreContract) => VerifierAuthority.ConfirmAuthorizedCore(coreContract);
         public static void CancelAuthorizedCoreChange() => VerifierAuthority.CancelAuthorizedCoreChange();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => VerifierAuthority.ProposeUpdate(nefHash, manifestHash);
 
@@ -415,7 +415,7 @@ namespace SmartAccount.Verifiers
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
             // Audit fix M-6: the ordinary-build validation entry is only reachable
-            // through the AA core's execution context; direct callers are rejected.
+            // through the SA core's execution context; direct callers are rejected.
             VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
 #endif
             SessionKeyData? sk = GetSessionKey(accountId);
@@ -475,7 +475,7 @@ namespace SmartAccount.Verifiers
             UInt160 to = (UInt160)op.Args[1];
             ExecutionEngine.Assert(from != null && from.IsValid && to != null && to.IsValid, "Invalid transfer address");
             UInt160 core = VerifierAuthority.AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
             UInt160 proxy = (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId);
             ExecutionEngine.Assert(from == proxy, "Transfer source must be the account asset address");
             return amount;
@@ -579,7 +579,7 @@ namespace SmartAccount.Verifiers
             NativeAuthority.Require(VerifierAuthority.AuthorizedCore(), accountId, "verifier", "configuration");
 #else
             // Audit fix M-1: the backup-owner direct-call branch is removed. Session
-            // key configuration is only accepted through the AA core, which enforces
+            // key configuration is only accepted through the SA core, which enforces
             // the 24h pending-call timelock (callVerifier / callVerifierChild); a
             // direct setSessionKey / clearSessionKey invocation is rejected here.
             VerifierAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);

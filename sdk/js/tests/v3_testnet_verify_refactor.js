@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Testnet verification for Neo Abstract Account.
+ * Testnet verification for Neo Smart Account.
  * Deploys existing pre-compiled NEFs and exercises core flows.
  *
  * Usage: TEST_WIF=Kzja... node v3_testnet_verify_refactor.js
@@ -134,7 +134,7 @@ async function main() {
 
   // ── Deploy core + plugins ──
   console.log('\n== Deploy ==');
-  const core = await deploy(client, account, magic, 'SmartAccountV3', `${tag}-core`);
+  const core = await deploy(client, account, magic, 'SmartAccount', `${tag}-core`);
   const web3auth = await deploy(client, account, magic, 'Web3AuthVerifier', `${tag}-w3a`);
   const sessionKey = await deploy(client, account, magic, 'SessionKeyVerifier', `${tag}-sk`);
   const dailyLimit = await deploy(client, account, magic, 'DailyLimitHook', `${tag}-dl`);
@@ -151,14 +151,14 @@ async function main() {
   }
   console.log('  all plugins authorized');
 
-  const aa = new SmartAccountClient(RPC_URL, core);
+  const sa = new SmartAccountClient(RPC_URL, core);
 
   // ═════════════════════════════════════════════════════════════════
   // TEST 1: Register + native ExecuteUserOp (no verifier, no hook)
   // ═════════════════════════════════════════════════════════════════
   console.log('\n== Test 1: Register + Native ExecuteUserOp ==');
   const id1 = randomId();
-  const virt1 = aa.deriveVirtualAccount(id1);
+  const virt1 = sa.deriveVirtualAccount(id1);
   await invoke(client, core, account, magic, 'registerAccount', [
     h160(id1), h160('0'.repeat(40)), empty(), h160('0'.repeat(40)),
     h160(hex(account.scriptHash)), int(7 * 24 * 3600),

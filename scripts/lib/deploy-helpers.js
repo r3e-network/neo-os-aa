@@ -224,6 +224,75 @@ async function deployArtifact({ client, account, networkMagic, rpcUrl, baseName,
   return { txid, hash, manifestName };
 }
 
+// ── Vanity market-row and core-binding analysis ─────────────────────────────
+
+/**
+ * Extracts the identity material a vanity market row's stored witness script
+ * commits to. The vanity generator and the SDK's buildVerifyScript agree on
+ * the layout's tail:
+ *
+ *   0c14 <accountId: 20 bytes> 11 c0 1f 0c06 <"verify"> 0c14 <coreHash:
+ *   20 bytes in wire (reversed) form> 41627d5b52   (SYSCALL System.Contract.Call)
+ *
+ * The first 20-byte PUSHDATA is the vanity account id exactly as the vanity
+ * generator pushed it (display hex); the last one is the SA core hash in
+ * reversed wire form, so its display form is the byte reverse of the push.
+ * Anything that is not that layout returns null — a strict parse, because a
+ * lenient one could bless a corrupted row as a consistent one.
+ */
+function parseVanityVerifyScript(verifyScriptHex) {
+  const hex = sanitizeHex(verifyScriptHex || '');
+  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-f]+$/.test(hex)) return null;
+  if (!hex.endsWith('41627d5b52')) return null; // must end in the Contract.Call syscall
+
+  const pushes = [];
+  for (let i = 0; i + 2 <= hex.length;) {
+    const opcode = parseInt(hex.slice(i, i + 2), 16);
+    if (opcode === 0x0c || opcode === 0x0d) {
+      const sizeBytes = opcode === 0x0c ? 1 : 2;
+      const sizeStart = i + 2;
+      if (sizeStart + sizeBytes * 2 > hex.length) return null;
+      let length = 0;
+      for (let b = 0; b < sizeBytes; b += 1) {
+        length += parseInt(hex.slice(sizeStart + b * 2, sizeStart + b * 2 + 2), 16) << (8 * b);
+      }
+      const dataStart = sizeStart + sizeBytes * 2;
+      if (length === 0 || dataStart + length * 2 > hex.length) return null;
+      pushes.push(hex.slice(dataStart, dataStart + length * 2));
+      i = dataStart + length * 2;
+      continue;
+    }
+    i += 2;
+  }
+
+  const twentyBytePushes = pushes.filter((item) => item.length === 40);
+  if (twentyBytePushes.length !== 2) return null;
+  if (!pushes.includes('766572696679')) return null; // the "verify" method name
+
+  const accountId = twentyBytePushes[0];
+  const coreWire = twentyBytePushes[twentyBytePushes.length - 1];
+  let coreDisplay = '';
+  for (let i = coreWire.length; i > 0; i -= 2) coreDisplay += coreWire.slice(i - 2, i);
+  return { accountId, coreContractHash: coreDisplay };
+}
+
+/**
+ * Classifies how a deployed module's authorized-core state relates to the SA
+ * core this run targets. VerifierAuthority/PaymasterAuthority (audit fix M-7)
+ * permit the instant SetAuthorizedCore only for the initial (unset) core:
+ * re-pointing an already-configured core is a rebind that faults inside
+ * SetAuthorizedCore and must go through the timelocked
+ * Propose/ConfirmAuthorizedCore path. `currentCore` may be the raw stack value
+ * (with or without 0x); an all-zero or empty value counts as unset.
+ */
+function classifyAuthorizedCoreBinding(currentCore, activeCoreHash) {
+  const current = sanitizeHex(currentCore || '');
+  const active = sanitizeHex(activeCoreHash || '');
+  if (!current || current === '00'.repeat(20)) return 'first-bind';
+  if (current === active) return 'already-bound';
+  return 'rebind';
+}
+
 // ── Market listing helpers (testnet market scripts) ─────────────────────────
 
 // Price tiers (GAS has 8 decimals)
@@ -285,7 +354,7 @@ function buildPsqlEnv(connectionString) {
 function loadAccountsFromDB(neonDbUrl) {
   // Use psql via child_process since pg module may not be installed in this project
   const { execFileSync } = require('child_process');
-  const query = 'SELECT id, pattern, address, account_id_hash, script_hash, verify_script FROM aa_accounts ORDER BY id';
+  const query = 'SELECT id, pattern, address, account_id_hash, script_hash, verify_script FROM sa_accounts ORDER BY id';
   if (!neonDbUrl) {
     throw new Error('NEON_DB_URL is required');
   }
@@ -310,6 +379,8 @@ module.exports = {
   withRpcRetry,
   artifactPaths,
   loadArtifact,
+  parseVanityVerifyScript,
+  classifyAuthorizedCoreBinding,
   normalizeHash,
   stackHash160,
   buildConfig,

@@ -85,8 +85,8 @@ test('ordinary artifact identity does not certify the newer source fixes or a pu
   assert.match(ordinary.protocolScope, /Full protocol conformance remains open/);
   assert.deepEqual(ordinary.protocolEvidence, [
     'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
-    'docs/AA-SYSTEM-STATUS.md',
-    'docs/AA-FORMAL-VERIFICATION.md',
+    'docs/SA-SYSTEM-STATUS.md',
+    'docs/SA-FORMAL-VERIFICATION.md',
   ]);
   assert.deepEqual(ordinary.releaseBoundaries, [
     'PUBLIC-CALLBACK-RESOURCE-ISOLATION',

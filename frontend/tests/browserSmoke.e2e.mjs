@@ -14,11 +14,11 @@ const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const FRONTEND_DIR = path.resolve(MODULE_DIR, "..");
 const REPO_ROOT = path.resolve(FRONTEND_DIR, "..");
 const HOST = "127.0.0.1";
-const DEFAULT_PORT = Number(process.env.AA_FRONTEND_E2E_PORT || 4173);
+const DEFAULT_PORT = Number(process.env.SA_FRONTEND_E2E_PORT || 4173);
 const VITE_BIN = path.resolve(FRONTEND_DIR, "node_modules", "vite", "bin", "vite.js");
-const E2E_RUN_ID = String(process.env.AA_FRONTEND_E2E_RUN_ID || new Date().toISOString().replace(/[:.]/g, "-"));
+const E2E_RUN_ID = String(process.env.SA_FRONTEND_E2E_RUN_ID || new Date().toISOString().replace(/[:.]/g, "-"));
 const SCREENSHOT_DIR = path.resolve(
-  process.env.AA_FRONTEND_E2E_SCREENSHOT_DIR || path.join(REPO_ROOT, ".automation-logs", "frontend-e2e", E2E_RUN_ID),
+  process.env.SA_FRONTEND_E2E_SCREENSHOT_DIR || path.join(REPO_ROOT, ".automation-logs", "frontend-e2e", E2E_RUN_ID),
 );
 
 function sleep(ms) {
@@ -162,12 +162,12 @@ test("browser smoke covers home, identity, app workspace, market, and docs", asy
     page.getByRole("link", { name: /Open App Workspace/i }).first(),
     "open app workspace link"
   );
-  await waitForVisible(page.getByRole("heading", { name: /Neo AA Operations Console/i }), "home hero");
+  await waitForVisible(page.getByRole("heading", { name: /Neo SA Operations Console/i }), "home hero");
   await assert.doesNotReject(() => page.title(), "home title should be readable");
   await captureScreenshot(page, "desktop-home");
 
   await page.goto(`${baseUrl}/app`, { waitUntil: "domcontentloaded" });
-  await waitForVisible(page.getByRole("heading", { name: /Abstract Account Workspace/i }), "workspace heading");
+  await waitForVisible(page.getByRole("heading", { name: /Smart Account Workspace/i }), "workspace heading");
   await waitForVisible(
     page.locator("#main-content").getByRole("button", { name: /Connect Wallet/i }),
     "connect wallet button"
@@ -181,7 +181,7 @@ test("browser smoke covers home, identity, app workspace, market, and docs", asy
 
   await page.goto(`${baseUrl}/market`, { waitUntil: "domcontentloaded" });
   await waitForVisible(
-    page.getByRole("heading", { name: /Create or settle an AA listing/i }),
+    page.getByRole("heading", { name: /Create or settle an SA listing/i }),
     "market heading"
   );
   await waitForVisible(
@@ -206,11 +206,11 @@ test("browser smoke covers home, identity, app workspace, market, and docs", asy
   // Mobile sanity snapshots for readability / density checks.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-  await waitForVisible(page.getByRole("heading", { name: /Neo AA Operations Console/i }), "home hero (mobile)");
+  await waitForVisible(page.getByRole("heading", { name: /Neo SA Operations Console/i }), "home hero (mobile)");
   await captureScreenshot(page, "mobile-home");
 
   await page.goto(`${baseUrl}/app`, { waitUntil: "domcontentloaded" });
-  await waitForVisible(page.getByRole("heading", { name: /Abstract Account Workspace/i }), "workspace heading (mobile)");
+  await waitForVisible(page.getByRole("heading", { name: /Smart Account Workspace/i }), "workspace heading (mobile)");
   await captureScreenshot(page, "mobile-app");
 
   await page.goto(`${baseUrl}/identity`, { waitUntil: "domcontentloaded" });
@@ -233,12 +233,12 @@ test("browser smoke covers home, identity, app workspace, market, and docs", asy
     for (const requested of ['testnet', 'invalid', '', 'mainnet&network=testnet']) {
       await page.goto(`${baseUrl}/app?network=${requested}`, { waitUntil: 'networkidle' });
       await waitForVisible(page.getByTestId('network-mismatch'), 'network mismatch guard');
-      assert.equal(await page.getByRole('heading', { name: /Abstract Account Workspace/i }).count(), 0);
+      assert.equal(await page.getByRole('heading', { name: /Smart Account Workspace/i }).count(), 0);
       assert.equal(await page.getByRole('button', { name: /Connect Wallet/i }).count(), 0);
     }
     await captureScreenshot(page, `network-mismatch-${viewport.width}`);
     await page.getByRole('link', { name: 'Open this network home' }).click();
-    await waitForVisible(page.getByRole('heading', { name: /Neo AA Operations Console/i }), 'explicit network home');
+    await waitForVisible(page.getByRole('heading', { name: /Neo SA Operations Console/i }), 'explicit network home');
     assert.equal(new URL(page.url()).searchParams.get('network'), 'mainnet');
   }
 });

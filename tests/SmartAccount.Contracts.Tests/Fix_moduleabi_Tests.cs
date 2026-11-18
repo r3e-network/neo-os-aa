@@ -24,7 +24,7 @@ public class Fix_ModuleAbi_Tests
     public void MarkerOnlyVerifierIsRejectedBeforeBinding()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 markerOnly = fx.Deploy("MarkerOnlyModule");
 
         UInt160 account = fx.CallUInt160(
@@ -55,7 +55,7 @@ public class Fix_ModuleAbi_Tests
     public void MarkerOnlyHookIsRejectedBeforeBinding()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 markerOnly = fx.Deploy("MarkerOnlyModule");
 
         UInt160 account = fx.CallUInt160(
@@ -86,7 +86,7 @@ public class Fix_ModuleAbi_Tests
     public void ExecutionOnlyVerifierReturnsInvalidErc1271ValueWithoutMessageAbi()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
         string verifierDir = Path.Combine(root, "contracts", "bin", "v3", "verifiers");
         byte[] nef = File.ReadAllBytes(Path.Combine(verifierDir, "NeoNativeVerifier.nef"));
@@ -133,7 +133,7 @@ public class Fix_ModuleAbi_Tests
     public void WrongLifecycleReturnTypeIsRejectedBeforeBinding()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 malformed = fx.Deploy("WrongLifecycleAbiModule");
 
         UInt160 account = fx.CallUInt160(
@@ -164,7 +164,7 @@ public class Fix_ModuleAbi_Tests
     public void WrongHookLifecycleReturnTypeIsRejectedBeforeBinding()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 malformed = fx.Deploy("WrongHookLifecycleAbiModule");
 
         UInt160 account = fx.CallUInt160(
@@ -246,7 +246,7 @@ public class Fix_ModuleAbi_Tests
     public void CompositeRequiresPublishedRosterBeforeTimelockedLeafConfiguration()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
         UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
         UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,
@@ -280,7 +280,7 @@ public class Fix_ModuleAbi_Tests
     public void PendingLeafConfigurationIsInvalidatedWhenVerifierRootChanges()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
         UInt160 firstRoot = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
         UInt160 secondRoot = fx.Deploy("MockVerifierCore");
@@ -312,7 +312,7 @@ public class Fix_ModuleAbi_Tests
     public void SuccessfulLeafMutationInvalidatesFailedRootConfigurationIntent()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
         UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
         UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,
@@ -359,7 +359,7 @@ public class Fix_ModuleAbi_Tests
     public void PendingModuleCallCannotBeOverwrittenWhileInFlight()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
         UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
         UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,

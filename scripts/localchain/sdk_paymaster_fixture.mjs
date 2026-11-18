@@ -19,10 +19,10 @@ import { fileURLToPath } from 'node:url';
 import { normalizeRelayContractParameter } from '../../shared/relayContractParameter.mjs';
 import { canonicalByteHex, compareSponsArgs, sameValue } from './sponsoredArgumentComparison.mjs';
 
-const AA = fileURLToPath(new URL('../../', import.meta.url));
+const SA = fileURLToPath(new URL('../../', import.meta.url));
 const request = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-const sdkRequire = createRequire(`${AA}/sdk/js/package.json`);
-const { SmartAccountClient } = sdkRequire(`${AA}/sdk/js/src/index.js`);
+const sdkRequire = createRequire(`${SA}/sdk/js/package.json`);
+const { SmartAccountClient } = sdkRequire(`${SA}/sdk/js/src/index.js`);
 const { sc, u } = sdkRequire('@cityofzion/neon-js');
 
 // The relay's typed byte boundary, as an object array the script builder can emit.

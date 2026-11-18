@@ -1,35 +1,88 @@
-# 普通合约账户工作台
+# Ordinary contract account workspace
 
-`/app` 使用已部署的 V3 普通合约账户，是 NeoOS 应用接入的主路径。`/native` 使用独立的原生协议与节点能力；两者的账户标识、部署地址与签名上下文不能混用。
+`/app` uses the deployed V3 ordinary contract account and is the main NeoOS
+application path. `/native` uses the independent native protocol and node
+capability; account identity, deployment address and signing context must not be
+mixed between them.
 
-## 创建
+## Creation
 
-连接 Neo N3 钱包后，填写账户的验证器、初始化参数、可选 Hook 和 7–90 天的恢复等待期。Backup Owner 必须是可提供 Neo 交易见证的地址或其 Neo script hash；不是 Ethereum 地址。当前注册界面只请求已连接 Neo 钱包签名，该钱包同时是注册授权人和费用支付人，因此 Backup Owner 必须与它一致。若要使用其他备用地址，应连接对应的钱包。
+After connecting a Neo N3 wallet, enter the account's verifier, initialization
+parameters, optional hook and a 7–90 day recovery delay. The backup owner must be
+an address, or its Neo script hash, that can supply a Neo transaction witness; it
+is not an Ethereum address. The current registration screen requests a signature
+only from the connected Neo wallet, and that wallet is both the registration
+authority and the fee payer, so the backup owner must match it. To use a different
+backup address, connect the corresponding wallet.
 
-保存 accountId 和派生收款地址。accountId 用于读取与管理账户，派生地址用于收款。提交交易后等待链上确认；钱包返回交易编号不代表账户已经注册成功。
+Keep the account ID and the derived receiving address. The account ID reads and
+manages the account; the derived address receives funds. Wait for on-chain
+confirmation after submitting; a wallet-returned transaction ID does not mean the
+account is registered.
 
-## 更换验证器或 Hook
+## Replacing a verifier or hook
 
-在治理页面输入 accountId 并读取链上状态。首次安装空槽位可直接生效；替换已有插件先建立待处理变更，再由 Backup Owner 于 24 小时等待期后确认。等待期间可取消。页面显示当前插件、待生效插件、验证器参数、发起时间和成熟时间。
+Enter the account ID on the governance page and read chain state. Installing into
+an empty slot takes effect directly; replacing an installed plugin first stages a
+pending change that the backup owner confirms after the 24-hour delay. It can be
+cancelled while pending. The page shows the current plugin, the pending plugin,
+the verifier parameters, the initiation time and the maturity time.
 
-成熟判断使用所选节点的区块时间。时间经过后点击刷新；本地时钟不会自动证明变更已成熟。提交前再次读取账户、权限和待处理记录，变化时必须重新审阅。钱包确认至上链期间仍可能有另一设备更改待处理状态；普通合约的既有确认/取消 ABI 不保留审阅状态。
+Maturity is judged by the selected node's block time. Refresh after the time
+passes; the local clock does not prove maturity. Read the account, authorities and
+pending record again before submitting, and re-review if anything changed. Another
+device can still alter pending state between wallet confirmation and inclusion;
+the ordinary contract's existing confirm/cancel ABI does not preserve the reviewed
+state.
 
-完整审阅需要部署提供 `getPendingVerifierUpdate` 与 `getPendingHookUpdate` 只读方法。旧部署只提供存在性和成熟时间时，页面明确无法读取目标和参数，并禁用盲目确认；可以保留只读检查与明确按角色取消待处理变更。没有待处理项时不能确认或取消。
+A complete review requires the deployment to expose the `getPendingVerifierUpdate`
+and `getPendingHookUpdate` read methods. When an older deployment exposes only
+existence and maturity, the page states that the target and parameters cannot be
+read and disables blind confirmation; read-only inspection and explicit
+role-scoped cancellation of the pending change remain available. Nothing can be
+confirmed or cancelled when no pending item exists.
 
-## 备用恢复
+## Backup recovery
 
-只有当前 Backup Owner 可发起与完成恢复。发起后需等待账户配置的时间锁，再由该地址显式完成；到期不会自动替换验证器。完成时可选择恢复为 Backup Owner 直接授权，或指定新验证器及它要求的初始化参数。新验证器地址与参数必须成对审阅。
+Only the current backup owner can start and complete recovery. After initiating,
+wait for the account's configured timelock and complete it explicitly from that
+address; maturity does not replace the verifier automatically. Completion can
+restore backup-owner authorization directly, or name a new verifier together with
+the initialization parameters it requires. The new verifier address and its
+parameters must be reviewed as a pair.
 
-成功恢复会移除旧 Hook，清理旧验证器和 Hook 的账户配置，并删除待处理插件替换、待处理插件调用与链上 metadata URI；不会把余额转到另一个地址。旧插件必须成功执行 `clearAccount`，故损坏或拒绝清理的插件可能阻止恢复。清理失败导致交易失败和状态回滚，不能显示恢复成功或资产已转移；已上链的失败交易仍可能消耗手续费。
+A successful recovery removes the old hook, clears the account configuration of
+the old verifier and hook, and deletes pending plugin replacements, pending plugin
+calls and the on-chain metadata URI; it does not move the balance to another
+address. The old plugins must successfully execute `clearAccount`, so a destroyed
+plugin or one that refuses cleanup can block recovery. A cleanup failure fails the
+transaction and rolls state back; the UI must not report success or moved assets,
+and an included failed transaction can still charge fees.
 
-恢复可用性依赖 Backup Owner 的 Neo 见证可用。丢失唯一备用密钥时，这条恢复路径无法替代它。保存独立备份，并在入金前确认地址和恢复安排。
+Recovery availability depends on a usable Neo witness for the backup owner. Losing
+the only backup key leaves no substitute for this path. Keep an independent backup
+and confirm the address and recovery arrangement before funding the account.
 
-## 账户资料
+## Account metadata
 
-保存资料需要连接当前 Backup Owner。页面在请求钱包前重新核实账户与所有者，并固定本次账户、网络、核心合约和资料内容。链上 `setMetadataUri` 确认成功后才同步链下描述与图标；失败或仍未确认时不写链下镜像。
+Saving metadata requires the current backup owner. The page re-verifies the
+account and owner before requesting the wallet, and pins this attempt's account,
+network, core contract and metadata content. Off-chain description and icon
+updates are written only after the on-chain `setMetadataUri` confirms; a failure or
+unconfirmed transaction writes no off-chain mirror.
 
-等待签名或确认期间切换账户、钱包、网络、身份或修改表单，会停止本次链下同步。已确认的链上变更不会撤销；请重新加载原账户核实结果。链下同步仍需有效的账户控制证明，失败时页面会单独提示。资料保存与治理操作不能同时请求钱包。
+Switching account, wallet, network or identity, or editing the form while waiting
+for a signature or confirmation, stops the off-chain synchronization. A confirmed
+on-chain change is not rolled back; reload the original account to verify the
+result. Off-chain synchronization still needs valid proof of account control and
+reports its own failure separately. Metadata saving and governance actions cannot
+request the wallet at the same time.
 
-## 验证边界
+## Validation boundary
 
-本轮界面验证使用本地节点夹具与模拟钱包请求，不生成用户密钥、不签署真实交易、不向公共链提交。测试应覆盖：错误或不同的备用地址、成熟前确认、旧部署缺少完整读取方法、待处理记录更换、账户或钱包切换、新验证器参数、链上失败和超时未确认。
+This round of interface validation uses local node fixtures and mocked wallet
+requests; it creates no user keys, signs no real transaction and submits nothing
+to a public chain. Tests must cover a wrong or different backup address,
+confirmation before maturity, older deployments without the complete read
+methods, a changed pending record, account or wallet switching, new verifier
+parameters, on-chain failure and an unconfirmed timeout.

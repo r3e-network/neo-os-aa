@@ -5,7 +5,7 @@
       Neo.SmartContract.Testing (the contract tests). Both are published on nuget.org, which
       nuget.config makes the only package source. The audited bytes of this pin and of every
       other Neo package it pulls in are in contracts/neo-platform-packages.json; change this
-      value, that file and the packages.lock.json files together (docs/AA-REPRODUCIBLE-BUILD.md,
+      value, that file and the packages.lock.json files together (docs/SA-REPRODUCIBLE-BUILD.md,
       "How to bump"). scripts/check_neo_platform_packages.mjs enforces all three.
       The private PLATFORM core uses the System.Contract.CallWithGasLimit syscall, which no published
       framework declares; the contract declares it itself (SmartAccount.Execution.cs).
@@ -17,7 +17,7 @@
       change it fails (NU1004), so a different resolved version or different package bytes
       (NU1403) can never enter a build silently. nccs runs its own restore of each contract
       project and honours the same setting. To update a lock file deliberately, restore that
-      project with the force-evaluate switch and RestoreLockedMode set to false (docs/AA-REPRODUCIBLE-BUILD.md).
+      project with the force-evaluate switch and RestoreLockedMode set to false (docs/SA-REPRODUCIBLE-BUILD.md).
     -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <RestoreLockedMode Condition="'$(RestoreLockedMode)' == ''">true</RestoreLockedMode>

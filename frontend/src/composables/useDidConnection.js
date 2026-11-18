@@ -52,22 +52,22 @@ export function useDidConnection() {
   // Auto-reconnect: persist DID connection state
   watch(isConnected, (connected) => {
     if (connected) {
-      localStorage.setItem('aa_did_connected', 'true');
+      localStorage.setItem('sa_did_connected', 'true');
     } else {
-      localStorage.removeItem('aa_did_connected');
+      localStorage.removeItem('sa_did_connected');
     }
   });
 
   // Auto-reconnect on page load
   onMounted(async () => {
-    if (localStorage.getItem('aa_did_connected') && !connectedDidProfile.value?.did && isConfigured.value) {
+    if (localStorage.getItem('sa_did_connected') && !connectedDidProfile.value?.did && isConfigured.value) {
       try {
         const didService = await getDidService();
         await didService.connect();
       } catch (error) {
         if (import.meta.env.DEV) console.error('[useDidConnection] Auto-reconnect failed:', error?.message);
         toast.error(t('nav.didSessionExpired', 'Web3Auth session expired. Please reconnect.'));
-        localStorage.removeItem('aa_did_connected');
+        localStorage.removeItem('sa_did_connected');
       }
     }
   });

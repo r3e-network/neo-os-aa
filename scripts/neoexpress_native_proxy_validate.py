@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from neoexpress_validate import (Chain, RawKey, ValidationFailure, H, B, I, S, A, ZERO,
-    hash_le, hash160, decode, serialize_unsigned, serialize_witnesses, aa_proxy_rules, varint)
+    hash_le, hash160, decode, serialize_unsigned, serialize_witnesses, sa_proxy_rules, varint)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes, check_readback
 from neoexpress_native_service_validate import (CORE, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
     check_native, persist, transaction_system_fee, check_account_record)
@@ -141,7 +141,7 @@ class ProxyTransactions:
         require(receiver_before == 0, "Abort recipient unexpectedly holds GAS")
         signers = [self.payer]
         if proxy_scope != "absent":
-            rules = aa_proxy_rules(CORE, GAS_TOKEN)
+            rules = sa_proxy_rules(CORE, GAS_TOKEN)
             if proxy_scope == "deny": rules[0]["action"] = "Deny"
             signers += [{"account": self.proxy, "scopes": "WitnessRules", "rules": rules}]
         record = check_account_record(self.chain.rpc_invoke(CORE, "getAccount", [H(self.account)])[0])

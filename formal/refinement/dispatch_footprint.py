@@ -51,7 +51,7 @@ import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SCHEMA = 'aa-dispatch-footprint/v1'
+SCHEMA = 'sa-dispatch-footprint/v1'
 SCOPE = 'actual-vm-execution-footprint-against-static-byte-dependency-closure'
 
 # The two names the engine dispatches itself. A named call to either is refused,

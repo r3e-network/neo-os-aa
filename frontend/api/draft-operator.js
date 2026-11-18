@@ -93,7 +93,7 @@ function serializeDraft(draft = {}, { accessScope = 'read' } = {}) {
 
 async function loadDraftByShareSlug(supabase, shareSlug) {
   const { data, error } = await supabase
-    .from('aa_transaction_drafts')
+    .from('sa_transaction_drafts')
     .select('*')
     .eq('share_slug', shareSlug)
     .maybeSingle();
@@ -148,7 +148,7 @@ async function handleClaim({ supabase, shareSlug, accessSlug, publicKeyJwk }) {
     await importOperatorPublicKey(publicKeyJwk);
 
     const { data, error } = await supabase
-      .from('aa_transaction_drafts')
+      .from('sa_transaction_drafts')
       .update({
         operator_public_key: publicKeyJwk,
         operator_key_claimed_at: new Date().toISOString(),
@@ -244,7 +244,7 @@ async function handleMutation({ supabase, shareSlug, accessSlug, mutation, paylo
   patch.operator_counter = expectedCounter + 1;
 
   const { data, error } = await supabase
-    .from('aa_transaction_drafts')
+    .from('sa_transaction_drafts')
     .update(patch)
     .eq('draft_id', draft.draft_id)
     .eq('operator_slug', accessSlug)
@@ -288,6 +288,17 @@ export default async function handler(req, res) {
     if (durable.inProgress) {
       return sendJson(res, 409, { error: 'request_in_progress' }, requestId);
     }
+    // F-13: a configured-but-erroring durability backend fails closed in
+    // production (mirrors the AA-07 rate-limiter policy) instead of crashing
+    // the route with an opaque 500.
+    if (durable.backendUnavailable) {
+      const retryAfter = Number(durable.retryAfter || 60);
+      res.setHeader?.('Retry-After', String(retryAfter));
+      return sendJson(res, 503, {
+        error: 'request_persistence_backend_unavailable',
+        retryAfter,
+      }, requestId);
+    }
   }
 
   if (req.method !== 'POST') {
@@ -297,7 +308,7 @@ export default async function handler(req, res) {
 
   const clientIp = resolveClientIp(req);
   const rateLimit = await checkRateLimit(clientIp);
-  
+
   if (!rateLimit.allowed) {
     const failure = resolveRateLimitFailure(rateLimit);
     if (failure.retryAfter) res.setHeader?.('Retry-After', String(failure.retryAfter));

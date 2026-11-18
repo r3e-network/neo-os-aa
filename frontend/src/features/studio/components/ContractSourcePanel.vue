@@ -1,20 +1,20 @@
 <template>
   <section
-    class="bg-aa-panel/60 shadow-glow-blue rounded-lg overflow-hidden border border-aa-border flex flex-col min-h-[400px] max-h-[700px] backdrop-blur-xl"
+    class="bg-sa-panel/60 shadow-glow-blue rounded-lg overflow-hidden border border-sa-border flex flex-col min-h-[400px] max-h-[700px] backdrop-blur-xl"
   >
     <div
-      class="px-6 py-5 border-b border-aa-border bg-aa-panel/40 flex items-center justify-between"
+      class="px-6 py-5 border-b border-sa-border bg-sa-panel/40 flex items-center justify-between"
     >
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("studioPanels.contractExplorer", "Contract Explorer") }}
         </h2>
-        <p class="text-xs text-aa-muted font-medium font-mono mt-1">
+        <p class="text-xs text-sa-muted font-medium font-mono mt-1">
           {{ t("studioPanels.contractModules", "C# Smart Contract Modules") }}
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-xs text-aa-muted"
+        <span class="text-xs text-sa-muted"
           >{{ contractFiles.length }}
           {{ t("studioPanels.filesLabel", "files") }}</span
         >
@@ -25,10 +25,10 @@
       class="flex flex-col items-center justify-center flex-1 text-center py-16"
     >
       <div class="skeleton h-24 w-24 rounded-2xl mb-5"></div>
-      <p class="text-sm font-semibold text-aa-muted">
+      <p class="text-sm font-semibold text-sa-muted">
         {{ t("studioPanels.loadingContractFiles", "Loading contract files…") }}
       </p>
-      <p class="text-xs text-aa-muted/60 mt-1">
+      <p class="text-xs text-sa-muted/60 mt-1">
         {{
           t(
             "studioPanels.loadingContractFilesHint",
@@ -43,7 +43,7 @@
     >
       <svg
         aria-hidden="true"
-        class="w-12 h-12 text-aa-muted/40 mb-4"
+        class="w-12 h-12 text-sa-muted/40 mb-4"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -55,10 +55,10 @@
           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
         />
       </svg>
-      <p class="text-sm font-semibold text-aa-muted">
+      <p class="text-sm font-semibold text-sa-muted">
         {{ t("studioPanels.noContractFiles", "No contract files loaded") }}
       </p>
-      <p class="text-xs text-aa-muted/60 mt-1">
+      <p class="text-xs text-sa-muted/60 mt-1">
         {{
           t(
             "studioPanels.noContractFilesHint",
@@ -68,14 +68,14 @@
       </p>
     </div>
     <div v-else class="flex flex-col md:flex-row flex-1 min-h-0">
-      <div class="md:hidden px-4 py-3 bg-aa-panel/50 border-b border-aa-border">
+      <div class="md:hidden px-4 py-3 bg-sa-panel/50 border-b border-sa-border">
         <label for="mobile-file-select" class="sr-only">{{
           t("studioPanels.selectFile", "Select file")
         }}</label>
         <select
           id="mobile-file-select"
           :value="activeFileIdx"
-          class="input-field w-full font-mono text-sm py-2 px-3 bg-aa-dark"
+          class="input-field w-full font-mono text-sm py-2 px-3 bg-sa-dark"
           @change="activeFileIdx = Number($event.target.value)"
         >
           <option
@@ -88,7 +88,7 @@
         </select>
       </div>
       <div
-        class="md:w-72 bg-aa-dark/40 border-r border-aa-border overflow-y-auto hidden md:block"
+        class="md:w-72 bg-sa-dark/40 border-r border-sa-border overflow-y-auto hidden md:block"
       >
         <nav class="flex-1 p-3 space-y-1">
           <button
@@ -98,8 +98,8 @@
             @click="activeFileIdx = idx"
             :class="[
               activeFileIdx === idx
-                ? 'bg-aa-orange/20 text-aa-orange font-bold shadow-sm ring-1 ring-aa-orange/40'
-                : 'text-aa-muted hover:bg-aa-panel/60 hover:text-aa-text font-medium',
+                ? 'bg-sa-orange/20 text-sa-orange font-bold shadow-sm ring-1 ring-sa-orange/40'
+                : 'text-sa-muted hover:bg-sa-panel/60 hover:text-sa-text font-medium',
               'group w-full flex items-center px-3 py-2.5 text-[13px] rounded-lg font-mono text-left transition-all duration-200',
             ]"
           >
@@ -107,7 +107,7 @@
               aria-hidden="true"
               class="w-4 h-4 mr-2 opacity-70 flex-shrink-0"
               :class="
-                activeFileIdx === idx ? 'text-aa-orange' : 'text-aa-muted'
+                activeFileIdx === idx ? 'text-sa-orange' : 'text-sa-muted'
               "
               fill="none"
               viewBox="0 0 24 24"
@@ -124,13 +124,13 @@
           </button>
         </nav>
       </div>
-      <div class="flex-1 bg-aa-dark flex flex-col min-w-0">
+      <div class="flex-1 bg-sa-dark flex flex-col min-w-0">
         <div
-          class="flex items-center justify-between px-4 py-3 bg-aa-panel/50 border-b border-aa-border"
+          class="flex items-center justify-between px-4 py-3 bg-sa-panel/50 border-b border-sa-border"
         >
           <div class="flex items-center gap-3">
             <span
-              class="text-xs font-mono text-aa-muted bg-aa-dark/50 px-3 py-1.5 rounded"
+              class="text-xs font-mono text-sa-muted bg-sa-dark/50 px-3 py-1.5 rounded"
               >{{ contractFiles[activeFileIdx]?.name }}</span
             >
           </div>
@@ -139,7 +139,7 @@
             :aria-label="
               t('studioPanels.ariaCopySource', 'Copy contract source')
             "
-            class="inline-flex items-center gap-2 text-xs font-semibold text-aa-text hover:text-aa-text px-3 py-1.5 rounded-lg bg-aa-panel/50 hover:bg-aa-panel/80 transition-colors duration-200"
+            class="inline-flex items-center gap-2 text-xs font-semibold text-sa-text hover:text-sa-text px-3 py-1.5 rounded-lg bg-sa-panel/50 hover:bg-sa-panel/80 transition-colors duration-200"
             @click="copyCode"
           >
             <svg
@@ -160,7 +160,7 @@
             <svg
               v-else
               aria-hidden="true"
-              class="w-4 h-4 text-aa-success"
+              class="w-4 h-4 text-sa-success"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -180,7 +180,7 @@
           </button>
         </div>
         <div
-          class="flex-1 overflow-auto p-4 md:p-6 text-[13px] font-mono text-aa-text"
+          class="flex-1 overflow-auto p-4 md:p-6 text-[13px] font-mono text-sa-text"
         >
           <highlightjs
             autodetect

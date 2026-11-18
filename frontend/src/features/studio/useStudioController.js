@@ -137,7 +137,7 @@ export function useStudioController() {
       createForm.value.backupOwner,
       createForm.value.escapeTimelockDays,
     ],
-    computeAA
+    computeSA
   );
 
   watch(activePanel, (panel) => {
@@ -148,7 +148,7 @@ export function useStudioController() {
 
   onMounted(() => {
     restoreRecentTransactions();
-    void computeAA();
+    void computeSA();
   });
 
   function restoreRecentTransactions() {
@@ -188,12 +188,12 @@ export function useStudioController() {
 
 
   async function invokeReadOperation(operation, args = []) {
-    const aaHash = getSmartAccountHash();
-    if (!aaHash) {
+    const saHash = getSmartAccountHash();
+    if (!saHash) {
       throw new Error(EC.contractNotFound);
     }
 
-    const response = await invokeReadFunction(resolveRpcUrl(walletService), aaHash, operation, args);
+    const response = await invokeReadFunction(resolveRpcUrl(walletService), saHash, operation, args);
     if (response?.state === 'FAULT') {
       throw new Error(EC.operationFailed);
     }
@@ -286,7 +286,7 @@ export function useStudioController() {
     applyCreateAccountVerifierPreset(createForm.value, preset, RUNTIME_CONFIG.morpheusNetwork, { t });
   }
 
-  async function computeAA() {
+  async function computeSA() {
     const escapeTimelockDays = Number(createForm.value.escapeTimelockDays) || 0;
     if (!createForm.value.backupOwner || escapeTimelockDays < MIN_REGISTRATION_ESCAPE_TIMELOCK_DAYS || escapeTimelockDays > MAX_REGISTRATION_ESCAPE_TIMELOCK_DAYS) {
       computedScriptHex.value = '';
@@ -296,18 +296,18 @@ export function useStudioController() {
     }
 
     try {
-      const aaHash = getSmartAccountHash();
-      if (!aaHash) return;
+      const saHash = getSmartAccountHash();
+      if (!saHash) return;
 
       const plan = planCreateAccount(createForm.value, RUNTIME_CONFIG.morpheusNetwork, { t });
-      const script = createVerifyScript(aaHash, plan.accountIdHash);
+      const script = createVerifyScript(saHash, plan.accountIdHash);
 
       computedAccountIdHash.value = plan.accountIdHash;
       computedScriptHex.value = script;
       const scriptHash = reverseHex(hash160(script));
       computedAddress.value = getAddressFromScriptHash(scriptHash);
     } catch (err) {
-      if (import.meta.env.DEV) console.error('[useStudioController] computeAA failed:', err?.message);
+      if (import.meta.env.DEV) console.error('[useStudioController] computeSA failed:', err?.message);
       computedScriptHex.value = '';
       computedAddress.value = '';
       computedAccountIdHash.value = '';
@@ -347,13 +347,13 @@ export function useStudioController() {
       coreHash: getSmartAccountHash(),
       wallet: connectedAccount.value,
     };
-    const aaHash = operationContext.coreHash;
-    if (!aaHash) {
+    const saHash = operationContext.coreHash;
+    if (!saHash) {
       throw new Error(EC.contractNotFound);
     }
 
     const result = await walletService.invoke({
-      scriptHash: aaHash,
+      scriptHash: saHash,
       operation,
       args,
       signers: [{ account: operationContext.wallet, scopes: 1 }]
@@ -779,7 +779,7 @@ export function useStudioController() {
     validCreateAdmins,
     addRow,
     removeRow,
-    computeAA,
+    computeSA,
     loadAccountConfiguration,
     createAccount,
     checkMatrixDomain,

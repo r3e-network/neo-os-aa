@@ -21,8 +21,8 @@ const relayHandler = relayModule.default;
 
 const TEST_WIF = process.env.TEST_WIF || process.env.NEO_TESTNET_WIF || "";
 let RPC_URL = process.env.TESTNET_RPC_URL || "";
-const CORE_HASH = process.env.AA_CORE_HASH_TESTNET || "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2";
-const WEB3AUTH_VERIFIER_HASH = process.env.AA_WEB3AUTH_VERIFIER_HASH_TESTNET || "0x7147f9a508594a7656a25f45d0a7a7dede7c227f";
+const CORE_HASH = process.env.SA_CORE_HASH_TESTNET || "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2";
+const WEB3AUTH_VERIFIER_HASH = process.env.SA_WEB3AUTH_VERIFIER_HASH_TESTNET || "0x7147f9a508594a7656a25f45d0a7a7dede7c227f";
 const PAYMASTER_APP_ID = process.env.MORPHEUS_PAYMASTER_APP_ID || "ddff154546fe22d15b65667156dd4b7c611e6093";
 const PAYMASTER_API_TOKEN =
   process.env.MORPHEUS_RUNTIME_TOKEN
@@ -208,7 +208,7 @@ function buildLocalPaymasterOverrides(accountId) {
   const normalizedTarget = normalizeHash(CORE_HASH).toLowerCase();
   return {
     MORPHEUS_PAYMASTER_TESTNET_ENABLED: "true",
-    MORPHEUS_PAYMASTER_TESTNET_POLICY_ID: "testnet-aa",
+    MORPHEUS_PAYMASTER_TESTNET_POLICY_ID: "testnet-sa",
     MORPHEUS_PAYMASTER_TESTNET_ALLOW_DAPPS: PAYMASTER_DAPP_ID,
     MORPHEUS_PAYMASTER_TESTNET_ALLOW_ACCOUNTS: normalized,
     MORPHEUS_PAYMASTER_TESTNET_ALLOW_TARGETS: normalizedTarget,
@@ -336,8 +336,8 @@ async function main() {
   const rpcClient = new rpc.RPCClient(RPC_URL);
   const version = await rpcClient.getVersion();
   const networkMagic = Number(version.protocol.network);
-  const aaClient = new SmartAccountClient(RPC_URL, CORE_HASH);
-  const deriveBootstrapAccountId = ({ verifierContractHash = "", verifierParamsHex = "" } = {}) => aaClient.deriveRegistrationAccountIdHash({
+  const saClient = new SmartAccountClient(RPC_URL, CORE_HASH);
+  const deriveBootstrapAccountId = ({ verifierContractHash = "", verifierParamsHex = "" } = {}) => saClient.deriveRegistrationAccountIdHash({
     verifierContractHash,
     verifierParamsHex,
     backupOwnerAddress: account.scriptHash,
@@ -449,7 +449,7 @@ async function main() {
   });
 
   const nonce = decodeIntStack(await invokeRead(rpcClient, CORE_HASH, "getNonce", [hash160Param(accountId), integerParam(0)]));
-  const argsHashHex = await aaClient.computeArgsHash([]);
+  const argsHashHex = await saClient.computeArgsHash([]);
   const deadline = BigInt(Date.now() + (60 * 60 * 1000));
   const typedData = buildV3UserOperationTypedData({
     chainId: networkMagic,
@@ -467,21 +467,21 @@ async function main() {
 
   const response = createResponse();
   const snapshot = {
-    AA_RELAY_RPC_URL: process.env.AA_RELAY_RPC_URL,
-    AA_RELAY_WIF: process.env.AA_RELAY_WIF,
-    AA_RELAY_ALLOWED_HASH: process.env.AA_RELAY_ALLOWED_HASH,
+    SA_RELAY_RPC_URL: process.env.SA_RELAY_RPC_URL,
+    SA_RELAY_WIF: process.env.SA_RELAY_WIF,
+    SA_RELAY_ALLOWED_HASH: process.env.SA_RELAY_ALLOWED_HASH,
     MORPHEUS_NETWORK: process.env.MORPHEUS_NETWORK,
     MORPHEUS_PAYMASTER_TESTNET_ENDPOINT: process.env.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT,
   };
 
-  process.env.AA_RELAY_RPC_URL = RPC_URL;
-  process.env.AA_RELAY_WIF = TEST_WIF;
-  process.env.AA_RELAY_ALLOWED_HASH = normalizeHash(CORE_HASH);
+  process.env.SA_RELAY_RPC_URL = RPC_URL;
+  process.env.SA_RELAY_WIF = TEST_WIF;
+  process.env.SA_RELAY_ALLOWED_HASH = normalizeHash(CORE_HASH);
   process.env.MORPHEUS_NETWORK = "testnet";
   process.env.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT = paymasterProxy.endpoint;
 
   try {
-    console.log("Submitting executeUserOp via AA relay with paymaster pre-authorization...");
+    console.log("Submitting executeUserOp via SA relay with paymaster pre-authorization...");
     await relayHandler({
       method: "POST",
       headers: {},
@@ -510,9 +510,9 @@ async function main() {
       },
     }, response);
   } finally {
-    process.env.AA_RELAY_RPC_URL = snapshot.AA_RELAY_RPC_URL;
-    process.env.AA_RELAY_WIF = snapshot.AA_RELAY_WIF;
-    process.env.AA_RELAY_ALLOWED_HASH = snapshot.AA_RELAY_ALLOWED_HASH;
+    process.env.SA_RELAY_RPC_URL = snapshot.SA_RELAY_RPC_URL;
+    process.env.SA_RELAY_WIF = snapshot.SA_RELAY_WIF;
+    process.env.SA_RELAY_ALLOWED_HASH = snapshot.SA_RELAY_ALLOWED_HASH;
     process.env.MORPHEUS_NETWORK = snapshot.MORPHEUS_NETWORK;
     process.env.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT = snapshot.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT;
     await paymasterProxy.close();

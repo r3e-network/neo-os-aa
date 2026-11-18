@@ -10,12 +10,12 @@ using System.ComponentModel;
 namespace SmartAccount.Verifiers
 {
     /// <summary>
-    /// Verifier for a bare secp256r1 (P-256) signature over the AA payload.
+    /// Verifier for a bare secp256r1 (P-256) signature over the SA payload.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This plugin lets a V3 AA account be controlled by a P-256 key after the
-    /// corresponding public key has been provisioned through the AA core.
+    /// This plugin lets a V3 SA account be controlled by a P-256 key after the
+    /// corresponding public key has been provisioned through the SA core.
     /// </para>
     /// <para>
     /// It is <b>not</b> a WebAuthn relying party. <c>ValidateSignature</c> is
@@ -60,7 +60,7 @@ namespace SmartAccount.Verifiers
         public static void ConfirmAuthorizedCore(UInt160 coreContract) => VerifierAuthority.ConfirmAuthorizedCore(coreContract);
         public static void CancelAuthorizedCoreChange() => VerifierAuthority.CancelAuthorizedCoreChange();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => VerifierAuthority.ProposeUpdate(nefHash, manifestHash);
 
@@ -71,7 +71,7 @@ namespace SmartAccount.Verifiers
         public static void Update(ByteString nef, string manifest) => VerifierAuthority.Update(nef, manifest);
 
         /// <summary>
-        /// Stores the passkey public key for an AA account.
+        /// Stores the passkey public key for an SA account.
         /// </summary>
         public static void SetPublicKey(UInt160 accountId, ByteString pubKey)
         {
@@ -124,8 +124,10 @@ namespace SmartAccount.Verifiers
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
             // Audit fix M-6: the ordinary-build validation entry is only reachable
-            // through the AA core's execution context; direct callers are rejected.
-            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+            // through the SA core's execution context; direct callers are rejected.
+            // v4: the core calls validators in the PhaseValidation phase, so this is
+            // the read-only validation-phase authorization (not the completion one).
+            VerifierAuthority.ValidateValidationCaller(accountId, Runtime.ExecutingScriptHash);
             ByteString pubKey = GetPublicKey(accountId);
             ExecutionEngine.Assert(pubKey.Length > 0, "No WebAuthn pubkey configured");
 

@@ -1,5 +1,5 @@
 /**
- * Shared registration account-id derivation for the Neo N3 Abstract Account
+ * Shared registration account-id derivation for the Neo N3 Smart Account
  * stack.
  *
  * Single source of truth for the V3 registration account-id payload layout

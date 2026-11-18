@@ -23,7 +23,7 @@ class VerificationGateTests(unittest.TestCase):
                             verify.coq_mutation_label('OrdinaryRecovery.v', 'recovery-retains-verifier'))
 
     def test_current_ordinary_receipt_is_tracked_and_source_bound(self):
-        receipt_path = verify.ROOT.parent / 'docs/reports/aa-formal-gate-20261031.json'
+        receipt_path = verify.ROOT.parent / 'docs/reports/sa-formal-gate-20261031.json'
         self.assertTrue(receipt_path.exists())
         self.assertEqual(
             '456af189c4249307f5c6706345a06a855d0c55f1b35c5ddbe3d5c691c7af5c08',
@@ -154,7 +154,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertEqual(["v3", "platform"], verify.MODEL_PROFILES["coq/ProxyWitnessScript.v"])
         self.assertEqual(22, len(verify.COQ_MODULES["NativeAuthorityEpoch.v"]))
         # Legacy escape-owner and uint256/paymaster models are not native ABI 2 semantics.
-        for model in ("coq/SmartAccountAA.v", "tla/SmartAccountAA.tla", "smt/aa_core.smt2"):
+        for model in ("coq/SmartAccountSA.v", "tla/SmartAccountSA.tla", "smt/sa_core.smt2"):
             self.assertNotIn("native", verify.MODEL_PROFILES[model])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeIntegerDomain.v"])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/PluginLifecycle.v"])
@@ -329,9 +329,9 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("PostHook; VerifierPost; Emit", model)
 
     def test_ordinary_execution_scopes_optional_callbacks(self):
-        model = (verify.ROOT / "coq" / "SmartAccountAA.v").read_text()
+        model = (verify.ROOT / "coq" / "SmartAccountSA.v").read_text()
         declarations = verify.coq_declarations(model)
-        self.assertIn("AA_020_disabled_callbacks_do_not_gate_execution", declarations)
+        self.assertIn("SA_020_disabled_callbacks_do_not_gate_execution", declarations)
         self.assertIn("pre_callback_valid", model)
         self.assertIn("post_callback_valid", model)
         self.assertIn("hookInstalled s || verifierConfigured s", model)
@@ -367,7 +367,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("proof-replay-freshness", verify.ATTESTATION_PROOF_COQ_MUTATIONS)
 
     def test_open_formal_boundary_ledger_remains_explicit(self):
-        ledger = json.loads((verify.ROOT.parent / "docs/AA-NATIVE-OPEN-BOUNDARIES.json").read_text())
+        ledger = json.loads((verify.ROOT.parent / "docs/SA-NATIVE-OPEN-BOUNDARIES.json").read_text())
         self.assertEqual("OPEN_BOUNDARIES_RETAINED", ledger["status"])
         statuses = {item["id"]: item["status"] for item in ledger["boundaries"]}
         self.assertEqual("OPEN", statuses["FORMAL-NEOVM-COMPILER-REFINEMENT"])
@@ -625,11 +625,11 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_smt_exact_verdicts(self):
         source = '(echo "OBL:one")\n(echo "CTRL:one")'
-        output = "OBL:one\nunsat\nCTRL:one\nsat\nDONE:aa_core"
+        output = "OBL:one\nunsat\nCTRL:one\nsat\nDONE:sa_core"
         self.assertEqual({"obligations": 1, "controls": 1}, verify.parse_smt(source, output, 0))
         for bad in [output.replace("unsat", "unknown"), output.replace("unsat", "sat"),
                     output.replace("CTRL:one\nsat\n", ""), output + "\nsat",
-                    output.replace("DONE:aa_core", "")]:
+                    output.replace("DONE:sa_core", "")]:
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 verify.parse_smt(source, bad, 0)
         with self.assertRaises(ValueError):
@@ -694,7 +694,7 @@ class VerificationGateTests(unittest.TestCase):
             for name in verify.SOURCE_FILES:
                 (repo / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(verify.ROOT.parent / name, repo / name)
-            lock = {"schema": "aa-formal-source-lock/v2", "runtimeProfiles": verify.RUNTIME_PROFILES,
+            lock = {"schema": "sa-formal-source-lock/v2", "runtimeProfiles": verify.RUNTIME_PROFILES,
                     "modelProfiles": verify.MODEL_PROFILES,
                     "sources": {name: hashlib.sha256((repo / name).read_bytes()).hexdigest() for name in verify.SOURCE_FILES}}
             (formal / "source-lock.json").write_text(json.dumps(lock))
@@ -739,7 +739,7 @@ class VerificationGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as output:
             result = Path(output) / "result.json"
             result.write_text('{"modelChecksPassed": true}')
-            env = {**os.environ, "COQC": "/nonexistent-aa-formal/coqc"}
+            env = {**os.environ, "COQC": "/nonexistent-sa-formal/coqc"}
             process = subprocess.run([sys.executable, str(verify.ROOT / "verify.py"), "--output", output],
                                      env=env, capture_output=True, text=True, timeout=20)
             self.assertNotEqual(0, process.returncode)

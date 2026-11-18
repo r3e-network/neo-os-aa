@@ -14,7 +14,7 @@ flowchart LR
   Core[SmartAccountV3]
   Verifier[Verifier Plugin]
   Hook[Hook Plugin]
-  Paymaster[AAPaymaster]
+  Paymaster[SAPaymaster]
   Target[Target Contract]
 
   User --> Browser
@@ -30,7 +30,7 @@ flowchart LR
   Core --> Target
 ```
 
-The Neo N3 Abstract Account system is a **policy-gated** smart contract wallet architecture. V3 keeps one shared execution engine and moves account-specific auth and policy into plugin bindings instead of embedding large role tables inside the core wallet.
+The Neo N3 Smart Account system is a **policy-gated** smart contract wallet architecture. V3 keeps one shared execution engine and moves account-specific auth and policy into plugin bindings instead of embedding large role tables inside the core wallet.
 
 ## 2. Account Model
 
@@ -81,7 +81,7 @@ flowchart TD
 
 ## 5. Sponsored Execution Pipeline
 
-When a sponsor funds gas via the `AAPaymaster` contract, the core wallet uses `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)` (or its batch variant) instead of the standard `executeUserOp`.
+When a sponsor funds gas via the `SAPaymaster` contract, the core wallet uses `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)` (or its batch variant) instead of the standard `executeUserOp`.
 
 ```mermaid
 flowchart TD
@@ -172,7 +172,7 @@ The relay trust boundary is explicit:
 | `contracts/verifiers/ZkLoginVerifier.cs` | Morpheus NeoDID / Web2 identity-root authorization with operation-bound zklogin tickets |
 | `contracts/verifiers/MultiSigVerifier.cs` | Plugin-based multisig authorization |
 | `contracts/hooks/*.cs` | Optional execution policies such as daily limits, token restrictions, credential gating, and hook composition |
-| `contracts/paymaster/Paymaster.cs` | `AAPaymaster`: on-chain GAS deposit pool and policy engine for sponsored/gasless transactions |
+| `contracts/paymaster/Paymaster.cs` | `SAPaymaster`: on-chain GAS deposit pool and policy engine for sponsored/gasless transactions |
 
 ## 12. Security Invariants
 

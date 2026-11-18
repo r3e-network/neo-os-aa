@@ -1,0 +1,64 @@
+{
+  "vectorId": "sa4-operation-envelope-template",
+  "kind": "operation-envelope",
+  "constantsRevision": "TODO(kernel39|40): pin after the constants files land",
+  "input": {
+    "network": 860833102,
+    "coreHash": "TODO(kernel39|40): actual executing core hash of the kernel under test",
+    "accountId": "TODO(kernel39|40): 20-byte raw hex",
+    "operation": {
+      "version": 4,
+      "target": "TODO: 20-byte hex",
+      "method": "transfer",
+      "args": [
+        "TODO: 32-byte hex",
+        1
+      ],
+      "nonce": "TODO: packed 191+64 hex or decimal",
+      "nonceSubkey": "TODO: 32-byte hex",
+      "deadline": 1766000000000,
+      "validatorId": 0,
+      "credentialGeneration": 1,
+      "authorityEpoch": 1,
+      "configurationNonce": 1,
+      "signature": "TODO: validator DTO bytes (test key, 64-byte r||s for built-in)",
+      "hookProofs": [
+        {
+          "hookId": 1,
+          "proof": "TODO: hex"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "canonicalUnsignedOperationHex": "TODO(kernel39|40): NeoVM binary serialization of the 13-field array with signature := empty ByteString",
+    "domainHex": "TODO(kernel39|40): NeoSmartAccount/UserOperation || U1(4) || U32LE(network) || coreHash || accountId || U64BE(validatorId) || U64BE(credentialGeneration) || U64BE(authorityEpoch) || U64BE(configurationNonce)",
+    "digestHex": "TODO(kernel39|40): SHA256(domain || canonicalUnsignedOperation)",
+    "equality": {
+      "ordinaryStdLibSerializeHex": "TODO(kernel39): identical to canonicalUnsignedOperationHex",
+      "nativeBinarySerializerHex": "TODO(kernel40): identical to canonicalUnsignedOperationHex"
+    },
+    "rejections": [
+      {
+        "mutation": "field count 12 or 14",
+        "error": "SA_OPERATION_FIELD_COUNT"
+      },
+      {
+        "mutation": "version != 4",
+        "error": "SA_PROTOCOL_VERSION"
+      },
+      {
+        "mutation": "Struct in place of Array",
+        "error": "SA_OPERATION_MALFORMED"
+      },
+      {
+        "mutation": "hookProofs unsorted or duplicate hookId",
+        "error": "SA_PROOF_INVALID"
+      },
+      {
+        "mutation": "negative or out-of-domain integer",
+        "error": "SA_OPERATION_MALFORMED"
+      }
+    ]
+  }
+}

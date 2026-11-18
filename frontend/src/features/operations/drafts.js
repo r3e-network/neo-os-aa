@@ -12,8 +12,8 @@ function createScopedError(code, message) {
   return error;
 }
 
-export const DRAFTS_TABLE = 'aa_transaction_drafts';
-export const LOCAL_DRAFTS_STORAGE_KEY = 'aa_transaction_drafts_local_v1';
+export const DRAFTS_TABLE = 'sa_transaction_drafts';
+export const LOCAL_DRAFTS_STORAGE_KEY = 'sa_transaction_drafts_local_v1';
 
 const SIGNER_SCOPE_ACTIVITY_TYPES = new Set([
   'signature_added',
@@ -409,7 +409,7 @@ export function createDraftStore({ supabase = getSupabaseClient(), storage = nul
     async createDraft(record) {
       try {
         const payload = createDraftRecord(record);
-        const { data, error } = await supabase.rpc('create_aa_draft', {
+        const { data, error } = await supabase.rpc('create_sa_draft', {
           p_payload: payload,
         });
         if (error) throw error;
@@ -420,7 +420,7 @@ export function createDraftStore({ supabase = getSupabaseClient(), storage = nul
     },
     async loadDraft(shareSlug, options = {}) {
       try {
-        const { data, error } = await supabase.rpc('get_aa_draft_by_share_slug', {
+        const { data, error } = await supabase.rpc('get_sa_draft_by_share_slug', {
           p_share_slug: shareSlug,
           p_access_slug: resolveAccessSlug(options) || null,
         });
@@ -436,7 +436,7 @@ export function createDraftStore({ supabase = getSupabaseClient(), storage = nul
         throw new Error(EC.collaboratorAccessRequired);
       }
       try {
-        const { data, error } = await supabase.rpc('append_aa_draft_signature', {
+        const { data, error } = await supabase.rpc('append_sa_draft_signature', {
           p_share_slug: shareSlug,
           p_access_slug: accessSlug,
           p_signature: cloneImmutable(signature),
@@ -484,11 +484,11 @@ export function createDraftStore({ supabase = getSupabaseClient(), storage = nul
       if (!accessSlug) {
         throw new Error(EC.collaboratorAccessRequired);
       }
-      // Callers only know their access slug; append_aa_draft_activity resolves
+      // Callers only know their access slug; append_sa_draft_activity resolves
       // whether it is an operator or collaborator capability and enforces the
       // allowed event types server-side.
       try {
-        const { data, error } = await supabase.rpc('append_aa_draft_activity', {
+        const { data, error } = await supabase.rpc('append_sa_draft_activity', {
           p_share_slug: shareSlug,
           p_access_slug: accessSlug,
           p_event: cloneImmutable(event || {}),

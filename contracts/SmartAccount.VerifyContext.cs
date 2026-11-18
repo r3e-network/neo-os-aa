@@ -13,49 +13,42 @@ namespace SmartAccount
         // ========================================================================
 
         // This section enables Neo's native witness/verification script system to work
-        // seamlessly with Abstract Accounts, making Neo's AA fundamentally different from
+        // seamlessly with Smart Accounts, making Neo's SA fundamentally different from
         // Ethereum's ERC-4337 approach.
+        //
+        // F-1 (audit fix, protocol v4): the retired per-account scope-target grant
+        // (prefix 0x1C, admin-configured) is DELETED. The proxy witness
+        // now authorizes ONLY the core call path: the witness rule must be exactly
+        // one Allow rule with condition CalledByContract(core). An admin can no
+        // longer bless an arbitrary target contract to pull witness authorization
+        // from the account, and a target rejected by the account's policy cannot
+        // come back through a target-side CheckWitness.
 
         /// <summary>
-        /// Bridge that enables native Neo multisig verification scripts to work with AA.
+        /// Bridge that enables native Neo verification scripts to work with SA.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// This method enables a key Neo N3 advantage over Ethereum's AA:
-        /// Neo's native CheckWitness API can verify ECDSA signatures against the
-        /// transaction's verification scripts without any external cryptographic calls.
-        /// </para>
-        /// <para>
         /// <b>How it works:</b>
         /// <list type="bullet">
-        ///   <item>During ExecuteUserOp, SetVerifyContext stores the target contract</item>
+        ///   <item>During executeUserOp the core stores the active op target (0x02)</item>
         ///   <item>The target contract can call CheckWitness(accountId) to verify authorization</item>
         ///   <item>Neo's runtime checks if the transaction includes a valid witness for accountId</item>
-        ///   <item>This supports Neo's native M-of-N multisig verification scripts</item>
         /// </list>
         /// </para>
         /// <para>
-        /// <b>Integration with NeoNativeVerifier:</b>
-        /// When using NeoNativeVerifier, the UserOperation's Signature field is ignored.
-        /// Instead, verification relies entirely on Neo's native transaction witnesses:
-        /// <list type="bullet">
-        ///   <item>User includes the required signers in their Neo transaction</item>
-        ///   <item>Each signer provides their verification script (or multisig contract script)</item>
-        ///   <item>NeoNativeVerifier calls Runtime.CheckWitness for each authorized signer</item>
-        ///   <item>The operation succeeds only when M-of-N signers have valid witnesses</item>
-        /// </list>
-        /// This is the most gas-efficient verification method as it leverages Neo's
-        /// built-in signature checking without any external crypto libraries.
-        /// </para>
-        /// <para>
-        /// <b>Neo vs Ethereum AA difference:</b>
-        /// Ethereum's ERC-4337 requires bundlers and complex signature aggregation.
-        /// Neo's native witness system eliminates the need for bundlers - the blockchain
-        /// itself handles signature verification through its transaction witnesses.
+        /// <b>Authorization surface (F-1):</b> the proxy witness only ever
+        /// authorizes the core call path. In the Verification trigger the whole
+        /// transaction must be a single bound <c>executeUserOp</c>/<c>executeUserOps</c>
+        /// call on this core, and the signer's witness rule must be exactly
+        /// CalledByContract(this core). In the Application trigger the caller must
+        /// be the currently dispatched operation target (or the NEO/GAS native
+        /// contract when the operation itself targets that asset). No
+        /// admin-configured target forwarding exists anymore.
         /// </para>
         /// </remarks>
-        /// <param name="accountId">The AA account identifier to verify</param>
-        /// <returns>True if the calling contract is the current execution target for this account</returns>
+        /// <param name="accountId">The SA account identifier to verify</param>
+        /// <returns>True if the calling contract is authorized for this account's current execution</returns>
         [Safe]
         public static bool Verify(UInt160 accountId)
         {
@@ -94,65 +87,40 @@ namespace SmartAccount
             return false;
         }
 
-        [Safe]
-        public static UInt160 GetVerifyScopeTarget(UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(Prefix_VerifyScopeTarget, (byte[])accountId);
-            ByteString? value = Storage.Get(Storage.CurrentContext, key);
-            return value == null ? UInt160.Zero : (UInt160)value;
-        }
-
-        public static void SetVerifyScopeTarget(UInt160 accountId, UInt160 targetContract)
-        {
-            AssertContractAdmin();
-            SetVerifyScopeTargetCore(accountId, targetContract);
-        }
-
-        public static void SetVerifyScopeTargets(UInt160[] accountIds, UInt160 targetContract)
-        {
-            AssertContractAdmin();
-            ExecutionEngine.Assert(accountIds != null && accountIds.Length > 0 && accountIds.Length <= 128, "invalid account batch");
-            UInt160[] accounts = accountIds!;
-            for (int i = 0; i < accounts.Length; i++)
-            {
-                SetVerifyScopeTargetCore(accounts[i], targetContract);
-            }
-        }
-
-        private static void SetVerifyScopeTargetCore(UInt160 accountId, UInt160 targetContract)
-        {
-            ExecutionEngine.Assert(accountId != null && accountId != UInt160.Zero, "account id required");
-            ExecutionEngine.Assert(targetContract != null && targetContract != UInt160.Zero, "target required");
-            AssertAccountConfigurationIdle(accountId!);
-            byte[] key = Helper.Concat(Prefix_VerifyScopeTarget, (byte[])accountId!);
-            Storage.Put(Storage.CurrentContext, key, (byte[])targetContract!);
-            OnVerifyScopeTargetSet(accountId!, targetContract!);
-        }
-
-        private static void AssertContractAdmin()
-        {
-            ByteString? admin = Storage.Get(Storage.CurrentContext, Prefix_ContractAdmin);
-            ExecutionEngine.Assert(admin != null, "No admin set");
-            UInt160 adminHash = (UInt160)admin!;
-            ExecutionEngine.Assert(Runtime.CheckWitness(adminHash), "Not admin");
-        }
+        // -----------------------------------------------------------------------
+        // Audit note — outbound permission convergence (#25, design report 6.12):
+        //
+        // The core performs an arbitrary-target dispatch for executed operations
+        // (Contract.Call(target, method, CallFlags.All, args) in Execution.cs).
+        // This is the ONE intentional wildcard-equivalent surface of the core: it
+        // is the operation pipeline itself, and it is gated by the 13-field
+        // envelope, explicit validator routing, the full §3.6 phase pipeline and
+        // AssertTargetIsNotProtocolOwned. This authorization NEVER extends to
+        // module callbacks: every module call in the adaptation layer
+        // (Modules.cs §12) targets the specific module instance's contract hash
+        // recorded in 0x52 — no plugin or service call ever uses a wildcard
+        // target, and the wildcard-equivalent dispatch above never propagates to
+        // descendants (module callbacks during an operation are addressed to the
+        // recorded instances only, and the 0x58 phase gates keep them mutually
+        // exclusive with the target dispatch authorization).
+        // -----------------------------------------------------------------------
 
         // ------------------------------------------------------------------------
-        // Verification-trigger proxy witness binding (audit SEV-0)
+        // Verification-trigger proxy witness binding (audit SEV-0 + F-1)
         // ------------------------------------------------------------------------
         //
         // The proxy verification script (`PUSH accountId; CALL core.verify`) carries
         // no secret: the witness has an empty invocation script and nothing to sign.
-        // Checking only the signer's WitnessRules shape therefore let ANY transaction
-        // list a victim's proxy as a signer and, through the shared core, move the
-        // assets held at the proxy address. The witness is now bound to the account's
-        // own execution: the transaction script must consist solely of data pushes
-        // followed by exactly one `core.executeUserOp(accountId, op)` (or
-        // `executeUserOps(accountId, ops)`) call for THIS accountId, and the proxy
-        // must not be the fee-paying sender. Because the whole script is that single
-        // call, the operation's signature -- verified by the account's verifier or
-        // backup owner inside ExecuteUserOp -- is the only thing that can make the
-        // transaction succeed; any other script shape is rejected at verification.
+        // The witness is bound to the account's own execution: the transaction
+        // script must consist solely of data pushes followed by exactly one
+        // `core.executeUserOp(accountId, op)` (or `executeUserOps(accountId, ops)`)
+        // call for THIS accountId, the proxy must not be the fee-paying sender, and
+        // the signer's witness rule must authorize exactly the core call path
+        // (CalledByContract(core), F-1). Because the whole script is that single
+        // call, the operation's signature — verified by the account's validator or
+        // built-in P-256 profile inside executeUserOp — is the only thing that can
+        // make the transaction succeed; any other script shape is rejected at
+        // verification.
 
         private static readonly byte[] ScriptPushData20 = new byte[] { 0x0C, 0x14 };
         private static readonly byte[] ScriptPush2Pack = new byte[] { 0x12, 0xC0 };
@@ -171,9 +139,6 @@ namespace SmartAccount
 
         private static bool VerifyScopedTransactionSigner(UInt160 accountId)
         {
-            UInt160 targetContract = GetVerifyScopeTarget(accountId);
-            if (targetContract == UInt160.Zero) return false;
-
             UInt160 proxy = Runtime.CallingScriptHash;
             if (!TransactionIsBoundToAccountExecution(accountId, proxy)) return false;
 
@@ -183,7 +148,7 @@ namespace SmartAccount
                 // Only the calling verification script's own signer can grant
                 // its scope. Another signer must not bless a Global proxy.
                 if (signers[i].Account == proxy &&
-                    HasExactAaWitnessRules(signers[i], Runtime.ExecutingScriptHash, targetContract))
+                    HasCoreOnlyWitnessRule(signers[i], Runtime.ExecutingScriptHash))
                 {
                     return true;
                 }
@@ -302,122 +267,111 @@ namespace SmartAccount
             return size;
         }
 
-        private static bool HasExactAaWitnessRules(Signer signer, UInt160 proxyContract, UInt160 targetContract)
+        /// <summary>
+        /// F-1 witness rule shape: exactly ONE Allow rule whose condition is
+        /// exactly CalledByContract(core). The retired Or(CalledByContract(core),
+        /// CalledByContract(&lt;admin-configured target&gt;)) structure — which let an
+        /// admin bless arbitrary target forwarding and let policy-rejected targets
+        /// come back through a target-side CheckWitness — is deleted.
+        /// </summary>
+        private static bool HasCoreOnlyWitnessRule(Signer signer, UInt160 coreContract)
         {
             if (signer.Scopes != WitnessScope.WitnessRules) return false;
             if (signer.Rules == null || signer.Rules.Length != 1) return false;
             WitnessRule rule = signer.Rules[0];
             if (rule.Action != WitnessRuleAction.Allow) return false;
-            if (rule.Condition == null || rule.Condition.Type != WitnessConditionType.Or) return false;
-
-            OrCondition condition = (OrCondition)rule.Condition;
-            if (condition.Expressions == null || condition.Expressions.Length != 2) return false;
-
-            bool hasProxy = false;
-            bool hasTarget = false;
-            for (int i = 0; i < condition.Expressions.Length; i++)
-            {
-                WitnessCondition expression = condition.Expressions[i];
-                if (expression == null || expression.Type != WitnessConditionType.CalledByContract) return false;
-                CalledByContractCondition calledBy = (CalledByContractCondition)expression;
-                if (calledBy.Hash == proxyContract) hasProxy = true;
-                else if (calledBy.Hash == targetContract) hasTarget = true;
-                else return false;
-            }
-            return hasProxy && hasTarget;
+            if (rule.Condition == null) return false;
+            if (rule.Condition.Type != WitnessConditionType.CalledByContract) return false;
+            CalledByContractCondition calledBy = (CalledByContractCondition)rule.Condition;
+            return calledBy.Hash == coreContract;
         }
 
+        // ========================================================================
+        // F-7 phase-exact module authorization adapters
+        // ========================================================================
+        //
+        // The legacy stage-blind canConfigureVerifier / canConfigureHook /
+        // canExecuteVerifier / canExecuteHook entry points — which trusted a
+        // root/child caller parameter chain and an open per-account context row —
+        // are replaced by thin adapters over the 0x58 phase-exact authorization
+        // (getAuthorizedModuleId): a plugin callback is authorized only while the
+        // recorded writer phase matches AND the caller IS the contract of the
+        // recorded active module instance. The stage-blind caller parameters are
+        // accepted (legacy ABI) but ignored for authorization.
+        //
+        // TODO(26): remove these adapters when the plugin batch migrates to
+        // getAuthorizedModuleId(accountId, phase); the v4 forward ABI is
+        // [Safe] BigInteger getAuthorizedModuleId(UInt160 accountId, byte phase).
+
         /// <summary>
-        /// Authorizes a verifier plugin to configure itself for an account.
+        /// Legacy adapter: a module may write its configuration only while it is
+        /// the active module of the PhaseConfiguration writer phase (inside a
+        /// confirmed configuration-intent callback or module lifecycle callback).
         /// </summary>
-        /// <remarks>
-        /// This enables verifiers like NeoNativeVerifier, Web3AuthVerifier, and others to
-        /// store their configuration data without exposing it to arbitrary callers.
-        /// </remarks>
-        /// <param name="accountId">The AA account being configured</param>
-        /// <param name="verifierContract">The verifier contract seeking authorization</param>
-        /// <returns>True if caller is the expected verifier for this configuration</returns>
         [Safe]
         public static bool CanConfigureVerifier(UInt160 accountId, UInt160 verifierContract)
         {
-            if (HasOwnerOnlyRecovery(accountId)) return false;
-            byte[] key = Helper.Concat(Prefix_VerifierConfigContext, (byte[])accountId);
-            ByteString? expectedVerifier = Storage.Get(Storage.CurrentContext, key);
-            return expectedVerifier != null
-                && Runtime.CallingScriptHash == verifierContract
-                && (UInt160)expectedVerifier == verifierContract;
+            return IsModulePhaseCaller(accountId, verifierContract, PhaseConfiguration);
         }
 
-        /// <summary>
-        /// Authorizes a hook plugin to configure itself for an account.
-        /// </summary>
-        /// <remarks>
-        /// This enables hooks like DailyLimitHook, WhitelistHook, and NeoDIDCredentialHook
-        /// to store their configuration data securely.
-        /// </remarks>
-        /// <param name="accountId">The AA account being configured</param>
-        /// <param name="hookContract">The hook contract seeking authorization</param>
-        /// <returns>True if caller is the expected hook for this configuration</returns>
+        /// <summary>Legacy adapter, hook flavor of <see cref="CanConfigureVerifier"/>.</summary>
         [Safe]
         public static bool CanConfigureHook(UInt160 accountId, UInt160 hookContract)
         {
-            if (HasOwnerOnlyRecovery(accountId)) return false;
-            byte[] key = Helper.Concat(Prefix_HookConfigContext, (byte[])accountId);
-            ByteString? expectedHook = Storage.Get(Storage.CurrentContext, key);
-            return expectedHook != null
-                && Runtime.CallingScriptHash == hookContract
-                && (UInt160)expectedHook == hookContract;
+            return IsModulePhaseCaller(accountId, hookContract, PhaseConfiguration);
         }
 
         /// <summary>
-        /// Authorizes a verifier plugin to apply post-execution effects during the verifier phase.
+        /// Read-only validation-phase adapter: while the core runs the
+        /// PhaseValidation writer phase it calls exactly one validator with
+        /// <c>CallFlags.ReadOnly</c>. A validator that checks its caller before
+        /// verifying uses this entry instead of the completion-phase one, so a
+        /// validation callback is authorized without granting any write right.
+        /// </summary>
+        [Safe]
+        public static bool CanValidateVerifier(UInt160 accountId, UInt160 verifierContract)
+        {
+            return IsModulePhaseCaller(accountId, verifierContract, PhaseValidation);
+        }
+
+        /// <summary>
+        /// Legacy adapter: a validator may apply post-execution effects only in
+        /// the PhaseCompletion writer phase. The stage-blind
+        /// <paramref name="callerContract"/> parameter is ignored: a nested
+        /// contract claiming to be the "root verifier" grants nothing anymore.
         /// </summary>
         [Safe]
         public static bool CanExecuteVerifier(UInt160 accountId, UInt160 callerContract, UInt160 verifierContract)
         {
-            if (HasOwnerOnlyRecovery(accountId)) return false;
-            byte[] key = Helper.Concat(Prefix_VerifierExecutionContext, (byte[])accountId);
-            ByteString? expectedRoot = Storage.Get(Storage.CurrentContext, key);
-            if (expectedRoot == null) return false;
-            if (Runtime.CallingScriptHash != verifierContract) return false;
-
-            UInt160 activeRootVerifier = (UInt160)expectedRoot;
-            if (callerContract == Runtime.ExecutingScriptHash)
-            {
-                return activeRootVerifier == verifierContract;
-            }
-
-            return callerContract == activeRootVerifier;
+            return IsModulePhaseCaller(accountId, verifierContract, PhaseCompletion);
         }
 
         /// <summary>
-        /// Authorizes a hook plugin to execute during the hook phase of UserOperation execution.
+        /// Legacy adapter: a hook may run only while it is the active module of
+        /// the PhaseHookPre or PhaseHookPost writer phase. The stage-blind
+        /// <paramref name="callerContract"/> parameter is ignored.
         /// </summary>
-        /// <remarks>
-        /// This validates that a hook plugin is the active hook for an account and that
-        /// it's being called from the proper execution context (either directly from the
-        /// AA core or from the root hook in a nested hook chain).
-        /// </remarks>
-        /// <param name="accountId">The AA account being executed</param>
-        /// <param name="callerContract">The contract that initiated this hook call</param>
-        /// <param name="hookContract">The hook contract being invoked</param>
-        /// <returns>True if the hook is authorized to execute for this account</returns>
         [Safe]
         public static bool CanExecuteHook(UInt160 accountId, UInt160 callerContract, UInt160 hookContract)
         {
+            return IsModulePhaseCaller(accountId, hookContract, PhaseHookPre)
+                || IsModulePhaseCaller(accountId, hookContract, PhaseHookPost);
+        }
+
+        /// <summary>
+        /// Phase-exact authorization core (F-7): the caller must self-declare the
+        /// module contract it speaks for (matching its own calling script hash)
+        /// and be the recorded active module instance of the exact writer phase.
+        /// </summary>
+        private static bool IsModulePhaseCaller(UInt160 accountId, UInt160 selfDeclaredContract, byte phase)
+        {
+            if (accountId == null || accountId == UInt160.Zero) return false;
+            if (selfDeclaredContract == null || selfDeclaredContract == UInt160.Zero) return false;
+            // The self-declared contract must be the actual caller; the stage-blind
+            // root/child chain is not consulted at all.
+            if (selfDeclaredContract != Runtime.CallingScriptHash) return false;
             if (HasOwnerOnlyRecovery(accountId)) return false;
-            byte[] key = Helper.Concat(Prefix_HookExecutionContext, (byte[])accountId);
-            ByteString? expectedRoot = Storage.Get(Storage.CurrentContext, key);
-            if (expectedRoot == null) return false;
-            if (Runtime.CallingScriptHash != hookContract) return false;
-
-            UInt160 activeRootHook = (UInt160)expectedRoot;
-            if (callerContract == Runtime.ExecutingScriptHash)
-            {
-                return activeRootHook == hookContract;
-            }
-
-            return callerContract == activeRootHook;
+            return getAuthorizedModuleId(accountId, phase) >= 0;
         }
     }
 }

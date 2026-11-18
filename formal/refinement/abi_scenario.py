@@ -65,8 +65,8 @@ import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-SCHEMA = 'aa-abi-scenario/v1'
-INPUT_SCHEMA = 'aa-abi-scenario-input/v1'
+SCHEMA = 'sa-abi-scenario/v1'
+INPUT_SCHEMA = 'sa-abi-scenario-input/v1'
 SCOPE = 'actual-vm-calls-with-declared-arguments-over-established-state'
 
 # The opcodes this encoder emits. Values are taken from the audited table in

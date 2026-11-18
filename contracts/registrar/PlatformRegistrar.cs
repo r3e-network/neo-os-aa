@@ -10,16 +10,16 @@ using Neo.SmartContract.Framework.Services;
 namespace SmartAccount
 {
     /// <summary>
-    /// On-chain platform registrar service for Neo N3 AA.
+    /// On-chain platform registrar service for Neo N3 SA.
     ///
     /// The service owns the pending platform-account owner rotations: the proposal
     /// records, their 7-day timelock, and cancellation. Account *state* itself
     /// (deterministic account ids, bindings, proxy indexes, the authoritative
-    /// ownership write) stays in the AA core; the registrar orchestrates and the
+    /// ownership write) stays in the SA core; the registrar orchestrates and the
     /// core re-validates every write through its registrar-gated entry points.
     /// </summary>
-    [DisplayName("AAPlatformRegistrar")]
-    // The registrar only ever calls its authorized AA core; each fixed callee method is
+    [DisplayName("SAPlatformRegistrar")]
+    // The registrar only ever calls its authorized SA core; each fixed callee method is
     // enumerated so the manifest documents the exact core surface it depends on.
     [ContractPermission("*", "computePlatformAccountId")]
     [ContractPermission("*", "computeStablePlatformAccountId")]
@@ -30,7 +30,7 @@ namespace SmartAccount
     [ContractPermission("*", "getBackupOwner")]
     [ContractPermission("*", "getEscapeTriggeredAt")]
     [ContractPermission("*", "isMarketEscrowActive")]
-    [ManifestExtra("Description", "Platform Account Registrar Service for Neo N3 AA")]
+    [ManifestExtra("Description", "Platform Account Registrar Service for Neo N3 SA")]
     public class PlatformRegistrar : SmartContract
     {
         // ========================================================================
@@ -105,7 +105,7 @@ namespace SmartAccount
 
         public static void CancelAdminRotation() => PlatformRegistrarAuthority.CancelAdminRotation();
 
-        // Timelocked contract upgrade (AA-D-01 pattern).
+        // Timelocked contract upgrade (SA-D-01 pattern).
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => PlatformRegistrarAuthority.ProposeUpdate(nefHash, manifestHash);
 
         public static void ConfirmUpdate(ByteString nef, string manifest) => Update(nef, manifest);
@@ -316,7 +316,7 @@ namespace SmartAccount
         private static UInt160 AssertAuthorizedCore()
         {
             UInt160 core = PlatformRegistrarAuthority.AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
             return core;
         }
 

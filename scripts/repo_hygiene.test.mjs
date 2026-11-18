@@ -52,7 +52,7 @@ test("NeoDID cross-repo gate resolves the services vendor artifact path", () => 
   assert.equal(validator.includes('"neo-os-services" / "contracts" / "build"'), false);
 });
 
-// AA stays on GitHub-hosted runners, including default-branch pushes and manual
+// SA stays on GitHub-hosted runners, including default-branch pushes and manual
 // runs. Require a literal runner: visibility, event, ref, fork and repository
 // variables must never be able to redirect this public repository's scanner.
 function assertHostedGitleaks(workflow) {
@@ -190,8 +190,8 @@ const MUST_NOT_BE_IGNORED = [
   "frontend/.env.example",
   "sdk/js/.env.example",
   ".codegraph/.gitignore",
-  "contracts/build/SmartAccountV3.nef",
-  "contracts/build/SmartAccountV3.manifest.json",
+  "contracts/build/SmartAccount.nef",
+  "contracts/build/SmartAccount.manifest.json",
   "contracts/SmartAccount.csproj",
   "Directory.Build.props",
   "nuget.config",
@@ -203,20 +203,20 @@ const MUST_NOT_BE_IGNORED = [
   "sdk/js/package.json",
   "scripts/verify_repo.sh",
   ".github/workflows/ci.yml",
-  "docs/reports/aa-artifact-reproducibility-20261030.json",
-  "docs/reports/aa-artifact-reproducibility-20261031.json",
-  "docs/reports/aa-artifact-reproducibility-20261113.json",
-  "docs/reports/aa-artifact-reproducibility-20261116.json",
-  "docs/reports/aa-formal-gate-20261030.json",
-  "docs/reports/aa-formal-gate-20261031.json",
-  "docs/reports/aa-neoexpress-validation-20261030.json",
-  "docs/reports/aa-neoexpress-validation-20261031.json",
-  "docs/reports/aa-private-artifact-provenance-20261030.json",
-  "docs/reports/aa-private-artifact-provenance-20261031.json",
-  "docs/reports/aa-ordinary-candidate-compatibility-20261030.json",
-  "docs/reports/aa-ordinary-candidate-compatibility-20261113.json",
-  "docs/reports/aa-ordinary-candidate-compatibility-20261116.json",
-  "docs/reports/aa-native-ci-probe-consistency-20261009.json",
+  "docs/reports/sa-artifact-reproducibility-20261030.json",
+  "docs/reports/sa-artifact-reproducibility-20261031.json",
+  "docs/reports/sa-artifact-reproducibility-20261113.json",
+  "docs/reports/sa-artifact-reproducibility-20261116.json",
+  "docs/reports/sa-formal-gate-20261030.json",
+  "docs/reports/sa-formal-gate-20261031.json",
+  "docs/reports/sa-neoexpress-validation-20261030.json",
+  "docs/reports/sa-neoexpress-validation-20261031.json",
+  "docs/reports/sa-private-artifact-provenance-20261030.json",
+  "docs/reports/sa-private-artifact-provenance-20261031.json",
+  "docs/reports/sa-ordinary-candidate-compatibility-20261030.json",
+  "docs/reports/sa-ordinary-candidate-compatibility-20261113.json",
+  "docs/reports/sa-ordinary-candidate-compatibility-20261116.json",
+  "docs/reports/sa-native-ci-probe-consistency-20261009.json",
   "docs/reports/native-domain-copy-20261009/candidate-acceptance.json",
   "docs/reports/native-usability-20261009/private-runtime.json",
   "docs/reports/testnet-validation-v1v2-2026-03.md",

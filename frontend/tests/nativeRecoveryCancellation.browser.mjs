@@ -20,7 +20,7 @@ import {
 const root = fileURLToPath(new URL("..", import.meta.url));
 const payer = "66".repeat(20);
 const evidenceDir = process.env.NATIVE_CANCELLATION_EVIDENCE_DIR ||
-  join(tmpdir(), "aa-native-recovery-cancellation");
+  join(tmpdir(), "sa-native-recovery-cancellation");
 const evidenceStage = process.env.NATIVE_CANCELLATION_EVIDENCE_STAGE || "current";
 
 test("recovery cancellation separates its payer and authority and invalidates stale UI", {
@@ -53,7 +53,7 @@ test("recovery cancellation separates its payer and authority and invalidates st
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());
     });
-    await page.addInitScript(() => localStorage.setItem("aa_locale", "en"));
+    await page.addInitScript(() => localStorage.setItem("sa_locale", "en"));
     await page.route("https://native.fixture.test/rpc", async (route) => {
       const { id, method, params } = route.request().postDataJSON();
       let result = await fixture.send(method, params);

@@ -24,7 +24,7 @@ import {
   integerItem,
   records,
   userOpExecutedNotification,
-} from './fixtures/aaChainFixtures.js';
+} from './fixtures/saChainFixtures.js';
 import { haltResult, post, startNode, withRelay } from './fixtures/relayHarness.js';
 
 const require = createRequire(import.meta.url);

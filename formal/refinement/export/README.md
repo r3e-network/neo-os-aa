@@ -13,7 +13,7 @@ dotnet formal/refinement/export/bin/Debug/net10.0/RefinementExport.dll \
   --project "$PWD/contracts/SmartAccount.csproj" \
   --nef "$PWD/contracts/bin/v3/SmartAccountV3.nef" \
   --manifest "$PWD/contracts/bin/v3/SmartAccountV3.manifest.json" \
-  > /tmp/aa-refinement-inventory.json
+  > /tmp/sa-refinement-inventory.json
 python3 -m unittest formal/refinement/export/test_export.py
 ```
 
@@ -32,7 +32,7 @@ rejects the export. The original repository's build outputs are untouched.
 Standard output contains one compact JSON document; errors go to standard error
 and return a nonzero exit code.
 
-Schema `neoos-aa-refinement-inventory/v1` has these stable fields:
+Schema `neoos-sa-refinement-inventory/v1` has these stable fields:
 
 - `inputs`: absolute input paths mapped to original SHA256, including source,
   project/config/lock files, compiler package and consumed references/documents.

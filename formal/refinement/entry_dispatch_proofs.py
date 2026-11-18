@@ -228,7 +228,7 @@ def run(inventory_path,output,report_path):
     require(sha(Path(inventory_path).read_bytes())==sha(raw),'Inventory changed during proof')
     for path,expected in inputs.items():require(sha(Path(path).read_bytes())==expected,'Tool/model changed during proof')
     require(source.project_captured(rows)==projection,'Source changed during proof')
-    result=dict(schema='neoos-aa-entry-dispatch-proof/v1',scope=source.SCOPE,entryBoundary=source.ENTRY_BOUNDARY,
+    result=dict(schema='neoos-sa-entry-dispatch-proof/v1',scope=source.SCOPE,entryBoundary=source.ENTRY_BOUNDARY,
         kernelChecked=True,coqchkChecked=True,assumptionsClosed=True,productionSourceBound=True,
         implementationVerified=False,fullImplementationVerified=False,sourceFrontendVerified=False,applicationEngineVerified=False,vmCorrespondenceProven=False,
         coreSourceCommit=source.CORE_COMMIT,neoVmSourceCommit=source.VM_COMMIT,pinnedSource=rows,
@@ -247,7 +247,7 @@ def main(argv=None):
     parser.add_argument('--inventory',type=Path,required=True);parser.add_argument('--output-dir',type=Path,required=True)
     parser.add_argument('--json-report',type=Path,required=True);parser.add_argument('--controls',action='store_true',help='Controls are always required.')
     args=parser.parse_args(argv);args.json_report.parent.mkdir(parents=True,exist_ok=True)
-    failure=dict(schema='neoos-aa-entry-dispatch-proof/v1',scope=source.SCOPE,status='FAIL',kernelChecked=False,fullImplementationVerified=False)
+    failure=dict(schema='neoos-sa-entry-dispatch-proof/v1',scope=source.SCOPE,status='FAIL',kernelChecked=False,fullImplementationVerified=False)
     args.json_report.write_text(json.dumps(failure)+'\n')
     try:run(args.inventory,args.output_dir,args.json_report);return 0
     except Exception as error:

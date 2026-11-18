@@ -12,7 +12,7 @@ const { buildV3UserOperationTypedData } = require('../metaTx');
  * @param {string|number} options.chainId - Chain ID
  * @param {string} options.verifierHash - Verifier contract hash
  * @param {string} options.accountId - Account ID hash
- * @param {string} options.coreContractHash - Authorized AA core hash
+ * @param {string} options.coreContractHash - Authorized SA core hash
  * @param {Object} options.userOp - UserOperation object
  * @param {string} options.argsHash - On-chain-computed args hash. REQUIRED: this
  *   must equal keccak256(StdLib.Serialize(args)) as produced by the contract's

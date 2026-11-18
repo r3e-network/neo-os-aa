@@ -32,15 +32,13 @@ cannot substitute for that new build and readback evidence.
 ## Historical source-built NeoExpress authority validation (2026-10-30)
 
 The 2026-10-30 authority-admission revision was rebuilt into a complete
-source-built NeoExpress runtime. The native module build receipt is
-[`smartaccount-native-module-build-20261030-authority.json`](../reports/smartaccount-native-module-build-20261030-authority.json),
-and the successful two-build runner receipt is
-[`smartaccount-native-runner-build-20261030-authority2.json`](../reports/smartaccount-native-runner-build-20261030-authority2.json).
-The earlier failed runner attempt remains recorded separately and is not used as
-provenance for that revision.
+source-built NeoExpress runtime. The intermediate receipts were retired in the
+documents cleanup; the final 2026-10-31 receipts below supersede them for the
+same track. The earlier failed runner attempt remains recorded in its log and is
+not used as provenance for that revision.
 
-The aggregate receipt is
-[`summary.json`](../reports/smartaccount-native-source-runtime-20261030-authority/summary.json).
+The aggregate receipt is the 2026-10-31 final
+[`summary.json`](../reports/smartaccount-native-source-runtime-20261031-final/summary.json).
 It is `PASS` with all five matrices passing: native service lifecycle, signed
 proxy and atomic rollback, configuration-root mutation, authority recovery, and
 activation-boundary validation. The individual receipts are retained beside the
@@ -111,8 +109,8 @@ private-key independence or arbitrary topology.
 
 ## Historical extended native matrix (2026-10-30)
 
-The earlier extended source-built matrix is indexed by
-[`index.json`](../reports/smartaccount-native-extended-matrix-20261030-authority/index.json).
+The earlier extended source-built matrix is indexed by the 2026-10-31 final
+[`index.json`](../reports/smartaccount-native-extended-matrix-20261031-final/index.json).
 It records `PASS` for five additional private NeoExpress scenarios:
 
 - MultiSig composition with real P-256 and native witnesses;
@@ -138,20 +136,20 @@ parity.
 The final 2026-10-09 composite-profile runtime pins core `ff422d940a4722c361c32398c6f28c00fb7f0693`,
 node `fa35e69af130661e2ac60bffd43eb6c6c78aa7d5` and profile digest
 `4201b02f571b7415121467d67343a8189b8070ad795a82424c0403782d22b1b4`.
-Use [`aa-native-composite-final-runner-build-20261009.json`](../reports/aa-native-composite-final-runner-build-20261009.json)
+Use [`sa-native-composite-final-runner-build-20261009.json`](../reports/sa-native-composite-final-runner-build-20261009.json)
 for its two complete source builds (314 core, 123 node and 182 Express inputs;
 104 identical runtime files and 50 dependency archives), and
-[`aa-native-composite-final-build-proof-20261009.json`](../reports/aa-native-composite-final-build-proof-20261009.json)
+[`sa-native-composite-final-build-proof-20261009.json`](../reports/sa-native-composite-final-build-proof-20261009.json)
 for that dated module, public-artifact and model evidence. Those source-identity
 claims apply to that recorded input set, not the current authority-admission
 revision.
 
 Execution evidence for that dated revision is separate:
-[`aa-native-final-private-runtime-20261009.json`](../reports/aa-native-final-private-runtime-20261009.json)
+[`sa-native-final-private-runtime-20261009.json`](../reports/sa-native-final-private-runtime-20261009.json)
 records the ten-suite private matrix, selected producer bytes and retention limits;
-[`aa-native-final-sdk-runtime-20261009.json`](../reports/aa-native-final-sdk-runtime-20261009.json)
+[`sa-native-final-sdk-runtime-20261009.json`](../reports/sa-native-final-sdk-runtime-20261009.json)
 records the actual SDK-signed transaction matrix. The
-[convergence report](../reports/aa-native-convergence-20261009.md) indexes the final
+[convergence report](../reports/sa-native-convergence-20261009.md) indexes the final
 validation and remaining upstream activation boundaries.
 
 The separate `scripts/neoexpress_activation_validate.py` receipt uses
@@ -170,8 +168,8 @@ The earlier ABI 2 source runner was rebuilt twice from its then-reviewed product
 sources on 2026-10-08. All 104 runtime files, 50 dependency archives and generated
 lock maps matched. The source graph contains 313 core, 122 node and 182 Express
 inputs. Exact hashes are in
-[`aa-native-abi2-runner-build-20261008.json`](../reports/aa-native-abi2-runner-build-20261008.json);
-[`aa-native-abi2-build-convergence-20261008.json`](../reports/aa-native-abi2-build-convergence-20261008.json)
+[`sa-native-abi2-runner-build-20261008.json`](../reports/sa-native-abi2-runner-build-20261008.json);
+[`sa-native-abi2-build-convergence-20261008.json`](../reports/sa-native-abi2-build-convergence-20261008.json)
 joins the module, runtime, public-profile and model receipts. The final node
 formatting commit occurred after the build snapshot; the readback report records
 its new HEAD while preserving the original build metadata and matching source
@@ -184,9 +182,9 @@ the exact `minimumrequiredfee`; a published core without that capability omits
 the field. Automatic SDK fee preparation requires that field; explicit SystemFee preparation
 is separate from the mandatory final signed-transaction preflight. This intermediate
 receipt predates the final composite/key-normalization implementation and is historical.
-See [`aa-native-abi2-runner-build-20261009.json`](../reports/aa-native-abi2-runner-build-20261009.json)
+See [`sa-native-abi2-runner-build-20261009.json`](../reports/sa-native-abi2-runner-build-20261009.json)
 for that intermediate runtime and
-[`aa-native-abi2-rpc-runtime-20261009.json`](../reports/aa-native-abi2-rpc-runtime-20261009.json)
+[`sa-native-abi2-rpc-runtime-20261009.json`](../reports/sa-native-abi2-rpc-runtime-20261009.json)
 for its source/build and two-lane RPC test evidence. The earlier runner receipt
 remains the dated snapshot and must not be substituted for these changed sources.
 

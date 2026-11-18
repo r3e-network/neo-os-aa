@@ -12,11 +12,11 @@ function stripHexPrefix(value) {
 
 test('runtime defaults are derived from the generated Morpheus public registry and runtime topology catalog', () => {
   const mainnet = getRuntimeConfig({});
-  const testnet = getRuntimeConfig({ VITE_AA_NETWORK: 'testnet' });
+  const testnet = getRuntimeConfig({ VITE_SA_NETWORK: 'testnet' });
   const automationUpkeep = MORPHEUS_PUBLIC_RUNTIME_CATALOG.workflows.find((item) => item.id === 'automation.upkeep');
 
-  assert.equal(mainnet.abstractAccountHash, stripHexPrefix(MORPHEUS_PUBLIC_REGISTRY.mainnet.contracts.aaCore));
-  assert.equal(mainnet.abstractAccountDomain, MORPHEUS_PUBLIC_REGISTRY.mainnet.domains.aa);
+  assert.equal(mainnet.smartAccountHash, stripHexPrefix(MORPHEUS_PUBLIC_REGISTRY.mainnet.contracts.saCore));
+  assert.equal(mainnet.smartAccountDomain, MORPHEUS_PUBLIC_REGISTRY.mainnet.domains.sa);
   assert.equal(mainnet.rpcUrl, MORPHEUS_PUBLIC_REGISTRY.mainnet.rpcUrl);
   assert.equal(mainnet.neoDidDomain, MORPHEUS_PUBLIC_REGISTRY.mainnet.domains.neodid);
   assert.equal(mainnet.morpheusApiBaseUrl, MORPHEUS_PUBLIC_REGISTRY.mainnet.morpheus.publicApiUrl);
@@ -30,7 +30,7 @@ test('runtime defaults are derived from the generated Morpheus public registry a
   });
   assert.deepEqual(mainnet.morpheusAutomationTriggerKinds, ['interval', 'threshold']);
 
-  assert.equal(testnet.abstractAccountHash, stripHexPrefix(MORPHEUS_PUBLIC_REGISTRY.testnet.contracts.aaCore));
+  assert.equal(testnet.smartAccountHash, stripHexPrefix(MORPHEUS_PUBLIC_REGISTRY.testnet.contracts.saCore));
   assert.equal(testnet.rpcUrl, MORPHEUS_PUBLIC_REGISTRY.testnet.rpcUrl);
   assert.equal(testnet.morpheusApiBaseUrl, MORPHEUS_PUBLIC_REGISTRY.testnet.morpheus.publicApiUrl);
   assert.equal(testnet.morpheusDatafeedCvmId, MORPHEUS_PUBLIC_REGISTRY.testnet.morpheus.datafeedCvmId);

@@ -81,9 +81,9 @@ namespace Neo.SmartContract.Examples
         }
 
         [Safe]
-        public static UInt160 GetAAContract(UInt160 accountId)
+        public static UInt160 GetSAContract(UInt160 accountId)
         {
-            ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_AA_CONTRACT, accountId));
+            ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_SA_CONTRACT, accountId));
             return data == null ? UInt160.Zero : (UInt160)data;
         }
 

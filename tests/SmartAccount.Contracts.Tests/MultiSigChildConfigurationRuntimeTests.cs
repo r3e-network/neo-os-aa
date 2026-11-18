@@ -32,7 +32,7 @@ public class MultiSigChildConfigurationRuntimeTests
 
         public Harness(bool foreignChildCore = false, bool includeSession = false)
         {
-            Core = Fx.Deploy("SmartAccountV3");
+            Core = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
             Root = Fx.Deploy("verifiers/MultiSigVerifier", Core.ToArray());
             Web = Fx.Deploy("verifiers/Web3AuthVerifier", Core.ToArray());
@@ -185,8 +185,8 @@ public class MultiSigChildConfigurationRuntimeTests
     public void ChildConfiguration_RejectsMarketEscrow()
     {
         Harness h = new();
-        UInt160 market = h.Fx.Deploy("AAAddressMarket");
-        h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        UInt160 market = h.Fx.Deploy("SAAddressMarket");
+        h.Fx.CallVoid(market, "setAllowedSA", h.Core, true);
         // Phase 1b: the core admin registers the market as an approved escrow service.
         h.Fx.CallVoid(h.Core, "setMarketService", market, true);
         h.Fx.CallVoid(market, "createListing", h.Core, h.Account, 100000000, "child configuration test", "");
@@ -439,8 +439,8 @@ public class MultiSigChildConfigurationRuntimeTests
         UInt160 account = h.Fx.CallUInt160(h.Core, "computeRegistrationAccountId",
             root, Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
         h.Fx.CallVoid(h.Core, "registerAccount", account, root, Array.Empty<byte>(), UInt160.Zero, h.Owner, 604800u);
-        UInt160 market = h.Fx.Deploy("AAAddressMarket");
-        h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        UInt160 market = h.Fx.Deploy("SAAddressMarket");
+        h.Fx.CallVoid(market, "setAllowedSA", h.Core, true);
         // Phase 1b: the core admin registers the market as an approved escrow service.
         h.Fx.CallVoid(h.Core, "setMarketService", market, true);
         h.Fx.CallVoid(market, "createListing", h.Core, account, 100000000, "dependency guard", "");

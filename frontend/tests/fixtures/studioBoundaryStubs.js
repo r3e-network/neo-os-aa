@@ -10,7 +10,7 @@ export const walletService = {
     return { txid: '' };
   },
 };
-export function getAbstractAccountHash() {
+export function getSmartAccountHash() {
   return '0268a387913250166ddec032b03332690a1ef78';
 }
 export function useToast() {

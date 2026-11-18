@@ -6,7 +6,7 @@ import { resolveProxyTransferWitness } from '../api/proxyWitness.js';
 import { buildClientProxyWitnessTransaction, buildClientBroadcastRequest } from '../src/features/operations/execution.js';
 import { buildOperationFromPreset } from '../src/features/operations/presets.js';
 import { post, withRelay, relayAccount } from './fixtures/relayHarness.js';
-import { CORE_HASH, GAS_HASH, BUYER_HASH } from './fixtures/aaChainFixtures.js';
+import { CORE_HASH, GAS_HASH, BUYER_HASH } from './fixtures/saChainFixtures.js';
 const require = createRequire(new URL('../../sdk/js/package.json', import.meta.url));
 const { tx, sc, wallet } = require('@cityofzion/neon-js');
 const sdk = require('../../sdk/js/src/proxyWitness.js');
@@ -134,7 +134,7 @@ test('relay prices and signs complete proxy envelope and caps fees before broadc
   const node = await nodeHarness();
   try {
     for (const metaInvocation of [invocation(), batchInvocation()]) {
-      const reply = await withRelay(node, { AA_RELAY_PROXY_WITNESS_ENABLED: '1', AA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000' }, () => post({ metaInvocation }));
+      const reply = await withRelay(node, { SA_RELAY_PROXY_WITNESS_ENABLED: '1', SA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000' }, () => post({ metaInvocation }));
       assert.equal(reply.status, 200, JSON.stringify(reply.body));
       assert.ok(reply.body.txid);
       assert.equal(reply.body.networkFee, "200010000");
@@ -152,10 +152,10 @@ test('relay prices and signs complete proxy envelope and caps fees before broadc
       assert.equal(wallet.verify(`40e20100${Buffer.from(transaction.hash(), 'hex').reverse().toString('hex')}`, transaction.witnesses[0].invocationScript.toBigEndian().slice(4), relayAccount.publicKey), true);
     }
     const before = node.requests.filter((item) => item.method === 'sendrawtransaction').length;
-    const missingReserve = await withRelay(node, { AA_RELAY_PROXY_WITNESS_ENABLED: '1' }, () => post({ metaInvocation: invocation() }));
+    const missingReserve = await withRelay(node, { SA_RELAY_PROXY_WITNESS_ENABLED: '1' }, () => post({ metaInvocation: invocation() }));
     assert.equal(missingReserve.status, 502);
     assert.equal(node.requests.filter((item) => item.method === 'sendrawtransaction').length, before);
-    const denied = await withRelay(node, { AA_RELAY_PROXY_WITNESS_ENABLED: '1', AA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000', AA_RELAY_MAX_NETWORK_FEE: '1' }, () => post({ metaInvocation: invocation() }));
+    const denied = await withRelay(node, { SA_RELAY_PROXY_WITNESS_ENABLED: '1', SA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000', SA_RELAY_MAX_NETWORK_FEE: '1' }, () => post({ metaInvocation: invocation() }));
     assert.equal(denied.status, 502);
     assert.equal(node.requests.filter((item) => item.method === 'sendrawtransaction').length, before);
   } finally { await node.close(); }
@@ -166,7 +166,7 @@ test('real relay handler refuses both sponsored proxy envelopes before fee calcu
   const node = await nodeHarness();
   try {
     for (const metaInvocation of [invocation(true), batchInvocation(true)]) {
-      const reply = await withRelay(node, { AA_RELAY_PROXY_WITNESS_ENABLED: '1', AA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000', AA_RELAY_INCLUDE_RAW_ERRORS: '1' }, () => post({ metaInvocation }));
+      const reply = await withRelay(node, { SA_RELAY_PROXY_WITNESS_ENABLED: '1', SA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000', SA_RELAY_INCLUDE_RAW_ERRORS: '1' }, () => post({ metaInvocation }));
       assert.equal(reply.status, 502);
       assert.match(reply.body.rawMessage, /Sponsored proxy transfers are not supported/);
       assert.equal(reply.body.txid, undefined);

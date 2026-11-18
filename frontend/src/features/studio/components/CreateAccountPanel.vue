@@ -2,10 +2,10 @@
   <section class="card">
     <div class="flex items-start justify-between mb-2">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
-          {{ t("studioPanels.createTitle", "Create Abstract Account") }}
+        <h2 class="text-lg font-bold text-sa-text">
+          {{ t("studioPanels.createTitle", "Create Smart Account") }}
         </h2>
-        <p class="text-sm text-aa-muted mt-1">
+        <p class="text-sm text-sa-muted mt-1">
           {{
             t(
               "studioPanels.createSubtitleLong",
@@ -16,12 +16,12 @@
       </div>
       <span v-if="canCreate" class="badge-green">
         <span
-          class="w-1.5 h-1.5 rounded-full bg-aa-success animate-pulse"
+          class="w-1.5 h-1.5 rounded-full bg-sa-success animate-pulse"
         ></span>
         {{ t("studioPanels.ready", "Ready") }}
       </span>
       <span v-else-if="computedAddress" class="badge-amber">
-        <span class="w-1.5 h-1.5 rounded-full bg-aa-warning"></span>
+        <span class="w-1.5 h-1.5 rounded-full bg-sa-warning"></span>
         {{ t("studioPanels.addressDerived", "Address Derived") }}
       </span>
     </div>
@@ -31,40 +31,40 @@
         <div class="section-label">
           {{ t("studioPanels.identitySection", "Identity") }}
         </div>
-        <div class="bg-aa-panel rounded-lg border border-aa-border/60 p-5">
-          <p class="mb-4 text-xs text-aa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
+        <div class="bg-sa-panel rounded-lg border border-sa-border/60 p-5">
+          <p class="mb-4 text-xs text-sa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-2">
               <label
                 for="matrix-domain-input"
-                class="flex items-center gap-2 text-sm font-semibold text-aa-text"
+                class="flex items-center gap-2 text-sm font-semibold text-sa-text"
               >
                 {{ t("studioPanels.matrixDomain", ".matrix Domain") }}
-                <span class="text-xs font-normal text-aa-muted">{{
+                <span class="text-xs font-normal text-sa-muted">{{
                   t("studioPanels.optional", "(optional)")
                 }}</span>
               </label>
               <div
-                class="flex rounded-lg border border-aa-border overflow-hidden bg-aa-dark focus-within:border-aa-orange focus-within:ring-1 focus-within:ring-aa-orange transition-all duration-200"
+                class="flex rounded-lg border border-sa-border overflow-hidden bg-sa-dark focus-within:border-sa-orange focus-within:ring-1 focus-within:ring-sa-orange transition-all duration-200"
               >
                 <input
                   id="matrix-domain-input"
                   v-model="createForm.matrixDomain"
                   type="text"
-                  class="flex-1 bg-transparent py-2.5 px-4 text-sm text-aa-text border-none focus:ring-0"
+                  class="flex-1 bg-transparent py-2.5 px-4 text-sm text-sa-text border-none focus:ring-0"
                   :placeholder="
                     t('studioPanels.matrixDomainPlaceholder', 'alice')
                   "
                 />
                 <span
-                  class="flex items-center px-3 bg-aa-panel border-l border-aa-border text-aa-muted text-sm font-mono select-none"
+                  class="flex items-center px-3 bg-sa-panel border-l border-sa-border text-sa-muted text-sm font-mono select-none"
                   >.matrix</span
                 >
                 <button
                   type="button"
                   :aria-label="t('studioPanels.check', 'Check')"
                   @click="checkMatrixDomain"
-                  class="bg-aa-lightOrange/10 hover:bg-aa-lightOrange/20 text-aa-lightOrange px-4 text-xs font-bold uppercase transition-colors duration-200 border-l border-aa-border"
+                  class="bg-sa-lightOrange/10 hover:bg-sa-lightOrange/20 text-sa-lightOrange px-4 text-xs font-bold uppercase transition-colors duration-200 border-l border-sa-border"
                   :class="{ 'btn-loading': matrixCheckResult?.checking }"
                   :disabled="
                     !createForm.matrixDomain || matrixCheckResult?.checking
@@ -99,10 +99,10 @@
                 class="mt-1 text-xs"
                 :class="
                   matrixCheckResult?.available
-                    ? 'text-aa-success'
+                    ? 'text-sa-success'
                     : matrixCheckResult?.error
-                      ? 'text-aa-error-light'
-                      : 'text-aa-muted'
+                      ? 'text-sa-error-light'
+                      : 'text-sa-muted'
                 "
               >
                 {{
@@ -117,7 +117,7 @@
 
             <div class="space-y-2">
               <label
-                class="flex items-center gap-2 text-sm font-semibold text-aa-text"
+                class="flex items-center gap-2 text-sm font-semibold text-sa-text"
               >
                 {{
                   t(
@@ -129,7 +129,7 @@
               <div class="relative">
                 <div
                   v-if="computedAddress"
-                  class="w-full bg-aa-panel border border-aa-success/30 rounded-lg py-2.5 px-4 font-mono text-sm text-aa-success-light flex items-center"
+                  class="w-full bg-sa-panel border border-sa-success/30 rounded-lg py-2.5 px-4 font-mono text-sm text-sa-success-light flex items-center"
                 >
                   <span class="flex-1 break-all">{{ computedAddress }}</span>
                   <button
@@ -138,7 +138,7 @@
                       copyText(computedAddress);
                       markCopied('computedAddress');
                     "
-                    class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+                    class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
                   >
                     <svg
                       aria-hidden="true"
@@ -159,7 +159,7 @@
                       aria-hidden="true"
                       v-else
                       xmlns="http://www.w3.org/2000/svg"
-                      class="h-3.5 w-3.5 text-aa-success"
+                      class="h-3.5 w-3.5 text-sa-success"
                       viewBox="0 0 20 20"
                       fill="currentColor"
                     >
@@ -173,7 +173,7 @@
                 </div>
                 <div
                   v-else
-                  class="w-full bg-aa-dark/50 border border-aa-border rounded-lg py-3 px-4 text-sm text-aa-muted text-center"
+                  class="w-full bg-sa-dark/50 border border-sa-border rounded-lg py-3 px-4 text-sm text-sa-muted text-center"
                 >
                   {{
                     t(
@@ -188,10 +188,10 @@
                 >
                   <span class="relative flex h-3 w-3">
                     <span
-                      class="animate-ping absolute inline-flex h-full w-full rounded-full bg-aa-success opacity-75"
+                      class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sa-success opacity-75"
                     ></span>
                     <span
-                      class="relative inline-flex rounded-full h-3 w-3 bg-aa-success"
+                      class="relative inline-flex rounded-full h-3 w-3 bg-sa-success"
                     ></span>
                   </span>
                 </div>
@@ -200,20 +200,20 @@
           </div>
           <div
             v-if="computedAccountIdHash"
-            class="mt-5 rounded-lg border border-aa-success/25 bg-aa-success/10 p-4"
+            class="mt-5 rounded-lg border border-sa-success/25 bg-sa-success/10 p-4"
           >
             <div
               class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
             >
               <div class="min-w-0">
-                <p class="text-xs font-bold uppercase text-aa-success-light">
+                <p class="text-xs font-bold uppercase text-sa-success-light">
                   {{ t("studioPanels.accountIdHash", "AccountId Hash") }}
                 </p>
                 <code
-                  class="mt-1 block break-all font-mono text-sm text-aa-text"
+                  class="mt-1 block break-all font-mono text-sm text-sa-text"
                   >0x{{ computedAccountIdHash }}</code
                 >
-                <p class="mt-1 text-xs text-aa-muted">
+                <p class="mt-1 text-xs text-sa-muted">
                   {{
                     t(
                       "studioPanels.accountIdHashHint",
@@ -261,12 +261,12 @@
         <div class="section-label">
           {{ t("studioPanels.pluginsSection", "Plugins") }}
         </div>
-        <div class="bg-aa-panel rounded-lg border border-aa-border/60 p-5">
-          <p class="mb-4 text-xs text-aa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
+        <div class="bg-sa-panel rounded-lg border border-sa-border/60 p-5">
+          <p class="mb-4 text-xs text-sa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-4">
               <div class="space-y-2">
-                <span class="block text-sm font-semibold text-aa-text">{{
+                <span class="block text-sm font-semibold text-sa-text">{{
                   t(
                     "studioPanels.createVerifierPresets",
                     "Published verifier presets",
@@ -280,21 +280,21 @@
                     class="rounded-lg border px-3 py-2 text-left transition-colors duration-200"
                     :class="
                       selectedVerifierPreset?.id === preset.id
-                        ? 'border-aa-orange bg-aa-orange/10'
-                        : 'border-aa-border bg-aa-dark hover:border-aa-orange/60'
+                        ? 'border-sa-orange bg-sa-orange/10'
+                        : 'border-sa-border bg-sa-dark hover:border-sa-orange/60'
                     "
                     :aria-pressed="selectedVerifierPreset?.id === preset.id"
                     @click="applyCreateVerifierPreset(preset)"
                   >
-                    <span class="block text-xs font-semibold text-aa-text">{{
+                    <span class="block text-xs font-semibold text-sa-text">{{
                       preset.label
                     }}</span>
-                    <span class="block font-mono text-[10px] text-aa-muted">{{
+                    <span class="block font-mono text-[10px] text-sa-muted">{{
                       preset.verifierContract
                     }}</span>
                   </button>
                 </div>
-                <p class="text-xs text-aa-muted">
+                <p class="text-xs text-sa-muted">
                   {{
                     selectedVerifierPreset
                       ? selectedVerifierPreset.description
@@ -308,7 +308,7 @@
               <div>
                 <label
                   for="verifier-contract-input"
-                  class="block text-sm font-semibold text-aa-text mb-1"
+                  class="block text-sm font-semibold text-sa-text mb-1"
                   >{{
                     t("studioPanels.verifierPlugin", "Verifier Plugin")
                   }}</label
@@ -317,7 +317,7 @@
                   id="verifier-contract-input"
                   v-model="createForm.verifierContract"
                   type="text"
-                  class="input-field font-mono text-sm py-2 px-3 bg-aa-dark"
+                  class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
                   :placeholder="
                     t(
                       'studioPanels.verifierContractOptionalPlaceholder',
@@ -325,7 +325,7 @@
                     )
                   "
                 />
-                <p class="mt-1 text-xs text-aa-muted">
+                <p class="mt-1 text-xs text-sa-muted">
                   {{
                     t(
                       "studioPanels.verifierPluginExamples",
@@ -337,7 +337,7 @@
               <div>
                 <label
                   for="verifier-params-input"
-                  class="block text-sm font-semibold text-aa-text mb-1"
+                  class="block text-sm font-semibold text-sa-text mb-1"
                   >{{
                     t("studioPanels.verifierParamsHex", "Verifier Params (hex)")
                   }}</label
@@ -345,7 +345,7 @@
                 <textarea
                   id="verifier-params-input"
                   v-model="createForm.verifierParams"
-                  class="input-field font-mono text-xs py-2 px-3 bg-aa-dark min-h-24"
+                  class="input-field font-mono text-xs py-2 px-3 bg-sa-dark min-h-24"
                   :placeholder="
                     t(
                       'studioPanels.verifierParamsPlaceholder',
@@ -360,14 +360,14 @@
               <div>
                 <label
                   for="hook-contract-input"
-                  class="block text-sm font-semibold text-aa-text mb-1"
+                  class="block text-sm font-semibold text-sa-text mb-1"
                   >{{ t("studioPanels.hookPlugin", "Hook Plugin") }}</label
                 >
                 <input
                   id="hook-contract-input"
                   v-model="createForm.hookContract"
                   type="text"
-                  class="input-field font-mono text-sm py-2 px-3 bg-aa-dark"
+                  class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
                   :placeholder="
                     t(
                       'studioPanels.hookContractOptionalPlaceholder',
@@ -375,7 +375,7 @@
                     )
                   "
                 />
-                <p class="mt-1 text-xs text-aa-muted">
+                <p class="mt-1 text-xs text-sa-muted">
                   {{
                     t(
                       "studioPanels.hookPluginExamples",
@@ -393,20 +393,20 @@
         <div class="section-label">
           {{ t("studioPanels.backupSection", "Backup & Recovery") }}
         </div>
-        <div class="bg-aa-panel rounded-lg border border-aa-border/60 p-5">
-          <p class="mb-4 text-xs text-aa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
+        <div class="bg-sa-panel rounded-lg border border-sa-border/60 p-5">
+          <p class="mb-4 text-xs text-sa-muted">{{ t('ordinary.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-2">
               <label
                 for="backup-owner-input"
-                class="block text-sm font-semibold text-aa-text mb-1"
+                class="block text-sm font-semibold text-sa-text mb-1"
                 >{{ t("studioPanels.backupOwner", "Backup Owner") }}</label
               >
               <input
                 id="backup-owner-input"
                 v-model="createForm.backupOwner"
                 type="text"
-                class="input-field font-mono text-sm py-2 px-3 bg-aa-dark"
+                class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
                 :class="backupOwnerInputClass"
                 :placeholder="
                   t('studioPanels.backupOwnerPlaceholder', 'N... or 0x...')
@@ -415,11 +415,11 @@
               <p
                 v-if="backupOwnerError"
                 role="alert"
-                class="mt-1 text-xs text-aa-error-light"
+                class="mt-1 text-xs text-sa-error-light"
               >
                 {{ backupOwnerError }}
               </p>
-              <p class="mt-1 text-xs text-aa-muted">
+              <p class="mt-1 text-xs text-sa-muted">
                 {{
                   t(
                     "studioPanels.backupOwnerHint",
@@ -431,7 +431,7 @@
             <div class="space-y-2">
               <label
                 for="escape-timelock-days"
-                class="block text-sm font-semibold text-aa-text mb-1"
+                class="block text-sm font-semibold text-sa-text mb-1"
                 >{{
                   t("studioPanels.escapeTimelockDays", "Escape Timelock (days)")
                 }}</label
@@ -442,10 +442,10 @@
                 type="number"
                 min="7"
                 max="90"
-                class="input-field w-32 text-sm py-2 px-3 bg-aa-dark"
+                class="input-field w-32 text-sm py-2 px-3 bg-sa-dark"
                 placeholder="30"
               />
-              <p class="mt-1 text-xs text-aa-muted">
+              <p class="mt-1 text-xs text-sa-muted">
                 {{
                   t(
                     "studioPanels.escapeTimelockHint",
@@ -465,7 +465,7 @@
         <div class="space-y-2">
           <label
             for="verificationScriptHex"
-            class="flex items-center justify-between text-sm font-semibold text-aa-text"
+            class="flex items-center justify-between text-sm font-semibold text-sa-text"
           >
             {{
               t(
@@ -477,7 +477,7 @@
               v-if="computedScriptHex"
               type="button"
               @click="copyScript"
-              class="text-xs text-aa-orange hover:text-aa-lightOrange transition-colors duration-200 flex items-center gap-1"
+              class="text-xs text-sa-orange hover:text-sa-lightOrange transition-colors duration-200 flex items-center gap-1"
             >
               <svg
                 aria-hidden="true"
@@ -501,13 +501,13 @@
             </button>
           </label>
           <div
-            class="relative rounded-lg overflow-hidden border border-aa-border"
+            class="relative rounded-lg overflow-hidden border border-sa-border"
           >
             <textarea
               id="verificationScriptHex"
               :value="computedScriptHex || ''"
               readonly
-              class="w-full bg-aa-dark border-0 p-4 font-mono text-xs text-aa-text placeholder:text-aa-muted focus:ring-0 resize-none h-24"
+              class="w-full bg-sa-dark border-0 p-4 font-mono text-xs text-sa-text placeholder:text-sa-muted focus:ring-0 resize-none h-24"
               :placeholder="
                 computedAddress
                   ? t(
@@ -525,7 +525,7 @@
       </div>
 
       <div
-        class="pt-6 border-t border-aa-border/60 flex flex-col sm:flex-row items-center gap-4"
+        class="pt-6 border-t border-sa-border/60 flex flex-col sm:flex-row items-center gap-4"
       >
         <button
           type="button"
@@ -537,7 +537,7 @@
           <svg
             aria-hidden="true"
             v-if="isCreating"
-            class="animate-spin -ml-1 mr-2 h-4 w-4 text-aa-text"
+            class="animate-spin -ml-1 mr-2 h-4 w-4 text-sa-text"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
@@ -566,7 +566,7 @@
           }}
         </button>
         <span
-          class="text-xs text-aa-muted font-medium text-center sm:text-left"
+          class="text-xs text-sa-muted font-medium text-center sm:text-left"
           >{{
             t(
               "studioPanels.registerHint",
@@ -628,7 +628,7 @@ const backupOwnerInputClass = computed(() => {
   const val = createForm.value.backupOwner?.trim() || "";
   if (!val) return "";
   return backupOwnerError.value
-    ? "border-aa-error focus:border-aa-error-light"
-    : "border-aa-success/50";
+    ? "border-sa-error focus:border-sa-error-light"
+    : "border-sa-success/50";
 });
 </script>

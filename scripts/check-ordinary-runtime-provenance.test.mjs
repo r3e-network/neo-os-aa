@@ -49,19 +49,19 @@ function fixture(t) {
       nefScriptByteEquality: true, nefChecksumEquality: true, manifestSemanticEquality: true });
   }
   for (const suffix of ['nef', 'manifest.json']) {
-    const bytes = fs.readFileSync(path.join(releaseRoot, `SmartAccountV3.${suffix}`));
-    write(`contracts/bin/platform/SmartAccountV3.${suffix}`, bytes);
-    hashes[`platform/SmartAccountV3.${suffix}`] = sha256(bytes);
+    const bytes = fs.readFileSync(path.join(releaseRoot, `SmartAccount.${suffix}`));
+    write(`contracts/bin/platform/SmartAccount.${suffix}`, bytes);
+    hashes[`platform/SmartAccount.${suffix}`] = sha256(bytes);
   }
   receipt.source.coreSha256 = sha256(nef);
   receipt.sourceArtifactRuntime = { ...receipt.sourceArtifactRuntime,
-    schema: 'neoos-aa-ordinary-source-artifact-runtime/v1', publicNetwork: false, scope: '8 deployed artifacts only', artifacts, readback };
+    schema: 'neoos-sa-ordinary-source-artifact-runtime/v1', publicNetwork: false, scope: '8 deployed artifacts only', artifacts, readback };
   receipt.gateFailures = [];
   const sources = buildInputSnapshot(repoRoot);
   const repro = { release_matches_fresh_build: true, drifted: [], missing: [], artifacts_compared: Object.keys(hashes).length,
     profiles: { v3: { matches_fresh_build: true, required_core_present: true, artifacts_compared: names.length * 2 },
       platform: { matches_fresh_build: true, required_core_present: true, artifacts_compared: 2 } },
-    certificate: { schema: 'neoos-aa-source-to-artifact-certificate/v1', source_root: 'repository', source_files: sources,
+    certificate: { schema: 'neoos-sa-source-to-artifact-certificate/v1', source_root: 'repository', source_files: sources,
       source_snapshot_sha256: sha256(Buffer.from(JSON.stringify(sources))), byte_equal_release: true,
       fresh_artifact_sha256: { ...hashes }, release_artifact_sha256: { ...hashes } } };
   return { repro, receipt, repoRoot, releaseRoot };
@@ -76,7 +76,7 @@ test('joins rebuild, source inputs and exactly the source suite deployment/readb
 test('source changes, build drift, wrong profile and incomplete scenario evidence fail closed', (t) => {
   const changes = [
     (f) => fs.appendFileSync(path.join(f.repoRoot, 'contracts/Core.cs'), 'drift'),
-    (f) => fs.appendFileSync(path.join(f.releaseRoot, 'SmartAccountV3.nef'), 'drift'),
+    (f) => fs.appendFileSync(path.join(f.releaseRoot, 'SmartAccount.nef'), 'drift'),
     (f) => { f.receipt.profile = 'platform-syscall-present'; },
     (f) => { f.receipt.source.coreSha256 = 'a'.repeat(64); },
     (f) => { f.receipt.results.pop(); },

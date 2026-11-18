@@ -1,26 +1,26 @@
 <template>
   <div
-    class="relative min-h-screen overflow-hidden bg-aa-dark font-sans text-aa-text"
+    class="relative min-h-screen overflow-hidden bg-sa-dark font-sans text-sa-text"
   >
     <div class="absolute inset-0 z-0">
       <div
-        class="absolute left-1/4 top-0 h-[480px] w-[480px] rounded-full bg-aa-info/10 blur-3xl"
+        class="absolute left-1/4 top-0 h-[480px] w-[480px] rounded-full bg-sa-info/10 blur-3xl"
       ></div>
       <div
-        class="absolute bottom-0 right-1/4 h-[420px] w-[420px] rounded-full bg-aa-success/10 blur-3xl"
+        class="absolute bottom-0 right-1/4 h-[420px] w-[420px] rounded-full bg-sa-success/10 blur-3xl"
       ></div>
     </div>
 
     <div class="relative z-10 mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-      <section class="aa-market-focus-entry">
+      <section class="sa-market-focus-entry">
         <div>
-          <p class="text-xs font-bold uppercase text-aa-info">
+          <p class="text-xs font-bold uppercase text-sa-info">
             {{ t("market.focusEyebrow", "Market workflow") }}
           </p>
-          <h1 class="mt-2 text-3xl font-extrabold text-aa-text font-outfit md:text-4xl">
-            {{ t("market.focusTitle", "Create or settle an AA listing") }}
+          <h1 class="mt-2 text-3xl font-extrabold text-sa-text font-outfit md:text-4xl">
+            {{ t("market.focusTitle", "Create or settle an SA listing") }}
           </h1>
-          <p class="mt-3 max-w-3xl text-sm leading-7 text-aa-muted md:text-base">
+          <p class="mt-3 max-w-3xl text-sm leading-7 text-sa-muted md:text-base">
             {{
               t(
                 "market.focusSubtitle",
@@ -34,12 +34,12 @@
         </a>
       </section>
 
-      <details class="aa-focus-reference mb-6">
+      <details class="sa-focus-reference mb-6">
         <summary>
           <span>{{ t("market.marketReference", "Market reference") }}</span>
           <strong>{{ activeListingsCount }} active</strong>
         </summary>
-        <div class="aa-market-reference-stack">
+        <div class="sa-market-reference-stack">
           <AddressMarketHero />
           <MarketStatsStrip
             :loading="loading"
@@ -64,12 +64,12 @@
         data-vanity-anchor
       >
         <div
-          class="rounded-[20px] border border-aa-border bg-aa-panel/60 p-6 backdrop-blur-xl shadow-sm"
+          class="rounded-[20px] border border-sa-border bg-sa-panel/60 p-6 backdrop-blur-xl shadow-sm"
         >
-          <h2 class="text-lg font-bold text-aa-text">
+          <h2 class="text-lg font-bold text-sa-text">
             {{ t("market.createEscrowListing", "Create Escrow Listing") }}
           </h2>
-          <p class="mt-2 text-sm leading-7 text-aa-muted">
+          <p class="mt-2 text-sm leading-7 text-sa-muted">
             {{
               t(
                 "market.createEscrowListingHint",
@@ -81,7 +81,7 @@
           <div class="mt-6 space-y-4">
             <label class="block" for="market-account-seed">
               <span
-                class="mb-1 block text-xs font-semibold uppercase text-aa-muted"
+                class="mb-1 block text-xs font-semibold uppercase text-sa-muted"
                 >{{
                   t("market.accountSeedLabel", "Account Seed / AccountId Hash")
                 }}</span
@@ -90,7 +90,7 @@
                 id="market-account-seed"
                 v-model="createForm.accountSeed"
                 type="text"
-                class="input-field w-full bg-aa-dark font-mono text-sm"
+                class="input-field w-full bg-sa-dark font-mono text-sm"
                 :class="accountSeedInputClass"
                 :placeholder="
                   t(
@@ -104,35 +104,35 @@
               <p
                 v-if="accountSeedError"
                 role="alert"
-                class="mt-1 text-xs text-aa-error"
+                class="mt-1 text-xs text-sa-error"
               >
                 {{ accountSeedError }}
               </p>
               <p
                 v-else-if="listingPreview.address"
-                class="mt-1 text-xs text-aa-success/70"
+                class="mt-1 text-xs text-sa-success/70"
               >
                 {{ t("market.validAccountDetected", "Valid account detected") }}
               </p>
             </label>
 
             <div
-              class="rounded-2xl border border-aa-border bg-aa-dark/50 p-4 transition-all duration-200"
+              class="rounded-2xl border border-sa-border bg-sa-dark/50 p-4 transition-all duration-200"
               :class="
                 listingPreview.address
-                  ? 'border-aa-success/30 shadow-glow-emerald-sm'
+                  ? 'border-sa-success/30 shadow-glow-emerald-sm'
                   : ''
               "
             >
               <div class="flex items-center justify-between">
-                <p class="text-xs font-semibold uppercase text-aa-muted">
-                  {{ t("market.derivedAaAddress", "Derived AA Address") }}
+                <p class="text-xs font-semibold uppercase text-sa-muted">
+                  {{ t("market.derivedSaAddress", "Derived SA Address") }}
                 </p>
                 <button
                   v-if="listingPreview.address"
                   type="button"
                   :aria-label="t('market.copyAddress', 'Copy address')"
-                  class="text-xs text-aa-muted hover:text-aa-text transition-colors duration-200 flex items-center gap-1"
+                  class="text-xs text-sa-muted hover:text-sa-text transition-colors duration-200 flex items-center gap-1"
                   @click="copyDerivedAddress"
                 >
                   <svg
@@ -156,7 +156,7 @@
                   }}
                 </button>
               </div>
-              <p class="mt-2 break-all font-mono text-sm text-aa-text">
+              <p class="mt-2 break-all font-mono text-sm text-sa-text">
                 {{
                   listingPreview.address ||
                   t(
@@ -167,7 +167,7 @@
               </p>
               <p
                 v-if="listingPreview.accountIdHash"
-                class="mt-2 break-all font-mono text-xs text-aa-muted"
+                class="mt-2 break-all font-mono text-xs text-sa-muted"
               >
                 {{ t("market.accountIdLabel", "accountId") }}: 0x{{
                   listingPreview.accountIdHash
@@ -177,7 +177,7 @@
 
             <label class="block" for="market-listing-title">
               <span
-                class="mb-1 block text-xs font-semibold uppercase text-aa-muted"
+                class="mb-1 block text-xs font-semibold uppercase text-sa-muted"
                 >{{ t("market.listingTitleLabel", "Listing Title") }}</span
               >
               <input
@@ -185,10 +185,10 @@
                 v-model="createForm.title"
                 type="text"
                 maxlength="80"
-                class="input-field w-full bg-aa-dark text-sm"
+                class="input-field w-full bg-sa-dark text-sm"
                 :class="
                   titleError
-                    ? 'border-aa-error focus:border-aa-error-light focus:ring-aa-error/20'
+                    ? 'border-sa-error focus:border-sa-error-light focus:ring-sa-error/20'
                     : ''
                 "
                 :placeholder="
@@ -199,18 +199,18 @@
               <p
                 v-if="titleError"
                 role="alert"
-                class="mt-1 text-xs text-aa-error"
+                class="mt-1 text-xs text-sa-error"
               >
                 {{ titleError }}
               </p>
-              <p v-else class="mt-1 text-xs text-aa-muted">
+              <p v-else class="mt-1 text-xs text-sa-muted">
                 {{ createForm.title.length }}/80
               </p>
             </label>
 
             <label class="block" for="market-price-gas">
               <span
-                class="mb-1 block text-xs font-semibold uppercase text-aa-muted"
+                class="mb-1 block text-xs font-semibold uppercase text-sa-muted"
                 >{{ t("market.priceLabel", "Price (GAS)") }}</span
               >
               <input
@@ -218,7 +218,7 @@
                 v-model="createForm.price_gas"
                 type="text"
                 inputmode="decimal"
-                class="input-field w-full bg-aa-dark font-mono text-sm"
+                class="input-field w-full bg-sa-dark font-mono text-sm"
                 :class="priceInputClass"
                 :placeholder="t('market.pricePlaceholder', 'e.g. 25.5')"
                 @input="validatePrice"
@@ -226,7 +226,7 @@
               <p
                 v-if="priceError"
                 role="alert"
-                class="mt-1 text-xs text-aa-error"
+                class="mt-1 text-xs text-sa-error"
               >
                 {{ priceError }}
               </p>
@@ -234,7 +234,7 @@
 
             <label class="block" for="market-metadata-uri">
               <span
-                class="mb-1 block text-xs font-semibold uppercase text-aa-muted"
+                class="mb-1 block text-xs font-semibold uppercase text-sa-muted"
                 >{{ t("market.metadataLabel", "Metadata / Docs URL") }}</span
               >
               <input
@@ -242,7 +242,7 @@
                 v-model="createForm.metadataUri"
                 type="text"
                 maxlength="240"
-                class="input-field w-full bg-aa-dark text-sm"
+                class="input-field w-full bg-sa-dark text-sm"
                 :placeholder="
                   t(
                     'market.metadataPlaceholder',
@@ -277,9 +277,9 @@
               }}
             </button>
 
-            <p class="text-xs leading-6 text-aa-muted">
+            <p class="text-xs leading-6 text-sa-muted">
               {{ t("market.sellerWalletLabel", "Seller wallet:") }}
-              <span class="font-mono text-aa-text">{{
+              <span class="font-mono text-sa-text">{{
                 connectedAccount ||
                 t("market.connectNeoWallet", "connect a Neo wallet")
               }}</span>
@@ -421,8 +421,8 @@ async function copyDerivedAddress() {
 
 const accountSeedInputClass = computed(() => {
   if (accountSeedError.value)
-    return "border-aa-error focus:border-aa-error-light focus:ring-aa-error/20";
-  if (listingPreview.value.accountIdHash) return "border-aa-success/50";
+    return "border-sa-error focus:border-sa-error-light focus:ring-sa-error/20";
+  if (listingPreview.value.accountIdHash) return "border-sa-success/50";
   return "";
 });
 
@@ -480,8 +480,8 @@ function validateTitle() {
 
 const priceInputClass = computed(() => {
   if (priceError.value)
-    return "border-aa-error focus:border-aa-error-light focus:ring-aa-error/20";
-  if (createForm.price_gas && !priceError.value) return "border-aa-success/50";
+    return "border-sa-error focus:border-sa-error-light focus:ring-sa-error/20";
+  if (createForm.price_gas && !priceError.value) return "border-sa-success/50";
   return "";
 });
 
@@ -507,7 +507,7 @@ const listingPreview = computed(() => {
       : "";
     const address = accountIdHash
       ? deriveVirtualAddressFromListing({
-          aaContractHash: RUNTIME_CONFIG.abstractAccountHash,
+          saContractHash: RUNTIME_CONFIG.smartAccountHash,
           accountIdHash,
         })
       : "";

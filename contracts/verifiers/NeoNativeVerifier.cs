@@ -55,7 +55,7 @@ namespace SmartAccount.Verifiers
         public static void ConfirmAuthorizedCore(UInt160 coreContract) => VerifierAuthority.ConfirmAuthorizedCore(coreContract);
         public static void CancelAuthorizedCoreChange() => VerifierAuthority.CancelAuthorizedCoreChange();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => VerifierAuthority.ProposeUpdate(nefHash, manifestHash);
 
@@ -194,8 +194,10 @@ namespace SmartAccount.Verifiers
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
             // Audit fix M-6: the ordinary-build validation entry is only reachable
-            // through the AA core's execution context; direct callers are rejected.
-            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+            // through the SA core's execution context; direct callers are rejected.
+            // v4: the core calls validators in the PhaseValidation phase, so this is
+            // the read-only validation-phase authorization (not the completion one).
+            VerifierAuthority.ValidateValidationCaller(accountId, Runtime.ExecutingScriptHash);
 #endif
             byte[] key = VerifierAuthority.AccountKey(Prefix_AuthorizedSigners, accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);

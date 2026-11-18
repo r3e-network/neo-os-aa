@@ -99,8 +99,8 @@ test('stubbed NeoExpress report redirections stay in the temporary checkout', (t
   assert.equal(result.status, 0, result.stderr);
   const reports = fs.readdirSync(result.reportDir).sort();
   assert.equal(reports.length, 2, 'only the two shell-redirected stub reports exist');
-  assert.match(reports[0], /^aa-artifact-reproducibility-\d{8}\.json$/);
-  assert.match(reports[1], /^aa-ordinary-runtime-provenance-\d{8}\.json$/);
+  assert.match(reports[0], /^sa-artifact-reproducibility-\d{8}\.json$/);
+  assert.match(reports[1], /^sa-ordinary-runtime-provenance-\d{8}\.json$/);
   assert.ok(reports.every((name) => fs.statSync(path.join(result.reportDir, name)).size === 0));
   // The trace is the log of what the stubs were invoked with. Git Bash (MSYS) renders
   // the Windows reportDir argument in its POSIX form (/tmp/<fixture>/docs/reports) when

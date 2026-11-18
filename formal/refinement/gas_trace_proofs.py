@@ -193,7 +193,7 @@ def run_proofs(directory, runtime_receipts, controls=True):
     trace.require(all(trace.digest(p.read_bytes())==trace.digest(data) for p,data in raw.items()),'Proof input drift')
     trace.require(trace.derive(trace.bind_artifact(),trace.extract_fees(trace.pinned_sources()))==model,'Pricing/artifact drift')
     trace.require(all(trace.digest(Path(j['path']).read_bytes())==j['sha256'] for j in joined),'Runtime receipt drift')
-    return dict(schema='neoos-aa-helper-gas-bound/v1',kernelChecked=True,scope='exact-CFG-parameterized-helper-price-bound',
+    return dict(schema='neoos-sa-helper-gas-bound/v1',kernelChecked=True,scope='exact-CFG-parameterized-helper-price-bound',
         applicationEngineVerified=False,fullImplementationVerified=False,sourceFrontendVerified=False,
         sourcePricingPinned=True,modelPriceBoundProved=True,actualRuntimeCrossChecked=True,
         runtimeObservationSource='supplied-runtime-receipts',runtimeReexecuted=False,

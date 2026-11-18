@@ -1,7 +1,7 @@
 {
-  "name": "smart-account",
+  "name": "@r3e-network/neo-smart-account",
   "version": "1.0.0",
-  "description": "Neo N3 Abstract Account SDK",
+  "description": "Neo N3 Smart Account SDK",
   "license": "MIT",
   "main": "dist/sdk/js/src/index.js",
   "types": "dist/sdk/js/src/index.d.ts",
@@ -13,10 +13,10 @@
       "default": "./dist/sdk/js/src/index.js"
     }
   },
-  "homepage": "https://github.com/r3e-network/neo-os-aa",
+  "homepage": "https://github.com/r3e-network/neo-os-sa",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/r3e-network/neo-os-aa.git"
+    "url": "git+https://github.com/r3e-network/neo-os-sa.git"
   },
   "engines": {
     "node": ">=22.12.0"

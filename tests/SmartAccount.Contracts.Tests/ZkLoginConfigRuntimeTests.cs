@@ -18,7 +18,7 @@ public class ZkLoginConfigRuntimeTests
     public void ConfigBlobRejectsTrailingBytesAtTheVerifierBoundary()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 wallet = fixture.Deploy("SmartAccount");
         UInt160 verifier = fixture.Deploy("verifiers/ZkLoginVerifier", wallet.ToArray());
 
         byte[] canonical = BuildConfigBlob();
@@ -53,7 +53,7 @@ public class ZkLoginConfigRuntimeTests
     public void SetConfigRejectsProviderLongerThanTheWireLengthPrefix()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 wallet = fixture.Deploy("SmartAccount");
         UInt160 verifier = fixture.Deploy("verifiers/ZkLoginVerifier", wallet.ToArray());
         byte[] canonical = BuildConfigBlob();
         UInt160 accountId = fixture.CallUInt160(

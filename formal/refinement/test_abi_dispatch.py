@@ -52,7 +52,7 @@ UNDECLARED = 'abiBoundaryProbeNotDeclared'
 
 class DispatchFaceTests(unittest.TestCase):
     def setUp(self):
-        self.directory = tempfile.mkdtemp(prefix='aa-abi-')
+        self.directory = tempfile.mkdtemp(prefix='sa-abi-')
         self.addCleanup(shutil.rmtree, self.directory, True)
         self.manifest_path = os.path.join(self.directory, 'manifest.json')
         with open(self.manifest_path, 'w', encoding='utf-8') as handle:

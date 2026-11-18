@@ -20,7 +20,7 @@ test('claim stays fresh and only an exact signed mutation can replay its cached 
   let databaseReads = 0;
   globalThis.fetch = async (resource, options = {}) => {
     const url = String(resource);
-    if (url.startsWith('https://supabase.example.test/rest/v1/aa_transaction_drafts')) {
+    if (url.startsWith('https://supabase.example.test/rest/v1/sa_transaction_drafts')) {
       databaseReads += 1;
       if (options.method === 'PATCH') Object.assign(draft, JSON.parse(options.body));
       return Response.json(draft);

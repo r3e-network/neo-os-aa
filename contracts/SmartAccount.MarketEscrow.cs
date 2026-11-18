@@ -8,256 +8,249 @@ using Neo.SmartContract.Framework.Services;
 
 namespace SmartAccount
 {
+    /// <summary>
+    /// Market escrow under the minimal-lock model (protocol v4, spec §7.5 /
+    /// design report §4.4).
+    ///
+    /// Physical markers 0x06 (market contract), 0x07 (listing id) and 0x1D
+    /// (legacy cancel-initiated latch) remain Market-only writes: they are
+    /// allocated as globally unique bytes in the STORAGE PREFIX MAP and are
+    /// written at Market entrances (EnterMarketEscrow, driven by the market
+    /// contract itself) and deleted only by Market-driven unwind paths
+    /// (CancelMarketEscrow / SettleMarketEscrow). No owner-side path writes
+    /// or deletes them — the retired owner-side 0x1D write and the
+    /// ForceCancel/FinalizeEscapeToOwner marker deletions were kernel-batch
+    /// bugs and are gone.
+    ///
+    /// The 0x5D MarketControlBinding pins, per account, the escrow lock, the
+    /// account's control revision at entry and the listing id. The owner's
+    /// escape from a stuck or hostile escrow is the core callback-free
+    /// recovery flow (beginRecovery/executeRecovery in SmartAccount.Escape.cs):
+    /// it writes only 0x59 records, never a legacy Market prefix, never calls
+    /// the Market, and its control-epoch advance invalidates the old-epoch
+    /// lock — an escaped account can no longer be settled under its old
+    /// binding (SA_MARKET_LOCKED). Later Market claims (cancel) clean the
+    /// physical markers.
+    /// </summary>
     public partial class SmartAccount
     {
-        // ========================================================================
-        // 7. Market Escrow (address transfer)
-        // ========================================================================
-
-        // Storage prefix for the owner-driven, timelocked escrow cancellation marker.
-        // 0x1D is the globally unique active allocation for this latch: there is no
-        // legacy sibling row to read or delete, so every code path touches exactly
-        // this prefix.
+        // Market-only physical marker: timelocked escrow cancellation latch.
+        // Written and deleted exclusively by Market-driven paths in this
+        // partial; no owner-side path may touch it (spec §7.5).
         private static readonly byte[] Prefix_MarketEscrowCancelInitiated = new byte[] { 0x1D };
 
-        // Registered market-service allowlist. EnterMarketEscrow requires BOTH the
-        // caller to be the named market contract AND that market to be admin-registered
-        // here: caller identity alone cannot stop an arbitrary deployed contract from
-        // arming a fake escrow and settling the account to an attacker-chosen owner
-        // without payment. The core admin therefore vets market services explicitly,
-        // mirroring the market-side setAllowedAA allowlist of trusted AA cores.
+        // Registered market-service allowlist. EnterMarketEscrow requires BOTH
+        // the caller to be the named market contract AND that market to be
+        // admin-registered here: caller identity alone cannot stop an arbitrary
+        // deployed contract from arming a fake escrow and settling the account
+        // to an attacker-chosen owner without payment.
         private static readonly byte[] Prefix_MarketServiceRegistration = new byte[] { 0x29 };
-
-        // Delay the backup owner must wait between requesting and forcing an escrow
-        // cancellation. Gives an honest market its full opportunity to settle while still
-        // guaranteeing the owner can always reclaim a stuck/abandoned escrow.
-        private static readonly BigInteger MarketEscrowOwnerCancelTimelockMs = 7L * 24 * 60 * 60 * 1000;
-
-        public delegate void MarketEscrowOwnerCancelInitiatedDelegate(UInt160 accountId, UInt160 backupOwner, BigInteger availableAt);
-
-        [DisplayName("MarketEscrowOwnerCancelInitiated")]
-        public static event MarketEscrowOwnerCancelInitiatedDelegate OnMarketEscrowOwnerCancelInitiated = null!;
-
-        [DisplayName("MarketEscrowOwnerCancelled")]
-        public static event AccountOnlyDelegate OnMarketEscrowOwnerCancelled = null!;
 
         public delegate void MarketServiceChangedDelegate(UInt160 marketContract, bool allowed);
 
         [DisplayName("MarketServiceChanged")]
         public static event MarketServiceChangedDelegate OnMarketServiceChanged = null!;
 
+        // ========================================================================
+        // 0x5D control-epoch binding (spec §7.5)
+        // ========================================================================
+
+        private static MarketControlBinding? GetMarketControlBinding(UInt160 accountId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, MarketControlEpochKey(accountId));
+            return data == null ? null : (MarketControlBinding)StdLib.Deserialize(data!);
+        }
+
+        private static void PutMarketControlBinding(UInt160 accountId, MarketControlBinding binding)
+        {
+            Storage.Put(Storage.CurrentContext, MarketControlEpochKey(accountId), StdLib.Serialize(binding));
+        }
+
+        private static void DeleteMarketControlBinding(UInt160 accountId)
+        {
+            Storage.Delete(Storage.CurrentContext, MarketControlEpochKey(accountId));
+        }
+
+        // ========================================================================
+        // Market entrances
+        // ========================================================================
+
         /// <summary>
-        /// Locks an account into a market-controlled escrow state so it can be sold atomically.
-        /// While escrow is active, normal execution and configuration flows are blocked.
+        /// Locks an account into a market-controlled escrow state so it can be
+        /// sold atomically. Called by the registered market contract itself
+        /// (the listing's binding must be established by the market — see the
+        /// caller-identity assert) with the custody witness of the account
+        /// being sold. Writes the physical 0x06/0x07 markers and the 0x5D
+        /// binding that pins the account's control revision at entry.
         /// </summary>
         public static void EnterMarketEscrow(UInt160 accountId, UInt160 marketContract, BigInteger listingId)
         {
-            AssertBackupOwner(accountId);
+            ValidateAccountId(accountId);
+            AccountControl control = MaterializeAccountControl(accountId);
+            RequireCustodyWitness(control);
+            ExecutionEngine.Assert(control.Status == AccountStatusActive, ErrorAccountStatus);
             AssertAccountConfigurationIdle(accountId);
             AssertNoMarketEscrow(accountId);
+            ExecutionEngine.Assert(GetMarketControlBinding(accountId) == null, ErrorMarketLocked);
             ExecutionEngine.Assert(marketContract != null && marketContract != UInt160.Zero, "Market contract required");
             ExecutionEngine.Assert(listingId > 0, "Listing id required");
 
-            // The (marketContract, listingId) binding must be established by the market itself.
-            // A listing's later abandon/settle/cancel calls are authorised purely by
-            // CallingScriptHash == the recorded marketContract, so allowing any backup owner to
-            // record an arbitrary (market, listingId) here would let an attacker point their own
-            // account's escrow at a victim's listing and then drive that victim's listing through
-            // the abandon path. Requiring the real market to be the caller that arms the escrow
-            // keeps the binding honest: the only on-chain path is the market's own CreateListing,
-            // which calls in passing itself (Runtime.ExecutingScriptHash) as marketContract.
+            // The (marketContract, listingId) binding must be established by the market
+            // itself: allowing any custody to record an arbitrary (market, listingId)
+            // here would let an attacker point their own account's escrow at a
+            // victim's listing and then drive that victim's listing through the
+            // unwind paths.
             ExecutionEngine.Assert(Runtime.CallingScriptHash == marketContract!, "Caller is not the market");
 
-            // Registration gate (Phase 1b service extraction): the market driving this
-            // escrow must be one the core admin registered. Listing on an unregistered
-            // market would hand that contract unconditional settle authority over the
-            // account without any payment guarantee, so the combination of an explicit
-            // registration and the caller identity keeps the escrow binding honest.
+            // Registration gate: the market driving this escrow must be one the
+            // core admin registered. Listing on an unregistered market would
+            // hand that contract unconditional settle authority over the
+            // account without any payment guarantee.
             ExecutionEngine.Assert(IsRegisteredMarketService(marketContract!), "Market service not registered");
 
             byte[] marketKey = Helper.Concat(Prefix_MarketEscrowContract, (byte[])accountId);
             byte[] listingKey = Helper.Concat(Prefix_MarketEscrowListing, (byte[])accountId);
             Storage.Put(Storage.CurrentContext, marketKey, (byte[])marketContract!);
             Storage.Put(Storage.CurrentContext, listingKey, listingId);
+
+            // Entering an escrow is a control-epoch-relevant change: bump the
+            // revision and pin it in the 0x5D binding. A later recovery bumps
+            // the revision again, so this lock dies on the epoch check.
+            control.ControlRevision += BigInteger.One;
+            PutAccountControl(accountId, control);
+            MarketControlBinding binding = new MarketControlBinding();
+            binding.Market = marketContract!;
+            binding.ListingId = listingId;
+            binding.ControlEpoch = control.ControlRevision;
+            PutMarketControlBinding(accountId, binding);
+
+            OnMarketControlEpochBound(accountId, listingId, binding.ControlEpoch);
             OnMarketEscrowEntered(accountId, marketContract!, listingId);
         }
 
+        // ========================================================================
+        // Market-driven unwind
+        // ========================================================================
+
         /// <summary>
-        /// Clears an active market escrow without changing control. Intended for listing cancellation.
+        /// Clears an active market escrow without changing control (listing
+        /// cancellation, driven by the market contract). If the 0x5D binding's
+        /// control epoch no longer matches — the owner escaped through
+        /// callback-free recovery — this is a cleanup claim: the invalidated
+        /// lock is dropped, the physical markers are cleaned and
+        /// <c>MarketLockInvalidated</c> is emitted; no state transfer happens.
         /// </summary>
         public static void CancelMarketEscrow(UInt160 accountId, BigInteger listingId)
         {
-            AssertEscrowMarket(accountId, listingId);
+            ValidateAccountId(accountId);
+            AccountControl control = MaterializeAccountControl(accountId);
+            ExecutionEngine.Assert(control.Status == AccountStatusActive, ErrorAccountStatus);
             AssertAccountConfigurationIdle(accountId);
-            UInt160 market = GetMarketEscrowContract(accountId);
+            AssertEscrowMarket(accountId, listingId);
+
+            MarketControlBinding? binding = GetMarketControlBinding(accountId);
+            if (binding != null && binding!.ControlEpoch != control.ControlRevision)
+            {
+                // Old-epoch lock: the owner already recovered. Cleanup only.
+                DeleteMarketControlBinding(accountId);
+                ClearMarketEscrow(accountId);
+                OnMarketLockInvalidated(accountId, binding.ControlEpoch);
+                OnMarketEscrowCancelled(accountId);
+                return;
+            }
+
+            DeleteMarketControlBinding(accountId);
             ClearMarketEscrow(accountId);
-            NotifyMarketListingAbandoned(market, accountId, listingId);
             OnMarketEscrowCancelled(accountId);
         }
 
         /// <summary>
-        /// Completes a market escrow sale by transferring only the AA shell and wiping prior plugin state.
-        /// The buyer receives a clean account with a new backup owner and no inherited verifier/hook bindings.
+        /// Completes a market escrow sale by transferring only the SA shell:
+        /// the buyer becomes the new custody and receives a clean account —
+        /// every module instance, threshold policy, hook order, message
+        /// subject set, pending intent, nonce channel and pending migration
+        /// state is swept callback-free (no old plugin clearAccount callback
+        /// can block or corrupt the settlement), and built-in authorization is
+        /// enabled so the buyer can operate immediately. The 0x5D binding must
+        /// still match the account's control revision: an account whose owner
+        /// escaped through recovery can never be sold under its old binding.
+        /// A pre-upgrade escrow (no binding) may settle only while the account
+        /// was never recovered (authorityEpoch still at its materialization
+        /// value).
         /// </summary>
         public static void SettleMarketEscrow(UInt160 accountId, BigInteger listingId, UInt160 newBackupOwner)
         {
-            AssertEscrowMarket(accountId, listingId);
+            ValidateAccountId(accountId);
+            AccountControl control = MaterializeAccountControl(accountId);
+            ExecutionEngine.Assert(control.Status == AccountStatusActive, ErrorAccountStatus);
             AssertAccountConfigurationIdle(accountId);
+            AssertEscrowMarket(accountId, listingId);
             ExecutionEngine.Assert(newBackupOwner != null && newBackupOwner != UInt160.Zero, "New backup owner required");
 
-            AccountState state = GetAccountState(accountId);
-            UInt160 previousVerifier = state.Verifier;
-            UInt160 previousHook = state.HookId;
-
-            // Clear old plugin state before wiping pointers. A cleanup failure MUST abort the
-            // settlement rather than handing the buyer an account whose old plugin storage may
-            // still authorize actions. The finally blocks only clear the temporary caller
-            // context; the enclosing Neo transaction rolls every state write back on the fault.
-            if (previousVerifier != UInt160.Zero)
+            MarketControlBinding? binding = GetMarketControlBinding(accountId);
+            if (binding != null)
             {
-                SetVerifierConfigContext(accountId, previousVerifier);
-                try
-                {
-                    CallRootWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
-                }
-                finally
-                {
-                    ClearVerifierConfigContext(accountId);
-                }
+                ExecutionEngine.Assert(binding!.ControlEpoch == control.ControlRevision, ErrorMarketLocked);
             }
-            if (previousHook != UInt160.Zero)
+            else
             {
-                SetHookConfigContext(accountId, previousHook);
-                try
-                {
-                    CallRootWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
-                }
-                finally
-                {
-                    ClearHookConfigContext(accountId);
-                }
+                // Pre-upgrade escrow without a 0x5D binding: still sellable,
+                // but only if the account was never frozen/recovered after
+                // materialization (both advance the authority epoch).
+                ExecutionEngine.Assert(control.AuthorityEpoch == BigInteger.One, ErrorMarketLocked);
             }
 
-            state.BackupOwner = newBackupOwner!;
-            state.Verifier = UInt160.Zero;
-            state.HookId = UInt160.Zero;
-            state.EscapeTriggeredAt = 0;
+            // Callback-free clean sweep: no old plugin, market or oracle call.
+            SweepAccountModulesAndPolicies(accountId);
 
-            byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId);
-            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(state));
+            control.Custody = newBackupOwner!;
+            control.RecoveryAuthority = UInt160.Zero;
+            control.Status = AccountStatusActive;
+            control.AuthorityEpoch += BigInteger.One;
+            control.ConfigurationNonce += BigInteger.One;
+            control.ControlRevision += BigInteger.One;
+            control.DefaultOperationAuthorization = true;
+            control.DefaultMessageAuthorization = true;
+            PutAccountControl(accountId, control);
+            // Spec §8: settlement replaces the custody, so the swept 0x57 set is
+            // rebuilt against the BUYER rather than left empty.
+            InitializeDefaultMessageSubjects(accountId, control);
+            // Keep the legacy five-field row truthful as migration input: the
+            // buyer is the new backup owner and no legacy pointer survives.
+            byte[] stateKey = Helper.Concat(Prefix_AccountState, (byte[])accountId);
+            ByteString? legacyRow = Storage.Get(Storage.CurrentContext, stateKey);
+            if (legacyRow != null)
+            {
+                AccountState state = (AccountState)StdLib.Deserialize(legacyRow!);
+                state.BackupOwner = newBackupOwner!;
+                state.Verifier = UInt160.Zero;
+                state.HookId = UInt160.Zero;
+                state.EscapeTriggeredAt = BigInteger.Zero;
+                Storage.Put(Storage.CurrentContext, stateKey, StdLib.Serialize(state));
+            }
 
-            // Hand the buyer a genuinely clean shell: wipe every per-account marker the previous
-            // owner could have left behind. Beyond the pending plugin *updates*, this also clears
-            // any pending timelocked plugin *calls*, a stale escape-cooldown stamp (so the buyer is
-            // not locked out of InitiateEscape), and the seller's off-chain metadata URI.
+            // Drop the seller's stale legacy pending/cancel markers (core-owned
+            // prefixes; the physical Market markers are cleared below).
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId));
-            // Phase 1b: a pre-sale pending platform owner rotation lives in the registrar
-            // service; its previousOwner no longer matches the buyer, so the core's
-            // staleness guard in ApplyPlatformAccountOwnerRotation can never confirm it.
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookCall, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_EscapeLastInitiated, (byte[])accountId));
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_MetadataUri, (byte[])accountId));
 
-            if (previousVerifier != UInt160.Zero)
-            {
-                OnModuleRemoved(accountId, ModuleTypeVerifier, previousVerifier);
-            }
-            if (previousHook != UInt160.Zero)
-            {
-                OnModuleRemoved(accountId, ModuleTypeHook, previousHook);
-            }
-
+            DeleteMarketControlBinding(accountId);
             ClearMarketEscrow(accountId);
             OnMarketEscrowSettled(accountId, newBackupOwner!);
         }
 
-        /// <summary>
-        /// Begins the backup-owner escape from a market escrow. This is the owner-side counterpart
-        /// to the market-driven <see cref="CancelMarketEscrow"/>: it lets the account's backup owner
-        /// unwind a stuck or abandoned escrow (e.g. a market contract that was destroyed, upgraded
-        /// away, or never settles) instead of leaving the account permanently bricked.
-        ///
-        /// The actual cancellation is timelocked via <see cref="ForceCancelMarketEscrow"/> so an
-        /// honest market still has its full window to settle the sale before the owner can reclaim
-        /// control. Re-invoking restarts the timer.
-        /// </summary>
-        public static void InitiateMarketEscrowCancel(UInt160 accountId)
-        {
-            AssertBackupOwner(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            ExecutionEngine.Assert(IsMarketEscrowActive(accountId), "Market escrow not active");
-
-            byte[] key = Helper.Concat(Prefix_MarketEscrowCancelInitiated, (byte[])accountId);
-            Storage.Put(Storage.CurrentContext, key, Runtime.Time);
-
-            AccountState state = GetAccountState(accountId);
-            OnMarketEscrowOwnerCancelInitiated(accountId, state.BackupOwner!, Runtime.Time + MarketEscrowOwnerCancelTimelockMs);
-        }
+        // ========================================================================
+        // Market service registration (admin-gated allowlist)
+        // ========================================================================
 
         /// <summary>
-        /// Completes the backup-owner escape after the timelock elapses, clearing the escrow and
-        /// returning full control to the existing backup owner without changing ownership. Preserves
-        /// the normal market settle/cancel paths; this guarantees the owner is never permanently
-        /// locked out by a market that was destroyed, upgraded away, never settles, or throws.
-        /// The market notification is pre-flighted and best-effort; see
-        /// <see cref="NotifyMarketListingAbandoned"/> for the exact boundary.
-        /// </summary>
-        public static void ForceCancelMarketEscrow(UInt160 accountId)
-        {
-            AssertBackupOwner(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            ExecutionEngine.Assert(IsMarketEscrowActive(accountId), "Market escrow not active");
-
-            ByteString? initiated = GetMarketEscrowOwnerCancelInitiated(accountId);
-            ExecutionEngine.Assert(initiated != null, "Owner cancel not initiated");
-            BigInteger initiatedAt = (BigInteger)initiated!;
-            ExecutionEngine.Assert(Runtime.Time >= initiatedAt + MarketEscrowOwnerCancelTimelockMs, "Owner cancel timelock active");
-
-            // Capture the listing the escrow points at before wiping the local markers so the
-            // market can be told to retire the listing too — otherwise the owner reclaims the
-            // account but the market keeps an Active listing that can never settle (a zombie).
-            UInt160 market = GetMarketEscrowContract(accountId);
-            BigInteger listingId = GetMarketEscrowListingId(accountId);
-            ClearMarketEscrow(accountId);
-            NotifyMarketListingAbandoned(market, accountId, listingId);
-            OnMarketEscrowOwnerCancelled(accountId);
-        }
-
-        /// <summary>
-        /// Returns whether the backup owner has an in-flight timelocked escrow cancellation.
-        /// </summary>
-        [Safe]
-        public static bool HasMarketEscrowOwnerCancel(UInt160 accountId)
-        {
-            return GetMarketEscrowOwnerCancelInitiated(accountId) != null;
-        }
-
-        /// <summary>
-        /// Returns the timestamp (ms) at which the backup owner may force-cancel the escrow, or 0
-        /// if no owner cancellation is in flight.
-        /// </summary>
-        [Safe]
-        public static BigInteger GetMarketEscrowOwnerCancelTime(UInt160 accountId)
-        {
-            ByteString? initiated = GetMarketEscrowOwnerCancelInitiated(accountId);
-            return initiated == null ? 0 : (BigInteger)initiated! + MarketEscrowOwnerCancelTimelockMs;
-        }
-
-        private static ByteString? GetMarketEscrowOwnerCancelInitiated(UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(Prefix_MarketEscrowCancelInitiated, (byte[])accountId);
-            return Storage.Get(Storage.CurrentContext, key);
-        }
-
-        /// <summary>
-        /// Registers or unregisters a market service contract that may drive escrow locks.
-        /// Admin-gated: only the core admin vets which deployed markets are trustworthy
-        /// enough to hold settle authority over escrowed accounts. Registering an already
-        /// registered market with the same flag is idempotent; unregistering revokes the
-        /// market's ability to arm new escrows (existing escrows still unwind normally
-        /// through cancel/settle/force-cancel).
+        /// Registers or unregisters a market service contract that may drive
+        /// escrow locks. Admin-gated: only the core admin vets which deployed
+        /// markets are trustworthy enough to hold settle authority over
+        /// escrowed accounts.
         /// </summary>
         public static void SetMarketService(UInt160 marketContract, bool allowed)
         {
@@ -292,11 +285,21 @@ namespace SmartAccount
                 Helper.Concat(Prefix_MarketServiceRegistration, (byte[])marketContract)) != null;
         }
 
+        // ========================================================================
+        // Internal gates
+        // ========================================================================
+
         private static void AssertNoMarketEscrow(UInt160 accountId)
         {
             ExecutionEngine.Assert(!IsMarketEscrowActive(accountId), "Account locked in market escrow");
         }
 
+        /// <summary>
+        /// The caller must be the market contract the escrow points at, and
+        /// the listing id must match the recorded one. The 0x5D epoch check
+        /// lives in the individual unwind paths (cancel tolerates a stale
+        /// epoch as a cleanup claim; settle never does).
+        /// </summary>
         private static void AssertEscrowMarket(UInt160 accountId, BigInteger listingId)
         {
             UInt160 market = GetMarketEscrowContract(accountId);
@@ -314,65 +317,6 @@ namespace SmartAccount
             Storage.Delete(Storage.CurrentContext, marketKey);
             Storage.Delete(Storage.CurrentContext, listingKey);
             Storage.Delete(Storage.CurrentContext, ownerCancelKey);
-        }
-
-        private const string MarketAbandonListingMethod = "abandonListing";
-        private const int MarketAbandonListingParameterCount = 2;
-
-        /// <summary>
-        /// Asks the market contract to retire the listing this escrow was bound to so a wallet-side
-        /// escrow clear (owner force-cancel or market-driven cancel) never leaves an Active listing
-        /// the market can no longer settle. The AbandonListing transition is idempotent, so
-        /// overlapping with the market's own cancel path is harmless.
-        /// </summary>
-        /// <remarks>
-        /// The notification must never be able to block the owner escape. A NeoVM <c>catch</c>
-        /// only intercepts a callee <c>THROW</c>; a call to a destroyed contract, to a contract
-        /// without a matching method, or a callee <c>ASSERT</c>/<c>ABORT</c> faults the whole
-        /// transaction uncatchably. The market is therefore inspected through
-        /// <c>ContractManagement.GetContract</c> before it is called: a market that no longer
-        /// exists or that does not expose <c>abandonListing(accountId, listingId)</c> is skipped,
-        /// and a market that throws is tolerated by the <c>catch</c>. The remaining residual is a
-        /// market that aborts inside its own <c>abandonListing</c>; such a market already holds
-        /// unconditional settle authority over the escrowed account (see <see cref="SettleMarketEscrow"/>),
-        /// so listing on it is the trust decision, not this callback.
-        /// </remarks>
-        private static void NotifyMarketListingAbandoned(UInt160 market, UInt160 accountId, BigInteger listingId)
-        {
-            if (market == UInt160.Zero || listingId <= 0) return;
-            if (!MarketExposesAbandonListing(market)) return;
-            try
-            {
-                Contract.Call(market, MarketAbandonListingMethod, CallFlags.All, new object[] { accountId, listingId });
-            }
-            catch
-            {
-                // Market threw: the local escrow is already cleared, so the owner keeps control
-                // regardless. A still-Active listing on such a market cannot settle anyway because
-                // the wallet no longer recognises it as the escrow holder.
-            }
-        }
-
-        /// <summary>
-        /// True when <paramref name="market"/> is a deployed contract whose manifest declares
-        /// <c>abandonListing</c> with exactly two parameters. This is the only pre-flight NeoVM
-        /// offers: it removes the missing-contract and missing-method faults that a
-        /// <c>try</c>/<c>catch</c> cannot intercept.
-        /// </summary>
-        private static bool MarketExposesAbandonListing(UInt160 market)
-        {
-            Contract? deployed = ContractManagement.GetContract(market);
-            if (deployed == null) return false;
-            ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
-            for (int i = 0; i < methods.Length; i++)
-            {
-                if (methods[i].Name == MarketAbandonListingMethod
-                    && methods[i].Parameters.Length == MarketAbandonListingParameterCount)
-                {
-                    return true;
-                }
-            }
-            return false;
         }
     }
 }

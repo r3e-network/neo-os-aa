@@ -46,7 +46,7 @@ FOOTPRINTS = {
 
 class FootprintFaceTests(unittest.TestCase):
     def setUp(self):
-        self.directory = tempfile.mkdtemp(prefix='aa-footprint-')
+        self.directory = tempfile.mkdtemp(prefix='sa-footprint-')
         self.addCleanup(shutil.rmtree, self.directory, True)
 
     # -- fixtures ---------------------------------------------------------
@@ -61,7 +61,7 @@ class FootprintFaceTests(unittest.TestCase):
                 'initializationDependencyStarts': [INITIALIZE],
             })
         return {
-            'schema': 'neoos-aa-entrypoint-closure-inventory/v1',
+            'schema': 'neoos-sa-entrypoint-closure-inventory/v1',
             'nefSha256': 'n' * 64,
             'scriptSha256': hashlib.sha256(SCRIPT).hexdigest(),
             'byteMethods': [{'start': 0, 'endExclusive': 4},
@@ -87,7 +87,7 @@ class FootprintFaceTests(unittest.TestCase):
                 'syscalls': [], 'stepLimitReached': False,
             })
         return {
-            'schema': 'aa-abi-dispatch/v2',
+            'schema': 'sa-abi-dispatch/v2',
             'nef': {'sha256': 'n' * 64, 'scriptLength': len(SCRIPT)},
             'script': {'length': len(SCRIPT), 'hex': SCRIPT.hex(),
                        'sha256': hashlib.sha256(SCRIPT).hexdigest()},

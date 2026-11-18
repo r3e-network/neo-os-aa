@@ -9,8 +9,8 @@ import { walletService, getSmartAccountHash } from '@/services/walletService';
 import { buildZkLoginVerifierParamsHex, formatZkLoginTicket, normalizeZkLoginProvider } from '@/services/zkLoginVerifierService.js';
 import { connectedDidProfile } from '@/utils/did';
 import { decodeStackHash160 } from '@/features/studio/helpers';
-import { createAccountIdentityReader } from './aaIdentityReadService.js';
-import { buildAaActionId, requireAaSigningText, toNeoInternalHex } from './aaTicketService.js';
+import { createAccountIdentityReader } from './saIdentityReadService.js';
+import { buildSaActionId, requireSaSigningText, toNeoInternalHex } from './saTicketService.js';
 
 function trim(value) {
   return String(value || '').trim();
@@ -156,8 +156,8 @@ async function readVerifierMethod({ rpcUrl, verifierHash, operation, args = [] }
   return decodeStackItem(result?.stack?.[0]);
 }
 
-async function readAccountMethod({ rpcUrl, aaContractHash, operation, args = [] } = {}) {
-  const result = await invokeReadFunction(rpcUrl, sanitizeHex(aaContractHash), operation, args);
+async function readAccountMethod({ rpcUrl, saContractHash, operation, args = [] } = {}) {
+  const result = await invokeReadFunction(rpcUrl, sanitizeHex(saContractHash), operation, args);
   if (result?.state === 'FAULT') {
     const err = new Error(EC.rpcFault);
     err.rpcDetail = result?.exception || null;
@@ -166,8 +166,8 @@ async function readAccountMethod({ rpcUrl, aaContractHash, operation, args = [] 
   return decodeStackItem(result?.stack?.[0]);
 }
 
-export async function fetchAccountMaintenanceState({ rpcUrl, aaContractHash, accountIdHex } = {}) {
-  const normalizedAaHash = sanitizeHex(aaContractHash);
+export async function fetchAccountMaintenanceState({ rpcUrl, saContractHash, accountIdHex } = {}) {
+  const normalizedSaHash = sanitizeHex(saContractHash);
   const accountIdParam = toHash160Param(accountIdHex);
   const [
     hasPendingVerifierUpdate,
@@ -177,21 +177,21 @@ export async function fetchAccountMaintenanceState({ rpcUrl, aaContractHash, acc
     pendingVerifierCall,
     pendingHookCall,
   ] = await Promise.all([
-    readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'hasPendingVerifierUpdate', args: [accountIdParam] }).catch(() => false),
-    readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'getPendingVerifierUpdateTime', args: [accountIdParam] }).catch(() => '0'),
-    readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'hasPendingHookUpdate', args: [accountIdParam] }).catch(() => false),
-    readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'getPendingHookUpdateTime', args: [accountIdParam] }).catch(() => '0'),
+    readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'hasPendingVerifierUpdate', args: [accountIdParam] }).catch(() => false),
+    readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingVerifierUpdateTime', args: [accountIdParam] }).catch(() => '0'),
+    readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'hasPendingHookUpdate', args: [accountIdParam] }).catch(() => false),
+    readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingHookUpdateTime', args: [accountIdParam] }).catch(() => '0'),
     Promise.all([
-      readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'hasPendingVerifierCall', args: [accountIdParam] }).catch(() => false),
-      readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'getPendingVerifierCallTime', args: [accountIdParam] }).catch(() => '0'),
-      readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'getPendingVerifierCallModule', args: [accountIdParam] }).catch(() => ''),
-      readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'getPendingVerifierCallHash', args: [accountIdParam] }).catch(() => ''),
+      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'hasPendingVerifierCall', args: [accountIdParam] }).catch(() => false),
+      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingVerifierCallTime', args: [accountIdParam] }).catch(() => '0'),
+      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingVerifierCallModule', args: [accountIdParam] }).catch(() => ''),
+      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingVerifierCallHash', args: [accountIdParam] }).catch(() => ''),
     ]),
     Promise.all([
-      readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'hasPendingHookCall', args: [accountIdParam] }).catch(() => false),
-      readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'getPendingHookCallTime', args: [accountIdParam] }).catch(() => '0'),
-      readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'getPendingHookCallModule', args: [accountIdParam] }).catch(() => ''),
-      readAccountMethod({ rpcUrl, aaContractHash: normalizedAaHash, operation: 'getPendingHookCallHash', args: [accountIdParam] }).catch(() => ''),
+      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'hasPendingHookCall', args: [accountIdParam] }).catch(() => false),
+      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingHookCallTime', args: [accountIdParam] }).catch(() => '0'),
+      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingHookCallModule', args: [accountIdParam] }).catch(() => ''),
+      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingHookCallHash', args: [accountIdParam] }).catch(() => ''),
     ]),
   ]);
 
@@ -229,7 +229,7 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
     owner,
     morpheusOracle,
     network,
-    aaContract,
+    saContract,
     accountIdText,
     accountAddress,
     recoveryNonce,
@@ -264,7 +264,7 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
     owner,
     morpheusOracle,
     network,
-    aaContract,
+    saContract,
     accountIdText,
     accountAddress,
     recoveryNonce,
@@ -401,10 +401,10 @@ class MorpheusDidService {
     });
   }
 
-  async previewRecoveryTicket({ network, aaContract, verifierContract, accountId, accountIdText, accountIdRaw, accountAddress, newOwner, recoveryNonce, expiresAt } = {}) {
-    const networkText = requireAaSigningText(network, 'network');
-    const accountText = requireAaSigningText(accountIdText, 'accountIdText');
-    const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
+  async previewRecoveryTicket({ network, saContract, verifierContract, accountId, accountIdText, accountIdRaw, accountAddress, newOwner, recoveryNonce, expiresAt } = {}) {
+    const networkText = requireSaSigningText(network, 'network');
+    const accountText = requireSaSigningText(accountIdText, 'accountIdText');
+    const core = toRequiredNeoInternalHex(saContract, 'saContract');
     const recoveryVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
     const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');
     const accountAddressInternal = toRequiredNeoInternalHex(accountAddress, 'accountAddress');
@@ -418,7 +418,7 @@ class MorpheusDidService {
     return callNeoDid('recovery-ticket', {
       ...subjectPatch,
       network: networkText,
-      aa_contract: core,
+      sa_contract: core,
       verifier_contract: recoveryVerifier,
       account_id_raw: account,
       account_id: accountText,
@@ -430,16 +430,16 @@ class MorpheusDidService {
     });
   }
 
-  async previewActionTicket({ aaContract, verifierContract, accountId, accountIdText, accountIdRaw, executor, sessionNonce = 0, authorizationEpoch, expiresAt, network } = {}) {
-    const networkText = requireAaSigningText(network, 'network');
-    const accountText = requireAaSigningText(accountIdText, 'accountIdText');
-    const core = toRequiredNeoInternalHex(aaContract, 'aaContract');
+  async previewActionTicket({ saContract, verifierContract, accountId, accountIdText, accountIdRaw, executor, sessionNonce = 0, authorizationEpoch, expiresAt, network } = {}) {
+    const networkText = requireSaSigningText(network, 'network');
+    const accountText = requireSaSigningText(accountIdText, 'accountIdText');
+    const core = toRequiredNeoInternalHex(saContract, 'saContract');
     const actionVerifier = toRequiredNeoInternalHex(verifierContract, 'verifierContract');
     const account = toRequiredNeoInternalHex(accountIdRaw, 'accountIdRaw');
     const disposable = toRequiredNeoInternalHex(executor, 'executor');
     const epoch = String(authorizationEpoch ?? '');
     if (!/^[1-9][0-9]*$/.test(epoch)) throw new Error('Current action authorization epoch required');
-    const actionId = await buildAaActionId({ network: networkText, aaContractInternal: core, accountIdRawInternal: account, executorInternal: disposable, sessionNonce, expiresAt });
+    const actionId = await buildSaActionId({ network: networkText, saContractInternal: core, accountIdRawInternal: account, executorInternal: disposable, sessionNonce, expiresAt });
     const profile = getDidProfile();
     const subjectPatch = await buildEncryptedSubjectPatch({
       linked_accounts: profile?.linkedAccounts || [],
@@ -447,7 +447,7 @@ class MorpheusDidService {
     return callNeoDid('action-ticket', {
       ...subjectPatch,
       network: networkText,
-      aa_contract: core,
+      sa_contract: core,
       verifier_contract: actionVerifier,
       account_id_raw: account,
       account_id: accountText,
@@ -518,7 +518,7 @@ class MorpheusDidService {
     });
 
     const notificationPayload = {
-      aa_contract: getSmartAccountHash(),
+      sa_contract: getSmartAccountHash(),
       verifier: sanitizeHex(verifierHash),
       account_id: accountIdHex,
       new_owner: normalizeScriptHash(newOwner),

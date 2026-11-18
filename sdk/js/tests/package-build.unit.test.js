@@ -6,7 +6,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 async function buildFixture(t) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'neo-aa-build-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'neo-sa-build-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const sdk = path.join(root, 'sdk/js');
   await fs.mkdir(path.join(sdk, 'scripts'), { recursive: true });

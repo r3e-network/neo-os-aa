@@ -27,7 +27,7 @@ public class MultiHookChildConfigurationRuntimeTests
 
         public Harness()
         {
-            Core = Fx.Deploy("SmartAccountV3");
+            Core = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
             Root = Fx.Deploy("hooks/MultiHook", Core.ToArray());
             Whitelist = Fx.Deploy("hooks/WhitelistHook", Core.ToArray());

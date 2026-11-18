@@ -12,7 +12,7 @@ import shutil
 import socket
 import tempfile
 import time
-from neoexpress_validate import Chain, RawKey, ValidationFailure, H, B, I, ZERO, hash_le, decode, serialize_unsigned, serialize_witnesses, aa_proxy_rules
+from neoexpress_validate import Chain, RawKey, ValidationFailure, H, B, I, ZERO, hash_le, decode, serialize_unsigned, serialize_witnesses, sa_proxy_rules
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require, runtime_hashes
 from neoexpress_native_service_validate import (CORE, STDLIB, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
     check_native, persist, operation, check_account_record, transaction_system_fee, execution_arguments)
@@ -65,7 +65,7 @@ class RecoveryTransactions:
             script = call_script(CORE, method, arguments); signers = signers_for(keys)
             if proxy:
                 require(method in ('executeUserOp','executeUserOps'),'Proxy authority can only execute operations')
-                signers.append({'account':proxy_address(self.account),'scopes':'WitnessRules','rules':aa_proxy_rules(CORE,STDLIB)})
+                signers.append({'account':proxy_address(self.account),'scopes':'WitnessRules','rules':sa_proxy_rules(CORE,STDLIB)})
             sysfee, netfee = transaction_system_fee(self.chain, script, signers, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI), (2 if proxy else 1)*GAS
             unsigned = serialize_unsigned(int.from_bytes(os.urandom(4), "little"), sysfee, netfee, self.chain.rpc("getblockcount", []) + 50, signers, script)
             digest = hashlib.sha256(unsigned).digest(); txid = "0x" + digest[::-1].hex()

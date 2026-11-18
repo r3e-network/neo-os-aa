@@ -1,8 +1,8 @@
 # SDK package contract
 
-`smart-account` must work after installing its npm tarball into a project
+`@r3e-network/neo-smart-account` must work after installing its npm tarball into a project
 outside this repository with production dependencies only. The supported public
-entrypoint remains `smart-account`, available through CommonJS `require`
+entrypoint remains `@r3e-network/neo-smart-account`, available through CommonJS `require`
 and ESM named/default imports, with TypeScript declarations resolved by package name.
 Internal source paths are not public exports.
 
@@ -44,7 +44,7 @@ failed installation is a failed gate. No blockchain writes occur.
 For downstream consumers:
 
 ```js
-const { SmartAccountClient } = require('smart-account');
+const { SmartAccountClient } = require('@r3e-network/neo-smart-account');
 const client = new SmartAccountClient('http://127.0.0.1:10332', '11'.repeat(20));
 const accountId = client.deriveRegistrationAccountIdHash({
   backupOwnerAddress: '22'.repeat(20),
@@ -52,7 +52,8 @@ const accountId = client.deriveRegistrationAccountIdHash({
 // accountId is 40 lowercase hexadecimal characters; no RPC call is made.
 ```
 
-Existing package-name imports need no migration. Direct imports from `src` were
+Imports of the previous bare package name `smart-account` need to migrate to the
+scoped package name. Direct imports from `src` were
 already blocked by the export map and remain unsupported. Build and tarball
 artifacts are disposable; edit canonical source and rebuild. These checks establish
 local package usability, not npm publication or deployed-contract compatibility.

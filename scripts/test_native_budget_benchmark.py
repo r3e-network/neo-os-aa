@@ -16,7 +16,7 @@ def fixture():
     # Historical execution evidence supplies the finite scenario matrix only.
     # Timing and storage values below are test data, not benchmark measurements.
     root = Path(__file__).resolve().parents[1]
-    probe = json.loads((root / "docs/reports/aa-native-ci-probe-consistency-20261009.json").read_text())
+    probe = json.loads((root / "docs/reports/sa-native-ci-probe-consistency-20261009.json").read_text())
     receipt = {key: copy.deepcopy(probe[key]) for key in
                ("status", "publicNetworksTouched", "pricing", "artifactHashes", "runtimeAssemblyHashes", "probeSourceHashes")}
     receipt.update(schema="smartaccount-native-multisig-benchmark/v1", mode="fixed-snapshot-discard",

@@ -5,7 +5,7 @@
       class="mx-auto mb-3"
       :title="t('operations.composerEmptyTitle', 'Enter a contract hash above to begin composing an operation')"
     />
-    <p class="text-sm font-medium text-aa-text">
+    <p class="text-sm font-medium text-sa-text">
       {{
         t(
           "operations.composerEmptyTitle",
@@ -13,7 +13,7 @@
         )
       }}
     </p>
-    <p class="mt-1 text-xs text-aa-muted">
+    <p class="mt-1 text-xs text-sa-muted">
       {{
         t(
           "operations.composerEmptyHint",

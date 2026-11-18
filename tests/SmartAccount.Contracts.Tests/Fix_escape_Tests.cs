@@ -62,8 +62,8 @@ public class Fix_escape_Tests
 
         public EscapeHarness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
-            // The verifiers/hook trust this wallet as their AA core (passed as deploy data).
+            Wallet = Fx.Deploy("SmartAccount");
+            // The verifiers/hook trust this wallet as their SA core (passed as deploy data).
             // Two distinct verifier contracts are used so they have distinct deploy hashes; both
             // accept a 65-byte uncompressed public key through setPublicKey/getPublicKey/clearAccount.
             OldVerifier = Fx.Deploy("verifiers/Web3AuthVerifier", Wallet.ToArray());

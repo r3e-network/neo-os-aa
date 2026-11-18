@@ -1,11 +1,11 @@
 <template>
   <div
-    class="bg-gradient-to-r from-aa-success/10 to-aa-panel/60 rounded-lg p-5 border border-aa-orange/30 shadow-sm relative overflow-hidden backdrop-blur-sm"
+    class="bg-gradient-to-r from-sa-success/10 to-sa-panel/60 rounded-lg p-5 border border-sa-orange/30 shadow-sm relative overflow-hidden backdrop-blur-sm"
   >
-    <div class="absolute left-0 top-0 bottom-0 w-1 bg-aa-orange"></div>
+    <div class="absolute left-0 top-0 bottom-0 w-1 bg-sa-orange"></div>
     <div class="flex items-center justify-between mb-4">
       <h3
-        class="text-xs font-bold text-aa-orange uppercase font-outfit flex items-center gap-2"
+        class="text-xs font-bold text-sa-orange uppercase font-outfit flex items-center gap-2"
       >
         <svg
           aria-hidden="true"
@@ -23,15 +23,15 @@
         </svg>
         {{ t("studioPanels.currentV3State", "Current V3 State") }}
       </h3>
-      <span class="text-xs text-aa-muted">{{ snapshot.loadedAt }}</span>
+      <span class="text-xs text-sa-muted">{{ snapshot.loadedAt }}</span>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-      <div class="rounded-lg bg-aa-dark/40 p-3 border border-aa-border/40">
-        <span class="block text-aa-muted text-xs mb-1">{{
+      <div class="rounded-lg bg-sa-dark/40 p-3 border border-sa-border/40">
+        <span class="block text-sa-muted text-xs mb-1">{{
           t("studioPanels.accountIdLabel", "AccountId")
         }}</span>
         <div class="flex items-center">
-          <span class="font-semibold text-aa-text break-all text-xs flex-1">{{
+          <span class="font-semibold text-sa-text break-all text-xs flex-1">{{
             snapshot.accountId || t("studioPanels.unset", "unset")
           }}</span>
           <button
@@ -41,7 +41,7 @@
               copyText(snapshot.accountId);
               markCopied('governanceAccountId');
             "
-            class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+            class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
           >
             <svg
               aria-hidden="true"
@@ -60,7 +60,7 @@
               aria-hidden="true"
               v-else
               xmlns="http://www.w3.org/2000/svg"
-              class="h-3.5 w-3.5 text-aa-success"
+              class="h-3.5 w-3.5 text-sa-success"
               viewBox="0 0 20 20"
               fill="currentColor"
             >
@@ -73,12 +73,12 @@
           </button>
         </div>
       </div>
-      <div class="rounded-lg bg-aa-dark/40 p-3 border border-aa-border/40">
-        <span class="block text-aa-muted text-xs mb-1">{{
+      <div class="rounded-lg bg-sa-dark/40 p-3 border border-sa-border/40">
+        <span class="block text-sa-muted text-xs mb-1">{{
           t("studioPanels.verifierLabel", "Verifier")
         }}</span>
         <div class="flex items-center">
-          <span class="font-semibold text-aa-text break-all text-xs flex-1">{{
+          <span class="font-semibold text-sa-text break-all text-xs flex-1">{{
             snapshot.verifier || t("studioPanels.unset", "unset")
           }}</span>
           <button
@@ -88,7 +88,7 @@
               copyText(snapshot.verifier);
               markCopied('governanceVerifier');
             "
-            class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+            class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
           >
             <svg
               aria-hidden="true"
@@ -107,7 +107,7 @@
               aria-hidden="true"
               v-else
               xmlns="http://www.w3.org/2000/svg"
-              class="h-3.5 w-3.5 text-aa-success"
+              class="h-3.5 w-3.5 text-sa-success"
               viewBox="0 0 20 20"
               fill="currentColor"
             >
@@ -120,12 +120,12 @@
           </button>
         </div>
       </div>
-      <div class="rounded-lg bg-aa-dark/40 p-3 border border-aa-border/40">
-        <span class="block text-aa-muted text-xs mb-1">{{
+      <div class="rounded-lg bg-sa-dark/40 p-3 border border-sa-border/40">
+        <span class="block text-sa-muted text-xs mb-1">{{
           t("studioPanels.hookLabel", "Hook")
         }}</span>
         <div class="flex items-center">
-          <span class="font-semibold text-aa-text break-all text-xs flex-1">{{
+          <span class="font-semibold text-sa-text break-all text-xs flex-1">{{
             snapshot.hook || t("studioPanels.unset", "unset")
           }}</span>
           <button
@@ -135,7 +135,7 @@
               copyText(snapshot.hook);
               markCopied('governanceHook');
             "
-            class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+            class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
           >
             <svg
               aria-hidden="true"
@@ -154,7 +154,7 @@
               aria-hidden="true"
               v-else
               xmlns="http://www.w3.org/2000/svg"
-              class="h-3.5 w-3.5 text-aa-success"
+              class="h-3.5 w-3.5 text-sa-success"
               viewBox="0 0 20 20"
               fill="currentColor"
             >
@@ -167,12 +167,12 @@
           </button>
         </div>
       </div>
-      <div class="rounded-lg bg-aa-dark/40 p-3 border border-aa-border/40">
-        <span class="block text-aa-muted text-xs mb-1">{{
+      <div class="rounded-lg bg-sa-dark/40 p-3 border border-sa-border/40">
+        <span class="block text-sa-muted text-xs mb-1">{{
           t("studioPanels.backupOwnerLabel", "Backup Owner")
         }}</span>
         <div class="flex items-center">
-          <span class="font-semibold text-aa-text break-all text-xs flex-1">{{
+          <span class="font-semibold text-sa-text break-all text-xs flex-1">{{
             snapshot.backupOwner || t("studioPanels.unset", "unset")
           }}</span>
           <button
@@ -182,7 +182,7 @@
               copyText(snapshot.backupOwner);
               markCopied('governanceBackupOwner');
             "
-            class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+            class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
           >
             <svg
               aria-hidden="true"
@@ -201,7 +201,7 @@
               aria-hidden="true"
               v-else
               xmlns="http://www.w3.org/2000/svg"
-              class="h-3.5 w-3.5 text-aa-success"
+              class="h-3.5 w-3.5 text-sa-success"
               viewBox="0 0 20 20"
               fill="currentColor"
             >
@@ -214,23 +214,23 @@
           </button>
         </div>
       </div>
-      <div class="rounded-lg bg-aa-dark/40 p-3 border border-aa-border/40">
-        <span class="block text-aa-muted text-xs mb-1">{{
+      <div class="rounded-lg bg-sa-dark/40 p-3 border border-sa-border/40">
+        <span class="block text-sa-muted text-xs mb-1">{{
           t("studioPanels.escapeTimelockLabel", "Escape Timelock")
         }}</span>
-        <span class="font-semibold text-aa-text text-xs"
+        <span class="font-semibold text-sa-text text-xs"
           >{{ snapshot.escapeTimelock || 0 }}
           {{ t("studioPanels.sec", "sec") }}</span
         >
       </div>
-      <div class="rounded-lg bg-aa-dark/40 p-3 border border-aa-border/40">
-        <span class="block text-aa-muted text-xs mb-1">{{
+      <div class="rounded-lg bg-sa-dark/40 p-3 border border-sa-border/40">
+        <span class="block text-sa-muted text-xs mb-1">{{
           t("studioPanels.escapeStateLabel", "Escape State")
         }}</span>
         <span
           class="font-semibold text-xs"
           :class="
-            snapshot.escapeActive ? 'text-aa-warning' : 'text-aa-success'
+            snapshot.escapeActive ? 'text-sa-warning' : 'text-sa-success'
           "
         >
           {{

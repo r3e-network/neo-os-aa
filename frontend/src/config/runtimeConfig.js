@@ -31,12 +31,12 @@ export const DEFAULT_MORPHEUS_AUTOMATION_TRIGGER_KINDS = [...MORPHEUS_AUTOMATION
 export const DEFAULT_NETWORK_MAGIC = MAINNET_REGISTRY.networkMagic;
 export const DEFAULT_NETWORK_MAGIC_TESTNET = TESTNET_REGISTRY.networkMagic;
 
-export const DEFAULT_ABSTRACT_ACCOUNT_HASH = stripHexPrefix(MAINNET_REGISTRY.contracts.aaCore);
-export const DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET = stripHexPrefix(TESTNET_REGISTRY.contracts.aaCore);
-export const DEFAULT_AA_ADDRESS_MARKET_HASH = stripHexPrefix(MAINNET_REGISTRY.contracts.aaAddressMarket);
-export const DEFAULT_AA_ADDRESS_MARKET_HASH_TESTNET = stripHexPrefix(TESTNET_REGISTRY.contracts.aaAddressMarket);
-export const DEFAULT_AA_PAYMASTER_HASH = stripHexPrefix(MAINNET_REGISTRY.contracts.aaPaymaster);
-export const DEFAULT_AA_PAYMASTER_HASH_TESTNET = stripHexPrefix(TESTNET_REGISTRY.contracts.aaPaymaster);
+export const DEFAULT_SMART_ACCOUNT_HASH = stripHexPrefix(MAINNET_REGISTRY.contracts.saCore);
+export const DEFAULT_SMART_ACCOUNT_HASH_TESTNET = stripHexPrefix(TESTNET_REGISTRY.contracts.saCore);
+export const DEFAULT_SA_ADDRESS_MARKET_HASH = stripHexPrefix(MAINNET_REGISTRY.contracts.saAddressMarket);
+export const DEFAULT_SA_ADDRESS_MARKET_HASH_TESTNET = stripHexPrefix(TESTNET_REGISTRY.contracts.saAddressMarket);
+export const DEFAULT_SA_PAYMASTER_HASH = stripHexPrefix(MAINNET_REGISTRY.contracts.saPaymaster);
+export const DEFAULT_SA_PAYMASTER_HASH_TESTNET = stripHexPrefix(TESTNET_REGISTRY.contracts.saPaymaster);
 export const DEFAULT_RPC_URL = MAINNET_REGISTRY.rpcUrl;
 export const DEFAULT_RPC_URL_TESTNET = TESTNET_REGISTRY.rpcUrl;
 export const DEFAULT_RELAY_ENDPOINT = '/api/relay-transaction';
@@ -54,7 +54,7 @@ export const DEFAULT_WEB3AUTH_CHAIN_ID = '0x1';
 export const DEFAULT_WEB3AUTH_RPC_TARGET = 'https://rpc.ankr.com/eth';
 export const DEFAULT_WEB3AUTH_PROJECT_NAME = 'DID.Morpheus';
 export const DEFAULT_DID_PROVIDER = 'web3auth';
-export const DEFAULT_ABSTRACT_ACCOUNT_DOMAIN = MAINNET_REGISTRY.domains.aa;
+export const DEFAULT_SMART_ACCOUNT_DOMAIN = MAINNET_REGISTRY.domains.sa;
 export const DEFAULT_NEODID_DOMAIN = MAINNET_REGISTRY.domains.neodid;
 export const DEFAULT_MORPHEUS_EDGE_BASE_URL = stripNetworkSuffix(MAINNET_REGISTRY.morpheus.edgeUrl);
 export const DEFAULT_MORPHEUS_CONTROL_PLANE_BASE_URL = MAINNET_REGISTRY.morpheus.controlPlaneBaseUrl;
@@ -72,10 +72,10 @@ export const DEFAULT_MORPHEUS_NEODID_SERVICE_DID = MAINNET_REGISTRY.morpheus.neo
 
 export const MORPHEUS_NETWORK_DEFAULTS = {
   mainnet: {
-    abstractAccountHash: DEFAULT_ABSTRACT_ACCOUNT_HASH,
-    abstractAccountDomain: MAINNET_REGISTRY.domains.aa,
-    addressMarketHash: DEFAULT_AA_ADDRESS_MARKET_HASH,
-    paymasterHash: DEFAULT_AA_PAYMASTER_HASH,
+    smartAccountHash: DEFAULT_SMART_ACCOUNT_HASH,
+    smartAccountDomain: MAINNET_REGISTRY.domains.sa,
+    addressMarketHash: DEFAULT_SA_ADDRESS_MARKET_HASH,
+    paymasterHash: DEFAULT_SA_PAYMASTER_HASH,
     rpcUrl: MAINNET_REGISTRY.rpcUrl,
     networkMagic: DEFAULT_NETWORK_MAGIC,
     n3IndexNetwork: 'mainnet',
@@ -83,10 +83,10 @@ export const MORPHEUS_NETWORK_DEFAULTS = {
     morpheusApiBaseUrl: MAINNET_REGISTRY.morpheus.publicApiUrl,
   },
   testnet: {
-    abstractAccountHash: DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET,
-    abstractAccountDomain: TESTNET_REGISTRY.domains.aa,
-    addressMarketHash: DEFAULT_AA_ADDRESS_MARKET_HASH_TESTNET,
-    paymasterHash: DEFAULT_AA_PAYMASTER_HASH_TESTNET,
+    smartAccountHash: DEFAULT_SMART_ACCOUNT_HASH_TESTNET,
+    smartAccountDomain: TESTNET_REGISTRY.domains.sa,
+    addressMarketHash: DEFAULT_SA_ADDRESS_MARKET_HASH_TESTNET,
+    paymasterHash: DEFAULT_SA_PAYMASTER_HASH_TESTNET,
     rpcUrl: TESTNET_REGISTRY.rpcUrl,
     networkMagic: DEFAULT_NETWORK_MAGIC_TESTNET,
     n3IndexNetwork: 'testnet',
@@ -97,7 +97,7 @@ export const MORPHEUS_NETWORK_DEFAULTS = {
 
 export function resolveRuntimeNetwork(env = import.meta.env ?? {}) {
   const normalized = String(
-    env.VITE_AA_NETWORK
+    env.VITE_SA_NETWORK
       || env.VITE_MORPHEUS_NETWORK
       || env.VITE_N3INDEX_NETWORK
       || DEFAULT_N3INDEX_NETWORK
@@ -110,7 +110,7 @@ export function resolveNetworkMagic(value, fallback = DEFAULT_NETWORK_MAGIC) {
   return Number.isFinite(normalized) && normalized > 0 ? normalized : fallback;
 }
 
-export function resolveSmartAccountHash(value, fallback = DEFAULT_ABSTRACT_ACCOUNT_HASH) {
+export function resolveSmartAccountHash(value, fallback = DEFAULT_SMART_ACCOUNT_HASH) {
   const normalized = sanitizeHex(value);
   if (!/^[0-9a-f]{40}$/.test(normalized)) return fallback;
   return normalized;
@@ -157,20 +157,20 @@ export function getRuntimeConfig(env = import.meta.env ?? {}) {
   const networkDefaults = MORPHEUS_NETWORK_DEFAULTS[runtimeNetwork];
   return {
     morpheusNetwork: runtimeNetwork,
-    abstractAccountHash: resolveSmartAccountHash(
-      env.VITE_AA_HASH || env.VITE_ABSTRACT_ACCOUNT_HASH,
-      networkDefaults.abstractAccountHash
+    smartAccountHash: resolveSmartAccountHash(
+      env.VITE_SA_HASH || env.VITE_SMART_ACCOUNT_HASH,
+      networkDefaults.smartAccountHash
     ),
-    abstractAccountDomain: resolveOptionalUrl(
-      env.VITE_AA_DOMAIN || env.VITE_ABSTRACT_ACCOUNT_DOMAIN,
-      networkDefaults.abstractAccountDomain
+    smartAccountDomain: resolveOptionalUrl(
+      env.VITE_SA_DOMAIN || env.VITE_SMART_ACCOUNT_DOMAIN,
+      networkDefaults.smartAccountDomain
     ),
     rpcUrl: resolveRpcUrl(
-      env.VITE_AA_RPC_URL || env.VITE_NEO_RPC_URL,
+      env.VITE_SA_RPC_URL || env.VITE_NEO_RPC_URL,
       networkDefaults.rpcUrl
     ),
     networkMagic: resolveNetworkMagic(
-      env.VITE_AA_NETWORK_MAGIC || env.VITE_NEO_NETWORK_MAGIC,
+      env.VITE_SA_NETWORK_MAGIC || env.VITE_NEO_NETWORK_MAGIC,
       networkDefaults.networkMagic
     ),
     supabaseUrl: resolveOptionalUrl(
@@ -180,55 +180,55 @@ export function getRuntimeConfig(env = import.meta.env ?? {}) {
       env.VITE_SUPABASE_ANON_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY
     ),
     relayEndpoint: resolveOptionalUrl(
-      env.VITE_AA_RELAY_URL || env.VITE_RELAY_ENDPOINT,
+      env.VITE_SA_RELAY_URL || env.VITE_RELAY_ENDPOINT,
       DEFAULT_RELAY_ENDPOINT
     ),
     relayRpcUrl: resolveOptionalUrl(
-      env.VITE_AA_RELAY_RPC_URL || env.VITE_NEO_RPC_URL || env.VITE_AA_RPC_URL,
+      env.VITE_SA_RELAY_RPC_URL || env.VITE_NEO_RPC_URL || env.VITE_SA_RPC_URL,
       networkDefaults.rpcUrl
     ),
     relayMetaEnabled: resolveOptionalBoolean(
-      env.VITE_AA_RELAY_META_ENABLED || env.VITE_RELAY_META_ENABLED,
+      env.VITE_SA_RELAY_META_ENABLED || env.VITE_RELAY_META_ENABLED,
       false
     ),
     relayRawEnabled: resolveOptionalBoolean(
-      env.VITE_AA_RELAY_RAW_ENABLED || env.VITE_RELAY_RAW_ENABLED,
+      env.VITE_SA_RELAY_RAW_ENABLED || env.VITE_RELAY_RAW_ENABLED,
       false
     ),
     explorerBaseUrl: resolveOptionalUrl(
-      env.VITE_AA_EXPLORER_BASE_URL || env.VITE_EXPLORER_BASE_URL,
+      env.VITE_SA_EXPLORER_BASE_URL || env.VITE_EXPLORER_BASE_URL,
       DEFAULT_EXPLORER_BASE_URL
     ),
     matrixContractHash: resolveOptionalHash(
       (runtimeNetwork === 'testnet' ? env.VITE_MATRIX_CONTRACT_HASH_TESTNET : env.VITE_MATRIX_CONTRACT_HASH_MAINNET)
-        || env.VITE_AA_MATRIX_CONTRACT_HASH || env.VITE_MATRIX_CONTRACT_HASH,
+        || env.VITE_SA_MATRIX_CONTRACT_HASH || env.VITE_MATRIX_CONTRACT_HASH,
       runtimeNetwork === 'testnet' ? DEFAULT_MATRIX_CONTRACT_HASH_TESTNET : DEFAULT_MATRIX_CONTRACT_HASH
     ),
     addressMarketHash: resolveOptionalHash(
-      env.VITE_AA_MARKET_HASH || env.VITE_AA_ADDRESS_MARKET_HASH,
+      env.VITE_SA_MARKET_HASH || env.VITE_SA_ADDRESS_MARKET_HASH,
       networkDefaults.addressMarketHash
     ),
     paymasterHash: resolveOptionalHash(
-      env.VITE_AA_PAYMASTER_HASH || env.VITE_AA_PAYMASTER_CONTRACT_HASH,
+      env.VITE_SA_PAYMASTER_HASH || env.VITE_SA_PAYMASTER_CONTRACT_HASH,
       networkDefaults.paymasterHash
     ),
     n3IndexApiBaseUrl: resolveOptionalUrl(
-      env.VITE_AA_N3INDEX_API_BASE_URL || env.VITE_N3INDEX_API_BASE_URL,
+      env.VITE_SA_N3INDEX_API_BASE_URL || env.VITE_N3INDEX_API_BASE_URL,
       DEFAULT_N3INDEX_API_BASE_URL
     ),
-    // AA wallet account discovery has its own explicit read API base URL. Unlike
+    // SA wallet account discovery has its own explicit read API base URL. Unlike
     // the shared key above it has no compiled-in public default, so a stack that
     // sets nothing fails closed instead of silently listing accounts from the
     // public production read API.
-    aaReadApiBaseUrl: resolveOptionalUrl(
-      env.VITE_AA_N3INDEX_API_BASE_URL || env.VITE_N3INDEX_API_BASE_URL
+    saReadApiBaseUrl: resolveOptionalUrl(
+      env.VITE_SA_N3INDEX_API_BASE_URL || env.VITE_N3INDEX_API_BASE_URL
     ),
     n3IndexNetwork: resolveOptionalNetwork(
-      env.VITE_AA_N3INDEX_NETWORK || env.VITE_N3INDEX_NETWORK,
+      env.VITE_SA_N3INDEX_NETWORK || env.VITE_N3INDEX_NETWORK,
       networkDefaults.n3IndexNetwork
     ),
     neoNnsContractHash: resolveSmartAccountHash(
-      env.VITE_AA_NEO_NNS_CONTRACT_HASH || env.VITE_NEO_NNS_CONTRACT_HASH,
+      env.VITE_SA_NEO_NNS_CONTRACT_HASH || env.VITE_NEO_NNS_CONTRACT_HASH,
       DEFAULT_NEO_NNS_CONTRACT_HASH
     ),
     web3AuthClientId: resolveOptionalToken(

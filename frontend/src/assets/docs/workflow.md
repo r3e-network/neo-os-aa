@@ -1,4 +1,4 @@
-# Abstract Account Workflow Lifecycle
+# Smart Account Workflow Lifecycle
 
 This page describes the active V3 workflow built around `SmartAccountV3` and `executeUserOp(accountId, op)`.
 

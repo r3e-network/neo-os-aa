@@ -56,7 +56,7 @@ test('buildEIP712PayloadForWeb3AuthVerifier uses the supplied on-chain argsHash'
     argsHash,
   });
 
-  assert.equal(payload.domain.name, 'Neo N3 Abstract Account');
+  assert.equal(payload.domain.name, 'Neo Smart Account');
   assert.equal(payload.message.method, 'transfer');
   // The supplied on-chain argsHash must be carried through verbatim, never
   // re-derived locally.
@@ -99,7 +99,7 @@ test('buildV3UserOperationTypedData constructs correct domain and message', () =
     deadline: 9999999999,
   });
 
-  assert.equal(payload.domain.name, 'Neo N3 Abstract Account');
+  assert.equal(payload.domain.name, 'Neo Smart Account');
   assert.equal(payload.domain.chainId, 894710606);
   assert.equal(payload.message.method, 'transfer');
 });
@@ -188,6 +188,115 @@ test('simulateUserOperation never reports the signature as verified', async () =
   });
   assert.equal(previewThrew.passed, false);
   assert.equal(previewThrew.signatureVerified, false);
+});
+
+// ---------------------------------------------------------------------------
+// F-17: an account without a verifier is a complete smart account. The
+// simulation must follow executeUserOp's no-verifier branch (the backup
+// owner's native witness authorizes the operation) instead of demanding a
+// verifier. Only the preliminary conditions are checked — never the signature.
+// ---------------------------------------------------------------------------
+
+const OWNER_WITNESS_REQUEST = {
+  accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
+  targetContract: '49c095ce04d38642e39155f5481615c58227a498',
+  method: 'transfer',
+  args: [],
+  nonce: 0,
+  deadline: Date.now() + 3_600_000,
+};
+
+function ownerWitnessPreview() {
+  return {
+    deadlineValid: true,
+    nonceAcceptable: true,
+    hasVerifier: false,
+    verifier: '',
+    hook: '',
+  };
+}
+
+test('F-17: a verifier-less account passes simulation as an owner-witness account, with a signing reminder', async () => {
+  const result = await simulateUserOperation({
+    async getUserOpValidationPreview() { return ownerWitnessPreview(); },
+    async describeAccount() { return { exists: true, backupOwner: '2222222222222222222222222222222222222222' }; },
+  }, OWNER_WITNESS_REQUEST);
+
+  assert.equal(result.passed, true, `owner-witness account must pass, got: ${result.errors.join('; ')}`);
+  assert.equal(result.signatureVerified, false);
+  assert.equal(result.checks.authorization, 'owner-witness');
+  assert.equal(result.checks.hasVerifier, false);
+  assert.equal(result.checks.backupOwner, '2222222222222222222222222222222222222222');
+  assert.equal(result.checks.ownerWitnessPresent, undefined, 'not judged without supplied signers');
+  assert.deepEqual(result.errors, []);
+  assert.match(result.warnings.join('\n'), /native witness of backup owner 0x2222/);
+});
+
+test('F-17: supplied signers carrying the backup owner witness satisfy the owner-witness path', async () => {
+  const seen = [];
+  const result = await simulateUserOperation({
+    async getUserOpValidationPreview() { return ownerWitnessPreview(); },
+    async describeAccount() { return { exists: true, backupOwner: '2222222222222222222222222222222222222222' }; },
+    async simulateValidation(request) {
+      seen.push(request);
+      return { nativeWitnessPresent: true };
+    },
+  }, { ...OWNER_WITNESS_REQUEST, signers: [{ account: '2222222222222222222222222222222222222222' }] });
+
+  assert.equal(result.passed, true, result.errors.join('; '));
+  assert.equal(result.checks.authorization, 'owner-witness');
+  assert.equal(result.checks.ownerWitnessPresent, true);
+  assert.deepEqual(result.errors, []);
+  assert.equal(seen.length, 1);
+  assert.deepEqual(seen[0].signers, [{ account: '2222222222222222222222222222222222222222' }],
+    'the signers must be forwarded to the validation simulation');
+});
+
+test('F-17: signers that do not carry the backup owner witness fail the owner-witness path', async () => {
+  const result = await simulateUserOperation({
+    async getUserOpValidationPreview() { return ownerWitnessPreview(); },
+    async describeAccount() { return { exists: true, backupOwner: '2222222222222222222222222222222222222222' }; },
+    async simulateValidation() { return { nativeWitnessPresent: false }; },
+  }, { ...OWNER_WITNESS_REQUEST, signers: [{ account: '3333333333333333333333333333333333333333' }] });
+
+  assert.equal(result.passed, false, 'an owner-witness operation without the owner witness must fail the preview');
+  assert.equal(result.checks.ownerWitnessPresent, false);
+  assert.match(result.errors.join('\n'), /Native witness failed/);
+  assert.match(result.errors.join('\n'), /backup owner 0x2222/);
+});
+
+test('F-17: a verifier-less account with no backup owner is refused, mirroring the core assert', async () => {
+  const result = await simulateUserOperation({
+    async getUserOpValidationPreview() { return ownerWitnessPreview(); },
+    async describeAccount() { return { exists: true, backupOwner: '0000000000000000000000000000000000000000' }; },
+  }, OWNER_WITNESS_REQUEST);
+
+  assert.equal(result.passed, false);
+  assert.match(result.errors.join('\n'), /Native fallback requires backup owner/);
+  assert.equal(result.checks.backupOwner, '0000000000000000000000000000000000000000');
+});
+
+test('F-17: an unregistered account is refused on the owner-witness path too', async () => {
+  const result = await simulateUserOperation({
+    async getUserOpValidationPreview() { return ownerWitnessPreview(); },
+    async describeAccount() { return { exists: false, backupOwner: '' }; },
+  }, OWNER_WITNESS_REQUEST);
+
+  assert.equal(result.passed, false);
+  assert.match(result.errors.join('\n'), /Account is not registered/);
+});
+
+test('F-17: an unreadable backup owner is a warning, not a silent pass or a hard failure', async () => {
+  const result = await simulateUserOperation({
+    async getUserOpValidationPreview() { return ownerWitnessPreview(); },
+  }, OWNER_WITNESS_REQUEST);
+
+  assert.equal(result.passed, true, `nothing can be judged, so nothing is refused: ${result.errors.join('; ')}`);
+  assert.equal(result.checks.authorization, 'owner-witness');
+  assert.equal(result.checks.backupOwner, '');
+  assert.equal(result.checks.ownerWitnessPresent, undefined);
+  assert.match(result.warnings.join('\n'), /backup owner could not be read/);
+  assert.deepEqual(result.errors, []);
 });
 
 test('escape status compares millisecond trigger time with second timelock', async () => {
@@ -898,7 +1007,7 @@ test('EIP-712 typed data hash matches expected test vector', () => {
   const eip712DomainTypeHash = ethers.keccak256(
     ethers.toUtf8Bytes('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'),
   );
-  const nameHash = ethers.keccak256(ethers.toUtf8Bytes('Neo N3 Abstract Account'));
+  const nameHash = ethers.keccak256(ethers.toUtf8Bytes('Neo Smart Account'));
   const versionHash = ethers.keccak256(ethers.toUtf8Bytes('1'));
   const manualDomainSeparator = ethers.keccak256(
     ethers.AbiCoder.defaultAbiCoder().encode(

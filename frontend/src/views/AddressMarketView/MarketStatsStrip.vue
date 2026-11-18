@@ -4,7 +4,7 @@
       <div
         v-for="i in 3"
         :key="'stat-skel-' + i"
-        class="gradient-border-card bg-aa-panel/60 backdrop-blur-xl p-5"
+        class="gradient-border-card bg-sa-panel/60 backdrop-blur-xl p-5"
       >
         <div class="skeleton h-3 w-24 mb-3"></div>
         <div class="skeleton h-8 w-16"></div>
@@ -12,34 +12,34 @@
     </template>
     <template v-else>
       <div
-        class="gradient-border-card bg-aa-panel/60 backdrop-blur-xl p-5 group hover:bg-aa-panel/60 transition-all duration-200"
+        class="gradient-border-card bg-sa-panel/60 backdrop-blur-xl p-5 group hover:bg-sa-panel/60 transition-all duration-200"
       >
-        <p class="text-xs font-semibold uppercase text-aa-muted">
+        <p class="text-xs font-semibold uppercase text-sa-muted">
           {{ t("market.statsTotal", "Total Listings") }}
         </p>
-        <p class="mt-2 text-3xl font-extrabold text-aa-text font-outfit">
+        <p class="mt-2 text-3xl font-extrabold text-sa-text font-outfit">
           {{ totalListings }}
         </p>
       </div>
       <div
-        class="gradient-border-card bg-aa-panel/60 backdrop-blur-xl p-5 group hover:bg-aa-panel/60 transition-all duration-200"
+        class="gradient-border-card bg-sa-panel/60 backdrop-blur-xl p-5 group hover:bg-sa-panel/60 transition-all duration-200"
       >
-        <p class="text-xs font-semibold uppercase text-aa-muted">
+        <p class="text-xs font-semibold uppercase text-sa-muted">
           {{ t("market.statsActive", "Active Escrows") }}
         </p>
-        <p class="mt-2 text-3xl font-extrabold text-aa-success font-outfit">
+        <p class="mt-2 text-3xl font-extrabold text-sa-success font-outfit">
           {{ activeCount }}
         </p>
       </div>
       <div
-        class="gradient-border-card bg-aa-panel/60 backdrop-blur-xl p-5 group hover:bg-aa-panel/60 transition-all duration-200"
+        class="gradient-border-card bg-sa-panel/60 backdrop-blur-xl p-5 group hover:bg-sa-panel/60 transition-all duration-200"
       >
-        <p class="text-xs font-semibold uppercase text-aa-muted">
+        <p class="text-xs font-semibold uppercase text-sa-muted">
           {{ t("market.statsAvgPrice", "Avg Price") }}
         </p>
-        <p class="mt-2 text-3xl font-extrabold text-aa-text font-outfit">
+        <p class="mt-2 text-3xl font-extrabold text-sa-text font-outfit">
           {{ avgPrice }}
-          <span class="text-sm font-semibold text-aa-muted">GAS</span>
+          <span class="text-sm font-semibold text-sa-muted">GAS</span>
         </p>
       </div>
     </template>

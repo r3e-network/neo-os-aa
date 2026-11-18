@@ -9,7 +9,7 @@ import {
 } from '../src/features/operations/useUserOpSigning.js';
 import { EC } from '../src/config/errorCodes.js';
 
-const AA_CONTRACT_HASH = '49c095ce04d38642e39155f5481615c58227a498';
+const SA_CONTRACT_HASH = '49c095ce04d38642e39155f5481615c58227a498';
 const ACCOUNT_ID_HASH = 'f951cd3eb5196dacde99b339c5dcca37ac38cc22';
 const VERIFIER_HASH = '5be915aea3ce85e4752d522632f0a9520e377aaf';
 const ARGS_HASH = 'ab'.repeat(32);
@@ -40,7 +40,7 @@ test('prepareV3UserOpContext fails fast with the caller error code when the acco
   await assert.rejects(
     () => prepareV3UserOpContext({
       rpcUrl: 'https://rpc.example',
-      aaContractHash: AA_CONTRACT_HASH,
+      saContractHash: SA_CONTRACT_HASH,
       accountIdHash: '',
       operationBody: { args: [] },
       missingAccountError: EC.v3AccountRequired,
@@ -56,7 +56,7 @@ test('prepareV3UserOpContext surfaces the caller error code when no verifier is 
   await assert.rejects(
     () => prepareV3UserOpContext({
       rpcUrl: 'https://rpc.example',
-      aaContractHash: AA_CONTRACT_HASH,
+      saContractHash: SA_CONTRACT_HASH,
       accountIdHash: ACCOUNT_ID_HASH,
       operationBody: { args: [] },
       missingVerifierError: EC.noVerifierPlugin,
@@ -71,7 +71,7 @@ test('prepareV3UserOpContext reads args hash, verifier, and channel-0 nonce', as
   const before = Date.now();
   const context = await prepareV3UserOpContext({
     rpcUrl: 'https://rpc.example',
-    aaContractHash: AA_CONTRACT_HASH,
+    saContractHash: SA_CONTRACT_HASH,
     accountIdHash: ACCOUNT_ID_HASH,
     operationBody: { args: [{ type: 'Integer', value: '1' }] },
     deps,
@@ -95,14 +95,14 @@ test('signUserOpWithEvm returns a contract-aligned signature record and invocati
   const signer = Wallet.createRandom();
   const { deps } = makeDeps();
   const operationBody = {
-    targetContract: AA_CONTRACT_HASH,
+    targetContract: SA_CONTRACT_HASH,
     method: 'balanceOf',
     args: [{ type: 'Hash160', value: `0x${ACCOUNT_ID_HASH}` }],
   };
 
   const result = await signUserOpWithEvm({
     rpcUrl: 'https://rpc.example',
-    aaContractHash: AA_CONTRACT_HASH,
+    saContractHash: SA_CONTRACT_HASH,
     accountIdHash: ACCOUNT_ID_HASH,
     operationBody,
     signerId: signer.address.toLowerCase(),
@@ -137,7 +137,7 @@ test('signUserOpWithEvm returns a contract-aligned signature record and invocati
 
 test('signUserOpWithEvm binds the EIP-712 domain chainId to the active network magic', async () => {
   const operationBody = {
-    targetContract: AA_CONTRACT_HASH,
+    targetContract: SA_CONTRACT_HASH,
     method: 'balanceOf',
     args: [{ type: 'Hash160', value: `0x${ACCOUNT_ID_HASH}` }],
   };
@@ -152,7 +152,7 @@ test('signUserOpWithEvm binds the EIP-712 domain chainId to the active network m
     const { deps } = makeDeps();
     const result = await signUserOpWithEvm({
       rpcUrl: 'https://rpc.example',
-      aaContractHash: AA_CONTRACT_HASH,
+      saContractHash: SA_CONTRACT_HASH,
       accountIdHash: ACCOUNT_ID_HASH,
       operationBody,
       signerId: signer.address.toLowerCase(),
@@ -176,9 +176,9 @@ test('signUserOpWithEvm falls back to the legacy testnet chain id when none is s
   const { deps } = makeDeps();
   const result = await signUserOpWithEvm({
     rpcUrl: 'https://rpc.example',
-    aaContractHash: AA_CONTRACT_HASH,
+    saContractHash: SA_CONTRACT_HASH,
     accountIdHash: ACCOUNT_ID_HASH,
-    operationBody: { targetContract: AA_CONTRACT_HASH, method: 'balanceOf', args: [] },
+    operationBody: { targetContract: SA_CONTRACT_HASH, method: 'balanceOf', args: [] },
     signerId: signer.address.toLowerCase(),
     signTypedData: (typedData) =>
       signer.signTypedData(typedData.domain, typedData.types, typedData.message),
@@ -193,7 +193,7 @@ test('signUserOpWithEvm rejects when no signer is supplied', async () => {
   await assert.rejects(
     () => signUserOpWithEvm({
       rpcUrl: 'https://rpc.example',
-      aaContractHash: AA_CONTRACT_HASH,
+      saContractHash: SA_CONTRACT_HASH,
       accountIdHash: ACCOUNT_ID_HASH,
       operationBody: {},
       signerId: '0xabc',

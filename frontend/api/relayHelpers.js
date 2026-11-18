@@ -7,8 +7,8 @@ import { ALLOWED_RELAY_META_OPERATIONS } from './relayOperations.generated.js';
 export { ALLOWED_RELAY_META_OPERATIONS };
 
 // The relay signs and pays for a meta invocation from the operator WIF, so it accepts only the
-// execution surface the deployed Abstract Account core actually exports. The generated list is
-// derived from contracts/build/SmartAccountV3.manifest.json by
+// execution surface the deployed Smart Account core actually exports. The generated list is
+// derived from contracts/build/SmartAccount.manifest.json by
 // scripts/generate-relay-operations.mjs; it is not hand-maintained, so it cannot name an entrypoint
 // the deployment does not have. CU-203: it used to name `executeUnified` and
 // `executeUnifiedByAddress`, which no deployed manifest and no contract source defines, so such a
@@ -29,11 +29,11 @@ export function isValidMetaInvocation(input = {}) {
   );
 }
 
-export function sanitizeMetaInvocationForRelay(input = {}, { aaContractHash = '' } = {}) {
+export function sanitizeMetaInvocationForRelay(input = {}, { saContractHash = '' } = {}) {
   if (!isValidMetaInvocation(input)) return null;
 
   const scriptHash = sanitizeHex(input.scriptHash || '');
-  const allowedHash = sanitizeHex(aaContractHash || '');
+  const allowedHash = sanitizeHex(saContractHash || '');
   const operation = String(input.operation || '').trim();
 
   if (allowedHash && scriptHash !== allowedHash) return null;
@@ -53,16 +53,16 @@ export function sanitizeMetaInvocationForRelay(input = {}, { aaContractHash = ''
  * The relay reports this verbatim, so a request naming an operation the deployed core does not
  * export is refused for that reason instead of failing later in simulation.
  */
-export function resolveRelayMetaInvocationRefusal(input = {}, { aaContractHash = '' } = {}) {
-  if (sanitizeMetaInvocationForRelay(input, { aaContractHash })) return null;
+export function resolveRelayMetaInvocationRefusal(input = {}, { saContractHash = '' } = {}) {
+  if (sanitizeMetaInvocationForRelay(input, { saContractHash })) return null;
   if (!isValidMetaInvocation(input)) {
     return 'invalid relay meta invocation: a 40-hex scriptHash, an operation and an args array are required';
   }
 
   const scriptHash = sanitizeHex(input.scriptHash || '');
-  const allowedHash = sanitizeHex(aaContractHash || '');
+  const allowedHash = sanitizeHex(saContractHash || '');
   if (allowedHash && scriptHash !== allowedHash) {
-    return 'scriptHash is not the configured Abstract Account contract';
+    return 'scriptHash is not the configured Smart Account contract';
   }
 
   const operation = String(input.operation || '').trim();
@@ -70,7 +70,7 @@ export function resolveRelayMetaInvocationRefusal(input = {}, { aaContractHash =
     return `unsupported relay operation name: ${operation.slice(0, 64)}`;
   }
   if (!ALLOWED_RELAY_META_OPERATIONS.includes(operation)) {
-    return `unsupported relay operation: ${operation} is not in the deployed Abstract Account ABI`;
+    return `unsupported relay operation: ${operation} is not in the deployed Smart Account ABI`;
   }
   return 'relay meta invocation refused';
 }

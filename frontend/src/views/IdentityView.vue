@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative min-h-screen overflow-hidden bg-aa-dark font-sans text-aa-text"
+    class="relative min-h-screen overflow-hidden bg-sa-dark font-sans text-sa-text"
   >
     <div
       class="absolute inset-x-0 top-0 z-0 h-72 border-b border-slate-200 bg-white"
@@ -11,26 +11,26 @@
         class="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"
       >
         <div>
-          <p class="mb-2 text-xs font-bold uppercase text-aa-info">
+          <p class="mb-2 text-xs font-bold uppercase text-sa-info">
             {{ t("identity.pageEyebrow", "Identity Control Plane") }}
           </p>
           <h1 class="text-3xl font-extrabold text-slate-950 font-outfit md:text-4xl">
             {{ t("identity.pageTitle", "Web3Auth / NeoDID Workspace") }}
           </h1>
           <p
-            class="mt-3 max-w-3xl text-sm leading-7 text-aa-muted md:text-base"
+            class="mt-3 max-w-3xl text-sm leading-7 text-sa-muted md:text-base"
           >
             {{
               t(
                 "identity.pageSubtitle",
-                "Keep Web3 identity login, NeoDID binding, recovery, and private-session controls in one isolated workspace. The main AA workspace stays lighter and only links here when you need identity actions.",
+                "Keep Web3 identity login, NeoDID binding, recovery, and private-session controls in one isolated workspace. The main SA workspace stays lighter and only links here when you need identity actions.",
               )
             }}
           </p>
         </div>
         <div class="flex flex-wrap gap-3">
           <router-link class="btn-secondary" :to="workspaceLink">
-            {{ t("identity.openWorkspace", "Open AA Workspace") }}
+            {{ t("identity.openWorkspace", "Open SA Workspace") }}
           </router-link>
           <router-link class="btn-primary" to="/docs">
             {{ t("identity.readDocs", "Read Docs") }}
@@ -38,31 +38,31 @@
         </div>
       </div>
 
-      <details class="aa-focus-reference mb-6">
+      <details class="sa-focus-reference mb-6">
         <summary>
           <span>{{ t("identity.contextReference", "Connection reference") }}</span>
           <strong>{{ walletLabel }}</strong>
         </summary>
-        <div class="aa-reference-grid">
-          <div class="aa-reference-card">
+        <div class="sa-reference-grid">
+          <div class="sa-reference-card">
             <p>{{ t("identity.connectedWallet", "Connected Neo Wallet") }}</p>
             <strong>{{ walletLabel }}</strong>
           </div>
-          <div class="aa-reference-card">
+          <div class="sa-reference-card">
             <p>{{ t("identity.boundAccount", "Bound Account Context") }}</p>
             <strong>{{ accountContextLabel }}</strong>
           </div>
-          <div class="aa-reference-card">
-            <p>{{ t("identity.aaContract", "AA Contract") }}</p>
+          <div class="sa-reference-card">
+            <p>{{ t("identity.saContract", "SA Contract") }}</p>
             <strong>{{
-              aaContractHash || t("identity.unconfigured", "unconfigured")
+              saContractHash || t("identity.unconfigured", "unconfigured")
             }}</strong>
           </div>
         </div>
       </details>
 
       <DidIdentityPanel
-        :aa-contract-hash="aaContractHash"
+        :sa-contract-hash="saContractHash"
         :account-address-script-hash="accountAddressScriptHash"
         :account-id-prefill="accountIdPrefill"
         :neo-wallet-address="neoWalletAddress"
@@ -89,7 +89,7 @@ import { getScriptHashFromAddress } from "@/utils/neo.js";
 const route = useRoute();
 const { t } = useI18n();
 
-const aaContractHash = getSmartAccountHash();
+const saContractHash = getSmartAccountHash();
 const accountIdPrefill = computed(() =>
   String(route.query.accountId || "").trim(),
 );

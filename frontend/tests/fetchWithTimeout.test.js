@@ -93,7 +93,7 @@ test('metaTx invokeRead surfaces non-OK responses as EC_rpc_request_failed inste
   await assert.rejects(
     () => computeArgsHash({
       rpcUrl: 'https://rpc.example.org',
-      aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+      saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
       args: [],
       fetchImpl,
     }),

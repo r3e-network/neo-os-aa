@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 const frontendRoot = fileURLToPath(new URL('..', import.meta.url));
 
 test('frontend-only APIs load and relay with declared production dependencies', { timeout: 30_000 }, async (t) => {
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'aa-frontend-api-'));
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'sa-frontend-api-'));
   t.after(() => fs.rm(temporary, { recursive: true, force: true }));
   const isolated = path.join(temporary, 'frontend');
   await fs.mkdir(isolated);

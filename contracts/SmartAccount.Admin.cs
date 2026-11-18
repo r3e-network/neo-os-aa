@@ -12,7 +12,7 @@ namespace SmartAccount
     {
         private static readonly byte[] Prefix_ContractAdmin = new byte[] { 0x11 };
 
-        // AA-D-01: the core contract upgrade is timelocked. A single admin key must not be
+        // SA-D-01: the core contract upgrade is timelocked. A single admin key must not be
         // able to instantly replace the authorization logic of EVERY bound account — that
         // contradicts the timelocked plugin upgrades (UpdateHook/ConfirmHookUpdate) and the
         // verifier authority upgrades (VerifierAuthority.ProposeUpdate/Update). The admin
@@ -24,7 +24,7 @@ namespace SmartAccount
         private static readonly byte[] Prefix_UpdateTimelock = new byte[] { 0x14 };
         private static readonly BigInteger MinUpgradeDelayMs = 7L * 24 * 60 * 60 * 1000;
 
-        // AA-D-02: rotating the contract admin is itself timelocked. An instant Storage.Put
+        // SA-D-02: rotating the contract admin is itself timelocked. An instant Storage.Put
         // hand-off (the old TransferAdmin) was inconsistent with every other privileged role
         // rotation in the project (VerifierAuthority / HookAuthority / PaymasterAuthority all
         // use ProposeAdminTransfer/RotateAdmin -> a 7-day window -> ConfirmAdminRotation gated
@@ -61,17 +61,31 @@ namespace SmartAccount
 
         public delegate void ContractUpdateConfirmedDelegate(UInt256 nefHash, UInt256 manifestHash);
 
-        [DisplayName("UpdateConfirmed")]
+        // Plan item #13 (event naming): the upgrade-lifecycle events follow the
+        // ContractUpdate* stem consistently with ContractUpdateProposed above.
+        [DisplayName("ContractUpdateConfirmed")]
         public static event ContractUpdateConfirmedDelegate OnUpdateConfirmed = null!;
 
         public delegate void ContractUpdateCancelledDelegate(UInt256 nefHash, UInt256 manifestHash);
 
-        [DisplayName("UpdateCancelled")]
+        [DisplayName("ContractUpdateCancelled")]
         public static event ContractUpdateCancelledDelegate OnUpdateCancelled = null!;
 
         public static void _deploy(object data, bool update)
         {
-            if (update) return;
+            if (update)
+            {
+                // Versioned migration opening (spec §14, design report §4.3
+                // step 6): the in-place update ONLY opens the migration mode —
+                // it never iterates accounts and never calls a plugin in the
+                // upgrade transaction. Unmigrated legacy accounts are then
+                // rejected fail-closed for execution/message authorization
+                // (SA_MIGRATION_REQUIRED) until their owners import the
+                // approved configuration through a 24h migration intent; see
+                // SmartAccount.Migration.cs.
+                OpenVersionedMigration();
+                return;
+            }
             Storage.Put(Storage.CurrentContext, Prefix_ContractAdmin, (ByteString)(byte[])Runtime.Transaction.Sender);
         }
 

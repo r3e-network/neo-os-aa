@@ -46,7 +46,7 @@ def reference_signed_le(payload):
 
 
 def source_evidence(cache=None):
-    cache = Path(cache) if cache else Path(tempfile.gettempdir()) / 'aa-pinned-neovm-numeric-004cd607'
+    cache = Path(cache) if cache else Path(tempfile.gettempdir()) / 'sa-pinned-neovm-numeric-004cd607'
     cache.mkdir(parents=True, exist_ok=True)
     evidence = {}
     for name, expected in SOURCE_HASHES.items():
@@ -110,7 +110,7 @@ def run_model_proofs(output_dir, cache=None):
     require(digest(__file__) == tool_hash, 'Proof runner changed during proof')
     require(all(digest(item['path']) == item['sha256'] for item in sources.values()), 'Pinned source changed during proof')
     return {
-        'schema': 'neoos-aa-numeric-coercion-proof/v1', 'scope': 'numeric-coercions',
+        'schema': 'neoos-sa-numeric-coercion-proof/v1', 'scope': 'numeric-coercions',
         'kernelChecked': True, 'vmCorrespondenceProven': False, 'fullImplementationVerified': False,
         'closedDeclarations': names, 'modelSha256': hashes, 'proverSha256': tool_hash,
         'sourceCommit': COMMIT, 'pinnedSource': sources, 'toolVersion': version.splitlines()[0],

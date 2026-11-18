@@ -388,7 +388,7 @@ namespace SmartAccount
 
         /// <summary>
         /// Enforces the canonical UserOperation ABI boundary before any external call.
-        /// BigInteger is used by Neo's VM, but the AA wire format is deliberately bounded
+        /// BigInteger is used by Neo's VM, but the SA wire format is deliberately bounded
         /// to the non-negative signed-VM domain (`0 <= value < 2^255`) for nonce and deadline.
         /// </summary>
         private static void ValidateUserOperation(UserOperation op)

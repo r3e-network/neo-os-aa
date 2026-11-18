@@ -1,12 +1,12 @@
 <template>
   <div
     v-if="recommendations.length > 0"
-    class="mt-6 rounded-lg border border-aa-border bg-aa-panel/60 p-5"
+    class="mt-6 rounded-lg border border-sa-border bg-sa-panel/60 p-5"
   >
     <div class="flex items-center gap-2 mb-3">
       <svg
         aria-hidden="true"
-        class="w-5 h-5 text-aa-info-light"
+        class="w-5 h-5 text-sa-info-light"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -18,7 +18,7 @@
           d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
         ></path>
       </svg>
-      <p class="text-xs font-bold uppercase text-aa-muted">
+      <p class="text-xs font-bold uppercase text-sa-muted">
         {{ t("security.recommendations", "Recommendations") }}
       </p>
     </div>
@@ -26,13 +26,13 @@
       <div
         v-for="rec in recommendations"
         :key="rec.id"
-        class="flex items-start gap-3 rounded-lg bg-aa-dark/30 px-4 py-3"
+        class="flex items-start gap-3 rounded-lg bg-sa-dark/30 px-4 py-3"
       >
         <span class="mt-0.5" :class="rec.iconClass">
           <svg
             v-if="rec.type === 'warning'"
             aria-hidden="true"
-            class="w-4 h-4 text-aa-warning"
+            class="w-4 h-4 text-sa-warning"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -47,7 +47,7 @@
           <svg
             v-else-if="rec.type === 'info'"
             aria-hidden="true"
-            class="w-4 h-4 text-aa-info-light"
+            class="w-4 h-4 text-sa-info-light"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -62,7 +62,7 @@
           <svg
             v-else
             aria-hidden="true"
-            class="w-4 h-4 text-aa-success"
+            class="w-4 h-4 text-sa-success"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -76,8 +76,8 @@
           </svg>
         </span>
         <div class="flex-1">
-          <p class="text-sm font-medium text-aa-text">{{ rec.title }}</p>
-          <p class="text-xs text-aa-muted mt-0.5">{{ rec.description }}</p>
+          <p class="text-sm font-medium text-sa-text">{{ rec.title }}</p>
+          <p class="text-xs text-sa-muted mt-0.5">{{ rec.description }}</p>
         </div>
         <router-link
           v-if="rec.docLink"

@@ -9,7 +9,7 @@ import * as reproducibility from "./check-artifact-reproducibility.mjs";
 import { RESTORE_POLICY_FILES, compareProfiles, compareTrees, compileScratch, listArtifacts, listSourceInputs, sourceSnapshot, prepareScratch } from "./check-artifact-reproducibility.mjs";
 
 function scratchTree(files) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aa-repro-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sa-repro-test-"));
   for (const [relative, contents] of Object.entries(files)) {
     const target = path.join(dir, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -45,20 +45,20 @@ test("listing ignores non-artifact files and missing directories", () => {
 
 test("public success cannot hide private profile drift or omission", () => {
   const files = {
-    "v3/SmartAccountV3.nef": "public",
-    "v3/SmartAccountV3.manifest.json": "{}",
-    "platform/SmartAccountV3.nef": "private",
-    "platform/SmartAccountV3.manifest.json": "{}",
+    "v3/SmartAccount.nef": "public",
+    "v3/SmartAccount.manifest.json": "{}",
+    "platform/SmartAccount.nef": "private",
+    "platform/SmartAccount.manifest.json": "{}",
   };
   const expected = scratchTree(files);
-  const actual = scratchTree({ ...files, "platform/SmartAccountV3.nef": "drift" });
+  const actual = scratchTree({ ...files, "platform/SmartAccount.nef": "drift" });
   let profiles = compareProfiles(expected, actual);
   assert.equal(profiles.v3.matches_fresh_build, true);
   assert.equal(profiles.platform.matches_fresh_build, false);
   fs.rmSync(path.join(actual, "platform"), { recursive: true });
   profiles = compareProfiles(expected, actual);
   assert.equal(profiles.platform.matches_fresh_build, false);
-  assert.deepEqual(profiles.platform.missing, ["SmartAccountV3.manifest.json", "SmartAccountV3.nef"]);
+  assert.deepEqual(profiles.platform.missing, ["SmartAccount.manifest.json", "SmartAccount.nef"]);
 });
 
 test("two absent or empty profile directories never establish reproducibility", () => {
@@ -71,8 +71,8 @@ test("two absent or empty profile directories never establish reproducibility", 
 
 test("identical profile trees pass and unexpected artifacts fail", () => {
   const files = Object.fromEntries(["v3", "platform"].flatMap((profile) => [
-    [`${profile}/SmartAccountV3.nef`, profile],
-    [`${profile}/SmartAccountV3.manifest.json`, "{}"],
+    [`${profile}/SmartAccount.nef`, profile],
+    [`${profile}/SmartAccount.manifest.json`, "{}"],
   ]));
   const expected = scratchTree(files);
   const actual = scratchTree(files);

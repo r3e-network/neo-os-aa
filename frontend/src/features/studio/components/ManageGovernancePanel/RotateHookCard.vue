@@ -1,13 +1,13 @@
 <template>
-  <div class="card hover:border-aa-muted transition-colors duration-200">
-    <h3 class="text-sm font-bold text-aa-text mb-5">
+  <div class="card hover:border-sa-muted transition-colors duration-200">
+    <h3 class="text-sm font-bold text-sa-text mb-5">
       {{ t("studioPanels.rotateHook", "Rotate Hook Plugin") }}
     </h3>
     <div class="space-y-4">
       <div>
         <label
           for="governance-hook-hash"
-          class="block text-xs font-semibold text-aa-muted mb-1"
+          class="block text-xs font-semibold text-sa-muted mb-1"
           >{{ t("studioPanels.hookHash", "Hook Hash") }}</label
         >
         <input
@@ -15,7 +15,7 @@
           :value="hookContract"
           @input="$emit('update:hookContract', $event.target.value)"
           type="text"
-          class="input-field font-mono text-sm py-2 px-3 bg-aa-dark"
+          class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
           :placeholder="t('studioPanels.hashPlaceholder', '0x...')"
         />
       </div>
@@ -33,7 +33,7 @@
             : t("studioPanels.updateHook", "Update Hook")
         }}
       </button>
-      <p class="text-xs text-aa-muted">
+      <p class="text-xs text-sa-muted">
         {{
           t(
             "studioPanels.hookPluginExamples",

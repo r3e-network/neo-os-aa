@@ -75,7 +75,7 @@ import json
 import os
 import re
 
-SCHEMA = 'aa-frontend-correspondence/1'
+SCHEMA = 'sa-frontend-correspondence/1'
 SCOPE = 'source-frontend-and-compiler-correspondence'
 
 # The seven modules that share one reader. `private_tables()` finds the rest:

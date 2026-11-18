@@ -2,10 +2,10 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between gap-4">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("security.title", "Security Dashboard") }}
         </h2>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{
             t(
               "security.subtitle",
@@ -124,9 +124,9 @@ const overallSecurityLevel = computed(() => {
     return {
       label: t("security.secure", "Secure"),
       badgeClass: "badge-green",
-      dotClass: "bg-aa-success animate-pulse",
-      circleClass: "text-aa-success",
-      scoreTextClass: "text-aa-success",
+      dotClass: "bg-sa-success animate-pulse",
+      circleClass: "text-sa-success",
+      scoreTextClass: "text-sa-success",
       description: t(
         "security.secureDesc",
         "All security features are configured",
@@ -138,9 +138,9 @@ const overallSecurityLevel = computed(() => {
     return {
       label: t("security.good", "Good"),
       badgeClass: "badge-blue",
-      dotClass: "bg-aa-info",
-      circleClass: "text-aa-info",
-      scoreTextClass: "text-aa-info",
+      dotClass: "bg-sa-info",
+      circleClass: "text-sa-info",
+      scoreTextClass: "text-sa-info",
       description: t(
         "security.goodDesc",
         "Most security features are configured",
@@ -151,9 +151,9 @@ const overallSecurityLevel = computed(() => {
   return {
     label: t("security.basic", "Basic"),
     badgeClass: "badge-orange",
-    dotClass: "bg-aa-warning",
-    circleClass: "text-aa-warning",
-    scoreTextClass: "text-aa-warning",
+    dotClass: "bg-sa-warning",
+    circleClass: "text-sa-warning",
+    scoreTextClass: "text-sa-warning",
     description: t("security.basicDesc", "Basic protection only"),
     hint: t("security.basicHint", "Add verifier, hook, and backup owner"),
   };
@@ -165,10 +165,10 @@ const verifierStatus = computed(() => {
     return {
       displayValue: t("security.notSet", "Not Set"),
       description: t("security.verifierNotSetDesc", "No verifier configured"),
-      borderClass: "border-aa-error/30",
-      iconClass: "text-aa-error",
-      labelClass: "text-aa-error",
-      descriptionClass: "text-aa-error",
+      borderClass: "border-sa-error/30",
+      iconClass: "text-sa-error",
+      labelClass: "text-sa-error",
+      descriptionClass: "text-sa-error",
     };
   }
   return {
@@ -176,10 +176,10 @@ const verifierStatus = computed(() => {
     description:
       props.accountState.verifierType ||
       t("security.customVerifier", "Custom Verifier"),
-    borderClass: "border-aa-success/30",
-    iconClass: "text-aa-success",
-    labelClass: "text-aa-success",
-    descriptionClass: "text-aa-muted",
+    borderClass: "border-sa-success/30",
+    iconClass: "text-sa-success",
+    labelClass: "text-sa-success",
+    descriptionClass: "text-sa-muted",
   };
 });
 
@@ -189,20 +189,20 @@ const hookStatus = computed(() => {
     return {
       displayValue: t("security.notSet", "Not Set"),
       description: t("security.hookNotSetDesc", "No hook configured"),
-      borderClass: "border-aa-error/30",
-      iconClass: "text-aa-error",
-      labelClass: "text-aa-error",
-      descriptionClass: "text-aa-error",
+      borderClass: "border-sa-error/30",
+      iconClass: "text-sa-error",
+      labelClass: "text-sa-error",
+      descriptionClass: "text-sa-error",
     };
   }
   return {
     displayValue: formatHash(props.accountState.hook),
     description:
       props.accountState.hookType || t("security.customHook", "Custom Hook"),
-    borderClass: "border-aa-success/30",
-    iconClass: "text-aa-success",
-    labelClass: "text-aa-success",
-    descriptionClass: "text-aa-muted",
+    borderClass: "border-sa-success/30",
+    iconClass: "text-sa-success",
+    labelClass: "text-sa-success",
+    descriptionClass: "text-sa-muted",
   };
 });
 
@@ -215,19 +215,19 @@ const backupStatus = computed(() => {
     return {
       displayValue: t("security.notSet", "Not Set"),
       description: t("security.backupNotSetDesc", "No recovery configured"),
-      borderClass: "border-aa-error/30",
-      iconClass: "text-aa-error",
-      labelClass: "text-aa-error",
-      descriptionClass: "text-aa-error",
+      borderClass: "border-sa-error/30",
+      iconClass: "text-sa-error",
+      labelClass: "text-sa-error",
+      descriptionClass: "text-sa-error",
     };
   }
   return {
     displayValue: formatHash(props.accountState.backupOwner),
     description: t("security.backupSetDesc", "Recovery is available"),
-    borderClass: "border-aa-success/30",
-    iconClass: "text-aa-success",
-    labelClass: "text-aa-success",
-    descriptionClass: "text-aa-success",
+    borderClass: "border-sa-success/30",
+    iconClass: "text-sa-success",
+    labelClass: "text-sa-success",
+    descriptionClass: "text-sa-success",
   };
 });
 
@@ -240,31 +240,31 @@ const escapeStatus = computed(() => {
     return {
       displayValue: t("security.disabled", "Disabled"),
       description: t("security.escapeDisabledDesc", "No escape timelock"),
-      borderClass: "border-aa-error/30",
-      iconClass: "text-aa-error",
-      labelClass: "text-aa-error",
-      descriptionClass: "text-aa-error",
+      borderClass: "border-sa-error/30",
+      iconClass: "text-sa-error",
+      labelClass: "text-sa-error",
+      descriptionClass: "text-sa-error",
     };
   }
   if (props.accountState.escapeActive) {
     return {
       displayValue: t("security.escapeActive", "Active"),
       description: `${t("security.since")} ${formatTime(props.accountState.escapeTriggeredAt)}`,
-      borderClass: "border-aa-warning/30",
-      iconClass: "text-aa-warning",
-      labelClass: "text-aa-warning",
-      descriptionClass: "text-aa-warning",
-      timeRemainingClass: "text-aa-warning",
+      borderClass: "border-sa-warning/30",
+      iconClass: "text-sa-warning",
+      labelClass: "text-sa-warning",
+      descriptionClass: "text-sa-warning",
+      timeRemainingClass: "text-sa-warning",
     };
   }
   return {
     displayValue: `${props.accountState.escapeTimelock}s`,
     description: t("security.escapeReadyDesc", "Recovery is ready"),
-    borderClass: "border-aa-success/30",
-    iconClass: "text-aa-success",
-    labelClass: "text-aa-success",
-    descriptionClass: "text-aa-muted",
-    timeRemainingClass: "text-aa-muted",
+    borderClass: "border-sa-success/30",
+    iconClass: "text-sa-success",
+    labelClass: "text-sa-success",
+    descriptionClass: "text-sa-muted",
+    timeRemainingClass: "text-sa-muted",
   };
 });
 

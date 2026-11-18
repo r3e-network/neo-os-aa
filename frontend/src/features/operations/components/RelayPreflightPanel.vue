@@ -2,10 +2,10 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between gap-4">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("operations.relayPreflightTitle", "Relay Preflight") }}
         </h2>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{
             t(
               "operations.relayPreflightSubtitle",
@@ -22,11 +22,11 @@
 
     <div v-if="level === 'idle'" class="empty-state">
       <div
-        class="mx-auto w-12 h-12 rounded-full bg-aa-dark/50 flex items-center justify-center mb-4"
+        class="mx-auto w-12 h-12 rounded-full bg-sa-dark/50 flex items-center justify-center mb-4"
       >
         <svg
           aria-hidden="true"
-          class="w-6 h-6 text-aa-muted"
+          class="w-6 h-6 text-sa-muted"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -39,10 +39,10 @@
           ></path>
         </svg>
       </div>
-      <p class="text-aa-text font-medium mb-2">
+      <p class="text-sa-text font-medium mb-2">
         {{ t("operations.preflightIdle", "No preflight check run yet") }}
       </p>
-      <p class="text-sm text-aa-muted max-w-md mx-auto">
+      <p class="text-sm text-sa-muted max-w-md mx-auto">
         {{
           t(
             "operations.preflightIdleHint",
@@ -148,36 +148,36 @@
         </button>
       </div>
 
-      <dl class="grid gap-4 text-sm text-aa-muted md:grid-cols-2">
+      <dl class="grid gap-4 text-sm text-sa-muted md:grid-cols-2">
         <div>
-          <dt class="font-medium text-aa-text">
+          <dt class="font-medium text-sa-text">
             {{ t("operations.payloadMode", "Payload Mode") }}
           </dt>
-          <dd class="mt-1 rounded bg-aa-panel/50 px-2 py-1 font-mono text-xs">
+          <dd class="mt-1 rounded bg-sa-panel/50 px-2 py-1 font-mono text-xs">
             {{ payloadMode || "best" }}
           </dd>
         </div>
         <div>
-          <dt class="font-medium text-aa-text">
+          <dt class="font-medium text-sa-text">
             {{ t("operations.vmState", "VM State") }}
           </dt>
           <dd
             class="mt-1 font-mono text-xs"
-            :class="vmState === 'HALT' ? 'text-aa-success' : 'text-aa-error'"
+            :class="vmState === 'HALT' ? 'text-sa-success' : 'text-sa-error'"
           >
             {{ vmState || t("operations.notAvailable", "Not available") }}
           </dd>
         </div>
         <div>
-          <dt class="font-medium text-aa-text">
+          <dt class="font-medium text-sa-text">
             {{ t("operations.gasConsumed", "Gas Consumed") }}
           </dt>
-          <dd class="mt-1 rounded bg-aa-panel/50 px-2 py-1 font-mono text-xs">
+          <dd class="mt-1 rounded bg-sa-panel/50 px-2 py-1 font-mono text-xs">
             {{ gasConsumed || t("operations.notAvailable", "Not available") }}
           </dd>
         </div>
         <div>
-          <dt class="font-medium text-aa-text">
+          <dt class="font-medium text-sa-text">
             {{ t("operations.operation", "Operation") }}
           </dt>
           <dd class="mt-1 break-all font-mono text-xs">
@@ -185,19 +185,19 @@
           </dd>
         </div>
         <div class="md:col-span-2">
-          <dt class="font-medium text-aa-text">
+          <dt class="font-medium text-sa-text">
             {{ t("operations.summary", "Summary") }}
           </dt>
-          <dd class="mt-1 rounded bg-aa-panel/50 px-3 py-2 text-sm">
+          <dd class="mt-1 rounded bg-sa-panel/50 px-3 py-2 text-sm">
             {{ displayDetail }}
           </dd>
         </div>
         <div v-if="exception" class="md:col-span-2">
-          <dt class="font-medium text-aa-error">
+          <dt class="font-medium text-sa-error">
             {{ t("operations.exception", "Exception") }}
           </dt>
           <dd
-            class="mt-1 break-all rounded border border-aa-error/30 bg-aa-error/10 px-3 py-2 font-mono text-xs text-aa-error-light"
+            class="mt-1 break-all rounded border border-sa-error/30 bg-sa-error/10 px-3 py-2 font-mono text-xs text-sa-error-light"
           >
             {{ exception }}
           </dd>
@@ -206,7 +206,7 @@
 
       <details v-if="formattedStack.length > 0" class="mt-5 glass-panel p-4">
         <summary
-          class="cursor-pointer text-sm font-semibold text-aa-text hover:text-aa-text transition-colors duration-200"
+          class="cursor-pointer text-sm font-semibold text-sa-text hover:text-sa-text transition-colors duration-200"
         >
           {{ t("operations.viewStackTrace", "View Stack Trace") }} ({{
             formattedStack.length
@@ -217,39 +217,39 @@
           <div
             v-for="(item, index) in formattedStack"
             :key="index"
-            class="rounded-lg border border-aa-border bg-aa-panel/30 p-4"
+            class="rounded-lg border border-sa-border bg-sa-panel/30 p-4"
           >
             <div class="flex items-center gap-2 mb-2">
               <span
-                class="rounded bg-aa-dark px-2 py-0.5 text-xs font-mono text-aa-text"
+                class="rounded bg-sa-dark px-2 py-0.5 text-xs font-mono text-sa-text"
                 >{{ t("operations.item", "Item") }} {{ index }}</span
               >
               <span
                 class="rounded px-2 py-0.5 text-xs font-mono"
                 :class="
                   item.type === 'Integer'
-                    ? 'bg-aa-success/10 text-aa-success-light'
-                    : 'bg-aa-info/10 text-aa-info-light'
+                    ? 'bg-sa-success/10 text-sa-success-light'
+                    : 'bg-sa-info/10 text-sa-info-light'
                 "
                 >{{ item.type }}</span
               >
             </div>
             <div class="grid gap-2 text-xs">
               <div>
-                <span class="text-aa-muted">{{
+                <span class="text-sa-muted">{{
                   t("operations.raw", "Raw:")
                 }}</span>
                 <pre
-                  class="mt-1 whitespace-pre-wrap break-all text-aa-muted font-mono"
+                  class="mt-1 whitespace-pre-wrap break-all text-sa-muted font-mono"
                   >{{ serialize(item.raw) }}</pre
                 >
               </div>
               <div>
-                <span class="text-aa-muted">{{
+                <span class="text-sa-muted">{{
                   t("operations.decoded", "Decoded:")
                 }}</span>
                 <pre
-                  class="mt-1 whitespace-pre-wrap break-all text-aa-text font-mono"
+                  class="mt-1 whitespace-pre-wrap break-all text-sa-text font-mono"
                   >{{ serialize(item.decoded) }}</pre
                 >
               </div>
@@ -303,13 +303,13 @@ const badgeClass = computed(() => {
   if (props.level === "ready") return "badge-orange";
   if (props.level === "warning") return "badge-amber";
   if (props.level === "blocked") return "badge-red";
-  return "bg-aa-panel text-aa-muted";
+  return "bg-sa-panel text-sa-muted";
 });
 const badgeDotClass = computed(() => {
-  if (props.level === "ready") return "bg-aa-orange animate-pulse";
-  if (props.level === "warning") return "bg-aa-warning";
-  if (props.level === "blocked") return "bg-aa-error";
-  return "bg-aa-muted";
+  if (props.level === "ready") return "bg-sa-orange animate-pulse";
+  if (props.level === "warning") return "bg-sa-warning";
+  if (props.level === "blocked") return "bg-sa-error";
+  return "bg-sa-muted";
 });
 const formattedStack = computed(() => formatRelayStack(props.stack || []));
 function emitCopy(kind) {

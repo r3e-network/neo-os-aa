@@ -176,7 +176,7 @@ def run_proofs(inventory,output_dir):
     controls=semantic_controls(bound,inventory,work)
     require(bind_method(inventory)==bound,'Artifact drift during proof')
     require(all(sha(Path(p).read_bytes())==h for p,h in {**models,**tools}.items()),'Model/tool drift during proof')
-    return dict(schema='neoos-aa-hook-params-refinement/v1',scope='private-hook-params-reference-refinement',kernelChecked=True,
+    return dict(schema='neoos-sa-hook-params-refinement/v1',scope='private-hook-params-reference-refinement',kernelChecked=True,
                 referenceRefinementVerified=True,fullImplementationVerified=False,vmCorrespondenceProven=False,
                 fullUnprovedEntrypointCount=len(inventory['manifest']['methods']),methodRange=[bound['start'],bound['end']],
                 byteCount=len(bound['bytes']),instructionCount=bound['instructionCount'],methodSha256=bound['methodSha256'],
@@ -242,7 +242,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inventory',type=Path,required=True);parser.add_argument('--output-dir',type=Path,required=True)
     parser.add_argument('--json-report',type=Path,required=True);args=parser.parse_args()
-    failure=dict(schema='neoos-aa-hook-params-refinement/v1',scope='private-hook-params-reference-refinement',kernelChecked=False,
+    failure=dict(schema='neoos-sa-hook-params-refinement/v1',scope='private-hook-params-reference-refinement',kernelChecked=False,
                  referenceRefinementVerified=False,fullImplementationVerified=False,error='Verification has not completed')
     args.json_report.parent.mkdir(parents=True,exist_ok=True);args.json_report.write_text(json.dumps(failure,indent=2)+'\n')
     try:

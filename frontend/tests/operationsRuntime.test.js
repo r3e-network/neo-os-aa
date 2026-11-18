@@ -9,16 +9,16 @@ import { createSupabaseBrowserClient, resetSupabaseClientForTests } from '../src
 
 test('getRuntimeConfig exposes Supabase and relay settings', () => {
   const config = getRuntimeConfig({
-    VITE_AA_HASH: '0x1111111111111111111111111111111111111111',
-    VITE_AA_RPC_URL: 'https://rpc.example.org',
+    VITE_SA_HASH: '0x1111111111111111111111111111111111111111',
+    VITE_SA_RPC_URL: 'https://rpc.example.org',
     VITE_SUPABASE_URL: 'https://example.supabase.co',
     VITE_SUPABASE_ANON_KEY: 'public-anon-key',
   });
 
   assert.deepEqual(config, {
     morpheusNetwork: 'mainnet',
-    abstractAccountHash: '1111111111111111111111111111111111111111',
-    abstractAccountDomain: 'smartwallet.neo',
+    smartAccountHash: '1111111111111111111111111111111111111111',
+    smartAccountDomain: 'smartwallet.neo',
     rpcUrl: 'https://rpc.example.org',
     networkMagic: 860833102,
     supabaseUrl: 'https://example.supabase.co',
@@ -32,7 +32,7 @@ test('getRuntimeConfig exposes Supabase and relay settings', () => {
     addressMarketHash: 'ae7afe3a85ab08bfd1d4907b35ae8b80c75b3a69',
     paymasterHash: 'a0defa2bc6d7a71ba1e237149287c8ca4ff46caf',
     n3IndexApiBaseUrl: 'https://api.n3index.dev',
-    aaReadApiBaseUrl: '',
+    saReadApiBaseUrl: '',
     n3IndexNetwork: 'mainnet',
     neoNnsContractHash: '50ac1c37690cc2cfc594472833cf57505d5f46de',
     web3AuthClientId: '',
@@ -88,13 +88,13 @@ test('getRuntimeConfig exposes Supabase and relay settings', () => {
 
 test('getRuntimeConfig switches implicit defaults to testnet when selected', () => {
   const config = getRuntimeConfig({
-    VITE_AA_NETWORK: 'testnet',
+    VITE_SA_NETWORK: 'testnet',
     VITE_SUPABASE_URL: 'https://example.supabase.co',
     VITE_SUPABASE_ANON_KEY: 'public-anon-key',
   });
 
-  assert.equal(config.abstractAccountHash, 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2');
-  assert.equal(config.abstractAccountDomain, '');
+  assert.equal(config.smartAccountHash, 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2');
+  assert.equal(config.smartAccountDomain, '');
   assert.equal(config.rpcUrl, 'https://api.n3index.dev/testnet');
   assert.equal(config.relayRpcUrl, 'https://api.n3index.dev/testnet');
   assert.equal(config.n3IndexNetwork, 'testnet');
@@ -164,7 +164,7 @@ test('relay transaction function exists and guards missing relay env and invalid
   assert.match(source, /missing_raw_transaction/);
   assert.match(source, /invalid_raw_transaction/);
   assert.match(source, /missing_meta_invocation|invalid_meta_invocation/);
-  assert.match(source, /AA_RELAY_WIF|relay_signer_not_configured/);
+  assert.match(source, /SA_RELAY_WIF|relay_signer_not_configured/);
   assert.match(source, /relay_meta_invocation_not_allowed|sanitizeMetaInvocationForRelay/);
   assert.match(source, /CalledByEntry/);
   assert.doesNotMatch(source, /return Array\.isArray\(invocation\.signers\)/);

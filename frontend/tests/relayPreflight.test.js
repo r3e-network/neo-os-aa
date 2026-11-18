@@ -13,7 +13,7 @@ import {
   executeUserOpsInvocation,
   gasTransferArgs,
   relayRoute,
-} from './fixtures/aaChainFixtures.js';
+} from './fixtures/saChainFixtures.js';
 
 test('buildRelayPreflightRequest reuses the selected relay payload and adds simulate mode', () => {
   const request = buildRelayPreflightRequest({

@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/localchain"))
-from aa_rpc_scenarios import Ctx, free_port_pair, sc_key_verifier  # noqa: E402
+from sa_rpc_scenarios import Ctx, free_port_pair, sc_key_verifier  # noqa: E402
 from rpcx import Rx  # noqa: E402
 
 
@@ -19,7 +19,7 @@ class PublicProfileTest(unittest.TestCase):
 
         previous = signal.signal(signal.SIGTERM, interrupted)
         try:
-            with tempfile.TemporaryDirectory(prefix="aa-public-", dir="/private/tmp" if sys.platform == "darwin" else "/tmp") as workdir:
+            with tempfile.TemporaryDirectory(prefix="sa-public-", dir="/private/tmp" if sys.platform == "darwin" else "/tmp") as workdir:
                 chain = Rx(workdir, free_port_pair())
                 print(f"Disposable neoxp: 127.0.0.1:{chain.port}, data {workdir}", flush=True)
                 try:
@@ -27,7 +27,7 @@ class PublicProfileTest(unittest.TestCase):
                     chain.start()
                     chain.fund(["deployer", "owner", "buyer", "relay"], 3000)
                     artifacts = ROOT / "contracts/bin/v3"
-                    core = chain.deploy("SmartAccountV3", artifacts / "SmartAccountV3.nef")
+                    core = chain.deploy("SmartAccount", artifacts / "SmartAccount.nef")
                     chain.deploy("MockTransferTarget", artifacts / "MockTransferTarget.nef")
                     chain.deploy("WebAuthnVerifier", artifacts / "verifiers/WebAuthnVerifier.nef", data_core=core)
                     context = Ctx(chain, "public", workdir)

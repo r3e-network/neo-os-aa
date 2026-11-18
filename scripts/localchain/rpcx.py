@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""RPC-driven local-chain harness for the AA assessment.
+"""RPC-driven local-chain harness for the SA assessment.
 
 One long-lived `neoxp run` node (published neoxp, no private hardfork), every transaction built and signed
 here and sent over JSON-RPC, so a step costs a block (1 s) instead of two .NET process starts. Reuses the
-serialisation helpers of neo-os-aa/scripts/neoexpress_validate.py. Throwaway dev-chain keys only.
+serialisation helpers of neo-os-sa/scripts/neoexpress_validate.py. Throwaway dev-chain keys only.
 """
 import base64, hashlib, json, math, os, shutil, subprocess, sys, time, urllib.request
 from pathlib import Path
 
-AA = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(AA / "scripts"))
+SA = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(SA / "scripts"))
 import neoexpress_validate as v  # noqa: E402
 from neoexpress_validate import H, B, I, S, BOOL, A, ZERO, DAY, GAS, FAR_DEADLINE  # noqa: E402
 
@@ -49,7 +49,7 @@ class Rx:
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.port = port
         self.neoxp = neoxp or os.environ.get("NEOXP") or shutil.which("neoxp") or str(Path.home() / ".dotnet" / "tools" / "neoxp")
-        self.file = self.workdir / "aa.neo-express"
+        self.file = self.workdir / "sa.neo-express"
         self.env = {k: os.environ[k] for k in ("PATH", "DOTNET_ROOT", "LANG", "TMPDIR") if k in os.environ}
         self.env["HOME"] = str(self.workdir)
         self.env.setdefault("DOTNET_ROOT", v.dotnet_root())
@@ -171,7 +171,7 @@ class Rx:
             return {"account": self.hashes[s["w"]], "scopes": s.get("scope", "CalledByEntry")}
         if "genesis" in s:
             return {"account": self.genesis_hash, "scopes": "CalledByEntry"}
-        return {"account": s["proxy"], "scopes": "WitnessRules", "rules": v.aa_proxy_rules(s["core"], s["target"])}
+        return {"account": s["proxy"], "scopes": "WitnessRules", "rules": v.sa_proxy_rules(s["core"], s["target"])}
 
     def send(self, step, signers, contract, method, args, expect="HALT", expect_text=None, script_override=None,
              sysfee_margin=3 * GAS, netfee=3 * GAS, reject_ok=False, probe_fault_ok=False, fixed_sysfee=None,

@@ -12,13 +12,13 @@ namespace SmartAccount
         private static readonly byte[] Prefix_AuthorizedCore = new byte[] { 0xD1 };
         private static readonly byte[] Prefix_PendingAdmin = new byte[] { 0xD2 };
         private static readonly byte[] Prefix_AdminRotationTimelock = new byte[] { 0xD3 };
-        // Audit fix M-7 (parity with HookAuthority): timelocked change of the trusted AA
+        // Audit fix M-7 (parity with HookAuthority): timelocked change of the trusted SA
         // core (a repointed "core" passes ValidateCoreCaller and could drain every
         // sponsor deposit through SettleReimbursement, so it must not be instant).
         // New prefixes — never written by previous deployments.
         private static readonly byte[] Prefix_PendingCore = new byte[] { 0xD4 };
         private static readonly byte[] Prefix_CoreTimelock = new byte[] { 0xD5 };
-        // AA-D-01: timelocked contract upgrade. The admin first proposes the sha256 of the
+        // SA-D-01: timelocked contract upgrade. The admin first proposes the sha256 of the
         // new NEF and manifest, then can only apply that exact artifact pair after the
         // 7-day window. This is one-way: once deployed, every future upgrade waits 7 days.
         private static readonly byte[] Prefix_PendingUpdateNefHash = new byte[] { 0xD6 };
@@ -97,7 +97,7 @@ namespace SmartAccount
             Storage.Delete(Storage.CurrentContext, Prefix_CoreTimelock);
         }
 
-        // AA-D-01: contract upgrade is timelocked. ProposeUpdate pins the sha256 of the
+        // SA-D-01: contract upgrade is timelocked. ProposeUpdate pins the sha256 of the
         // new NEF and manifest; Paymaster.Update applies exactly that artifact pair only
         // after the 7-day window (AssertConfirmableUpdate validates and consumes the
         // proposal — the ContractManagement.Update call itself lives in Paymaster.cs).
@@ -139,7 +139,7 @@ namespace SmartAccount
         internal static void ValidateCoreCaller()
         {
             UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
             ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
         }
 

@@ -161,11 +161,11 @@ class ExceptionIdentityProjectionTests(unittest.TestCase):
 class PinnedMutantTests(unittest.TestCase):
     """Each mutant must move exactly one field; that is the projection's claim."""
 
-    mirror = os.environ.get('AA_EXCEPTION_IDENTITY_SOURCE_MIRROR','')
+    mirror = os.environ.get('SA_EXCEPTION_IDENTITY_SOURCE_MIRROR','')
 
     def setUp(self):
         if not self.mirror:
-            self.skipTest('AA_EXCEPTION_IDENTITY_SOURCE_MIRROR is not set')
+            self.skipTest('SA_EXCEPTION_IDENTITY_SOURCE_MIRROR is not set')
         self.contents = pinned_contents(self.mirror)
         self.base = source.project_sources(self.contents)
 

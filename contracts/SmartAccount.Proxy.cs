@@ -12,8 +12,8 @@ namespace SmartAccount
         // Virtual-account proxy address
         // ========================================================================
         //
-        // A virtual AA account holds its on-chain assets at the script hash of a
-        // fixed "proxy" verification script (devpack `deriveVirtualAAAccount`):
+        // A virtual SA account holds its on-chain assets at the script hash of a
+        // fixed "proxy" verification script (devpack `deriveVirtualSAAccount`):
         //
         //   PUSHDATA1 20 <accountId>
         //   PUSH1 PACK PUSH15

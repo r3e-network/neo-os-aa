@@ -53,7 +53,7 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(gas.project_source(SOURCE.replace("10000", "10001"))["feeFactor"], 10001)
 
     def test_all_kernel_certificates_and_mutations(self):
-        with tempfile.TemporaryDirectory(prefix="aa-gas-test-") as temp:
+        with tempfile.TemporaryDirectory(prefix="sa-gas-test-") as temp:
             original_read = Path.read_text
             def guarded_read(path, *args, **kwargs):
                 if path == gas.MODEL:

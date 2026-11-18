@@ -229,7 +229,7 @@ function randomAccountId() {
 }
 
 function validationRunId() {
-  return (process.env.AA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString('hex')}`).toLowerCase();
+  return (process.env.SA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString('hex')}`).toLowerCase();
 }
 
 function logSection(title) {
@@ -242,7 +242,7 @@ async function main() {
   const rpcClient = new rpc.RPCClient(RPC_URL);
   const version = await withRpcRetry('rpc.getVersion', () => rpcClient.getVersion());
   const networkMagic = Number(version.protocol.network);
-  const deploymentTag = process.env.AA_VALIDATION_DEPLOY_TAG || `validation-smoke-${validationRunId()}`;
+  const deploymentTag = process.env.SA_VALIDATION_DEPLOY_TAG || `validation-smoke-${validationRunId()}`;
 
   console.log(JSON.stringify({
     rpc: RPC_URL,
@@ -252,19 +252,19 @@ async function main() {
   }, null, 2));
 
   logSection('Deploy Contracts');
-  const core = await deployContract(rpcClient, account, networkMagic, 'SmartAccountV3', `${deploymentTag}-core`);
+  const core = await deployContract(rpcClient, account, networkMagic, 'SmartAccount', `${deploymentTag}-core`);
   const web3Auth = await deployContract(rpcClient, account, networkMagic, 'Web3AuthVerifier', `${deploymentTag}-web3auth`);
   const whitelist = await deployContract(rpcClient, account, networkMagic, 'WhitelistHook', `${deploymentTag}-whitelist`);
   await authorizeVerifier(rpcClient, core.hash, web3Auth.hash, account, networkMagic);
   await authorizeHook(rpcClient, core.hash, whitelist.hash, account, networkMagic);
   console.log(JSON.stringify({ core, web3Auth, whitelist }, null, 2));
 
-  const aaClient = new SmartAccountClient(RPC_URL, core.hash);
-  const accountId = aaClient.deriveRegistrationAccountIdHash({
+  const saClient = new SmartAccountClient(RPC_URL, core.hash);
+  const accountId = saClient.deriveRegistrationAccountIdHash({
     backupOwnerAddress: account.scriptHash,
     escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
   });
-  const virtual = aaClient.deriveVirtualAccount(accountId);
+  const virtual = saClient.deriveVirtualAccount(accountId);
 
   logSection('Register Native-Fallback Account');
   const registerNative = await invokePersisted(
@@ -284,7 +284,7 @@ async function main() {
   );
   console.log(JSON.stringify({ registerNative: registerNative.txid, accountId: normalizeHash(accountId), virtualAddress: virtual.address }, null, 2));
 
-  const nativeState = await aaClient.getAccountState(accountId);
+  const nativeState = await saClient.getAccountState(accountId);
   console.log(JSON.stringify({ nativeState }, null, 2));
 
   logSection('Native ExecuteUserOp');
@@ -391,13 +391,13 @@ async function main() {
   const evmSigner2 = ethers.Wallet.createRandom();
   const pubKey1 = sanitizeHex(evmSigner1.signingKey.publicKey);
   const pubKey2 = sanitizeHex(evmSigner2.signingKey.publicKey);
-  const web3AuthAccountId = aaClient.deriveRegistrationAccountIdHash({
+  const web3AuthAccountId = saClient.deriveRegistrationAccountIdHash({
     verifierContractHash: web3Auth.hash,
     verifierParamsHex: pubKey1,
     backupOwnerAddress: account.scriptHash,
     escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
   });
-  const web3AuthVirtual = aaClient.deriveVirtualAccount(web3AuthAccountId);
+  const web3AuthVirtual = saClient.deriveVirtualAccount(web3AuthAccountId);
 
   const verifierConfigRequest = await invokePersisted(
     rpcClient,

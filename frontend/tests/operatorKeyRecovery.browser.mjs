@@ -18,7 +18,7 @@ const shareSlug = 'browser-recovery-draft';
 const accessSlug = 'browser-operator-link';
 
 test('real Chromium preserves the key across browser restart and restores encrypted download in a fresh profile', { timeout: 90_000 }, async () => {
-  const temp = await mkdtemp(path.join(os.tmpdir(), 'aa-operator-browser-'));
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'sa-operator-browser-'));
   const state = { publicJwk: null, counter: 0, requests: [] };
   const server = await createServer({
     configFile: false, root, cacheDir: path.join(temp, 'vite-cache'),
@@ -106,7 +106,7 @@ test('real Chromium preserves the key across browser restart and restores encryp
     assert.equal((await mutate(page)).status, 'ready');
     assert.deepEqual(state.publicJwk, pinned);
     assert.equal(state.counter, 1);
-    assert.equal(await page.evaluate(() => Object.keys(sessionStorage).some((key) => key.startsWith('aa_operator_session'))), false);
+    assert.equal(await page.evaluate(() => Object.keys(sessionStorage).some((key) => key.startsWith('sa_operator_session'))), false);
     await context.close(); context = null;
 
     page = await open('fresh');

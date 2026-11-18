@@ -1,0 +1,97 @@
+{
+  "manifestVersion": 1,
+  "protocolVersion": 4,
+  "network": "TODO(kernel39|40): 860833102 (mainnet) or the testnet magic",
+  "legacyCoreHash": "TODO: mainnet 0x0268a387… / testnet 0xdbf38e7b… legacy core",
+  "newCoreHash": "TODO: the freshly deployed SmartAccount core",
+  "exportedAt": "TODO: Runtime.Time ms at export",
+  "scan": {
+    "accounts": "TODO: 53 mainnet / 407 testnet as re-scanned",
+    "legacyPrefixRows": {
+      "0x01": "TODO",
+      "0x12": "TODO",
+      "0x1C": "TODO"
+    },
+    "artifactDigest": "TODO: SHA-256 of the scanned deployment artifacts"
+  },
+  "accounts": [
+    {
+      "accountId": "TODO",
+      "accountAddress": "TODO",
+      "classification": "TODO: no-plugin | scalar-plugin | multihook | multisig | unknown-plugin | owner-only | market-locked | recovery-pending",
+      "legacyState": {
+        "verifier": "TODO",
+        "hook": "TODO",
+        "backupOwner": "TODO",
+        "escapeTimelock": "TODO",
+        "escapeTriggeredAt": "TODO",
+        "frozen": "TODO",
+        "ownerOnly": "TODO",
+        "pendingConfig": "TODO (evidence only, dropped)",
+        "pendingCalls": "TODO (evidence only, dropped)"
+      },
+      "legacyModules": [
+        {
+          "role": "TODO: verifier-root | hook-root | child",
+          "contractHash": "TODO",
+          "contractId": "TODO",
+          "updateCounter": "TODO",
+          "nefSha256": "TODO",
+          "children": [
+            {
+              "contractHash": "TODO",
+              "type": "TODO"
+            }
+          ]
+        }
+      ],
+      "legacyThreshold": {
+        "members": "TODO",
+        "value": "TODO"
+      },
+      "legacyHookOrder": [
+        "TODO: child hashes in legacy forward order"
+      ],
+      "legacyNonces": [
+        {
+          "channel": "TODO",
+          "cursor": "TODO"
+        }
+      ],
+      "marketLock": {
+        "listingId": "TODO",
+        "escrowContract": "TODO"
+      },
+      "targetState": {
+        "modules": [
+          {
+            "moduleId": "TODO",
+            "type": "TODO",
+            "contractHash": "TODO",
+            "credentialGeneration": 1,
+            "source": "TODO"
+          }
+        ],
+        "hookOrder": [
+          "TODO"
+        ],
+        "thresholdPolicies": [
+          {
+            "policyId": "TODO",
+            "threshold": "TODO",
+            "memberIds": [
+              "TODO"
+            ]
+          }
+        ],
+        "recoveryTimelockMs": "TODO",
+        "defaultPolicy": {
+          "operation": "builtin",
+          "message": "builtin"
+        }
+      },
+      "required": "TODO: only for unknown-plugin — what the owner must decide",
+      "idempotencyKey": "network:accountId:manifestDigest"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import re
 import subprocess
 import sys
 
-_DECODER_SPEC = importlib.util.spec_from_file_location("aa_refinement_nef_decode", Path(__file__).with_name("nef_decode.py"))
+_DECODER_SPEC = importlib.util.spec_from_file_location("sa_refinement_nef_decode", Path(__file__).with_name("nef_decode.py"))
 _DECODER = importlib.util.module_from_spec(_DECODER_SPEC)
 _DECODER_SPEC.loader.exec_module(_DECODER)
 
@@ -131,7 +131,7 @@ def decode_nef(raw):
 
 def validate_inventory(inventory, nef_path, manifest_path, source_root):
     """Recheck exact current inputs, byte coverage and complete ABI inventory."""
-    require(inventory.get("schema") == "neoos-aa-refinement-inventory/v1", "unsupported inventory schema")
+    require(inventory.get("schema") == "neoos-sa-refinement-inventory/v1", "unsupported inventory schema")
     require(inventory.get("status") == "INVENTORY_ONLY", "inventory cannot assert proof status")
     nef_path, manifest_path, source_root = map(lambda p: Path(p).resolve(), (nef_path, manifest_path, source_root))
     inputs = inventory.get("inputs", {})
@@ -334,7 +334,7 @@ def main(argv=None):
         supporting, helper_inventory, source_projection = None, None, None
         receipt_hashes = {"arithmetic": sha256(output / "proof.json")}
         if not args.arithmetic_only:
-            spec = importlib.util.spec_from_file_location("aa_fresh_source_projection", here / "method_source.py")
+            spec = importlib.util.spec_from_file_location("sa_fresh_source_projection", here / "method_source.py")
             projector = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(projector)
             source_projection = projector.project_method(inventory)
@@ -349,7 +349,7 @@ def main(argv=None):
                 _run(command, output / (name + "-proof.log"), args.timeout_seconds)
                 supporting[name] = json.loads((output / (name + "-proof.json")).read_text())
                 receipt_hashes[name] = sha256(output / (name + "-proof.json"))
-            spec = importlib.util.spec_from_file_location("aa_complete_method_inventory", here / "method_inventory.py")
+            spec = importlib.util.spec_from_file_location("sa_complete_method_inventory", here / "method_inventory.py")
             complete_method = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(complete_method)
             helper_inventory = complete_method.build_method_inventory(inventory)
@@ -361,7 +361,7 @@ def main(argv=None):
                 "compilation input set or bytes changed during proof")
         require(tool_snapshot(here, protocol_models) == tool_inputs,
                 "verification tool input set or bytes changed during run")
-        report.update({"schema": "neoos-aa-implementation-refinement/v1", "inventory": summary,
+        report.update({"schema": "neoos-sa-implementation-refinement/v1", "inventory": summary,
                        "inventorySha256": sha256(inventory_path), "proofReceiptSha256": sha256(output / "proof.json"),
                        "proofReceiptSha256ByLane": receipt_hashes,
                        "proofSelection": "arithmetic-region" if args.arithmetic_only else "complete-helper-and-supporting-models",

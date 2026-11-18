@@ -2,7 +2,7 @@
 
 Review baseline: 2026-10-09; authority-admission correction: 2026-10-14. This map follows [issue #242](https://github.com/neo-project/proposals/issues/242), including its six required sections and six acceptance criteria. It describes a draft review candidate, not an adopted standard or permission to activate a public network.
 
-The normative documents are the [native ABI 2 profile](SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) and the [deployment-independent foundation](nep-aa-entry-verifier.mediawiki). Identity derivation remains version 1. Authority admission now requires recipient consent and rejects registered proxy authorities. This changes draft consensus behavior without changing ABI methods, state layout, identity derivation or parameter constants. The unchanged parameter digest does not identify this source revision or prove compatibility with earlier experimental state.
+The normative documents are the [native ABI 2 profile](SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) and the [deployment-independent foundation](nep-smartaccount-entry-verifier.mediawiki). Identity derivation remains version 1. Authority admission now requires recipient consent and rejects registered proxy authorities. This changes draft consensus behavior without changing ABI methods, state layout, identity derivation or parameter constants. The unchanged parameter digest does not identify this source revision or prove compatibility with earlier experimental state.
 
 The foundation supports parallel ordinary-contract and native implementations.
 An ordinary implementation can validate shared protocol behavior and serve
@@ -15,7 +15,7 @@ and witness restrictions are not inferred from ordinary-contract execution.
 | Issue requirement | Normative coverage | Implementation and evidence | Boundary |
 | --- | --- | --- | --- |
 | Native identity and activation | Profile §§3–5, §13; canonical parameters and vectors | Core `SmartAccountProtocol`, `SmartAccount.Initialize`; tests `NativeIdentityActivationAndRequiredAbiAreStable`, `InitializationStoresProfileOnlyAtItsActivation`, `NativeIdentityAndPublishedAccountVectorMatch` | Missing activation disables the service. An ordinary deployed contract cannot activate it. Network configuration and protocol approval remain pending. |
-| Account and module state | §§6–8, including authority admission, authority epoch, configuration nonce, freeze, recovery and composition registry | Core `SmartAccountState`, `SmartAccount.ReadState/Save`, `SmartAccountModulePolicy`, `SmartAccount.Keys/Modules`; historical lifecycle/recovery/configuration suites in the [iteration receipt](../reports/aa-consistency-iteration-20261009.md), with the admission correction described below | Newly introduced authority recipients must consent; current and pending registered proxies are excluded. Custody, execution, configuration, recovery and service governance remain distinct. Recovery revokes old module authority without calling the old modules. |
+| Account and module state | §§6–8, including authority admission, authority epoch, configuration nonce, freeze, recovery and composition registry | Core `SmartAccountState`, `SmartAccount.ReadState/Save`, `SmartAccountModulePolicy`, `SmartAccount.Keys/Modules`; historical lifecycle/recovery/configuration suites in the [iteration receipt](../reports/sa-consistency-iteration-20261009.md), with the admission correction described below | Newly introduced authority recipients must consent; current and pending registered proxies are excluded. Custody, execution, configuration, recovery and service governance remain distinct. Recovery revokes old module authority without calling the old modules. |
 | UserOperation semantics | §9 plus foundation canonical field order, nonce channels, callback order, batch rollback and reentrancy rules | Core `SmartAccount.Execution`, `SmartAccountEnvelope`; SDK codec vectors; actual transaction-commitment and new chain-clock regressions | Both scalar descriptors remain mandatory on every native verifier; composite execution uses its additional receipt callbacks. Boolean `false` is not automatically a VM fault; applicable module or client policy may reject it. |
 | Resource and fee accounting | §§3,10; explicit callback budgets, ancestor inheritance, sponsor and failure semantics | Bounded-call prerequisite [#4759](https://github.com/neo-project/neo/pull/4759); native callback probes and fee-aware RPC preflight evidence | Exhaustion faults atomically; transaction fees may still be charged. Measurements cover the recorded modules and fee policy, not arbitrary plugin liveness. |
 | Witness and address compatibility | §§5,9.1–9.3,12,14 | Fixed proxy script/address vectors; actual signed single/batch proxy verification and Application replay; typed RPC/SDK manifests | Verification uses persisted chain time; Application uses its executing block. A successful preflight reserves neither nonce nor inclusion. Script changes require explicit address migration. |
@@ -42,11 +42,11 @@ and witness restrictions are not inferred from ordinary-contract execution.
 
 Current implementation review is coordinated through [core #4768](https://github.com/neo-project/neo/pull/4768), [RPC #1115](https://github.com/neo-project/neo-node/pull/1115) and [foundation #243](https://github.com/neo-project/proposals/pull/243). Upstream review and public-activation gates remain open. Historical issue comments and pinned runtime receipts describe their original checkpoints and must not be read as current deployment claims.
 
-The [2026-10-09 validation receipt](../reports/aa-issue-242-conformance-20261009.json) records the source pins, new regression cases and verification counts for this review.
+The [2026-10-09 validation receipt](../reports/sa-issue-242-conformance-20261009.json) records the source pins, new regression cases and verification counts for this review.
 
 ## Lifecycle and usability follow-up
 
-The [protocol audit receipt](../reports/aa-native-protocol-review-20261009.json)
+The [protocol audit receipt](../reports/sa-native-protocol-review-20261009.json)
 tracks the subsequent client and workspace review. It separates permissionless
 account-level activation from custody-authorized module-policy activation, binds
 module cancellation reviews to their exact pending intent, and documents the
@@ -84,7 +84,7 @@ conformance, upstream adoption or public activation. Runtime claims must remain
 bound to the corrected candidate and its regression evidence, not the historical
 receipts linked above.
 
-The [usability follow-up](../reports/aa-native-usability-20261009.md) adds
+The [usability follow-up](../reports/sa-native-usability-20261009.md) adds
 execution-time pending-content checks to SDK cancellation, standard Neo
 CHECKMULTISIG wallet authorities, exact signed-file submission and recovery of
 historical receipts. These are client and integration guarantees; the native

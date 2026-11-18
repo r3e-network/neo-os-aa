@@ -3,13 +3,13 @@
     <template v-if="didConnected">
       <span class="badge-blue text-[10px] px-2 py-1">
         <span
-          class="w-1.5 h-1.5 mr-1 bg-aa-info rounded-full animate-pulse"
+          class="w-1.5 h-1.5 mr-1 bg-sa-info rounded-full animate-pulse"
         ></span>
         {{ t("nav.didPrefix", "DID") }} {{ didShort }}
       </span>
       <router-link
         to="/identity"
-        class="text-aa-muted hover:text-aa-text transition-colors duration-200 p-2.5"
+        class="text-sa-muted hover:text-sa-text transition-colors duration-200 p-2.5"
         :aria-label="t('nav.openIdentity', 'Open Identity')"
       >
         <svg
@@ -29,7 +29,7 @@
       </router-link>
       <button
         @click="disconnectDid"
-        class="text-aa-muted hover:text-aa-error-light transition-colors duration-200 p-2.5"
+        class="text-sa-muted hover:text-sa-error-light transition-colors duration-200 p-2.5"
         :aria-label="t('nav.disconnectDid', 'Disconnect Web3Auth')"
       >
         <svg
@@ -51,13 +51,13 @@
     <template v-if="isConnected">
       <span class="badge-orange text-[10px] px-2 py-1">
         <span
-          class="w-1.5 h-1.5 mr-1 bg-aa-orange rounded-full animate-pulse"
+          class="w-1.5 h-1.5 mr-1 bg-sa-orange rounded-full animate-pulse"
         ></span>
         <span :title="truncatedAddress">{{ truncatedAddress }}</span>
       </span>
       <button
         @click="disconnect"
-        class="text-aa-muted hover:text-aa-error-light transition-colors duration-200 p-2.5"
+        class="text-sa-muted hover:text-sa-error-light transition-colors duration-200 p-2.5"
         :aria-label="t('nav.disconnect', 'Disconnect')"
       >
         <svg
@@ -99,39 +99,39 @@
   </div>
   <div
     v-else-if="didConnected"
-    class="flex items-center gap-3 bg-aa-panel border border-aa-border rounded px-3 py-1.5 shadow-sm"
+    class="flex items-center gap-3 bg-sa-panel border border-sa-border rounded px-3 py-1.5 shadow-sm"
   >
     <span class="badge-blue">
       <span
-        class="w-1.5 h-1.5 mr-1 bg-aa-info rounded-full animate-pulse"
+        class="w-1.5 h-1.5 mr-1 bg-sa-info rounded-full animate-pulse"
       ></span>
       {{ t("nav.didPrefix", "DID") }} {{ didShort }}
     </span>
     <router-link
       to="/identity"
-      class="text-xs text-aa-muted hover:text-aa-text font-medium px-1 transition-colors duration-200"
+      class="text-xs text-sa-muted hover:text-sa-text font-medium px-1 transition-colors duration-200"
       >{{ t("nav.openIdentity", "Open Identity") }}</router-link
     >
     <button
       @click="disconnectDid"
-      class="text-xs text-aa-muted hover:text-aa-error-light font-medium px-1 transition-colors duration-200"
+      class="text-xs text-sa-muted hover:text-sa-error-light font-medium px-1 transition-colors duration-200"
     >
       {{ t("nav.disconnectDid", "Disconnect Web3Auth") }}
     </button>
   </div>
   <div
     v-else-if="isConnected"
-    class="flex items-center gap-3 bg-aa-panel border border-aa-border rounded px-3 py-1.5 shadow-sm"
+    class="flex items-center gap-3 bg-sa-panel border border-sa-border rounded px-3 py-1.5 shadow-sm"
   >
     <span class="badge-orange">
       <span
-        class="w-1.5 h-1.5 mr-1 bg-aa-orange rounded-full animate-pulse"
+        class="w-1.5 h-1.5 mr-1 bg-sa-orange rounded-full animate-pulse"
       ></span>
       <span :title="truncatedAddress">{{ truncatedAddress }}</span>
     </span>
     <button
       @click="disconnect"
-      class="text-xs text-aa-muted hover:text-aa-error-light font-medium px-1 transition-colors duration-200"
+      class="text-xs text-sa-muted hover:text-sa-error-light font-medium px-1 transition-colors duration-200"
     >
       {{ t("nav.disconnect", "Disconnect") }}
     </button>

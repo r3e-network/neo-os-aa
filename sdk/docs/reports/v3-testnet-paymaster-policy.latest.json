@@ -1,7 +1,7 @@
 {
   "network": "testnet",
   "appId": "ddff154546fe22d15b65667156dd4b7c611e6093",
-  "policyId": "testnet-aa",
+  "policyId": "testnet-sa",
   "accountId": "0x0c3146e78efc42bfb7d4cc2e06e3efd063c01c56",
   "approved": {
     "approvalDigest": "a5cc686eae87893e38391983f5dd871103d7b2eacb83a86a2d2bcb7ea7e92d3a",

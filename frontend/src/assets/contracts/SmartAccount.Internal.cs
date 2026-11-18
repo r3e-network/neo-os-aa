@@ -40,7 +40,7 @@ namespace SmartAccount
         // observes the core itself as Runtime.CallingScriptHash. Callees that act on that
         // identity — paymaster settlement, market listing retirement — query
         // IsUserOpExecutionActive() and refuse to run meanwhile, because one core backs every
-        // virtual account and "the caller is the AA core" alone cannot identify an authorization.
+        // virtual account and "the caller is the SA core" alone cannot identify an authorization.
         // The marker is a depth counter (audit Low 6): the value records the transaction hash
         // plus the number of active execution frames, so the unwind of a nested frame decrements
         // it instead of deleting the slot while an outer frame still executes.

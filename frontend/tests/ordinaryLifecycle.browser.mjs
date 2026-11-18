@@ -14,14 +14,14 @@ import {
 } from './fixtures/ordinaryGovernanceFixture.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const evidenceDir = process.env.ORDINARY_LIFECYCLE_EVIDENCE_DIR || join(tmpdir(), 'aa-ordinary-lifecycle');
+const evidenceDir = process.env.ORDINARY_LIFECYCLE_EVIDENCE_DIR || join(tmpdir(), 'sa-ordinary-lifecycle');
 const stage = process.env.ORDINARY_LIFECYCLE_EVIDENCE_STAGE || 'current';
 
 async function withWorkspace(name, run, setup = () => {}) {
   const fixture = createOrdinaryGovernanceFixture();
   setup(fixture);
   const errors = [], navigations = [], documentRequests = [];
-  const env = { VITE_AA_RPC_URL: ordinaryRpcUrl, VITE_AA_HASH: ordinaryCore, VITE_AA_NETWORK_MAGIC: String(ordinaryMagic) };
+  const env = { VITE_SA_RPC_URL: ordinaryRpcUrl, VITE_SA_HASH: ordinaryCore, VITE_SA_NETWORK_MAGIC: String(ordinaryMagic) };
   const previousEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   Object.assign(process.env, env);
   await mkdir(evidenceDir, { recursive: true });
@@ -39,7 +39,7 @@ async function withWorkspace(name, run, setup = () => {}) {
     await page.route('**/*', (route) => fixture.route(route, origin));
     await page.exposeFunction('ordinaryWalletInvoke', (request) => fixture.invoke(request));
     await page.addInitScript(({ address, hash, magic }) => {
-      localStorage.setItem('aa_locale', 'en');
+      localStorage.setItem('sa_locale', 'en');
       window.__ordinaryWallet = { address, hash };
       window.neo3Dapi = {
         getAccount: async () => window.__ordinaryWallet,
@@ -48,7 +48,7 @@ async function withWorkspace(name, run, setup = () => {}) {
       };
     }, { address: getAddressFromScriptHash(ordinaryOwner), hash: ordinaryOwner, magic: ordinaryMagic });
     await page.goto(`${origin}/app`);
-    await page.getByRole('heading', { name: /Abstract Account Workspace/i }).waitFor();
+    await page.getByRole('heading', { name: /Smart Account Workspace/i }).waitFor();
     assert.equal(page.url(), `${origin}/app`);
     assert.match(await page.title(), /Account|Workspace|App/);
     await page.locator('#main-content').getByRole('button', { name: 'Connect Wallet', exact: true }).click();

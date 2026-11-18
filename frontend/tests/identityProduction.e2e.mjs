@@ -3,20 +3,20 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-const origin = 'https://aa.neoos.network';
+const origin = 'https://sa.neoos.network';
 const output = fileURLToPath(new URL(`../../.automation-logs/identity-production/${Date.now()}/`, import.meta.url));
 const report = { origin, startedAt: new Date().toISOString(), scope: 'Unauthenticated identity security regression; not login acceptance', checks: [], passed: false };
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({
   headless: true,
-  ...(process.env.AA_BROWSER_EXECUTABLE ? { executablePath: process.env.AA_BROWSER_EXECUTABLE } : {}),
+  ...(process.env.SA_BROWSER_EXECUTABLE ? { executablePath: process.env.SA_BROWSER_EXECUTABLE } : {}),
 });
 try {
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     const context = await browser.newContext({ viewport });
     try {
       await context.addInitScript(() => {
-        localStorage.setItem('aa_connected_did_profile', JSON.stringify({
+        localStorage.setItem('sa_connected_did_profile', JSON.stringify({
           did: 'FORGED_AUDIT_IDENTITY', name: 'FORGED_AUDIT_IDENTITY',
           provider: 'web3auth', idToken: 'forged.invalid.token',
         }));
@@ -29,7 +29,7 @@ try {
       const body = await page.locator('body').innerText();
       const check = {
         viewport, status: response.status(),
-        cacheRemoved: await page.evaluate(() => localStorage.getItem('aa_connected_did_profile') === null),
+        cacheRemoved: await page.evaluate(() => localStorage.getItem('sa_connected_did_profile') === null),
         forgedIdentityRendered: body.includes('FORGED_AUDIT_IDENTITY'),
         providerUnconfigured: body.includes('not configured'), pageErrors,
         assets: await page.locator('script[src]').evaluateAll(elements => elements.map(element => element.getAttribute('src'))),
@@ -50,7 +50,7 @@ try {
       check.networkMismatchBlocked = true;
       await page.screenshot({ path: `${output}/network-mismatch-${viewport.width}.png`, fullPage: true });
       await page.getByRole('link', { name: 'Open this network home' }).click();
-      await page.getByRole('heading', { name: /Neo AA Operations Console/i }).waitFor();
+      await page.getByRole('heading', { name: /Neo SA Operations Console/i }).waitFor();
       assert.equal(new URL(page.url()).searchParams.get('network'), 'mainnet');
       const get = await context.request.get(`${origin}/api/did-verify`);
       assert.equal(get.status(), 405);

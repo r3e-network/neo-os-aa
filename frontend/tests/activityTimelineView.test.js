@@ -92,7 +92,7 @@ test('buildActivityEmptyState returns tailored guidance for each filter', () => 
   assert.match(buildActivityEmptyState('relay'), /Check Relay/i);
   assert.match(buildActivityEmptyState('signatures'), /Append Manual Signature|Sign with EVM Wallet/i);
   assert.match(buildActivityEmptyState('broadcast'), /Broadcast with Neo Wallet|Submit via Relay/i);
-  assert.match(buildActivityEmptyState('workflow'), /Load Abstract Account|Stage/i);
+  assert.match(buildActivityEmptyState('workflow'), /Load Smart Account|Stage/i);
 });
 
 test('buildActivityPresentation returns icon and tone metadata for known event types', () => {

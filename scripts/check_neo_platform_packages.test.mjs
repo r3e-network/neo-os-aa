@@ -181,7 +181,7 @@ test("a missing lock file, a different version and different bytes in a lock fil
   const framework = manifest.packages.find((pkg) => pkg.id === "Neo.SmartContract.Framework");
   const lockWith = (entry) => ({ version: 1, dependencies: { "net10.0": { "Neo.SmartContract.Framework": entry } } });
   const good = { type: "Direct", requested: `[${framework.version}, )`, resolved: framework.version, contentHash: framework.sha512 };
-  const project = "contracts/market/AAAddressMarket.csproj";
+  const project = "contracts/market/SAAddressMarket.csproj";
   const file = "contracts/market/packages.lock.json";
   assert.deepEqual(lockFileProblems([{ project, file, lock: lockWith(good) }], manifest), []);
   assert.deepEqual(lockFileProblems([{ project, file, lock: null }], manifest), [
@@ -197,7 +197,7 @@ test("a missing lock file, a different version and different bytes in a lock fil
 test("a lock file must lock the framework, the tests lock must lock the test engine, and no unlisted Neo package may appear", () => {
   const framework = manifest.packages.find((pkg) => pkg.id === "Neo.SmartContract.Framework");
   const empty = { version: 1, dependencies: { "net10.0": {} } };
-  assert.deepEqual(lockFileProblems([{ project: "contracts/market/AAAddressMarket.csproj", file: "m.lock.json", lock: empty }], manifest), [
+  assert.deepEqual(lockFileProblems([{ project: "contracts/market/SAAddressMarket.csproj", file: "m.lock.json", lock: empty }], manifest), [
     "m.lock.json does not lock Neo.SmartContract.Framework",
   ]);
   const frameworkOnly = {
@@ -213,7 +213,7 @@ test("a lock file must lock the framework, the tests lock must lock the test eng
   ]);
   const extra = structuredClone(frameworkOnly);
   extra.dependencies["net10.0"]["Neo.Plugins.Example"] = { type: "Transitive", resolved: "1.0.0", contentHash: "x" };
-  assert.deepEqual(lockFileProblems([{ project: "contracts/market/AAAddressMarket.csproj", file: "m.lock.json", lock: extra }], manifest), [
+  assert.deepEqual(lockFileProblems([{ project: "contracts/market/SAAddressMarket.csproj", file: "m.lock.json", lock: extra }], manifest), [
     `m.lock.json locks Neo.Plugins.Example 1.0.0, which is not in ${PATHS.manifest}`,
   ]);
 });

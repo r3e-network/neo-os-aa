@@ -1,10 +1,10 @@
 <template>
   <section class="mb-10 relative">
     <div
-      class="absolute -top-20 -right-20 w-72 h-72 bg-aa-info/5 rounded-full blur-3xl pointer-events-none"
+      class="absolute -top-20 -right-20 w-72 h-72 bg-sa-info/5 rounded-full blur-3xl pointer-events-none"
     ></div>
     <div
-      class="absolute -bottom-16 -left-16 w-56 h-56 bg-aa-success/5 rounded-full blur-3xl pointer-events-none"
+      class="absolute -bottom-16 -left-16 w-56 h-56 bg-sa-success/5 rounded-full blur-3xl pointer-events-none"
     ></div>
     <div class="relative">
       <CoinArt
@@ -14,14 +14,14 @@
         :title="t('market.subtitlePart2', 'Marketplace')"
       />
       <div
-        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-aa-info/10 text-aa-info text-sm font-semibold border border-aa-info/25 shadow-sm mb-4"
+        class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sa-info/10 text-sa-info text-sm font-semibold border border-sa-info/25 shadow-sm mb-4"
       >
         <span class="relative flex h-2 w-2">
           <span
-            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-aa-info opacity-75"
+            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sa-info opacity-75"
           ></span>
           <span
-            class="relative inline-flex rounded-full h-2 w-2 bg-aa-info"
+            class="relative inline-flex rounded-full h-2 w-2 bg-sa-info"
           ></span>
         </span>
         {{ t("market.badge", "Trustless Escrow") }}
@@ -29,24 +29,24 @@
       <span class="sr-only">{{
         t(
           "market.srDescription",
-          "Trustless escrow for AA address transfers",
+          "Trustless escrow for SA address transfers",
         )
       }}</span>
       <h1
         class="text-4xl font-extrabold font-outfit md:text-5xl leading-tight"
       >
         <span class="text-gradient-white mr-2">{{
-          t("market.subtitlePart1", "AA Address")
+          t("market.subtitlePart1", "SA Address")
         }}</span>
         <span class="text-gradient">
           {{ t("market.subtitlePart2", "Marketplace") }}</span
         >
       </h1>
-      <p class="mt-4 max-w-3xl text-base leading-8 text-aa-text">
+      <p class="mt-4 max-w-3xl text-base leading-8 text-sa-text">
         {{
           t(
             "market.description",
-            "Sellers list an AA account and atomically lock it into escrow. Buyers settle in one chain transaction: transfer GAS to the market contract, rotate control to the new owner, and release seller payment only if the transfer succeeds.",
+            "Sellers list an SA account and atomically lock it into escrow. Buyers settle in one chain transaction: transfer GAS to the market contract, rotate control to the new owner, and release seller payment only if the transfer succeeds.",
           )
         }}
       </p>

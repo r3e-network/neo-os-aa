@@ -16,7 +16,7 @@ namespace SmartAccount.Hooks
     /// Copy this file and <c>HookTemplate.csproj</c>, rename the class, the
     /// <c>DisplayName</c> and the storage prefix, then replace the policy inside
     /// <see cref="PreExecute"/> with your own (spending limits, rate windows, token
-    /// restrictions, …). Every ceremony method here is load-bearing: the AA core refuses
+    /// restrictions, …). Every ceremony method here is load-bearing: the SA core refuses
     /// to bind a hook whose manifest does not expose the exact ABI this template compiles
     /// to, so keep the method names and signatures intact.
     /// </para>
@@ -76,7 +76,7 @@ namespace SmartAccount.Hooks
         public static void CancelUpdate() => HookAuthority.CancelUpdate();
 
         // ------------------------------------------------------------------
-        // Account configuration (reached only through the AA core)
+        // Account configuration (reached only through the SA core)
         // ------------------------------------------------------------------
 
         /// <summary>

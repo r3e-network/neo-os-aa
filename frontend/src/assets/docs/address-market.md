@@ -1,18 +1,18 @@
-# AA Address Market
+# SA Address Market
 
-The AA address market is a trustless GAS escrow surface for transferring deterministic Neo Abstract Account addresses.
+The SA address market is a trustless GAS escrow surface for transferring deterministic Neo Smart Account addresses.
 
 ## What A Listing Includes
 
-- AA core contract hash
+- SA core contract hash
 - accountId hash
-- derived AA address
+- derived SA address
 - seller backup-owner address
 - price in GAS
 - title
 - optional metadata URL
 
-When a listing is created, the seller's account is immediately locked into market escrow on-chain. Normal AA execution and plugin maintenance are blocked until the listing is either cancelled or sold.
+When a listing is created, the seller's account is immediately locked into market escrow on-chain. Normal SA execution and plugin maintenance are blocked until the listing is either cancelled or sold.
 
 ## What A Purchase Means
 
@@ -50,6 +50,6 @@ Before buying:
 
 - The market contract only escrows GAS and control transfer.
 - It does not try to guarantee off-chain promises made in a metadata URL.
-- The market transfers only the AA shell and ownership anchor.
-- Old verifier and hook bindings are intentionally cleared during sale settlement so the buyer receives only the AA shell.
-- Third-party plugin contracts may still keep their own internal storage, but it is no longer active once the AA core bindings are cleared.
+- The market transfers only the SA shell and ownership anchor.
+- Old verifier and hook bindings are intentionally cleared during sale settlement so the buyer receives only the SA shell.
+- Third-party plugin contracts may still keep their own internal storage, but it is no longer active once the SA core bindings are cleared.

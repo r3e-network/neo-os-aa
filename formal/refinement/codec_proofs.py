@@ -316,7 +316,7 @@ def run_proofs(output_dir, native_vectors=None, source_cache=None, native_source
     command([coqchk, '-silent', *checked_modules], output, output / 'coqchk.log')
     _, version = command([coqc, '--version'], output, output / 'coqc-version.log')
     codec.require(all(digest(p) == expected for p, expected in input_hashes.items()), 'Input changed during proof')
-    result = dict(schema='neoos-aa-ledger-codec-proof/v1', scope='ledger-codec', kernelChecked=True,
+    result = dict(schema='neoos-sa-ledger-codec-proof/v1', scope='ledger-codec', kernelChecked=True,
                   fullImplementationVerified=False, runtimeSourceSimulationProven=False,
                   outputDirectory=str(output), inputSha256=input_hashes,
                   closedDeclarations=names, semanticControls=controls, pinnedSource=source_receipt,

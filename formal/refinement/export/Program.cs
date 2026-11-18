@@ -93,7 +93,7 @@ internal static class Program
             string compilerPackagePath = Path.Combine(Path.GetFullPath(Path.Combine(compilerDir, "../../..")), "neo.compiler.csharp.3.9.1.nupkg");
             inputs[compilerPackagePath] = CompilerPackageSha256;
             SnapshotFrameworkPackage(inputs);
-            string scratch = Path.Combine(Path.GetTempPath(), "aa-refinement-export-" + Guid.NewGuid().ToString("N"));
+            string scratch = Path.Combine(Path.GetTempPath(), "sa-refinement-export-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(scratch);
             try
             {
@@ -162,7 +162,7 @@ internal static class Program
                     .OrderBy(a => a.GetName().Name).ToDictionary(a => a.GetName().Name!, a => Hash(File.ReadAllBytes(a.Location)));
                 var report = new
                 {
-                    schema = "neoos-aa-refinement-inventory/v1", status = "INVENTORY_ONLY", inputs,
+                    schema = "neoos-sa-refinement-inventory/v1", status = "INVENTORY_ONLY", inputs,
                     compiler = new { assemblyPath = Path.Combine(compilerDir, "nccs.dll"),
                         sha256 = Hash(File.ReadAllBytes(assemblyIdentity.Location)),
                         informationalVersion = assemblyIdentity.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion,

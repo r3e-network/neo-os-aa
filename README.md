@@ -1,12 +1,12 @@
-# NeoOS AA — Neo N3 Smart Accounts
+# NeoOS SA — Neo N3 Smart Accounts
 
-`neo-os-aa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Abstract Accounts on Neo N3.
+`neo-os-sa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Smart Accounts on Neo N3.
 
 The project keeps two implementation tracks for one smart-account protocol.
 `SmartAccountV3` is the current user-contract delivery path for NeoOS;
 the protocol's native `SmartAccount` service is developed in parallel for
-the standard submission path. Start with the [implementation strategy](docs/AA-IMPLEMENTATION-STRATEGY.md)
-and [capability boundaries](docs/AA-SYSTEM-STATUS.md). For the native track,
+the standard submission path. Start with the [implementation strategy](docs/SA-IMPLEMENTATION-STRATEGY.md)
+and [capability boundaries](docs/SA-SYSTEM-STATUS.md). For the native track,
 see the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
 [native SDK](docs/NATIVE_SDK.md), and [native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md).
 The service uses stable account identity, explicitly scoped
@@ -25,10 +25,10 @@ wire format, callback resources, recovery and sponsorship guarantees remain
 profile-specific; passing native profile checks does not reclassify a V3
 deployment as native.
 
-The [usability follow-up](docs/reports/aa-native-usability-20261009.md) covers
+The [usability follow-up](docs/reports/sa-native-usability-20261009.md) covers
 guarded policy cancellation, standard wallet threshold recovery, signed-file
 submission and receipt restoration, and measured module costs. The earlier
-[consistency follow-up](docs/reports/aa-consistency-iteration-20261009.md)
+[consistency follow-up](docs/reports/sa-consistency-iteration-20261009.md)
 retains its original SDK/relay and private-chain checkpoint. Both distinguish
 local implementation evidence from the remaining protocol and activation gates.
 
@@ -37,9 +37,9 @@ Runtime and deployment boundaries:
 - This repository retains `SmartAccountV3` compatibility for the public deployments listed below, alongside the native `SmartAccount` implementation.
 - V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
 - The public `v3` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
-- [System capability boundaries](docs/AA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
-- The canonical mainnet AA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `aa.morpheus.neo`.
-- The canonical shared testnet AA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
+- [System capability boundaries](docs/SA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
+- The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
+- The canonical shared testnet SA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
 The two implementation versions live on this branch behind explicit directory
 entrypoints: [ordinary user-contract](implementations/ordinary/README.md) and
@@ -51,13 +51,13 @@ same files.
 
 ## Architecture authority
 
-In the NeoOS workspace ownership map, `neo-os-aa` is the sole authority for account abstraction: user operations, proxy
-verification, and recovery (`protocol-aa-core`). Native consensus enforcement lives in the matching
+In the NeoOS workspace ownership map, `neo-os-sa` is the sole authority for account abstraction: user operations, proxy
+verification, and recovery (`protocol-sa-core`). Native consensus enforcement lives in the matching
 Neo core `SmartAccount` implementation; this repository supplies its profile, modules, SDK and UI.
-AA decides whether an actor authorized an
+SA decides whether an actor authorized an
 operation and nothing more: it does not grant DID eligibility, hold network identity, or
 select signers, and it has no dependency on the DID registry. The operation-policy layer
-composes `AAAuthorization` with an independently verified `EligibilityProof` when a product
+composes `SAAuthorization` with an independently verified `EligibilityProof` when a product
 needs both.
 
 The binding is declared in `neo-os-web/docs/workspace/neoos-target-architecture.v1.json` and
@@ -71,9 +71,9 @@ Proposed v2 binding: in `neo-os-web/docs/workspace/neoos-target-architecture.v2.
 - **Verifier Plugin Authorization**: Bind Web3Auth, TEE, WebAuthn, session keys, multisig, or other verifier plugins per account.
 - **Hook Plugin Policy Enforcement**: Attach optional hook plugins for daily limits, token restrictions, credential gates, and post-execution controls.
 - **Backup-Owner Recovery**: Every account can define a native Neo backup owner plus timelocked verifier rotation. Finalization currently requires successful cleanup by the old plugins; see [recovery boundaries](docs/ACCOUNT_RECOVERY_AND_IDENTITY.md).
-- **Trustless AA Address Escrow Market**: Deterministic AA addresses can be listed, escrow-locked, purchased with GAS, and transferred atomically on-chain.
+- **Trustless SA Address Escrow Market**: Deterministic SA addresses can be listed, escrow-locked, purchased with GAS, and transferred atomically on-chain.
 - **Cross-Chain EVM Compatibility**: V3 supports secp256k1 / Keccak256 EIP-712 `UserOperation` signatures through the Web3Auth verifier path.
-- **On-Chain Paymaster (Sponsored Transactions)**: The `AAPaymaster` contract enables trustless gasless execution — sponsors deposit GAS, create per-account or global sponsorship policies, and relays are reimbursed automatically after successful `UserOp` execution. Supports per-op limits, daily budgets, total budgets, target/method restrictions, and expiry timestamps.
+- **On-Chain Paymaster (Sponsored Transactions)**: The `SAPaymaster` contract enables trustless gasless execution — sponsors deposit GAS, create per-account or global sponsorship policies, and relays are reimbursed automatically after successful `UserOp` execution. Supports per-op limits, daily budgets, total budgets, target/method restrictions, and expiry timestamps.
 - **Policy-Gated Execution**: New integrations should flow through `executeUserOp(accountId, op)` where nonce handling, verification, hooks, and target execution stay centralized.
 
 ## Public V3 App + Market Deployment
@@ -82,18 +82,18 @@ The frontend now separates:
 
 - a marketing-style home page,
 - an app workspace for account creation and operation flow,
-- and a trustless AA address market backed by an on-chain escrow contract.
+- and a trustless SA address market backed by an on-chain escrow contract.
 
-For the market UI, set `VITE_AA_MARKET_HASH` to the deployed `AAAddressMarket` contract hash.
+For the market UI, set `VITE_SA_MARKET_HASH` to the deployed `SAAddressMarket` contract hash.
 
-For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_AA_RELAY_URL`, and `VITE_AA_RELAY_RPC_URL`, then apply every file in `supabase/migrations/` in filename order — the chain is replayable end to end on a fresh database. Its CI replay gate is currently disabled (`.github/workflows/supabase-migrations.yml.disabled`, deliberately parked on 2026-09-27 to drop the CI runner cost; see the deployment checklist below for the current manual replay step). The full chain keeps the public share link read-only, narrows collaborator links to signature-safe writes, moves operator-only status/relay mutations behind the signed operator mutation server route in `frontend/api/draft-operator.js`, and bounds anonymous draft payloads. `supabase/migrations/20260327_security_hardening.sql` and `supabase/migrations/20260611_draft_metadata_hardening.sql` are mandatory — without them the draft tables keep permissive RLS policies, racy metadata writers, and unbounded anonymous draft creation.
+For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SA_RELAY_URL`, and `VITE_SA_RELAY_RPC_URL`, then apply every file in `supabase/migrations/` in filename order — the chain is replayable end to end on a fresh database. Its CI replay gate is currently disabled (`.github/workflows/supabase-migrations.yml.disabled`, deliberately parked on 2026-09-27 to drop the CI runner cost; see the deployment checklist below for the current manual replay step). The full chain keeps the public share link read-only, narrows collaborator links to signature-safe writes, moves operator-only status/relay mutations behind the signed operator mutation server route in `frontend/api/draft-operator.js`, and bounds anonymous draft payloads. `supabase/migrations/20260327_security_hardening.sql` and `supabase/migrations/20260611_draft_metadata_hardening.sql` are mandatory — without them the draft tables keep permissive RLS policies, racy metadata writers, and unbounded anonymous draft creation.
 
-If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `AA_RELAY_WIF` on the server, prefer `AA_RELAY_RPC_URL` for the relay backend, pin `AA_RELAY_ALLOWED_HASH` to the intended AA contract, and leave `AA_RELAY_ALLOW_RAW_FORWARD=0` unless you explicitly want raw passthrough in `frontend/api/relay-transaction.js`.
+If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `SA_RELAY_WIF` on the server, prefer `SA_RELAY_RPC_URL` for the relay backend, pin `SA_RELAY_ALLOWED_HASH` to the intended SA contract, and leave `SA_RELAY_ALLOW_RAW_FORWARD=0` unless you explicitly want raw passthrough in `frontend/api/relay-transaction.js`.
 For local setup, start from `frontend/.env.example` and copy the values you need into `frontend/.env.local` or your hosting provider's environment-variable dashboard.
 
-For on-chain sponsored transactions via the `AAPaymaster` contract, set `VITE_AA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the AA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `createSponsoredUserOpPayload` and `validatePaymasterOp` methods.
+For on-chain sponsored transactions via the `SAPaymaster` contract, set `VITE_SA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the SA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `createSponsoredUserOpPayload` and `validatePaymasterOp` methods.
 
-Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/AA-PROXY-TRANSFERS.md).
+Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/SA-PROXY-TRANSFERS.md).
 
 If you want relay submission to request Morpheus off-chain sponsorship before broadcasting, also configure the server-side paymaster bridge:
 
@@ -101,13 +101,13 @@ If you want relay submission to request Morpheus off-chain sponsorship before br
 - `MORPHEUS_PAYMASTER_TESTNET_API_TOKEN`
 - `MORPHEUS_PAYMASTER_MAINNET_ENDPOINT`
 - `MORPHEUS_PAYMASTER_MAINNET_API_TOKEN`
-- Optional debug only: `AA_RELAY_INCLUDE_RAW_ERRORS=1`
+- Optional debug only: `SA_RELAY_INCLUDE_RAW_ERRORS=1`
 
 The relay route now forwards optional paymaster metadata and can request Morpheus paymaster pre-authorization before broadcasting a relay-ready `executeUserOp` or `executeUserOps` invocation. Failures are now phase-tagged as `preview`, `paymaster`, `relay`, or `response` so operator logs can separate Morpheus sponsorship errors from on-chain relay failures.
 
 ### Validation Preview And Trust Boundaries
 
-Production integrations should treat the core AA runtime as having three distinct boundaries:
+Production integrations should treat the core SA runtime as having three distinct boundaries:
 
 - **validation preview**: `previewUserOpValidation(accountId, op)` is a read-only check for deadline validity, nonce acceptability, and current verifier/hook bindings
 - **authorization**: only the configured verifier plugin or backup-owner witness can authorize `executeUserOp`
@@ -138,23 +138,23 @@ When this repo references Morpheus-integrated addresses, treat the following as 
 
 | Item | Mainnet | Testnet |
 | --- | --- | --- |
-| AA core | `0x0268a387913b250166ddec032b03332690a1ef78` | `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2` |
-| AA runtime label | `SmartAccountV3` | `SmartAccountV3` |
+| SA core | `0x0268a387913b250166ddec032b03332690a1ef78` | `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2` |
+| SA runtime label | `SmartAccountV3` | `SmartAccountV3` |
 | Morpheus Oracle | `0xf54d8584ef82315c1800373272ab08ae0db2d5ef` | `0xf54d8584ef82315c1800373272ab08ae0db2d5ef` |
 | Morpheus DataFeed | `0x03013f49c42a14546c8bbe58f9d434c3517fccab` | `0x9bea75cf702f6afc09125aa6d22f082bfd2ee064` |
 | Oracle callback consumer | `0xe1226268f2fe08bea67fb29e1c8fda0d7c8e9844` | `0x0ac1fa9cdcb66c1672f0642f62d767902f460f2b` |
 | NeoDIDRegistry | `0xb81f31ea81e279793b30411b82c2e82078b63105` | unpublished in the shared registry |
-| AA Web3AuthVerifier | `0xf5c452cd4ba29dcdc47026383568c0d8b38d9272` | `0x1111f5b6b046a964c75d208998c13945ce172e85` |
+| SA Web3AuthVerifier | `0xf5c452cd4ba29dcdc47026383568c0d8b38d9272` | `0x1111f5b6b046a964c75d208998c13945ce172e85` |
 | SocialRecoveryVerifier v2 | `0x198b3a9cec9bccc2110d19bd929b10374a9d034d` | unpublished in the shared registry |
 
 The Morpheus Oracle (MiniApp-OS kernel v2) has the same contract hash on mainnet and testnet. The testnet hash `0x4b882e94ed766807c4fd728768f972e13008ad52` still seen in older records is the retired v1 oracle — do not integrate against it.
 
 Domain rules:
 
-- mainnet AA domain: `smartwallet.neo`
-- mainnet AA additional alias: `aa.morpheus.neo`
+- mainnet SA domain: `smartwallet.neo`
+- mainnet SA additional alias: `sa.morpheus.neo`
 - mainnet NeoDID domain: `neodid.morpheus.neo`
-- testnet currently has no shared AA / NeoDID NNS aliases
+- testnet currently has no shared SA / NeoDID NNS aliases
 - the `*.miniapp.neo` spellings are the retired migration names: on 2026-11-16 the canonical registry restored the `smartwallet.neo` / `*.morpheus.neo` set above
 - `oracle.morpheus.neo` pointed to the superseded oracle `0x5b492098fc094c760402e01f7e0b631b939d2bea` before the 2026-11-16 rebinding; the canonical registry now publishes it for the current oracle
 
@@ -165,16 +165,16 @@ Current published Morpheus CVM attestation anchors:
 - DataFeed CVM: `datafeed-morpheus-neo-r3e` / `ac5b6886a2832df36e479294206611652400178f`
 - DataFeed attestation explorer: `https://cloud.phala.com/explorer/app_ac5b6886a2832df36e479294206611652400178f`
 
-Do not conflate the AA recovery verifier with the independent NeoDID registry:
+Do not conflate the SA recovery verifier with the independent NeoDID registry:
 
-- `SocialRecoveryVerifier` is the AA-specific recovery verifier
+- `SocialRecoveryVerifier` is the SA-specific recovery verifier
 - `NeoDIDRegistry` is the independent Morpheus identity / action-ticket registry
 
 Current validation references:
 
-- `docs/PLUGIN_MATRIX.md` captures the active verifier / hook matrix.
-- `docs/PAYMASTER_RELAY_VALIDATION.md` captures the active AA paymaster relay path (off-chain Morpheus flow).
-- The on-chain `AAPaymaster` contract provides an alternative trustless sponsorship model without off-chain dependencies.
+- `docs/SECURITY_MODEL.md` is the bounded-claim ledger for verifiers, hooks, recovery and paymaster paths.
+- `docs/PROTOCOL_COMPLETENESS_AUDIT.md` states protocol coverage and the deployment gates that remain open.
+- The on-chain `SAPaymaster` contract provides an alternative trustless sponsorship model without off-chain dependencies.
 
 For Morpheus / NeoDID production integration, also set:
 
@@ -191,17 +191,18 @@ Shared draft metadata is intentionally bounded: the frontend keeps the latest 10
 
 ### Deployment Checklist
 
-- Apply every file in `supabase/migrations/` in filename order (`20260308_home_operations_workspace.sql` through `20260611_draft_metadata_hardening.sql`). The chain replays cleanly on a fresh database; do not cherry-pick individual files.
+- Apply every file in `supabase/migrations/` in filename order (`20260308_home_operations_workspace.sql` through `20261118_rename_aa_to_sa.sql`). The chain replays cleanly on a fresh database; do not cherry-pick individual files.
 - Treat `supabase/migrations/20260327_security_hardening.sql` as mandatory: it removes the permissive `aa_account_metadata` RLS policies, revokes direct table access on `aa_transaction_drafts`, and fixes the signature-append race.
-- Treat `supabase/migrations/20260611_draft_metadata_hardening.sql` as mandatory: it locks the remaining draft metadata writers against lost updates, bounds anonymous `create_aa_draft` payloads (64 KiB cap, array caps, inbound activity/receipt trimming), and revokes anon execute on the internal activity-scope helper.
+- Treat `supabase/migrations/20260611_draft_metadata_hardening.sql` as mandatory: it locks the remaining draft metadata writers against lost updates, bounds anonymous `create_sa_draft` payloads (64 KiB cap, array caps, inbound activity/receipt trimming), and revokes anon execute on the internal activity-scope helper.
+- Treat `supabase/migrations/20261118_rename_aa_to_sa.sql` as mandatory: it renames the `aa_transaction_drafts` / `aa_account_metadata` tables plus every `aa_` draft function, trigger, index, and read policy to their `sa_` names, and re-issues the surviving plpgsql bodies with `sa_` references (they resolve table and function names at execution time, so the renames alone would break every draft RPC at runtime), so all table and RPC references after it must use the `sa_` spelling.
 - The migration chain is designed for CI replay, but its gate `.github/workflows/supabase-migrations.yml.disabled` has been disabled since 2026-09-27 (runner-cost decision; database operations run manually). Until it is re-enabled — which is only removing the `.disabled` suffix, since the workflow file, the migration files and `supabase/tests/replay_assertions.sql` still match each other — verify a migration change by replaying every file in filename order against a scratch Postgres 16 and then running `supabase/tests/replay_assertions.sql` yourself.
 - Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for browser-side anonymous draft persistence.
 - Share the normal draft URL for read-only review, the collaborator link for signature collection, and the operator link for relay checks, broadcast, and other operator-only actions. Signer links cannot append operator-class relay or broadcast activity entries.
 - Use the Rotate Collaborator Link action when a signer link leaks, and rotate the operator link if an operator-only URL should be invalidated without rebuilding the draft.
-- Set `VITE_AA_RELAY_URL`, `VITE_AA_RELAY_RPC_URL`, and server-side `AA_RELAY_WIF` before enabling relay submission flows.
+- Set `VITE_SA_RELAY_URL`, `VITE_SA_RELAY_RPC_URL`, and server-side `SA_RELAY_WIF` before enabling relay submission flows.
 - Set server-only `SUPABASE_SERVICE_ROLE_KEY` so `frontend/api/draft-operator.js` can accept signed operator mutation requests for status changes, relay-preflight persistence, submission receipts, and link rotation.
-- Prefer server-side `AA_RELAY_RPC_URL`, pin `AA_RELAY_ALLOWED_HASH` to the intended AA contract, and keep `AA_RELAY_ALLOW_RAW_FORWARD` disabled unless you intentionally want the relay route to forward already-signed raw transactions.
-- Set `VITE_AA_EXPLORER_BASE_URL` if you want tx receipts and timeline actions to open your preferred explorer.
+- Prefer server-side `SA_RELAY_RPC_URL`, pin `SA_RELAY_ALLOWED_HASH` to the intended SA contract, and keep `SA_RELAY_ALLOW_RAW_FORWARD` disabled unless you intentionally want the relay route to forward already-signed raw transactions.
+- Set `VITE_SA_EXPLORER_BASE_URL` if you want tx receipts and timeline actions to open your preferred explorer.
 - Expect shared draft metadata to retain only the latest 100 activity entries and the latest 12 submission receipts.
 
 ### Documentation Map
@@ -225,7 +226,7 @@ If you want the clearest end-to-end explanation, read these docs in order:
 - access to nuget.org. The ordinary contract and test projects use published packages pinned
   by `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
   `node scripts/check_neo_platform_packages.mjs` checks the pins and
-  `docs/AA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. Public `v3`
+  `docs/SA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. Public `v3`
   verifier callbacks execute on the published TestEngine. Only the separate `PLATFORM` artifact
   requires the private `System.Contract.CallWithGasLimit` extension; its budget guarantees must
   not be attributed to the public build (`docs/NEO-PLATFORM-PACKAGES.md`).
@@ -271,7 +272,7 @@ when requested, a missing tool fails the gate rather than producing a pass:
 For `ordinary` or `all`, `--neoexpress` uses published NeoExpress for the public
 v3 source suite. Its eight deployed modules are linked to the rebuild certificate
 through exact artifact hashes and full RPC readback. It writes distinct
-`aa-ordinary-source-chain-*` and `aa-ordinary-runtime-provenance-*` receipts.
+`sa-ordinary-source-chain-*` and `sa-ordinary-runtime-provenance-*` receipts.
 The private PLATFORM full-module matrix and native-chain validators have
 separate entrypoints; this source suite does not establish public deployment.
 
@@ -342,7 +343,7 @@ The suite writes JSON artifacts under `sdk/docs/reports/`.
 
 ### Platform Registrar Service
 
-The platform services are extracted from the core: the registrar ships as the standalone `AAPlatformRegistrar` (`contracts/registrar/`), configured through the core's timelocked `proposePlatformRegistrar` / `confirmPlatformRegistrar` admin path. Once the pointer is set, the registrar owns platform-account owner-rotation proposals and the core re-validates every state write it drives.
+The platform services are extracted from the core: the registrar ships as the standalone `SAPlatformRegistrar` (`contracts/registrar/`), configured through the core's timelocked `proposePlatformRegistrar` / `confirmPlatformRegistrar` admin path. Once the pointer is set, the registrar owns platform-account owner-rotation proposals and the core re-validates every state write it drives.
 
 ### Build
 
@@ -352,46 +353,20 @@ cd frontend && npm run build
 
 ## Verified Testnet Status
 
-### V3 Plugin Matrix
+### Historical Testnet Records
 
-The V3 verifier / hook matrix is a **historical record**: it was run on **Neo N3 testnet** on
-**March 13, 2026** against a deployment set that is not the current canonical one, and it must not
-be read as the state of this repository's acceptance today.
-
-Canonical report:
-
-- `docs/PLUGIN_MATRIX.md`
-
-What that run shows, stated precisely:
-
-- every positive execution in the matrix targeted `MockTransferTarget`
-  (`contracts/mocks/MockTransferTarget.cs`), the repository's test-only target whose `transfer`
-  returns true without moving an asset and whose `balanceOf` is always 0 — the transactions are
-  real and the authorization path they exercise is real, but no value moved, and no live token or
-  third-party contract was involved;
-- the negative cases (the faults listed below) are the load-bearing half of the record;
-- the plugins it covers are `Web3AuthVerifier`, `TEEVerifier`, `WebAuthnVerifier`,
-  `SessionKeyVerifier`, `MultiSigVerifier`, `SubscriptionVerifier`, `WhitelistHook`,
-  `DailyLimitHook`, `TokenRestrictedHook`, `MultiHook` and `NeoDIDCredentialHook`.
+The last verifier / hook matrix is a **historical record**: it ran on **Neo N3 testnet** on
+**March 13, 2026** against a deployment set that is not the current canonical one. Every positive
+execution targeted `MockTransferTarget` (`contracts/mocks/MockTransferTarget.cs`), the
+repository's test-only target whose `transfer` returns true without moving an asset, so the record
+proves the authorization path and its negative cases and never value movement. It is not the state
+of this repository's acceptance today, and it is not reproduced here.
 
 The evidence this repository can reproduce today is the local-chain suite
 (`tests/localchain/README.md`). Its deployed variant runs the eight artifacts pinned by SHA-256 in
 `tests/localchain/expected-deployed.json` — `SmartAccountV3`, `MockTransferTarget`,
-`WebAuthnVerifier`, `SessionKeyVerifier`, `AAPaymaster`, `WhitelistHook`, `DailyLimitHook` and
-`SocialRecoveryVerifier` — and it performs no public-chain readback. The remaining matrix plugins
-have no reproducible acceptance run on the current artifacts.
-
-Security outcomes recorded by the matrix's adversarial cases:
-
-- direct external plugin configuration attempts fault
-- typed-data tampering faults
-- nonce replay faults
-- session-key method overreach faults
-- subscription overcharge and replay faults
-- whitelist bypass attempts fault
-- restricted-target access faults
-- credential-missing / revoked-credential access faults
-- NeoDID credential gating checks the on-chain `NeoDIDRegistry` instead of local hook-issued flags
+`WebAuthnVerifier`, `SessionKeyVerifier`, `SAPaymaster`, `WhitelistHook`, `DailyLimitHook` and
+`SocialRecoveryVerifier` — and it performs no public-chain readback.
 
 Production note:
 
@@ -401,7 +376,7 @@ Production note:
 
 Earlier validation reports from **March 6-8, 2026** covered the pre-V3,
 role-based wallet generation (`executeUnified`, admins/managers/thresholds,
-dome/oracle unlock) and its `sdk/js/tests/aa_testnet_*` validators. That
+dome/oracle unlock) and its `sdk/js/tests/sa_testnet_*` validators. That
 wallet model and those validators were removed in the V3 rewrite, so the
 reports no longer describe this repo's shipping surface. They are preserved
 verbatim in
@@ -412,7 +387,7 @@ verbatim in
 - `contracts/verifiers/`: Verifier plugins (Web3Auth, TEE, WebAuthn, SessionKey, MultiSig, etc.).
 - `contracts/hooks/`: Hook plugins (DailyLimit, Whitelist, TokenRestricted, MultiHook, NeoDIDCredential).
 - `contracts/paymaster/`: On-chain Paymaster contract for sponsored/gasless transactions.
-- `contracts/registrar/`: Standalone `AAPlatformRegistrar` service contract for platform-account registration and owner-rotation timelocks, extracted from the core.
+- `contracts/registrar/`: Standalone `SAPlatformRegistrar` service contract for platform-account registration and owner-rotation timelocks, extracted from the core.
 - `frontend/`: Vue components demonstrating Account creation and signature workflows.
 - `sdk/js/`: JavaScript/TypeScript SDK for dApp integration.
 - `docs/`: Protocol design and specification standards.

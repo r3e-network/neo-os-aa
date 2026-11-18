@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative min-h-screen bg-aa-dark overflow-hidden font-sans text-aa-text"
+    class="relative min-h-screen bg-sa-dark overflow-hidden font-sans text-sa-text"
   >
     <div
       class="absolute inset-0 z-0 bg-[linear-gradient(rgba(123,97,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(123,97,255,0.04)_1px,transparent_1px)] bg-[size:48px_48px]"
@@ -14,10 +14,10 @@
           class="md:w-64 flex-shrink-0"
         >
           <div
-            class="sticky top-24 bg-aa-panel/60 p-5 rounded-[20px] shadow-glow-blue border border-aa-border backdrop-blur-xl"
+            class="sticky top-24 bg-sa-panel/60 p-5 rounded-[20px] shadow-glow-blue border border-sa-border backdrop-blur-xl"
           >
             <h1
-              class="text-sm font-extrabold text-aa-muted uppercase text mb-4 px-2 font-outfit"
+              class="text-sm font-extrabold text-sa-muted uppercase text mb-4 px-2 font-outfit"
             >
               {{ t("docs.heading", "Documentation") }}
             </h1>
@@ -29,7 +29,7 @@
                   :aria-label="
                     t('docs.searchDocumentation', 'Search documentation')
                   "
-                  class="w-full rounded-[14px] border border-aa-border bg-aa-dark px-3 py-2 text-sm text-aa-text placeholder:text-aa-muted transition-all duration-200 focus:border-aa-orange focus:outline-none focus:ring-2 focus:ring-aa-orange/40"
+                  class="w-full rounded-[14px] border border-sa-border bg-sa-dark px-3 py-2 text-sm text-sa-text placeholder:text-sa-muted transition-all duration-200 focus:border-sa-orange focus:outline-none focus:ring-2 focus:ring-sa-orange/40"
                   :placeholder="
                     t('docs.searchDocsPlaceholder', 'Search docs...')
                   "
@@ -37,7 +37,7 @@
                 <svg
                   aria-hidden="true"
                   v-if="!searchQuery"
-                  class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-aa-muted"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sa-muted"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -53,7 +53,7 @@
                   v-else
                   @click="searchQuery = ''"
                   :aria-label="t('docs.clearSearch', 'Clear search')"
-                  class="absolute right-3 top-1/2 -translate-y-1/2 text-aa-muted hover:text-aa-text transition-colors duration-200"
+                  class="absolute right-3 top-1/2 -translate-y-1/2 text-sa-muted hover:text-sa-text transition-colors duration-200"
                 >
                   <svg
                     aria-hidden="true"
@@ -73,7 +73,7 @@
               </div>
               <p
                 v-if="searchQuery && filteredDocKeys.length === 0"
-                class="mt-2 text-xs text-aa-muted px-2"
+                class="mt-2 text-xs text-sa-muted px-2"
               >
                 {{ t("docs.noDocsFound", "No docs found") }}
               </p>
@@ -86,19 +86,19 @@
                 :aria-current="activeDoc === key ? 'page' : undefined"
                 :class="[
                   activeDoc === key
-                    ? 'bg-aa-orange/10 text-aa-orange font-bold border-l-4 border-aa-orange shadow-glow-orange-inset'
-                    : 'text-aa-text/75 hover:bg-aa-dark hover:text-aa-text border-l-4 border-transparent font-medium',
-                  'w-full flex items-center px-3 py-2.5 text-sm rounded-r-lg transition-all duration-200 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-aa-orange/40',
+                    ? 'bg-sa-orange/10 text-sa-orange font-bold border-l-4 border-sa-orange shadow-glow-orange-inset'
+                    : 'text-sa-text/75 hover:bg-sa-dark hover:text-sa-text border-l-4 border-transparent font-medium',
+                  'w-full flex items-center px-3 py-2.5 text-sm rounded-r-lg transition-all duration-200 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-sa-orange/40',
                 ]"
               >
                 {{ docs[key]?.title || key }}
               </button>
             </nav>
             <!-- Quick links -->
-            <div class="mt-4 pt-4 border-t border-aa-border/60 space-y-1">
+            <div class="mt-4 pt-4 border-t border-sa-border/60 space-y-1">
               <router-link
                 to="/"
-                class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-aa-muted hover:text-aa-text rounded-lg hover:bg-aa-dark transition-all duration-200"
+                class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-sa-muted hover:text-sa-text rounded-lg hover:bg-sa-dark transition-all duration-200"
               >
                 <svg
                   aria-hidden="true"
@@ -118,7 +118,7 @@
               </router-link>
               <router-link
                 to="/app"
-                class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-aa-muted hover:text-aa-text rounded-lg hover:bg-aa-dark transition-all duration-200"
+                class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-sa-muted hover:text-sa-text rounded-lg hover:bg-sa-dark transition-all duration-200"
               >
                 <svg
                   aria-hidden="true"
@@ -138,7 +138,7 @@
               </router-link>
               <router-link
                 to="/market"
-                class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-aa-muted hover:text-aa-text rounded-lg hover:bg-aa-dark transition-all duration-200"
+                class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-sa-muted hover:text-sa-text rounded-lg hover:bg-sa-dark transition-all duration-200"
               >
                 <svg
                   aria-hidden="true"
@@ -162,7 +162,7 @@
 
         <div class="flex-1 min-w-0">
           <div
-            class="prose prose-slate max-w-none bg-aa-panel/90 p-8 sm:p-12 rounded-[20px] shadow-glow-blue border border-aa-border backdrop-blur-xl min-h-[600px]"
+            class="prose prose-slate max-w-none bg-sa-panel/90 p-8 sm:p-12 rounded-[20px] shadow-glow-blue border border-sa-border backdrop-blur-xl min-h-[600px]"
           >
             <div v-if="isLoading" class="space-y-4">
               <div class="skeleton h-8 w-3/4"></div>
@@ -328,7 +328,7 @@ async function renderMermaidDiagrams() {
       if (import.meta.env.DEV)
         console.error("[DocsView] Mermaid render failed:", err?.message);
       const pre = document.createElement("pre");
-      pre.className = "text-aa-error-light text-xs overflow-auto";
+      pre.className = "text-sa-error-light text-xs overflow-auto";
       pre.textContent = t(
         "docs.diagramRenderFailed",
         "Failed to render diagram.",
@@ -358,7 +358,7 @@ const renderMarkdown = async (key) => {
     if (import.meta.env.DEV)
       console.error("[DocsView] Markdown render failed:", err?.message);
     if (currentRender === renderVersion) {
-      compiledMarkdown.value = `<p class="text-aa-error-light">${t("docs.failedToLoad", "Documentation failed to load.")}</p>`;
+      compiledMarkdown.value = `<p class="text-sa-error-light">${t("docs.failedToLoad", "Documentation failed to load.")}</p>`;
     }
   } finally {
     if (currentRender === renderVersion) {
@@ -400,14 +400,14 @@ watch(activeDoc, (value) => {
 <style>
 /* ── Typography ── */
 .markdown-body h1 {
-  color: theme("colors.aa.text");
+  color: theme("colors.sa.text");
   font-weight: 800;
   font-size: 2rem;
   margin-bottom: 1.5rem;
   font-family: "Outfit", sans-serif;
   background: linear-gradient(
     135deg,
-    theme("colors.aa.orange"),
+    theme("colors.sa.orange"),
     theme("colors.neo.400")
   );
   -webkit-background-clip: text;
@@ -416,8 +416,8 @@ watch(activeDoc, (value) => {
   line-height: 1.2;
 }
 .markdown-body h2 {
-  color: theme("colors.aa.text");
-  border-bottom: 1px solid rgba(var(--aa-orange-rgb), 0.15);
+  color: theme("colors.sa.text");
+  border-bottom: 1px solid rgba(var(--sa-orange-rgb), 0.15);
   padding-bottom: 0.75rem;
   margin-top: 3rem;
   margin-bottom: 1.25rem;
@@ -427,7 +427,7 @@ watch(activeDoc, (value) => {
   letter-spacing: 0;
 }
 .markdown-body h3 {
-  color: theme("colors.aa.text");
+  color: theme("colors.sa.text");
   margin-top: 2.25rem;
   margin-bottom: 0.75rem;
   font-weight: 600;
@@ -435,7 +435,7 @@ watch(activeDoc, (value) => {
   font-family: "Outfit", sans-serif;
 }
 .markdown-body h4 {
-  color: theme("colors.aa.text");
+  color: theme("colors.sa.text");
   margin-top: 1.75rem;
   margin-bottom: 0.5rem;
   font-weight: 600;
@@ -444,13 +444,13 @@ watch(activeDoc, (value) => {
 }
 .markdown-body p {
   line-height: 1.75;
-  color: theme("colors.aa.muted");
+  color: theme("colors.sa.muted");
   margin-bottom: 1.25rem;
   font-size: 1rem;
   max-width: 720px;
 }
 .markdown-body strong {
-  color: theme("colors.aa.text");
+  color: theme("colors.sa.text");
   font-weight: 700;
 }
 
@@ -458,13 +458,13 @@ watch(activeDoc, (value) => {
 .markdown-body ul {
   list-style-type: disc;
   padding-left: 1.5rem;
-  color: theme("colors.aa.muted");
+  color: theme("colors.sa.muted");
   margin-bottom: 1.5rem;
 }
 .markdown-body ol {
   list-style-type: decimal;
   padding-left: 1.5rem;
-  color: theme("colors.aa.muted");
+  color: theme("colors.sa.muted");
   margin-bottom: 1.5rem;
 }
 .markdown-body li {
@@ -472,21 +472,21 @@ watch(activeDoc, (value) => {
   line-height: 1.75;
 }
 .markdown-body li::marker {
-  color: theme("colors.aa.orange");
+  color: theme("colors.sa.orange");
 }
 
 /* ── Links ── */
 .markdown-body a {
-  color: theme("colors.aa.orange");
+  color: theme("colors.sa.orange");
   text-decoration: none;
-  border-bottom: 1px solid rgba(var(--aa-orange-rgb), 0.3);
+  border-bottom: 1px solid rgba(var(--sa-orange-rgb), 0.3);
   transition:
     color 0.2s ease,
     border-color 0.2s ease;
 }
 .markdown-body a:hover {
-  color: theme("colors.aa.lightOrange");
-  border-bottom-color: theme("colors.aa.lightOrange");
+  color: theme("colors.sa.lightOrange");
+  border-bottom-color: theme("colors.sa.lightOrange");
 }
 
 /* ── Code Blocks ── */
@@ -506,31 +506,31 @@ watch(activeDoc, (value) => {
   tab-size: 2;
 }
 .markdown-body code:not(pre code) {
-  background-color: rgba(var(--aa-orange-rgb), 0.08);
-  color: theme("colors.aa.orange");
+  background-color: rgba(var(--sa-orange-rgb), 0.08);
+  color: theme("colors.sa.orange");
   padding: 0.15rem 0.4rem;
   border-radius: 0.25rem;
   font-size: 0.85em;
   font-weight: 600;
   font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
-  border: 1px solid rgba(var(--aa-orange-rgb), 0.15);
+  border: 1px solid rgba(var(--sa-orange-rgb), 0.15);
 }
 
 /* ── Blockquotes / Callouts ── */
 .markdown-body blockquote {
-  border-left: 3px solid theme("colors.aa.orange");
-  background: rgba(var(--aa-orange-rgb), 0.04);
+  border-left: 3px solid theme("colors.sa.orange");
+  background: rgba(var(--sa-orange-rgb), 0.04);
   padding: 1rem 1.25rem;
   margin: 1.5rem 0;
   border-radius: 0 0.5rem 0.5rem 0;
 }
 .markdown-body blockquote p {
-  color: theme("colors.aa.muted");
+  color: theme("colors.sa.muted");
   margin-bottom: 0;
   font-size: 0.95rem;
 }
 .markdown-body blockquote strong {
-  color: theme("colors.aa.orange");
+  color: theme("colors.sa.orange");
 }
 
 /* ── Tables ── */
@@ -543,12 +543,12 @@ watch(activeDoc, (value) => {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 .markdown-body thead th {
-  background: rgba(var(--aa-orange-rgb), 0.06);
+  background: rgba(var(--sa-orange-rgb), 0.06);
   padding: 0.75rem 1rem;
   text-align: left;
   font-size: 0.8rem;
   font-weight: 700;
-  color: theme("colors.aa.text");
+  color: theme("colors.sa.text");
   text-transform: uppercase;
   letter-spacing: 0.04em;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -556,14 +556,14 @@ watch(activeDoc, (value) => {
 .markdown-body tbody td {
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
-  color: theme("colors.aa.muted");
+  color: theme("colors.sa.muted");
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 .markdown-body tbody tr:nth-child(even) {
   background: rgba(255, 255, 255, 0.015);
 }
 .markdown-body tbody tr:hover {
-  background: rgba(var(--aa-orange-rgb), 0.03);
+  background: rgba(var(--sa-orange-rgb), 0.03);
 }
 
 /* ── Horizontal Rules ── */
@@ -573,7 +573,7 @@ watch(activeDoc, (value) => {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(var(--aa-orange-rgb), 0.2),
+    rgba(var(--sa-orange-rgb), 0.2),
     transparent
   );
   margin: 2.5rem 0;

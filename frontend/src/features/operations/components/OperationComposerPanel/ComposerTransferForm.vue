@@ -2,10 +2,10 @@
   <div class="space-y-4">
     <div class="grid gap-4 md:grid-cols-2">
       <label class="space-y-1.5 text-sm" for="op-composer-token-script-hash">
-        <span class="flex items-center gap-1.5 font-medium text-aa-text">
+        <span class="flex items-center gap-1.5 font-medium text-sa-text">
           <svg
             aria-hidden="true"
-            class="w-4 h-4 text-aa-muted"
+            class="w-4 h-4 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -24,7 +24,7 @@
           :value="transferTokenScriptHash"
           class="input-field font-mono text-xs"
           :class="{
-            'border-aa-error': errors.transferTokenScriptHash,
+            'border-sa-error': errors.transferTokenScriptHash,
           }"
           :placeholder="t('operations.tokenScriptHashPlaceholder', '0x...')"
           @input="$emit('update:transferTokenScriptHash', $event.target.value)"
@@ -32,16 +32,16 @@
         <p
           v-if="errors.transferTokenScriptHash"
           role="alert"
-          class="text-xs text-aa-error mt-1"
+          class="text-xs text-sa-error mt-1"
         >
           {{ errors.transferTokenScriptHash }}
         </p>
       </label>
       <label class="space-y-1.5 text-sm" for="op-composer-transfer-recipient">
-        <span class="flex items-center gap-1.5 font-medium text-aa-text">
+        <span class="flex items-center gap-1.5 font-medium text-sa-text">
           <svg
             aria-hidden="true"
-            class="w-4 h-4 text-aa-muted"
+            class="w-4 h-4 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -60,7 +60,7 @@
           :value="transferRecipient"
           class="input-field"
           :class="{
-            'border-aa-error': errors.transferRecipient,
+            'border-sa-error': errors.transferRecipient,
           }"
           :placeholder="t('operations.recipientPlaceholder', 'N... or 0x...')"
           @input="$emit('update:transferRecipient', $event.target.value)"
@@ -68,7 +68,7 @@
         <p
           v-if="errors.transferRecipient"
           role="alert"
-          class="text-xs text-aa-error mt-1"
+          class="text-xs text-sa-error mt-1"
         >
           {{ errors.transferRecipient }}
         </p>
@@ -76,10 +76,10 @@
     </div>
     <div class="grid gap-4 md:grid-cols-2">
       <label class="space-y-1.5 text-sm" for="op-composer-transfer-amount">
-        <span class="flex items-center gap-1.5 font-medium text-aa-text">
+        <span class="flex items-center gap-1.5 font-medium text-sa-text">
           <svg
             aria-hidden="true"
-            class="w-4 h-4 text-aa-muted"
+            class="w-4 h-4 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -98,23 +98,23 @@
           :value="transferAmount"
           type="number"
           class="input-field"
-          :class="{ 'border-aa-error': errors.transferAmount }"
+          :class="{ 'border-sa-error': errors.transferAmount }"
           placeholder="0"
           @input="$emit('update:transferAmount', $event.target.value)"
         />
         <p
           v-if="errors.transferAmount"
           role="alert"
-          class="text-xs text-aa-error mt-1"
+          class="text-xs text-sa-error mt-1"
         >
           {{ errors.transferAmount }}
         </p>
       </label>
       <label class="space-y-1.5 text-sm" for="op-composer-transfer-data">
-        <span class="flex items-center gap-1.5 font-medium text-aa-text">
+        <span class="flex items-center gap-1.5 font-medium text-sa-text">
           <svg
             aria-hidden="true"
-            class="w-4 h-4 text-aa-muted"
+            class="w-4 h-4 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

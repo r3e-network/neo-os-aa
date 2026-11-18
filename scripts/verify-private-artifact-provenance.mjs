@@ -32,17 +32,17 @@ function latestDatedReport(prefix) {
 // Defaults intentionally resolve only canonical dated reports. This excludes
 // historical `-final` receipts and the explicitly non-evidence `-unmatched-runner`
 // receipt, so a direct invocation cannot silently join stale or ineligible data.
-const reproPath = latestDatedReport("aa-artifact-reproducibility");
-const receiptPath = latestDatedReport("aa-neoexpress-validation");
+const reproPath = latestDatedReport("sa-artifact-reproducibility");
+const receiptPath = latestDatedReport("sa-neoexpress-validation");
 
 // Keep this list identical to scripts/neoexpress_validate.py::ARTIFACTS for the
 // 24 artifacts produced by this repository. NeoDIDRegistry is an external sibling
 // artifact and is checked by the NeoExpress receipt but not by this source tree.
 // Phase 1b replaced the PlatformRegistrarMock fixture with the real
-// AAPlatformRegistrar service contract; a fresh reproducibility certificate and
+// SAPlatformRegistrar service contract; a fresh reproducibility certificate and
 // NeoExpress receipt cycle is required before this verifier passes again.
 export const LOCAL_ARTIFACTS = {
-  SmartAccountV3: "SmartAccountV3.nef",
+  SmartAccount: "SmartAccount.nef",
   MockTransferTarget: "MockTransferTarget.nef",
   Web3AuthVerifier: "verifiers/Web3AuthVerifier.nef",
   TEEVerifier: "verifiers/TEEVerifier.nef",
@@ -58,11 +58,11 @@ export const LOCAL_ARTIFACTS = {
   WhitelistHook: "hooks/WhitelistHook.nef",
   MultiHook: "hooks/MultiHook.nef",
   TokenRestrictedHook: "hooks/TokenRestrictedHook.nef",
-  AAPaymaster: "AAPaymaster.nef",
-  AAAddressMarket: "AAAddressMarket.nef",
+  SAPaymaster: "SAPaymaster.nef",
+  SAAddressMarket: "SAAddressMarket.nef",
   SocialRecoveryVerifier: "SocialRecoveryVerifier.nef",
   MockVerifierCore: "MockVerifierCore.nef",
-  AAPlatformRegistrar: "AAPlatformRegistrar.nef",
+  SAPlatformRegistrar: "SAPlatformRegistrar.nef",
   MarkerOnlyModule: "MarkerOnlyModule.nef",
   WrongLifecycleAbiModule: "WrongLifecycleAbiModule.nef",
   WrongHookLifecycleAbiModule: "WrongHookLifecycleAbiModule.nef",
@@ -159,7 +159,7 @@ export function verifyReleaseCertificate(repro, releaseRoot = releaseDir) {
     const entry = repro.profiles?.[profile];
     if (entry?.matches_fresh_build !== true || entry?.required_core_present !== true
         || entry.artifacts_compared !== files.length
-        || !["SmartAccountV3.nef", "SmartAccountV3.manifest.json"].every((name) => files.includes(name))) {
+        || !["SmartAccount.nef", "SmartAccount.manifest.json"].every((name) => files.includes(name))) {
       throw new Error(`rebuild certificate profile inventory mismatch: ${profile}`);
     }
     return files.map((file) => `${profile}/${file}`);
@@ -187,7 +187,7 @@ export function verifyReleaseCertificate(repro, releaseRoot = releaseDir) {
 }
 
 export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
-  if (repro.certificate?.schema !== "neoos-aa-source-to-artifact-certificate/v1") {
+  if (repro.certificate?.schema !== "neoos-sa-source-to-artifact-certificate/v1") {
     throw new Error("source-to-artifact certificate is missing");
   }
   if (repro.certificate.source_root !== "repository") throw new Error("source-to-artifact certificate must include repository restore policy");
@@ -228,7 +228,7 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
   const readback = Object.fromEntries(receipt.rpcReadback.contracts.map((row) => [row.contractName, row]));
   const rows = [];
   for (const [name, relative] of Object.entries(LOCAL_ARTIFACTS)) {
-    const profile = name === "SmartAccountV3" ? "platform" : "v3";
+    const profile = name === "SmartAccount" ? "platform" : "v3";
     const artifactRoot = profile === "v3" ? releaseRoot : path.join(path.dirname(releaseRoot), profile);
     const nefPath = path.join(artifactRoot, relative);
     const manifestPath = nefPath.replace(/\.nef$/, ".manifest.json");
@@ -265,7 +265,7 @@ export function verifyProvenance({ repro, receipt, releaseRoot = releaseDir }) {
 
   const external = Object.keys(deployments).filter((name) => !(name in LOCAL_ARTIFACTS));
   return {
-    schema: "neoos-aa-private-artifact-provenance/v1",
+    schema: "neoos-sa-private-artifact-provenance/v1",
     status: "PASS",
     sourceToRelease: {
       sourceSnapshotSha256: repro.certificate.source_snapshot_sha256,

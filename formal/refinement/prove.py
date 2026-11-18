@@ -339,7 +339,7 @@ def run_proofs(inventory, output_dir):
     nef_paths = [Path(p) for p, h in inventory["inputs"].items()
                  if p.endswith("SmartAccountV3.nef") and h == inventory["nef"]["sha256"]]
     require(len(nef_paths) == 1, "Ambiguous actual NEF input")
-    spec = importlib.util.spec_from_file_location("aa_refinement_binding", ROOT / "verify.py")
+    spec = importlib.util.spec_from_file_location("sa_refinement_binding", ROOT / "verify.py")
     binding = importlib.util.module_from_spec(spec); spec.loader.exec_module(binding)
     decoded = binding.decode_nef(nef_paths[0].read_bytes())
     require(decoded["script"].hex() == inventory["nef"]["scriptHex"] and
@@ -359,7 +359,7 @@ def run_proofs(inventory, output_dir):
     require(all(digest(REPO / name) == expected for name, expected in hashes.items()), "Model changed during proof")
     require(all(digest(REPO / name) == expected for name, expected in tools_before.items()), "Proof tool changed during proof")
     require(all(digest(filename) == expected for filename, expected in inventory["inputs"].items()), "Input changed during proof")
-    return {"schema": "neoos-aa-arithmetic-refinement-proof/v1", "scope": "arithmetic-region",
+    return {"schema": "neoos-sa-arithmetic-refinement-proof/v1", "scope": "arithmetic-region",
         "kernelChecked": True, "fullImplementationVerified": False, "sourceMethod": method["id"],
         "nefSha256": inventory["nef"]["sha256"], "scriptSha256": inventory["nef"]["scriptSha256"],
         "verifiedRegions": [{"start": start, "endExclusive": end, "instructionOffsets": list(range(start, end)),

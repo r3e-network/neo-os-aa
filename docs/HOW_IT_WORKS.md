@@ -1,23 +1,23 @@
 # How It Works & Usage Guide
 
-This guide explains the Neo Abstract Account system end to end: what the contract does, how the website is organized, how a user creates and uses an account, how collaboration drafts work, and how transactions finally reach the chain.
+This guide explains the Neo Smart Account system end to end: what the contract does, how the website is organized, how a user creates and uses an account, how collaboration drafts work, and how transactions finally reach the chain.
 
 ## 1. Who This Is For
 
 Use this page if you are trying to answer any of these questions:
 
-- **New user:** What is an Abstract Account and what do I click first?
+- **New user:** What is a Smart Account and what do I click first?
 - **Signer:** What can I review and sign without taking operator actions?
 - **Operator:** How do I collect approvals, run relay checks, and submit safely?
 - **Integrator:** Which parts are on-chain, off-chain, and server-side?
 
 If you only want one mental model, use this:
 
-> One global AA contract stores account configuration, while each logical account gets a deterministic verify address that routes authorization back through the shared policy-gated engine.
+> One global SA contract stores account configuration, while each logical account gets a deterministic verify address that routes authorization back through the shared policy-gated engine.
 
 ## 2. Mental Model
 
-An Abstract Account in this project is **not** a new smart contract deployed per user.
+An Smart Account in this project is **not** a new smart contract deployed per user.
 
 Instead, the system uses one global master contract plus a deterministic verification account address for each logical account.
 
@@ -91,7 +91,7 @@ sequenceDiagram
   participant Relay
   participant Chain
 
-  User->>Frontend: Load abstract account
+  User->>Frontend: Load Smart Account
   User->>Frontend: Compose operation
   Frontend->>DraftStore: Persist draft
   User->>Wallet: Sign natively or via EVM typed data
@@ -122,14 +122,14 @@ That means:
 
 ## 7. Human-Readable Domain Access
 
-The frontend can use `.matrix` domains as a discovery layer. During account creation, a compatible Neo wallet can submit a single batched transaction that both creates the AA and registers the `.matrix` domain to the signer wallet. Later, the frontend resolves the domain back to the controller wallet address and discovers associated AA addresses through on-chain admin/manager indexes.
+The frontend can use `.matrix` domains as a discovery layer. During account creation, a compatible Neo wallet can submit a single batched transaction that both creates the SA and registers the `.matrix` domain to the signer wallet. Later, the frontend resolves the domain back to the controlling wallet address. V3 keeps no reverse index, so a domain does not list the SA accounts it controls: read each one with `getAccountState(accountIdHash)`.
 
 ## 8. How a User Uses the Website
 
 ### For a new user
 
 1. Open **Home**
-2. Load or derive the abstract account
+2. Load or derive the smart account
 3. Choose an operation preset or create a custom invocation
 4. Persist the draft
 5. Share links depending on the collaborator role
@@ -163,7 +163,7 @@ The frontend can use `.matrix` domains as a discovery layer. During account crea
 
 The draft body and collaboration state live off-chain, while authority and execution rules live on-chain.
 
-- **On-chain:** admins, managers, thresholds, verifier configuration, whitelist / blacklist rules, dome settings, and transfer limits
+- **On-chain:** verifier and hook configuration, backup owner, escape timelock, whitelist / blacklist rules, and transfer limits
 - **Browser / Supabase:** immutable draft body, collected signatures, activity timeline, relay preflight snapshots, and bounded submission receipt history
 - **Relay server:** simulation, raw transaction forwarding if explicitly enabled, and meta invocation submission when a relay signer is configured
 
@@ -171,11 +171,11 @@ Shared draft metadata is intentionally bounded: the frontend retains only the la
 
 ## 10. Sponsored / Gasless Transactions
 
-The on-chain `AAPaymaster` contract enables users to execute operations without holding GAS:
+The on-chain `SAPaymaster` contract enables users to execute operations without holding GAS:
 
 1. A **sponsor** (dApp, organization, or service) deposits GAS into the Paymaster contract and creates a sponsorship policy specifying which accounts, contracts, methods, and budgets to fund.
-2. The **relay** calls `executeSponsoredUserOp` on the AA core with the sponsor and paymaster details.
-3. Relays can optionally preflight `validatePaymasterOp`, while the AA core executes the UserOp normally (verifier + hooks) and then atomically settles the reimbursement — deducting from the sponsor's deposit and sending GAS to the relay.
+2. The **relay** calls `executeSponsoredUserOp` on the SA core with the sponsor and paymaster details.
+3. Relays can optionally preflight `validatePaymasterOp`, while the SA core executes the UserOp normally (verifier + hooks) and then atomically settles the reimbursement — deducting from the sponsor's deposit and sending GAS to the relay.
 
 Sponsors can create **per-account policies** (specific accountId) or **global policies** (accountId = Zero) to sponsor any account. Policies support:
 - Per-operation GAS limits
@@ -191,16 +191,16 @@ The Paymaster never replaces the verifier or backup-owner — it only funds the 
 Every execution path still flows through the same protection layer:
 
 - account existence checks
-- role / threshold verification
+- verifier / backup-owner witness verification
 - optional custom verifier hook
-- dome timeout + oracle unlock path
+- escape timelock and finalization rules
 - method allowlist
 - blacklist / whitelist
 - max transfer restrictions
 
 The practical security result is:
 
-- deterministic proxy witnesses are limited to hardened AA wrapper flows
+- deterministic proxy witnesses are limited to hardened SA wrapper flows
 - public links are read-only
 - collaborator links are signature-only
 - operator actions use signed server-side mutations
@@ -218,17 +218,17 @@ If you are learning the system for the first time, read these pages in order:
 
 ## 13. Glossary
 
-- **Abstract Account** — a logical account identified by an `accountId`, enforced by the shared AA contract
+- **Smart Account** — a logical account identified by an `accountId`, enforced by the shared SA contract
 - **Deterministic account address** — the Neo address derived from the `verify(accountId)` script
 - **Master contract** — the shared on-chain execution and permission engine
 - **Draft** — the off-chain collaboration record containing operation data, signatures, and metadata
 - **Collaborator link** — a scoped link for signature collection only
 - **Operator link** — a scoped link for relay, broadcast, receipts, and link rotation
 - **Relay preflight** — a server-backed simulation of a relay-ready invocation before submission
-- **Meta invocation** — the AA payload created from EVM typed-data signatures; it targets `executeUserOp`
+- **Meta invocation** — the SA payload created from EVM typed-data signatures; it targets `executeUserOp`
 - **Account discovery** — reading one account's state with `getAccountState(accountIdHash)`; the V1/V2 reverse indices were removed, so there is no admin/manager role query
 - **Batch registration** — registering several accounts in one transaction with `registerAccounts` (no shared governance: every account carries its own verifier, hook and backup owner)
-- **Paymaster** — on-chain contract (`AAPaymaster`) that holds sponsor GAS deposits and reimburses relays after successful execution
+- **Paymaster** — on-chain contract (`SAPaymaster`) that holds sponsor GAS deposits and reimburses relays after successful execution
 - **Sponsor** — an address that deposits GAS into the Paymaster and creates policies to fund operations for other accounts
 - **Sponsorship policy** — configuration defining which accounts, contracts, methods, and budgets a sponsor will fund
 - **Settlement** — atomic post-execution step where the Paymaster deducts from the sponsor deposit and sends GAS to the relay

@@ -9,8 +9,8 @@ const controllerPath = path.resolve('src/features/studio/useStudioController.js'
 const governancePath = path.resolve('src/features/studio/governance.js');
 const panelPath = path.resolve('src/features/studio/components/ManageGovernancePanel.vue');
 const manifestCandidates = [
-  path.resolve('../contracts/bin/v3/SmartAccountV3.manifest.json'),
-  path.resolve('../contracts/build/SmartAccountV3.manifest.json'),
+  path.resolve('../contracts/bin/v3/SmartAccount.manifest.json'),
+  path.resolve('../contracts/build/SmartAccount.manifest.json'),
 ];
 const manifestPath = manifestCandidates.find((candidate) => fs.existsSync(candidate)) || manifestCandidates[1];
 
@@ -49,7 +49,7 @@ test('decodeStackHashArray decodes each little-endian entry to display form', ()
   assert.deepEqual(decoded, [DISPLAY_HASH]);
 });
 
-test('every studio contract operation exists in the SmartAccountV3 ABI', () => {
+test('every studio contract operation exists in the SmartAccount ABI', () => {
   const source = [controllerPath, governancePath, panelPath].map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const abiMethods = new Set(manifest.abi.methods.map((method) => method.name));

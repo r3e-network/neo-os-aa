@@ -1,6 +1,6 @@
 # Configuring MultiSig children
 
-Each ordinary verifier requires the pinned AA core to call it with an exact
+Each ordinary verifier requires the pinned SA core to call it with an exact
 per-account configuration context. A MultiSig root forwarding to a child cannot
 satisfy that check. The core source provides a bounded child initialization path.
 `callVerifierChild(accountId, childVerifier, method, args)` and the `getChildVerifierConfig(accountId)` read described below are absent from the pinned

@@ -62,7 +62,7 @@ test("did service integrates Web3Auth as the NeoDID identity root", () => {
   assert.match(source, /this\.persist\(null\)/);
 });
 
-test("morpheus did service can bind DIDs and invoke AA verifier requests", () => {
+test("morpheus did service can bind DIDs and invoke SA verifier requests", () => {
   const source = read("src/services/morpheusDidService.js");
   const proxy = read("api/morpheus-neodid.js");
   const keyProxy = read("api/morpheus-oracle-public-key.js");
@@ -257,7 +257,7 @@ test("did-notify binds the recipient to the verified identity and allowlists tem
     assert.equal(calls.length, 1);
     assert.equal(calls[0].url, "https://hooks.example/email");
 
-    // (c) A non-allowlisted template is coerced to the default aa_recovery.
+    // (c) A non-allowlisted template is coerced to the default sa_recovery.
     const templateRes = createResponse();
     await handler(
       {
@@ -276,7 +276,7 @@ test("did-notify binds the recipient to the verified identity and allowlists tem
     assert.equal(templateRes.statusCode, 200);
     assert.equal(calls.length, 2);
     const forwarded = JSON.parse(calls[1].options.body);
-    assert.equal(forwarded.template, "aa_recovery");
+    assert.equal(forwarded.template, "sa_recovery");
     assert.equal(forwarded.to, "a@x.com");
   } finally {
     global.fetch = originalFetch;

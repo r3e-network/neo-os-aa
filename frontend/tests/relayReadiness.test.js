@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { evaluateRelayReadiness } from '../src/features/operations/relayReadiness.js';
-import { executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
+import { executeUserOpInvocation } from './fixtures/saChainFixtures.js';
 
 test('relay readiness marks raw transactions as payload-ready until preflight passes', () => {
   const readiness = evaluateRelayReadiness({

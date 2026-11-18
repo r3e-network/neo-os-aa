@@ -1,0 +1,25 @@
+{
+  "vectorId": "sa4-migration-template",
+  "kind": "migration",
+  "constantsRevision": "TODO(kernel39|40): pin after the constants files land",
+  "input": {
+    "manifest": "TODO(kernel39|40): reference into migration-manifest.template.json (accountId + manifestDigest)",
+    "classification": "TODO: one of no-plugin | scalar-plugin | multihook | multisig | unknown-plugin | owner-only | market-locked | recovery-pending",
+    "legacyExportRow": {
+      "state": "TODO: five-field ordinary row or native 14-slot row, as exported",
+      "modules": "TODO: root + children + code identities",
+      "threshold": "TODO: members/value for multisig",
+      "hookOrder": "TODO: legacy forward order for multihook",
+      "nonces": "TODO: legacy channel cursors",
+      "marketLock": "TODO: listingId when market-locked"
+    }
+  },
+  "expected": {
+    "targetStateMatch": "TODO(kernel39|40): new 0x51/0x52/0x53/0x54/0x5B state matches targetState exactly",
+    "epochAndNonceMonotonic": "TODO(kernel39|40): authorityEpoch/configurationNonce >= legacy values; nonce cursors never decreased",
+    "invalidationDeclared": "TODO(kernel39|40): 0x12/0x1C invalidation recorded under 0x5A",
+    "replayRejected": "TODO(kernel39|40): legacy signature/pending replay fails",
+    "repeatIdempotent": "TODO(kernel39|40): identical (accountId, manifestDigest) resubmission is a no-op",
+    "events": "TODO(kernel39|40): MigrationRequired then MigrationImported emitted exactly once each"
+  }
+}

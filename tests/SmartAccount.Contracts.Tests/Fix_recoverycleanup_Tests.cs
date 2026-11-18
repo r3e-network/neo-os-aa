@@ -8,7 +8,7 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Regression coverage for the recovery verifier's V3 lifecycle cleanup. The AA core calls
+/// Regression coverage for the recovery verifier's V3 lifecycle cleanup. The SA core calls
 /// <c>clearAccount</c> on the outgoing verifier from <c>confirmVerifierUpdate</c>,
 /// <c>finalizeEscape</c> and <c>settleMarketEscrow</c>, and a nested call to a missing method
 /// faults the enclosing transaction uncatchably. <c>SocialRecoveryVerifier</c> is bound as an
@@ -54,7 +54,7 @@ public class Fix_RecoveryCleanup_Tests
 
         public Harness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
+            Wallet = Fx.Deploy("SmartAccount");
             Recovery = Fx.Deploy("SocialRecoveryVerifier");
             Fx.CallVoid(Recovery, "setAuthorizedCore", Wallet);
         }
@@ -98,7 +98,7 @@ public class Fix_RecoveryCleanup_Tests
         public void AssertRecoveryStateCleared(UInt160 accountId)
         {
             Assert.AreEqual(UInt160.Zero, Fx.CallUInt160(Recovery, "getOwner", accountId), "owner cleared");
-            Assert.AreEqual(UInt160.Zero, Fx.CallUInt160(Recovery, "getAAContract", accountId), "aa contract cleared");
+            Assert.AreEqual(UInt160.Zero, Fx.CallUInt160(Recovery, "getSAContract", accountId), "sa contract cleared");
             Assert.AreEqual(UInt160.Zero, Fx.CallUInt160(Recovery, "getMorpheusOracle", accountId), "oracle cleared");
             Assert.AreEqual(BigInteger.Zero, Fx.CallInteger(Recovery, "getThreshold", accountId), "threshold cleared");
             Assert.AreEqual(BigInteger.Zero, Fx.CallInteger(Recovery, "getTimelock", accountId), "timelock cleared");
@@ -213,14 +213,14 @@ public class Fix_RecoveryCleanup_Tests
         h.Fx.SetSigners(Owner);
         TestException rejected = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(h.Recovery, "clearAccount", accountId));
-        StringAssert.Contains(rejected.Message, "Unauthorized AA core caller");
+        StringAssert.Contains(rejected.Message, "Unauthorized SA core caller");
         Assert.AreEqual(Owner, h.Fx.CallUInt160(h.Recovery, "getOwner", accountId), "configuration untouched");
 
         // A foreign contract impersonating a core is refused as well.
         UInt160 impostor = h.Fx.Deploy("MockVerifierCore");
         TestException impostorRejected = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(impostor, "forward", h.Recovery, "clearAccount", new object?[] { accountId }));
-        StringAssert.Contains(impostorRejected.Message, "Unauthorized AA core caller");
+        StringAssert.Contains(impostorRejected.Message, "Unauthorized SA core caller");
     }
 
     [TestMethod]

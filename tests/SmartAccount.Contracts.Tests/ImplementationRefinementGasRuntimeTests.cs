@@ -21,7 +21,8 @@ namespace SmartAccount.Contracts.Tests;
 /// Private helper entry uses a synthetic descriptor; pure entries use original ABI.
 /// Trace deltas include all charges between instruction pre/post callbacks, but do
 /// not expose each internal AddFee call. This is finite evidence, not a gas-bound
-/// theorem for arbitrary inputs or policy configuration. See AA-GAS-REFINEMENT.md.
+/// theorem for arbitrary inputs or policy configuration. See SA-METHOD-REFINEMENT.md
+/// ("ApplicationEngine fee semantics").
 /// </summary>
 [TestClass]
 public class ImplementationRefinementGasRuntimeTests
@@ -144,7 +145,7 @@ public class ImplementationRefinementGasRuntimeTests
         Assert.AreEqual((long)((result.RawPico + ApplicationEngine.FeeFactor - 1) / ApplicationEngine.FeeFactor), result.Datoshi);
     }
     private static void WriteReceipt(string name, Result r) => File.WriteAllText(
-        Path.Combine(Path.GetTempPath(), "aa-gas-runtime-" + name + ".json"),
+        Path.Combine(Path.GetTempPath(), "sa-gas-runtime-" + name + ".json"),
         System.Text.Json.JsonSerializer.Serialize(new
         {
             scope = "actual-pinned-AE-instruction-fee-observation",
@@ -243,8 +244,8 @@ public class ImplementationRefinementGasRuntimeTests
     private static Result Run(string? shape, string? publicMethod, string? argument, long gas)
     {
         string dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/v3"));
-        byte[] rawNef = File.ReadAllBytes(Path.Combine(dir, "SmartAccountV3.nef"));
-        byte[] rawManifest = File.ReadAllBytes(Path.Combine(dir, "SmartAccountV3.manifest.json"));
+        byte[] rawNef = File.ReadAllBytes(Path.Combine(dir, "SmartAccount.nef"));
+        byte[] rawManifest = File.ReadAllBytes(Path.Combine(dir, "SmartAccount.manifest.json"));
         Assert.AreEqual("9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76", Hash(rawNef));
         Assert.AreEqual("a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31", Hash(rawManifest));
         Assert.AreEqual("cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a", Hash(File.ReadAllBytes(typeof(ApplicationEngine).Assembly.Location)));

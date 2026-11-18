@@ -8,11 +8,11 @@ using System.ComponentModel;
 namespace SmartAccount.Hooks
 {
     /// <summary>
-    /// Hook that restricts an AA account to an explicit target-contract allowlist.
+    /// Hook that restricts an SA account to an explicit target-contract allowlist.
     /// </summary>
     /// <remarks>
     /// Use this hook when an account should only talk to a small, reviewed set of contracts.
-    /// Configuration must still flow through the AA core via <c>canConfigureHook</c>.
+    /// Configuration must still flow through the SA core via <c>canConfigureHook</c>.
     /// </remarks>
     [DisplayName("WhitelistHook")]
 #if SMARTACCOUNT_NATIVE
@@ -47,7 +47,7 @@ namespace SmartAccount.Hooks
         public static void ConfirmAdminRotation(UInt160 newAdmin) => HookAuthority.ConfirmAdminRotation(newAdmin);
         public static void CancelAdminRotation() => HookAuthority.CancelAdminRotation();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => HookAuthority.ProposeUpdate(nefHash, manifestHash);
 

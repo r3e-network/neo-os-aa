@@ -1,4 +1,4 @@
-# Pinned, self-contained environment for the AA formal gate (formal/verify.py).
+# Pinned, self-contained environment for the SA formal gate (formal/verify.py).
 #
 # Ubuntu 24.04 is the same base the CI runner uses, so a reviewer and CI see the
 # same Coq 8.18, Z3 4.8 and OpenJDK 21 packages. The TLA+ tools jar is fetched from
@@ -8,8 +8,8 @@
 # for a missing or altered tool.
 #
 # Build and run through formal/verify-in-docker.sh, or directly:
-#   docker build -f formal/Dockerfile -t neo-os-aa-formal formal
-#   docker run --rm -v "$PWD:/work" -w /work -e HOME=/tmp neo-os-aa-formal
+#   docker build -f formal/Dockerfile -t neo-os-sa-formal formal
+#   docker run --rm -v "$PWD:/work" -w /work -e HOME=/tmp neo-os-sa-formal
 FROM ubuntu:24.04
 
 ARG TLA_JAR_URL=https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar

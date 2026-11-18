@@ -7,7 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace SmartAccount.Contracts.Tests;
 
 // ---------------------------------------------------------------------------
-// Source-invariant tests for SmartAccountV3 contract validation logic.
+// Source-invariant tests for SmartAccount contract validation logic.
 //
 // These tests use seeded random inputs to exhaustively verify:
 //   - Input validation boundaries (timelock, accountId, backupOwner)
@@ -42,9 +42,14 @@ public class SourceInvariantTests
     private static string ReadCombined() => string.Join("\n\n", new[]
     {
         "SmartAccount.Accounts.cs",
-        "SmartAccount.HookChildren.cs",
         "SmartAccount.Execution.cs",
+        "SmartAccount.Intents.cs",
         "SmartAccount.Internal.cs",
+        "SmartAccount.Message.cs",
+        "SmartAccount.Migration.cs",
+        "SmartAccount.ModuleProtocol.cs",
+        "SmartAccount.Modules.cs",
+        "SmartAccount.Nonce.cs",
         "SmartAccount.State.cs",
         "SmartAccount.Escape.cs",
         "SmartAccount.MarketEscrow.cs",
@@ -64,7 +69,7 @@ public class SourceInvariantTests
     private static Random Rng() => new(Seed);
 
     // ========================================================================
-    // 1. RegisterAccount – input validation boundaries
+    // 1. createAccount – v4 registration input validation boundaries
     // ========================================================================
 
     [TestMethod, Timeout(120_000)]
@@ -72,256 +77,214 @@ public class SourceInvariantTests
     {
         var rng = Rng();
         var accountsSource = Read("SmartAccount.Accounts.cs");
+        var moduleProtocolSource = Read("SmartAccount.ModuleProtocol.cs");
 
-        // These assertions are source-level but verify the constants are correct
-        StringAssert.Contains(accountsSource, "escapeTimelock >= 604800", "Min timelock assertion");
-        StringAssert.Contains(accountsSource, "escapeTimelock <= 7776000", "Max timelock assertion");
-        StringAssert.Contains(accountsSource, "Account id required", "Account ID required assertion");
-        StringAssert.Contains(accountsSource, "Backup owner required", "Backup owner required assertion");
-        StringAssert.Contains(accountsSource, "Backup owner witness required", "Witness required assertion");
+        // v4 registration (spec §16.1): identity is custody+salt, the timelock
+        // is clamped to the protocol's 7-90 day window, and the initial module
+        // configuration installs atomically through the intent executors.
+        StringAssert.Contains(accountsSource, "public static void createAccount(", "v4 single registration entrypoint");
+        StringAssert.Contains(accountsSource, "public static void createAccounts(", "v4 batch registration entrypoint");
+        StringAssert.Contains(accountsSource, "ComputeAccountIdentity", "custody+salt identity helper");
+        StringAssert.Contains(accountsSource, "Invalid registration salt", "Salt validation assertion");
         StringAssert.Contains(accountsSource, "Account already exists", "Duplicate check assertion");
-        StringAssert.Contains(accountsSource, "ComputeRegistrationAccountId", "Registration binding helper exists");
-        StringAssert.Contains(accountsSource, "public static void RegisterAccounts", "Batch registration entrypoint exists");
-        StringAssert.Contains(accountsSource, "Account batch size must be 1-64", "Batch registration boundary exists");
-        StringAssert.Contains(accountsSource, "ids.Length == paramList.Length", "Batch registration keeps account IDs bound to params");
-        StringAssert.Contains(accountsSource, "Account id does not match registration parameters", "Registration binding assertion");
+        StringAssert.Contains(accountsSource, "ids.Length == saltList.Length", "Batch registration keeps ids bound to salts");
+        StringAssert.Contains(accountsSource, "Account batch salts mismatch", "Batch length mismatch assertion");
+        // The timelock clamp uses the protocol constants (7-90 days, milliseconds).
+        StringAssert.Contains(moduleProtocolSource, "RecoveryTimelockMinMs = 604_800_000", "7-day minimum timelock constant");
+        StringAssert.Contains(moduleProtocolSource, "RecoveryTimelockMaxMs = 7_776_000_000", "90-day maximum timelock constant");
+        StringAssert.Contains(accountsSource, "RecoveryTimelockMinMs", "Registration clamps against the min constant");
+        StringAssert.Contains(accountsSource, "RecoveryTimelockMaxMs", "Registration clamps against the max constant");
+        // The legacy single-slot API is removed without aliases (spec §9).
+        Assert.IsFalse(accountsSource.Contains("public static void RegisterAccount(", StringComparison.Ordinal),
+            "The legacy RegisterAccount ABI must stay removed");
 
-        // Randomized invariant check: verify no escaped timelock boundary exists in the source
+        // Randomized invariant check: the v4 clamp window is 7-90 days.
         for (int i = 0; i < Iterations; i++)
         {
-            ulong timelock = (ulong)(rng.NextDouble() * 20000000);
-            bool shouldBeBelow = timelock < 604800;
-            bool shouldBeAbove = timelock > 7776000;
+            ulong timelockMs = (ulong)(rng.NextDouble() * 20_000_000_000UL);
+            bool belowMin = timelockMs < 604_800_000UL;
+            bool aboveMax = timelockMs > 7_776_000_000UL;
 
-            if (shouldBeBelow)
-                Assert.IsTrue(timelock < 604800);
-            if (shouldBeAbove)
-                Assert.IsTrue(timelock > 7776000);
+            if (belowMin) Assert.IsTrue(timelockMs < 604_800_000UL);
+            if (aboveMax) Assert.IsTrue(timelockMs > 7_776_000_000UL);
         }
     }
 
     // ========================================================================
-    // 2. ExecuteUserOp – deadline and nonce validation
+    // 2. executeUserOp – canonical envelope validation
     // ========================================================================
 
     [TestMethod, Timeout(120_000)]
-    public void SourceInvariant_ExecuteUserOp_DeadlineAndNonceValidation()
+    public void SourceInvariant_ExecuteUserOp_EnvelopeAndNonceValidation()
     {
         var rng = Rng();
         var executionSource = Read("SmartAccount.Execution.cs");
+        var moduleProtocolSource = Read("SmartAccount.ModuleProtocol.cs");
 
-        StringAssert.Contains(executionSource, "Runtime.Time <= op.Deadline", "Deadline check exists");
-        StringAssert.Contains(executionSource, "IsNonceAcceptable(accountId, op.Nonce)", "Nonce check before consume");
-        StringAssert.Contains(executionSource, "ConsumeNonce(accountId, op.Nonce)", "Nonce consumed after validation");
+        // 13-field canonical envelope (spec §4.1).
+        StringAssert.Contains(executionSource, "op.Length == UserOperationFieldCount", "Exact field count check");
+        StringAssert.Contains(moduleProtocolSource, "UserOperationFieldCount = 13", "13-field envelope pinned in the protocol constants");
+        // Strict Array, never a Struct: canonical serialization of the top level
+        // must begin with 0x40.
+        StringAssert.Contains(executionSource, "rawHeader[0] == 0x40", "Top-level Array (0x40) header check");
+        StringAssert.Contains(executionSource, "AssertTargetIsNotProtocolOwned(target)", "Protocol-owned target ban");
         // Non-negative NeoVM integers are signed 256-bit values. The canonical
         // uint-like field guard must reject a full-width value whose sign bit is
         // set instead of accepting it merely because its magnitude fits.
         StringAssert.Contains(executionSource, "encoded[length - 1] < 0x80",
             "Unsigned fields reject the signed-VM upper half");
+        // Deadline and nonce fields are checked against the SA_* error codes.
+        StringAssert.Contains(executionSource, "ErrorNonceInvalid", "Nonce field validation");
+        StringAssert.Contains(executionSource, "ErrorDeadlineExpired", "Deadline field validation");
 
-        // Randomized invariant check: verify 2D nonce math for random values
+        // Randomized invariant check: the v4 nonce is the packed pair
+        // (191-bit derived channel ‖ 64-bit sequence).
         for (int i = 0; i < Iterations; i++)
         {
-            BigInteger channel = rng.Next(0, 1000);
+            BigInteger channel = rng.Next(0, 1 << 24);
             BigInteger sequence = rng.Next(0, 100000);
             BigInteger nonce = (channel << 64) | sequence;
 
-            // Reconstruct channel and sequence from nonce
-            BigInteger extractedChannel = nonce >> 64;
-            BigInteger extractedSequence = nonce & 0xFFFFFFFFFFFFFFFF;
-
-            Assert.AreEqual(channel, extractedChannel, "Channel roundtrip");
-            Assert.AreEqual(sequence, extractedSequence, "Sequence roundtrip");
-
-            // Negative nonce should be rejected
+            Assert.AreEqual(channel, nonce >> 64, "Channel roundtrip");
+            Assert.AreEqual(sequence, nonce & 0xFFFFFFFFFFFFFFFF, "Sequence roundtrip");
             Assert.IsFalse(BigInteger.MinusOne >= 0, "Negative nonce < 0");
         }
     }
 
     // ========================================================================
-    // 3. ExecuteUserOp – nonce monotonicity (2D ERC-4337 spec)
+    // 3. Nonce channels – derived 191-bit channel, fail-closed collisions,
+    //    2^64 exhaustion sentinel, legacy 0x03 merge (spec §6)
     // ========================================================================
 
     [TestMethod, Timeout(120_000)]
-    public void SourceInvariant_Nonce_2D_Monotonicity()
+    public void SourceInvariant_NonceChannel_DerivationAndCollisionFailClosed()
     {
         var rng = Rng();
-        var executionSource = Read("SmartAccount.Execution.cs");
+        var nonceSource = Read("SmartAccount.Nonce.cs");
+        var moduleProtocolSource = Read("SmartAccount.ModuleProtocol.cs");
 
-        // Verify nonce system uses the canonical 2D spec with no value-threshold split.
-        StringAssert.Contains(executionSource, "channel = nonce >> 64");
-        StringAssert.Contains(executionSource, "sequence = nonce & 0xFFFFFFFFFFFFFFFF");
-        StringAssert.Contains(executionSource, "nonce < 0");
-        // The broken 1e18 value threshold (which made channel >= 1 unreachable) must be gone.
-        Assert.IsFalse(executionSource.Contains("MAX_2D_NONCE"),
-            "The value-threshold salt split must not be reintroduced");
+        // The channel is DERIVED from the namespace digest — never chosen.
+        StringAssert.Contains(nonceSource, "ChannelBytesFromDigest", "Channel derivation from the SHA256 namespace digest");
+        StringAssert.Contains(nonceSource, "ComputeNonceNamespaceDigest", "Namespace derivation digest (0x5C)");
+        StringAssert.Contains(nonceSource, "channel[0] = (byte)(digest[8] & 0x01)", "Derived channel keeps only the low 191 bits (top 7 bits zero)");
+        StringAssert.Contains(nonceSource, "(channel >> 191) == BigInteger.Zero", "Channel domain is 191 bits");
+        // Truncation-collision detection is fail-closed: a persisted namespace
+        // digest that no longer matches the derivation kills the channel.
+        StringAssert.Contains(nonceSource, "stored == namespaceDigest", "Namespace digest equality check");
+        StringAssert.Contains(nonceSource, "ErrorNonceChannelCollision", "Collision fails closed with SA_NONCE_CHANNEL_COLLISION");
+        StringAssert.Contains(moduleProtocolSource, "SA_NONCE_CHANNEL_COLLISION", "Collision error code pinned in the protocol constants");
+        // Exhaustion sentinel: 2^64, no wrap-around.
+        StringAssert.Contains(nonceSource, "NonceExhaustionSentinel = BigInteger.One << 64", "2^64 exhaustion sentinel");
+        StringAssert.Contains(nonceSource, "ErrorNonceExhausted", "Exhausted channel rejection");
+        // Legacy merge: the effective cursor is max(legacy 0x03, new 0x56) and
+        // the new cursor never decreases.
+        StringAssert.Contains(nonceSource, "newCursor > legacyCursor ? newCursor : legacyCursor", "Effective cursor merges the legacy row");
+        // The packed public query is (channel << 64) | sequence.
+        StringAssert.Contains(nonceSource, "(BytesToBigInteger(channel) << 64) | sequence", "Packed nonce query encoding");
 
-        // Runtime check against the compiled contract: every nonce is a canonical (channel,
-        // sequence) pair where channel = nonce >> 64 and sequence = nonce & 0xFFFFFFFFFFFFFFFF.
-        // IsNonceAcceptable is observed through previewUserOpValidation, ConsumeNonce through
-        // executeUserOp.
-        const ulong sequenceSpan = 0xFFFFFFFFFFFFFFFFUL; // 2^64 - 1
-        BigInteger channelStride = (BigInteger)sequenceSpan + 1; // 2^64
-        NonceProbeHarness probe = new();
-
-        Assert.IsTrue(probe.IsNonceAcceptable(0), "Channel 0: a fresh lane expects sequence 0");
-        Assert.IsFalse(probe.IsNonceAcceptable(1), "Channel 0: out-of-order sequence is rejected");
-
-        // A high channel (channel >= 1) must be reachable — this was unreachable under the
-        // broken value-threshold split. Its sequence cursor starts independently at 0.
-        BigInteger highChannel = BigInteger.Parse("1000000000000000000");
-        BigInteger highChannelSeq0 = highChannel * channelStride; // (highChannel << 64) | 0
-        Assert.IsTrue(probe.IsNonceAcceptable(highChannelSeq0), "A fresh high channel expects sequence 0");
-        Assert.IsFalse(probe.IsNonceAcceptable(highChannelSeq0 + 1), "High channel: out-of-order sequence is rejected");
-
-        // Consuming channel 0 advances ONLY channel 0's cursor and leaves other channels untouched.
-        probe.ExecuteWithNonce(0);
-        Assert.AreEqual(BigInteger.One, probe.GetChannelSequence(0), "Consume increments the channel-0 cursor");
-        Assert.IsFalse(probe.IsNonceAcceptable(0), "A consumed sequence cannot be replayed");
-        Assert.IsTrue(probe.IsNonceAcceptable(1), "The successor sequence becomes acceptable");
-        Assert.AreEqual(BigInteger.Zero, probe.GetChannelSequence(highChannel),
-            "Channel-0 activity must not advance an independent channel's cursor");
-
-        // Consuming the high channel advances ONLY its cursor; channel 0 stays at its own cursor.
-        probe.ExecuteWithNonce(highChannelSeq0);
-        Assert.AreEqual(BigInteger.One, probe.GetChannelSequence(highChannel), "Consume increments the high-channel cursor");
-        Assert.IsFalse(probe.IsNonceAcceptable(highChannelSeq0), "A consumed high-channel sequence cannot be replayed");
-        Assert.IsTrue(probe.IsNonceAcceptable(highChannelSeq0 + 1), "The high channel's successor sequence becomes acceptable");
-        Assert.AreEqual(BigInteger.One, probe.GetChannelSequence(0),
-            "High-channel activity must not advance channel 0's cursor");
-
-        // Seeded randomized sweep over channel 0 (VM executions, so capped): a 2D nonce is
-        // acceptable exactly when its sequence matches the (now advanced) channel-0 cursor (1).
-        int vmIterations = Math.Min(Iterations, 64);
-        for (int i = 0; i < vmIterations; i++)
+        // Randomized invariant check: a 191-bit channel packed over a 64-bit
+        // sequence never aliases another channel's sequences.
+        for (int i = 0; i < Iterations; i++)
         {
-            BigInteger sequence = rng.Next(0, 100000);
-            Assert.AreEqual(sequence == 1, probe.IsNonceAcceptable(sequence),
-                $"2D nonce acceptability must mirror the channel cursor (iteration {i})");
-        }
-    }
+            BigInteger channel = rng.Next(0, 1 << 24);
+            BigInteger sequenceA = rng.Next(0, 100000);
+            BigInteger sequenceB = rng.Next(0, 100000);
+            BigInteger packedA = (channel << 64) | sequenceA;
+            BigInteger packedB = (channel << 64) | sequenceB;
 
-    /// <summary>
-    /// Minimal wallet deployment that exposes the contract's private IsNonceAcceptable /
-    /// ConsumeNonce behavior through its public entrypoints.
-    /// </summary>
-    private sealed class NonceProbeHarness
-    {
-        private static readonly Neo.UInt160 BackupOwner =
-            Neo.UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
-
-        private readonly RuntimeFixture _fx = new();
-        private readonly Neo.UInt160 _wallet;
-        private readonly Neo.UInt160 _target;
-        private readonly Neo.UInt160 _accountId;
-
-        public NonceProbeHarness()
-        {
-            _wallet = _fx.Deploy("SmartAccountV3");
-            _target = _fx.Deploy("MockTransferTarget");
-            _accountId = _fx.CallUInt160(
-                _wallet, "computeRegistrationAccountId",
-                Neo.UInt160.Zero, Array.Empty<byte>(), Neo.UInt160.Zero, BackupOwner, 2_592_000u);
-
-            _fx.SetSigners(BackupOwner);
-            _fx.CallVoid(
-                _wallet, "registerAccount",
-                _accountId, Neo.UInt160.Zero, Array.Empty<byte>(), Neo.UInt160.Zero, BackupOwner, 2_592_000u);
-        }
-
-        public bool IsNonceAcceptable(BigInteger nonce)
-        {
-            var preview = (Neo.VM.Types.Array)_fx.Call(
-                _wallet, "previewUserOpValidation", _accountId, BuildOp(nonce));
-            return preview[1].GetBoolean();
-        }
-
-        public void ExecuteWithNonce(BigInteger nonce)
-        {
-            _fx.CallVoid(_wallet, "executeUserOp", _accountId, BuildOp(nonce));
-        }
-
-        public BigInteger GetChannelSequence(BigInteger channel)
-        {
-            return _fx.CallInteger(_wallet, "getNonce", _accountId, channel);
-        }
-
-        private object[] BuildOp(BigInteger nonce)
-        {
-            return RuntimeFixture.UserOp(
-                _target, "transfer",
-                new object?[] { _accountId, BackupOwner, (BigInteger)1, null },
-                nonce, _fx.Now() + 3_600_000, Array.Empty<byte>());
+            Assert.AreEqual(sequenceA == sequenceB, packedA == packedB,
+                "Packed nonces are equal exactly when their sequences are");
         }
     }
 
     // ========================================================================
-    // 4. ExecuteUserOp – authorization paths
+    // 4. executeUserOp – v4 routing and phase-exact authorization
     // ========================================================================
 
     [TestMethod, Timeout(120_000)]
     public void SourceInvariant_ExecuteUserOp_AuthorizationPaths()
     {
         var executionSource = Read("SmartAccount.Execution.cs");
+        var verifyContextSource = Read("SmartAccount.VerifyContext.cs");
 
-        // Verify both authorization paths exist
-        StringAssert.Contains(executionSource, "state.Verifier != UInt160.Zero", "Verifier path check");
-        StringAssert.Contains(executionSource, "CallVerifierWithGasLimit(", "Verifier bounded delegate call");
-        StringAssert.Contains(executionSource, "\"validateSignature\"", "Verifier method");
-        StringAssert.Contains(executionSource, "VerifierGasLimit", "Verifier gas cap");
-        StringAssert.Contains(executionSource, "Runtime.CheckWitness(state.BackupOwner!)", "Native fallback CheckWitness");
-        StringAssert.Contains(executionSource, "Reentrant call rejected", "Reentrancy guard");
+        // v4 routing is explicit by validatorId (spec §3.5): the routed
+        // validator instance or the active threshold policy approves the
+        // digest; there is no custody fallback while a validator is set.
+        StringAssert.Contains(executionSource, "GetModuleInstance(accountId, validatorId)", "Explicit validatorId routing resolves installed instances");
+        StringAssert.Contains(executionSource, "GetThresholdPolicy(accountId, validatorId)", "Threshold-policy routing resolves installed policies");
+        StringAssert.Contains(executionSource, "CallModuleGasCapped(", "Module callbacks run under the gas hard budget");
+        StringAssert.Contains(executionSource, "\"validateSignature\"", "Validator method");
+        StringAssert.Contains(executionSource, "ValidationAggregateGasLimit", "Validation aggregate gas cap");
+        // F-7 phase gates: each writer phase opens exactly one module authorization
+        // (0x58) and closes it before the next phase opens.
+        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseValidation", "Validation phase gate");
+        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseHookPre", "Hook pre phase gate");
+        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseTargetDispatch", "Target dispatch phase gate");
+        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseHookPost", "Hook post phase gate");
+        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseCompletion", "Completion phase gate");
+        // F-1: the dispatched target's CheckWitness(accountId) resolves through the
+        // 0x02 verify context bound around THIS operation's dispatch only.
+        StringAssert.Contains(executionSource, "SetVerifyContext(accountId, target)", "F-1 verify context binds the actual dispatched target");
+        StringAssert.Contains(executionSource, "ClearVerifyContext(accountId)", "F-1 verify context closed after dispatch");
+        Assert.IsFalse(verifyContextSource.Contains("verifyScopeTarget", StringComparison.Ordinal),
+            "F-1: the verifyScopeTarget grant must stay deleted");
+        // Execution lock still guards reentrancy per account.
         StringAssert.Contains(executionSource, "SetExecutionLock(accountId)", "Lock set");
         StringAssert.Contains(executionSource, "ClearExecutionLock(accountId)", "Lock cleared in finally");
     }
 
     [TestMethod, Timeout(120_000)]
-    public void SourceInvariant_ModuleLifecycleCallbacksUseMaintenanceBudget()
+    public void SourceInvariant_ModuleLifecycleCallbacksUseHardBudget()
     {
-        var executionSource = Read("SmartAccount.Execution.cs");
-        StringAssert.Contains(executionSource, "ModuleMaintenanceGasLimit = 250_000_000", "Module maintenance gas cap");
-        StringAssert.Contains(executionSource, "RootModuleMaintenanceGasLimit = 11 * ModuleMaintenanceGasLimit",
-            "The composite root budget includes its own call and at most ten leaf cleanups");
-        StringAssert.Contains(executionSource, "CallModuleWithMaintenanceBudget", "Shared bounded module entrypoint");
-        Assert.IsFalse(executionSource.Contains("Contract.Call(\n                            state.HookId", StringComparison.Ordinal),
-            "Hook callbacks must use the independent maintenance budget");
+        var moduleProtocolSource = Read("SmartAccount.ModuleProtocol.cs");
+        var modulesSource = Read("SmartAccount.Modules.cs");
 
-        foreach (string name in new[] { "SmartAccount.Accounts.cs", "SmartAccount.Escape.cs", "SmartAccount.VerifierChildren.cs" })
+        // Plan B gas hard budget (spec §11): the datoshi constants live in the
+        // protocol constants file and every module callback runs through the
+        // GasLeft-wrapped capped caller.
+        StringAssert.Contains(moduleProtocolSource, "ValidationAggregateGasLimit = 100_000_000", "1 GAS validation aggregate cap");
+        StringAssert.Contains(moduleProtocolSource, "HookCallbackGasLimit = 250_000_000", "2.5 GAS per hook pre/post cap");
+        StringAssert.Contains(moduleProtocolSource, "ValidatorCompletionGasLimit = 100_000_000", "1 GAS validator completion cap");
+        StringAssert.Contains(moduleProtocolSource, "LifecycleCallbackGasLimit = 250_000_000", "2.5 GAS per lifecycle callback cap");
+        StringAssert.Contains(modulesSource, "CallModuleGasCapped", "Shared capped module entrypoint");
+        StringAssert.Contains(modulesSource, "AssertCallbackGasBudget", "GasLeft fail-closed budget check");
+
+        // Lifecycle callbacks (onInstall/onUninstall/configure) go through the
+        // capped caller — never a bare Contract.Call.
+        foreach (string name in new[] { "SmartAccount.Modules.cs", "SmartAccount.Message.cs", "SmartAccount.Execution.cs" })
         {
             string source = Read(name);
-            Assert.IsFalse(source.Contains("Contract.Call(", StringComparison.Ordinal),
-                $"{name} must route every plugin lifecycle call through the independent maintenance budget");
-            StringAssert.Contains(source, "CallModuleWithMaintenanceBudget", $"{name} bounded module calls");
-            if (name != "SmartAccount.VerifierChildren.cs")
-                StringAssert.Contains(source, "CallRootWithMaintenanceBudget", $"{name} bounded composite-root calls");
+            StringAssert.Contains(source, "CallModuleGasCapped", $"{name} capped module calls");
         }
+        Assert.IsFalse(modulesSource.Contains("Contract.Call(\n                            state.HookId", StringComparison.Ordinal),
+            "Hook callbacks must use the capped module caller");
     }
 
     [TestMethod, Timeout(120_000)]
-    public void SourceInvariant_MessageSignatureAdapterUsesVerifierBudget()
+    public void SourceInvariant_MessageSignaturesUseBuiltInP256Subjects()
     {
-        var stateSource = Read("SmartAccount.State.cs");
-        int start = stateSource.IndexOf("public static ByteString IsValidSignature", StringComparison.Ordinal);
-        int end = stateSource.IndexOf("public static UInt160 GetVerifier", start, StringComparison.Ordinal);
-        Assert.IsTrue(start >= 0 && end > start, "ERC-1271 adapter must remain present and bounded");
-        string methodSource = stateSource.Substring(start, end - start);
+        var messageSource = Read("SmartAccount.Message.cs");
 
-        Assert.AreEqual(2, CountOccurrences(methodSource, "CallVerifierWithGasLimit("),
-            "Both ERC-1271 verifier calls must use the bounded verifier entrypoint");
-        Assert.AreEqual(2, CountOccurrences(methodSource, "Contract.Call("),
-            "The public profile deliberately preserves both original unbounded calls");
-        StringAssert.Contains(methodSource, "#if PLATFORM\n            bool supported = (bool)CallVerifierWithGasLimit(",
-            "ERC-1271 capability discovery uses the PLATFORM bounded path");
-        StringAssert.Contains(methodSource, "#else\n            bool supported = (bool)Contract.Call(",
-            "The public capability-discovery branch remains explicit");
-        StringAssert.Contains(methodSource, "#if PLATFORM\n            bool valid = (bool)CallVerifierWithGasLimit(",
-            "ERC-1271 signature validation uses the PLATFORM bounded path");
-        StringAssert.Contains(methodSource, "#else\n            bool valid = (bool)Contract.Call(",
-            "The public signature-validation branch remains explicit");
-        StringAssert.Contains(methodSource, "\"supportsMessageSignatures\"",
-            "ERC-1271 capability discovery remains explicit");
-        StringAssert.Contains(methodSource, "\"isValidSignature\"",
-            "ERC-1271 signature validation remains explicit");
+        // v4 built-in message signatures (spec §8): the ERC-1271 surface is the
+        // P-256 subject store with canonical subject entries and strict
+        // magic words — not a legacy verifier dispatch. The magic is a 4-byte
+        // ByteString (bytes4), never a uint/Integer return.
+        int start = messageSource.IndexOf("public static ByteString isValidSignature", StringComparison.Ordinal);
+        Assert.IsTrue(start >= 0, "ERC-1271 adapter must remain present and return bytes4 magic");
+        StringAssert.Contains(messageSource, "0x1626ba7e", "Success magic (ERC-1271)");
+        StringAssert.Contains(messageSource, "0xffffffff", "Failure magic (ERC-1271)");
+        StringAssert.Contains(messageSource, "MagicInvalidSignature", "Any failure returns the strict failure magic");
+        // Canonical P-256 subject: the signer script's SHA256 must equal a
+        // configured 0x57 subject.
+        StringAssert.Contains(messageSource, "CryptoLib.Sha256(script)", "Subject match against the canonical script hash");
+        StringAssert.Contains(messageSource, "VerifyWithECDsa", "P-256 verification primitive");
+        StringAssert.Contains(messageSource, "secp256r1SHA256", "secp256r1 curve with SHA256");
+        // Module route requires the declared messageCapability.
+        StringAssert.Contains(messageSource, "module.MessageCapability", "Module message route is capability-gated");
+        StringAssert.Contains(messageSource, "ValidationAggregateGasLimit", "Module message route runs under the validation budget");
+        // Message authorization never consumes an operation nonce (spec §8).
+        Assert.IsFalse(messageSource.Contains("ConsumeOperationNonce", StringComparison.Ordinal),
+            "Message signatures must not consume operation nonces");
     }
 
     // ========================================================================
@@ -770,7 +733,7 @@ public class SourceInvariantTests
         {
             ("contracts/SmartAccount.Admin.cs", "Runtime.CheckWitness(adminHash)"),
             ("contracts/paymaster/Paymaster.cs", "Runtime.CheckWitness(admin)"),
-            ("contracts/market/AAAddressMarket.cs", "ValidateAdmin();"),
+            ("contracts/market/SAAddressMarket.cs", "ValidateAdmin();"),
             ("contracts/mocks/MockTransferTarget.cs", "ValidateAdmin();"),
         };
 
@@ -804,13 +767,13 @@ public class SourceInvariantTests
             StringAssert.Contains(code, "public static void Update(ByteString nef, string manifest) => VerifierAuthority.Update(nef, manifest);", $"{verifier} delegates update");
         }
 
-        // Audit fixes H5 / H6 / AA-04: the two fund-holding auxiliaries (SocialRecoveryVerifier
-        // custodies the per-account oracle-credit GAS pool; AAAddressMarket holds in-flight
-        // buyer escrow) must expose the same AA-D-01/AA-D-02 timelocked admin surface as the
+        // Audit fixes H5 / H6 / SA-04: the two fund-holding auxiliaries (SocialRecoveryVerifier
+        // custodies the per-account oracle-credit GAS pool; SAAddressMarket holds in-flight
+        // buyer escrow) must expose the same SA-D-01/SA-D-02 timelocked admin surface as the
         // VerifierAuthority idiom — proposeUpdate + update/confirmUpdate behind the 7-day
         // window, and rotateAdmin/confirmAdminRotation/cancelAdminRotation in place of the
         // removed instant transferAdmin/setAdmin hand-offs.
-        string marketSource = ReadRepo("contracts", "market", "AAAddressMarket.cs");
+        string marketSource = ReadRepo("contracts", "market", "SAAddressMarket.cs");
         StringAssert.Contains(marketSource, "public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash)", "H6: market exposes proposeUpdate");
         StringAssert.Contains(marketSource, "Update timelock not expired", "H6: market update enforces the 7-day window");
         StringAssert.Contains(marketSource, "public static void RotateAdmin(UInt160 newAdmin)", "H6: market exposes timelocked rotateAdmin");
@@ -821,10 +784,10 @@ public class SourceInvariantTests
         string recoverySource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
         StringAssert.Contains(recoverySource, "public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash)", "H5: recovery verifier exposes proposeUpdate");
         StringAssert.Contains(recoverySource, "Update timelock not expired", "H5: recovery update enforces the 7-day window");
-        StringAssert.Contains(recoverySource, "public static void RotateAdmin(UInt160 newAdmin)", "AA-04: recovery verifier exposes timelocked rotateAdmin");
-        StringAssert.Contains(recoverySource, "Admin rotation timelock not expired", "AA-04: recovery rotation enforces the 7-day window");
+        StringAssert.Contains(recoverySource, "public static void RotateAdmin(UInt160 newAdmin)", "SA-04: recovery verifier exposes timelocked rotateAdmin");
+        StringAssert.Contains(recoverySource, "Admin rotation timelock not expired", "SA-04: recovery rotation enforces the 7-day window");
         Assert.IsFalse(recoverySource.Contains("public static void TransferAdmin", StringComparison.Ordinal),
-            "AA-04: the instant transferAdmin hand-off must be removed");
+            "SA-04: the instant transferAdmin hand-off must be removed");
     }
 
     // ========================================================================
@@ -871,46 +834,46 @@ public class SourceInvariantTests
     }
 
     // ========================================================================
-    // 21. Recovery verifier – anti-squat surface (AA-06)
+    // 21. Recovery verifier – anti-squat surface (SA-06)
     // ========================================================================
 
     [TestMethod, Timeout(120_000)]
     public void SourceInvariant_RecoveryVerifier_AntiSquatSurface()
     {
-        // Audit fix AA-06: SetupRecovery was first-write-wins with no proof of account
+        // Audit fix SA-06: SetupRecovery was first-write-wins with no proof of account
         // control — a squatter witnessing their OWN key could bind a victim's accountId.
-        // The fix pins the canonical AA core (contract-admin gated, initial-set-only,
+        // The fix pins the canonical SA core (contract-admin gated, initial-set-only,
         // re-pointing timelocked — mirroring the VerifierAuthority M-7 surface) and requires
         // the core's getBackupOwner registry to attest the claimed owner at setup.
         string flowsSource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Flows.cs");
-        StringAssert.Contains(flowsSource, "aaContract is not the authorized core", "AA-06: setup pins the authorized core");
-        StringAssert.Contains(flowsSource, "owner does not control account", "AA-06: setup attests the registered backup owner");
-        StringAssert.Contains(flowsSource, "\"getBackupOwner\"", "AA-06: ownership is attested via the core registry");
+        StringAssert.Contains(flowsSource, "saContract is not the authorized core", "SA-06: setup pins the authorized core");
+        StringAssert.Contains(flowsSource, "owner does not control account", "SA-06: setup attests the registered backup owner");
+        StringAssert.Contains(flowsSource, "\"getBackupOwner\"", "SA-06: ownership is attested via the core registry");
 
         string fixedSource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
-        StringAssert.Contains(fixedSource, "public static void SetAuthorizedCore(UInt160 coreContract)", "AA-06: admin-gated initial core bind exists");
-        StringAssert.Contains(fixedSource, "core already set; use ProposeAuthorizedCore", "AA-06: instant core re-pointing is rejected");
-        StringAssert.Contains(fixedSource, "public static void ProposeAuthorizedCore(UInt160 coreContract)", "AA-06: timelocked core re-pointing exists");
-        StringAssert.Contains(fixedSource, "Core change timelock not expired", "AA-06: core re-pointing enforces the 7-day window");
+        StringAssert.Contains(fixedSource, "public static void SetAuthorizedCore(UInt160 coreContract)", "SA-06: admin-gated initial core bind exists");
+        StringAssert.Contains(fixedSource, "core already set; use ProposeAuthorizedCore", "SA-06: instant core re-pointing is rejected");
+        StringAssert.Contains(fixedSource, "public static void ProposeAuthorizedCore(UInt160 coreContract)", "SA-06: timelocked core re-pointing exists");
+        StringAssert.Contains(fixedSource, "Core change timelock not expired", "SA-06: core re-pointing enforces the 7-day window");
     }
 
     // ========================================================================
-    // 23. Recovery verifier – least-privilege contract permissions (AA-03)
+    // 23. Recovery verifier – least-privilege contract permissions (SA-03)
     // ========================================================================
 
     [TestMethod, Timeout(120_000)]
     public void SourceInvariant_RecoveryVerifier_LeastPrivilegePermissions()
     {
-        // Audit fix AA-03: the wildcard ContractPermission("*", "*") is replaced by
+        // Audit fix SA-03: the wildcard ContractPermission("*", "*") is replaced by
         // five method-scoped grants covering the verified call surface — any future
         // wildcard reintroduction or dropped grant must fail here.
         string fixedSource = ReadRepo("contracts", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
-        Assert.IsFalse(fixedSource.Contains("ContractPermission(\"*\", \"*\")", StringComparison.Ordinal), "AA-03: no wildcard contract permission");
-        StringAssert.Contains(fixedSource, "ContractPermission(\"0xfffdc93764dbaddd97c48f252a53ea4643faa3fd\", \"update\")", "AA-03: ContractManagement.update grant (timelocked self-upgrade)");
-        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"getBackupOwner\")", "AA-03: core getBackupOwner grant (AA-06 attestation)");
-        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"canExecuteVerifier\")", "AA-03: V3 verifier execution-context grant");
-        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"request\")", "AA-03: oracle request grant (ticket submission)");
-        StringAssert.Contains(fixedSource, "ContractPermission(\"0xd2a4cff31913016155e38e474a2c06d08be276cf\", \"transfer\")", "AA-03: GAS transfer grant (credit forwarding)");
+        Assert.IsFalse(fixedSource.Contains("ContractPermission(\"*\", \"*\")", StringComparison.Ordinal), "SA-03: no wildcard contract permission");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"0xfffdc93764dbaddd97c48f252a53ea4643faa3fd\", \"update\")", "SA-03: ContractManagement.update grant (timelocked self-upgrade)");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"getBackupOwner\")", "SA-03: core getBackupOwner grant (SA-06 attestation)");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"canExecuteVerifier\")", "SA-03: V3 verifier execution-context grant");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"request\")", "SA-03: oracle request grant (ticket submission)");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"0xd2a4cff31913016155e38e474a2c06d08be276cf\", \"transfer\")", "SA-03: GAS transfer grant (credit forwarding)");
     }
 
     [TestMethod, Timeout(120_000)]
@@ -921,7 +884,7 @@ public class SourceInvariantTests
         StringAssert.Contains(v3Source, "public static bool ValidateSignature(UInt160 accountId, UserOperation op)");
         StringAssert.Contains(v3Source, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
         Assert.AreEqual(2, v3Source.Split("AssertV3ExecutionCaller(accountId)", StringSplitOptions.None).Length - 1,
-            "Both V3 execution entrypoints must validate the bound AA Core context");
+            "Both V3 execution entrypoints must validate the bound SA Core context");
         StringAssert.Contains(v3Source, "\"canExecuteVerifier\"");
         StringAssert.Contains(v3Source, "Runtime.CallingScriptHash == core");
     }
@@ -935,11 +898,11 @@ public class SourceInvariantTests
     {
         string sharedPayload = ReadRepo("contracts", "verifiers", "VerifierPayload.cs");
         StringAssert.Contains(sharedPayload, "VerifierAuthority.AuthorizedCore()",
-            "shared verifier payload must bind the authorized AA core");
+            "shared verifier payload must bind the authorized SA core");
 
         string web3Auth = ReadRepo("contracts", "verifiers", "Web3AuthVerifier.cs");
         StringAssert.Contains(web3Auth, "ToBytes20Word(VerifierAuthority.AuthorizedCore())",
-            "Web3Auth struct hash must bind the authorized AA core");
+            "Web3Auth struct hash must bind the authorized SA core");
         StringAssert.Contains(web3Auth, "UserOperationTypeHash",
             "Web3Auth struct hash must use the core-bound type hash");
         StringAssert.Contains(web3Auth, "CryptoLib.RecoverSecp256K1(hash, signature!)",
@@ -947,7 +910,7 @@ public class SourceInvariantTests
 
         string zkLogin = ReadRepo("contracts", "verifiers", "ZkLoginVerifier.cs");
         StringAssert.Contains(zkLogin, "(byte[])VerifierAuthority.AuthorizedCore()",
-            "ZkLogin payload must bind the authorized AA core");
+            "ZkLogin payload must bind the authorized SA core");
     }
 
     // ========================================================================
@@ -985,7 +948,7 @@ public class SourceInvariantTests
     public void SourceInvariant_RecoveryVerifier_TimelockBoundsMatchEstateStandard()
     {
         // Audit finding (recovery timelock bounds): SocialRecoveryVerifier enforced a 1h
-        // minimum and NO maximum, while the estate standard — the AA core escape hatch's
+        // minimum and NO maximum, while the estate standard — the SA core escape hatch's
         // 604800–7776000 seconds pinned in section 1/5 — is 7–90 days. The recovery verifier
         // must enforce the same window in Runtime.Time milliseconds (604800000–7776000000)
         // in BOTH SetupRecovery and UpdateRecoveryConfig.

@@ -95,7 +95,7 @@ internal static class AbiDispatch
 
         var report = new Dictionary<string, object?>
         {
-            ["schema"] = "aa-abi-dispatch/v3",
+            ["schema"] = "sa-abi-dispatch/v3",
             ["nef"] = new { path = nefPath, sha256 = Sha(nefBytes), scriptLength = nef.Script.Length },
             // The script bytes travel with the dump so that a second reader can
             // decode the same script the engine ran. Without them the consumer
@@ -283,7 +283,7 @@ internal static class AbiDispatch
 
         return new Dictionary<string, object?>
         {
-            ["schema"] = "aa-abi-boundary/v1",
+            ["schema"] = "sa-abi-boundary/v1",
             ["undeclaredName"] = UndeclaredProbeName,
             ["probes"] = rows
         };

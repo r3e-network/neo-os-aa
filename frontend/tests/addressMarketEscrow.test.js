@@ -9,7 +9,7 @@ const marketDocPath = path.resolve('src/assets/docs/address-market.md');
 const patternInputPath = path.resolve('src/features/market/components/PatternInputSection.vue');
 const i18nEnPath = path.resolve('src/i18n/index.js');
 const i18nZhPath = path.resolve('src/i18n/zh-CN.js');
-const marketContractPath = path.resolve('..', 'contracts', 'market', 'AAAddressMarket.cs');
+const marketContractPath = path.resolve('..', 'contracts', 'market', 'SAAddressMarket.cs');
 
 // Markup from a parent SFC was extracted into colocated child components living
 // in a sibling folder named after the parent (e.g. `AddressMarketView.vue` ->
@@ -45,7 +45,7 @@ test('address market UI and docs describe trustless escrow semantics', () => {
   const service = fs.readFileSync(marketServicePath, 'utf8');
   const doc = fs.readFileSync(marketDocPath, 'utf8');
 
-  assert.match(view, /Trustless escrow for AA address transfers/);
+  assert.match(view, /Trustless escrow for SA address transfers/);
   assert.match(view, /Create Trustless Listing/);
   assert.match(view, /Buy With Escrow/);
   assert.match(view, /Refund Pending Payment/);
@@ -56,7 +56,7 @@ test('address market UI and docs describe trustless escrow semantics', () => {
   assert.match(doc, /frozen|locked/i);
 });
 
-test('AA core and market contract expose escrow transfer primitives', () => {
+test('SA core and market contract expose escrow transfer primitives', () => {
   const core = readSmartAccountSource();
   const market = fs.readFileSync(marketContractPath, 'utf8');
 

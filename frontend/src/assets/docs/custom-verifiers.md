@@ -1,6 +1,6 @@
 # Custom Verifiers (Pluggable Authorization)
 
-While the default Role structures cover 95% of use cases, the Neo Abstract Account protocol is designed to be infinitely extensible. 
+While the default Role structures cover 95% of use cases, the Neo Smart Account protocol is designed to be infinitely extensible.
 
 Users can bypass the standard `M-of-N` signature logic by assigning a **Custom Verifier Contract**. When assigned, the Master Entry Contract defers authorization checks directly to this custom logic, then continues through the same hardened policy-gated execution path. A custom verifier does not bypass method policy, whitelist / blacklist checks, or max-transfer enforcement.
 
@@ -12,7 +12,7 @@ To create a custom verifier, developers must write and deploy a standard Neo sma
 using Neo;
 using Neo.SmartContract.Framework;
 
-namespace MyCustomVerifier 
+namespace MyCustomVerifier
 {
     public class CustomVerifierContract : SmartContract
     {
@@ -21,15 +21,15 @@ namespace MyCustomVerifier
         {
             // Extract the transaction and signers
             var tx = (Transaction)Runtime.Transaction;
-            
+
             // ... implement custom authorization logic ...
             // Examples:
             // 1. Check if the current time is between 9 AM and 5 PM
             // 2. Validate a ZK-SNARK proof passed via transaction attributes
             // 3. Inspect Runtime.Transaction and related state before approving
-            
+
             // Return true if authorized, false to reject
-            return true; 
+            return true;
         }
     }
 }
@@ -37,7 +37,7 @@ namespace MyCustomVerifier
 
 ## How to Bind a Custom Verifier
 
-Once your custom verifier contract is deployed to the Neo N3 network, you must bind it to your Abstract Account. This can only be done by an existing `Admin` of the account.
+Once your custom verifier contract is deployed to the Neo N3 network, you must bind it to your Smart Account. This can only be done by an existing `Admin` of the account.
 
 **Using the Frontend Studio:**
 1. Navigate to the **Permissions & Limits** tab.

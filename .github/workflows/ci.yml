@@ -38,7 +38,7 @@ jobs:
       # only source. Directory.Build.props pins the framework and the packages.lock.json next to
       # each project pins the rest; restore runs in locked mode, so a changed resolution or different
       # package bytes fail here, within seconds, with the pinned versions named
-      # (docs/AA-REPRODUCIBLE-BUILD.md), instead of deep inside verify_repo.sh.
+      # (docs/SA-REPRODUCIBLE-BUILD.md), instead of deep inside verify_repo.sh.
       - name: Check pinned Neo platform packages (framework 3.10.1)
         run: node scripts/check_neo_platform_packages.mjs
       # The compiler is not a project dependency, so no lock file covers it. verify_repo.sh and

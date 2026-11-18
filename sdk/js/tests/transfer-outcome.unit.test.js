@@ -1,7 +1,7 @@
 /**
  * CU-06: the SDK equivalent of the wallet's guards.
  *
- * Recorded on the deployed AA core (aa-chain-records-20261005.json, AA-03 case a and AA-09 case 8): a
+ * Recorded on the deployed SA core (sa-chain-records-20261005.json, SA-03 case a and SA-09 case 8): a
  * GAS.transfer out of the account's proxy address, carried by executeUserOp with the owner's witness (or the
  * relay's), HALTs with result false, moves nothing and still consumes the nonce and the fee. The SDK must not call
  * that operation passable (simulateUserOperation), and it hands apps the same result rules the relay route and
@@ -132,7 +132,7 @@ test('positive controls: other sources, other methods and no arguments are not r
   assert.equal(stub.passed, true);
 });
 
-test('the SDK hands apps the shared result rules (recorded AA-09 case 8 and AA-03 case c)', () => {
+test('the SDK hands apps the shared result rules (recorded SA-09 case 8 and SA-03 case c)', () => {
   assert.equal(TRANSFER_RETURNED_FALSE, 'transfer_returned_false');
   assert.match(TRANSFER_RETURNED_FALSE_MESSAGE, /transfer returned false/i);
   assert.equal(isProxySourcedTransfer({ method: 'transfer', from: `0x${ACCOUNT_ID}`, proxy: ACCOUNT_ID }), true);

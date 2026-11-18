@@ -21,63 +21,63 @@ const routes = [
         path: '',
         name: 'home',
         component: HomeView,
-        meta: { breadcrumb: 'Home', breadcrumbKey: 'nav.home', titleKey: 'page.titleHome', title: 'Neo Abstract Account — Smart Wallets on Neo N3' }
+        meta: { breadcrumb: 'Home', breadcrumbKey: 'nav.home', titleKey: 'page.titleHome', title: 'Neo Smart Account — Smart Wallets on Neo N3' }
       },
       {
         path: 'console',
         name: 'console',
         component: ConsoleView,
-        meta: { breadcrumb: 'Console', breadcrumbKey: 'nav.console', titleKey: 'page.titleConsole', title: 'Console — Neo Abstract Account' }
+        meta: { breadcrumb: 'Console', breadcrumbKey: 'nav.console', titleKey: 'page.titleConsole', title: 'Console — Neo Smart Account' }
       },
       {
         path: 'app',
         name: 'app-workspace',
         component: SmartAccountTool,
-        meta: { breadcrumb: 'Workspace', breadcrumbKey: 'nav.app', titleKey: 'page.titleApp', title: 'App Workspace — Neo Abstract Account' }
+        meta: { breadcrumb: 'Workspace', breadcrumbKey: 'nav.app', titleKey: 'page.titleApp', title: 'App Workspace — Neo Smart Account' }
       },
       {
         path: 'identity',
         name: 'identity-workspace',
         component: IdentityView,
-        meta: { breadcrumb: 'Identity', breadcrumbKey: 'nav.identity', titleKey: 'page.titleIdentity', title: 'Identity Workspace — Neo Abstract Account' }
+        meta: { breadcrumb: 'Identity', breadcrumbKey: 'nav.identity', titleKey: 'page.titleIdentity', title: 'Identity Workspace — Neo Smart Account' }
       },
       {
         path: 'market',
         name: 'address-market',
         component: AddressMarketView,
-        meta: { breadcrumb: 'Market', breadcrumbKey: 'nav.market', titleKey: 'page.titleMarket', title: 'Address Market — Neo Abstract Account' }
+        meta: { breadcrumb: 'Market', breadcrumbKey: 'nav.market', titleKey: 'page.titleMarket', title: 'Address Market — Neo Smart Account' }
       },
       {
         path: 'native',
         name: 'native-account',
         component: NativeAccountWorkspace,
-        meta: { breadcrumb: 'Native accounts', title: 'Native Accounts — Neo Abstract Account' }
+        meta: { breadcrumb: 'Native accounts', title: 'Native Accounts — Neo Smart Account' }
       },
       {
         path: 'docs',
         name: 'documentation',
         component: DocsView,
-        meta: { breadcrumb: 'Docs', breadcrumbKey: 'nav.docs', titleKey: 'page.titleDocs', title: 'Documentation — Neo Abstract Account' }
+        meta: { breadcrumb: 'Docs', breadcrumbKey: 'nav.docs', titleKey: 'page.titleDocs', title: 'Documentation — Neo Smart Account' }
       },
       {
         path: 'transaction-info/:txid',
         name: 'transaction-info',
         component: TransactionInfoView,
         props: true,
-        meta: { breadcrumb: 'Transaction Info', breadcrumbKey: 'nav.transactionInfo', titleKey: 'page.titleTransaction', title: 'Transaction Info — Neo Abstract Account' }
+        meta: { breadcrumb: 'Transaction Info', breadcrumbKey: 'nav.transactionInfo', titleKey: 'page.titleTransaction', title: 'Transaction Info — Neo Smart Account' }
       },
       {
         path: 'tx/:draftId',
         name: 'transaction-draft',
         component: TransactionInfoView,
         props: (route) => ({ draftId: route.params.draftId }),
-        meta: { breadcrumb: 'Draft', breadcrumbKey: 'nav.draft', titleKey: 'page.titleDraft', title: 'Draft — Neo Abstract Account' }
+        meta: { breadcrumb: 'Draft', breadcrumbKey: 'nav.draft', titleKey: 'page.titleDraft', title: 'Draft — Neo Smart Account' }
       },
       {
         path: '/:pathMatch(.*)*',
         name: 'not-found',
         component: NotFoundView,
-        meta: { breadcrumb: 'Not Found', breadcrumbKey: 'nav.notFound', titleKey: 'page.titleNotFound', title: 'Not Found — Neo Abstract Account' }
+        meta: { breadcrumb: 'Not Found', breadcrumbKey: 'nav.notFound', titleKey: 'page.titleNotFound', title: 'Not Found — Neo Smart Account' }
       }
     ]
   }

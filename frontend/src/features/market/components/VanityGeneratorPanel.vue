@@ -4,14 +4,14 @@
       class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6"
     >
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("market.vanityTitle", "Vanity Address Generator") }}
         </h2>
-        <p class="mt-1 text-sm text-aa-muted">
+        <p class="mt-1 text-sm text-sa-muted">
           {{
             t(
               "market.vanitySubtitle",
-              "Generate AA addresses with custom prefixes, suffixes, or patterns",
+              "Generate SA addresses with custom prefixes, suffixes, or patterns",
             )
           }}
         </p>
@@ -122,7 +122,7 @@ function updatePatternType(value) {
 }
 
 function handleStart() {
-  const contractHash = RUNTIME_CONFIG.abstractAccountHash;
+  const contractHash = RUNTIME_CONFIG.smartAccountHash;
   if (!contractHash) return;
   vanity.start(contractHash, vanity.pattern.value, vanity.patternType.value);
 }

@@ -27,7 +27,7 @@ public class ReimbursementIntegerBoundaryRuntimeTests
     public void ZeroFeePublicReservationClassifiesIntegerBoundary(bool addSecond)
     {
         RuntimeFixture fx = new();
-        UInt160 core = fx.Deploy("SmartAccountV3");
+        UInt160 core = fx.Deploy("SmartAccount");
         UInt160 policy = DeployPolicy(fx, core);
         UInt160 account = fx.CallUInt160(core, "computeRegistrationAccountId", UInt160.Zero,
             System.Array.Empty<byte>(), UInt160.Zero, Owner, (uint)2_592_000);
@@ -71,7 +71,7 @@ public class ReimbursementIntegerBoundaryRuntimeTests
         byte[]? pendingBytes = pending.TryGet(key)?.Value.ToArray();
         byte[]? committedBytes = fx.Engine.Storage.Snapshot.TryGet(key)?.Value.ToArray();
         string? error = app.FaultException?.Message;
-        File.WriteAllText(Path.Combine(Path.GetTempPath(), "aa-public-integer-boundary-" + addSecond + ".json"),
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "sa-public-integer-boundary-" + addSecond + ".json"),
             System.Text.Json.JsonSerializer.Serialize(new
             {
                 addSecond,

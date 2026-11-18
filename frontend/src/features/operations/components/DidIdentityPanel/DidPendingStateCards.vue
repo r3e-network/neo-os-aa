@@ -9,24 +9,24 @@
   >
     <div
       v-if="verifierState.pendingRecovery?.active"
-      class="rounded-xl border border-aa-warning/30 bg-aa-warning/5 p-4"
+      class="rounded-xl border border-sa-warning/30 bg-sa-warning/5 p-4"
     >
-      <p class="text-xs uppercase text-aa-warning font-bold mb-2">
+      <p class="text-xs uppercase text-sa-warning font-bold mb-2">
         {{ t("didPanel.pendingRecovery", "Pending Recovery") }}
       </p>
-      <p class="text-sm text-aa-text break-all">
+      <p class="text-sm text-sa-text break-all">
         {{ t("didPanel.newOwner", "new owner") }}:
         {{
           verifierState.pendingRecovery.newOwner ||
           t("didPanel.unset", "unset")
         }}
       </p>
-      <p class="text-sm text-aa-text">
+      <p class="text-sm text-sa-text">
         {{ t("didPanel.approved", "approved") }}:
         {{ verifierState.pendingRecovery.approvedCount }} /
         {{ verifierState.threshold }}
       </p>
-      <p class="text-sm text-aa-text">
+      <p class="text-sm text-sa-text">
         {{ t("didPanel.executableAt", "executable at") }}:
         {{ verifierState.pendingRecovery.executableAt }}
       </p>
@@ -65,26 +65,26 @@
     </div>
     <div
       v-if="verifierState.activeSession?.active"
-      class="rounded-xl border border-aa-info/30 bg-aa-info/5 p-4"
+      class="rounded-xl border border-sa-info/30 bg-sa-info/5 p-4"
     >
-      <p class="text-xs uppercase text-aa-info font-bold mb-2">
+      <p class="text-xs uppercase text-sa-info font-bold mb-2">
         {{ t("didPanel.activePrivateSession", "Active Private Session") }}
       </p>
-      <p class="text-sm text-aa-text break-all">
+      <p class="text-sm text-sa-text break-all">
         {{ t("didPanel.executor", "executor") }}:
         {{
           verifierState.activeSession.executor ||
           t("didPanel.unset", "unset")
         }}
       </p>
-      <p class="text-sm text-aa-text break-all">
+      <p class="text-sm text-sa-text break-all">
         {{ t("didPanel.action", "action") }}:
         {{
           verifierState.activeSession.actionId ||
           t("didPanel.unset", "unset")
         }}
       </p>
-      <p class="text-sm text-aa-text">
+      <p class="text-sm text-sa-text">
         {{ t("didPanel.expiresAt", "expires at") }}:
         {{ verifierState.activeSession.expiresAt }}
       </p>

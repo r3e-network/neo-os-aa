@@ -9,8 +9,8 @@ const accountId = '22'.repeat(20);
 const target = '33'.repeat(20);
 function fixture() {
   const operationBody = { targetContract: target, method: 'balanceOf', args: [{ type: 'Hash160', value: `0x${accountId}` }] };
-  const body = buildStagedTransactionBody({ aaContractHash: core, account: { accountIdHash: accountId }, operationBody, morpheusNetwork: 'testnet' });
-  const invocation = buildExecuteUserOpInvocation({ aaContractHash: core, accountIdHash: accountId, targetContract: target, method: 'balanceOf', methodArgs: operationBody.args, nonce: '9', deadline: '2000000000000', signatureHex: 'ab'.repeat(64) });
+  const body = buildStagedTransactionBody({ saContractHash: core, account: { accountIdHash: accountId }, operationBody, morpheusNetwork: 'testnet' });
+  const invocation = buildExecuteUserOpInvocation({ saContractHash: core, accountIdHash: accountId, targetContract: target, method: 'balanceOf', methodArgs: operationBody.args, nonce: '9', deadline: '2000000000000', signatureHex: 'ab'.repeat(64) });
   const typedData = buildV3UserOperationTypedData({ chainId: 894710606, verifyingContract: '44'.repeat(20), coreContractHash: core, accountIdHash: accountId, targetContract: target, method: 'balanceOf', argsHashHex: '55'.repeat(32), nonce: '9', deadline: '2000000000000' });
   const signatures = [{ kind: 'evm', signerId: 'alice', signatureHex: 'ab'.repeat(64), metadata: { metaInvocation: invocation, typedData } }];
   return { body, signatures, invocation };
@@ -109,7 +109,7 @@ test('malformed and unsigned V3 metadata cannot be offered as a signed relay pay
 });
 
 test('client blocks proxy-sourced transfer even when imported metadata omits the witness requirement flag', () => {
-  const body = buildStagedTransactionBody({ aaContractHash: core, account: { accountIdHash: accountId, accountAddressScriptHash: target }, morpheusNetwork: 'testnet', operationBody: { targetContract: core, method: 'transfer', args: [{ type: 'Hash160', value: `0x${target}` }] } });
+  const body = buildStagedTransactionBody({ saContractHash: core, account: { accountIdHash: accountId, accountAddressScriptHash: target }, morpheusNetwork: 'testnet', operationBody: { targetContract: core, method: 'transfer', args: [{ type: 'Hash160', value: `0x${target}` }] } });
   assert.equal(body.requiresProxyWitness, false);
   assert.throws(() => client({ body, signatures: [] }), /proxy witness/);
   body.clientInvocation.args[1].value[2].value[0].value = `0x${'77'.repeat(20)}`;
@@ -143,7 +143,7 @@ test('collaborator payload cannot replace an unanchored raw draft with wallet sp
   state.body = { network: 'neo-n3-testnet', accountIdHash: accountId, rawTransaction: 'deadbeef' };
   assert.throws(() => client(state), /staged operation anchor/);
   state.signatures[0].metadata.metaInvocation = { scriptHash: target, operation: 'transfer', args: [{ type: 'Hash160', value: `0x${accountId}` }] };
-  assert.throws(() => client(state), /unsupported AA wrapper/);
+  assert.throws(() => client(state), /unsupported SA wrapper/);
 });
 
 test('client cannot send metadata whose claimed argument hash differs from the core computation', async () => {

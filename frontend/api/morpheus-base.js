@@ -14,18 +14,18 @@ export function normalizeNetwork(value) {
 // server-side operator decision, not a client choice — otherwise an anonymous caller can
 // pass `morpheus_network` to make the MAINNET operator fund their testnet relay (or vice
 // versa). Client-supplied selection (query/body/header) is therefore IGNORED unless the
-// operator explicitly opts in via AA_RELAY_ALLOW_CLIENT_NETWORK=1, and that override is
+// operator explicitly opts in via SA_RELAY_ALLOW_CLIENT_NETWORK=1, and that override is
 // itself ignored in production (fail closed — default safe, explicit dev opt-in, production
 // ignores the override, mirroring the morpheus sandbox guard).
 function allowsClientNetworkSelection() {
   if (isProductionDeployment()) return false;
-  return envFlagEnabled(process.env.AA_RELAY_ALLOW_CLIENT_NETWORK || '');
+  return envFlagEnabled(process.env.SA_RELAY_ALLOW_CLIENT_NETWORK || '');
 }
 
 export function resolveNetwork(req) {
   const serverNetwork = normalizeNetwork(
     process.env.MORPHEUS_NETWORK
-      || process.env.VITE_AA_NETWORK
+      || process.env.VITE_SA_NETWORK
       || process.env.VITE_MORPHEUS_NETWORK
   );
   if (!allowsClientNetworkSelection()) return serverNetwork;
@@ -112,7 +112,7 @@ export function resolveMorpheusPaymasterEndpoint(networkInput) {
   const explicit = normalizeUrl(
     process.env[`MORPHEUS_PAYMASTER_${upper}_ENDPOINT`]
       || process.env.MORPHEUS_PAYMASTER_ENDPOINT
-      || process.env.AA_PAYMASTER_ENDPOINT
+      || process.env.SA_PAYMASTER_ENDPOINT
       || ''
   );
   if (explicit) return explicit;

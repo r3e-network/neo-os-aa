@@ -1,13 +1,13 @@
 <template>
-  <div class="card hover:border-aa-muted transition-colors duration-200">
-    <h3 class="text-sm font-bold text-aa-text mb-5">
+  <div class="card hover:border-sa-muted transition-colors duration-200">
+    <h3 class="text-sm font-bold text-sa-text mb-5">
       {{ t("studioPanels.rotateVerifier", "Rotate Verifier Plugin") }}
     </h3>
     <div class="space-y-4">
       <div>
         <label
           for="governance-verifier-hash"
-          class="block text-xs font-semibold text-aa-muted mb-1"
+          class="block text-xs font-semibold text-sa-muted mb-1"
           >{{ t("studioPanels.verifierHash", "Verifier Hash") }}</label
         >
         <input
@@ -15,14 +15,14 @@
           :value="verifierContract"
           @input="$emit('update:verifierContract', $event.target.value)"
           type="text"
-          class="input-field font-mono text-sm py-2 px-3 bg-aa-dark"
+          class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
           :placeholder="t('studioPanels.hashPlaceholder', '0x...')"
         />
       </div>
       <div>
         <label
           for="governance-verifier-params"
-          class="block text-xs font-semibold text-aa-muted mb-1"
+          class="block text-xs font-semibold text-sa-muted mb-1"
           >{{
             t("studioPanels.verifierParamsHex", "Verifier Params (hex)")
           }}</label
@@ -31,7 +31,7 @@
           id="governance-verifier-params"
           :value="verifierParams"
           @input="$emit('update:verifierParams', $event.target.value)"
-          class="input-field font-mono text-xs py-2 px-3 bg-aa-dark min-h-24"
+          class="input-field font-mono text-xs py-2 px-3 bg-sa-dark min-h-24"
           :placeholder="
             t(
               'studioPanels.manageVerifierParamsPlaceholder',

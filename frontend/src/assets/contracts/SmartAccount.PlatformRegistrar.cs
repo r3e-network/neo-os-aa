@@ -13,7 +13,7 @@ namespace SmartAccount
         // ========================================================================
         // 9. Platform Registrar boundary (service extraction, Phase 1b)
         // ========================================================================
-        // Pending platform-account owner rotations moved to the AAPlatformRegistrar
+        // Pending platform-account owner rotations moved to the SAPlatformRegistrar
         // service contract (contracts/registrar/). The core keeps the platform account
         // STATE: deterministic id computation, the registrar-gated registration entry
         // points, the registrar pointer with its 7-day timelock, the app binding, and
@@ -27,7 +27,7 @@ namespace SmartAccount
         private static readonly byte[] Prefix_PlatformAccountBinding = new byte[] { 0x1E };
         // Reverse index for platform virtual-account witnesses.  The proxy hash
         // is the address that holds the account's assets and appears as the
-        // witness/caller at platform contracts; accountId is the AA core's
+        // witness/caller at platform contracts; accountId is the SA core's
         // authorization subject.  Only the platform registrar may create this
         // binding, and it is immutable for the lifetime of the account.
         private static readonly byte[] Prefix_PlatformProxyAccount = new byte[] { 0x1F };
@@ -164,7 +164,7 @@ namespace SmartAccount
         }
 
         /// <summary>
-        /// Resolves a platform virtual-account witness address to its AA
+        /// Resolves a platform virtual-account witness address to its SA
         /// account identifier.  The result is only populated by the trusted
         /// platform registrar during account creation; callers cannot register
         /// or overwrite an index row.

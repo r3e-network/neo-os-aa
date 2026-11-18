@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Regenerates, or checks, AA's copies of the Morpheus public registry, runtime
+// Regenerates, or checks, SA's copies of the Morpheus public registry, runtime
 // catalog and confidential envelope from the canonical neo-os-services exports.
 //
 //   node scripts/sync_morpheus_registry.mjs             write the generated files

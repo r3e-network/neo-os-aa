@@ -37,8 +37,8 @@ const NETWORK = 'mainnet';
 // social-recovery verifier yet (empty address), and an unpublished entry
 // yields no preset.
 const PUBLISHED_VERIFIER_KEYS = {
-  mainnet: ['aaWeb3AuthVerifier', 'aaSessionKeyVerifier', 'aaSocialRecoveryVerifier'],
-  testnet: ['aaWeb3AuthVerifier', 'aaSessionKeyVerifier'],
+  mainnet: ['saWeb3AuthVerifier', 'saSessionKeyVerifier', 'saSocialRecoveryVerifier'],
+  testnet: ['saWeb3AuthVerifier', 'saSessionKeyVerifier'],
 };
 
 const publishedVerifierContracts = PUBLISHED_VERIFIER_KEYS[NETWORK].map(
@@ -286,7 +286,7 @@ test('the create panel renders every published verifier address as a choice', as
 // --- acceptance clause 2: the create flow targets no removed ABI entry ----
 
 test('the shipped V3 ABI has no V2 create entry, and the operations preset refuses batchCreate', () => {
-  const methodNames = manifestMethods('SmartAccountV3').map((method) => method.name);
+  const methodNames = manifestMethods('SmartAccount').map((method) => method.name);
   assert.equal(methodNames.includes('create'), false, 'the V3 ABI never exported create');
   assert.equal(methodNames.includes('registerAccount'), true);
   assert.equal(
@@ -350,12 +350,12 @@ test('the catalogue is exactly the verifier modules the registry publishes on ea
 
 test('an unpublished, empty or malformed registry entry yields no preset (control: the same oracle lists the published three)', () => {
   const registry = structuredClone(MORPHEUS_PUBLIC_REGISTRY);
-  delete registry.mainnet.contracts.aaSessionKeyVerifier;
-  registry.mainnet.contracts.aaWeb3AuthVerifier = '0xnot-a-hash';
+  delete registry.mainnet.contracts.saSessionKeyVerifier;
+  registry.mainnet.contracts.saWeb3AuthVerifier = '0xnot-a-hash';
   const narrowed = createAccountVerifierPresets('mainnet', { registry, t: fallbackT });
   assert.deepEqual(
     narrowed.map((preset) => preset.registryKey),
-    ['aaSocialRecoveryVerifier'],
+    ['saSocialRecoveryVerifier'],
     'the catalogue still offers a verifier the registry does not publish',
   );
   // Positive control: the same function lists all three from the unmodified
@@ -395,7 +395,7 @@ test('applying a published preset writes the registry address and clears params 
   studio.applyCreateVerifierPreset('sessionKey');
   assert.equal(
     form.verifierContract,
-    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaSessionKeyVerifier,
+    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saSessionKeyVerifier,
   );
   assert.equal(form.verifierParams, '', 'a none preset left stale registration params in the form');
 });
@@ -410,7 +410,7 @@ test('a forged preset object cannot substitute an address the registry does not 
   );
   assert.equal(
     form.verifierContract,
-    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaWeb3AuthVerifier,
+    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saWeb3AuthVerifier,
     'the applied address came from the caller instead of the registry',
   );
 });
@@ -418,7 +418,7 @@ test('a forged preset object cannot substitute an address the registry does not 
 test('an unpublished preset is refused and the form is not touched', () => {
   const form = {
     ...createCreateFormState(),
-    verifierContract: MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaWeb3AuthVerifier,
+    verifierContract: MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saWeb3AuthVerifier,
     verifierParams: '02ab',
   };
   const snapshot = structuredClone(form);
@@ -444,7 +444,7 @@ function createFormWith(backupOwnerSeed = 'ab') {
 }
 
 test('the planned registerAccount invocation carries what the shipped ABI declares', () => {
-  const register = manifestMethods('SmartAccountV3').find((method) => method.name === 'registerAccount');
+  const register = manifestMethods('SmartAccount').find((method) => method.name === 'registerAccount');
   assert.ok(register, 'the shipped V3 ABI has no registerAccount');
   assert.equal(register.safe, false);
 
@@ -468,7 +468,7 @@ test('the planned registerAccount invocation carries what the shipped ABI declar
   assert.equal(plan.escapeTimelockSeconds, 30 * 24 * 60 * 60);
   assert.equal(
     plan.verifierHash,
-    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaWeb3AuthVerifier.replace(/^0x/, ''),
+    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saWeb3AuthVerifier.replace(/^0x/, ''),
   );
 });
 
@@ -513,7 +513,7 @@ test('the params rule follows the verifier address, not the last clicked preset'
     'the params rule of a preset the address no longer selects was still applied',
   );
   // Control: putting the published address back selects the preset's own rule.
-  form.verifierContract = MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.aaSessionKeyVerifier;
+  form.verifierContract = MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saSessionKeyVerifier;
   form.verifierParams = 'cafebabe';
   const guided = planCreateAccount(form, NETWORK, { t: fallbackT });
   assert.equal(guided.invocation.args[2].value, '0x');
@@ -566,7 +566,7 @@ test('the rendered choices come from the controller catalogue (control: an empty
       );
     }
     assert.ok(
-      mounted.text().includes('Create Abstract Account'),
+      mounted.text().includes('Create Smart Account'),
       'the control mount did not render the create panel, so its silence proves nothing',
     );
   } finally {

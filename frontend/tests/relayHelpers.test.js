@@ -15,7 +15,7 @@ import {
 // CU-203: the relay allowlist is a security boundary that used to be typed by hand, so it kept
 // naming entrypoints the deployed core does not export. It is now generated from the artifact that
 // is actually deployed, and these tests read that artifact directly as their oracle.
-const DEPLOYED_MANIFEST = path.resolve('..', 'contracts', 'build', 'SmartAccountV3.manifest.json');
+const DEPLOYED_MANIFEST = path.resolve('..', 'contracts', 'build', 'SmartAccount.manifest.json');
 const GENERATED_OPERATIONS_FILE = path.resolve('api', 'relayOperations.generated.js');
 const GENERATOR_SCRIPT = path.resolve('..', 'scripts', 'generate-relay-operations.mjs');
 
@@ -100,13 +100,13 @@ test('a relay request naming a non-exported entrypoint is refused with the opera
     args: [{ type: 'String', value: 'ok' }],
   };
   assert.equal(
-    sanitizeMetaInvocationForRelay(invocation, { aaContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf' }),
+    sanitizeMetaInvocationForRelay(invocation, { saContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf' }),
     null,
     'the helper must not allow an entrypoint the deployed core does not export',
   );
   assert.equal(
-    resolveRelayMetaInvocationRefusal(invocation, { aaContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf' }),
-    'unsupported relay operation: executeUnified is not in the deployed Abstract Account ABI',
+    resolveRelayMetaInvocationRefusal(invocation, { saContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf' }),
+    'unsupported relay operation: executeUnified is not in the deployed Smart Account ABI',
   );
 });
 
@@ -120,11 +120,11 @@ test('a relay request naming a supported entrypoint is still allowed unchanged',
     ],
   };
   const sanitized = sanitizeMetaInvocationForRelay(invocation, {
-    aaContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
   });
   assert.equal(sanitized?.operation, 'executeUserOp');
   assert.equal(
-    resolveRelayMetaInvocationRefusal(invocation, { aaContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf' }),
+    resolveRelayMetaInvocationRefusal(invocation, { saContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf' }),
     null,
   );
 });
@@ -137,7 +137,7 @@ test('normalizeRelayPayload prefers raw transactions when provided', () => {
 });
 
 
-test('sanitizeMetaInvocationForRelay only accepts configured AA wrapper invocations and strips caller signers', () => {
+test('sanitizeMetaInvocationForRelay only accepts configured SA wrapper invocations and strips caller signers', () => {
   const metaInvocation = {
     scriptHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
     operation: 'executeSponsoredUserOps',
@@ -151,7 +151,7 @@ test('sanitizeMetaInvocationForRelay only accepts configured AA wrapper invocati
   assert.ok(ALLOWED_RELAY_META_OPERATIONS.includes('executeSponsoredUserOps'));
   assert.deepEqual(
     sanitizeMetaInvocationForRelay(metaInvocation, {
-      aaContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
+      saContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
     }),
     {
       scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
@@ -173,7 +173,7 @@ test('sanitizeMetaInvocationForRelay accepts V3 executeUserOp invocations', () =
 
   assert.deepEqual(
     sanitizeMetaInvocationForRelay(metaInvocation, {
-      aaContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
+      saContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
     }),
     {
       scriptHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
@@ -193,7 +193,7 @@ test('sanitizeMetaInvocationForRelay rejects wrong contract hashes and unsupport
       operation: 'executeUserOp',
       args: [],
     }, {
-      aaContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
+      saContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
     }),
     null,
   );
@@ -204,7 +204,7 @@ test('sanitizeMetaInvocationForRelay rejects wrong contract hashes and unsupport
       operation: 'transfer',
       args: [],
     }, {
-      aaContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
+      saContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
     }),
     null,
   );

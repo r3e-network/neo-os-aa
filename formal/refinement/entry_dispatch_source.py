@@ -238,7 +238,7 @@ def project_sources(contents, *, enforce_identity=True):
     for name,(key,header) in HEADERS.items():
         text = body(contents[key],header); program.update(parse_method(name,text))
         methods[name] = dict(source=key,declaration=header,bodyTokens=text,bodySha256=sha(text.encode()))
-    result = dict(schema='neoos-aa-entry-dispatch-source/v1',scope=SCOPE,entryBoundary=ENTRY_BOUNDARY,
+    result = dict(schema='neoos-sa-entry-dispatch-source/v1',scope=SCOPE,entryBoundary=ENTRY_BOUNDARY,
         coreSourceCommit=CORE_COMMIT,neoVmSourceCommit=VM_COMMIT,
         sourceHashes={k:sha(v.encode()) for k,v in contents.items()},methods=methods,program=program,
         initializationName='_initialize',initializationArity=0,preconditions=PRECONDITIONS,
@@ -276,10 +276,10 @@ def mirror_source(key,row):
     same pinned value a download would have to reach, so a mirror cannot launder
     a different artifact. This only substitutes for a stalled network, which is
     an environment fault rather than a fact about the source. Point
-    AA_ENTRY_DISPATCH_SOURCE_MIRROR at a directory of previously fetched
+    SA_ENTRY_DISPATCH_SOURCE_MIRROR at a directory of previously fetched
     `<key>.cs` files to run the lane offline.
     """
-    mirror=os.environ.get('AA_ENTRY_DISPATCH_SOURCE_MIRROR')
+    mirror=os.environ.get('SA_ENTRY_DISPATCH_SOURCE_MIRROR')
     if not mirror: return None
     candidate=Path(mirror)/(key.replace('/','-')+'.cs')
     if not candidate.is_file(): return None

@@ -39,7 +39,7 @@ async function filesBelow(directory) {
 }
 
 test('the real npm tarball is a self-contained, reproducible production package', { timeout: 300_000 }, async (t) => {
-  const temporary = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neo-aa-package-')));
+  const temporary = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'neo-sa-package-')));
   t.after(() => fs.rm(temporary, { recursive: true, force: true }));
   const packDirectory = path.join(temporary, 'pack');
   const consumer = path.join(temporary, 'consumer');
@@ -62,7 +62,7 @@ test('the real npm tarball is a self-contained, reproducible production package'
   await t.test('CommonJS and ESM consumers execute the shared runtime graph without workspace access', () => {
     const exportedNames = JSON.parse(run(process.execPath, ['--input-type=commonjs', '-e', `
       const assert = require('node:assert/strict');
-      const sdk = require('smart-account');
+      const sdk = require('@r3e-network/neo-smart-account');
       const client = new sdk.SmartAccountClient('http://127.0.0.1:9', '11'.repeat(20));
       const accountId = client.deriveRegistrationAccountIdHash({ backupOwnerAddress: '22'.repeat(20) });
       assert.match(accountId, /^[0-9a-f]{40}$/);
@@ -88,11 +88,11 @@ test('the real npm tarball is a self-contained, reproducible production package'
     assert.deepEqual(exportedNames, Object.keys(require('../src/index')).sort(), 'every source export reaches consumers');
     run(process.execPath, ['--input-type=module', '-e', `
       import assert from 'node:assert/strict';
-      import sdk from 'smart-account';
-      import * as namedExports from 'smart-account';
+      import sdk from '@r3e-network/neo-smart-account';
+      import * as namedExports from '@r3e-network/neo-smart-account';
       import { createRequire } from 'node:module';
       const require = createRequire(import.meta.url);
-      assert.deepEqual(Object.keys(sdk).sort(), Object.keys(require('smart-account')).sort());
+      assert.deepEqual(Object.keys(sdk).sort(), Object.keys(require('@r3e-network/neo-smart-account')).sort());
       assert.equal(typeof sdk.SmartAccountClient, 'function');
       for (const key of Object.keys(sdk)) assert.equal(namedExports[key], sdk[key], key);
     `], consumer);
@@ -102,7 +102,7 @@ test('the real npm tarball is a self-contained, reproducible production package'
     const fixture = JSON.parse(await fs.readFile(path.join(__dirname, 'fixtures', 'ordinary-owner-only-contract-state.json'), 'utf8'));
     run(process.execPath, ['--input-type=commonjs', '-e', `
       const assert = require('node:assert/strict');
-      const { SmartAccountClient } = require('smart-account');
+      const { SmartAccountClient } = require('@r3e-network/neo-smart-account');
       const client = new SmartAccountClient('http://127.0.0.1:9', '11'.repeat(20));
       const state = ${JSON.stringify(fixture)};
       const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: '22'.repeat(20) });

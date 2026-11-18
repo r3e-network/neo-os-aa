@@ -7,7 +7,7 @@ const NETWORK_MAGIC = { mainnet: '860833102', testnet: '894710606' };
 const fail = (detail) => { throw new Error(`Draft signed invocation mismatch: ${detail}`); };
 const networkName = (value) => String(value || '').trim().toLowerCase().replace(/^neo-n3-/, '');
 
-// The deployed V3 execution surface (contracts/build/SmartAccountV3.manifest.json), shared by
+// The deployed core execution surface (contracts/build/SmartAccount.manifest.json), shared by
 // this selector and by the client broadcast builder so the two cannot disagree about what the
 // account core exports. A V1/V2 wrapper is not in it: the client no longer builds one and no
 // deployed contract exports the name.
@@ -127,7 +127,7 @@ export function selectSignedInvocation({ transactionBody = {}, signatures = [], 
     if (!invocation?.scriptHash || !invocation?.operation || !Array.isArray(invocation.args)) fail('invalid invocation');
     // An envelope the deployed core does not export is refused here; the client broadcast builder
     // applies the same predicate to whatever the selector returns.
-    if (!isDeployedEntrypoint(invocation.operation)) fail('unsupported AA wrapper');
+    if (!isDeployedEntrypoint(invocation.operation)) fail('unsupported SA wrapper');
     const fields = v3Fields(invocation);
     if (fields && !fields.signature) fail('signed UserOperation has no signature');
     const anchor = anchors.find((item) => item.operation === invocation.operation);

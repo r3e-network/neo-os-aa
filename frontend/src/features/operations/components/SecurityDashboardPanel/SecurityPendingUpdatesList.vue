@@ -1,12 +1,12 @@
 <template>
   <div
     v-if="pendingUpdates.length > 0"
-    class="mb-6 rounded-lg border border-aa-warning/30 bg-aa-warning/5 p-5"
+    class="mb-6 rounded-lg border border-sa-warning/30 bg-sa-warning/5 p-5"
   >
     <div class="flex items-center gap-2 mb-3">
       <svg
         aria-hidden="true"
-        class="w-5 h-5 text-aa-warning"
+        class="w-5 h-5 text-sa-warning"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -18,7 +18,7 @@
           d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
         ></path>
       </svg>
-      <p class="text-xs font-bold uppercase text-aa-warning">
+      <p class="text-xs font-bold uppercase text-sa-warning">
         {{ t("security.pendingUpdates", "Pending Updates") }}
       </p>
     </div>
@@ -26,11 +26,11 @@
       <div
         v-for="update in pendingUpdates"
         :key="update.id"
-        class="flex items-start gap-3 rounded-lg bg-aa-dark/40 p-3"
+        class="flex items-start gap-3 rounded-lg bg-sa-dark/40 p-3"
       >
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-aa-text">{{ update.title }}</p>
-          <p class="text-xs text-aa-muted mt-0.5">
+          <p class="text-sm font-medium text-sa-text">{{ update.title }}</p>
+          <p class="text-xs text-sa-muted mt-0.5">
             {{ update.description }}
           </p>
         </div>
@@ -40,7 +40,7 @@
           </p>
           <button
             v-if="update.canCancel"
-            class="mt-1 text-xs text-aa-warning hover:text-aa-warning-light transition-colors duration-200"
+            class="mt-1 text-xs text-sa-warning hover:text-sa-warning-light transition-colors duration-200"
             @click="$emit('cancel-pending-update', update.id)"
           >
             {{ t("security.cancelUpdate", "Cancel") }}

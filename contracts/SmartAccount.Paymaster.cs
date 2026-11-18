@@ -15,7 +15,7 @@ namespace SmartAccount
         // SERVICE BOUNDARY: this partial is the execution-side half of the sponsored
         // path only. All settlement policy — sponsor deposits, per-op/daily/total
         // budgets, spending counters and the relay payout — lives in the independent
-        // AAPaymaster service contract (contracts/paymaster/Paymaster.cs), which the
+        // SAPaymaster service contract (contracts/paymaster/Paymaster.cs), which the
         // core reaches through a single `settleReimbursement` callback after the user
         // operation succeeded. The core deliberately retains one primitive here: the
         // transaction-global reimbursement reservation below. It must be a single
@@ -27,7 +27,7 @@ namespace SmartAccount
         // Neo N3 on-chain paymaster flow:
         // 1. Relay calls ExecuteSponsoredUserOp with paymaster + sponsor details
         // 2. Relay may optionally preflight ValidatePaymasterOp off-chain before submission
-        // 3. Core executes the UserOp normally (verifier + hooks + target call)
+        // 3. Core executes the canonical v4 operation normally (validator + hooks + target call)
         // 4. Core calls paymaster.settleReimbursement for atomic policy enforcement + relay reimbursement
 
         // One bounded record shared across all accounts, sponsors and paymasters.
@@ -99,25 +99,26 @@ namespace SmartAccount
         }
 
         /// <summary>
-        /// Executes a single user operation with paymaster sponsorship.
-        /// The relay (transaction sender) is reimbursed from the sponsor's deposit
-        /// held in the paymaster contract after successful execution.
+        /// Executes a single canonical v4 user operation with paymaster
+        /// sponsorship. The relay (transaction sender) is reimbursed from the
+        /// sponsor's deposit held in the paymaster contract after successful
+        /// execution.
         /// </summary>
-        /// <param name="accountId">The AA account executing the operation</param>
-        /// <param name="op">The user operation to execute</param>
+        /// <param name="accountId">The SA account executing the operation</param>
+        /// <param name="operation">The canonical 13-field v4 user operation</param>
         /// <param name="paymaster">The paymaster contract hash</param>
         /// <param name="sponsor">The sponsor address funding the operation</param>
         /// <param name="reimbursementAmount">GAS amount (in fractions) to reimburse the relay</param>
         /// <returns>The result of the target contract call</returns>
         public static object ExecuteSponsoredUserOp(
             UInt160 accountId,
-            UserOperation op,
+            object operation,
             UInt160 paymaster,
             UInt160 sponsor,
             BigInteger reimbursementAmount)
         {
             ValidateAccountId(accountId);
-            ValidateUserOperation(op);
+            object[] op = ValidateOperationEnvelope(operation);
             ExecutionEngine.Assert(paymaster != null && paymaster != UInt160.Zero, "Paymaster required");
             ExecutionEngine.Assert(sponsor != null && sponsor != UInt160.Zero, "Sponsor required");
             ExecutionEngine.Assert(reimbursementAmount > 0, "Reimbursement amount required");
@@ -131,12 +132,12 @@ namespace SmartAccount
             ExecutionEngine.Assert(paymasterCore == Runtime.ExecutingScriptHash, "Paymaster not bound to this core");
 
             // Execute the operation (full validation + execution + hooks)
-            object result = ExecuteUserOp(accountId!, op);
+            object result = executeUserOp(accountId!, operation);
 
             // Settle: deduct from sponsor deposit and reimburse relay.
             // Settlement does full policy validation atomically — no separate pre-check needed.
             Contract.Call(paymaster!, "settleReimbursement", CallFlags.All,
-                new object[] { sponsor!, accountId!, op.TargetContract, op.Method,
+                new object[] { sponsor!, accountId!, op[OpTarget], op[OpMethod],
                                Runtime.Transaction.Sender!, settledAmount });
 
             OnSponsoredUserOpExecuted(accountId!, paymaster!, sponsor!, Runtime.Transaction.Sender!, settledAmount);
@@ -144,14 +145,15 @@ namespace SmartAccount
         }
 
         /// <summary>
-        /// Executes multiple user operations as an atomic batch with paymaster sponsorship.
-        /// A single reimbursement covers the entire batch. The settlement validates the first
-        /// op's target/method against the policy; all ops in the batch must target the same
-        /// contract and method.
+        /// Executes multiple canonical v4 user operations as an atomic batch
+        /// with paymaster sponsorship. A single reimbursement covers the
+        /// entire batch. The settlement validates the first op's
+        /// target/method against the policy; all ops in the batch must target
+        /// the same contract and method.
         /// </summary>
         public static object[] ExecuteSponsoredUserOps(
             UInt160 accountId,
-            UserOperation[] ops,
+            object[] operations,
             UInt160 paymaster,
             UInt160 sponsor,
             BigInteger reimbursementAmount)
@@ -160,20 +162,17 @@ namespace SmartAccount
             ExecutionEngine.Assert(paymaster != null && paymaster != UInt160.Zero, "Paymaster required");
             ExecutionEngine.Assert(sponsor != null && sponsor != UInt160.Zero, "Sponsor required");
             ExecutionEngine.Assert(reimbursementAmount > 0, "Reimbursement amount required");
-            ExecutionEngine.Assert(ops != null && ops.Length > 0, "Operations required");
-            ExecutionEngine.Assert(ops!.Length <= MaxUserOperationBatchLength, "Batch exceeds protocol limit");
+            ExecutionEngine.Assert(operations != null && operations.Length > 0, "Operations required");
+            ExecutionEngine.Assert(operations!.Length <= MaxOperationsPerEnvelope, ErrorModuleLimitBatch);
 
-            UserOperation[] validatedOps = ops!;
-            for (int i = 0; i < validatedOps.Length; i++)
+            // Validate every envelope; keep the first op's target/method for
+            // the shared settlement (batch ops must share target and method).
+            object[] first = ValidateOperationEnvelope(operations[0]);
+            for (int i = 1; i < operations.Length; i++)
             {
-                ValidateUserOperation(validatedOps[i]);
-            }
-
-            // Enforce all ops share the same target/method (policy is checked against these)
-            for (int i = 1; i < ops!.Length; i++)
-            {
-                ExecutionEngine.Assert(ops[i].TargetContract == ops[0].TargetContract, "Batch ops must share target contract");
-                ExecutionEngine.Assert(ops[i].Method == ops[0].Method, "Batch ops must share method");
+                object[] op = ValidateOperationEnvelope(operations[i]);
+                ExecutionEngine.Assert(op[OpTarget] == first[OpTarget], "Batch ops must share target contract");
+                ExecutionEngine.Assert(op[OpMethod] == first[OpMethod], "Batch ops must share method");
             }
 
             // Bind the relay-requested reimbursement to the actual gas cost of this transaction
@@ -185,11 +184,11 @@ namespace SmartAccount
             ExecutionEngine.Assert(paymasterCore == Runtime.ExecutingScriptHash, "Paymaster not bound to this core");
 
             // Execute all operations atomically
-            object[] results = ExecuteUserOps(accountId!, ops);
+            object[] results = executeUserOps(accountId!, operations);
 
             // Single settlement for entire batch
             Contract.Call(paymaster!, "settleReimbursement", CallFlags.All,
-                new object[] { sponsor!, accountId!, ops[0].TargetContract, ops[0].Method,
+                new object[] { sponsor!, accountId!, first[OpTarget], first[OpMethod],
                                Runtime.Transaction.Sender!, settledAmount });
 
             OnSponsoredUserOpExecuted(accountId!, paymaster!, sponsor!, Runtime.Transaction.Sender!, settledAmount);

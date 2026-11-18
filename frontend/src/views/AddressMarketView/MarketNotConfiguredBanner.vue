@@ -9,7 +9,7 @@
       {{
         t(
           "market.notConfiguredBody",
-          "Set VITE_AA_MARKET_HASH for the current deployment before using the trustless escrow market. The UI will not fall back to local listings anymore.",
+          "Set VITE_SA_MARKET_HASH for the current deployment before using the trustless escrow market. The UI will not fall back to local listings anymore.",
         )
       }}
     </p>

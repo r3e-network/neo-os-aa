@@ -10,7 +10,7 @@ using Neo.VM;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral tests for the AA proxy witness path used by virtual accounts: the
+/// Behavioral tests for the SA proxy witness path used by virtual accounts: the
 /// proxy address is the hash of a script that calls <c>core.verify(accountId)</c>,
 /// and it authorizes an operation only through its own restricted signer.
 /// </summary>
@@ -96,7 +96,7 @@ public class ProxyWitnessRuntimeTests
 
         public ProxyHarness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
+            Wallet = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
             Fx.CallVoid(Wallet, "setVerifyScopeTarget", AccountId, Target);
             Assert.AreEqual(Target, Fx.CallUInt160(Wallet, "getVerifyScopeTarget", AccountId),

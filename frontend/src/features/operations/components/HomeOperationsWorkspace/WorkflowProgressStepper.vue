@@ -1,16 +1,16 @@
 <template>
   <div
-    class="mb-8 rounded-xl border border-aa-border bg-aa-panel/40 p-4 backdrop-blur-md"
+    class="mb-8 rounded-xl border border-sa-border bg-sa-panel/40 p-4 backdrop-blur-md"
   >
     <div class="flex items-center justify-between mb-3">
-      <p class="text-xs font-bold uppercase text-aa-muted">
+      <p class="text-xs font-bold uppercase text-sa-muted">
         {{ t("operations.workflowProgress", "Workflow Progress") }}
       </p>
       <div class="flex items-center gap-3">
-        <p class="text-xs text-aa-muted">{{ currentStepLabel }}</p>
+        <p class="text-xs text-sa-muted">{{ currentStepLabel }}</p>
         <button
           @click="emit('toggle-shortcuts')"
-          class="text-aa-muted hover:text-aa-text transition-colors duration-200 text-xs font-mono border border-aa-border rounded px-3 py-2 sm:py-1 hover:border-aa-orange/30"
+          class="text-sa-muted hover:text-sa-text transition-colors duration-200 text-xs font-mono border border-sa-border rounded px-3 py-2 sm:py-1 hover:border-sa-orange/30"
           :aria-label="
             t('operations.keyboardShortcuts', 'Keyboard shortcuts')
           "
@@ -20,7 +20,7 @@
         </button>
         <button
           @click="emit('reset-workflow')"
-          class="text-xs text-aa-muted hover:text-aa-error font-medium transition-colors duration-200"
+          class="text-xs text-sa-muted hover:text-sa-error font-medium transition-colors duration-200"
           :aria-label="t('operations.resetWorkflow', 'Reset workflow')"
           :title="t('operations.resetWorkflow', 'Reset workflow')"
         >
@@ -57,18 +57,18 @@
             step.state === 'active'
               ? 'bg-neo-500/20 border border-neo-500/50 text-neo-300'
               : step.state === 'completed'
-                ? 'bg-aa-success/10 border border-aa-success/30 text-aa-success-light hover:bg-aa-success/20 cursor-pointer'
-                : 'bg-aa-dark/30 border border-aa-border text-aa-muted cursor-not-allowed opacity-60'
+                ? 'bg-sa-success/10 border border-sa-success/30 text-sa-success-light hover:bg-sa-success/20 cursor-pointer'
+                : 'bg-sa-dark/30 border border-sa-border text-sa-muted cursor-not-allowed opacity-60'
           "
         >
           <div
             class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
             :class="
               step.state === 'active'
-                ? 'bg-neo-500 text-aa-dark'
+                ? 'bg-neo-500 text-sa-dark'
                 : step.state === 'completed'
-                  ? 'bg-aa-success text-aa-dark'
-                  : 'bg-aa-dark text-aa-text'
+                  ? 'bg-sa-success text-sa-dark'
+                  : 'bg-sa-dark text-sa-text'
             "
           >
             <svg
@@ -99,8 +99,8 @@
           :class="
             steps[index].state === 'completed' &&
             steps[index + 1].state !== 'locked'
-              ? 'bg-aa-success/50'
-              : 'bg-aa-dark'
+              ? 'bg-sa-success/50'
+              : 'bg-sa-dark'
           "
         ></div>
       </template>

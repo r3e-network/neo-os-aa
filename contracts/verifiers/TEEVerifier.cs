@@ -14,7 +14,7 @@ namespace SmartAccount.Verifiers
     /// </summary>
     /// <remarks>
     /// This plugin is designed for trusted off-chain agents or secure hardware workers that sign
-    /// raw AA payload bytes after applying private business logic. The verifier only checks the
+    /// raw SA payload bytes after applying private business logic. The verifier only checks the
     /// signature; remote attestation and policy decisions must happen off-chain before signing.
     /// </remarks>
     [DisplayName("TEEVerifier")]
@@ -47,7 +47,7 @@ namespace SmartAccount.Verifiers
         public static void ConfirmAuthorizedCore(UInt160 coreContract) => VerifierAuthority.ConfirmAuthorizedCore(coreContract);
         public static void CancelAuthorizedCoreChange() => VerifierAuthority.CancelAuthorizedCoreChange();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => VerifierAuthority.ProposeUpdate(nefHash, manifestHash);
 
@@ -106,13 +106,15 @@ namespace SmartAccount.Verifiers
         }
 
         /// <summary>
-        /// Validates a secp256r1 signature against the raw AA payload bytes.
+        /// Validates a secp256r1 signature against the raw SA payload bytes.
         /// </summary>
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
             // Audit fix M-6: the ordinary-build validation entry is only reachable
-            // through the AA core's execution context; direct callers are rejected.
-            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+            // through the SA core's execution context; direct callers are rejected.
+            // v4: the core calls validators in the PhaseValidation phase, so this is
+            // the read-only validation-phase authorization (not the completion one).
+            VerifierAuthority.ValidateValidationCaller(accountId, Runtime.ExecutingScriptHash);
             ByteString teePubKey = GetPublicKey(accountId);
             ExecutionEngine.Assert(teePubKey.Length > 0, "No TEE pubkey configured");
 

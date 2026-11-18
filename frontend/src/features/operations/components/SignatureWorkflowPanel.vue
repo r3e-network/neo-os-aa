@@ -2,10 +2,10 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between gap-4">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("operations.signatureWorkflowTitle", "Signature Workflow") }}
         </h2>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{
             t(
               "operations.signatureWorkflowSubtitle",
@@ -15,12 +15,12 @@
         </p>
       </div>
     </div>
-    <div class="mb-5 rounded-lg border border-aa-border bg-aa-dark/50 p-4">
+    <div class="mb-5 rounded-lg border border-sa-border bg-sa-dark/50 p-4">
       <div class="flex items-center justify-between mb-3">
-        <p class="text-xs font-bold uppercase text-aa-muted">
+        <p class="text-xs font-bold uppercase text-sa-muted">
           {{ t("operations.signatureProgressTitle", "Signature Progress") }}
         </p>
-        <p class="text-xs font-mono text-aa-muted">
+        <p class="text-xs font-mono text-sa-muted">
           {{
             t("operations.collectedCount", "{collected} / {required} collected")
               .replace("{collected}", signatureCount)
@@ -28,7 +28,7 @@
           }}
         </p>
       </div>
-      <div class="w-full bg-aa-dark rounded-full h-2">
+      <div class="w-full bg-sa-dark rounded-full h-2">
         <div
           role="progressbar"
           :aria-valuenow="signatureCount"
@@ -49,7 +49,7 @@
       </div>
       <p
         v-if="signatureCount >= requiredSignerCount && requiredSignerCount > 0"
-        class="mt-2 text-xs text-aa-success flex items-center gap-1"
+        class="mt-2 text-xs text-sa-success flex items-center gap-1"
       >
         <svg
           aria-hidden="true"
@@ -74,7 +74,7 @@
       </p>
       <p
         v-else-if="requiredSignerCount === 0"
-        class="mt-2 text-xs text-aa-muted"
+        class="mt-2 text-xs text-sa-muted"
       >
         {{
           t(
@@ -86,7 +86,7 @@
     </div>
     <div class="grid gap-4 md:grid-cols-2">
       <label class="space-y-1 text-sm" for="sig-workflow-signer-id">
-        <span class="font-medium text-aa-text">{{
+        <span class="font-medium text-sa-text">{{
           t("operations.signerIdLabel", "Signer ID")
         }}</span>
         <input
@@ -100,7 +100,7 @@
         />
       </label>
       <label class="space-y-1 text-sm" for="sig-workflow-signer-kind">
-        <span class="font-medium text-aa-text">{{
+        <span class="font-medium text-sa-text">{{
           t("operations.signerKindLabel", "Signer Kind")
         }}</span>
         <select
@@ -134,7 +134,7 @@
             }}
           </option>
         </select>
-        <p class="text-xs text-aa-muted mt-1">
+        <p class="text-xs text-sa-muted mt-1">
           {{
             t(
               "operations.neoEvmAddressHint",
@@ -146,7 +146,7 @@
     </div>
     <div class="mt-4">
       <label class="space-y-1 text-sm" for="sig-workflow-signature-hex">
-        <span class="font-medium text-aa-text">{{
+        <span class="font-medium text-sa-text">{{
           t("operations.signatureHexLabel", "Signature Hex")
         }}</span>
         <textarea
@@ -155,7 +155,7 @@
           rows="3"
           class="input-field font-mono text-xs resize-none"
           :class="
-            signatureHex && !isValidHex(signatureHex) ? '!border-aa-error' : ''
+            signatureHex && !isValidHex(signatureHex) ? '!border-sa-error' : ''
           "
           :placeholder="
             t(
@@ -168,7 +168,7 @@
         <p
           v-if="signatureHex && !isValidHex(signatureHex)"
           role="alert"
-          class="text-xs text-aa-error mt-1"
+          class="text-xs text-sa-error mt-1"
         >
           {{
             t(
@@ -180,7 +180,7 @@
       </label>
     </div>
     <div class="mt-5 flex items-center justify-between gap-4">
-      <p class="text-xs text-aa-muted">
+      <p class="text-xs text-sa-muted">
         {{ t("operations.orSignWithWallet", "Or sign with your wallet:") }}
       </p>
       <button
@@ -199,8 +199,8 @@
       </button>
     </div>
 
-    <div class="mt-6 rounded-lg border border-aa-border bg-aa-dark/50 p-4">
-      <p class="text-xs font-bold uppercase text-aa-muted mb-3">
+    <div class="mt-6 rounded-lg border border-sa-border bg-sa-dark/50 p-4">
+      <p class="text-xs font-bold uppercase text-sa-muted mb-3">
         {{ t("sharedDraft.collectedSignaturesTitle", "Collected Signatures") }}
       </p>
       <div
@@ -209,7 +209,7 @@
       >
         <svg
           aria-hidden="true"
-          class="w-8 h-8 text-aa-muted/40 mb-2"
+          class="w-8 h-8 text-sa-muted/40 mb-2"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -221,7 +221,7 @@
             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
           />
         </svg>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{
             t(
               "sharedDraft.noSignaturesYet",
@@ -234,7 +234,7 @@
         <div
           v-for="(sig, idx) in signatures"
           :key="`${sig.signerId}:${sig.kind}:${idx}`"
-          class="flex items-center gap-3 rounded-lg bg-aa-panel/50 px-3 py-2.5"
+          class="flex items-center gap-3 rounded-lg bg-sa-panel/50 px-3 py-2.5"
         >
           <span
             class="badge"
@@ -255,13 +255,13 @@
             }}
           </span>
           <span
-            class="font-mono text-xs text-aa-text truncate flex-1"
+            class="font-mono text-xs text-sa-text truncate flex-1"
             :title="sig.signerId"
             >{{ truncateSignerId(sig.signerId) }}</span
           >
           <span
             v-if="sig.createdAt"
-            class="text-[10px] text-aa-muted whitespace-nowrap"
+            class="text-[10px] text-sa-muted whitespace-nowrap"
             >{{ formatSigTime(sig.createdAt) }}</span
           >
         </div>

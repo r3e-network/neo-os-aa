@@ -23,13 +23,13 @@ class NativeSessionTests(unittest.TestCase):
 
     def test_explicit_target_scope_preserves_default_and_allows_negative_controls(self):
         from neoexpress_native_proxy_validate import GAS_TOKEN
-        from neoexpress_validate import aa_proxy_rules
+        from neoexpress_validate import sa_proxy_rules
         for options,target in (({},GAS_TOKEN),({'witness_target':STDLIB},STDLIB)):
             driver,args=self.rejection_driver()
             with patch('neoexpress_native_session_validate.serialize_unsigned',side_effect=ValueError('captured')) as serialize:
                 with self.assertRaisesRegex(ValueError,'captured'):
                     driver.send('scope-control',CORE,'executeUserOp',args,proxy=True,**options)
-            self.assertEqual(aa_proxy_rules(CORE,target),serialize.call_args.args[4][1]['rules'])
+            self.assertEqual(sa_proxy_rules(CORE,target),serialize.call_args.args[4][1]['rules'])
             self.assertTrue(serialize.call_args.args[5].startswith(bytes.fromhex('1b17')),
                             'The fresh proxy script must push observed configuration 11 then epoch 7')
 

@@ -6,7 +6,7 @@
 // byte-for-byte with the generated local artifact directory.
 //
 // contracts/build is tracked in git and is deliberately not treated as build
-// output: its SmartAccountV3.nef is byte-identical to the deployed mainnet
+// output: its SmartAccount.nef is byte-identical to the deployed mainnet
 // core, so it is retained as a provenance anchor and reported separately.
 
 import { execFileSync } from "node:child_process";
@@ -147,7 +147,7 @@ export function artifactCertificateHashes(rows) {
 export function compareProfiles(expectedBin, actualBin) {
   return Object.fromEntries(ARTIFACT_PROFILES.map((profile) => {
     const rows = compareTrees(path.join(expectedBin, profile), path.join(actualBin, profile));
-    const required = ["SmartAccountV3.nef", "SmartAccountV3.manifest.json"];
+    const required = ["SmartAccount.nef", "SmartAccount.manifest.json"];
     const requiredCorePresent = required.every((name) => rows.some((row) =>
       row.artifact === name && row.expected_sha256 && row.actual_sha256));
     return [profile, {
@@ -164,7 +164,7 @@ export function compareProfiles(expectedBin, actualBin) {
 
 /** Copies the sources, lock files and restore policy that determine the artifacts into a new scratch directory. */
 export function prepareScratch() {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "aa-repro-"));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sa-repro-"));
   fs.cpSync(path.join(repoRoot, "contracts"), path.join(scratch, "contracts"), {
     recursive: true,
     filter: (source) => !isSkippedDirectory(source),
@@ -208,12 +208,12 @@ async function main() {
     const drifted = rows.filter((row) => !row.match && row.expected_sha256 && row.actual_sha256);
     const missing = rows.filter((row) => !row.expected_sha256 || !row.actual_sha256);
     const anchor = compareTrees(freshDir, path.join(trackedDir, "..", "build"))
-      .filter((row) => row.artifact === "SmartAccountV3.nef")
+      .filter((row) => row.artifact === "SmartAccount.nef")
       .map((row) => ({ ...row, provenance: "tracked contracts/build; deployed-mainnet bytecode anchor" }));
     // The comparison above only ever looked at one file, so drift in the rest of the
     // tracked release tree was invisible: 23 same-relative-path files differed while
     // this gate reported success. Report the whole tree now. It is not folded into
-    // `release_matches_fresh_build` because SmartAccountV3 is deliberately pinned
+    // `release_matches_fresh_build` because SmartAccount is deliberately pinned
     // to the deployed mainnet bytecode and that exception has to be decided first.
     const trackedRows = compareTrees(freshDir, path.join(trackedDir, "..", "build"));
     const trackedDrift = trackedRows
@@ -225,7 +225,7 @@ async function main() {
       .map((file) => [file, sourceInputs[file]]));
     const profilesMatch = Object.values(profiles).every((profile) => profile.matches_fresh_build);
     const certificate = {
-      schema: "neoos-aa-source-to-artifact-certificate/v1",
+      schema: "neoos-sa-source-to-artifact-certificate/v1",
       source_root: "repository",
       source_files: sourceInputs,
       source_snapshot_sha256: sha256(Buffer.from(JSON.stringify(sourceInputs))),
@@ -238,7 +238,7 @@ async function main() {
       semantic_scope: "Rebuild and byte comparison; not a mechanized C# to NEF or full NeoVM refinement proof",
     };
     const report = {
-      schema: "neoos-aa-artifact-reproducibility/v2",
+      schema: "neoos-sa-artifact-reproducibility/v2",
       generated_at: new Date().toISOString(),
       release_dir: path.relative(repoRoot, releaseDir).replaceAll(path.sep, "/"),
       profiles,
@@ -250,7 +250,7 @@ async function main() {
       tracked_tree_drift: trackedDrift,
       tracked_tree_note:
         "Files under contracts/build whose bytes differ from a fresh build. Reported, " +
-        "not failing: SmartAccountV3 is intentionally pinned to the deployed " +
+        "not failing: SmartAccount is intentionally pinned to the deployed " +
         "mainnet bytecode and that exception must be decided before this becomes a gate.",
       certificate,
       chain_writes_performed: false,

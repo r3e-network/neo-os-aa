@@ -178,7 +178,7 @@ public class PolicySemanticsRuntimeTests
     public void RealCore_FailedTransferRollsBackNonceTokenAndPolicyState(bool subscription)
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 token = fx.Deploy("PolicyExecutionProbe");
         UInt160 verifier = fx.Deploy("verifiers/" + (subscription ? "SubscriptionVerifier" : "SessionKeyVerifier"), wallet.ToArray());
         UInt160 owner = fx.Engine.ValidatorsAddress;

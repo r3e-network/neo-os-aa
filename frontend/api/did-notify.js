@@ -39,8 +39,8 @@ function resolveWebhookConfig(channel) {
   return { url: '', token: '' };
 }
 
-const ALLOWED_TEMPLATES = new Set(['aa_recovery', 'aa_action_session']);
-const DEFAULT_TEMPLATE = 'aa_recovery';
+const ALLOWED_TEMPLATES = new Set(['sa_recovery', 'sa_action_session']);
+const DEFAULT_TEMPLATE = 'sa_recovery';
 
 function resolveTemplate(value) {
   const candidate = trim(value);

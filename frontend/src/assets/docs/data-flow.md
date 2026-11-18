@@ -1,6 +1,6 @@
 # Contract Data Flow & Storage
 
-The Abstract Account model centralizes all on-chain authority inside the **Master Entry Contract**, while using the browser, Supabase, and optional relay services to improve usability and collaboration.
+The Smart Account model centralizes all on-chain authority inside the **Master Entry Contract**, while using the browser, Supabase, and optional relay services to improve usability and collaboration.
 
 ## 1. System Boundaries
 
@@ -33,7 +33,7 @@ Those boundaries do different jobs:
 
 | Boundary | What lives there | Who can mutate it | Why it exists |
 | --- | --- | --- | --- |
-| On-chain master contract | Admins, managers, thresholds, whitelist / blacklist, verifier, dome, limits, nonces | Authorized AA governance flows | Source of truth for authorization and execution |
+| On-chain master contract | Admins, managers, thresholds, whitelist / blacklist, verifier, dome, limits, nonces | Authorized SA governance flows | Source of truth for authorization and execution |
 | Browser memory | Current workspace state, selected payload mode, active wallet session | Current browser session | Fast UX and staging |
 | `localStorage` fallback | Local-only drafts and preferences | Same browser only | Offline / no-Supabase development path |
 | Supabase | Draft body, append-only signatures, bounded activity, bounded receipts, scoped slugs | Scope-limited collaboration flows | Shared review and multi-party coordination |
@@ -161,4 +161,4 @@ This keeps long-lived drafts explainable and reviewable without letting metadata
 
 ## Matrix Domain Resolution Boundary
 
-The `.matrix` contract is an external naming boundary. It does not replace AA authorization state. Instead, the frontend resolves a `.matrix` domain to a controller wallet address and then queries AA admin/manager address indexes to find the corresponding bound AA addresses.
+The `.matrix` contract is an external naming boundary. It does not replace SA authorization state. Instead, the frontend resolves a `.matrix` domain to a controller wallet address and then queries SA admin/manager address indexes to find the corresponding bound SA addresses.

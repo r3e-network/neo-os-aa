@@ -18,9 +18,9 @@ neonRpc.RPCClient.prototype.calculateNetworkFee = async function (transaction) {
 const account = new wallet.Account(relayPrivateKeyHex);
 delete process.env.RELAY_PRIVATE_KEY_HEX;
 if (`0x${account.scriptHash}` !== fx.relay) throw new Error(`Relay key/address mismatch: ${account.scriptHash} vs ${fx.relay}`);
-Object.assign(process.env, { AA_RELAY_RPC_URL: fx.rpcUrl, AA_RELAY_WIF: account.WIF, AA_RELAY_ALLOWED_HASH: fx.core,
-  AA_RELAY_ALLOW_UNSPONSORED: '1', AA_RELAY_PROXY_WITNESS_ENABLED: '1', AA_RELAY_MAX_SYSTEM_FEE: '3000000000',
-  AA_RELAY_MAX_NETWORK_FEE: '3000000000', AA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000', AA_RELAY_MAX_TOTAL_FEE: '3000000000', AA_RELAY_INCLUDE_RAW_ERRORS: '1' });
+Object.assign(process.env, { SA_RELAY_RPC_URL: fx.rpcUrl, SA_RELAY_WIF: account.WIF, SA_RELAY_ALLOWED_HASH: fx.core,
+  SA_RELAY_ALLOW_UNSPONSORED: '1', SA_RELAY_PROXY_WITNESS_ENABLED: '1', SA_RELAY_MAX_SYSTEM_FEE: '3000000000',
+  SA_RELAY_MAX_NETWORK_FEE: '3000000000', SA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000', SA_RELAY_MAX_TOTAL_FEE: '3000000000', SA_RELAY_INCLUDE_RAW_ERRORS: '1' });
 const { default: handler } = await import('../../frontend/api/relay-transaction.js');
 async function rpc(method, params) {
   const reply = await fetch(fx.rpcUrl, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }).then((r) => r.json());
@@ -57,15 +57,15 @@ async function call(name, metaInvocation) {
 }
 const cases = [await call('invalidSignature', fx.invocations.invalidSignature)];
 const refusals = [];
-const reserve = process.env.AA_RELAY_PROXY_NETWORK_FEE_RESERVE;
-delete process.env.AA_RELAY_PROXY_NETWORK_FEE_RESERVE;
+const reserve = process.env.SA_RELAY_PROXY_NETWORK_FEE_RESERVE;
+delete process.env.SA_RELAY_PROXY_NETWORK_FEE_RESERVE;
 refusals.push(await call('missingReserve', fx.invocations.direct));
-process.env.AA_RELAY_PROXY_NETWORK_FEE_RESERVE = '1';
+process.env.SA_RELAY_PROXY_NETWORK_FEE_RESERVE = '1';
 refusals.push(await call('insufficientReserve', fx.invocations.direct));
-process.env.AA_RELAY_PROXY_NETWORK_FEE_RESERVE = reserve;
-process.env.AA_RELAY_MAX_NETWORK_FEE = '1';
+process.env.SA_RELAY_PROXY_NETWORK_FEE_RESERVE = reserve;
+process.env.SA_RELAY_MAX_NETWORK_FEE = '1';
 refusals.push(await call('networkFeeCeiling', fx.invocations.direct));
-process.env.AA_RELAY_MAX_NETWORK_FEE = '3000000000';
+process.env.SA_RELAY_MAX_NETWORK_FEE = '3000000000';
 cases.push(await call('direct', fx.invocations.direct));
 cases.push(await call('sponsored', fx.invocations.sponsored));
 console.log(JSON.stringify({ core: fx.core, accountId: fx.accountId, proxy: fx.proxy, buyer: fx.buyer, owner: fx.owner,

@@ -17,7 +17,7 @@ namespace Neo.SmartContract.Examples
             string accountIdText,
             string network,
             UInt160 owner,
-            UInt160 aaContract,
+            UInt160 saContract,
             UInt160 accountAddress,
             UInt160 morpheusOracle,
             ByteString[] masterNullifiers,
@@ -26,7 +26,7 @@ namespace Neo.SmartContract.Examples
             ECPoint morpheusVerifier)
         {
             Storage.Put(Storage.CurrentContext, Key(PREFIX_OWNER, accountId), owner);
-            Storage.Put(Storage.CurrentContext, Key(PREFIX_AA_CONTRACT, accountId), aaContract);
+            Storage.Put(Storage.CurrentContext, Key(PREFIX_SA_CONTRACT, accountId), saContract);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_ACCOUNT_ADDRESS, accountId), accountAddress);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_MORPHEUS_ORACLE, accountId), morpheusOracle);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_NETWORK, accountId), network);

@@ -31,7 +31,7 @@ test('buildMetaTransactionTypedData matches the contract field layout', () => {
 
   assert.deepEqual(payload, {
     domain: {
-      name: 'Neo N3 Abstract Account',
+      name: 'Neo Smart Account',
       version: '1',
       chainId: params.chainId,
       verifyingContract: `0x${params.verifyingContract}`,
@@ -82,7 +82,7 @@ test('computeArgsHash invokes the contract helper and decodes the returned bytes
 
   const result = await computeArgsHash({
     rpcUrl: 'https://rpc.example.org',
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     args: [{ type: 'String', value: 'hello' }],
     fetchImpl,
   });
@@ -109,7 +109,7 @@ test('fetchNonceForAddress reads the current meta-tx nonce for an address signer
 
   const nonce = await fetchNonceForAddress({
     rpcUrl: 'https://rpc.example.org',
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     accountAddressScriptHash: '13ef519c362973f9a34648a9eac5b71250b2a80a',
     evmSignerAddress: '0x49c095ce04d38642e39155f5481615c58227a498',
     fetchImpl,
@@ -119,7 +119,7 @@ test('fetchNonceForAddress reads the current meta-tx nonce for an address signer
 });
 
 test('the V1/V2 invocation builder is gone from the client transaction builders', async () => {
-  // CU-209: the deployed SmartAccountV3 ABI exports four execute* entrypoints and neither
+  // CU-209: the deployed SmartAccount ABI exports four execute* entrypoints and neither
   // V1/V2 name, so no builder for that envelope may exist here. The manifest-oracle gate lives in
   // metaInvocationProducer.test.js.
   const metaTx = await import('../src/features/operations/metaTx.js');
@@ -141,7 +141,7 @@ test('buildV3UserOperationTypedData matches the V3 verifier field layout', () =>
 
   assert.deepEqual(payload, {
     domain: {
-      name: 'Neo N3 Abstract Account',
+      name: 'Neo Smart Account',
       version: '1',
       chainId: 894710606,
       verifyingContract: '0x49c095ce04d38642e39155f5481615c58227a498',
@@ -184,7 +184,7 @@ test('fetchV3Nonce reads the current V3 channel nonce', async () => {
 
   const nonce = await fetchV3Nonce({
     rpcUrl: 'https://rpc.example.org',
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
     channel: 0n,
     fetchImpl,
@@ -208,7 +208,7 @@ test('fetchV3Verifier reads the bound verifier for a V3 account id', async () =>
 
   const verifierHash = await fetchV3Verifier({
     rpcUrl: 'https://rpc.example.org',
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
     fetchImpl,
   });
@@ -244,7 +244,7 @@ test('fetchV3ValidationPreview reads the structured validation preview for a use
 
   const preview = await fetchV3ValidationPreview({
     rpcUrl: 'https://rpc.example.org',
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
     targetContract: '49c095ce04d38642e39155f5481615c58227a498',
     method: 'transfer',
@@ -266,7 +266,7 @@ test('fetchV3ValidationPreview reads the structured validation preview for a use
 
 test('buildExecuteUserOpInvocation builds V3 struct args', () => {
   const invocation = buildExecuteUserOpInvocation({
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
     targetContract: 'd2a4cff31913016155e38e474a2c06d08be276cf',
     method: 'balanceOf',

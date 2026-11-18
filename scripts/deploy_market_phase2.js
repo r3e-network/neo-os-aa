@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Phase 2 (archival, parameterized): deploy TEEVerifier, register accounts on
- * an already-deployed AA core, and create market listings on an
+ * an already-deployed SA core, and create market listings on an
  * already-deployed market.
  *
  * This was originally a one-shot follow-up to a specific phase-1 run of
@@ -10,11 +10,11 @@
  * default (the core default now tracks the canonical testnet deployment), but
  * every deployment-specific value can now be overridden:
  *
- *   AA_TESTNET_CORE_HASH    already-deployed AA core (default: canonical testnet SmartAccountV3)
- *   AA_TESTNET_MARKET_HASH  already-deployed AAAddressMarket (default: 2026-03 phase 1)
+ *   SA_TESTNET_CORE_HASH    already-deployed SA core (default: canonical testnet SmartAccount)
+ *   SA_TESTNET_MARKET_HASH  already-deployed SAAddressMarket (default: 2026-03 phase 1)
  *   MARKET_DEPLOY_TAG       manifest suffix tag for the TEEVerifier deployment
  *   MARKET_DEPLOY_WIF / NEO_TESTNET_WIF   funded deployer WIF
- *   NEON_DB_URL             Neon/Postgres connection string with aa_accounts
+ *   NEON_DB_URL             Neon/Postgres connection string with sa_accounts
  *
  * Shared deploy plumbing lives in scripts/lib/deploy-helpers.js; its
  * invokePersisted/deployArtifact helpers abort with "<operation> preview FAULT"
@@ -51,10 +51,10 @@ const NEON_DB_URL = process.env.NEON_DB_URL || '';
 const TESTNET_NETWORK_MAGIC = 894710606;
 
 // Already-deployed contracts. The core default is the canonical testnet
-// SmartAccountV3 (the 2026-03 phase-1 core 0x2818ce32… is superseded);
+// SmartAccount (the 2026-03 phase-1 core 0x2818ce32… is superseded);
 // the market default is still the 2026-03 phase-1 deployment.
-const CORE_HASH = normalizeHash(process.env.AA_TESTNET_CORE_HASH || '0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2');
-const MARKET_HASH = normalizeHash(process.env.AA_TESTNET_MARKET_HASH || '0x8dbd4cf6fc47afc013e7fd7128d028db2985bddf');
+const CORE_HASH = normalizeHash(process.env.SA_TESTNET_CORE_HASH || '0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2');
+const MARKET_HASH = normalizeHash(process.env.SA_TESTNET_MARKET_HASH || '0x8dbd4cf6fc47afc013e7fd7128d028db2985bddf');
 
 const DEPLOY_TAG = process.env.MARKET_DEPLOY_TAG || 'market-mneku8bc';
 const ZERO_HASH160 = '0000000000000000000000000000000000000000';
@@ -92,7 +92,7 @@ async function main() {
   const teeVerifier = await deployArtifact({ ...deployCtx, baseName: 'TEEVerifier', uniqueSuffix: `${DEPLOY_TAG}-tee` });
   console.log('');
 
-  // Step 2: Authorize the TEEVerifier to accept calls from our AA Core
+  // Step 2: Authorize the TEEVerifier to accept calls from our SA Core
   console.log('[2/4] Authorizing TEEVerifier for core...');
   await invokePersisted({
     ...deployCtx,
@@ -185,7 +185,7 @@ async function main() {
     networkMagic,
     deployer: { address: account.address, scriptHash: normalizeHash(account.scriptHash) },
     contracts: {
-      aaCore: { hash: CORE_HASH },
+      saCore: { hash: CORE_HASH },
       market: { hash: MARKET_HASH },
       teeVerifier: teeVerifier,
     },
@@ -198,7 +198,7 @@ async function main() {
   fs.writeFileSync(RESULTS_FILE, JSON.stringify(results, null, 2));
   console.log('');
   console.log('=== Complete ===');
-  console.log(`AA Core:     ${CORE_HASH}`);
+  console.log(`SA Core:     ${CORE_HASH}`);
   console.log(`Market:      ${MARKET_HASH}`);
   console.log(`TEEVerifier: ${teeVerifier.hash}`);
   console.log(`Registered:  ${registered}/${accounts.length}`);
@@ -206,7 +206,7 @@ async function main() {
   console.log(`Results:     ${RESULTS_FILE}`);
   console.log('');
   console.log('Frontend .env update:');
-  console.log(`  VITE_AA_MARKET_HASH=${MARKET_HASH}`);
+  console.log(`  VITE_SA_MARKET_HASH=${MARKET_HASH}`);
 }
 
 main().catch((error) => {

@@ -180,7 +180,7 @@ def proof_receipt(bundle):
     report, inputs, hashes, work, coqc, count, inventory = bundle
     _, version = command([coqc,'--version'],work,'tool-version.log')
     unchanged(inputs)
-    return {'schema':'neoos-aa-reimbursement-composition/v1','scope':'caller-ledger-composition',
+    return {'schema':'neoos-sa-reimbursement-composition/v1','scope':'caller-ledger-composition',
       'kernelChecked':True,'actualHelperTheoremApplied':True,'helperByteCount':281,
       'helperCertificateSha256':report['certificateSha256'],'helperMethodSha256':report['methodSha256'],
       'actualApplicationEngineVerified':False,'fullImplementationVerified':False,
@@ -228,7 +228,7 @@ def semantic_controls(bundle):
         rejected.append(name)
         details[name] = {'definitionsCompiled': True, 'certificateRejected': True, 'kernelExitCode': code}
     unchanged(inputs)
-    return {'schema':'neoos-aa-reimbursement-composition-controls/v1','scope':'caller-ledger-composition',
+    return {'schema':'neoos-sa-reimbursement-composition-controls/v1','scope':'caller-ledger-composition',
         'definitionsCompiled':True,'rejected':rejected,'controls':details,
         'inputSha256':portable_hashes(hashes),
         'actualApplicationEngineVerified':False,'fullImplementationVerified':False}

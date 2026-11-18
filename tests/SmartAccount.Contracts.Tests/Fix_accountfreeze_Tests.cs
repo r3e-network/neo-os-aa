@@ -38,7 +38,7 @@ public class Fix_AccountFreeze_Tests
 
         public Harness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
+            Wallet = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
         }
 

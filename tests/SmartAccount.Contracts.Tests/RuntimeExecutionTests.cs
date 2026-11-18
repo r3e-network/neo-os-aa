@@ -29,10 +29,10 @@ public class RuntimeExecutionTests
         UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd");
 
     private static readonly NefFile WalletNef =
-        NefFile.Parse(File.ReadAllBytes(Path.Combine(CompiledContractsDir, "SmartAccountV3.nef")), verify: true);
+        NefFile.Parse(File.ReadAllBytes(Path.Combine(CompiledContractsDir, "SmartAccount.nef")), verify: true);
 
     private static readonly string WalletManifestText =
-        File.ReadAllText(Path.Combine(CompiledContractsDir, "SmartAccountV3.manifest.json"));
+        File.ReadAllText(Path.Combine(CompiledContractsDir, "SmartAccount.manifest.json"));
 
     private static readonly ContractManifest WalletManifest = ContractManifest.Parse(WalletManifestText);
 

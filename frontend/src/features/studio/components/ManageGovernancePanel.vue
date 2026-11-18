@@ -1,9 +1,9 @@
 <template>
   <section class="card">
-    <h2 class="text-lg font-bold text-aa-text mb-2">
+    <h2 class="text-lg font-bold text-sa-text mb-2">
       {{ t("studioPanels.manageTitle", "Manage Governance") }}
     </h2>
-    <p class="text-sm text-aa-muted mb-8">
+    <p class="text-sm text-sa-muted mb-8">
       {{
         t(
           "studioPanels.manageSubtitle",
@@ -13,10 +13,10 @@
     </p>
 
     <div class="space-y-8">
-      <div class="bg-aa-panel p-5 rounded-lg border border-aa-border/60">
+      <div class="bg-sa-panel p-5 rounded-lg border border-sa-border/60">
         <label
           for="manage-target-account"
-          class="block text-sm font-semibold text-aa-text mb-3"
+          class="block text-sm font-semibold text-sa-text mb-3"
           >{{
             t("studioPanels.targetAccountLabel", "Target AccountId Hash")
           }}</label
@@ -27,7 +27,7 @@
             v-model="manageForm.accountAddress"
             type="text"
             list="loaded-manage-accounts"
-            class="input-field flex-1 font-mono text-sm py-2.5 px-4 bg-aa-dark"
+            class="input-field flex-1 font-mono text-sm py-2.5 px-4 bg-sa-dark"
             :placeholder="
               t('studioPanels.targetAccountPlaceholder', '20-byte hash160')
             "
@@ -54,7 +54,7 @@
             }}
           </button>
         </div>
-        <p class="mt-2 text-xs text-aa-muted">
+        <p class="mt-2 text-xs text-sa-muted">
           {{
             t(
               "studioPanels.v3StateKeyedHint",
@@ -64,8 +64,8 @@
         </p>
       </div>
 
-      <p v-if="governanceOutcome" role="status" class="text-sm text-aa-warning" data-testid="ordinary-governance-outcome">{{ governanceOutcome }}</p>
-      <p v-if="governanceBusy" role="status" class="text-sm text-aa-muted">{{ t('ordinary.waitForWallet', 'Waiting for the wallet or chain confirmation. Keep this page open.') }}</p>
+      <p v-if="governanceOutcome" role="status" class="text-sm text-sa-warning" data-testid="ordinary-governance-outcome">{{ governanceOutcome }}</p>
+      <p v-if="governanceBusy" role="status" class="text-sm text-sa-muted">{{ t('ordinary.waitForWallet', 'Waiting for the wallet or chain confirmation. Keep this page open.') }}</p>
       <!-- Empty state when no account is loaded -->
       <GovernanceEmptyState v-if="!manageSnapshot.loadedAt" />
 
@@ -77,17 +77,17 @@
       </transition>
 
       <div v-if="manageSnapshot.loadedAt" class="space-y-3 text-sm">
-        <div v-if="manageSnapshot.ownerOnlyRecovery" role="status" class="rounded-lg border border-aa-warning p-4" data-testid="ordinary-owner-only-state">
+        <div v-if="manageSnapshot.ownerOnlyRecovery" role="status" class="rounded-lg border border-sa-warning p-4" data-testid="ordinary-owner-only-state">
           <p>{{ t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.') }}</p>
           <p class="mt-2">{{ t('ordinary.ownerOnlyOperations', 'The backup owner can directly authorize account operations. The account identity, asset address and nonce remain unchanged. This recovery does not transfer or refund balances, and cannot guarantee permissions in external contracts.') }}</p>
           <router-link :to="{ path: '/app', query: { accountId: `0x${manageSnapshot.accountId}` } }" class="btn-secondary btn-sm mt-3">{{ t('studioPanels.openOperations', 'Open Operations') }}</router-link>
         </div>
         <p data-testid="ordinary-chain-time">{{ t('ordinary.chainTime', 'Node block time at refresh') }}: {{ formatTime(manageSnapshot.chain.time) }} · #{{ manageSnapshot.chain.height }} · {{ String(manageSnapshot.chain.hash || '').slice(0, 10) }}…{{ String(manageSnapshot.chain.hash || '').slice(-8) }}</p>
-        <p class="text-xs text-aa-muted">{{ t('ordinary.refreshHint', 'Use Load V3 State to refresh maturity. Your device clock does not advance the verified node state.') }}</p>
-        <p v-if="!isGovernanceOwner" role="status" class="text-aa-warning">{{ t('ordinary.connectOwner', 'Connect the configured Neo backup owner.') }}</p>
-        <p v-if="manageSnapshot.marketEscrow" class="text-aa-warning">{{ t('ordinary.escrow', 'This account is in market escrow. Plugin changes and recovery are unavailable.') }}</p>
-        <p class="text-xs text-aa-muted">{{ t('ordinary.pendingRace', 'State is checked again before wallet signing. Another device can change the pending proposal before your transaction is included; these actions affect the pending update for that role at execution.') }}</p>
-        <p v-if="!manageSnapshot.ownerOnlyRecovery" class="text-xs text-aa-muted">{{ t('ordinary.rotationDelay', 'Installing into an empty slot is immediate. Replacing an installed plugin requires a separate confirmation after 24 hours. The backup owner authorizes and pays; review the wallet fee.') }}</p>
+        <p class="text-xs text-sa-muted">{{ t('ordinary.refreshHint', 'Use Load V3 State to refresh maturity. Your device clock does not advance the verified node state.') }}</p>
+        <p v-if="!isGovernanceOwner" role="status" class="text-sa-warning">{{ t('ordinary.connectOwner', 'Connect the configured Neo backup owner.') }}</p>
+        <p v-if="manageSnapshot.marketEscrow" class="text-sa-warning">{{ t('ordinary.escrow', 'This account is in market escrow. Plugin changes and recovery are unavailable.') }}</p>
+        <p class="text-xs text-sa-muted">{{ t('ordinary.pendingRace', 'State is checked again before wallet signing. Another device can change the pending proposal before your transaction is included; these actions affect the pending update for that role at execution.') }}</p>
+        <p v-if="!manageSnapshot.ownerOnlyRecovery" class="text-xs text-sa-muted">{{ t('ordinary.rotationDelay', 'Installing into an empty slot is immediate. Replacing an installed plugin requires a separate confirmation after 24 hours. The backup owner authorizes and pays; review the wallet fee.') }}</p>
       </div>
       <div v-if="manageSnapshot.loadedAt" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <PendingModuleUpdateCard role="verifier" :pending="manageSnapshot.pendingVerifier" :chain-time="manageSnapshot.chain.time" :can-confirm="canGovernanceAction('confirmVerifierUpdate')" :can-cancel="canGovernanceAction('cancelVerifierUpdate')" @confirm="confirmGovernanceChange('confirmVerifierUpdate')" @cancel="confirmGovernanceChange('cancelVerifierUpdate')" />
@@ -114,13 +114,13 @@
       </div>
 
       <div v-if="manageSnapshot.loadedAt">
-        <div class="card hover:border-aa-muted transition-colors duration-200">
-          <h3 class="text-sm font-bold text-aa-text mb-5">
+        <div class="card hover:border-sa-muted transition-colors duration-200">
+          <h3 class="text-sm font-bold text-sa-text mb-5">
             {{ t("studioPanels.escapeHatch", "Escape Hatch") }}
           </h3>
           <div class="space-y-4">
-            <p v-if="!manageSnapshot.ownerOnlyRecovery" class="text-xs text-aa-muted">{{ t('ordinary.escapeCleanup', 'Recovery removes the old hook, its configuration, old verifier configuration, pending plugin changes and calls, and the on-chain metadata URI. It does not transfer assets. Old plugins must successfully clear their configuration; a cleanup fault rolls back the recovery, and a mined failure may still cost fees.') }}</p>
-            <p class="text-xs text-aa-warning">{{ t('ordinary.escapeOwnerLoss', 'Keep a separate backup of the Neo backup owner. If its only key is lost, this recovery path cannot replace that witness.') }}</p>
+            <p v-if="!manageSnapshot.ownerOnlyRecovery" class="text-xs text-sa-muted">{{ t('ordinary.escapeCleanup', 'Recovery removes the old hook, its configuration, old verifier configuration, pending plugin changes and calls, and the on-chain metadata URI. It does not transfer assets. Old plugins must successfully clear their configuration; a cleanup fault rolls back the recovery, and a mined failure may still cost fees.') }}</p>
+            <p class="text-xs text-sa-warning">{{ t('ordinary.escapeOwnerLoss', 'Keep a separate backup of the Neo backup owner. If its only key is lost, this recovery path cannot replace that witness.') }}</p>
             <p v-if="manageSnapshot.escapeActive" class="text-sm">{{ t('ordinary.escapeMatures', 'Recovery matures at') }}: {{ formatTime(manageSnapshot.escapeTriggeredAt + manageSnapshot.escapeTimelock * 1000) }}</p>
             <label class="block text-sm" for="governance-escape-mode">{{ t('ordinary.escapeMode', 'Authorization after recovery') }}
               <select id="governance-escape-mode" v-model="manageForm.escapeMode" :disabled="governanceBusy || manageSnapshot.ownerOnlyRecovery" class="input-field mt-1">
@@ -131,7 +131,7 @@
             <div v-if="manageForm.escapeMode === 'verifier'">
               <label
                 for="governance-escape-verifier"
-                class="block text-xs font-semibold text-aa-muted mb-1"
+                class="block text-xs font-semibold text-sa-muted mb-1"
                 >{{
                   t(
                     "studioPanels.newVerifierAfterEscape",
@@ -143,14 +143,14 @@
                 id="governance-escape-verifier"
                 v-model="manageForm.escapeNewVerifier"
                 type="text"
-                class="input-field font-mono text-sm py-2 px-3 bg-aa-dark"
+                class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
                 :placeholder="t('studioPanels.hashPlaceholder', '0x...')"
               />
             </div>
             <div v-if="manageForm.escapeMode === 'verifier'" class="space-y-2">
-              <label for="governance-escape-params" class="block text-xs font-semibold text-aa-muted">{{ t('ordinary.pendingParams', 'Initialization parameters (hex)') }}</label>
+              <label for="governance-escape-params" class="block text-xs font-semibold text-sa-muted">{{ t('ordinary.pendingParams', 'Initialization parameters (hex)') }}</label>
               <textarea id="governance-escape-params" v-model="manageForm.escapeVerifierParams" class="input-field font-mono text-xs" rows="3" />
-              <label class="flex gap-2 text-xs text-aa-muted"><input type="checkbox" v-model="manageForm.escapeAllowEmptyParams" />{{ t('ordinary.allowEmptyParams', 'This verifier needs no initialization parameters. I have checked its configuration requirements.') }}</label>
+              <label class="flex gap-2 text-xs text-sa-muted"><input type="checkbox" v-model="manageForm.escapeAllowEmptyParams" />{{ t('ordinary.allowEmptyParams', 'This verifier needs no initialization parameters. I have checked its configuration requirements.') }}</label>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
@@ -186,7 +186,7 @@
                 }}
               </button>
             </div>
-            <p class="text-xs text-aa-muted">
+            <p class="text-xs text-sa-muted">
               {{
                 t(
                   "studioPanels.escapeHint",
@@ -194,12 +194,12 @@
                 )
               }}
             </p>
-            <div class="space-y-3 rounded-lg border border-aa-warning/40 p-4" data-testid="ordinary-owner-only-recovery">
+            <div class="space-y-3 rounded-lg border border-sa-warning/40 p-4" data-testid="ordinary-owner-only-recovery">
               <h4 class="font-semibold">{{ t('ordinary.ownerOnlyTitle', 'Permanent recovery without plugin cleanup') }}</h4>
-              <p class="text-xs text-aa-muted">{{ t('ordinary.ownerOnlyExplanation', 'If a broken verifier or hook prevents normal recovery, use the same matured recovery timer to permanently return authorization to the backup owner. This path calls no old or new plugin. It removes active plugin bindings, pending changes and the metadata URI.') }}</p>
-              <p class="text-xs text-aa-warning">{{ t('ordinary.ownerOnlyIrreversible', 'This is irreversible: this account can never install a verifier or hook again. Keep the backup owner key available; losing it can permanently lock the account.') }}</p>
-              <p class="text-xs text-aa-muted">{{ t('ordinary.ownerOnlyOperations', 'The backup owner can directly authorize account operations. The account identity, asset address and nonce remain unchanged. This recovery does not transfer or refund balances, and cannot guarantee permissions in external contracts.') }}</p>
-              <p v-if="!manageSnapshot.ownerOnlyRecoverySupported" role="status" class="text-xs text-aa-warning">{{ t('ordinary.ownerOnlyUnsupported', 'This deployment does not support permanent owner-only recovery. The required write method and safe mode query must both be present in its deployed ABI.') }}</p>
+              <p class="text-xs text-sa-muted">{{ t('ordinary.ownerOnlyExplanation', 'If a broken verifier or hook prevents normal recovery, use the same matured recovery timer to permanently return authorization to the backup owner. This path calls no old or new plugin. It removes active plugin bindings, pending changes and the metadata URI.') }}</p>
+              <p class="text-xs text-sa-warning">{{ t('ordinary.ownerOnlyIrreversible', 'This is irreversible: this account can never install a verifier or hook again. Keep the backup owner key available; losing it can permanently lock the account.') }}</p>
+              <p class="text-xs text-sa-muted">{{ t('ordinary.ownerOnlyOperations', 'The backup owner can directly authorize account operations. The account identity, asset address and nonce remain unchanged. This recovery does not transfer or refund balances, and cannot guarantee permissions in external contracts.') }}</p>
+              <p v-if="!manageSnapshot.ownerOnlyRecoverySupported" role="status" class="text-xs text-sa-warning">{{ t('ordinary.ownerOnlyUnsupported', 'This deployment does not support permanent owner-only recovery. The required write method and safe mode query must both be present in its deployed ABI.') }}</p>
               <label v-if="manageSnapshot.ownerOnlyRecoverySupported && !manageSnapshot.ownerOnlyRecovery" class="flex gap-2 text-xs" for="governance-owner-only-acknowledgement">
                 <input id="governance-owner-only-acknowledgement" type="checkbox" v-model="manageForm.escapeOwnerOnlyAcknowledged" :disabled="governanceBusy" />
                 {{ t('ordinary.ownerOnlyAcknowledgement', 'I understand this account will permanently use only the backup owner witness, and plugins can never be restored.') }}

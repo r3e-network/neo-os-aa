@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
+import { executeUserOpInvocation } from './fixtures/saChainFixtures.js';
 import {
   buildCollectedSignatureCards,
   buildOperationSnapshotItems,

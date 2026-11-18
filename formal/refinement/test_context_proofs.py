@@ -19,7 +19,7 @@ class ContextProofTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.inventory = load_inventory()
-        cls.directory = tempfile.TemporaryDirectory(prefix='aa-context-fixture-')
+        cls.directory = tempfile.TemporaryDirectory(prefix='sa-context-fixture-')
         cls.addClassCleanup(cls.directory.cleanup)
         nef = materialize_nef_fixture(cls.inventory, cls.directory.name)
         cls.inventory['inputs'] = {str(nef):cls.inventory['nef']['sha256']}
@@ -77,7 +77,7 @@ class ContextProofTests(unittest.TestCase):
         self.assertEqual(len(reads),1)
 
     def test_cli_failure_replaces_stale_success(self):
-        with tempfile.TemporaryDirectory(prefix='aa-context-fail-') as temporary:
+        with tempfile.TemporaryDirectory(prefix='sa-context-fail-') as temporary:
             directory=Path(temporary)
             receipt=directory/'receipt.json'
             receipt.write_text('{"status":"PASS","kernelChecked":true}')
@@ -89,7 +89,7 @@ class ContextProofTests(unittest.TestCase):
             self.assertFalse(fail['initializerReferenceVerified'])
 
     def test_kernel_and_semantic_controls(self):
-        with tempfile.TemporaryDirectory(prefix='aa-context-proof-') as output:
+        with tempfile.TemporaryDirectory(prefix='sa-context-proof-') as output:
             receipt=context.run_proofs(self.inventory, output, controls=True)
             self.assertTrue(receipt['initializerReferenceVerified'])
             self.assertFalse(receipt['fullImplementationVerified'])
@@ -97,7 +97,7 @@ class ContextProofTests(unittest.TestCase):
             self.assertEqual(receipt['closedAssumptionCount'],sum(map(len,receipt['assumptionDeclarations'].values())))
 
     def test_complete_context_kernel_certificate(self):
-        with tempfile.TemporaryDirectory(prefix='aa-complete-context-proof-') as output:
+        with tempfile.TemporaryDirectory(prefix='sa-complete-context-proof-') as output:
             receipt=context.run_complete_proofs(self.inventory,output,controls=True)
             self.assertTrue(receipt['initializerReferenceVerified'])
             self.assertTrue(receipt['helperContextVerified'])

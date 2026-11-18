@@ -363,7 +363,7 @@ def project_sources(contents, *, enforce_identity=True):
                   'descriptor.Validate(item);'):
         require(on.count(guard) == 1 or converted.count(guard) == 1,
                 'Missing unconditional guard: ' + guard)
-    return dict(schema='neoos-aa-interop-conversion-source/v1', scope=SCOPE,
+    return dict(schema='neoos-sa-interop-conversion-source/v1', scope=SCOPE,
                 entryBoundary=ENTRY_BOUNDARY, coreSourceCommit=CORE_COMMIT,
                 neoVmSourceCommit=VM_COMMIT,
                 sourceHashes={k: sha(v.encode()) for k, v in contents.items()},
@@ -409,7 +409,7 @@ def mirror_source(key, row):
     same pinned value a download would have to reach, so a mirror cannot
     launder a different artifact. This only substitutes for a stalled network.
     """
-    mirror = os.environ.get('AA_INTEROP_CONVERSION_SOURCE_MIRROR')
+    mirror = os.environ.get('SA_INTEROP_CONVERSION_SOURCE_MIRROR')
     if not mirror:
         return None
     candidate = Path(mirror) / (key.replace('/', '-') + '.cs')

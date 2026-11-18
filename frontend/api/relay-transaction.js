@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
-import { DEFAULT_ABSTRACT_ACCOUNT_HASH, DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET, resolveSmartAccountHash, resolveOptionalBoolean } from '../src/config/runtimeConfig.js';
+import { DEFAULT_SMART_ACCOUNT_HASH, DEFAULT_SMART_ACCOUNT_HASH_TESTNET, resolveSmartAccountHash, resolveOptionalBoolean } from '../src/config/runtimeConfig.js';
 import { sanitizeHex } from '../src/utils/hex.js';
 import { TRANSFER_RETURNED_FALSE_MESSAGE, findFailedTransferInInvocation } from '../src/shared/transferOutcome.mjs';
 import { convertContractParamFromJson, normalizeRelayPayload, resolveRelayMetaInvocationRefusal, sanitizeMetaInvocationForRelay } from './relayHelpers.js';
@@ -49,14 +49,14 @@ function normalizeHash(value) {
 }
 
 // L2: stack-trace/raw-error leakage is a server security switch — it must read server-only
-// env. VITE_* vars are inlined into the client build, so VITE_AA_RELAY_INCLUDE_RAW_ERRORS is
+// env. VITE_* vars are inlined into the client build, so VITE_SA_RELAY_INCLUDE_RAW_ERRORS is
 // deliberately no longer honored here.
 export function shouldIncludeRawRelayErrors() {
-  return resolveOptionalBoolean(process.env.AA_RELAY_INCLUDE_RAW_ERRORS, false);
+  return resolveOptionalBoolean(process.env.SA_RELAY_INCLUDE_RAW_ERRORS, false);
 }
 
 function shouldAllowUnsponsoredRelay() {
-  return resolveOptionalBoolean(process.env.AA_RELAY_ALLOW_UNSPONSORED, false);
+  return resolveOptionalBoolean(process.env.SA_RELAY_ALLOW_UNSPONSORED, false);
 }
 
 function resolvePositiveBigIntEnv(name) {
@@ -72,15 +72,15 @@ function resolvePositiveBigIntEnv(name) {
 }
 
 function resolveMaxSystemFee() {
-  return resolvePositiveBigIntEnv('AA_RELAY_MAX_SYSTEM_FEE');
+  return resolvePositiveBigIntEnv('SA_RELAY_MAX_SYSTEM_FEE');
 }
 
 function resolveMaxNetworkFee() {
-  return resolvePositiveBigIntEnv('AA_RELAY_MAX_NETWORK_FEE');
+  return resolvePositiveBigIntEnv('SA_RELAY_MAX_NETWORK_FEE');
 }
 
 function resolveMaxTotalFee() {
-  return resolvePositiveBigIntEnv('AA_RELAY_MAX_TOTAL_FEE');
+  return resolvePositiveBigIntEnv('SA_RELAY_MAX_TOTAL_FEE');
 }
 
 // A sponsored relay must never default to unbounded spend from its WIF. The
@@ -121,12 +121,12 @@ export function enforceRelayFeePolicy({ operation = 'relay', systemFee, networkF
 
   const systemFeeBig = toBigIntOrNull(systemFee);
   if (maxSystemFee != null && (systemFeeBig == null || systemFeeBig > maxSystemFee)) {
-    throw new Error(`${operation} systemFee ${systemFee} exceeds AA_RELAY_MAX_SYSTEM_FEE ${maxSystemFee.toString()}`);
+    throw new Error(`${operation} systemFee ${systemFee} exceeds SA_RELAY_MAX_SYSTEM_FEE ${maxSystemFee.toString()}`);
   }
 
   const networkFeeBig = toBigIntOrNull(networkFee);
   if (maxNetworkFee != null && (networkFeeBig == null || networkFeeBig > maxNetworkFee)) {
-    throw new Error(`${operation} networkFee ${networkFee} exceeds AA_RELAY_MAX_NETWORK_FEE ${maxNetworkFee.toString()}`);
+    throw new Error(`${operation} networkFee ${networkFee} exceeds SA_RELAY_MAX_NETWORK_FEE ${maxNetworkFee.toString()}`);
   }
 
   if (maxTotalFee != null || approvedMax != null) {
@@ -135,7 +135,7 @@ export function enforceRelayFeePolicy({ operation = 'relay', systemFee, networkF
     }
     const totalFeeBig = systemFeeBig + networkFeeBig;
     if (maxTotalFee != null && totalFeeBig > maxTotalFee) {
-      throw new Error(`${operation} total fee ${totalFeeBig.toString()} exceeds AA_RELAY_MAX_TOTAL_FEE ${maxTotalFee.toString()}`);
+      throw new Error(`${operation} total fee ${totalFeeBig.toString()} exceeds SA_RELAY_MAX_TOTAL_FEE ${maxTotalFee.toString()}`);
     }
     if (approvedMax != null && totalFeeBig > approvedMax) {
       throw new Error(`${operation} total fee ${totalFeeBig.toString()} exceeds paymaster-approved maximum ${approvedMax.toString()}`);
@@ -196,8 +196,8 @@ function sendJson(res, statusCode, payload, requestId) {
 function resolveRelayEnv(network, key) {
   const upper = network === 'testnet' ? 'TESTNET' : 'MAINNET';
   return trimString(
-    process.env[`AA_RELAY_${upper}_${key}`]
-      || process.env[`AA_RELAY_${key}`]
+    process.env[`SA_RELAY_${upper}_${key}`]
+      || process.env[`SA_RELAY_${key}`]
       || ''
   );
 }
@@ -226,10 +226,10 @@ function resolveRelayNetwork({ req = {}, requestPayload = {}, paymaster = null }
   });
 }
 
-function resolveAllowedAaContractHash(network) {
+function resolveAllowedSaContractHash(network) {
   const defaultHash = network === 'testnet'
-    ? DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET
-    : DEFAULT_ABSTRACT_ACCOUNT_HASH;
+    ? DEFAULT_SMART_ACCOUNT_HASH_TESTNET
+    : DEFAULT_SMART_ACCOUNT_HASH;
   // L2: the relay allowlist is a server security boundary — it gates which contract the
   // operator WIF will fund invocations against. Only server env or the compiled canonical
   // default may set it; the VITE_* client-build fallbacks are deliberately removed.
@@ -246,12 +246,12 @@ export function resolveRelayExecutionConfig({ req = {}, requestPayload = {}, pay
     network,
     rpcUrl: trimString(
       resolveRelayEnv(network, 'RPC_URL')
-        || process.env.VITE_AA_RELAY_RPC_URL
+        || process.env.VITE_SA_RELAY_RPC_URL
         || process.env.VITE_NEO_RPC_URL
         || ''
     ),
     relayWif: trimString(resolveRelayEnv(network, 'WIF') || ''),
-    allowedAaContractHash: resolveAllowedAaContractHash(network),
+    allowedSaContractHash: resolveAllowedSaContractHash(network),
     // L2: raw-forward enable is a server security switch — server-only env, no VITE_ fallback.
     allowRawRelayForwarding: resolveOptionalBoolean(
       resolveRelayEnv(network, 'ALLOW_RAW_FORWARD'),
@@ -267,10 +267,10 @@ function hasExplicitPaymasterConfig(network) {
   return Boolean(
     trimString(process.env[`MORPHEUS_PAYMASTER_${upper}_ENDPOINT`])
       || trimString(process.env.MORPHEUS_PAYMASTER_ENDPOINT)
-      || trimString(process.env.AA_PAYMASTER_ENDPOINT)
+      || trimString(process.env.SA_PAYMASTER_ENDPOINT)
       || trimString(process.env[`MORPHEUS_PAYMASTER_${upper}_API_TOKEN`])
       || trimString(process.env.MORPHEUS_PAYMASTER_API_TOKEN)
-      || trimString(process.env.AA_PAYMASTER_API_TOKEN)
+      || trimString(process.env.SA_PAYMASTER_API_TOKEN)
       || trimString(process.env[`MORPHEUS_${upper}_PAYMASTER_APP_ID`])
       || trimString(process.env.MORPHEUS_PAYMASTER_APP_ID),
   );
@@ -281,7 +281,7 @@ function resolvePaymasterConfig(network) {
   const apiToken = trimString(
     process.env[`MORPHEUS_PAYMASTER_${network === 'testnet' ? 'TESTNET' : 'MAINNET'}_API_TOKEN`]
       || process.env.MORPHEUS_PAYMASTER_API_TOKEN
-      || process.env.AA_PAYMASTER_API_TOKEN
+      || process.env.SA_PAYMASTER_API_TOKEN
       || resolveMorpheusRuntimeToken(network)
       || ''
   );
@@ -493,10 +493,10 @@ async function fetchValidationPreview({ rpcUrl, invocation }) {
 async function resolveInvocationWitnesses({ account, tx, sc, rpcClient, invocation }) {
   const proxyTransaction = await resolveProxyTransferWitness({
     invocation, feePayer: account.scriptHash, rpcClient, sc,
-    enabled: resolveOptionalBoolean(process.env.AA_RELAY_PROXY_WITNESS_ENABLED, false),
+    enabled: resolveOptionalBoolean(process.env.SA_RELAY_PROXY_WITNESS_ENABLED, false),
   });
-  if (proxyTransaction && resolvePositiveBigIntEnv('AA_RELAY_PROXY_NETWORK_FEE_RESERVE') == null) {
-    throw new Error('AA_RELAY_PROXY_NETWORK_FEE_RESERVE must be configured for proxy witnesses');
+  if (proxyTransaction && resolvePositiveBigIntEnv('SA_RELAY_PROXY_NETWORK_FEE_RESERVE') == null) {
+    throw new Error('SA_RELAY_PROXY_NETWORK_FEE_RESERVE must be configured for proxy witnesses');
   }
   if (proxyTransaction && resolveMaxNetworkFee() == null && resolveMaxTotalFee() == null) {
     throw new Error('A network or total fee ceiling must be configured for proxy witnesses');
@@ -594,7 +594,7 @@ async function relayMetaInvocation({ rpcUrl, relayWif, invocation, feePolicy = {
   const maxSystemFee = resolveMaxSystemFee();
   const systemFeeBig = toBigIntOrNull(systemFee);
   if (maxSystemFee != null && (systemFeeBig == null || systemFeeBig > maxSystemFee)) {
-    throw new Error(`${invocation.operation} systemFee ${systemFee} exceeds AA_RELAY_MAX_SYSTEM_FEE ${maxSystemFee.toString()}`);
+    throw new Error(`${invocation.operation} systemFee ${systemFee} exceeds SA_RELAY_MAX_SYSTEM_FEE ${maxSystemFee.toString()}`);
   }
 
   const validUntilBlock = (await rpcClient.getBlockCount()) + 1000;
@@ -613,8 +613,8 @@ async function relayMetaInvocation({ rpcUrl, relayWif, invocation, feePolicy = {
   // scripts. An explicit operator reserve covers the proxy's verification work
   // and serialized witness bytes; every existing network/total fee cap still
   // applies. Never silently submit the known-underpriced calculator result.
-  const proxyReserve = proxyWitness ? resolvePositiveBigIntEnv('AA_RELAY_PROXY_NETWORK_FEE_RESERVE') : 0n;
-  if (proxyWitness && proxyReserve == null) throw new Error('AA_RELAY_PROXY_NETWORK_FEE_RESERVE must be configured for proxy witnesses');
+  const proxyReserve = proxyWitness ? resolvePositiveBigIntEnv('SA_RELAY_PROXY_NETWORK_FEE_RESERVE') : 0n;
+  if (proxyWitness && proxyReserve == null) throw new Error('SA_RELAY_PROXY_NETWORK_FEE_RESERVE must be configured for proxy witnesses');
   const estimatedNetworkFeeBig = toBigIntOrNull(estimatedNetworkFee?.toString?.() ?? estimatedNetworkFee);
   if (estimatedNetworkFeeBig == null || estimatedNetworkFeeBig < 0n) throw new Error('Invalid network fee estimate');
   const networkFee = (estimatedNetworkFeeBig + proxyReserve).toString();
@@ -668,6 +668,17 @@ export default async function handler(req, res) {
     if (durable.inProgress) {
       return sendJson(res, 409, { error: 'request_in_progress' }, requestId);
     }
+    // F-13: a configured-but-erroring durability backend fails closed in
+    // production (mirrors the AA-07 rate-limiter policy) instead of crashing
+    // the route with an opaque 500.
+    if (durable.backendUnavailable) {
+      const retryAfter = Number(durable.retryAfter || 60);
+      res.setHeader?.('Retry-After', String(retryAfter));
+      return sendJson(res, 503, {
+        error: 'request_persistence_backend_unavailable',
+        retryAfter,
+      }, requestId);
+    }
   }
 
   if (req.method !== 'POST') {
@@ -677,7 +688,7 @@ export default async function handler(req, res) {
 
   const clientIp = resolveClientIp(req);
   const rateLimit = await checkRateLimit(clientIp);
-  
+
   if (!rateLimit.allowed) {
     const failure = resolveRateLimitFailure(rateLimit);
     if (failure.retryAfter) res.setHeader?.('Retry-After', String(failure.retryAfter));
@@ -693,7 +704,7 @@ export default async function handler(req, res) {
     requestPayload,
     paymaster: paymasterInput,
   });
-  const { rpcUrl, relayWif, allowedAaContractHash, allowRawRelayForwarding } = relayConfig;
+  const { rpcUrl, relayWif, allowedSaContractHash, allowRawRelayForwarding } = relayConfig;
   if (!rpcUrl) {
     await failDurableRequest(durable.context, { statusCode: 501, error: 'relay_not_configured', phase: 'config' });
     return sendJson(res, 501, { error: 'relay_not_configured' }, requestId);
@@ -769,13 +780,13 @@ export default async function handler(req, res) {
 
   const metaInvocation = requestPayload?.metaInvocation || requestPayload?.meta_invocation;
   const sanitizedMetaInvocation = sanitizeMetaInvocationForRelay(metaInvocation, {
-    aaContractHash: allowedAaContractHash,
+    saContractHash: allowedSaContractHash,
   });
   if (!sanitizedMetaInvocation) {
     // Name the cause: an operation the deployed core does not export has to be refused here,
     // where the caller can still see why, not later inside simulation.
     const reason = resolveRelayMetaInvocationRefusal(metaInvocation, {
-      aaContractHash: allowedAaContractHash,
+      saContractHash: allowedSaContractHash,
     });
     await failDurableRequest(durable.context, { statusCode: 400, error: 'relay_meta_invocation_not_allowed', phase: 'validation' });
     return sendJson(res, 400, { error: 'relay_meta_invocation_not_allowed', reason }, requestId);
@@ -809,7 +820,7 @@ export default async function handler(req, res) {
   if (!simulate && !hasConfiguredFeeCeiling()) {
     const body = {
       error: 'relay_fee_ceiling_not_configured',
-      message: 'A relay fee ceiling (AA_RELAY_MAX_SYSTEM_FEE, AA_RELAY_MAX_NETWORK_FEE, or AA_RELAY_MAX_TOTAL_FEE) must be configured before sponsoring a broadcast.',
+      message: 'A relay fee ceiling (SA_RELAY_MAX_SYSTEM_FEE, SA_RELAY_MAX_NETWORK_FEE, or SA_RELAY_MAX_TOTAL_FEE) must be configured before sponsoring a broadcast.',
     };
     await failDurableRequest(durable.context, { statusCode: 400, error: body.error, phase: 'config' });
     return sendJson(res, 400, body, requestId);

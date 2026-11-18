@@ -11,7 +11,7 @@ This guide is a practical, user-first companion to `docs/HOW_IT_WORKS.md`.
 ## Fast path
 
 1. Open the home workspace
-2. Load the abstract account
+2. Load the smart account
 3. Choose a preset or compose a custom invocation
 4. Persist the draft
 5. Share the right scoped link
@@ -107,4 +107,4 @@ const accountId = client.deriveRegistrationAccountIdHash({
 
 ## Loading by `.matrix`
 
-If you remember your `.matrix` name more easily than an AA address, enter the domain in the load field. The frontend resolves the domain to the controlling wallet address. V3 has no admin or manager role query, so a domain does not by itself list bound AA accounts: read each one with `getAccountState(accountHashOrAddress)`. The V2 account-discovery helper that named the removed `getAccountAddressesByAdmin` / `getAccountAddressesByManager` reads has been deleted, so no frontend path targets those reads any more.
+If you remember your `.matrix` name more easily than an SA address, enter the domain in the load field. The frontend resolves the domain to the controlling wallet address. V3 has no admin or manager role query, so a domain does not by itself list bound SA accounts: read each one with `getAccountState(accountHashOrAddress)`. The V2 account-discovery helper that named the removed `getAccountAddressesByAdmin` / `getAccountAddressesByManager` reads has been deleted, so no frontend path targets those reads any more.

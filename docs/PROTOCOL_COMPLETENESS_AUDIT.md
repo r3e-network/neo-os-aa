@@ -51,7 +51,7 @@ and independent readback remain required before claiming a deployed fix.
 
 ## Executive Summary
 
-The Neo N3 Abstract Account protocol is a **Neo-native account system inspired by ERC-4337/ERC-7579**, not a drop-in Ethereum implementation. It does not expose an EntryPoint, Ethereum UserOperation ABI, bundler RPC, ERC-7579 executor/module interface, or Ethereum paymaster staking lifecycle. Those differences are protocol boundaries and must be visible to integrators.
+The Neo N3 Smart Account protocol is a **Neo-native account system inspired by ERC-4337/ERC-7579**, not a drop-in Ethereum implementation. It does not expose an EntryPoint, Ethereum UserOperation ABI, bundler RPC, ERC-7579 executor/module interface, or Ethereum paymaster staking lifecycle. Those differences are protocol boundaries and must be visible to integrators.
 
 The core now exposes a standards-friendly discovery surface (`getAccountImplementationId`, `supportsExecutionMode`, `supportsModuleType`, `isModuleInstalled`, and `previewUserOpValidation`) plus an ERC-1271-compatible result adapter. `isValidSignature` returns `0x1626ba7e` only when the installed verifier explicitly supports message signatures; UserOperation validation is never silently reused as message validation. The currently shipped Web3Auth verifier implements that adapter by recovering the configured secp256k1 key directly from the supplied 32-byte digest, using either EIP-2098 compact (64-byte) or recoverable `r || s || v` (65-byte) input. It does not hash the digest a second time. Other verifiers advertise `false` and fail closed.
 
@@ -362,8 +362,8 @@ verifier/hook admission policy before funding transactions.
 |---|---|---|
 | `docs/ETHEREUM_AA_COMPARISON.md` | ERC-4337/7579 mapping | ✓ Accurate |
 | `docs/SECURITY_MODEL.md` | Threat model & security properties | ✓ Accurate |
-| `docs/PLUGIN_MATRIX.md` | Plugin compatibility matrix | ✓ Accurate |
-| `docs/AA_V3_ARCHITECTURE.zh-CN.md` | V3 architecture (bilingual) | ✓ Accurate |
+| `docs/PLUGIN_DEVELOPER_GUIDE.md` | Plugin compatibility and lifecycle | ✓ Accurate |
+| `docs/architecture.zh-CN.md` | V3 architecture (Chinese counterpart) | ✓ Accurate |
 | `contracts/*.cs` | Inline XML documentation | ✓ Complete |
 
 **Key Documented Claims:**
@@ -516,7 +516,7 @@ verifier/hook admission policy before funding transactions.
 
 ## Conclusion
 
-The Neo N3 Abstract Account protocol is production-oriented, with a clearly bounded Neo-native protocol and explicit compatibility adapters. It should be integrated as a Neo AA protocol. The ERC-1271 message adapter is now safe to consume because unsupported verifiers return the invalid magic value instead of falling back to a different signature domain.
+The Neo N3 Smart Account protocol is production-oriented, with a clearly bounded Neo-native protocol and explicit compatibility adapters. It should be integrated as a Neo Smart Account protocol. The ERC-1271 message adapter is now safe to consume because unsupported verifiers return the invalid magic value instead of falling back to a different signature domain.
 
 - **Shared virtual accounts** avoid per-account contract deployment, while registration and execution still cost transaction fees
 - **Heterogeneous signatures** support multiple security models

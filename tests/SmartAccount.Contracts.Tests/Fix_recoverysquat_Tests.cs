@@ -8,7 +8,7 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral VM tests for audit finding AA-06: <c>SocialRecoveryVerifier.SetupRecovery</c>
+/// Behavioral VM tests for audit finding SA-06: <c>SocialRecoveryVerifier.SetupRecovery</c>
 /// was first-write-wins with NO proof of account control. Its <c>CheckWitness(owner)</c> did
 /// not help — an attacker passes THEIR OWN address as <c>owner</c> (they can witness
 /// themselves), binding a victim's known accountId to attacker-controlled nullifiers/verifier,
@@ -16,9 +16,9 @@ namespace SmartAccount.Contracts.Tests;
 /// that accountId.
 ///
 /// The fix mirrors the repo's plugin invariant (VerifierAuthority M-7): the verifier pins a
-/// canonical AA core (<c>setAuthorizedCore</c>, initial-set-only and contract-admin gated;
+/// canonical SA core (<c>setAuthorizedCore</c>, initial-set-only and contract-admin gated;
 /// re-pointing flows through the 7-day <c>proposeAuthorizedCore</c>/<c>confirmAuthorizedCore</c>
-/// window), and <c>setupRecovery</c> requires <c>aaContract == authorizedCore()</c> plus the
+/// window), and <c>setupRecovery</c> requires <c>saContract == authorizedCore()</c> plus the
 /// core's <c>getBackupOwner(accountId)</c> — the registry of record — to attest the claimed
 /// owner.
 /// </summary>
@@ -53,7 +53,7 @@ public class Fix_RecoverySquat_Tests
 
         public SquatHarness(bool bindCore = true)
         {
-            Core = Fx.Deploy("SmartAccountV3");
+            Core = Fx.Deploy("SmartAccount");
             Verifier = Fx.Deploy("SocialRecoveryVerifier");
             if (bindCore)
             {
@@ -63,7 +63,7 @@ public class Fix_RecoverySquat_Tests
         }
 
         /// <summary>
-        /// Registers an account on the real AA core with <paramref name="owner"/> as its backup
+        /// Registers an account on the real SA core with <paramref name="owner"/> as its backup
         /// owner and returns the core-derived 20-byte account id.
         /// </summary>
         public byte[] RegisterAccount(UInt160 owner)
@@ -80,11 +80,11 @@ public class Fix_RecoverySquat_Tests
         }
 
         /// <summary>Valid setup arguments for <paramref name="accountId"/>; vary one field per test.</summary>
-        public object?[] SetupArgs(byte[] accountId, UInt160 owner, UInt160 aaContract, byte[] verifierPubKey)
+        public object?[] SetupArgs(byte[] accountId, UInt160 owner, UInt160 saContract, byte[] verifierPubKey)
         {
             return new object?[]
             {
-                accountId, "acct-squat", Network, owner, aaContract, AccountAddress, Oracle,
+                accountId, "acct-squat", Network, owner, saContract, AccountAddress, Oracle,
                 new object?[] { Factor() }, (BigInteger)1, SevenDaysMs, verifierPubKey
             };
         }
@@ -102,7 +102,7 @@ public class Fix_RecoverySquat_Tests
     // ========================================================================
 
     [TestMethod]
-    public void AA06_SetupRecovery_WithRegisteredOwner_Succeeds()
+    public void SA06_SetupRecovery_WithRegisteredOwner_Succeeds()
     {
         SquatHarness h = new();
         using P256SessionKey verifierKey = new();
@@ -125,7 +125,7 @@ public class Fix_RecoverySquat_Tests
     // ========================================================================
 
     [TestMethod]
-    public void AA06_SetupRecovery_SquatWithOwnWitnessedKey_Faults()
+    public void SA06_SetupRecovery_SquatWithOwnWitnessedKey_Faults()
     {
         SquatHarness h = new();
         using P256SessionKey verifierKey = new();
@@ -150,11 +150,11 @@ public class Fix_RecoverySquat_Tests
     }
 
     // ========================================================================
-    // (c) caller-supplied aaContract that is not the pinned canonical core
+    // (c) caller-supplied saContract that is not the pinned canonical core
     // ========================================================================
 
     [TestMethod]
-    public void AA06_SetupRecovery_WithNonAuthorizedCore_Faults()
+    public void SA06_SetupRecovery_WithNonAuthorizedCore_Faults()
     {
         SquatHarness h = new();
         using P256SessionKey verifierKey = new();
@@ -162,25 +162,25 @@ public class Fix_RecoverySquat_Tests
 
         h.Fx.SetSigners(OwnerA);
 
-        // A second, genuine AA core is still not THE pinned core — a squatter cannot route the
+        // A second, genuine SA core is still not THE pinned core — a squatter cannot route the
         // attestation through a core of their choosing.
-        UInt160 foreignCore = h.Fx.Deploy("SmartAccountV3");
+        UInt160 foreignCore = h.Fx.Deploy("SmartAccount");
         TestException foreign = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(
                 h.Verifier, "setupRecovery",
                 h.SetupArgs(accountId, OwnerA, foreignCore, verifierKey.CompressedPublicKey)));
-        StringAssert.Contains(foreign.Message, "aaContract is not the authorized core");
+        StringAssert.Contains(foreign.Message, "saContract is not the authorized core");
 
         // An arbitrary address is rejected the same way.
         TestException arbitrary = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(
                 h.Verifier, "setupRecovery",
                 h.SetupArgs(accountId, OwnerA, Stranger, verifierKey.CompressedPublicKey)));
-        StringAssert.Contains(arbitrary.Message, "aaContract is not the authorized core");
+        StringAssert.Contains(arbitrary.Message, "saContract is not the authorized core");
     }
 
     [TestMethod]
-    public void AA06_SetupRecovery_WithoutAuthorizedCoreConfigured_Faults()
+    public void SA06_SetupRecovery_WithoutAuthorizedCoreConfigured_Faults()
     {
         SquatHarness h = new(bindCore: false);
         using P256SessionKey verifierKey = new();
@@ -191,7 +191,7 @@ public class Fix_RecoverySquat_Tests
             () => h.Fx.CallVoid(
                 h.Verifier, "setupRecovery",
                 h.SetupArgs(accountId, OwnerA, h.Core, verifierKey.CompressedPublicKey)));
-        StringAssert.Contains(unbound.Message, "Authorized AA core not configured");
+        StringAssert.Contains(unbound.Message, "Authorized SA core not configured");
     }
 
     // ========================================================================
@@ -199,7 +199,7 @@ public class Fix_RecoverySquat_Tests
     // ========================================================================
 
     [TestMethod]
-    public void AA06_SetupRecovery_UnknownAccount_Faults()
+    public void SA06_SetupRecovery_UnknownAccount_Faults()
     {
         SquatHarness h = new();
         using P256SessionKey verifierKey = new();
@@ -216,12 +216,12 @@ public class Fix_RecoverySquat_Tests
     }
 
     [TestMethod]
-    public void AA06_SetupRecovery_RejectsNonAccountShapedId()
+    public void SA06_SetupRecovery_RejectsNonAccountShapedId()
     {
         SquatHarness h = new();
         using P256SessionKey verifierKey = new();
 
-        // A non-20-byte id can never name a core-registered AA account.
+        // A non-20-byte id can never name a core-registered SA account.
         byte[] legacyTextId = System.Text.Encoding.ASCII.GetBytes("acct-legacy-text");
         h.Fx.SetSigners(OwnerA);
         TestException malformed = Assert.ThrowsExactly<TestException>(
@@ -236,10 +236,10 @@ public class Fix_RecoverySquat_Tests
     // ========================================================================
 
     [TestMethod]
-    public void AA06_AuthorizedCore_InitialSetOnly_AndAdminGated()
+    public void SA06_AuthorizedCore_InitialSetOnly_AndAdminGated()
     {
         RuntimeFixture fx = new();
-        UInt160 core = fx.Deploy("SmartAccountV3");
+        UInt160 core = fx.Deploy("SmartAccount");
         UInt160 verifier = fx.Deploy("SocialRecoveryVerifier");
 
         Assert.AreEqual(UInt160.Zero, fx.CallUInt160(verifier, "authorizedCore"), "Core starts unset");
@@ -263,7 +263,7 @@ public class Fix_RecoverySquat_Tests
     }
 
     [TestMethod]
-    public void AA06_AuthorizedCore_ProposeConfirm_HonorsWindowAndCancel()
+    public void SA06_AuthorizedCore_ProposeConfirm_HonorsWindowAndCancel()
     {
         SquatHarness h = new();
 

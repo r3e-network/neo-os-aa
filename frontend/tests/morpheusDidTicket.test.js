@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 
 import { EC } from '../src/config/errorCodes.js';
-import { buildAaActionId, requireAaSigningText, toNeoInternalHex } from '../src/services/aaTicketService.js';
+import { buildSaActionId, requireSaSigningText, toNeoInternalHex } from '../src/services/saTicketService.js';
 
 const core = '000102030405060708090a0b0c0d0e0f10111213';
 const account = '1415161718191a1b1c1d1e1f2021222324252627';
@@ -47,15 +47,15 @@ function createService({ invokeReadFunction = async () => { throw new Error('une
     fetchWithTimeout,
     encryptJsonWithMorpheusOracleKey: async () => 'encrypted-params',
     walletService: { invoke: async (...args) => { signerCalls.push(args); return {}; } },
-    getAbstractAccountHash: () => { defaultCoreReads += 1; return core; },
+    getSmartAccountHash: () => { defaultCoreReads += 1; return core; },
     buildZkLoginVerifierParamsHex: () => '',
     formatZkLoginTicket: (value) => value,
     normalizeZkLoginProvider: (value) => value,
     connectedDidProfile: { value: { provider: 'web3auth', idToken: 'id-token' } },
     decodeStackHash160,
     createAccountIdentityReader: () => async () => { throw new Error('not used'); },
-    buildAaActionId,
-    requireAaSigningText,
+    buildSaActionId,
+    requireSaSigningText,
     toNeoInternalHex,
   };
   const source = fs.readFileSync(new URL('../src/services/morpheusDidService.js', import.meta.url), 'utf8')
@@ -77,7 +77,7 @@ function createService({ invokeReadFunction = async () => { throw new Error('une
 function recoveryInput() {
   return {
     network: 'neo3-testnet',
-    aaContract: `0x${core}`,
+    saContract: `0x${core}`,
     verifierContract: verifier,
     accountIdText: 'shared-account-text',
     accountIdRaw: account,
@@ -91,7 +91,7 @@ function recoveryInput() {
 function actionInput() {
   return {
     network: 'neo3-testnet',
-    aaContract: core,
+    saContract: core,
     verifierContract: verifier,
     accountIdText: 'shared-account-text',
     accountIdRaw: account,
@@ -116,7 +116,7 @@ test('recovery preview uses only the raw account and converts display Hash160 fi
   assert.equal(body.action, 'recovery-ticket');
   assert.equal(body.account_id, 'shared-account-text');
   assert.equal(body.account_id_raw, toNeoInternalHex(account));
-  assert.equal(body.aa_contract, toNeoInternalHex(core));
+  assert.equal(body.sa_contract, toNeoInternalHex(core));
   assert.equal(body.verifier_contract, toNeoInternalHex(verifier));
   assert.equal(body.account_address, toNeoInternalHex(accountAddress));
   assert.equal(body.new_owner, toNeoInternalHex(newOwner));
@@ -132,10 +132,10 @@ test('action preview forwards explicit text and internal Hash160 fields', async 
   assert.equal(body.action, 'action-ticket');
   assert.equal(body.account_id, 'shared-account-text');
   assert.equal(body.account_id_raw, toNeoInternalHex(account));
-  assert.equal(body.aa_contract, toNeoInternalHex(core));
+  assert.equal(body.sa_contract, toNeoInternalHex(core));
   assert.equal(body.verifier_contract, toNeoInternalHex(verifier));
   assert.equal(body.disposable_account, toNeoInternalHex(executor));
-  assert.match(body.action_id, /^aa_proxy:[0-9a-f]{64}$/);
+  assert.match(body.action_id, /^sa_proxy:[0-9a-f]{64}$/);
   assert.equal(harness.signerCalls.length, 0);
   assert.equal(harness.defaultCoreReads(), 0);
 });
@@ -171,8 +171,8 @@ test('recovery and action previews reject a display accountId without raw accoun
 
 test('recovery and action previews reject every missing required field before Oracle, NeoDID, or signer calls', async () => {
   const cases = [
-    ['previewRecoveryTicket', recoveryInput(), ['network', 'accountIdText', 'accountIdRaw', 'aaContract', 'verifierContract', 'newOwner', 'accountAddress']],
-    ['previewActionTicket', actionInput(), ['network', 'accountIdText', 'accountIdRaw', 'aaContract', 'verifierContract', 'executor']],
+    ['previewRecoveryTicket', recoveryInput(), ['network', 'accountIdText', 'accountIdRaw', 'saContract', 'verifierContract', 'newOwner', 'accountAddress']],
+    ['previewActionTicket', actionInput(), ['network', 'accountIdText', 'accountIdRaw', 'saContract', 'verifierContract', 'executor']],
   ];
   for (const [method, base, fields] of cases) {
     const harness = createService();
@@ -191,8 +191,8 @@ test('recovery and action previews reject every missing required field before Or
 
 test('recovery and action previews reject zero Hash160 fields before any external call', async () => {
   const cases = [
-    ['previewRecoveryTicket', recoveryInput(), ['accountIdRaw', 'aaContract', 'verifierContract', 'newOwner', 'accountAddress']],
-    ['previewActionTicket', actionInput(), ['accountIdRaw', 'aaContract', 'verifierContract', 'executor']],
+    ['previewRecoveryTicket', recoveryInput(), ['accountIdRaw', 'saContract', 'verifierContract', 'newOwner', 'accountAddress']],
+    ['previewActionTicket', actionInput(), ['accountIdRaw', 'saContract', 'verifierContract', 'executor']],
   ];
   for (const [method, base, fields] of cases) {
     const harness = createService();
@@ -233,7 +233,7 @@ for (const size of [20, 32]) {
     const state = await harness.fetchUnifiedVerifierState({ rpcUrl: 'http://rpc.test', verifierHash: verifier, accountIdHex: account });
     assert.equal(state.network, network);
     assert.equal(state.accountIdText, accountIdText);
-    assert.equal(state.aaContract, core);
+    assert.equal(state.saContract, core);
     assert.equal(state.accountAddress, accountAddress);
     assert.ok(!state.accountIdText.startsWith('0x'));
     assert.equal(calls.length, 15);
@@ -250,7 +250,7 @@ test('failed network, core, and account-text reads fail closed instead of fabric
       invokeReadFunction: stateRpc(calls, { network: 'neo3-testnet', accountIdText: 'real-text', faults: [fault] }),
     });
     const state = await harness.fetchUnifiedVerifierState({ rpcUrl: 'http://rpc.test', verifierHash: verifier, accountIdHex: account });
-    const field = fault === 'getNetwork' ? 'network' : fault === 'getAAContract' ? 'aaContract' : 'accountIdText';
+    const field = fault === 'getNetwork' ? 'network' : fault === 'getAAContract' ? 'saContract' : 'accountIdText';
     assert.equal(state[field], '');
     assert.notEqual(state[field], fault === 'getNetwork' ? 'neo_n3' : fault === 'getAAContract' ? core : account);
     const input = { ...recoveryInput(), [field]: state[field] };
@@ -264,12 +264,12 @@ test('failed network, core, and account-text reads fail closed instead of fabric
 function rawPreviewActionId(input) {
   const fields = [
     Buffer.from(input.network, 'utf8'),
-    ...[input.aaContract, input.accountIdRaw, input.executor].map((value) => Buffer.from(value.replace(/^0x/i, ''), 'hex').reverse()),
+    ...[input.saContract, input.accountIdRaw, input.executor].map((value) => Buffer.from(value.replace(/^0x/i, ''), 'hex').reverse()),
     Buffer.from(String(input.sessionNonce ?? '0')),
     Buffer.from(String(input.expiresAt)),
   ];
   const material = Buffer.concat(fields.flatMap((field, index) => index ? [Buffer.from([0x1f]), field] : [field]));
-  return `aa_proxy:${createHash('sha256').update(material).digest('hex')}`;
+  return `sa_proxy:${createHash('sha256').update(material).digest('hex')}`;
 }
 
 test('F3 preview witnesses preserve opaque stored network and accountIdText in both ticket types', async () => {
@@ -358,7 +358,7 @@ test('action enrollment is an explicit normal owner-wallet invocation, not a DID
 });
 
 test('legacy session reauthorization signs the exact displayed executor/action/expiry/nullifier tuple', async () => {
-  const h = createService(), session = { active: true, executor, actionId: 'aa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: `0x${'cd'.repeat(32)}` };
+  const h = createService(), session = { active: true, executor, actionId: 'sa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: `0x${'cd'.repeat(32)}` };
   await h.morpheusDidService.reauthorizeActiveActionSession({ verifierHash: verifier, accountIdHex: account, session });
   const [call] = h.signerCalls[0];
   assert.equal(call.operation, 'reauthorizeActiveActionSession');
@@ -370,7 +370,7 @@ test('legacy session reauthorization signs the exact displayed executor/action/e
 test('actual enrollment/reauthorization UI handlers are inert until explicit action and reject stale/legacy contexts', async () => {
   const sfc = fs.readFileSync(new URL('../src/features/operations/components/DidIdentityPanel.vue', import.meta.url), 'utf8');
   const extract = name => sfc.match(new RegExp(`async function ${name}\\([\\s\\S]*?^}`, 'm'))?.[0];
-  const calls = [], state = { actionProtocolVersion: '4', activeSession: { active: true, executor, actionId: 'aa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: 'cd'.repeat(32) } };
+  const calls = [], state = { actionProtocolVersion: '4', activeSession: { active: true, executor, actionId: 'sa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: 'cd'.repeat(32) } };
   let fresh = true;
   const bindings = {
     proxyVerifierState: { value: state }, proxyVerifierStateContext: { value: {} }, effectiveProxyVerifierHash: { value: verifier },
@@ -397,7 +397,7 @@ test('stored session executor is decoded as Hash160 while nullifier stays raw by
     if (args[2] !== 'getActiveSession') return base(...args);
     return { state: 'HALT', stack: [{ type: 'Struct', value: [
       { type: 'ByteString', value: Buffer.from(executor, 'hex').reverse().toString('base64') },
-      { type: 'ByteString', value: Buffer.from('aa_proxy:' + 'ef'.repeat(32)).toString('base64') },
+      { type: 'ByteString', value: Buffer.from('sa_proxy:' + 'ef'.repeat(32)).toString('base64') },
       { type: 'ByteString', value: Buffer.alloc(32, 0xcd).toString('base64') },
       { type: 'Integer', value: '1800000000000' }, { type: 'Boolean', value: true },
     ] }] };
@@ -405,6 +405,6 @@ test('stored session executor is decoded as Hash160 while nullifier stays raw by
   const state = await h.fetchUnifiedVerifierState({ rpcUrl: 'http://rpc.test', verifierHash: verifier, accountIdHex: account });
   assert.equal(state.activeSession.executor, executor);
   assert.equal(state.activeSession.actionNullifier, `0x${'cd'.repeat(32)}`);
-  assert.equal(state.activeSession.actionId, 'aa_proxy:' + 'ef'.repeat(32));
+  assert.equal(state.activeSession.actionId, 'sa_proxy:' + 'ef'.repeat(32));
   assert.equal(h.signerCalls.length, 0);
 });

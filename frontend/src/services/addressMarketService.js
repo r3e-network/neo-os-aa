@@ -39,11 +39,11 @@ function normalizeHash160Input(value) {
   return normalized;
 }
 
-function buildEscrowCreationSigner(accountAddress, marketHash, aaContractHash) {
+function buildEscrowCreationSigner(accountAddress, marketHash, saContractHash) {
   return {
     account: accountAddress,
     scopes: 16,
-    allowedContracts: [`0x${sanitizeHex(marketHash)}`, `0x${sanitizeHex(aaContractHash)}`],
+    allowedContracts: [`0x${sanitizeHex(marketHash)}`, `0x${sanitizeHex(saContractHash)}`],
   };
 }
 
@@ -74,8 +74,8 @@ export function resolveListedAccountId(input = '') {
   return deriveAccountIdHash(encodeAccountSeed(raw));
 }
 
-export function deriveVirtualAddressFromListing({ aaContractHash, accountIdHash }) {
-  const script = createVerifyScript(aaContractHash, accountIdHash);
+export function deriveVirtualAddressFromListing({ saContractHash, accountIdHash }) {
+  const script = createVerifyScript(saContractHash, accountIdHash);
   const scriptHash = reverseHex(hash160(script));
   return getAddressFromScriptHash(scriptHash);
 }
@@ -155,7 +155,7 @@ function decodeListing(item = {}) {
   }
   const [
     idItem,
-    aaContractItem,
+    saContractItem,
     accountIdItem,
     sellerItem,
     priceItem,
@@ -171,7 +171,7 @@ function decodeListing(item = {}) {
 
   return {
     id: decodeInteger(idItem),
-    aaContractHash: decodeHash160(aaContractItem),
+    saContractHash: decodeHash160(saContractItem),
     accountIdHash: decodeHash160(accountIdItem),
     sellerScriptHash: decodeHash160(sellerItem),
     priceRaw: decodeInteger(priceItem),
@@ -197,13 +197,13 @@ async function invokeMarketRead(operation, args = []) {
   return result;
 }
 
-async function fetchAccountSnapshot(aaContractHash, accountIdHash) {
+async function fetchAccountSnapshot(saContractHash, accountIdHash) {
   try {
     const [verifier, hook, backupOwner, escrowActive] = await Promise.all([
-      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, aaContractHash, 'getVerifier', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
-      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, aaContractHash, 'getHook', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
-      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, aaContractHash, 'getBackupOwner', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
-      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, aaContractHash, 'isMarketEscrowActive', [{ type: 'Hash160', value: `0x${accountIdHash}` }]).catch((error) => { if (import.meta.env.DEV) console.error('[addressMarketService] isMarketEscrowActive failed:', error?.message); return null; }),
+      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getVerifier', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
+      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getHook', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
+      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getBackupOwner', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
+      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'isMarketEscrowActive', [{ type: 'Hash160', value: `0x${accountIdHash}` }]).catch((error) => { if (import.meta.env.DEV) console.error('[addressMarketService] isMarketEscrowActive failed:', error?.message); return null; }),
     ]);
 
     return {
@@ -225,10 +225,10 @@ async function fetchAccountSnapshot(aaContractHash, accountIdHash) {
 
 async function enrichListing(listing) {
   const accountAddress = deriveVirtualAddressFromListing({
-    aaContractHash: listing.aaContractHash,
+    saContractHash: listing.saContractHash,
     accountIdHash: listing.accountIdHash,
   });
-  const snapshot = await fetchAccountSnapshot(listing.aaContractHash, listing.accountIdHash);
+  const snapshot = await fetchAccountSnapshot(listing.saContractHash, listing.accountIdHash);
   return {
     ...listing,
     account_address: accountAddress,
@@ -288,7 +288,7 @@ export async function createAddressListing(input = {}) {
     throw new Error(EC.walletRequiredForListing);
   }
 
-  const aaContractHash = normalizeHash160Input(input.aaContractHash || RUNTIME_CONFIG.abstractAccountHash);
+  const saContractHash = normalizeHash160Input(input.saContractHash || RUNTIME_CONFIG.smartAccountHash);
   const accountIdHash = resolveListedAccountId(input.accountSeed || input.accountId || '');
   const priceFractions = parseGasToFractions(input.price_gas);
   const title = String(input.title || '').trim();
@@ -298,19 +298,19 @@ export async function createAddressListing(input = {}) {
     scriptHash: marketHash,
     operation: 'createListing',
     args: [
-      { type: 'Hash160', value: `0x${aaContractHash}` },
+      { type: 'Hash160', value: `0x${saContractHash}` },
       { type: 'Hash160', value: `0x${accountIdHash}` },
       { type: 'Integer', value: priceFractions },
       { type: 'String', value: title },
       { type: 'String', value: metadataUri },
     ],
-    signers: [buildEscrowCreationSigner(connectedAccount.value, marketHash, aaContractHash)],
+    signers: [buildEscrowCreationSigner(connectedAccount.value, marketHash, saContractHash)],
   });
 
   return {
     txid: result?.txid || '',
     accountIdHash,
-    accountAddress: deriveVirtualAddressFromListing({ aaContractHash, accountIdHash }),
+    accountAddress: deriveVirtualAddressFromListing({ saContractHash, accountIdHash }),
   };
 }
 

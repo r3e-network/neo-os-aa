@@ -272,12 +272,12 @@ class ModelProjectionAgreementTests(unittest.TestCase):
         self.assertEqual(22,len(gate.SCOPES))
 
 
-@unittest.skipUnless(os.environ.get('AA_INTEROP_CONVERSION_SOURCE_DIR'),
+@unittest.skipUnless(os.environ.get('SA_INTEROP_CONVERSION_SOURCE_DIR'),
                      'Pinned source fixture is exercised by fresh CLI; '
-                     'optional unit readback needs AA_INTEROP_CONVERSION_SOURCE_DIR')
+                     'optional unit readback needs SA_INTEROP_CONVERSION_SOURCE_DIR')
 class PinnedSourceReadbackTests(unittest.TestCase):
     def contents(self):
-        directory=Path(os.environ['AA_INTEROP_CONVERSION_SOURCE_DIR'])
+        directory=Path(os.environ['SA_INTEROP_CONVERSION_SOURCE_DIR'])
         return {k:(directory/(k.replace('/','-')+'.cs')).read_text() for k in source.SOURCES}
 
     def test_projection_derives_the_reviewed_record(self):
@@ -360,7 +360,7 @@ class PinnedDownloadRetryTests(unittest.TestCase):
             # The offline mirror is an environment fault fallback, not part of
             # this contract: if it is set the download never happens and this
             # test would assert nothing.
-            with mock.patch.dict(os.environ,{'AA_INTEROP_CONVERSION_SOURCE_MIRROR':''}):
+            with mock.patch.dict(os.environ,{'SA_INTEROP_CONVERSION_SOURCE_MIRROR':''}):
                 with mock.patch.object(source.urllib.request,'urlopen',
                                        lambda url,timeout=None:_Payload(b'not the pinned source')):
                     with self.assertRaisesRegex(ValueError,'Downloaded pinned source mismatch'):
@@ -371,7 +371,7 @@ class PinnedDownloadRetryTests(unittest.TestCase):
         key=next(iter(source.SOURCES))
         with tempfile.TemporaryDirectory() as out, tempfile.TemporaryDirectory() as mirror:
             (Path(mirror)/(key.replace('/','-')+'.cs')).write_bytes(b'not the pinned source')
-            with mock.patch.dict(os.environ,{'AA_INTEROP_CONVERSION_SOURCE_MIRROR':mirror}):
+            with mock.patch.dict(os.environ,{'SA_INTEROP_CONVERSION_SOURCE_MIRROR':mirror}):
                 with mock.patch.object(source.urllib.request,'urlopen',
                                        lambda *a,**k:self.fail('mirror hit attempted a download')):
                     with self.assertRaisesRegex(ValueError,'Offline mirror source mismatch'):
@@ -381,7 +381,7 @@ class PinnedDownloadRetryTests(unittest.TestCase):
     def test_absent_mirror_entry_falls_back_to_the_pinned_download(self):
         with tempfile.TemporaryDirectory() as out, tempfile.TemporaryDirectory() as mirror:
             def unreachable(url,timeout=None):raise TimeoutError('transport unavailable')
-            with mock.patch.dict(os.environ,{'AA_INTEROP_CONVERSION_SOURCE_MIRROR':mirror}):
+            with mock.patch.dict(os.environ,{'SA_INTEROP_CONVERSION_SOURCE_MIRROR':mirror}):
                 with mock.patch.object(source.urllib.request,'urlopen',unreachable):
                     with self.assertRaises(TimeoutError):
                         source.project_production(out)

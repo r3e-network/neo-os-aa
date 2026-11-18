@@ -8,7 +8,7 @@ namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
 /// Regression coverage for the non-atomic-purchase griefing finding: while a buyer's GAS is
-/// escrowed for a listing, the seller (the AA backup owner) must not be able to invalidate that
+/// escrowed for a listing, the seller (the SA backup owner) must not be able to invalidate that
 /// in-flight deposit via <c>cancelListing</c> or <c>updateListingPrice</c> (which would make
 /// <c>settleListing</c> revert and lock the buyer's capital). Once the deposit clears — by
 /// settlement or refund — the seller regains the ability to cancel/reprice.
@@ -34,11 +34,11 @@ public class FixMarketPendingPaymentTests
 
         public MarketHarness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
-            Market = Fx.Deploy("AAAddressMarket");
-            // The market admin (the deploying validators account) allowlists the genuine AA core
+            Wallet = Fx.Deploy("SmartAccount");
+            Market = Fx.Deploy("SAAddressMarket");
+            // The market admin (the deploying validators account) allowlists the genuine SA core
             // so listings backed by it are accepted. Signers are the validators here by default.
-            Fx.CallVoid(Market, "setAllowedAA", Wallet, true);
+            Fx.CallVoid(Market, "setAllowedSA", Wallet, true);
             // Phase 1b: the core admin registers the market as an approved escrow service.
             Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
@@ -59,7 +59,7 @@ public class FixMarketPendingPaymentTests
         public BigInteger CreateListing(UInt160 accountId)
         {
             Fx.SetSigners(Seller);
-            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "AA address", "");
+            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "SA address", "");
             return Fx.CallInteger(Market, "getListingCount");
         }
 
@@ -146,14 +146,14 @@ public class FixMarketPendingPaymentTests
     }
 
     [TestMethod]
-    public void CreateListing_WithNonAllowlistedAaContract_Faults()
+    public void CreateListing_WithNonAllowlistedSaContract_Faults()
     {
-        // A fresh market with no AA core allowlisted: any listing must be refused before the
-        // contract trusts the AA contract for getBackupOwner/escrow calls, so a malicious or
-        // arbitrary AA contract cannot be used to defraud buyers.
+        // A fresh market with no SA core allowlisted: any listing must be refused before the
+        // contract trusts the SA contract for getBackupOwner/escrow calls, so a malicious or
+        // arbitrary SA contract cannot be used to defraud buyers.
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
-        UInt160 market = fx.Deploy("AAAddressMarket");
+        UInt160 wallet = fx.Deploy("SmartAccount");
+        UInt160 market = fx.Deploy("SAAddressMarket");
 
         UInt160 accountId = fx.CallUInt160(
             wallet, "computeRegistrationAccountId",
@@ -163,20 +163,20 @@ public class FixMarketPendingPaymentTests
             wallet, "registerAccount",
             accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, Seller, 2_592_000u);
 
-        Assert.IsFalse(fx.CallBoolean(market, "isAllowedAA", wallet));
+        Assert.IsFalse(fx.CallBoolean(market, "isAllowedSA", wallet));
         fx.SetSigners(Seller);
         TestException blocked = Assert.ThrowsExactly<TestException>(
-            () => fx.CallVoid(market, "createListing", wallet, accountId, Price, "AA address", ""));
-        StringAssert.Contains(blocked.Message, "AA core not allowlisted");
+            () => fx.CallVoid(market, "createListing", wallet, accountId, Price, "SA address", ""));
+        StringAssert.Contains(blocked.Message, "SA core not allowlisted");
     }
 
     [TestMethod]
     public void CreateListing_AfterAdminAllowlistsCore_Succeeds()
     {
-        // The genuine AA core must be usable once the admin allowlists it: the standard
+        // The genuine SA core must be usable once the admin allowlists it: the standard
         // list -> deposit -> settle path completes end to end.
         MarketHarness h = new();
-        Assert.IsTrue(h.Fx.CallBoolean(h.Market, "isAllowedAA", h.Wallet));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Market, "isAllowedSA", h.Wallet));
 
         UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
         BigInteger listingId = h.CreateListing(accountId);

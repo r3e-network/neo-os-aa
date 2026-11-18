@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <!-- The overlay compiles the pinned native core in full and replaces exactly
-       three groups of its files with AA-owned true source:
+       three groups of its files with SA-owned true source:
          1. Native/NativeContract.cs      - the overlay variant registers SmartAccount
             and gates its HF_SmartAccountV1 activation;
          2. Native/SmartAccount*.cs       - generated sync copies of the editable true

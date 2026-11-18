@@ -30,7 +30,7 @@ Set NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 for the release-grade cross-repository ga
 neo-os-services NeoDIDRegistry artifact, or a missing neo-os-services checkout for the Morpheus
 canonical-sync test (MORPHEUS_ORACLE_ROOT, else ../neo-os-services), then fails instead of skipping.
 Set NEOOS_REQUIRE_COMPLETE=1 to fail closed when any selected optional gate would be NOT RUN.
-Pass --formal (or set NEOOS_REQUIRE_FORMAL=1) to also run the fail-closed AA model-checking
+Pass --formal (or set NEOOS_REQUIRE_FORMAL=1) to also run the fail-closed SA model-checking
 gate (formal/verify.py plus its runner tests). Set NEOOS_NATIVE_CORE_SOURCE to the reviewed
 core checkout matching formal/source-lock.json. It needs Coq 8.16+ (including Rocq 9), Z3, a real JDK (JAVA_BIN)
 and tla2tools.jar (TLA_JAR); a missing tool is a failure, never a simulated pass.
@@ -117,7 +117,7 @@ if [[ $run_contracts -eq 1 ]]; then
   echo "=== Contract Gates ==="
   # Restores the pinned Neo packages in locked mode first (every package is published on
   # nuget.org), so a changed resolution, different package bytes or a different nccs stop here
-  # with the pinned versions named (docs/AA-REPRODUCIBLE-BUILD.md) instead of deep inside the build.
+  # with the pinned versions named (docs/SA-REPRODUCIBLE-BUILD.md) instead of deep inside the build.
   source "$ROOT_DIR/scripts/dotnet_env.sh"
   if [[ $run_native -eq 1 ]]; then
     node scripts/check_neo_platform_packages.mjs --include-native
@@ -161,7 +161,7 @@ if [[ $run_contracts -eq 1 ]]; then
     python3 -m unittest discover -s scripts -p 'test_neoexpress_source_validate.py'
     python3 -m unittest discover -s scripts -p 'test_neoexpress_reproducible_build.py'
     node --test scripts/lib/deploy-helpers.test.mjs \
-      scripts/deploy_latest_aa_verifiers.test.mjs \
+      scripts/deploy_latest_sa_verifiers.test.mjs \
       scripts/check_neo_platform_packages.test.mjs \
       scripts/check-artifact-reproducibility.test.mjs \
       scripts/check-ordinary-runtime-provenance.test.mjs \
@@ -191,7 +191,7 @@ if [[ $run_contracts -eq 1 ]]; then
     # fixture. This proves module storage/object isolation, not native-chain admission.
     native_epoch_probe_receipt="${NEOOS_NATIVE_EPOCH_RECEIPT:-}"
     if [[ -z "$native_epoch_probe_receipt" ]]; then
-      native_epoch_probe_receipt="$(mktemp "${TMPDIR:-/tmp}/aa-native-epoch.XXXXXX")"
+      native_epoch_probe_receipt="$(mktemp "${TMPDIR:-/tmp}/sa-native-epoch.XXXXXX")"
     fi
     echo "native module VM regression: locked production build + test-only public-VM fixture (not native-chain proof)"
     echo "native module VM receipt: $native_epoch_probe_receipt"
@@ -201,13 +201,13 @@ if [[ $run_contracts -eq 1 ]]; then
   # tools; formal/verify.py refuses to substitute a simulated result for a missing tool, so an
   # unconditional run would only ever fail there. State the gap instead of hiding it.
   if [[ $run_formal -eq 1 || "${NEOOS_REQUIRE_FORMAL:-0}" == "1" ]]; then
-    echo "formal gate: running fail-closed AA model checks (formal/verify.py)"
+    echo "formal gate: running fail-closed SA model checks (formal/verify.py)"
     python3 formal/verify.py
     python3 -m unittest discover -s formal -p 'test_*.py'
   else
     mark_not_run "formal"
     echo "formal gate: NOT RUN - formal/verify.py (Coq/TLC/Z3 model checks + semantic mutations) was skipped."
-    echo "formal gate:   pass --formal or set NEOOS_REQUIRE_FORMAL=1 to run it; see docs/AA-FORMAL-VERIFICATION.md."
+    echo "formal gate:   pass --formal or set NEOOS_REQUIRE_FORMAL=1 to run it; see docs/SA-FORMAL-VERIFICATION.md."
   fi
   # The private-chain validation is opt-in for the same reason: it needs the neoxp tool,
   # takes several minutes, and a missing tool must read as NOT RUN, never as a pass.
@@ -216,9 +216,9 @@ if [[ $run_contracts -eq 1 ]]; then
     neoxp_tool="${NEOOS_NEOXP:-${NEOXP:-$(command -v neoxp || true)}}"
     neoxp_tool="${neoxp_tool:-$HOME/.dotnet/tools/neoxp}"
     neoexpress_date="$(date -u +%Y%m%d)"
-    repro_receipt="$ROOT_DIR/docs/reports/aa-artifact-reproducibility-$neoexpress_date.json"
-    neoexpress_receipt="$ROOT_DIR/docs/reports/aa-ordinary-source-chain-$neoexpress_date.json"
-    provenance_receipt="$ROOT_DIR/docs/reports/aa-ordinary-runtime-provenance-$neoexpress_date.json"
+    repro_receipt="$ROOT_DIR/docs/reports/sa-artifact-reproducibility-$neoexpress_date.json"
+    neoexpress_receipt="$ROOT_DIR/docs/reports/sa-ordinary-source-chain-$neoexpress_date.json"
+    provenance_receipt="$ROOT_DIR/docs/reports/sa-ordinary-runtime-provenance-$neoexpress_date.json"
     mkdir -p "$ROOT_DIR/docs/reports"
     # Invalidate previous receipts so a failed rerun cannot leave a current-looking PASS.
     rm -f "$neoexpress_receipt" "$provenance_receipt"

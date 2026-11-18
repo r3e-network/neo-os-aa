@@ -11,7 +11,7 @@ except ImportError:
 
 HERE = Path(__file__).resolve().parent
 COQ = HERE/'coq/LoadAdmission.v'
-MIRROR = os.environ.get('AA_LOAD_ADMISSION_SOURCE_MIRROR')
+MIRROR = os.environ.get('SA_LOAD_ADMISSION_SOURCE_MIRROR')
 STEPS = ['read-magic','read-compiler','read-source','read-reserve-byte',
          'read-tokens','read-reserve-short','read-script','verify-checksum']
 
@@ -107,7 +107,7 @@ def guard_list():
 
 
 def local_projection():
-    return dict(schema='neoos-aa-load-admission-source/v1',scope=source.SCOPE,
+    return dict(schema='neoos-sa-load-admission-source/v1',scope=source.SCOPE,
                 entryBoundary=source.ENTRY_BOUNDARY,coreCommit=source.CORE_COMMIT,
                 program=dict(PROGRAM),
                 reasonOnlyGuards=['exact-lookup-key-is-(name,arity)',

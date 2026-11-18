@@ -29,7 +29,7 @@ def require(condition,message):
  if not condition: raise ValueError(message)
 def sha(raw): return hashlib.sha256(raw).hexdigest()
 def capture_sources(cache=None):
- root=Path(cache) if cache else Path(tempfile.gettempdir())/'aa-pinned-neovm-collection-004cd607';result={}
+ root=Path(cache) if cache else Path(tempfile.gettempdir())/'sa-pinned-neovm-collection-004cd607';result={}
  for name,expected in SOURCE_HASHES.items():
   path=root/name
   if not path.exists():
@@ -184,7 +184,7 @@ def extract(cache=None):
  programs={opcode:parse_collection(texts[f'JumpTable/JumpTable.{group}.cs'],method) for opcode,(group,method) in HANDLERS.items()}
  programs['PICKITEM']['indexOffset']+=api['getterIndexOffset']
  programs['CONVERT']['spanDrop']=primitiveApi['spanDrop']
- return dict(primitiveBufferApi=primitiveApi,typeEnum=enum,arrayApi=api,schema='neoos-aa-runtime-collection-source/v1',sourceCommit=COMMIT,sourceSha256=SOURCE_HASHES,programs=programs,unsupported=['RET caller continuation/unload and distinct result stack contracts','ISTYPE only Array/Struct; CONVERT only ByteString/Buffer to Buffer contents; SIZE only Array/Struct count; other typed runtime APIs unsupported','Map/PrimitiveType/Buffer switch branches','Struct-valued SETITEM cloning','readonly and reference-counter/resource semantics','C# extraction and compiled DLL binding'])
+ return dict(primitiveBufferApi=primitiveApi,typeEnum=enum,arrayApi=api,schema='neoos-sa-runtime-collection-source/v1',sourceCommit=COMMIT,sourceSha256=SOURCE_HASHES,programs=programs,unsupported=['RET caller continuation/unload and distinct result stack contracts','ISTYPE only Array/Struct; CONVERT only ByteString/Buffer to Buffer contents; SIZE only Array/Struct count; other typed runtime APIs unsupported','Map/PrimitiveType/Buffer switch branches','Struct-valued SETITEM cloning','readonly and reference-counter/resource semantics','C# extraction and compiled DLL binding'])
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source-cache',type=Path);a=p.parse_args();print(json.dumps(extract(a.source_cache),separators=(',',':')))
 if __name__=='__main__':main()

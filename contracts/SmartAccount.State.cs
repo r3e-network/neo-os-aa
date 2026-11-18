@@ -8,17 +8,30 @@ using Neo.SmartContract.Framework.Services;
 
 namespace SmartAccount
 {
+    /// <summary>
+    /// v4 query surface (spec §9) plus the legacy market-marker readers the
+    /// §7.5 minimal-lock model still consumes. The legacy single-pointer
+    /// queries (GetVerifier/GetHook, DescribeAccount, SimulateValidation, the
+    /// verifier-dispatched IsValidSignature, the pending-update/pending-call
+    /// queries and CancelVerifierUpdate/CancelHookUpdate) are removed with the
+    /// old model: getVerifier/getHook/CallVerifier/CallHook/*Child surfaces are
+    /// removed without aliases in both kernels. Message validation is the
+    /// built-in P-256/0x57 flow in SmartAccount.Message.cs.
+    /// </summary>
     public partial class SmartAccount
     {
-        private const string AccountImplementationId = "org.r3e.neo.smart-account.v3";
-        private static readonly byte[] ERC1271_MAGIC_VALUE = new byte[] { 0x16, 0x26, 0xBA, 0x7E };
-        private static readonly byte[] ERC1271_INVALID_VALUE = new byte[] { 0xFF, 0xFF, 0xFF, 0xFF };
+        private const string AccountImplementationId = "org.r3e.neo.smart-account.v4";
 
+        /// <summary>
+        /// Legacy five-field row decoder (spec §7.4): the ONLY authorized
+        /// consumer of the old Verifier/HookId pointers is the migration
+        /// input. Faults on unknown accounts.
+        /// </summary>
         private static AccountState GetAccountState(UInt160 accountId)
         {
             byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId);
             ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            ExecutionEngine.Assert(data != null, "Account not found");
+            ExecutionEngine.Assert(data != null, ErrorAccountNotFound);
             return (AccountState)StdLib.Deserialize(data!);
         }
 
@@ -28,208 +41,219 @@ namespace SmartAccount
             return AccountImplementationId;
         }
 
+        // ========================================================================
+        // 1. Protocol / account queries (spec §9)
+        // ========================================================================
+
+        /// <summary>
+        /// Returns [protocolVersion, migrationModeOpen]. Migration mode opens
+        /// only through the versioned in-place update (spec §14).
+        /// </summary>
+        [Safe]
+        public static object[] getProtocolInfo()
+        {
+            object[] info = GetProtocolInfoRecord();
+            return new object[] { info[0], info[1] };
+        }
+
+        /// <summary>
+        /// Aggregated account descriptor. Non-faulting for unknown accounts
+        /// (counterfactual probing) and legacy-only accounts (read-only: the
+        /// legacy five-field row and the legacy freeze latch are migration
+        /// inputs). Layout:
+        /// [exists, status, custody, recoveryAuthority, authorityEpoch,
+        ///  configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
+        ///  defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
+        ///  controlRevision, recoveryPending, recoveryMatureAt,
+        ///  marketEscrowActive, legacyRow].
+        /// Status: 0 Active / 1 Frozen / 2 MigrationRequired.
+        /// </summary>
+        [Safe]
+        public static object[] getAccount(UInt160 accountId)
+        {
+            ValidateAccountId(accountId);
+            AccountControl? control = GetAccountControl(accountId);
+            if (control != null)
+            {
+                CoreRecoveryRecord? recovery = GetCoreRecoveryRecord(accountId);
+                return new object[]
+                {
+                    true,
+                    (BigInteger)control!.Status,
+                    control.Custody,
+                    control.RecoveryAuthority,
+                    control.AuthorityEpoch,
+                    control.ConfigurationNonce,
+                    control.RecoveryTimelockMs,
+                    control.DefaultOperationAuthorization,
+                    control.DefaultMessageAuthorization,
+                    control.OwnerOnlyRecovery,
+                    control.HookOrderRevision,
+                    control.ControlRevision,
+                    recovery != null,
+                    recovery == null ? BigInteger.Zero : recovery!.MatureAt,
+                    IsMarketEscrowActive(accountId),
+                    HasLegacyAccountRow(accountId)
+                };
+            }
+
+            ByteString? legacy = Storage.Get(Storage.CurrentContext,
+                Helper.Concat(Prefix_AccountState, (byte[])accountId));
+            if (legacy != null)
+            {
+                AccountState state = (AccountState)StdLib.Deserialize(legacy!);
+                // A legacy row without a 0x51 record: the frozen latch decides
+                // between Frozen and MigrationRequired (post-update, an
+                // unmigrated legacy account can neither execute nor authorize
+                // messages until its owner imports the approved configuration).
+                BigInteger status = HasLegacyFrozenLatch(accountId)
+                    ? (BigInteger)AccountStatusFrozen
+                    : (BigInteger)AccountStatusMigrationRequired;
+                BigInteger timelockMs = state.EscapeTimelock * 1000;
+                if (timelockMs < RecoveryTimelockMinMs) timelockMs = RecoveryTimelockMinMs;
+                if (timelockMs > RecoveryTimelockMaxMs) timelockMs = RecoveryTimelockMaxMs;
+                return new object[]
+                {
+                    true,
+                    status,
+                    state.BackupOwner,
+                    UInt160.Zero,
+                    BigInteger.Zero,
+                    BigInteger.Zero,
+                    timelockMs,
+                    false,
+                    false,
+                    HasLegacyOwnerOnlyLatch(accountId),
+                    BigInteger.Zero,
+                    BigInteger.Zero,
+                    false,
+                    BigInteger.Zero,
+                    IsMarketEscrowActive(accountId),
+                    true
+                };
+            }
+
+            return new object[]
+            {
+                false, (BigInteger)0, UInt160.Zero, UInt160.Zero,
+                BigInteger.Zero, BigInteger.Zero, BigInteger.Zero,
+                false, false, false, BigInteger.Zero, BigInteger.Zero,
+                false, BigInteger.Zero, false, false
+            };
+        }
+
+        /// <summary>
+        /// ERC-7579-style module capability discovery: only validator (type
+        /// code 1) and hook (type code 4) are supported; executor and
+        /// fallback are not (spec §2).
+        /// </summary>
+        [Safe]
+        public static bool SupportsModuleType(string moduleType)
+        {
+            return moduleType == "validator" || moduleType == "hook";
+        }
+
         [Safe]
         public static bool SupportsExecutionMode(string mode)
         {
             return mode == "single" || mode == "batch" || mode == "batch-atomic";
         }
 
-        [Safe]
-        public static bool SupportsModuleType(string moduleType)
+        private static int ModuleTypeCodeFromName(string moduleType)
         {
-            return moduleType == "validator" || moduleType == "verifier" || moduleType == "hook";
+            if (moduleType == "validator") return ModuleTypeCodeValidator;
+            if (moduleType == "hook") return ModuleTypeCodeHook;
+            ExecutionEngine.Assert(false, ErrorModuleTypeUnsupported);
+            return 0;
         }
 
-        [Safe]
-        public static bool IsModuleInstalled(UInt160 accountId, string moduleType, UInt160 moduleHash)
+        /// <summary>
+        /// Canonical v4 module-type label used by the §18 reused lifecycle
+        /// events (ModuleInstalled/ModuleRemoved/ModuleUpdate*) — these keep
+        /// the ERC-7579-style string labels the old model already emitted.
+        /// </summary>
+        internal static string ModuleTypeNameFromCode(int code)
         {
+            return code == ModuleTypeCodeValidator ? "validator" : "hook";
+        }
+
+        /// <summary>
+        /// Page of installed moduleIds of the given type, strictly ascending
+        /// past <paramref name="cursor"/> (the cursor is a moduleId — ids are
+        /// never reused, so pages can never alias). Returns
+        /// [ids[], nextCursor, configurationNonce]; nextCursor is 0 when
+        /// exhausted (spec §3.3).
+        /// </summary>
+        [Safe]
+        public static object[] getModules(UInt160 accountId, string moduleType, BigInteger cursor, BigInteger limit)
+        {
+            ValidateAccountId(accountId);
+            int typeCode = ModuleTypeCodeFromName(moduleType);
+            object[] page = EnumerateModuleIds(accountId, typeCode, cursor, limit);
+            AccountControl? control = GetAccountControl(accountId);
+            BigInteger configurationNonce = control == null ? BigInteger.Zero : control!.ConfigurationNonce;
+            return new object[] { page[0], page[1], configurationNonce };
+        }
+
+        /// <summary>
+        /// Full module-instance descriptor, or an empty array when the id is
+        /// not installed on the account. Layout:
+        /// [moduleId, moduleType, contractHash, contractId, updateCounter,
+        ///  nefSha256, profileSha256, moduleRevision, credentialGeneration,
+        ///  instanceIsolation, messageCapability, thresholdMemberEligible].
+        /// </summary>
+        [Safe]
+        public static object[] getModule(UInt160 accountId, BigInteger moduleId)
+        {
+            ValidateAccountId(accountId);
+            ModuleInstance? module = GetModuleInstance(accountId, moduleId);
+            if (module == null) return new object[0];
+            return new object[]
+            {
+                moduleId,
+                (BigInteger)module!.ModuleType,
+                module.ContractHash,
+                module.ContractId,
+                module.UpdateCounter,
+                module.NefSha256,
+                module.ProfileSha256,
+                module.ModuleRevision,
+                module.CredentialGeneration,
+                module.InstanceIsolation,
+                module.MessageCapability,
+                module.ThresholdMemberEligible
+            };
+        }
+
+        /// <summary>
+        /// True when the account has an installed module instance of the
+        /// given type whose contract hash matches. The additionalContext
+        /// parameter is reserved for instance-isolated installs
+        /// (TODO(26): instance addressing).
+        /// </summary>
+        [Safe]
+        public static bool IsModuleInstalled(UInt160 accountId, string moduleType, UInt160 moduleHash, ByteString additionalContext)
+        {
+            ValidateAccountId(accountId);
             if (moduleHash == null || moduleHash == UInt160.Zero) return false;
-
-            AccountState state = GetAccountState(accountId);
-            if (moduleType == "validator" || moduleType == "verifier")
-            {
-                return state.Verifier == moduleHash;
-            }
-
-            if (moduleType == "hook")
-            {
-                return state.HookId == moduleHash;
-            }
-
-            return false;
+            int typeCode = ModuleTypeCodeFromName(moduleType);
+            return FindModuleIdByContract(accountId, typeCode, moduleHash) != 0;
         }
 
-        /// <summary>
-        /// Aggregated, non-faulting account descriptor for wallets and explorers, in the
-        /// spirit of ERC-7579 capability discovery. Unknown account ids return
-        /// <c>exists = false</c> with zeroed fields instead of faulting, so callers can
-        /// probe counterfactual accounts before registration.
-        /// Layout: [exists, verifier, hook, backupOwner, escapeTimelock,
-        /// escapeTriggeredAt, escapeActive, marketEscrowContract, marketEscrowListingId,
-        /// marketEscrowActive, pendingVerifierUpdate, pendingVerifierMatureAt,
-        /// pendingHookUpdate, pendingHookMatureAt].
-        /// </summary>
+        /// <summary>Returns [hookIds[], revision] — the core-owned hook order.</summary>
         [Safe]
-        public static object[] DescribeAccount(UInt160 accountId)
+        public static object[] getHookOrder(UInt160 accountId)
         {
             ValidateAccountId(accountId);
-            byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null)
-            {
-                return new object[]
-                {
-                    false, UInt160.Zero, UInt160.Zero, UInt160.Zero,
-                    0, 0, false, UInt160.Zero, 0, false, false, 0, false, 0
-                };
-            }
-            AccountState state = (AccountState)StdLib.Deserialize(data);
-            UInt160 escrowContract = GetMarketEscrowContract(accountId);
-            BigInteger escrowListing = GetMarketEscrowListingId(accountId);
-            return new object[]
-            {
-                true,
-                state.Verifier,
-                state.HookId,
-                state.BackupOwner,
-                (BigInteger)state.EscapeTimelock,
-                state.EscapeTriggeredAt,
-                state.EscapeTriggeredAt > 0,
-                escrowContract,
-                escrowListing,
-                escrowContract != UInt160.Zero && escrowListing > 0,
-                HasPendingVerifierUpdate(accountId),
-                GetPendingVerifierUpdateTime(accountId),
-                HasPendingHookUpdate(accountId),
-                GetPendingHookUpdateTime(accountId),
-            };
+            HookOrderRecord order = GetHookOrder(accountId);
+            return new object[] { order.HookIds, order.Revision };
         }
 
-        /// <summary>
-        /// Non-faulting preflight of the core's execution-time checks for one operation,
-        /// named after ERC-4337's EntryPoint.simulateValidation so 4337-aware tooling
-        /// finds the familiar entry point. Like previewUserOpValidation it
-        /// deliberately excludes signature verification and hook execution; unlike it, the
-        /// call reports instead of faulting on an unknown account, and exposes the two
-        /// execution-relevant latches a submitter must see: market escrow (blocks
-        /// execution) and an active escape (execution would cancel it).
-        /// nativeWitnessPresent reflects the witness set of this invocation context; a
-        /// wallet simulating with the backup owner attached learns whether the native
-        /// fallback path would authorize the operation.
-        /// Layout: [accountExists, deadlineOk, nonceOk, verifierBound,
-        /// nativeWitnessPresent, marketEscrowBlocks, escapeActive].
-        /// </summary>
-        [Safe]
-        public static object[] SimulateValidation(UInt160 accountId, UserOperation op)
-        {
-            ValidateAccountId(accountId);
-            ValidateUserOperation(op);
-            byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null)
-            {
-                return new object[] { false, false, false, false, false, false, false };
-            }
-            AccountState state = (AccountState)StdLib.Deserialize(data);
-            return new object[]
-            {
-                true,
-                Runtime.Time <= op.Deadline,
-                IsNonceAcceptable(accountId, op.Nonce),
-                state.Verifier != UInt160.Zero,
-                Runtime.CheckWitness(state.BackupOwner),
-                IsMarketEscrowActive(accountId),
-                state.EscapeTriggeredAt > 0,
-            };
-        }
-
-        /// <summary>
-        /// Neo adapter for ERC-1271 contract-wallet message validation.
-        ///
-        /// The four-byte result is intentionally the ERC-1271 magic value so a
-        /// relayer or cross-chain adapter can consume the same success signal.
-        /// Verifiers must explicitly implement and advertise
-        /// supportsMessageSignatures; UserOperation validation is never reused
-        /// as a generic message signature check.
-        /// </summary>
-        [Safe]
-        public static ByteString IsValidSignature(UInt160 accountId, ByteString hash, ByteString signature)
-        {
-            ExecutionEngine.Assert(hash != null && hash.Length == 32, "Invalid message hash");
-            ExecutionEngine.Assert(
-                signature != null && (signature.Length == 64 || signature.Length == 65),
-                "Invalid message signature");
-            AccountState state = GetAccountState(accountId);
-            if (state.Verifier == UInt160.Zero) return (ByteString)ERC1271_INVALID_VALUE;
-
-            // Message signatures are an optional verifier capability. Check the complete
-            // read-only ABI before dispatching so an execution-only V3 verifier fails closed
-            // with ERC-1271's invalid value instead of faulting on a missing method.
-            if (!ModuleExposesSafeMethod(state.Verifier, "supportsMessageSignatures", ContractParameterType.Boolean)
-                || !ModuleExposesSafeMethod(state.Verifier, "isValidSignature", ContractParameterType.Boolean,
-                    ContractParameterType.Hash160, ContractParameterType.ByteArray, ContractParameterType.ByteArray))
-                return (ByteString)ERC1271_INVALID_VALUE;
-
-#if PLATFORM
-            bool supported = (bool)CallVerifierWithGasLimit(
-                state.Verifier,
-                "supportsMessageSignatures",
-                CallFlags.ReadOnly,
-                new object[] { });
-#else
-            bool supported = (bool)Contract.Call(
-                state.Verifier,
-                "supportsMessageSignatures",
-                CallFlags.ReadOnly,
-                new object[] { });
-#endif
-            if (!supported) return (ByteString)ERC1271_INVALID_VALUE;
-
-#if PLATFORM
-            bool valid = (bool)CallVerifierWithGasLimit(
-                state.Verifier,
-                "isValidSignature",
-                CallFlags.ReadOnly,
-                new object[] { accountId, hash!, signature! });
-#else
-            bool valid = (bool)Contract.Call(
-                state.Verifier,
-                "isValidSignature",
-                CallFlags.ReadOnly,
-                new object[] { accountId, hash!, signature! });
-#endif
-            return valid ? (ByteString)ERC1271_MAGIC_VALUE : (ByteString)ERC1271_INVALID_VALUE;
-        }
-
-        [Safe]
-        public static UInt160 GetVerifier(UInt160 accountId)
-        {
-            return GetAccountState(accountId).Verifier;
-        }
-
-        [Safe]
-        public static UInt160 GetHook(UInt160 accountId)
-        {
-            return GetAccountState(accountId).HookId;
-        }
-
-        [Safe]
-        public static UInt160 GetBackupOwner(UInt160 accountId)
-        {
-            return GetAccountState(accountId).BackupOwner;
-        }
-
-        [Safe]
-        public static uint GetEscapeTimelock(UInt160 accountId)
-        {
-            return GetAccountState(accountId).EscapeTimelock;
-        }
-
-        [Safe]
-        public static BigInteger GetEscapeTriggeredAt(UInt160 accountId)
-        {
-            return GetAccountState(accountId).EscapeTriggeredAt;
-        }
+        // ========================================================================
+        // 2. Legacy market markers (spec §7.5 minimal-lock model)
+        //    0x06/0x07 are Market-owned physical markers; the readers stay
+        //    read-only queries on both legacy and v4 accounts.
+        // ========================================================================
 
         [Safe]
         public static UInt160 GetMarketEscrowContract(UInt160 accountId)
@@ -253,11 +277,13 @@ namespace SmartAccount
             return GetMarketEscrowContract(accountId) != UInt160.Zero && GetMarketEscrowListingId(accountId) > 0;
         }
 
-        [Safe]
-        public static bool IsEscapeActive(UInt160 accountId)
-        {
-            return GetAccountState(accountId).EscapeTriggeredAt > 0;
-        }
+        // ========================================================================
+        // 3. Legacy nonce channel query (0x03) — read-only migration input.
+        //    The v4 channels (0x56/0x5C) are queried through
+        //    getNonce(accountId, validatorId, nonceSubkey) and
+        //    getNonceSequence(accountId, channel) in SmartAccount.Nonce.cs;
+        //    the legacy merge rule is applied there at consumption time.
+        // ========================================================================
 
         [Safe]
         public static BigInteger GetNonce(UInt160 accountId, BigInteger channel)
@@ -282,197 +308,20 @@ namespace SmartAccount
                 new object[] { serialized });
         }
 
-        [Safe]
-        public static bool HasPendingVerifierUpdate(UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
-            return Storage.Get(Storage.CurrentContext, key) != null;
-        }
-
-        [Safe]
-        public static bool HasPendingHookUpdate(UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
-            return Storage.Get(Storage.CurrentContext, key) != null;
-        }
-
-        /// <summary>
-        /// Returns [newVerifier, verifierParams, initiatedAt, matureAt], or null.
-        /// The public array layout is independent of the pending storage object.
-        /// </summary>
-        [Safe]
-        public static object[]? GetPendingVerifierUpdate(UInt160 accountId)
-        {
-            ValidateAccountId(accountId);
-            byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return null;
-            PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
-            return new object[]
-            {
-                pending.NewVerifier,
-                pending.VerifierParams ?? (ByteString)new byte[0],
-                pending.InitiatedAt,
-                pending.InitiatedAt + ConfigUpdateTimelockMs
-            };
-        }
-
-        /// <summary>
-        /// Returns [newHook, emptyBytes, initiatedAt, matureAt], or null.
-        /// Hooks never expose verifier parameters from the shared storage type.
-        /// </summary>
-        [Safe]
-        public static object[]? GetPendingHookUpdate(UInt160 accountId)
-        {
-            ValidateAccountId(accountId);
-            byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return null;
-            PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
-            return new object[]
-            {
-                pending.NewHookId,
-                (ByteString)new byte[0],
-                pending.InitiatedAt,
-                pending.InitiatedAt + ConfigUpdateTimelockMs
-            };
-        }
-
-        [Safe]
-        public static BigInteger GetPendingVerifierUpdateTime(UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return 0;
-            PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
-            return pending.InitiatedAt + ConfigUpdateTimelockMs;
-        }
-
-        [Safe]
-        public static BigInteger GetPendingHookUpdateTime(UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return 0;
-            PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
-            return pending.InitiatedAt + ConfigUpdateTimelockMs;
-        }
-
-        private static PendingModuleCall? GetPendingModuleCallRecord(byte[] prefix, UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(prefix, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return null;
-            return (PendingModuleCall)StdLib.Deserialize(data!);
-        }
-
-        [Safe]
-        public static bool HasPendingVerifierCall(UInt160 accountId)
-        {
-            return GetPendingModuleCallRecord(Prefix_PendingVerifierCall, accountId) != null;
-        }
-
-        [Safe]
-        public static bool HasPendingHookCall(UInt160 accountId)
-        {
-            return GetPendingModuleCallRecord(Prefix_PendingHookCall, accountId) != null;
-        }
-
-        [Safe]
-        public static UInt160 GetPendingVerifierCallModule(UInt160 accountId)
-        {
-            PendingModuleCall? pending = GetPendingModuleCallRecord(Prefix_PendingVerifierCall, accountId);
-            return pending == null ? UInt160.Zero : pending.ModuleHash;
-        }
-
-        [Safe]
-        public static UInt160 GetPendingHookCallModule(UInt160 accountId)
-        {
-            PendingModuleCall? pending = GetPendingModuleCallRecord(Prefix_PendingHookCall, accountId);
-            return pending == null ? UInt160.Zero : pending.ModuleHash;
-        }
-
-        [Safe]
-        public static ByteString GetPendingVerifierCallHash(UInt160 accountId)
-        {
-            PendingModuleCall? pending = GetPendingModuleCallRecord(Prefix_PendingVerifierCall, accountId);
-            return pending == null ? (ByteString)new byte[0] : pending.CallHash;
-        }
-
-        [Safe]
-        public static ByteString GetPendingHookCallHash(UInt160 accountId)
-        {
-            PendingModuleCall? pending = GetPendingModuleCallRecord(Prefix_PendingHookCall, accountId);
-            return pending == null ? (ByteString)new byte[0] : pending.CallHash;
-        }
-
-        [Safe]
-        public static BigInteger GetPendingVerifierCallTime(UInt160 accountId)
-        {
-            PendingModuleCall? pending = GetPendingModuleCallRecord(Prefix_PendingVerifierCall, accountId);
-            return pending == null ? 0 : pending.InitiatedAt + ConfigUpdateTimelockMs;
-        }
-
-        [Safe]
-        public static BigInteger GetPendingHookCallTime(UInt160 accountId)
-        {
-            PendingModuleCall? pending = GetPendingModuleCallRecord(Prefix_PendingHookCall, accountId);
-            return pending == null ? 0 : pending.InitiatedAt + ConfigUpdateTimelockMs;
-        }
-
-        /// <summary>
-        /// Cancels a pending verifier update.
-        /// </summary>
-        public static void CancelVerifierUpdate(UInt160 accountId)
-        {
-            AssertBackupOwner(accountId);
-            AssertPluginConfigurationAllowed(accountId);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            Storage.Delete(Storage.CurrentContext, key);
-            if (data != null)
-            {
-                PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
-                OnModuleUpdateCancelled(accountId, ModuleTypeVerifier, pending.NewVerifier);
-            }
-            OnVerifierUpdateCancelled(accountId);
-        }
-
-        /// <summary>
-        /// Cancels a pending hook update.
-        /// </summary>
-        public static void CancelHookUpdate(UInt160 accountId)
-        {
-            AssertBackupOwner(accountId);
-            AssertPluginConfigurationAllowed(accountId);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            Storage.Delete(Storage.CurrentContext, key);
-            if (data != null)
-            {
-                PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
-                OnModuleUpdateCancelled(accountId, ModuleTypeHook, pending.NewHookId);
-            }
-            OnHookUpdateCancelled(accountId);
-        }
+        // ========================================================================
+        // 4. Account metadata URI (custody-gated, active-account-gated)
+        // ========================================================================
 
         /// <summary>
         /// Sets the off-chain metadata URI for an account. Deletes the key if cleared.
         /// </summary>
         public static void SetMetadataUri(UInt160 accountId, string metadataUri)
         {
-            AssertBackupOwner(accountId);
-            AssertPluginConfigurationAllowed(accountId);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            byte[] key = Helper.Concat(Prefix_MetadataUri, (byte[])accountId);
+            ValidateAccountId(accountId);
+            AccountControl control = RequireAccountActive(accountId!);
+            RequireCustodyWitness(control);
+            AssertAccountConfigurationIdle(accountId!);
+            byte[] key = Helper.Concat(Prefix_MetadataUri, (byte[])accountId!);
             if (metadataUri == null || metadataUri.Length == 0)
             {
                 Storage.Delete(Storage.CurrentContext, key);
@@ -481,7 +330,7 @@ namespace SmartAccount
 
             ExecutionEngine.Assert(metadataUri.Length <= MaxMetadataUriLength, "MetadataUri too long");
             Storage.Put(Storage.CurrentContext, key, metadataUri);
-            OnMetadataUriUpdated(accountId, metadataUri);
+            OnMetadataUriUpdated(accountId!, metadataUri);
         }
 
         /// <summary>

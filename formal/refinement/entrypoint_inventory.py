@@ -387,7 +387,7 @@ def build_entrypoint_inventory(inventory):
                                       'missingReferenceDecoderOpcodes': sorted({r['name'] for r in closure_rows if r['opcode'] not in recognized}),
                                       'referenceDecoderRecognizesAllBytes': all(r['opcode'] in recognized for r in closure_rows),
                                       'classification': 'structural-no-external-effect-candidate', 'proved': False})
-    return {'schema': 'neoos-aa-entrypoint-closure-inventory/v1', 'status': 'STRUCTURAL_INVENTORY_ONLY',
+    return {'schema': 'neoos-sa-entrypoint-closure-inventory/v1', 'status': 'STRUCTURAL_INVENTORY_ONLY',
             'nefSha256': target['sha256'], 'scriptSha256': target['scriptSha256'], 'scriptByteCount': len(script),
             'instructionCount': len(decoded), 'abiEntryCount': len(entries), 'fullUnprovedCount': len(entries),
             'implementationVerified': False, 'fullImplementationVerified': False,

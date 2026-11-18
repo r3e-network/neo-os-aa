@@ -5,10 +5,10 @@
       class="mx-auto mb-2"
       :title="t('studioPanels.noAccountLoaded', 'No account loaded')"
     />
-    <p class="text-sm text-aa-text font-medium mb-1">
+    <p class="text-sm text-sa-text font-medium mb-1">
       {{ t("studioPanels.noAccountLoaded", "No account loaded") }}
     </p>
-    <p class="text-xs text-aa-muted">
+    <p class="text-xs text-sa-muted">
       {{
         t(
           "studioPanels.loadAccountHint",

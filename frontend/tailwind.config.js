@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        aa: {
+        sa: {
           // "orange" tokens repurposed to the Neo Soft violet interactive accent
           orange: '#7B61FF',
           darkOrange: '#6A4DF4',
@@ -111,7 +111,7 @@ export default {
         'glow-neo-sm': '0 2px 12px rgba(22, 199, 132, 0.12)',
         'glow-green-diffuse': '0 16px 40px rgba(22, 199, 132, 0.06)',
         'glow-orange-hot': '0 2px 10px rgba(123, 97, 255, 0.4)',
-        'glow-error-sm': '0 0 6px var(--aa-error)',
+        'glow-error-sm': '0 0 6px var(--sa-error)',
       },
     },
   },

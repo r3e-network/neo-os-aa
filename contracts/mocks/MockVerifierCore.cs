@@ -9,11 +9,11 @@ using System.ComponentModel;
 namespace SmartAccount.Mocks
 {
     /// <summary>
-    /// Minimal AA-core stub used by verifier runtime tests.
+    /// Minimal SA-core stub used by verifier runtime tests.
     /// </summary>
     /// <remarks>
     /// Verifier plugins gate configuration and post-execution effects through
-    /// <c>VerifierAuthority</c>, which requires the caller to be the authorized AA core and
+    /// <c>VerifierAuthority</c>, which requires the caller to be the authorized SA core and
     /// asks that core to approve the operation via <c>canConfigureVerifier</c> /
     /// <c>canExecuteVerifier</c>. This stub plays that core role for tests: it approves both
     /// checks and exposes a generic <see cref="Forward"/> so a test can invoke a verifier
@@ -22,7 +22,7 @@ namespace SmartAccount.Mocks
     /// </remarks>
     [DisplayName("MockVerifierCore")]
     [ContractPermission("*", "*")]
-    [ManifestExtra("Description", "Test-only AA core stub for verifier authority checks")]
+    [ManifestExtra("Description", "Test-only SA core stub for verifier authority checks")]
     public class MockVerifierCore : SmartContract
     {
         private static readonly byte[] Prefix_BackupOwner = new byte[] { 0x01 };
@@ -33,7 +33,7 @@ namespace SmartAccount.Mocks
         private static readonly byte[] Prefix_LeafMode = new byte[] { 0x06 };
         private static readonly byte[] Prefix_CleanupRecoveryTarget = new byte[] { 0x07 };
 
-        // Test-only V3 surface used to model a plugin whose cleanup fails. The production AA
+        // Test-only V3 surface used to model a plugin whose cleanup fails. The production SA
         // core must fail closed rather than silently transferring such a dirty shell.
         [Safe]
         public static bool SupportsV3() => true;

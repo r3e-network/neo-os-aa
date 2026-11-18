@@ -34,8 +34,8 @@ response cannot restore an earlier account's recovery context.
 
 Recovery signatures use the `neodid-recovery-v2` domain and compact-v3 encoding.
 New action requests use `neo_n3_action_v4`: compact action-v4 tickets signed
-under `neodid-aa-action-v3`, binding the enrolled master nullifier and current
-action-authorization epoch. Both paths bind the AA core and raw 20-byte account
+under `neodid-sa-action-v3`, binding the enrolled master nullifier and current
+action-authorization epoch. Both paths bind the SA core and raw 20-byte account
 ID along with their ticket-specific context; the proxy address is not the raw
 account ID. Direct ticket submission re-derives the expected action ID instead
 of accepting an unrelated ID solely because its signature matches. Existing

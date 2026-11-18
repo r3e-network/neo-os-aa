@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/localchain"))
-import aa_rpc_scenarios as suite
+import sa_rpc_scenarios as suite
 
 class GateTest(unittest.TestCase):
     def setUp(self):
@@ -115,9 +115,9 @@ class GateTest(unittest.TestCase):
 
     def test_artifact_mismatch_names_file(self):
         expected = copy.deepcopy(self.expected)
-        name = "contracts/build/SmartAccountV3.nef"
+        name = "contracts/build/SmartAccount.nef"
         next(a for a in expected["artifacts"] if a["path"] == name)["sha256"] = "0" * 64
-        with self.assertRaisesRegex(suite.Fail, "SmartAccountV3.nef"):
+        with self.assertRaisesRegex(suite.Fail, "SmartAccount.nef"):
             suite.validate_artifacts(expected)
 
 if __name__ == "__main__":

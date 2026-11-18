@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 /**
- * Deploy and smoke-test the production AAAddressMarket/AAPaymaster contracts on
+ * Deploy and smoke-test the production SAAddressMarket/SAPaymaster contracts on
  * Neo N3 mainnet.
  *
  * This script is intentionally mainnet-only and refuses to broadcast unless
- * CONFIRM_MAINNET_AA_DEPLOY=1 is set. It never prints private key material.
+ * CONFIRM_MAINNET_SA_DEPLOY=1 is set. It never prints private key material.
  *
  * Shared deploy plumbing lives in scripts/lib/deploy-helpers.js; its
  * invokePersisted helper aborts with "<operation> preview FAULT" before
@@ -35,6 +35,7 @@ const {
   waitForAppLog,
   assertVmState,
   invokePersisted,
+  classifyAuthorizedCoreBinding,
 } = require('./lib/deploy-helpers');
 
 const { rpc, sc, wallet, experimental, CONST } = neon;
@@ -50,7 +51,7 @@ const DEFAULT_WEB3AUTH_VERIFIER_HASH = '0xf5c452cd4ba29dcdc47026383568c0d8b38d92
 const GAS_HASH = CONST.NATIVE_CONTRACT_HASH.GasToken;
 const ZERO_HASH160 = '0000000000000000000000000000000000000000';
 const ESCAPE_TIMELOCK = 7 * 24 * 60 * 60;
-const RESULTS_FILE = path.resolve(__dirname, '..', 'mainnet-aa-deployment-results.json');
+const RESULTS_FILE = path.resolve(__dirname, '..', 'mainnet-sa-deployment-results.json');
 
 const args = new Set(process.argv.slice(2));
 const planOnly = args.has('--plan');
@@ -59,7 +60,7 @@ const deployMarket = args.has('--deploy-market') || args.has('--deploy-all');
 const deployPaymaster = args.has('--deploy-paymaster') || args.has('--deploy-all');
 const smokePaymaster = args.has('--smoke-paymaster');
 const deployModules = [
-  ...(process.env.AA_MAINNET_DEPLOY_MODULES || '').split(/[,\s]+/),
+  ...(process.env.SA_MAINNET_DEPLOY_MODULES || '').split(/[,\s]+/),
   args.has('--deploy-web3auth') ? 'Web3AuthVerifier' : '',
   args.has('--deploy-session-key') ? 'SessionKeyVerifier' : '',
 ].map((item) => item.trim()).filter(Boolean);
@@ -67,7 +68,7 @@ const deployModules = [
 function loadEnvFile(filePath) {
   if (!filePath) return;
   const resolved = path.resolve(filePath);
-  if (!fs.existsSync(resolved)) throw new Error(`AA_ENV_FILE not found: ${resolved}`);
+  if (!fs.existsSync(resolved)) throw new Error(`SA_ENV_FILE not found: ${resolved}`);
   const lines = fs.readFileSync(resolved, 'utf8').split(/\r?\n/);
   for (const line of lines) {
     const trimmed = line.trim();
@@ -81,17 +82,17 @@ function loadEnvFile(filePath) {
 
 function requireBroadcastConfirmation() {
   if (planOnly) return;
-  if (process.env.CONFIRM_MAINNET_AA_DEPLOY !== '1') {
-    throw new Error('Refusing to broadcast without CONFIRM_MAINNET_AA_DEPLOY=1');
+  if (process.env.CONFIRM_MAINNET_SA_DEPLOY !== '1') {
+    throw new Error('Refusing to broadcast without CONFIRM_MAINNET_SA_DEPLOY=1');
   }
 }
 
 function resolveWif() {
-  if (process.env.AA_MAINNET_DEPLOY_WIF) return process.env.AA_MAINNET_DEPLOY_WIF;
+  if (process.env.SA_MAINNET_DEPLOY_WIF) return process.env.SA_MAINNET_DEPLOY_WIF;
   if (process.env.NEO_MAINNET_WIF) return process.env.NEO_MAINNET_WIF;
   if (process.env.MARKET_DEPLOY_WIF) return process.env.MARKET_DEPLOY_WIF;
-  if (process.env.ALLOW_RELAY_WIF_FOR_MAINNET_DEPLOY === '1' && process.env.AA_RELAY_WIF) {
-    return process.env.AA_RELAY_WIF;
+  if (process.env.ALLOW_RELAY_WIF_FOR_MAINNET_DEPLOY === '1' && process.env.SA_RELAY_WIF) {
+    return process.env.SA_RELAY_WIF;
   }
   return '';
 }
@@ -128,7 +129,7 @@ async function contractExists(client, hash) {
 }
 
 async function deployContract(client, account, networkMagic, rpcUrl, baseName) {
-  const suffix = String(process.env.AA_DEPLOY_SUFFIX || '').trim();
+  const suffix = String(process.env.SA_DEPLOY_SUFFIX || '').trim();
   const { nef, manifest, manifestName } = loadArtifact(baseName, suffix);
   const predictedHash = predictContractHash(account, nef.checksum, manifestName);
   const alreadyDeployed = await contractExists(client, predictedHash);
@@ -167,6 +168,57 @@ async function deployContract(client, account, networkMagic, rpcUrl, baseName) {
 async function invokeRead(client, contractHash, operation, params = [], signers) {
   return withRpcRetry(`${operation}.read`, () =>
     client.invokeFunction(sanitizeHex(contractHash), operation, params, signers));
+}
+
+/**
+ * F-19 (re-verified from code): binds a module to this run's SA core only
+ * when it is safe to do so. VerifierAuthority/PaymasterAuthority implement
+ * audit fix M-7, whose SetAuthorizedCore asserts
+ * `AuthorizedCore() == UInt160.Zero, "core already set; use ProposeAuthorizedCore"`:
+ * the instant set is a first-bind-only operation. The old `currentCore !==
+ * activeCoreHash` comparison would broadcast a doomed setAuthorizedCore on
+ * rebind, so this classifies the current state and:
+ *   - first-bind: sends the one setAuthorizedCore that is actually valid;
+ *   - already-bound: skips (no wasted broadcast);
+ *   - rebind: refuses with the precise remediation (proposeAuthorizedCore +
+ *     the 7-day timelock + confirmAuthorizedCore) instead of faulting on
+ *     mainnet.
+ */
+async function bindAuthorizedCoreToActiveCore({
+  invokeCtx,
+  client,
+  moduleLabel,
+  contractHash,
+  activeCoreHash,
+  transactions,
+  txKey,
+  invokeReadFn = invokeRead,
+  invokePersistedFn = invokePersisted,
+}) {
+  const authorizedCore = await invokeReadFn(client, contractHash, 'authorizedCore');
+  const currentCore = stackHash160(authorizedCore?.stack?.[0]);
+  const binding = classifyAuthorizedCoreBinding(currentCore, activeCoreHash);
+
+  if (binding === 'already-bound') {
+    console.log(`${moduleLabel} ${contractHash} already bound to SA core ${activeCoreHash}`);
+    return { binding, txid: null, currentCore };
+  }
+  if (binding === 'rebind') {
+    throw new Error(
+      `${moduleLabel} ${contractHash} is already bound to SA core ${currentCore}, not this run's ${activeCoreHash}. `
+      + 'SetAuthorizedCore is initial-bind-only: rebind through proposeAuthorizedCore, the 7-day timelock and confirmAuthorizedCore (or deploy a fresh module) instead of broadcasting a doomed setAuthorizedCore.'
+    );
+  }
+
+  console.log(`Binding ${moduleLabel} ${contractHash} to SA core ${activeCoreHash} (initial bind)`);
+  const bind = await invokePersistedFn({
+    ...invokeCtx,
+    contractHash,
+    operation: 'setAuthorizedCore',
+    params: [hash160Param(activeCoreHash)],
+  });
+  if (transactions && txKey) transactions[txKey] = bind.txid;
+  return { binding, txid: bind.txid, currentCore };
 }
 
 function stackBoolean(item) {
@@ -225,8 +277,8 @@ async function runPaymasterSmoke({ client, account, networkMagic, rpcUrl, coreHa
     ],
   });
 
-  const depositAmount = BigInt(process.env.AA_MAINNET_PAYMASTER_SMOKE_DEPOSIT || '2000000');
-  const reimbursement = BigInt(process.env.AA_MAINNET_PAYMASTER_SMOKE_REIMBURSEMENT || '100000');
+  const depositAmount = BigInt(process.env.SA_MAINNET_PAYMASTER_SMOKE_DEPOSIT || '2000000');
+  const reimbursement = BigInt(process.env.SA_MAINNET_PAYMASTER_SMOKE_REIMBURSEMENT || '100000');
   const deposit = await invokePersisted({
     ...invokeCtx,
     contractHash: GAS_HASH,
@@ -317,7 +369,7 @@ async function runPaymasterSmoke({ client, account, networkMagic, rpcUrl, coreHa
 }
 
 async function main() {
-  loadEnvFile(process.env.AA_ENV_FILE);
+  loadEnvFile(process.env.SA_ENV_FILE);
   requireBroadcastConfirmation();
 
   if (!planOnly && !deployCore && !deployMarket && !deployPaymaster && deployModules.length === 0 && !smokePaymaster) {
@@ -326,12 +378,12 @@ async function main() {
 
   const wif = resolveWif();
   if (!wif) {
-    throw new Error('AA_MAINNET_DEPLOY_WIF, NEO_MAINNET_WIF, or MARKET_DEPLOY_WIF is required. Set ALLOW_RELAY_WIF_FOR_MAINNET_DEPLOY=1 to explicitly reuse AA_RELAY_WIF.');
+    throw new Error('SA_MAINNET_DEPLOY_WIF, NEO_MAINNET_WIF, or MARKET_DEPLOY_WIF is required. Set ALLOW_RELAY_WIF_FOR_MAINNET_DEPLOY=1 to explicitly reuse SA_RELAY_WIF.');
   }
 
   const rpcUrl = process.env.NEO_MAINNET_RPC_URL || process.env.MAINNET_RPC_URL || DEFAULT_RPC_URL;
-  const coreHash = normalizeHash(process.env.AA_MAINNET_CORE_HASH || DEFAULT_CORE_HASH);
-  const verifierHash = normalizeHash(process.env.AA_MAINNET_WEB3AUTH_VERIFIER_HASH || DEFAULT_WEB3AUTH_VERIFIER_HASH);
+  const coreHash = normalizeHash(process.env.SA_MAINNET_CORE_HASH || DEFAULT_CORE_HASH);
+  const verifierHash = normalizeHash(process.env.SA_MAINNET_WEB3AUTH_VERIFIER_HASH || DEFAULT_WEB3AUTH_VERIFIER_HASH);
   const account = new wallet.Account(wif);
   const client = new rpc.RPCClient(rpcUrl);
   const version = await withRpcRetry('getVersion', () => client.getVersion());
@@ -339,7 +391,7 @@ async function main() {
   if (networkMagic !== MAINNET_MAGIC) {
     throw new Error(`RPC network magic mismatch: expected ${MAINNET_MAGIC}, got ${networkMagic}`);
   }
-  if (!deployCore && !(await contractExists(client, coreHash))) throw new Error(`AA core not deployed: ${coreHash}`);
+  if (!deployCore && !(await contractExists(client, coreHash))) throw new Error(`SA core not deployed: ${coreHash}`);
   if (!(await contractExists(client, verifierHash))) throw new Error(`Web3Auth verifier not deployed: ${verifierHash}`);
 
   const invokeCtx = { client, account, networkMagic, rpcUrl };
@@ -360,8 +412,8 @@ async function main() {
   };
 
   const core = (deployCore || planOnly)
-    ? await deployContract(client, account, networkMagic, rpcUrl, 'SmartAccountV3')
-    : { baseName: 'SmartAccountV3', manifestName: 'SmartAccountV3', hash: coreHash, txid: null, status: 'configured' };
+    ? await deployContract(client, account, networkMagic, rpcUrl, 'SmartAccount')
+    : { baseName: 'SmartAccount', manifestName: 'SmartAccount', hash: coreHash, txid: null, status: 'configured' };
   const activeCoreHash = core.hash;
 
   const modules = {};
@@ -371,14 +423,14 @@ async function main() {
   const activeVerifierHash = modules.Web3AuthVerifier?.hash || verifierHash;
 
   const market = (deployMarket || planOnly)
-    ? await deployContract(client, account, networkMagic, rpcUrl, 'AAAddressMarket')
-    : process.env.AA_MAINNET_MARKET_HASH
-      ? { baseName: 'AAAddressMarket', manifestName: 'AAAddressMarket', hash: normalizeHash(process.env.AA_MAINNET_MARKET_HASH), txid: null, status: 'provided' }
+    ? await deployContract(client, account, networkMagic, rpcUrl, 'SAAddressMarket')
+    : process.env.SA_MAINNET_MARKET_HASH
+      ? { baseName: 'SAAddressMarket', manifestName: 'SAAddressMarket', hash: normalizeHash(process.env.SA_MAINNET_MARKET_HASH), txid: null, status: 'provided' }
       : null;
   const paymaster = (deployPaymaster || planOnly)
-    ? await deployContract(client, account, networkMagic, rpcUrl, 'AAPaymaster')
-    : process.env.AA_MAINNET_PAYMASTER_HASH
-      ? { hash: normalizeHash(process.env.AA_MAINNET_PAYMASTER_HASH), status: 'provided' }
+    ? await deployContract(client, account, networkMagic, rpcUrl, 'SAPaymaster')
+    : process.env.SA_MAINNET_PAYMASTER_HASH
+      ? { hash: normalizeHash(process.env.SA_MAINNET_PAYMASTER_HASH), status: 'provided' }
       : null;
 
   const transactions = {};
@@ -387,33 +439,27 @@ async function main() {
     const state = await client.getContractState(sanitizeHex(moduleDeployment.hash));
     const methods = state?.manifest?.abi?.methods?.map((method) => method.name) || [];
     if (!methods.includes('setAuthorizedCore')) continue;
-    const authorizedCore = await invokeRead(client, moduleDeployment.hash, 'authorizedCore');
-    const currentCore = stackHash160(authorizedCore?.stack?.[0]);
-    if (currentCore !== activeCoreHash) {
-      console.log(`Binding ${moduleName} ${moduleDeployment.hash} to AA core ${activeCoreHash}`);
-      const bind = await invokePersisted({
-        ...invokeCtx,
-        contractHash: moduleDeployment.hash,
-        operation: 'setAuthorizedCore',
-        params: [hash160Param(activeCoreHash)],
-      });
-      transactions[`set${moduleName}AuthorizedCoreTx`] = bind.txid;
-    }
+    await bindAuthorizedCoreToActiveCore({
+      invokeCtx,
+      client,
+      moduleLabel: moduleName,
+      contractHash: moduleDeployment.hash,
+      activeCoreHash,
+      transactions,
+      txKey: `set${moduleName}AuthorizedCoreTx`,
+    });
   }
 
   if (paymaster && !planOnly) {
-    const authorizedCore = await invokeRead(client, paymaster.hash, 'authorizedCore');
-    const currentCore = stackHash160(authorizedCore?.stack?.[0]);
-    if (currentCore !== activeCoreHash) {
-      console.log(`Binding Paymaster ${paymaster.hash} to AA core ${activeCoreHash}`);
-      const bind = await invokePersisted({
-        ...invokeCtx,
-        contractHash: paymaster.hash,
-        operation: 'setAuthorizedCore',
-        params: [hash160Param(activeCoreHash)],
-      });
-      transactions.setAuthorizedCoreTx = bind.txid;
-    }
+    await bindAuthorizedCoreToActiveCore({
+      invokeCtx,
+      client,
+      moduleLabel: 'Paymaster',
+      contractHash: paymaster.hash,
+      activeCoreHash,
+      transactions,
+      txKey: 'setAuthorizedCoreTx',
+    });
   }
 
   const partialResults = {
@@ -466,7 +512,15 @@ async function main() {
   console.log(JSON.stringify(results, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  MAINNET_MAGIC,
+  ESCAPE_TIMELOCK,
+  bindAuthorizedCoreToActiveCore,
+};

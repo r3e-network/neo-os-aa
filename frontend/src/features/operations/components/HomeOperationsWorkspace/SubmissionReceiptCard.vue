@@ -1,12 +1,12 @@
 <template>
   <div
-    class="mt-6 rounded-xl border border-aa-border/50 bg-aa-panel/80 backdrop-blur-md px-6 py-5 shadow-xl"
+    class="mt-6 rounded-xl border border-sa-border/50 bg-sa-panel/80 backdrop-blur-md px-6 py-5 shadow-xl"
     :class="
       receipt.tone === 'success'
         ? 'border-neo-500/30 shadow-glow-green'
         : receipt.tone === 'error'
-          ? 'border-aa-error/40 bg-aa-error/5'
-          : 'border-aa-warning/30'
+          ? 'border-sa-error/40 bg-sa-error/5'
+          : 'border-sa-warning/30'
     "
   >
     <div class="flex items-center gap-2 mb-3">
@@ -16,11 +16,11 @@
           receipt.tone === 'success'
             ? 'bg-neo-500 shadow-glow-green-sm'
             : receipt.tone === 'error'
-              ? 'bg-aa-error shadow-glow-error-sm'
-              : 'bg-aa-warning'
+              ? 'bg-sa-error shadow-glow-error-sm'
+              : 'bg-sa-warning'
         "
       ></span>
-      <p class="text-xs font-bold uppercase text-aa-text">
+      <p class="text-xs font-bold uppercase text-sa-text">
         {{ t("operations.receiptTitle", "Submission Receipt") }}
       </p>
     </div>
@@ -30,7 +30,7 @@
     >
       <p
         role="alert"
-        class="flex-1 text-sm text-aa-error-light leading-relaxed"
+        class="flex-1 text-sm text-sa-error-light leading-relaxed"
       >
         {{ receipt.detail }}
       </p>
@@ -39,7 +39,7 @@
         :aria-label="
           t('sharedDraft.copyErrorDetail', 'Copy error details')
         "
-        class="shrink-0 mt-0.5 text-xs text-aa-muted hover:text-aa-text transition-colors duration-200"
+        class="shrink-0 mt-0.5 text-xs text-sa-muted hover:text-sa-text transition-colors duration-200"
         @click="
           emit('copy', {
             text: receipt.rawDetail || receipt.detail,
@@ -65,7 +65,7 @@
         <svg
           aria-hidden="true"
           v-else
-          class="w-4 h-4 text-aa-success"
+          class="w-4 h-4 text-sa-success"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -79,7 +79,7 @@
         </svg>
       </button>
     </div>
-    <p v-else class="mt-1 text-sm text-aa-text leading-relaxed">
+    <p v-else class="mt-1 text-sm text-sa-text leading-relaxed">
       {{ receipt.detail }}
     </p>
     <div
@@ -87,7 +87,7 @@
       class="mt-3 flex items-start gap-2"
     >
       <code
-        class="block flex-1 break-all rounded-lg border border-aa-border bg-aa-dark px-4 py-3 text-sm text-neo-300 font-mono shadow-inner"
+        class="block flex-1 break-all rounded-lg border border-sa-border bg-sa-dark px-4 py-3 text-sm text-neo-300 font-mono shadow-inner"
         >{{ receipt.txid }}</code
       >
       <button
@@ -95,7 +95,7 @@
         :aria-label="
           t('operations.copyTxid', 'Copy transaction ID')
         "
-        class="shrink-0 mt-2 text-xs text-aa-muted hover:text-aa-text transition-colors duration-200"
+        class="shrink-0 mt-2 text-xs text-sa-muted hover:text-sa-text transition-colors duration-200"
         @click="
           emit('copy', { text: receipt.txid, key: 'receipt-txid' })
         "
@@ -118,7 +118,7 @@
         <svg
           aria-hidden="true"
           v-else
-          class="w-4 h-4 text-aa-success"
+          class="w-4 h-4 text-sa-success"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -157,9 +157,9 @@
     </a>
     <div
       v-if="historyItems && historyItems.length > 0"
-      class="mt-6 border-t border-aa-border pt-5"
+      class="mt-6 border-t border-sa-border pt-5"
     >
-      <p class="text-xs font-bold uppercase text-aa-muted mb-4">
+      <p class="text-xs font-bold uppercase text-sa-muted mb-4">
         {{ t("operations.receiptHistoryTitle", "Receipt History") }}
       </p>
       <div class="space-y-3">
@@ -169,25 +169,25 @@
           class="rounded-lg border px-4 py-3 transition-colors duration-200"
           :class="
             item.tone === 'error'
-              ? 'border-aa-error/30 bg-aa-error/5 hover:bg-aa-error/10'
-              : 'border-aa-border bg-aa-panel/40 hover:bg-aa-dark/60'
+              ? 'border-sa-error/30 bg-sa-error/5 hover:bg-sa-error/10'
+              : 'border-sa-border bg-sa-panel/40 hover:bg-sa-dark/60'
           "
         >
           <div class="flex items-center justify-between gap-3 mb-1">
             <div class="flex items-center gap-2">
               <span
                 v-if="item.tone === 'error'"
-                class="w-1.5 h-1.5 rounded-full bg-aa-error shrink-0"
+                class="w-1.5 h-1.5 rounded-full bg-sa-error shrink-0"
               ></span>
               <span
                 v-else-if="item.tone === 'success'"
-                class="w-1.5 h-1.5 rounded-full bg-aa-success shrink-0"
+                class="w-1.5 h-1.5 rounded-full bg-sa-success shrink-0"
               ></span>
-              <div class="text-sm font-semibold text-aa-text">
+              <div class="text-sm font-semibold text-sa-text">
                 {{ item.title }}
               </div>
             </div>
-            <div class="text-xs text-aa-muted">
+            <div class="text-xs text-sa-muted">
               {{ item.createdLabel }}
             </div>
           </div>
@@ -195,8 +195,8 @@
             class="text-sm leading-relaxed"
             :class="
               item.tone === 'error'
-                ? 'text-aa-error-light'
-                : 'text-aa-text'
+                ? 'text-sa-error-light'
+                : 'text-sa-text'
             "
           >
             {{ item.detail }}

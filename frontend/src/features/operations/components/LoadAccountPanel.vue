@@ -2,18 +2,18 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("operations.loadAccountTitle", "Load V3 Account") }}
         </h2>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{
             t(
               "operations.loadAccountSubtitle",
-              "Enter the 20-byte accountId hash captured when the V3 account was registered. The virtual AA address is derived locally from that identity root.",
+              "Enter the 20-byte accountId hash captured when the V3 account was registered. The virtual SA address is derived locally from that identity root.",
             )
           }}
         </p>
-        <p class="mt-1 text-xs text-aa-muted">
+        <p class="mt-1 text-xs text-sa-muted">
           {{
             t(
               "operations.loadAccountHelp",
@@ -31,7 +31,7 @@
         <svg
           v-if="loading"
           aria-hidden="true"
-          class="animate-spin -ml-1 mr-2 h-4 w-4 text-aa-text inline"
+          class="animate-spin -ml-1 mr-2 h-4 w-4 text-sa-text inline"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -59,14 +59,14 @@
     </div>
     <div class="space-y-4">
       <label class="block space-y-1 text-sm" for="load-account-seed">
-        <span class="font-medium text-aa-text">{{
+        <span class="font-medium text-sa-text">{{
           t("operations.boundAddressHashLabel", "AccountId Hash")
         }}</span>
         <input
           id="load-account-seed"
           :value="accountAddressScriptHash"
           class="input-field w-full font-mono"
-          :class="validationError ? '!border-aa-error' : ''"
+          :class="validationError ? '!border-sa-error' : ''"
           :placeholder="
             t(
               'operations.accountSeedPlaceholder',
@@ -81,16 +81,16 @@
         <p
           v-if="validationError"
           role="alert"
-          class="text-xs text-aa-error mt-1"
+          class="text-xs text-sa-error mt-1"
         >
           {{ validationError }}
         </p>
       </label>
-      <div class="glass-panel px-3 py-2 text-xs text-aa-muted space-y-1">
-        <p class="font-medium text-aa-text">
+      <div class="glass-panel px-3 py-2 text-xs text-sa-muted space-y-1">
+        <p class="font-medium text-sa-text">
           {{ t("operations.supportedFormatsTitle", "Supported formats:") }}
         </p>
-        <ul class="list-disc list-inside space-y-0.5 text-aa-muted">
+        <ul class="list-disc list-inside space-y-0.5 text-sa-muted">
           <li>
             <code class="font-mono text-neo-300">{{
               t("operations.formatLabel40CharHex", "40-char hex")

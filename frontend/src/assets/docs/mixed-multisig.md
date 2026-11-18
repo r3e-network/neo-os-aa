@@ -1,12 +1,12 @@
 # Mixed Multi-Sig (N3 + EVM)
 
-A single Abstract Account can aggregate native Neo witnesses and EVM EIP-712 signatures toward the same threshold.
+A single Smart Account can aggregate native Neo witnesses and EVM EIP-712 signatures toward the same threshold.
 
 ## Mixed Flow
 
-On the V1/V2 hardened testnet deployment `0x5be915aea3ce85e4752d522632f0a9520e377aaf` (superseded; the canonical shared testnet AA core is now `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2` in `frontend/src/config/generatedMorpheusRegistry.js`), the validator of that time exercised a mixed Neo-relayer + EVM-signer path where:
+On the V1/V2 hardened testnet deployment `0x5be915aea3ce85e4752d522632f0a9520e377aaf` (superseded; the canonical shared testnet SA core is now `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2` in `frontend/src/config/generatedMorpheusRegistry.js`), the validator of that time exercised a mixed Neo-relayer + EVM-signer path where:
 
-- the EVM signer authorizes an AA wrapper action with EIP-712 typed data
+- the EVM signer authorizes an SA wrapper action with EIP-712 typed data
 - the Neo account relays and pays GAS for the transaction
 - the contract increments nonces correctly and still enforces whitelist mode and related restrictions
 
@@ -16,7 +16,7 @@ The app workspace also supports anonymous share drafts for mixed approval collec
 
 That means a coordinator can:
 
-1. stage an AA invocation or transfer in the app workspace
+1. stage an SA invocation or transfer in the app workspace
 2. persist it to Supabase with a read-only share link plus collaborator and operator links
 3. collect EVM approvals or manual Neo signature material from collaborators through the collaborator link while reviewers can stay on the read-only link
 4. keep relay checks, final broadcast, and link rotation behind the operator link
@@ -31,6 +31,6 @@ Mixed signing does **not** bypass hardening. The combined authorization still ha
 
 ## Practical Example
 
-- **Signer A:** Ethereum wallet signs typed data for an AA-managed action routed through `executeUserOp`
+- **Signer A:** Ethereum wallet signs typed data for an SA-managed action routed through `executeUserOp`
 - **Signer B:** Neo wallet submits the outer transaction and attaches the native witness
 - **Contract:** counts valid authorization across both ecosystems, then enforces whitelist / blacklist / transfer policies before the target call

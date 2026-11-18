@@ -136,7 +136,7 @@ class DeploymentArtifactTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for profile in ("v3", "platform"):
-                for name in ("SmartAccountV3", "MockTransferTarget"):
+                for name in ("SmartAccount", "MockTransferTarget"):
                     directory = root / profile
                     directory.mkdir(exist_ok=True)
                     (directory / f"{name}.nef").write_bytes(f"{profile}:{name}".encode())
@@ -153,7 +153,7 @@ class DeploymentArtifactTests(unittest.TestCase):
                                       "tx-hash": "0x" + "02" * 32})
 
             chain.nx = Mock(side_effect=deploy)
-            artifacts = [("SmartAccountV3", "SmartAccountV3.nef", False),
+            artifacts = [("SmartAccount", "SmartAccount.nef", False),
                          ("MockTransferTarget", "MockTransferTarget.nef", False)]
             with patch.object(validation, "BIN", root / "v3"), \
                     patch.object(validation, "PLATFORM_BIN", root / "platform"), \
@@ -164,9 +164,9 @@ class DeploymentArtifactTests(unittest.TestCase):
                              ["platform", "v3"])
             self.assertEqual([row["artifactProfile"] for row in chain.deployments], ["platform", "v3"])
             self.assertEqual(chain.deployments[0]["localNefSha256"],
-                             hashlib.sha256(b"platform:SmartAccountV3").hexdigest())
+                             hashlib.sha256(b"platform:SmartAccount").hexdigest())
             self.assertNotEqual(chain.deployments[0]["localNefSha256"],
-                                hashlib.sha256(b"v3:SmartAccountV3").hexdigest())
+                                hashlib.sha256(b"v3:SmartAccount").hexdigest())
 
 
 class ReadbackTests(unittest.TestCase):
@@ -180,7 +180,7 @@ class ReadbackTests(unittest.TestCase):
         self.chain.start_node = Mock()
         self.chain.stop_node = Mock()
         self.chain.rpc = Mock(side_effect=self.rpc)
-        self.add_artifact("SmartAccountV3")
+        self.add_artifact("SmartAccount")
         # This artifact is not in ARTIFACTS. It must receive the same complete
         # readback checks as the private core and public module artifacts.
         self.add_artifact("NeoDIDRegistry")
@@ -220,7 +220,7 @@ class ReadbackTests(unittest.TestCase):
         result = self.chain.readback()
         self.assertEqual(result["blockCountAtReadback"], 42)
         rows = result["contracts"]
-        self.assertEqual([row["contractName"] for row in rows], ["SmartAccountV3", "NeoDIDRegistry"])
+        self.assertEqual([row["contractName"] for row in rows], ["SmartAccount", "NeoDIDRegistry"])
         for row in rows:
             for field in ("nefScriptByteEquality", "nefChecksumEquality", "manifestSemanticEquality"):
                 self.assertTrue(row[field])
@@ -275,7 +275,7 @@ class PrivateChainConfigurationTests(unittest.TestCase):
     def test_create_funds_every_wallet_for_the_full_matrix(self):
         with tempfile.TemporaryDirectory() as temp:
             chain = object.__new__(validation.Chain)
-            chain.file = Path(temp) / "aa-validation.neo-express"
+            chain.file = Path(temp) / "sa-validation.neo-express"
             chain.file.write_text(json.dumps({"magic": 519508, "consensus-nodes": [{"rpc-port": 10332}]}))
             chain.wallets = {}
             listing = {
@@ -300,7 +300,7 @@ class PrivateChainConfigurationTests(unittest.TestCase):
             ])
 
     def test_services_build_directory_defaults_to_the_pinned_vendor_tree(self):
-        with patch.object(validation, "ROOT", Path("/workspace/neo-os-aa")), \
+        with patch.object(validation, "ROOT", Path("/workspace/neo-os-sa")), \
                 patch.dict("os.environ", {}, clear=True):
             self.assertEqual(validation.services_build_directory(), Path(
                 "/workspace/neo-os-services/vendor/neo-os-did/contracts/build"))

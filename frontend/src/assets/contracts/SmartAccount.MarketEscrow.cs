@@ -25,7 +25,7 @@ namespace SmartAccount
         // here: caller identity alone cannot stop an arbitrary deployed contract from
         // arming a fake escrow and settling the account to an attacker-chosen owner
         // without payment. The core admin therefore vets market services explicitly,
-        // mirroring the market-side setAllowedAA allowlist of trusted AA cores.
+        // mirroring the market-side setAllowedSA allowlist of trusted SA cores.
         private static readonly byte[] Prefix_MarketServiceRegistration = new byte[] { 0x29 };
 
         // Delay the backup owner must wait between requesting and forcing an escrow
@@ -96,7 +96,7 @@ namespace SmartAccount
         }
 
         /// <summary>
-        /// Completes a market escrow sale by transferring only the AA shell and wiping prior plugin state.
+        /// Completes a market escrow sale by transferring only the SA shell and wiping prior plugin state.
         /// The buyer receives a clean account with a new backup owner and no inherited verifier/hook bindings.
         /// </summary>
         public static void SettleMarketEscrow(UInt160 accountId, BigInteger listingId, UInt160 newBackupOwner)

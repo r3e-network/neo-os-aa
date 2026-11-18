@@ -2,35 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as relayModule from '../api/relay-transaction.js';
-import { DEFAULT_ABSTRACT_ACCOUNT_HASH } from '../src/config/runtimeConfig.js';
+import { DEFAULT_SMART_ACCOUNT_HASH } from '../src/config/runtimeConfig.js';
 
 // L2 regression coverage: VITE_* vars are inlined into the CLIENT build at build time, so a
 // SERVER security switch keyed on them is build-time controllable and violates the
 // server/client env split. These switches must read server-only env names:
-//   - raw-forward enable            (AA_RELAY_*_ALLOW_RAW_FORWARD, not VITE_AA_RELAY_RAW_ENABLED)
-//   - raw error/stack-trace leakage (AA_RELAY_INCLUDE_RAW_ERRORS, not VITE_AA_RELAY_INCLUDE_RAW_ERRORS)
-//   - relay AA-contract allowlist   (AA_RELAY_*_ALLOWED_HASH, not VITE_AA_HASH*/VITE_ABSTRACT_ACCOUNT_HASH*)
+//   - raw-forward enable            (SA_RELAY_*_ALLOW_RAW_FORWARD, not VITE_SA_RELAY_RAW_ENABLED)
+//   - raw error/stack-trace leakage (SA_RELAY_INCLUDE_RAW_ERRORS, not VITE_SA_RELAY_INCLUDE_RAW_ERRORS)
+//   - relay SA-contract allowlist   (SA_RELAY_*_ALLOWED_HASH, not VITE_SA_HASH*/VITE_SMART_ACCOUNT_HASH*)
 
 const { resolveRelayExecutionConfig, shouldIncludeRawRelayErrors } = relayModule;
 
 const ENV_KEYS = [
-  'AA_RELAY_ALLOW_RAW_FORWARD',
-  'AA_RELAY_MAINNET_ALLOW_RAW_FORWARD',
-  'AA_RELAY_TESTNET_ALLOW_RAW_FORWARD',
-  'VITE_AA_RELAY_RAW_ENABLED',
-  'AA_RELAY_INCLUDE_RAW_ERRORS',
-  'VITE_AA_RELAY_INCLUDE_RAW_ERRORS',
-  'AA_RELAY_ALLOWED_HASH',
-  'AA_RELAY_MAINNET_ALLOWED_HASH',
-  'AA_RELAY_TESTNET_ALLOWED_HASH',
-  'VITE_AA_HASH',
-  'VITE_AA_HASH_TESTNET',
-  'VITE_ABSTRACT_ACCOUNT_HASH',
-  'VITE_ABSTRACT_ACCOUNT_HASH_TESTNET',
+  'SA_RELAY_ALLOW_RAW_FORWARD',
+  'SA_RELAY_MAINNET_ALLOW_RAW_FORWARD',
+  'SA_RELAY_TESTNET_ALLOW_RAW_FORWARD',
+  'VITE_SA_RELAY_RAW_ENABLED',
+  'SA_RELAY_INCLUDE_RAW_ERRORS',
+  'VITE_SA_RELAY_INCLUDE_RAW_ERRORS',
+  'SA_RELAY_ALLOWED_HASH',
+  'SA_RELAY_MAINNET_ALLOWED_HASH',
+  'SA_RELAY_TESTNET_ALLOWED_HASH',
+  'VITE_SA_HASH',
+  'VITE_SA_HASH_TESTNET',
+  'VITE_SMART_ACCOUNT_HASH',
+  'VITE_SMART_ACCOUNT_HASH_TESTNET',
   'MORPHEUS_NETWORK',
   'NODE_ENV',
   'VERCEL_ENV',
-  'AA_RELAY_ALLOW_CLIENT_NETWORK',
+  'SA_RELAY_ALLOW_CLIENT_NETWORK',
 ];
 
 function snapshotEnv() {
@@ -56,41 +56,41 @@ function execConfig() {
   });
 }
 
-test('L2: raw-forward enable ignores VITE_AA_RELAY_RAW_ENABLED and honors the server var', () => {
+test('L2: raw-forward enable ignores VITE_SA_RELAY_RAW_ENABLED and honors the server var', () => {
   const snapshot = snapshotEnv();
   clearAll();
 
   try {
-    process.env.VITE_AA_RELAY_RAW_ENABLED = '1';
+    process.env.VITE_SA_RELAY_RAW_ENABLED = '1';
     assert.equal(execConfig().allowRawRelayForwarding, false, 'client-build var must not flip a server switch');
 
-    process.env.AA_RELAY_ALLOW_RAW_FORWARD = '1';
+    process.env.SA_RELAY_ALLOW_RAW_FORWARD = '1';
     assert.equal(execConfig().allowRawRelayForwarding, true, 'server env enables raw forwarding');
 
-    delete process.env.AA_RELAY_ALLOW_RAW_FORWARD;
-    process.env.AA_RELAY_MAINNET_ALLOW_RAW_FORWARD = '0';
+    delete process.env.SA_RELAY_ALLOW_RAW_FORWARD;
+    process.env.SA_RELAY_MAINNET_ALLOW_RAW_FORWARD = '0';
     assert.equal(execConfig().allowRawRelayForwarding, false, 'network-scoped server var overrides the global one');
   } finally {
     restoreEnv(snapshot);
   }
 });
 
-test('L2: raw error/stack-trace leakage ignores VITE_AA_RELAY_INCLUDE_RAW_ERRORS and honors the server var', () => {
+test('L2: raw error/stack-trace leakage ignores VITE_SA_RELAY_INCLUDE_RAW_ERRORS and honors the server var', () => {
   const snapshot = snapshotEnv();
   clearAll();
 
   try {
-    process.env.VITE_AA_RELAY_INCLUDE_RAW_ERRORS = '1';
+    process.env.VITE_SA_RELAY_INCLUDE_RAW_ERRORS = '1';
     assert.equal(shouldIncludeRawRelayErrors(), false, 'client-build var must not enable stack-trace leakage');
 
-    process.env.AA_RELAY_INCLUDE_RAW_ERRORS = '1';
+    process.env.SA_RELAY_INCLUDE_RAW_ERRORS = '1';
     assert.equal(shouldIncludeRawRelayErrors(), true, 'server env enables raw relay errors');
   } finally {
     restoreEnv(snapshot);
   }
 });
 
-test('L2: the relay AA-contract allowlist ignores VITE_ hash fallbacks and honors the server var', () => {
+test('L2: the relay SA-contract allowlist ignores VITE_ hash fallbacks and honors the server var', () => {
   const snapshot = snapshotEnv();
   clearAll();
 
@@ -98,17 +98,17 @@ test('L2: the relay AA-contract allowlist ignores VITE_ hash fallbacks and honor
   const serverConfigured = '55'.repeat(20);
 
   try {
-    process.env.VITE_AA_HASH = `0x${viteInjected}`;
-    process.env.VITE_ABSTRACT_ACCOUNT_HASH = `0x${viteInjected}`;
+    process.env.VITE_SA_HASH = `0x${viteInjected}`;
+    process.env.VITE_SMART_ACCOUNT_HASH = `0x${viteInjected}`;
     assert.equal(
-      execConfig().allowedAaContractHash,
-      DEFAULT_ABSTRACT_ACCOUNT_HASH,
+      execConfig().allowedSaContractHash,
+      DEFAULT_SMART_ACCOUNT_HASH,
       'client-build hash vars must not repoint the relay allowlist — compiled default wins',
     );
 
-    process.env.AA_RELAY_ALLOWED_HASH = `0x${serverConfigured}`;
+    process.env.SA_RELAY_ALLOWED_HASH = `0x${serverConfigured}`;
     assert.equal(
-      execConfig().allowedAaContractHash,
+      execConfig().allowedSaContractHash,
       serverConfigured,
       'server env configures the allowlist',
     );

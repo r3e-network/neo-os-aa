@@ -1,10 +1,10 @@
 <template>
   <div
     v-if="pattern"
-    class="rounded-lg border border-aa-border bg-aa-dark/50 p-4"
+    class="rounded-lg border border-sa-border bg-sa-dark/50 p-4"
   >
     <div class="flex items-center justify-between mb-3">
-      <p class="text-xs font-semibold uppercase text-aa-muted">
+      <p class="text-xs font-semibold uppercase text-sa-muted">
         {{ t("market.vanityDifficulty", "Difficulty") }}
       </p>
       <span class="badge text-xs font-semibold uppercase" :class="levelClass">
@@ -14,30 +14,30 @@
 
     <div class="space-y-2">
       <div class="flex items-center justify-between text-sm">
-        <span class="text-aa-muted">{{
+        <span class="text-sa-muted">{{
           t("market.vanityAttemptsEstimate", "Estimated attempts")
         }}</span>
-        <span class="font-mono text-aa-text">{{ formattedAttempts }}</span>
+        <span class="font-mono text-sa-text">{{ formattedAttempts }}</span>
       </div>
       <div class="flex items-center justify-between text-sm">
-        <span class="text-aa-muted">{{
+        <span class="text-sa-muted">{{
           t("market.vanityTimeEstimate", "Estimated time (3K/s)")
         }}</span>
-        <span class="font-mono text-aa-text">{{ formattedTime }}</span>
+        <span class="font-mono text-sa-text">{{ formattedTime }}</span>
       </div>
       <div v-if="showCost" class="flex items-center justify-between text-sm">
-        <span class="text-aa-muted">{{
+        <span class="text-sa-muted">{{
           t("market.vanityCostEstimate", "Cost estimate")
         }}</span>
-        <span class="font-mono text-aa-warning">{{ costGAS }} GAS</span>
+        <span class="font-mono text-sa-warning">{{ costGAS }} GAS</span>
       </div>
     </div>
 
     <div
       v-if="difficulty.level === 'hard'"
-      class="mt-3 rounded-lg border border-aa-warning/20 bg-aa-warning/5 p-2.5"
+      class="mt-3 rounded-lg border border-sa-warning/20 bg-sa-warning/5 p-2.5"
     >
-      <p class="text-xs text-aa-warning">
+      <p class="text-xs text-sa-warning">
         {{
           t(
             "market.vanityHighDifficultyWarning",

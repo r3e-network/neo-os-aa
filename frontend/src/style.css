@@ -3,25 +3,25 @@
 
 :root {
   /* Neo Soft — "orange" tokens repurposed to the violet interactive accent */
-  --aa-orange: #7b61ff;
-  --aa-orange-rgb: 123, 97, 255;
-  --aa-dark-orange: #6a4df4;
-  --aa-light-orange: #9b87ff;
-  --aa-blue: #3e8cff;
-  --aa-blue-rgb: 62, 140, 255;
-  --aa-dark: #f4f5f7;
-  --aa-panel: #ffffff;
-  --aa-border: #e6e8ee;
-  --aa-text: #1e1e2e;
-  --aa-muted: #5b6478;
-  --aa-success: #16c784;
-  --aa-success-light: #6ee7b7;
-  --aa-info: #3e8cff;
-  --aa-info-light: #7cb5ff;
-  --aa-warning: #f5a623;
-  --aa-warning-light: #fcd34d;
-  --aa-error: #ea3943;
-  --aa-error-light: #fda4af;
+  --sa-orange: #7b61ff;
+  --sa-orange-rgb: 123, 97, 255;
+  --sa-dark-orange: #6a4df4;
+  --sa-light-orange: #9b87ff;
+  --sa-blue: #3e8cff;
+  --sa-blue-rgb: 62, 140, 255;
+  --sa-dark: #f4f5f7;
+  --sa-panel: #ffffff;
+  --sa-border: #e6e8ee;
+  --sa-text: #1e1e2e;
+  --sa-muted: #5b6478;
+  --sa-success: #16c784;
+  --sa-success-light: #6ee7b7;
+  --sa-info: #3e8cff;
+  --sa-info-light: #7cb5ff;
+  --sa-warning: #f5a623;
+  --sa-warning-light: #fcd34d;
+  --sa-error: #ea3943;
+  --sa-error-light: #fda4af;
   --neo-500: #16c784;
   --neo-500-rgb: 22, 199, 132;
   --neo-400: #34d399;
@@ -296,11 +296,11 @@
     @apply rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500 transition-colors duration-200;
   }
 
-  .aa-focus-shell {
+  .sa-focus-shell {
     @apply relative overflow-hidden rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_16px_40px_rgba(20,22,38,0.08)];
   }
 
-  .aa-focus-shell::before {
+  .sa-focus-shell::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -310,84 +310,84 @@
       linear-gradient(90deg, rgba(123, 97, 255, 0.05), transparent 45%);
   }
 
-  .aa-focus-header {
+  .sa-focus-header {
     @apply relative z-10 mb-6 flex flex-col gap-5 border-b border-slate-200 pb-5;
   }
 
-  .aa-focus-wallet-actions {
+  .sa-focus-wallet-actions {
     @apply flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2;
   }
 
-  .aa-focus-wallet-actions .btn-primary,
-  .aa-focus-wallet-actions .btn-secondary {
+  .sa-focus-wallet-actions .btn-primary,
+  .sa-focus-wallet-actions .btn-secondary {
     @apply rounded-xl px-3.5 py-2 text-xs;
   }
 
-  .aa-focus-reference {
+  .sa-focus-reference {
     @apply relative z-10 mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3;
   }
 
-  .aa-focus-reference summary {
+  .sa-focus-reference summary {
     @apply flex cursor-pointer list-none items-center justify-between gap-4 text-left;
   }
 
-  .aa-focus-reference summary::-webkit-details-marker {
+  .sa-focus-reference summary::-webkit-details-marker {
     display: none;
   }
 
-  .aa-focus-reference summary span {
+  .sa-focus-reference summary span {
     @apply text-xs font-semibold uppercase text-slate-500;
   }
 
-  .aa-focus-reference summary strong {
+  .sa-focus-reference summary strong {
     @apply text-sm font-semibold text-slate-950;
   }
 
-  .aa-reference-grid {
+  .sa-reference-grid {
     @apply grid gap-3 border-t border-slate-200 pt-3;
   }
 
-  .aa-reference-card {
+  .sa-reference-card {
     @apply min-w-0 rounded-xl border border-slate-200 bg-white p-3;
   }
 
-  .aa-reference-card p {
+  .sa-reference-card p {
     @apply m-0 text-[0.68rem] font-extrabold uppercase tracking-wide text-slate-500;
   }
 
-  .aa-reference-card strong {
+  .sa-reference-card strong {
     @apply mt-2 block break-words text-xs font-semibold leading-5 text-slate-900;
   }
 
-  .aa-market-focus-entry {
+  .sa-market-focus-entry {
     @apply mb-6 flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(20,22,38,0.08)];
   }
 
-  .aa-market-reference-stack {
+  .sa-market-reference-stack {
     @apply grid gap-4 border-t border-slate-200 pt-4;
   }
 
-  .aa-home-focus {
-    @apply min-h-screen bg-aa-dark text-slate-950;
+  .sa-home-focus {
+    @apply min-h-screen bg-sa-dark text-slate-950;
   }
 
-  .aa-home-band {
+  .sa-home-band {
     @apply border-b border-slate-200 bg-white;
   }
 
-  .aa-home-workflow-card {
+  .sa-home-workflow-card {
     @apply rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_16px_40px_rgba(20,22,38,0.08)];
   }
 
-  .aa-home-step-link {
+  .sa-home-step-link {
     @apply grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition;
   }
 
-  .aa-home-step-index {
+  .sa-home-step-index {
     @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-xs font-semibold text-white;
   }
 
-  .aa-home-reference {
+  .sa-home-reference {
     @apply rounded-2xl border border-slate-200 bg-slate-50 p-4;
   }
 
@@ -498,7 +498,7 @@
     @apply -translate-y-px border-[#7b61ff]/40 shadow-[0_16px_40px_rgba(20,22,38,0.1)];
   }
 
-  .aa-home-step-link:hover {
+  .sa-home-step-link:hover {
     @apply border-emerald-300 bg-emerald-50;
   }
 }
@@ -510,18 +510,18 @@
 }
 
 @media (min-width: 768px) {
-  .aa-focus-shell {
+  .sa-focus-shell {
     @apply p-6;
   }
 
-  .aa-reference-grid {
+  .sa-reference-grid {
     @apply grid-cols-3;
   }
 }
 
 @media (min-width: 1024px) {
-  .aa-focus-header,
-  .aa-market-focus-entry {
+  .sa-focus-header,
+  .sa-market-focus-entry {
     @apply flex-row items-end justify-between;
   }
 }

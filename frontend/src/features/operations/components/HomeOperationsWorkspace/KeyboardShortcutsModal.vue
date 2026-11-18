@@ -11,19 +11,19 @@
     tabindex="-1"
   >
     <div
-      class="bg-aa-panel border border-aa-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4"
+      class="bg-sa-panel border border-sa-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4"
     >
       <div class="flex items-center justify-between mb-4">
         <h3
           id="shortcuts-title"
-          class="text-lg font-bold font-outfit text-aa-text"
+          class="text-lg font-bold font-outfit text-sa-text"
         >
           {{ t("shortcuts.title", "Keyboard Shortcuts") }}
         </h3>
         <button
           @click="emit('close')"
           :aria-label="t('shortcuts.close', 'Close keyboard shortcuts')"
-          class="text-aa-muted hover:text-aa-text transition-colors duration-200"
+          class="text-sa-muted hover:text-sa-text transition-colors duration-200"
         >
           <svg
             aria-hidden="true"
@@ -43,58 +43,58 @@
       </div>
       <div class="space-y-3">
         <div class="flex items-center justify-between text-sm">
-          <span class="text-aa-muted">{{
+          <span class="text-sa-muted">{{
             t("shortcuts.toggle", "Toggle shortcuts")
           }}</span>
           <kbd
-            class="px-2 py-1 rounded bg-aa-dark border border-aa-border text-xs font-mono text-aa-text"
+            class="px-2 py-1 rounded bg-sa-dark border border-sa-border text-xs font-mono text-sa-text"
             >?</kbd
           >
         </div>
         <div class="flex items-center justify-between text-sm">
-          <span class="text-aa-muted">{{
+          <span class="text-sa-muted">{{
             t("shortcuts.navigateSteps", "Navigate steps")
           }}</span>
           <div class="flex gap-1">
             <kbd
-              class="px-2 py-1 rounded bg-aa-dark border border-aa-border text-xs font-mono text-aa-text"
+              class="px-2 py-1 rounded bg-sa-dark border border-sa-border text-xs font-mono text-sa-text"
               >Ctrl</kbd
             >
-            <span class="text-aa-muted text-xs">+</span>
+            <span class="text-sa-muted text-xs">+</span>
             <kbd
-              class="px-2 py-1 rounded bg-aa-dark border border-aa-border text-xs font-mono text-aa-text"
+              class="px-2 py-1 rounded bg-sa-dark border border-sa-border text-xs font-mono text-sa-text"
               >1-5</kbd
             >
           </div>
         </div>
         <div class="flex items-center justify-between text-sm">
-          <span class="text-aa-muted">{{
+          <span class="text-sa-muted">{{
             t("shortcuts.saveDraft", "Save draft")
           }}</span>
           <div class="flex gap-1">
             <kbd
-              class="px-2 py-1 rounded bg-aa-dark border border-aa-border text-xs font-mono text-aa-text"
+              class="px-2 py-1 rounded bg-sa-dark border border-sa-border text-xs font-mono text-sa-text"
               >Ctrl</kbd
             >
-            <span class="text-aa-muted text-xs">+</span>
+            <span class="text-sa-muted text-xs">+</span>
             <kbd
-              class="px-2 py-1 rounded bg-aa-dark border border-aa-border text-xs font-mono text-aa-text"
+              class="px-2 py-1 rounded bg-sa-dark border border-sa-border text-xs font-mono text-sa-text"
               >S</kbd
             >
           </div>
         </div>
         <div class="flex items-center justify-between text-sm">
-          <span class="text-aa-muted">{{
+          <span class="text-sa-muted">{{
             t("shortcuts.broadcast", "Broadcast")
           }}</span>
           <div class="flex gap-1">
             <kbd
-              class="px-2 py-1 rounded bg-aa-dark border border-aa-border text-xs font-mono text-aa-text"
+              class="px-2 py-1 rounded bg-sa-dark border border-sa-border text-xs font-mono text-sa-text"
               >Ctrl</kbd
             >
-            <span class="text-aa-muted text-xs">+</span>
+            <span class="text-sa-muted text-xs">+</span>
             <kbd
-              class="px-2 py-1 rounded bg-aa-dark border border-aa-border text-xs font-mono text-aa-text"
+              class="px-2 py-1 rounded bg-sa-dark border border-sa-border text-xs font-mono text-sa-text"
               >Enter</kbd
             >
           </div>

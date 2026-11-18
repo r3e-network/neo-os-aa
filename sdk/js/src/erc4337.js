@@ -1,5 +1,5 @@
 /**
- * ERC-4337 shape adapters for the Neo N3 Abstract Account stack.
+ * ERC-4337 shape adapters for the Neo N3 Smart Account stack.
  *
  * The V3 core does not implement the 4337 EntryPoint interface (Neo has no
  * mempool rules, no initCode, and no gas-price bidding — fees are computed by
@@ -11,7 +11,7 @@
  *
  * Field mapping:
  * - sender       = the V3 account id (20 bytes, 0x-prefixed big-endian
- *                  display hex). This is the abstract account identity, NOT
+ *                  display hex). This is the smart account identity, NOT
  *                  an EOA address.
  * - nonce        = the UserOperation nonce as a 0x-prefixed hex quantity.
  * - callData     = the Neo VM invocation script for target.method(args)

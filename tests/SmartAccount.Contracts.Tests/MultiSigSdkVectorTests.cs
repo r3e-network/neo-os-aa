@@ -41,7 +41,7 @@ public class MultiSigSdkVectorTests
         public Harness(int threshold, bool reuseSigner = false)
         {
             this.reuseSigner = reuseSigner;
-            Core = Fx.Deploy("SmartAccountV3");
+            Core = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
             UInt160 first = Fx.Deploy("verifiers/SessionKeyVerifier", Core.ToArray());
             // Deployment identity includes the sender; obtain two distinct contract instances.

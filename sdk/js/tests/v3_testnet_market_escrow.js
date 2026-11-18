@@ -227,7 +227,7 @@ function randomAccountId() {
 }
 
 function validationRunId() {
-  return (process.env.AA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString('hex')}`).toLowerCase();
+  return (process.env.SA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString('hex')}`).toLowerCase();
 }
 
 async function main() {
@@ -237,7 +237,7 @@ async function main() {
   const client = new rpc.RPCClient(RPC_URL);
   const version = await withRpcRetry('rpc.getVersion', () => client.getVersion());
   const networkMagic = Number(version.protocol.network);
-  const deploymentTag = process.env.AA_VALIDATION_DEPLOY_TAG || `validation-market-escrow-${validationRunId()}`;
+  const deploymentTag = process.env.SA_VALIDATION_DEPLOY_TAG || `validation-market-escrow-${validationRunId()}`;
   const price = 10000000n;
 
   console.log(JSON.stringify({
@@ -247,15 +247,15 @@ async function main() {
     buyer: { address: buyer.address, scriptHash: normalizeHash(buyer.scriptHash) },
   }, null, 2));
 
-  const core = await deployContract(client, seller, networkMagic, 'SmartAccountV3', `${deploymentTag}-core`);
-  const market = await deployContract(client, seller, networkMagic, 'AAAddressMarket', `${deploymentTag}-market`);
+  const core = await deployContract(client, seller, networkMagic, 'SmartAccount', `${deploymentTag}-core`);
+  const market = await deployContract(client, seller, networkMagic, 'SAAddressMarket', `${deploymentTag}-market`);
   const teeVerifier = await deployContract(client, seller, networkMagic, 'TEEVerifier', `${deploymentTag}-tee`);
   const whitelistHook = await deployContract(client, seller, networkMagic, 'WhitelistHook', `${deploymentTag}-whitelist`);
   await authorizeVerifier(client, core.hash, teeVerifier.hash, seller, networkMagic);
   await authorizeHook(client, core.hash, whitelistHook.hash, seller, networkMagic);
 
-  const aaClient = new SmartAccountClient(RPC_URL, core.hash);
-  const accountId = aaClient.deriveRegistrationAccountIdHash({
+  const saClient = new SmartAccountClient(RPC_URL, core.hash);
+  const accountId = saClient.deriveRegistrationAccountIdHash({
     verifierContractHash: teeVerifier.hash,
     verifierParamsHex: sanitizeHex(seller.publicKey),
     hookContractHash: whitelistHook.hash,

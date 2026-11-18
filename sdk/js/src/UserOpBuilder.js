@@ -60,7 +60,7 @@ class UserOperationBuilder {
     /** @type {string} The verifier contract hash for EIP-712 */
     this.verifierHash = options.verifierHash || '';
 
-    /** @type {string} The authorized AA core hash for EIP-712 */
+    /** @type {string} The authorized SA core hash for EIP-712 */
     this.coreContractHash = options.coreContractHash || '';
 
     /** @type {string} The chain ID for EIP-712 */
@@ -209,8 +209,8 @@ class UserOperationBuilder {
   }
 
   /**
-   * Sets the authorized AA core contract hash for EIP-712 signing.
-   * @param {string} coreContractHash - 20-byte AA core hash (40 hex chars)
+   * Sets the authorized SA core contract hash for EIP-712 signing.
+   * @param {string} coreContractHash - 20-byte SA core hash (40 hex chars)
    * @returns {UserOperationBuilder} This builder for chaining
    */
   setCoreContract(coreContractHash) {
@@ -341,7 +341,7 @@ class UserOperationBuilder {
 
     if (!this.coreContractHash) {
       throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
-        hint: 'Authorized AA core hash is required for EIP-712 signing',
+        hint: 'Authorized SA core hash is required for EIP-712 signing',
       });
     }
 

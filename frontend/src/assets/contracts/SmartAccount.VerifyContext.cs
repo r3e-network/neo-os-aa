@@ -13,11 +13,11 @@ namespace SmartAccount
         // ========================================================================
 
         // This section enables Neo's native witness/verification script system to work
-        // seamlessly with Abstract Accounts, making Neo's AA fundamentally different from
+        // seamlessly with Smart Accounts, making Neo's SA fundamentally different from
         // Ethereum's ERC-4337 approach.
 
         /// <summary>
-        /// Bridge that enables native Neo multisig verification scripts to work with AA.
+        /// Bridge that enables native Neo multisig verification scripts to work with SA.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -54,7 +54,7 @@ namespace SmartAccount
         /// itself handles signature verification through its transaction witnesses.
         /// </para>
         /// </remarks>
-        /// <param name="accountId">The AA account identifier to verify</param>
+        /// <param name="accountId">The SA account identifier to verify</param>
         /// <returns>True if the calling contract is the current execution target for this account</returns>
         [Safe]
         public static bool Verify(UInt160 accountId)
@@ -183,7 +183,7 @@ namespace SmartAccount
                 // Only the calling verification script's own signer can grant
                 // its scope. Another signer must not bless a Global proxy.
                 if (signers[i].Account == proxy &&
-                    HasExactAaWitnessRules(signers[i], Runtime.ExecutingScriptHash, targetContract))
+                    HasExactSaWitnessRules(signers[i], Runtime.ExecutingScriptHash, targetContract))
                 {
                     return true;
                 }
@@ -302,7 +302,7 @@ namespace SmartAccount
             return size;
         }
 
-        private static bool HasExactAaWitnessRules(Signer signer, UInt160 proxyContract, UInt160 targetContract)
+        private static bool HasExactSaWitnessRules(Signer signer, UInt160 proxyContract, UInt160 targetContract)
         {
             if (signer.Scopes != WitnessScope.WitnessRules) return false;
             if (signer.Rules == null || signer.Rules.Length != 1) return false;
@@ -334,7 +334,7 @@ namespace SmartAccount
         /// This enables verifiers like NeoNativeVerifier, Web3AuthVerifier, and others to
         /// store their configuration data without exposing it to arbitrary callers.
         /// </remarks>
-        /// <param name="accountId">The AA account being configured</param>
+        /// <param name="accountId">The SA account being configured</param>
         /// <param name="verifierContract">The verifier contract seeking authorization</param>
         /// <returns>True if caller is the expected verifier for this configuration</returns>
         [Safe]
@@ -355,7 +355,7 @@ namespace SmartAccount
         /// This enables hooks like DailyLimitHook, WhitelistHook, and NeoDIDCredentialHook
         /// to store their configuration data securely.
         /// </remarks>
-        /// <param name="accountId">The AA account being configured</param>
+        /// <param name="accountId">The SA account being configured</param>
         /// <param name="hookContract">The hook contract seeking authorization</param>
         /// <returns>True if caller is the expected hook for this configuration</returns>
         [Safe]
@@ -396,9 +396,9 @@ namespace SmartAccount
         /// <remarks>
         /// This validates that a hook plugin is the active hook for an account and that
         /// it's being called from the proper execution context (either directly from the
-        /// AA core or from the root hook in a nested hook chain).
+        /// SA core or from the root hook in a nested hook chain).
         /// </remarks>
-        /// <param name="accountId">The AA account being executed</param>
+        /// <param name="accountId">The SA account being executed</param>
         /// <param name="callerContract">The contract that initiated this hook call</param>
         /// <param name="hookContract">The hook contract being invoked</param>
         /// <returns>True if the hook is authorized to execute for this account</returns>

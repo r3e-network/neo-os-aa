@@ -2,10 +2,10 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("operations.broadcastOptionsTitle", "Broadcast Options") }}
         </h2>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{
             t(
               "operations.broadcastOptionsSubtitle",
@@ -16,8 +16,8 @@
       </div>
     </div>
 
-    <div class="mb-5 rounded-lg border border-aa-border bg-aa-dark/40 p-4">
-      <p class="text-xs font-bold uppercase text-aa-muted mb-3">
+    <div class="mb-5 rounded-lg border border-sa-border bg-sa-dark/40 p-4">
+      <p class="text-xs font-bold uppercase text-sa-muted mb-3">
         {{ t("operations.broadcastModeTitle", "Broadcast Mode") }}
       </p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -28,8 +28,8 @@
           class="rounded-lg border p-4 text-left transition-all duration-200"
           :class="
             mode === activeMode
-              ? 'border-aa-orange bg-aa-orange/10 ring-1 ring-aa-orange'
-              : 'border-aa-border bg-aa-panel hover:border-aa-muted'
+              ? 'border-sa-orange bg-sa-orange/10 ring-1 ring-sa-orange'
+              : 'border-sa-border bg-sa-panel hover:border-sa-muted'
           "
           :aria-pressed="mode === activeMode"
           @click="$emit('set-mode', mode)"
@@ -37,14 +37,14 @@
           <div class="flex items-start gap-3">
             <div
               class="w-10 h-10 rounded-lg flex items-center justify-center"
-              :class="mode === activeMode ? 'bg-aa-orange/20' : 'bg-aa-dark'"
+              :class="mode === activeMode ? 'bg-sa-orange/20' : 'bg-sa-dark'"
             >
               <svg
                 v-if="mode === 'client'"
                 aria-hidden="true"
                 class="w-5 h-5"
                 :class="
-                  mode === activeMode ? 'text-aa-orange' : 'text-aa-muted'
+                  mode === activeMode ? 'text-sa-orange' : 'text-sa-muted'
                 "
                 fill="none"
                 stroke="currentColor"
@@ -62,7 +62,7 @@
                 aria-hidden="true"
                 class="w-5 h-5"
                 :class="
-                  mode === activeMode ? 'text-aa-orange' : 'text-aa-muted'
+                  mode === activeMode ? 'text-sa-orange' : 'text-sa-muted'
                 "
                 fill="none"
                 stroke="currentColor"
@@ -79,21 +79,21 @@
             <div class="flex-1">
               <p
                 class="font-semibold text-sm"
-                :class="mode === activeMode ? 'text-aa-orange' : 'text-aa-text'"
+                :class="mode === activeMode ? 'text-sa-orange' : 'text-sa-text'"
               >
                 {{ modeLabels[mode]?.title || mode }}
               </p>
-              <p class="text-xs text-aa-muted mt-1">
+              <p class="text-xs text-sa-muted mt-1">
                 {{ modeLabels[mode]?.desc || "" }}
               </p>
             </div>
             <div
               v-if="mode === activeMode"
-              class="w-5 h-5 rounded-full bg-aa-orange flex items-center justify-center"
+              class="w-5 h-5 rounded-full bg-sa-orange flex items-center justify-center"
             >
               <svg
                 aria-hidden="true"
-                class="w-3 h-3 text-aa-dark"
+                class="w-3 h-3 text-sa-dark"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -113,9 +113,9 @@
 
     <div
       v-if="relayPayloadOptions.length > 0"
-      class="mb-5 rounded-lg border border-aa-border bg-aa-dark/40 p-4"
+      class="mb-5 rounded-lg border border-sa-border bg-sa-dark/40 p-4"
     >
-      <p class="text-xs font-bold uppercase text-aa-muted mb-3">
+      <p class="text-xs font-bold uppercase text-sa-muted mb-3">
         {{ t("operations.relayPayloadType", "Relay Payload Type") }}
       </p>
       <div class="flex flex-wrap gap-2">
@@ -126,8 +126,8 @@
           class="rounded-lg border px-4 py-2 text-sm font-semibold transition-all duration-200"
           :class="
             option === activeRelayPayloadMode
-              ? 'border-aa-orange/30 bg-aa-orange/10 text-aa-orange'
-              : 'border-aa-border text-aa-muted hover:border-aa-muted'
+              ? 'border-sa-orange/30 bg-sa-orange/10 text-sa-orange'
+              : 'border-sa-border text-sa-muted hover:border-sa-muted'
           "
           @click="$emit('set-relay-payload-mode', option)"
         >
@@ -135,10 +135,10 @@
         </button>
       </div>
     </div>
-    <div v-else class="empty-state mb-5 bg-aa-dark/20 p-4">
+    <div v-else class="empty-state mb-5 bg-sa-dark/20 p-4">
       <svg
         aria-hidden="true"
-        class="w-8 h-8 mx-auto mb-2 text-aa-muted"
+        class="w-8 h-8 mx-auto mb-2 text-sa-muted"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -150,7 +150,7 @@
           d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
         ></path>
       </svg>
-      <p class="text-xs text-aa-muted">
+      <p class="text-xs text-sa-muted">
         {{
           t(
             "operations.relayPayloadEmpty",
@@ -160,21 +160,21 @@
       </p>
     </div>
 
-    <div class="rounded-lg border border-aa-border bg-aa-dark/40 p-4">
+    <div class="rounded-lg border border-sa-border bg-sa-dark/40 p-4">
       <div class="flex items-center justify-between gap-3">
         <div class="flex-1">
           <div class="flex items-center gap-2">
-            <p class="text-xs font-bold uppercase text-aa-muted">
+            <p class="text-xs font-bold uppercase text-sa-muted">
               {{ t("operations.paymasterTitle", "Morpheus Paymaster") }}
             </p>
             <span v-if="paymasterEnabled" class="badge-amber">
               <span
-                class="w-1.5 h-1.5 rounded-full bg-aa-warning animate-pulse"
+                class="w-1.5 h-1.5 rounded-full bg-sa-warning animate-pulse"
               ></span>
               {{ t("operations.paymasterActive", "Included") }}
             </span>
           </div>
-          <p class="mt-1 text-sm text-aa-muted">
+          <p class="mt-1 text-sm text-sa-muted">
             {{
               t(
                 "operations.paymasterSubtitle",
@@ -184,8 +184,8 @@
           </p>
         </div>
         <button
-          class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-aa-orange focus:ring-offset-2 focus:ring-offset-aa-dark"
-          :class="paymasterEnabled ? 'bg-aa-orange' : 'bg-aa-dark'"
+          class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-sa-orange focus:ring-offset-2 focus:ring-offset-sa-dark"
+          :class="paymasterEnabled ? 'bg-sa-orange' : 'bg-sa-dark'"
           @click="$emit('set-paymaster-enabled', !paymasterEnabled)"
         >
           <span class="sr-only">{{
@@ -203,7 +203,7 @@
         <div>
           <label
             for="paymaster-dapp-id-input"
-            class="mb-1.5 block text-xs font-bold uppercase text-aa-muted"
+            class="mb-1.5 block text-xs font-bold uppercase text-sa-muted"
             >{{ t("operations.paymasterDappId", "DApp ID") }}</label
           >
           <input
@@ -211,10 +211,10 @@
             :value="paymasterDappId"
             type="text"
             maxlength="64"
-            class="input-field w-full bg-aa-panel text-sm"
+            class="input-field w-full bg-sa-panel text-sm"
             :class="
               paymasterDappId && !isValidDappId(paymasterDappId)
-                ? 'border-aa-error focus:border-aa-error-light focus:ring-aa-error'
+                ? 'border-sa-error focus:border-sa-error-light focus:ring-sa-error'
                 : ''
             "
             :placeholder="
@@ -225,7 +225,7 @@
           <p
             v-if="paymasterDappId && !isValidDappId(paymasterDappId)"
             role="alert"
-            class="mt-1 text-xs text-aa-error"
+            class="mt-1 text-xs text-sa-error"
           >
             {{
               t(
@@ -235,8 +235,8 @@
             }}
           </p>
         </div>
-        <div class="rounded-lg border border-aa-warning/25 bg-aa-warning/5 p-3">
-          <p class="text-xs font-bold uppercase text-aa-warning">
+        <div class="rounded-lg border border-sa-warning/25 bg-sa-warning/5 p-3">
+          <p class="text-xs font-bold uppercase text-sa-warning">
             {{
               t(
                 "operations.paymasterReadinessTitle",
@@ -244,9 +244,9 @@
               )
             }}
           </p>
-          <p class="mt-1 text-xs leading-5 text-aa-muted">
-            {{ t("operations.policyTestnetAaDescPrefix", "Policy") }}
-            <code class="font-mono text-neo-300">testnet-aa</code>
+          <p class="mt-1 text-xs leading-5 text-sa-muted">
+            {{ t("operations.policyTestnetSaDescPrefix", "Policy") }}
+            <code class="font-mono text-neo-300">testnet-sa</code>
             {{
               t(
                 "operations.paymasterReadinessDesc",
@@ -254,7 +254,7 @@
               )
             }}
           </p>
-          <p class="mt-2 text-xs leading-5 text-aa-warning-light">
+          <p class="mt-2 text-xs leading-5 text-sa-warning-light">
             {{
               t(
                 "operations.paymasterCredentialNote",
@@ -269,7 +269,7 @@
             )
           }}</span>
           <router-link
-            class="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-aa-warning hover:text-aa-warning-light transition-colors duration-200"
+            class="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-sa-warning hover:text-sa-warning-light transition-colors duration-200"
             :to="{ path: '/docs', query: { doc: 'paymasterValidation' } }"
           >
             {{
@@ -295,7 +295,7 @@
     </div>
 
     <div class="mt-4 flex items-center justify-between">
-      <p class="text-xs text-aa-muted">
+      <p class="text-xs text-sa-muted">
         {{
           relayEndpoint
             ? t("operations.relayEndpointStatus", "Relay: {endpoint}").replace(

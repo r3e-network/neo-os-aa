@@ -11,7 +11,7 @@ namespace SmartAccount.Mocks
     /// </summary>
     [DisplayName("WrongLifecycleAbiModule")]
     [ContractPermission("*", "*")]
-    [ManifestExtra("Description", "Test-only malformed AA lifecycle ABI")]
+    [ManifestExtra("Description", "Test-only malformed SA lifecycle ABI")]
     public class WrongLifecycleAbiModule : SmartContract
     {
         [Safe]

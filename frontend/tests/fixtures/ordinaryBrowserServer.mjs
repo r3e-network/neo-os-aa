@@ -7,7 +7,7 @@ import { build, preview } from 'vite';
 let buildPromise;
 
 async function buildFixtureApp(root) {
-  const outDir = await mkdtemp(join(tmpdir(), 'aa-ordinary-browser-'));
+  const outDir = await mkdtemp(join(tmpdir(), 'sa-ordinary-browser-'));
   try {
     // Fixture VITE_* variables are set by the caller before the first build.
     // Never reuse production dist: it has a different network/core identity.

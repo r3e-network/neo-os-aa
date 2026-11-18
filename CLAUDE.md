@@ -1,10 +1,10 @@
-## Repository: neo-os-aa
+## Repository: neo-os-sa
 
-This is the NeoOS AA (Abstract Account) repository - Neo N3 account abstraction (ERC-4337 equivalent).
+This is the NeoOS SA (Smart Account) repository - Neo N3 account abstraction (ERC-4337 equivalent).
 
 Primary responsibilities:
-- C03 account: sole authority for account abstraction - user operations, proxy verification, and recovery (protocol-aa-core)
-- AA decides whether an actor authorized an operation and nothing more
+- C03 account: sole authority for account abstraction - user operations, proxy verification, and recovery (protocol-sa-core)
+- SA decides whether an actor authorized an operation and nothing more
 - SmartAccountV3: deterministic accounts keyed by 20-byte accountId
 - Verifier plugin authorization: Web3Auth, TEE, WebAuthn, session keys, multisig
 - Hook plugin policy enforcement: daily limits, token restrictions, credential gates
@@ -13,7 +13,7 @@ Primary responsibilities:
 
 This repo should NOT:
 - Grant DID eligibility, hold network identity, or select signers
-- Have dependency on the DID registry - operation-policy layer composes AAAuthorization with independently verified EligibilityProof
+- Have dependency on the DID registry - operation-policy layer composes SAAuthorization with independently verified EligibilityProof
 - Replace wallet confirmation - relay can package and pay, but cannot authorize on behalf of account
 - Make paymaster sponsorship replace the configured verifier or backup-owner witness
 

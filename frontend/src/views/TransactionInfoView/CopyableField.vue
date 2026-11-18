@@ -1,17 +1,17 @@
 <template>
-  <div class="rounded-lg border border-aa-border bg-aa-dark p-4">
-    <p class="text-xs font-semibold text-aa-muted uppercase mb-1">
+  <div class="rounded-lg border border-sa-border bg-sa-dark p-4">
+    <p class="text-xs font-semibold text-sa-muted uppercase mb-1">
       {{ label }}
     </p>
     <div class="flex items-center">
-      <code class="block text-sm font-mono text-aa-text break-all flex-1">{{
+      <code class="block text-sm font-mono text-sa-text break-all flex-1">{{
         value
       }}</code>
       <button
         v-if="showCopyButton"
         @click="$emit('copy')"
         :aria-label="copyAriaLabel"
-        class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+        class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
       >
         <svg
           aria-hidden="true"
@@ -30,7 +30,7 @@
           aria-hidden="true"
           v-else
           xmlns="http://www.w3.org/2000/svg"
-          class="h-3.5 w-3.5 text-aa-success"
+          class="h-3.5 w-3.5 text-sa-success"
           viewBox="0 0 20 20"
           fill="currentColor"
         >

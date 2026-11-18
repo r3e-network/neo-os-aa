@@ -1122,7 +1122,7 @@ class BoundProjection:
 
 
 def _project_inventory(inventory, expected_source_sha):
-    codec.require(inventory['schema'] == 'neoos-aa-native-codec-source/v1' and inventory['status'] == 'TYPED_SOURCE_INVENTORY_ONLY', 'Unknown native source inventory')
+    codec.require(inventory['schema'] == 'neoos-sa-native-codec-source/v1' and inventory['status'] == 'TYPED_SOURCE_INVENTORY_ONLY', 'Unknown native source inventory')
     codec.require(inventory['compilationErrorCount'] == 0 and inventory['semanticMetadataComplete'] is True and all(d['severity'] != 'Error' for d in inventory['diagnostics']), 'Unresolved native source')
     codec.require(inventory['roslyn']['sha256'] == ROSLYN_SHA256, 'Unpinned Roslyn frontend')
     source = inventory['source']['text']

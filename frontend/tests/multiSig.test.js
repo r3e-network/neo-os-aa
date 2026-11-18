@@ -37,7 +37,7 @@ test('frontend rejects RPC errors and absent network identity before loading sig
 test('UserOperation args hash RPC uses base64 bytes and RPC Array types', async () => {
   const { computeArgsHash } = await import('../src/features/operations/metaTx.js');
   let params;
-  const actual = await computeArgsHash({ rpcUrl: 'http://localhost:20332', aaContractHash: core, args: [{ type: 'ByteArray', value: '0xaabb' }, { type: 'Struct', value: [{ type: 'ByteArray', value: '0x' }] }], fetchImpl: async (_url, options) => {
+  const actual = await computeArgsHash({ rpcUrl: 'http://localhost:20332', saContractHash: core, args: [{ type: 'ByteArray', value: '0xaabb' }, { type: 'Struct', value: [{ type: 'ByteArray', value: '0x' }] }], fetchImpl: async (_url, options) => {
     params = JSON.parse(options.body).params;
     return { ok: true, json: async () => ({ result: halt({ type: 'ByteString', value: Buffer.from('aa'.repeat(32), 'hex').toString('base64') }) }) };
   } });

@@ -52,7 +52,7 @@ namespace SmartAccount.Hooks
         public static void ConfirmRegistry(UInt160 registryContract) => HookAuthority.ConfirmRegistry(registryContract);
         public static void CancelRegistryChange() => HookAuthority.CancelRegistryChange();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => HookAuthority.ProposeUpdate(nefHash, manifestHash);
 

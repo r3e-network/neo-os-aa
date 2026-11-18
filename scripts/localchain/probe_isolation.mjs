@@ -1,6 +1,6 @@
 import { isProductionDeployment } from '../../frontend/api/deploymentEnv.js';
 
-const OWNED_ENV = /^(AA_|MORPHEUS_|UPSTASH_|VITE_)/;
+const OWNED_ENV = /^(SA_|MORPHEUS_|UPSTASH_|VITE_)/;
 const LOOPBACK_ERROR = 'Disposable loopback RPC required: literal http://127.0.0.1 or http://[::1] with an explicit port >= 20000';
 
 export function clearLocalchainEnvironment() {

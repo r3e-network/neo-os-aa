@@ -2,7 +2,7 @@
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <!-- Verifier Status -->
     <div
-      class="rounded-lg border bg-aa-panel/50 p-4"
+      class="rounded-lg border bg-sa-panel/50 p-4"
       :class="verifierStatus.borderClass"
     >
       <div class="flex items-center gap-2 mb-2">
@@ -28,7 +28,7 @@
         >
       </div>
       <p
-        class="font-semibold text-sm text-aa-text truncate"
+        class="font-semibold text-sm text-sa-text truncate"
         :title="accountState.verifier"
       >
         {{ verifierStatus.displayValue }}
@@ -40,7 +40,7 @@
 
     <!-- Hook Status -->
     <div
-      class="rounded-lg border bg-aa-panel/50 p-4"
+      class="rounded-lg border bg-sa-panel/50 p-4"
       :class="hookStatus.borderClass"
     >
       <div class="flex items-center gap-2 mb-2">
@@ -66,7 +66,7 @@
         >
       </div>
       <p
-        class="font-semibold text-sm text-aa-text truncate"
+        class="font-semibold text-sm text-sa-text truncate"
         :title="accountState.hook"
       >
         {{ hookStatus.displayValue }}
@@ -78,7 +78,7 @@
 
     <!-- Backup Owner Status -->
     <div
-      class="rounded-lg border bg-aa-panel/50 p-4"
+      class="rounded-lg border bg-sa-panel/50 p-4"
       :class="backupStatus.borderClass"
     >
       <div class="flex items-center gap-2 mb-2">
@@ -104,7 +104,7 @@
         >
       </div>
       <p
-        class="font-semibold text-sm text-aa-text truncate"
+        class="font-semibold text-sm text-sa-text truncate"
         :title="accountState.backupOwner"
       >
         {{ backupStatus.displayValue }}
@@ -116,7 +116,7 @@
 
     <!-- Escape Hatch Status -->
     <div
-      class="rounded-lg border bg-aa-panel/50 p-4"
+      class="rounded-lg border bg-sa-panel/50 p-4"
       :class="escapeStatus.borderClass"
     >
       <div class="flex items-center gap-2 mb-2">
@@ -141,7 +141,7 @@
           >{{ t("security.escapeHatch", "Escape Hatch") }}</span
         >
       </div>
-      <p class="font-semibold text-sm text-aa-text">
+      <p class="font-semibold text-sm text-sa-text">
         {{ escapeStatus.displayValue }}
       </p>
       <p class="mt-1 text-xs" :class="escapeStatus.descriptionClass">

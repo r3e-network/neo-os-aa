@@ -226,7 +226,7 @@ namespace Neo.SmartContract.Examples
 
             ByteString digest = ComputeRecoveryDigest(
                 GetNetwork(accountId),
-                GetAAContract(accountId),
+                GetSAContract(accountId),
                 accountId,
                 GetAccountAddress(accountId),
                 GetAccountIdText(accountId),

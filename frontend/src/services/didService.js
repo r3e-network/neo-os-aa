@@ -3,9 +3,10 @@ import { connectedDidProfile, setConnectedDidProfile } from '@/utils/did';
 import { RUNTIME_CONFIG } from '@/config/runtimeConfig';
 import { EC } from '../config/errorCodes.js';
 import { fetchWithTimeout } from '@/utils/fetchWithTimeout.js';
+import { resolveSameOriginApiEndpoint } from '@/utils/sameOriginEndpoint.js';
 import { authenticateVerifiedDid } from './verifiedDidProfile.js';
 
-const DID_STORAGE_KEY = 'aa_connected_did_profile';
+const DID_STORAGE_KEY = 'sa_connected_did_profile';
 
 function trim(value) {
   return String(value || '').trim();
@@ -14,6 +15,12 @@ function trim(value) {
 async function verifyDidProfile(idToken) {
   const endpoint = trim(RUNTIME_CONFIG.didVerificationEndpoint);
   if (!endpoint || !trim(idToken)) return null;
+  // F-15 (re-verified from code): the idToken is a bearer credential; the
+  // verification endpoint must be provably same-origin before it is sent.
+  // Fail closed before any fetch.
+  if (!resolveSameOriginApiEndpoint(endpoint).ok) {
+    throw new Error(EC.credentialEndpointNotSameOrigin);
+  }
   const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

@@ -346,7 +346,7 @@ def project_sources(contents, *, enforce_identity=True):
         a_method_offset_cannot_be_negative=(
             'if(descriptor.Offset<0)throw' in method_from_json),
     )
-    return dict(schema='neoos-aa-load-admission-source/v1', scope=SCOPE,
+    return dict(schema='neoos-sa-load-admission-source/v1', scope=SCOPE,
                 entryBoundary=ENTRY_BOUNDARY, coreCommit=CORE_COMMIT,
                 sourceHashes={k: sha(v.encode()) for k, v in contents.items()},
                 methods=dict(nefDeserialize=nef_deserialize,
@@ -397,7 +397,7 @@ def mirror_source(key, row):
     same pinned value a download would have to reach, so a mirror cannot launder
     a different artifact. This only substitutes for a stalled network.
     """
-    mirror = os.environ.get('AA_LOAD_ADMISSION_SOURCE_MIRROR')
+    mirror = os.environ.get('SA_LOAD_ADMISSION_SOURCE_MIRROR')
     if not mirror:
         return None
     candidate = Path(mirror) / (key.replace('/', '-') + '.cs')

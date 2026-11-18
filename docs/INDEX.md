@@ -1,106 +1,140 @@
 # Documentation Index
 
-This index keeps the root documentation set visible and easy to browse.
+The product is the **Neo Smart Account — SA**. "AA" survives only where it names
+Ethereum account abstraction (ERC-4337/7579/7702/7715). The protocol string
+switch is complete: the EIP-712 domain name is `"Neo Smart Account"` and the
+`sa_contract` / `sa_proxy` wire keys use the SA prefixes. Tickets signed under
+the pre-switch domain cut off at that switch. Every document below uses SA for
+this system.
+
+Start with the root [README](../README.md); this index is the map, not the manual.
+
+## Language policy
+
+English is the normative text. Every document in this index carries a Chinese
+counterpart named `<name>.zh-CN.md`; the two versions are kept structurally
+identical, and a Chinese file states in its first paragraph that the English file
+wins on conflict. That covers the reading path, the native set, account
+operations, the security model, the runtime specification, the closure and
+formal-verification chapters, build and packaging, and the reference material
+(guides, runbooks and audits). [SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md) remains the
+Chinese reading guide to the chapter set.
+
+| Coverage | Documents | Note |
+| --- | --- | --- |
+| Bilingual (EN + `.zh-CN.md`) | Protocol, architecture, account, closure and reference documents | 54 pairs; the four dated `reports/*.md` snapshots remain English-only |
+
+## Start here
+
+| Document | What it answers | Language |
+| --- | --- | --- |
+| [SA-SYSTEM-STATUS.md](SA-SYSTEM-STATUS.md) | What is built, deployed, verified — and what is not | EN · [中文](SA-SYSTEM-STATUS.zh-CN.md) |
+| [HOW_IT_WORKS.md](HOW_IT_WORKS.md) | End-to-end mental model and usage guide | EN · [中文](HOW_IT_WORKS.zh-CN.md) |
+| [USER_GUIDE.md](USER_GUIDE.md) | Practical operator / signer steps | EN · [中文](USER_GUIDE.zh-CN.md) |
+| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Commands and quick lookup | EN · [中文](QUICK_REFERENCE.zh-CN.md) |
+| [WORKFLOWS.md](WORKFLOWS.md) | Transaction lifecycle and submission flows | EN · [中文](WORKFLOWS.zh-CN.md) |
+| [DATA_FLOW.md](DATA_FLOW.md) | Browser / Supabase / relay / chain boundaries | EN · [中文](DATA_FLOW.zh-CN.md) |
+| [architecture.md](architecture.md) | Technical architecture details | EN · [中文](architecture.zh-CN.md) |
+| [ORGANIZATION.md](ORGANIZATION.md) | Repository layout and the verification map | EN · [中文](ORGANIZATION.zh-CN.md) |
+| [SA-IMPLEMENTATION-STRATEGY.md](SA-IMPLEMENTATION-STRATEGY.md) | The two implementation paths and their delivery boundaries | EN · [中文](SA-IMPLEMENTATION-STRATEGY.zh-CN.md) |
 
 ## Native SmartAccount
 
-- [System architecture](NATIVE_SYSTEM_ARCHITECTURE.md) — identity, authorities, execution, recovery, fees and activation
-- [Native SDK](NATIVE_SDK.md) — exact ABI discovery, account plans and signed transactions
-- [Native workspace](NATIVE_ACCOUNT_WORKSPACE.md) — account discovery, registration, backup and wallet boundaries
-- [Protocol profile](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) — normative ABI 2 draft for Neo proposals #242 and #243
-- [Module profiles](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md) — supported native modules and lifecycle requirements
-- [Authority epochs](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md) — recovery revocation and module storage isolation
-- [ABI 2 vectors](proposals/smartaccount-native-profile-v2-vectors.json) — current authorization and execution commitments
-- [Formal scope](AA-FORMAL-VERIFICATION.md) — bounded models and remaining refinement boundaries
-- [Open proof boundaries](reports/aa-native-open-boundaries-20261008.json) — claims that local tests and model proofs do not establish
+- [NATIVE_SYSTEM_ARCHITECTURE.md](NATIVE_SYSTEM_ARCHITECTURE.md) · [中文](NATIVE_SYSTEM_ARCHITECTURE.zh-CN.md) — identity, authorities, execution, recovery, fees, activation
+- [NATIVE_SDK.md](NATIVE_SDK.md) · [中文](NATIVE_SDK.zh-CN.md) — ABI discovery, account plans, signed transactions
+- [NATIVE_ACCOUNT_WORKSPACE.md](NATIVE_ACCOUNT_WORKSPACE.md) · [中文](NATIVE_ACCOUNT_WORKSPACE.zh-CN.md) — discovery, registration, backup, wallet boundaries
+- [NATIVE_ACCOUNT_USER_GUIDE.md](NATIVE_ACCOUNT_USER_GUIDE.md) · [中文](NATIVE_ACCOUNT_USER_GUIDE.zh-CN.md) — backups, authority matrix, key-loss decisions
+- [NATIVE_ACCOUNT_TRANSACTION_GUARDS.md](NATIVE_ACCOUNT_TRANSACTION_GUARDS.md) · [中文](NATIVE_ACCOUNT_TRANSACTION_GUARDS.zh-CN.md) — exact-script cancellation guard
+- [NATIVE_ACCOUNT_THRESHOLD_RECOVERY.md](NATIVE_ACCOUNT_THRESHOLD_RECOVERY.md) · [中文](NATIVE_ACCOUNT_THRESHOLD_RECOVERY.zh-CN.md) — threshold wallets as guardian, custody or payer
+- [NATIVE_SIGNED_TRANSACTION_IMPORT.md](NATIVE_SIGNED_TRANSACTION_IMPORT.md) · [中文](NATIVE_SIGNED_TRANSACTION_IMPORT.zh-CN.md) — portable signed artifact and receipt recovery
+- [NATIVE_ACCOUNT_PERFORMANCE.md](NATIVE_ACCOUNT_PERFORMANCE.md) · [中文](NATIVE_ACCOUNT_PERFORMANCE.zh-CN.md) — measured budgets and fee behaviour
+- [proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) · [中文](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.zh-CN.md) — normative ABI 2 draft (Neo proposals #242/#243)
+- [proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md) · [中文](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md) — six native artifacts, packaging, formal boundary
+- [proposals/SMARTACCOUNT-NATIVE-MULTISIG.md](proposals/SMARTACCOUNT-NATIVE-MULTISIG.md) · [中文](proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md) — composite verifier, ephemeral approval receipt, argument isolation
+- [proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md) · [中文](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md) — module lifecycle and recovery revocation
+- [proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md) · [中文](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.zh-CN.md) — source-built runtime, proxy, configuration and recovery evidence
+- [proposals/smartaccount-native-profile-v2-vectors.json](proposals/smartaccount-native-profile-v2-vectors.json) — current authorization and execution vectors
+- [proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md) · [中文](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.zh-CN.md) — required protocol sections, evidence, open activation gates
+- [reports/sa-native-open-boundaries-20261008.json](reports/sa-native-open-boundaries-20261008.json) — claims local tests and model proofs do not establish
 
-Historical validation applies only to its recorded source and runtime. Earlier
-native receipts do not validate the current ABI 2 execution envelope or recovery
-semantics. Receipts absent from this checkout are not current release evidence.
+Earlier native receipts describe their recorded source and runtime only. They do not
+validate the current ABI 2 envelope, and a receipt absent from this checkout is not
+current release evidence.
 
-## Core Explainers
+## SA runtime specification
 
-- `docs/AA-SYSTEM-STATUS.md` — capability boundaries and operational prerequisites
-- `docs/ACCOUNT_RECOVERY_AND_IDENTITY.md` — recovery limitations and canonical account identity reads
-- `docs/OPERATOR_KEY_RECOVERY.md` — encrypted operator backups and browser recovery
-- `docs/AA-PROXY-TRANSFERS.md` — direct proxy witness construction, fee policy and sponsorship refusal
-- `sdk/js/PACKAGING.md` — independently installable SDK package and consumer validation
-- `docs/HOW_IT_WORKS.md` — end-to-end mental model and usage guide
-- `docs/USER_GUIDE.md` — practical operator / signer usage steps
-- `docs/WORKFLOWS.md` — transaction lifecycle and submission flows
-- `docs/DATA_FLOW.md` — browser / Supabase / relay / chain boundaries
-- `docs/architecture.md` — technical architecture details
-- `docs/AA-EIP-712-SPEC.md` — canonical EIP-712-style typed-data layout the verifiers hash on-chain
-- `docs/ETHEREUM_AA_COMPARISON.md` — Ethereum AA (4337/7702/7579/7715) alignment and deliberate divergences
-- `docs/QUICK_REFERENCE.md` — commands and quick lookup material
-- `docs/POST_DEPLOY_SMOKE_TEST.md` — post-deployment frontend smoke-test checklist
-- `docs/ORGANIZATION.md` — repository layout: core contracts, auxiliary contracts, native implementation and verification map
-- `docs/mainnet-validation-runbook.md` — read-only MainNet validation runbook (`sdk/js` `mainnet:validate:readonly`)
-- `TESTNET_QUICKSTART.md` — dry-run-first TestNet validation entry (`sdk/js` `testnet:validate:dry-run`)
+- [SA-EIP-712-SPEC.md](SA-EIP-712-SPEC.md) · [中文](SA-EIP-712-SPEC.zh-CN.md) — typed-data layout the verifiers hash on-chain
+- [SA-IMPLEMENTATION-REFINEMENT.md](SA-IMPLEMENTATION-REFINEMENT.md) · [中文](SA-IMPLEMENTATION-REFINEMENT.zh-CN.md) — refinement scope and acceptance conditions
+- [SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md) · [中文](SA-METHOD-REFINEMENT.zh-CN.md) — every method-level lane in one document, each keeping its own scope: artifact inventory, source projection, reference VM, runtime checks, arithmetic, fee semantics, public bodies, syscall admission, interop conversion and charge, exception identity
+- [SA-PROXY-TRANSFERS.md](SA-PROXY-TRANSFERS.md) · [中文](SA-PROXY-TRANSFERS.zh-CN.md) — direct proxy witness construction, fee policy, sponsorship refusal
+- [SA-MODULE-PROTOCOL.md](SA-MODULE-PROTOCOL.md) · [中文](SA-MODULE-PROTOCOL.zh-CN.md) — protocol v4 shared module specification for both kernels
+- [SA-MIGRATION-MANIFEST.md](SA-MIGRATION-MANIFEST.md) · [中文](SA-MIGRATION-MANIFEST.zh-CN.md) — legacy-to-v4 migration manifest and idempotency rules
+- [SA-CONTRACT-HANDOFF.md](SA-CONTRACT-HANDOFF.md) · [SA-FRONTEND-CORRESPONDENCE.md](SA-FRONTEND-CORRESPONDENCE.md) — contract/SDK/frontend contracts of record ([中文](SA-CONTRACT-HANDOFF.zh-CN.md) · [中文](SA-FRONTEND-CORRESPONDENCE.zh-CN.md))
+- Chinese guide to this whole chapter set: [SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md)
 
-## Chinese Counterparts
+## Closure and formal verification
 
-- `docs/HOW_IT_WORKS.zh-CN.md`
-- `docs/USER_GUIDE.zh-CN.md`
-- `docs/WORKFLOWS.zh-CN.md`
-- `docs/DATA_FLOW.zh-CN.md`
-- `docs/architecture.zh-CN.md`
-- `docs/QUICK_REFERENCE.zh-CN.md`
-- `docs/MORPHEUS_PRIVATE_ACTIONS.zh-CN.md`
+- [SA-CLOSURE-GATE.md](SA-CLOSURE-GATE.md) · [中文](SA-CLOSURE-GATE.zh-CN.md) — the gate that decides whether any entrypoint counts as verified
+- [SA-ENTRYPOINT-CLOSURE.md](SA-ENTRYPOINT-CLOSURE.md) · [中文](SA-ENTRYPOINT-CLOSURE.zh-CN.md) — per-entrypoint closure rules
+- [SA-FORMAL-VERIFICATION.md](SA-FORMAL-VERIFICATION.md) · [中文](SA-FORMAL-VERIFICATION.zh-CN.md) — bounded Coq models, runtime correspondence, open boundaries
+- [reports/sa-closure-gate-20261117.json](reports/sa-closure-gate-20261117.json) — current integrated receipt: scoped PASS, **NO-GO** for full implementation
 
-## Recovery Verifier
+The closure receipt is fail-closed on purpose: `status: NO-GO` with zero verified
+entrypoints is the honest state, not a regression.
 
-- `docs/MORPHEUS_PRIVATE_ACTIONS.md`
-- `docs/MORPHEUS_PRIVATE_ACTIONS.zh-CN.md`
+## Accounts, recovery and operations
 
-## Paymaster / Sponsored Transactions
+- [ACCOUNT_RECOVERY_AND_IDENTITY.md](ACCOUNT_RECOVERY_AND_IDENTITY.md) · [中文](ACCOUNT_RECOVERY_AND_IDENTITY.zh-CN.md) — recovery limits and canonical identity reads
+- [OPERATOR_KEY_RECOVERY.md](OPERATOR_KEY_RECOVERY.md) · [中文](OPERATOR_KEY_RECOVERY.zh-CN.md) — encrypted operator backups and browser recovery
+- [MORPHEUS_PRIVATE_ACTIONS.md](MORPHEUS_PRIVATE_ACTIONS.md) · [中文](MORPHEUS_PRIVATE_ACTIONS.zh-CN.md) — recovery verifier and private actions
+- [action-sessions.md](action-sessions.md) · [中文](action-sessions.zh-CN.md) — session-key scoping, expiry and reauthorization
+- [MULTISIG_SDK.md](MULTISIG_SDK.md) · [MULTISIG_CHILD_CONFIGURATION.md](MULTISIG_CHILD_CONFIGURATION.md) — multisig bundles and child proofs ([中文](MULTISIG_SDK.zh-CN.md) · [中文](MULTISIG_CHILD_CONFIGURATION.zh-CN.md))
+- [PENDING_CONFIG_UPDATE_READ_ABI.md](PENDING_CONFIG_UPDATE_READ_ABI.md) · [中文](PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md) — config-update read surface
+- [ORDINARY_ACCOUNT_WORKSPACE.md](ORDINARY_ACCOUNT_WORKSPACE.md) · [中文](ORDINARY_ACCOUNT_WORKSPACE.zh-CN.md) — ordinary-profile workspace
+- [mainnet-validation-runbook.md](mainnet-validation-runbook.md) · [中文](mainnet-validation-runbook.zh-CN.md) — read-only mainnet validation
+- [testnet-validation-runbook.md](testnet-validation-runbook.md) · [中文](testnet-validation-runbook.zh-CN.md) — dry-run-first testnet validation
+- [POST_DEPLOY_SMOKE_TEST.md](POST_DEPLOY_SMOKE_TEST.md) · [中文](POST_DEPLOY_SMOKE_TEST.zh-CN.md) — post-deployment frontend checklist
 
-- `docs/PAYMASTER_RELAY_VALIDATION.md` — Morpheus off-chain paymaster relay validation
-- `contracts/paymaster/Paymaster.cs` — on-chain `AAPaymaster` contract (deposits, policies, settlement)
-- `contracts/paymaster/PaymasterAuthority.cs` — authority pattern for Paymaster admin and core validation
-- `contracts/SmartAccount.Paymaster.cs` — AA core integration (`executeSponsoredUserOp`)
+## Security, audit and comparisons
 
-## Security Notes
+- [SECURITY_MODEL.md](SECURITY_MODEL.md) · [中文](SECURITY_MODEL.zh-CN.md) — current threat model and trust assumptions
+- [PROTOCOL_COMPLETENESS_AUDIT.md](PROTOCOL_COMPLETENESS_AUDIT.md) · [中文](PROTOCOL_COMPLETENESS_AUDIT.zh-CN.md) — protocol coverage and known boundaries
+- [ETHEREUM_AA_COMPARISON.md](ETHEREUM_AA_COMPARISON.md) · [中文](ETHEREUM_AA_COMPARISON.zh-CN.md) — Ethereum AA (4337/7702/7579/7715) alignment and deliberate divergences
+- [FRONTEND_DEPENDENCY_SECURITY.md](FRONTEND_DEPENDENCY_SECURITY.md) · [中文](FRONTEND_DEPENDENCY_SECURITY.zh-CN.md) — frontend dependency exposure
+- [PLUGIN_DEVELOPER_GUIDE.md](PLUGIN_DEVELOPER_GUIDE.md) · [中文](PLUGIN_DEVELOPER_GUIDE.zh-CN.md) — supported verifier/hook plugins, lifecycle and cleanup
+- [contracts/templates/](../contracts/templates/) — minimal verifier/hook starting points (`README.md` inside)
+- [proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md) · [中文](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.zh-CN.md) — NeoVM/DevPack verifier-budget extension
+- [proposals/nep-smartaccount-entry-verifier.mediawiki](proposals/nep-smartaccount-entry-verifier.mediawiki) — NEP draft for the entry verifier
 
-- `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md` — normative native profile draft for Issue #242, including identity, activation, state, lifecycle, resource, governance, migration, and conformance rules
-- `docs/proposals/smartaccount-native-profile-v1-vectors.json` — machine-readable version-1 identity and authorization vectors
-- `docs/proposals/validate-native-smartaccount-profile.py` — deterministic profile and vector validation
-- `docs/AA-FORMAL-VERIFICATION.md` — AA formal-model, runtime-correspondence and boundary report
-- `docs/proposals/AA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md` — exact NeoVM/DevPack verifier-budget extension and integration gates
-- `docs/SECURITY_MODEL.md` — current threat model and trust assumptions
-- `contracts/templates/` — minimal verifier/hook starting points that compile to the exact bind-time ABI (quick start: `contracts/templates/README.md`)
-- `docs/reports/aa-protocol-security-build-20260918.json` — reproducible local artifact and security-regression receipt
-- `docs/reports/aa-neoexpress-readback-20260918.json` — isolated NeoExpress deployment/readback receipt; public-chain parity remains unverified
-- `docs/reports/aa-neoexpress-readback-20260919.json` — historical pre-callback-ABI-fix NeoExpress readback; superseded by the 2026-09-20 receipt
-- `docs/reports/aa-neoexpress-readback-20260920.json` — historical post-callback-ABI readback; superseded by the current post-remediation receipt
-- `docs/reports/aa-neoexpress-readback-20260920-current.json` — post-remediation core NeoExpress readback of the core artifact before the branch-free reimbursement cap; local NEF/manifest parity verified then, public artifacts differ
-- `docs/reports/aa-neoexpress-validation-20260920.json` — historical private-chain validation of that snapshot: all 24 deployed to a fresh NeoExpress chain, 10 transaction-driven scenarios (65 halted transactions, 23 expected faults, 51 on-chain assertions), RPC readback parity for every contract; local-chain evidence only
-- `docs/reports/aa-neoexpress-gas-cap-20260921.json` — historical matching-core private-chain validation: 25 artifacts, 12 scenarios, adversarial verifier gas-cap fault and nonce rollback, and RPC readback parity; no public network touched
-- `docs/reports/aa-public-readback-20260920.json` — read-only TestNet/MainNet AA core readback; known public artifacts differ from the current local artifact
-- `docs/reports/aa-platform-gas-cap-20260920.json` — isolated Neo core/DevPack verifier-budget prototype receipt; AA integration and hardfork activation remain pending
-- `docs/reports/aa-platform-gas-cap-20260921.json` — historical Neo core/DevPack plus AA integration receipt; private NeoExpress verified at that snapshot, public activation/deployment pending
-- `docs/reports/aa-formal-gate-20260921.json` — historical 5-Coq-module/30-mutation formal gate with cached-base Docker BuildKit evidence and 20/20 runner tests
-- `docs/reports/aa-artifact-reproducibility-20260921.json` — 76 NEF/manifest artifacts reproduced byte-for-byte from that source snapshot; the historical `contracts/build` anchor is explicitly reported as intentional drift
-- `docs/reports/aa-current-revalidation-20260920.json` — independent read-only revalidation receipt; local runtime gates pass, while that environment's formal runner was unavailable and public parity remains open
-- `docs/SECURITY_AUDIT.md`
-- `docs/ETHEREUM_AA_COMPARISON.md`
-- `docs/PLUGIN_MATRIX.md`
-- `docs/PLUGIN_DEVELOPER_GUIDE.md`
+## Build and packaging
 
-## Build Toolchain
+- [SA-REPRODUCIBLE-BUILD.md](SA-REPRODUCIBLE-BUILD.md) · [中文](SA-REPRODUCIBLE-BUILD.zh-CN.md) — pinned toolchain, byte-for-byte rebuild, pin bumps
+- [NEO-PLATFORM-PACKAGES.md](NEO-PLATFORM-PACKAGES.md) · [中文](NEO-PLATFORM-PACKAGES.zh-CN.md) · [../contracts/neo-platform-packages.json](../contracts/neo-platform-packages.json) — audited package pins enforced by `scripts/check_neo_platform_packages.mjs`
+- [../sdk/js/PACKAGING.md](../sdk/js/PACKAGING.md) — independently installable SDK package
 
-- `docs/AA-REPRODUCIBLE-BUILD.md` — the pinned, published toolchain, how to restore, build and reproduce the AA contracts byte for byte, and how to bump a pin (R-11 / N-DEP-1)
-- `docs/NEO-PLATFORM-PACKAGES.md` — published dependency pins and the separate private `PLATFORM` runtime requirement
-- `contracts/neo-platform-packages.json` — audited hashes of the nine published Neo packages and the nccs compiler; `scripts/check_neo_platform_packages.mjs` enforces them together with the `packages.lock.json` files
-- `docs/reports/aa-published-build-reproducibility-20261004.json` — receipt: 76 artifacts built from published packages in two clean exports at different paths, byte-identical
+## Evidence receipts
 
-## Historical Reports
+`docs/reports/` holds dated machine receipts. A receipt is evidence only for the
+commit, artifacts and runtime it names; it is never a statement about the current
+tree. The current pinned set:
 
-- `docs/reports/testnet-validation-v1v2-2026-03.md` — archived pre-V3 (V1/V2) testnet validation status
+| Receipt | Covers |
+| --- | --- |
+| [sa-closure-gate-20261117.json](reports/sa-closure-gate-20261117.json) | integrated closure, NO-GO |
+| [sa-artifact-reproducibility-20261116.json](reports/sa-artifact-reproducibility-20261116.json) | byte-identical artifact rebuild |
+| [sa-formal-gate-20261031.json](reports/sa-formal-gate-20261031.json) | Coq gate and mutation set |
+| [sa-neoexpress-validation-20261031.json](reports/sa-neoexpress-validation-20261031.json) | private-chain deployment and readback |
+| [sa-ordinary-candidate-compatibility-20261116.json](reports/sa-ordinary-candidate-compatibility-20261116.json) | ordinary-profile candidate matrix |
 
-## Matrix Domain Support
+Historical and superseded receipts stay only where a guard or a formal scope pins
+them. [reports/testnet-validation-v1v2-2026-03.md](reports/testnet-validation-v1v2-2026-03.md)
+is the archived pre-V3 status.
 
-- same-transaction AA creation plus `.matrix` registration is supported for compatible Neo wallets
-- `.matrix` resolution is used to discover linked AA addresses through admin/manager indexes
+## Matrix domain
 
-- [Native issue 242 conformance map](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md): required protocol sections, implementation evidence and remaining public-activation gates.
+Same-transaction SA creation plus `.matrix` registration is supported for compatible
+Neo wallets. `.matrix` resolves a human-readable name to a controlling address; the
+frontend then reads the core's per-account state (`getAccountState`, the derived
+proxy and the bound verifier) to confirm the account behind that address. The
+contract exposes no reverse index from an owner address to its accounts, so a
+`.matrix` name is a starting point for a lookup, not proof of account ownership.

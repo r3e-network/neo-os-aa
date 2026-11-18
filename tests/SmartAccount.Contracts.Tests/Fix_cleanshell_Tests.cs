@@ -68,15 +68,15 @@ public class Fix_CleanShell_Tests
 
         public Harness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
-            Market = Fx.Deploy("AAAddressMarket");
-            // The verifiers/hook trust this wallet as their AA core (passed as deploy data). Two
+            Wallet = Fx.Deploy("SmartAccount");
+            Market = Fx.Deploy("SAAddressMarket");
+            // The verifiers/hook trust this wallet as their SA core (passed as deploy data). Two
             // distinct verifier contracts give distinct deploy hashes; both accept a 65-byte
             // uncompressed public key through setPublicKey/getPublicKey/clearAccount.
             OldVerifier = Fx.Deploy("verifiers/Web3AuthVerifier", Wallet.ToArray());
             NewVerifier = Fx.Deploy("verifiers/TEEVerifier", Wallet.ToArray());
             Hook = Fx.Deploy("hooks/WhitelistHook", Wallet.ToArray());
-            Fx.CallVoid(Market, "setAllowedAA", Wallet, true);
+            Fx.CallVoid(Market, "setAllowedSA", Wallet, true);
             // Phase 1b: the core admin registers the market as an approved escrow service.
             Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
@@ -126,7 +126,7 @@ public class Fix_CleanShell_Tests
         public BigInteger CreateListing(UInt160 accountId)
         {
             Fx.SetSigners(Seller);
-            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "AA address", "");
+            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "SA address", "");
             return Fx.CallInteger(Market, "getListingCount");
         }
     }

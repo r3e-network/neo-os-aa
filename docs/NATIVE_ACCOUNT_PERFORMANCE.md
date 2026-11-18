@@ -7,7 +7,7 @@ signing, network fees or confirmation latency.
 
 ## Target and preserved behavior
 
-The existing [module budget receipt](reports/aa-native-multisig-budget-20261009.json)
+The existing [module budget receipt](reports/sa-native-multisig-budget-20261009.json)
 records a maximum-argument `SSN` roster with slots `110`: its post-execution
 callback consumes 95,694,229 datoshi of the unchanged 100,000,000-datoshi limit.
 That leaves 4,305,771 datoshi, or 4.305771%, of headroom at the recorded pricing.

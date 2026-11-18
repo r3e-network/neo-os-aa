@@ -116,7 +116,7 @@ internal static class Program
             foreach (var assembly in new[] { typeof(Program).Assembly, typeof(IOperation).Assembly, typeof(CSharpCompilation).Assembly }) Snapshot(assembly.Location);
             foreach (var item in Inputs)
                 if (!File.ReadAllBytes(item.Key).SequenceEqual(item.Value)) throw new IOException("Input changed during export: " + item.Key);
-            var result = new { schema = "neoos-aa-native-codec-source/v1", status = "TYPED_SOURCE_INVENTORY_ONLY",
+            var result = new { schema = "neoos-sa-native-codec-source/v1", status = "TYPED_SOURCE_INVENTORY_ONLY",
                 source = new { path = sourcePath, sha256 = Hash(raw), text = source },
                 inputs = Inputs.ToDictionary(kv => kv.Key, kv => Hash(kv.Value)),
                 roslyn = new { version = typeof(CSharpCompilation).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,

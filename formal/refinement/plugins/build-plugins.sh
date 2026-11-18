@@ -20,7 +20,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
-OUT="${1:-$(mktemp -d "${TMPDIR:-/tmp}/aa-plugins.XXXXXX")}"
+OUT="${1:-$(mktemp -d "${TMPDIR:-/tmp}/sa-plugins.XXXXXX")}"
 NCCS_VERSION="3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"
 
 # contracts/compile.sh resolves this and refuses to run without it.
@@ -51,12 +51,12 @@ build hooks     MultiHook            MultiHook
 # platform owner-rotation apply when the caller is the registrar it recorded,
 # so that path deploys the registrar service contract itself, with its bytes
 # pinned like everything else in this directory.
-build registrar PlatformRegistrar   AAPlatformRegistrar
+build registrar PlatformRegistrar   SAPlatformRegistrar
 # Nor these two: the caller side of the market escrow (a forwarder with a
 # blanket permission, so the market's own cancel and settle calls have somebody
 # to come from) and the sponsor side of the sponsored paths.
 build mocks     MockVerifierCore       MockVerifierCore
-build paymaster Paymaster              AAPaymaster
+build paymaster Paymaster              SAPaymaster
 
 # Compare against the recorded hashes. python3 is used rather than shasum so the
 # comparison is byte-for-byte on binary files without depending on the coreutils

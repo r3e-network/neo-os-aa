@@ -9,14 +9,14 @@ import { hash160Param } from './helpers.js';
 
 const ZERO_HASH160 = '0000000000000000000000000000000000000000';
 
-// The registry keys the AA platform publishes. A key that the registry does not
+// The registry keys the SA platform publishes. A key that the registry does not
 // carry for the selected network yields no preset, rather than a raw hex field.
 // `paramsMode` is pinned to the shipped verifier ABI by the drive: the verifier
 // called with registration params must export setPublicKey(accountId, params).
 const VERIFIER_PRESET_SPECS = [
   {
     id: 'web3Auth',
-    registryKey: 'aaWeb3AuthVerifier',
+    registryKey: 'saWeb3AuthVerifier',
     module: 'Web3AuthVerifier',
     paramsMode: 'publicKey',
     labelKey: 'studioPanels.createPresetWeb3AuthLabel',
@@ -27,7 +27,7 @@ const VERIFIER_PRESET_SPECS = [
   },
   {
     id: 'sessionKey',
-    registryKey: 'aaSessionKeyVerifier',
+    registryKey: 'saSessionKeyVerifier',
     module: 'SessionKeyVerifier',
     paramsMode: 'none',
     labelKey: 'studioPanels.createPresetSessionKeyLabel',
@@ -38,7 +38,7 @@ const VERIFIER_PRESET_SPECS = [
   },
   {
     id: 'socialRecovery',
-    registryKey: 'aaSocialRecoveryVerifier',
+    registryKey: 'saSocialRecoveryVerifier',
     module: 'SocialRecoveryVerifier',
     paramsMode: 'none',
     labelKey: 'studioPanels.createPresetSocialRecoveryLabel',

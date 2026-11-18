@@ -12,7 +12,7 @@ import verify
 class SmtAcceptanceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.source = (Path(__file__).parent / "smt/aa_core.smt2").read_text()
+        cls.source = (Path(__file__).parent / "smt/sa_core.smt2").read_text()
 
     def solve(self, source):
         return subprocess.run(

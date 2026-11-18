@@ -27,7 +27,7 @@ public class CallbackResultBoundaryRuntimeTests
     public void InteropIteratorTargetResultFailsClosedBeforeVerifierPostExecute()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 wallet = fixture.Deploy("SmartAccount");
         UInt160 verifier = fixture.Deploy("MockVerifierCore");
         UInt160 target = DeployIteratorTarget(fixture);
         byte[] emptyParams = Array.Empty<byte>();

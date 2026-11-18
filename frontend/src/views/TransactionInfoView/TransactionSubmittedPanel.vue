@@ -5,10 +5,10 @@
     class="mx-auto mb-5 animate-fade-in"
     :title="t('sharedDraft.transactionSubmitted', 'Transaction Submitted')"
   />
-  <h1 class="text-2xl font-bold text-aa-text mb-2 text-center">
+  <h1 class="text-2xl font-bold text-sa-text mb-2 text-center">
     {{ t("sharedDraft.transactionSubmitted", "Transaction Submitted") }}
   </h1>
-  <p class="text-sm text-aa-muted mb-8 max-w-lg mx-auto text-center">
+  <p class="text-sm text-sa-muted mb-8 max-w-lg mx-auto text-center">
     {{
       t(
         "sharedDraft.transactionSubmittedDesc",
@@ -18,13 +18,13 @@
   </p>
   <div class="glass-panel p-5 mb-8 inline-block w-full max-w-full">
     <div class="flex items-center justify-between mb-2">
-      <p class="text-xs font-semibold text-aa-muted uppercase">
+      <p class="text-xs font-semibold text-sa-muted uppercase">
         {{ t("sharedDraft.transactionHash", "Transaction Hash") }}
       </p>
       <button
         @click="$emit('copy')"
         :aria-label="t('operations.copyTxHash', 'Copy transaction hash')"
-        class="text-xs font-medium text-aa-text hover:text-aa-orange bg-aa-dark border border-aa-border px-3 py-2 sm:py-1 rounded transition-colors duration-200"
+        class="text-xs font-medium text-sa-text hover:text-sa-orange bg-sa-dark border border-sa-border px-3 py-2 sm:py-1 rounded transition-colors duration-200"
       >
         {{
           copiedKey === "txid"
@@ -34,7 +34,7 @@
       </button>
     </div>
     <code
-      class="block text-sm font-mono text-aa-text break-all bg-aa-dark border border-aa-border p-3 rounded-md select-all"
+      class="block text-sm font-mono text-sa-text break-all bg-sa-dark border border-sa-border p-3 rounded-md select-all"
       >{{ txid }}</code
     >
   </div>

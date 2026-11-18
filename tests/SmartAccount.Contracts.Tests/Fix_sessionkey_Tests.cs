@@ -160,7 +160,7 @@ public class Fix_SessionKey_Tests
         UInt160 verifier = h.DeployVerifier();
 
         // Audit fix M-1: the backup-owner direct-call bypass is removed. setSessionKey /
-        // clearSessionKey only accept the bound AA core as their caller (the 24h
+        // clearSessionKey only accept the bound SA core as their caller (the 24h
         // pending-call timelock path), so even the backup owner's own witness is
         // rejected on a direct invocation.
         TestException configureRejected = Assert.ThrowsExactly<TestException>(

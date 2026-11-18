@@ -45,7 +45,7 @@ class ExportTests(unittest.TestCase):
 
     def test_actual_candidate_complete_inventory(self):
         report = self.actual_inventory()
-        self.assertEqual(report['schema'], 'neoos-aa-refinement-inventory/v1')
+        self.assertEqual(report['schema'], 'neoos-sa-refinement-inventory/v1')
         self.assertEqual(report['status'], 'INVENTORY_ONLY')
         self.assertEqual(report['nef']['sha256'], hashlib.sha256(NEF.read_bytes()).hexdigest())
         self.assertEqual(report['manifest']['methods'], json.loads(MANIFEST.read_text())['abi']['methods'])
@@ -301,7 +301,7 @@ Console.WriteLine("COLLECTION_IDENTITY_CONTROLS_PASS");
             deadline = time.monotonic() + 30
             changed = False
             while time.monotonic() < deadline and process.poll() is None:
-                for scratch in Path(tempfile.gettempdir()).glob('aa-refinement-export-*/contracts/SmartAccount.Paymaster.cs'):
+                for scratch in Path(tempfile.gettempdir()).glob('sa-refinement-export-*/contracts/SmartAccount.Paymaster.cs'):
                     try:
                         if marker in scratch.read_text():
                             original.write_text(original.read_text() + '// changed after snapshot\n')

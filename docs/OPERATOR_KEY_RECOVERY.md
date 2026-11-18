@@ -48,15 +48,23 @@ Export returns a JSON string for a user-initiated download. Import returns only
 success; secret material never appears in error strings, telemetry or HTTP bodies.
 Only public keys and signed canonical mutations are sent to `/api/draft-operator`.
 
-The backup envelope has format `neo-aa-operator-backup`, version `1`, `shareSlug`,
+The backup envelope has format `neo-sa-operator-backup`, version `1`, `shareSlug`,
 PBKDF2-SHA256 parameters (600,000 iterations, 16-byte random salt), and AES-GCM
 parameters (256-bit key, 12-byte random IV, 128-bit tag). The format, version and
-draft identity are authenticated as additional data. The decrypted payload holds
+draft identity are authenticated as additional data. Pre-switch
+`neo-aa-operator-backup` envelopes remain importable (they decrypt with their own
+legacy additional data; every export re-seals under the new format). The decrypted
+payload holds
 the draft identity and P-256 public/private JWK pair. File size is limited to 16 KiB
 and cryptographic parameters are fixed, preventing arbitrary KDF work on import.
 
 Browser records have version `2`, draft identity, public JWK, encrypted private
-JWK, IV and a non-extractable AES-GCM wrapping CryptoKey. IndexedDB transactions
+JWK, IV and a non-extractable AES-GCM wrapping CryptoKey, stored in the
+`sa_operator_keys` IndexedDB database whose name doubles as the record AES-GCM
+additional-data tag. A one-time fail-closed migration re-seals readable
+pre-switch `aa_operator_keys` records under the new database/AAD and deletes a
+legacy row only after its re-sealed record survives a new-AAD readback; unreadable
+legacy rows stay untouched. IndexedDB transactions
 atomically reuse the first generated record when same-origin tabs race to create
 a key. A per-draft lock serializes local claim/mutate and import operations when
 the Web Locks API is available; server counter checks remain authoritative.

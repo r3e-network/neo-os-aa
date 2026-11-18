@@ -14,12 +14,16 @@
 
   <ItemGroup>
     <Compile Include="SmartAccount.cs" />
+    <Compile Include="SmartAccount.ModuleProtocol.cs" />
     <Compile Include="SmartAccount.Models.cs" />
+    <Compile Include="SmartAccount.Modules.cs" />
+    <Compile Include="SmartAccount.Intents.cs" />
+    <Compile Include="SmartAccount.Nonce.cs" />
+    <Compile Include="SmartAccount.Message.cs" />
     <Compile Include="SmartAccount.Internal.cs" />
     <Compile Include="SmartAccount.Events.cs" />
     <Compile Include="SmartAccount.Accounts.cs" />
-    <Compile Include="SmartAccount.HookChildren.cs" />
-    <Compile Include="SmartAccount.VerifierChildren.cs" />
+    <Compile Include="SmartAccount.Migration.cs" />
     <Compile Include="SmartAccount.PlatformRegistrar.cs" />
     <Compile Include="SmartAccount.Proxy.cs" />
     <Compile Include="SmartAccount.State.cs" />

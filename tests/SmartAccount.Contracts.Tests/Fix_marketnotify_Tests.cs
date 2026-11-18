@@ -51,7 +51,7 @@ public class Fix_MarketNotify_Tests
 
         public Harness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
+            Wallet = Fx.Deploy("SmartAccount");
             SilentMarket = Fx.Deploy("MockVerifierCore");
             Target = Fx.Deploy("MockTransferTarget");
             // Phase 1b: the core admin (the deploying validators account) registers the

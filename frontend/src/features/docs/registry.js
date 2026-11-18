@@ -18,8 +18,8 @@ const DOC_DEFINITIONS = {
   architecture: {
     title: { en: 'Core Architecture', 'zh-CN': '核心架构' },
     loaders: {
-      en: () => import('@/assets/docs/AA_V3_ARCHITECTURE.en.md?raw'),
-      'zh-CN': () => import('@/assets/docs/AA_V3_ARCHITECTURE.zh-CN.md?raw'),
+      en: () => import('@/assets/docs/architecture.md?raw'),
+      'zh-CN': () => import('@/assets/docs/architecture.zh.md?raw'),
     },
   },
   workflow: {
@@ -67,23 +67,9 @@ const DOC_DEFINITIONS = {
     },
   },
   addressMarket: {
-    title: { en: 'AA Address Market', 'zh-CN': 'AA 地址市场' },
+    title: { en: 'SA Address Market', 'zh-CN': 'SA 地址市场' },
     loaders: {
       en: () => import('@/assets/docs/address-market.md?raw'),
-    },
-  },
-  paymasterValidation: {
-    title: { en: 'Paymaster Readiness', 'zh-CN': 'Paymaster 就绪状态' },
-    loaders: {
-      en: () => import('@/assets/docs/PAYMASTER_RELAY_VALIDATION.md?raw'),
-      'zh-CN': () => import('@/assets/docs/paymaster-validation.zh.md?raw'),
-    },
-  },
-  securityAudit: {
-    title: { en: 'Security Audit', 'zh-CN': '安全审计' },
-    loaders: {
-      en: () => import('@/assets/docs/SECURITY_AUDIT.md?raw'),
-      'zh-CN': () => import('@/assets/docs/security-audit.zh.md?raw'),
     },
   },
   morpheusActions: {

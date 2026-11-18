@@ -19,7 +19,7 @@ namespace Neo.SmartContract.Examples
         public class ActionAuthorization
         {
             public BigInteger ProtocolVersion = 4;
-            public UInt160 AAContract = UInt160.Zero;
+            public UInt160 SAContract = UInt160.Zero;
             public UInt160 Verifier = UInt160.Zero;
             public UInt160 Owner = UInt160.Zero;
             public string Network = string.Empty;
@@ -72,7 +72,7 @@ namespace Neo.SmartContract.Examples
             ValidateAccountId(accountId, "accountId");
             return new ActionAuthorization
             {
-                AAContract = GetAAContract(accountId),
+                SAContract = GetSAContract(accountId),
                 Verifier = Runtime.ExecutingScriptHash,
                 Owner = GetOwner(accountId),
                 Network = GetNetwork(accountId),

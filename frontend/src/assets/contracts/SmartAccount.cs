@@ -6,7 +6,7 @@ using Neo.SmartContract.Framework.Attributes;
 namespace SmartAccount
 {
     /// <summary>
-    /// Canonical Neo N3 AA core for the V3 runtime.
+    /// Canonical Neo N3 SA core for the V3 runtime.
     /// </summary>
     /// <remarks>
     /// This contract owns account state, nonce management, verifier and hook routing,
@@ -16,7 +16,7 @@ namespace SmartAccount
     /// 3. submit one or more <c>UserOperation</c> payloads through <c>ExecuteUserOp</c>.
     /// Security-sensitive configuration changes are always gated by the backup owner witness.
     /// </remarks>
-    [DisplayName("SmartAccountV3")]
+    [DisplayName("SmartAccount")]
     // Outbound-permission audit (converged with the Phase 1b service extraction):
     // the wildcard pair is required for exactly ONE axis — ExecuteUserOp
     // dispatches Contract.Call(op.TargetContract, op.Method, ...) to arbitrary
@@ -30,15 +30,15 @@ namespace SmartAccount
     //   * module-call allowlists   : callVerifierChild / callHookChild execute a
     //                                user-allowlisted (child, method) pair
     //   * paymaster settlement     : authorizedCore (read) + settleReimbursement
-    //                                on the authorized AAPaymaster
-    //   * market escape path       : abandonListing on the bound AAAddressMarket
+    //                                on the authorized SAPaymaster
+    //   * market escape path       : abandonListing on the bound SAAddressMarket
     //   * governed self-upgrade    : ContractManagement.Update; user-op targets
     //                                are explicitly barred from it
-    // The extracted service contracts (AAPaymaster, AAAddressMarket,
-    // AAPlatformRegistrar) and all plugins (verifiers, hooks) use
+    // The extracted service contracts (SAPaymaster, SAAddressMarket,
+    // SAPlatformRegistrar) and all plugins (verifiers, hooks) use
     // least-privilege manifests; only the core needs the wildcard.
     [ContractPermission("*", "*")]
-    [ManifestExtra("Description", "ERC-4337 Aligned Minimalist AA Engine for Neo N3")]
+    [ManifestExtra("Description", "ERC-4337 Aligned Minimalist SA Engine for Neo N3")]
     public partial class SmartAccount : SmartContract
     {
         // =====================================================================================

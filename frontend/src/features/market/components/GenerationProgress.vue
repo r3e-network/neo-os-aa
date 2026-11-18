@@ -1,8 +1,8 @@
 <template>
-  <div class="rounded-lg border border-aa-border bg-aa-dark/50 p-4">
+  <div class="rounded-lg border border-sa-border bg-sa-dark/50 p-4">
     <template v-if="running || (!found && attempts > 0)">
       <div class="flex items-center justify-between mb-3">
-        <p class="text-xs font-semibold uppercase text-aa-info-light">
+        <p class="text-xs font-semibold uppercase text-sa-info-light">
           {{ t("market.vanityGenerating", "Generating...") }}
         </p>
         <button
@@ -17,26 +17,26 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-3">
         <div>
-        <p class="text-[10px] uppercase text-aa-text/75">
+        <p class="text-[10px] uppercase text-sa-text/75">
             {{ t("market.vanityAttempts", "Attempts") }}
           </p>
-          <p class="mt-0.5 font-mono text-sm text-aa-text">
+          <p class="mt-0.5 font-mono text-sm text-sa-text">
             {{ formattedAttempts }}
           </p>
         </div>
         <div>
-        <p class="text-[10px] uppercase text-aa-text/75">
+        <p class="text-[10px] uppercase text-sa-text/75">
             {{ t("market.vanityElapsed", "Elapsed") }}
           </p>
-          <p class="mt-0.5 font-mono text-sm text-aa-text">
+          <p class="mt-0.5 font-mono text-sm text-sa-text">
             {{ formattedElapsed }}
           </p>
         </div>
         <div>
-        <p class="text-[10px] uppercase text-aa-text/75">
+        <p class="text-[10px] uppercase text-sa-text/75">
             {{ t("market.vanityHashrate", "Hashrate") }}
           </p>
-          <p class="mt-0.5 font-mono text-sm text-aa-text">
+          <p class="mt-0.5 font-mono text-sm text-sa-text">
             {{ hashrate }}{{ t("market.perSecond", "/s") }}
           </p>
         </div>
@@ -45,33 +45,33 @@
       <div
         role="status"
         aria-live="polite"
-        class="h-1.5 rounded-full bg-aa-dark/50 overflow-hidden"
+        class="h-1.5 rounded-full bg-sa-dark/50 overflow-hidden"
       >
         <span class="sr-only">{{
           t("market.generationRunning", "Generation in progress...")
         }}</span>
         <div
-          class="h-full w-full rounded-full bg-aa-info/60 animate-pulse"
+          class="h-full w-full rounded-full bg-sa-info/60 animate-pulse"
         ></div>
       </div>
     </template>
 
     <template v-else-if="found">
       <div class="text-center py-2">
-        <p class="text-lg font-bold text-aa-success font-outfit">
+        <p class="text-lg font-bold text-sa-success font-outfit">
           {{ t("market.vanityFound", "Found!") }}
         </p>
-        <p class="mt-2 break-all font-mono text-sm text-aa-text">
+        <p class="mt-2 break-all font-mono text-sm text-sa-text">
           {{ address }}
         </p>
-        <p class="mt-1 text-xs text-aa-muted">
+        <p class="mt-1 text-xs text-sa-muted">
           {{ formattedAttempts }} / {{ formattedElapsed }}
         </p>
       </div>
     </template>
 
     <template v-else>
-      <p class="text-sm text-aa-text/80 text-center py-2">
+      <p class="text-sm text-sa-text/80 text-center py-2">
         {{
           t(
             "market.vanityReady",

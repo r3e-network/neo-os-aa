@@ -25,7 +25,7 @@ public class PendingConfigUpdateReadRuntimeTests
     private static (RuntimeFixture Fx, UInt160 Core, UInt160 Account, UInt160 Verifier, UInt160 Hook) CreateAccount()
     {
         RuntimeFixture fx = new();
-        UInt160 core = fx.Deploy("SmartAccountV3");
+        UInt160 core = fx.Deploy("SmartAccount");
         UInt160 verifier = fx.Deploy("verifiers/NeoNativeVerifier", core.ToArray());
         UInt160 hook = fx.Deploy("hooks/WhitelistHook", core.ToArray());
         UInt160 account = fx.CallUInt160(core, "computeRegistrationAccountId", verifier,
@@ -62,7 +62,7 @@ public class PendingConfigUpdateReadRuntimeTests
     {
         string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
         ContractManifest manifest = ContractManifest.Parse(File.ReadAllText(
-            Path.Combine(root, "contracts/bin/v3/SmartAccountV3.manifest.json")));
+            Path.Combine(root, "contracts/bin/v3/SmartAccount.manifest.json")));
         foreach (string method in Getters)
         {
             ContractMethodDescriptor? descriptor = manifest.Abi.GetMethod(method, 1);

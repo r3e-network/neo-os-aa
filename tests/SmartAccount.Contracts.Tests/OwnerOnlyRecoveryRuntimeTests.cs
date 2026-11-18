@@ -30,7 +30,7 @@ public class OwnerOnlyRecoveryRuntimeTests
 
         public Harness(bool composite = false)
         {
-            Core = Fx.Deploy("SmartAccountV3");
+            Core = Fx.Deploy("SmartAccount");
             Faulting = Fx.Deploy("MockVerifierCore");
             Hook = Fx.Deploy("hooks/WhitelistHook", Core.ToArray());
             Target = Fx.Deploy("MockTransferTarget");
@@ -202,8 +202,8 @@ public class OwnerOnlyRecoveryRuntimeTests
     {
         Harness h = new();
         h.Mature();
-        UInt160 market = h.Fx.Deploy("AAAddressMarket");
-        h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        UInt160 market = h.Fx.Deploy("SAAddressMarket");
+        h.Fx.CallVoid(market, "setAllowedSA", h.Core, true);
         // Phase 1b: the core admin (the deploying validators account) registers the
         // market as an approved escrow service.
         h.Fx.CallVoid(h.Core, "setMarketService", market, true);
@@ -265,8 +265,8 @@ public class OwnerOnlyRecoveryRuntimeTests
         Harness h = new();
         h.Mature();
         h.Recover();
-        UInt160 market = h.Fx.Deploy("AAAddressMarket");
-        h.Fx.CallVoid(market, "setAllowedAA", h.Core, true);
+        UInt160 market = h.Fx.Deploy("SAAddressMarket");
+        h.Fx.CallVoid(market, "setAllowedSA", h.Core, true);
         // Phase 1b: the core admin (the deploying validators account) registers the
         // market as an approved escrow service.
         h.Fx.CallVoid(h.Core, "setMarketService", market, true);
@@ -304,7 +304,7 @@ public class OwnerOnlyRecoveryRuntimeTests
     public void OwnerOnlyRecovery_PlatformRotationSurvivesEscapeAndInheritsRestriction()
     {
         Harness h = new();
-        UInt160 registrar = h.Fx.Deploy("AAPlatformRegistrar", h.Core.ToArray());
+        UInt160 registrar = h.Fx.Deploy("SAPlatformRegistrar", h.Core.ToArray());
         byte[] binding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:owner-only-recovery");
         h.Fx.CallVoid(h.Core, "proposePlatformRegistrar", registrar);
         h.Fx.AdvanceTime(TimeSpan.FromDays(7));

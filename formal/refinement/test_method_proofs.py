@@ -44,7 +44,7 @@ def build_current_inventory():
     region = [item for item in instructions if method.START <= item["offset"] < method.END]
     manifest = json.loads(manifest_raw)
     return {
-        "schema": "neoos-aa-refinement-inventory/v1",
+        "schema": "neoos-sa-refinement-inventory/v1",
         "status": "INVENTORY_ONLY",
         "inputs": {str(nef_path): hashlib.sha256(nef_raw).hexdigest(),
                    str(manifest_path): hashlib.sha256(manifest_raw).hexdigest()},
@@ -65,7 +65,7 @@ def build_current_inventory():
 
 
 def load_inventory():
-    configured = os.environ.get("AA_METHOD_INVENTORY")
+    configured = os.environ.get("SA_METHOD_INVENTORY")
     if not configured:
         return build_current_inventory()
     path = Path(configured)
@@ -73,7 +73,7 @@ def load_inventory():
         return json.load(stream)
 
 
-INVENTORY = Path(os.environ["AA_METHOD_INVENTORY"]) if os.environ.get("AA_METHOD_INVENTORY") else None
+INVENTORY = Path(os.environ["SA_METHOD_INVENTORY"]) if os.environ.get("SA_METHOD_INVENTORY") else None
 
 
 def materialize_nef_fixture(inventory, directory):
@@ -114,7 +114,7 @@ class MethodProofTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.inventory = load_inventory()
-        cls.fixture_directory = tempfile.TemporaryDirectory(prefix="aa-cap-nef-fixture-")
+        cls.fixture_directory = tempfile.TemporaryDirectory(prefix="sa-cap-nef-fixture-")
         cls.addClassCleanup(cls.fixture_directory.cleanup)
         nef = materialize_nef_fixture(cls.inventory, cls.fixture_directory.name)
         # Replace host-specific source/compiler inputs only in this fixture

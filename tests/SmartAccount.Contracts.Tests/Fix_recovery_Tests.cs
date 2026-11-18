@@ -22,7 +22,7 @@ namespace SmartAccount.Contracts.Tests;
 ///      different account.
 ///   3. Recovery timelock bounds — <c>SetupRecovery</c> / <c>UpdateRecoveryConfig</c> enforce
 ///      the estate-standard 7–90 day window (rejecting both shorter and longer timelocks),
-///      matching the AA core escape-hatch bounds. Previously 1h minimum / no maximum
+///      matching the SA core escape-hatch bounds. Previously 1h minimum / no maximum
 ///      (audit finding: recovery timelock bounds).
 /// Executed against the compiled contract under <c>contracts/bin/v3</c> through a real Neo VM.
 /// </summary>
@@ -32,7 +32,7 @@ public partial class FixRecoveryTests
     private const string Network = "neo3-testnet";
 
     // Estate-standard recovery timelock window (Runtime.Time milliseconds): 7–90 days,
-    // mirroring the AA core escape hatch's 604800–7776000 seconds.
+    // mirroring the SA core escape hatch's 604800–7776000 seconds.
     private const ulong MinRecoveryTimelockMs = 604_800_000;
     private const ulong MaxRecoveryTimelockMs = 7_776_000_000;
 
@@ -59,17 +59,17 @@ public partial class FixRecoveryTests
 
         public RecoveryHarness()
         {
-            Core = Fx.Deploy("SmartAccountV3");
+            Core = Fx.Deploy("SmartAccount");
             Verifier = Fx.Deploy("SocialRecoveryVerifier");
-            // AA-06: setup is only accepted for accounts attested by the admin-pinned
-            // canonical AA core (deployer = validators is the contract admin).
+            // SA-06: setup is only accepted for accounts attested by the admin-pinned
+            // canonical SA core (deployer = validators is the contract admin).
             Fx.CallVoid(Verifier, "setAuthorizedCore", Core);
         }
 
         /// <summary>
-        /// Registers an account on the real AA core with <paramref name="owner"/> as its backup
+        /// Registers an account on the real SA core with <paramref name="owner"/> as its backup
         /// owner and returns the core-derived 20-byte account id. <c>getBackupOwner</c> on the
-        /// core then attests the owner — the AA-06 anti-squat precondition for setup.
+        /// core then attests the owner — the SA-06 anti-squat precondition for setup.
         /// </summary>
         public byte[] RegisterAccount(UInt160 owner)
         {
@@ -128,7 +128,7 @@ public partial class FixRecoveryTests
             material.AddRange(Encoding.UTF8.GetBytes(Fx.CallInteger(Verifier, "getSessionNonce", accountId).ToString()));
             material.Add(0x1f);
             material.AddRange(Encoding.UTF8.GetBytes(expiresAt.ToString()));
-            return "aa_proxy:" + Hex(material);
+            return "sa_proxy:" + Hex(material);
         }
 
         public string BuildRecoveryActionId(byte[] accountId, UInt160 newOwner, string recoveryNonce)
@@ -143,7 +143,7 @@ public partial class FixRecoveryTests
             material.AddRange(newOwner.ToArray());
             material.Add(0x1f);
             material.AddRange(Encoding.UTF8.GetBytes(recoveryNonce));
-            return "aa_recovery:" + Hex(material);
+            return "sa_recovery:" + Hex(material);
         }
 
         public byte[] ComputeActionDigest(byte[] accountId, string text, UInt160 executor,
@@ -151,7 +151,7 @@ public partial class FixRecoveryTests
             string? signingNetwork = null, UInt160? signingVerifier = null)
         {
             List<byte> bytes = new();
-            bytes.AddRange(Encoding.ASCII.GetBytes("neodid-aa-action-v3"));
+            bytes.AddRange(Encoding.ASCII.GetBytes("neodid-sa-action-v3"));
             bytes.AddRange(Segment(signingNetwork ?? Network)); bytes.AddRange(Core.ToArray()); bytes.AddRange(accountId);
             bytes.AddRange((signingVerifier ?? Verifier).ToArray()); bytes.AddRange(Segment(text)); bytes.AddRange(executor.ToArray());
             bytes.AddRange(Segment(actionId)); bytes.AddRange(Segment(expiry.ToString()));
@@ -402,8 +402,8 @@ public partial class FixRecoveryTests
         string recoveryExpiresAt = actionExpiresAt.ToString();
         byte[] actionNullifier = new byte[32];
         byte[] factor = Factor();
-        const string foreignRecoveryAction = "aa_recovery:foreign";
-        const string foreignSessionAction = "aa_proxy:foreign";
+        const string foreignRecoveryAction = "sa_recovery:foreign";
+        const string foreignSessionAction = "sa_proxy:foreign";
         byte[] recoverySignature = verifierKey.Sign(h.ComputeRecoveryDigest(
             accountId, "action-binding", Attacker, "0", recoveryExpiresAt,
             foreignRecoveryAction, factor, actionNullifier));
@@ -583,7 +583,7 @@ public partial class FixRecoveryTests
         using P256SessionKey verifierKey = new();
         byte[] keyBytes = verifierKey.CompressedPublicKey;
 
-        // AA-06: setup now requires a core-registered account; register one up front. The
+        // SA-06: setup now requires a core-registered account; register one up front. The
         // timelock assert runs before the anti-squat checks, so the rejections below fault
         // on the timelock alone.
         byte[] accountId = h.RegisterAccount(OwnerA);

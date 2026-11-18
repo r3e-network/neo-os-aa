@@ -46,12 +46,12 @@ public class Fix_MarketEscrow_OwnerEscapeTests
 
         public Harness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
-            Market = Fx.Deploy("AAAddressMarket");
+            Wallet = Fx.Deploy("SmartAccount");
+            Market = Fx.Deploy("SAAddressMarket");
             Target = Fx.Deploy("MockTransferTarget");
-            // The market admin (the deploying validators account) allowlists the genuine AA core
+            // The market admin (the deploying validators account) allowlists the genuine SA core
             // so escrow listings backed by it are accepted. Signers are the validators by default.
-            Fx.CallVoid(Market, "setAllowedAA", Wallet, true);
+            Fx.CallVoid(Market, "setAllowedSA", Wallet, true);
             // Phase 1b: the core admin registers the market as an approved escrow service.
             Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
@@ -72,7 +72,7 @@ public class Fix_MarketEscrow_OwnerEscapeTests
         public BigInteger CreateListing(UInt160 accountId)
         {
             Fx.SetSigners(Seller);
-            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "AA address", "");
+            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "SA address", "");
             return Fx.CallInteger(Market, "getListingCount");
         }
 

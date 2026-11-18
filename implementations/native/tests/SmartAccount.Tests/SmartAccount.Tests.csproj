@@ -18,7 +18,7 @@
   </PropertyGroup>
 
   <!-- Like the core project, the test project compiles the pinned core's full
-       test tree and swaps in the AA-owned copies of the four SmartAccount UT
+       test tree and swaps in the SA-owned copies of the four SmartAccount UT
        files (plus their three *-v2.json vector fixtures) that live in this
        directory, so the SmartAccount test surface lives here too. NeoTestsRoot /
        NeoSourceRoot are regular MSBuild properties and can be overridden by
@@ -33,7 +33,7 @@
   <ItemGroup>
     <None Include="$(NeoTestsRoot)/SmartContract/Manifest/TestFile/**/*" Link="SmartContract/Manifest/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <!-- The core's copies of the three SmartAccount v2 vector files are
-         replaced by the AA-owned ones below. -->
+         replaced by the SA-owned ones below. -->
     <None Include="$(NeoTestsRoot)/SmartContract/Native/TestFile/**/*"
           Exclude="$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-envelope-v2.json;$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-authorization-v2.json;$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-state-v2.json"
           Link="SmartContract/Native/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

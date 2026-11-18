@@ -1,5 +1,5 @@
 /**
- * Shared meta-transaction core for the Neo N3 Abstract Account stack.
+ * Shared meta-transaction core for the Neo N3 Smart Account stack.
  *
  * Single source of truth for the EIP-712 typed-data layouts and the Neo RPC
  * stack-item decode helpers that were previously duplicated between the CJS
@@ -216,7 +216,7 @@ const CORE_ERRORS = {
   },
   CORE_CONTRACT_REQUIRED: {
     code: 'METATX_CORE_CONTRACT_REQUIRED',
-    message: 'AA core contract is required for V3 payload binding',
+    message: 'SA core contract is required for V3 payload binding',
   },
   INTEGER_DOMAIN_INVALID: {
     code: 'METATX_INTEGER_DOMAIN_INVALID',
@@ -330,7 +330,10 @@ export function createMetaTxBuilders({ keccak256, createError = defaultCreateErr
     const sanitizedArgsHash = requireSignedFields({ nonce, deadline, argsHashHex });
     return {
       domain: {
-        name: 'Neo N3 Abstract Account',
+        // AA→SA wave-2 protocol switch: the EIP-712 domain name changed from
+        // "Neo N3 Abstract Account"; signatures over the old domain are invalid
+        // after this switch (no dual-domain verification).
+        name: 'Neo Smart Account',
         version: '1',
         chainId,
         verifyingContract: `0x${sanitizeHex(verifyingContract)}`,
@@ -364,7 +367,7 @@ export function createMetaTxBuilders({ keccak256, createError = defaultCreateErr
    * @param {string|number} options.chainId - Chain ID for the EIP-712 domain
    * @param {string} options.verifyingContract - Verifier contract hash (40 hex chars)
  * @param {string} options.accountIdHash - Account ID hash (40 hex chars)
- * @param {string} options.coreContractHash - Authorized AA core hash (40 hex chars)
+ * @param {string} options.coreContractHash - Authorized SA core hash (40 hex chars)
    * @param {string} options.targetContract - Target contract hash (40 hex chars)
    * @param {string} options.method - Method name
    * @param {string} options.argsHashHex - Args hash (32 bytes, 64 hex chars)
@@ -388,7 +391,10 @@ export function createMetaTxBuilders({ keccak256, createError = defaultCreateErr
     if (!coreContractHash) throw createError('CORE_CONTRACT_REQUIRED', {});
     return {
       domain: {
-        name: 'Neo N3 Abstract Account',
+        // AA→SA wave-2 protocol switch: the EIP-712 domain name changed from
+        // "Neo N3 Abstract Account"; signatures over the old domain are invalid
+        // after this switch (no dual-domain verification).
+        name: 'Neo Smart Account',
         version: '1',
         chainId,
         verifyingContract: `0x${sanitizeHex(verifyingContract)}`,

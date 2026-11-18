@@ -22,7 +22,7 @@ test('built routes defer identity crypto and the bundled provider still loads', 
   const identityService = files.find((file) => /^didService-.*\.js$/.test(file));
   assert.ok(identityService, 'the public identity service must remain bundled');
   const routes = [
-    ['/', /Neo AA Operations Console/i],
+    ['/', /Neo SA Operations Console/i],
     ['/identity', /Web3Auth \/ NeoDID Workspace/i],
     ['/docs', /Documentation/i],
   ];
@@ -45,7 +45,7 @@ test('built routes defer identity crypto and the bundled provider still loads', 
           if (request.resourceType() === 'script') scripts.add(new URL(request.url()).pathname.split('/').at(-1));
         });
         page.on('pageerror', (error) => errors.push(error.message));
-        await page.addInitScript(() => localStorage.setItem('aa_locale', 'en'));
+        await page.addInitScript(() => localStorage.setItem('sa_locale', 'en'));
         await page.goto(origin + route, { waitUntil: 'networkidle' });
         if (route === '/docs') await page.getByLabel(/Search documentation/i).waitFor();
         else await page.getByRole('heading', { name: heading }).first().waitFor();

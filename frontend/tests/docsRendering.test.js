@@ -63,7 +63,7 @@ test("supplemental root docs are preserved and indexable", () => {
 test("docs registry uses the repo README as the overview source of truth", () => {
   const registrySource = read("src/features/docs/registry.js");
   assert.match(registrySource, /@\/assets\/docs\/repo-readme\.md\?raw/);
-  assert.match(read("src/assets/docs/repo-readme.md"), /Abstract Account|Neo N3/i);
+  assert.match(read("src/assets/docs/repo-readme.md"), /Smart Account|Neo N3/i);
 });
 
 test("workflow doc explains the V3 execution path after proxy hardening", () => {
@@ -72,12 +72,12 @@ test("workflow doc explains the V3 execution path after proxy hardening", () => 
   assert.match(workflowDoc, /direct proxy-signed external/i);
 });
 
-test("sdk doc references the canonical testnet AA core from the generated registry", () => {
+test("sdk doc references the canonical testnet SA core from the generated registry", () => {
   const sdkDoc = read("src/assets/docs/sdk-usage.md");
   // The oracle is the generated Morpheus registry, not a literal copied into this test: the
   // literal this assertion used to pin was the removed V1/V2 core (DS-CU-163 section 4.1 P5).
-  const testnetCore = MORPHEUS_PUBLIC_REGISTRY.testnet.contracts.aaCore;
-  assert.ok(testnetCore, "the generated registry publishes no testnet AA core");
+  const testnetCore = MORPHEUS_PUBLIC_REGISTRY.testnet.contracts.saCore;
+  assert.ok(testnetCore, "the generated registry publishes no testnet SA core");
   assert.match(sdkDoc, new RegExp(testnetCore, "i"));
   assert.doesNotMatch(sdkDoc, /0x5be915aea3ce85e4752d522632f0a9520e377aaf/i);
 });
@@ -106,7 +106,6 @@ test("repo docs describe a hardened policy-gated execution surface", () => {
 
 test("production docs describe validation preview, module lifecycle, and relay trust boundaries", () => {
   const readme = readRepo("README.md");
-  const securityAudit = readRepo("docs/SECURITY_AUDIT.md");
   const frontendArchitecture = read("src/assets/docs/architecture.md");
 
   assert.match(readme, /validation preview|previewUserOpValidation/i);
@@ -123,32 +122,6 @@ test("production docs describe validation preview, module lifecycle, and relay t
   // the removed wrapper a supported path (DS-CU-163 section 4.5 T2).
   assert.doesNotMatch(frontendArchitecture, /compatibility-only/i);
   assert.match(frontendArchitecture, /executeUserOp/);
-
-  assert.match(securityAudit, /external third-party review/i);
-  assert.match(securityAudit, /property-based|adversarial/i);
-});
-
-test("historical architecture and audit docs stay aligned with the professionalized V3 runtime", () => {
-  const v3Blueprint = readRepo("docs/AA_V3_ARCHITECTURE.en.md");
-  const securityAudit = readRepo("docs/SECURITY_AUDIT.md");
-
-  assert.doesNotMatch(
-    v3Blueprint,
-    /Ultimate Abstract Account|Ultimate Security Architecture|Ultimate Answer/i,
-  );
-  assert.doesNotMatch(
-    v3Blueprint,
-    /killer plugin|panoramic trusted interaction gateway|frictionless cross-chain/i,
-  );
-  assert.match(v3Blueprint, /historical|design note|current runtime/i);
-
-  assert.doesNotMatch(securityAudit, /contracts\/SmartAccount\.cs/);
-  // The audit may cite the current split source files, but it must not present a
-  // superseded wrapper path as supported (DS-CU-163 section 4.5 T2). AbstractAccount
-  // and UnifiedSmartWallet are the two historical contract names before the rename.
-  assert.doesNotMatch(securityAudit, /contracts\/AbstractAccount\./);
-  assert.doesNotMatch(securityAudit, /contracts\/UnifiedSmartWallet\./);
-  assert.match(securityAudit, /SmartAccountV3|current V3 runtime/i);
 });
 
 test("repo README keeps a single quickstart heading", () => {
@@ -230,12 +203,12 @@ test("operations docs cover the app workspace, anonymous drafts, both broadcast 
   assert.match(readme, /operator link/i);
   assert.match(readme, /rotate collaborator link/i);
   assert.match(readme, /read-only/i);
-  assert.match(readme, /AA_RELAY_WIF/i);
+  assert.match(readme, /SA_RELAY_WIF/i);
   assert.match(readme, /frontend\/\.env\.example/i);
   assert.match(readme, /SUPABASE_SERVICE_ROLE_KEY/i);
   assert.match(readme, /signed operator mutation/i);
   assert.match(readme, /draft-operator/i);
-  assert.match(readme, /VITE_AA_EXPLORER_BASE_URL/i);
+  assert.match(readme, /VITE_SA_EXPLORER_BASE_URL/i);
   assert.match(mixedMultisigDoc, /anonymous share/i);
   assert.match(mixedMultisigDoc, /collaborator link/i);
   assert.match(mixedMultisigDoc, /operator link/i);
@@ -483,11 +456,11 @@ test("Neon is a declared server dependency and stays out of browser module impor
   }
 });
 
-test("HomeView keeps the first screen focused on AA operation entry", () => {
+test("HomeView keeps the first screen focused on SA operation entry", () => {
   const homeViewSource = read("src/views/HomeView.vue");
 
-  assert.match(homeViewSource, /aa-home-focus/);
-  assert.match(homeViewSource, /aa-home-step-link/);
+  assert.match(homeViewSource, /sa-home-focus/);
+  assert.match(homeViewSource, /sa-home-step-link/);
   assert.match(homeViewSource, /Deployment reference/);
   assert.match(homeViewSource, /to="\/app" class="btn-primary/);
   assert.doesNotMatch(homeViewSource, /ArchitectureDiagram/);
@@ -532,6 +505,6 @@ test("SmartAccountTool does not present paymaster relay as operational before pr
   assert.match(studioToolSource, /Runtime configuration detected/);
   assert.match(studioToolSource, /Preflight required/);
   assert.match(studioToolSource, /Relay Preflight/);
-  assert.doesNotMatch(studioToolSource, /Configured for live AA operations/);
+  assert.doesNotMatch(studioToolSource, /Configured for live SA operations/);
   assert.doesNotMatch(studioToolSource, /validationConfigured["'], "Configured"/);
 });

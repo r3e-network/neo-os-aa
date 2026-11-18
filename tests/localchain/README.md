@@ -1,4 +1,4 @@
-# AA local-chain acceptance: deployed artifacts and current source
+# SA local-chain acceptance: deployed artifacts and current source
 
 From the repository root, install .NET 10 and the published Neo.Express package
 3.10.1 (`dotnet tool install -g Neo.Express --version 3.10.1`, runtime reports
@@ -7,7 +7,7 @@ From the repository root, install .NET 10 and the published Neo.Express package
 ```sh
 npm ci --prefix frontend --ignore-scripts --no-audit --no-fund
 npm ci --prefix sdk/js --ignore-scripts --no-audit --no-fund
-python3 scripts/localchain/aa_rpc_scenarios.py --variant deployed
+python3 scripts/localchain/sa_rpc_scenarios.py --variant deployed
 ```
 
 `python3 tests/localchain/run.py` is the equivalent runner; `--variant source`
@@ -33,7 +33,7 @@ simulations and nothing is broadcast for them. The additional relay broadcast
 is not included in the RPC-driver transaction count. No private hardfork is
 required.
 
-`AA-10` walks the two timelocks across their boundaries with scripted chain-time
+`SA-10` walks the two timelocks across their boundaries with scripted chain-time
 jumps (`neoxp fastfwd`, one node stop and restart per jump) on three accounts of
 its own: a verifier call and a hook call under the 24 h configuration timelock
 (`getPendingVerifierCallTime`, `getPendingHookCallTime`) and an escape under the
@@ -48,7 +48,7 @@ also read back: the pending call is still pending and the session key is not
 stored before the boundary, and the stored key, the whitelist entry and the
 finalized escape are asserted after it.
 
-`AA-09` also drives the relay route's paymaster branch against a loopback
+`SA-09` also drives the relay route's paymaster branch against a loopback
 paymaster stub (127.0.0.1, ephemeral port asserted above 20000, a throwaway
 bearer token, no live host): a positive approval that echoes the operation hash
 it was sent, an approval bound to another operation, an explicit denial, an
@@ -64,12 +64,12 @@ are zero in a pricing container, so a sponsored invocation faults there
 (`Reimbursement exceeds actual gas cost`) and the route refuses it before
 signing, leaving the nonce and the sponsor deposit untouched. A sponsored
 operation on the deployed core is therefore only expressible by direct
-submission, which `AA-08` covers. The frontend has no sponsored-invocation
+submission, which `SA-08` covers. The frontend has no sponsored-invocation
 builder either, so the probe composes that wire shape itself and the SDK's
 `createSponsoredUserOpPayload` wraps the inner argument array in an `Any`
 parameter a relay-ready JSON payload cannot carry; both are inputs for CU-162.
 
-`AA-11` drives the SDK sponsored-operation end to end. The invocation is composed by the SDK's own
+`SA-11` drives the SDK sponsored-operation end to end. The invocation is composed by the SDK's own
 payload builder (`scripts/localchain/sdk_paymaster_fixture.mjs`), not by the harness: the fixture
 checks that the payload reproduces the requested operation field by field with its argument types
 intact, that no parameter is an untyped carrier, that a batch of one operation describes that
@@ -84,11 +84,11 @@ scenario then re-binds the bound to 1 GAS, where the same payload faults on chai
 `Exceeds per-operation limit` and moves neither the deposit nor the nonce, and to 6 GAS, where it
 settles below the request again. The bound is read through the paymaster's own preflight (inside at
 5 GAS, outside one datoshi above it). The scenario's own session key is separate from the one
-`AA-08` and `AA-09` use. Two readings it records are what a relay can price from: the sponsored
+`SA-08` and `SA-09` use. Two readings it records are what a relay can price from: the sponsored
 envelope faults in a fee-less container on its settlement cap, while the inner operation prices
 cleanly there.
 
-`AA-08` funds the sponsor deposit, executes a sponsored operation at a fixed
+`SA-08` funds the sponsor deposit, executes a sponsored operation at a fixed
 2.5 GAS system fee plus 0.5 GAS network fee while requesting 5 GAS back, and
 asserts the settlement: the `Reimbursed` event names the sponsor and the relay
 and carries exactly the 3 GAS the relay paid, the sponsor's deposit is debited
@@ -120,8 +120,8 @@ both sides moved off the deadline) to show the boundary evidence is load-bearing
 ## Current-source variant
 
 ```sh
-python3 scripts/localchain/source_build.py --out /private/tmp/aa-source
-python3 tests/localchain/run.py --variant source --source-dir /private/tmp/aa-source
+python3 scripts/localchain/source_build.py --out /private/tmp/sa-source
+python3 tests/localchain/run.py --variant source --source-dir /private/tmp/sa-source
 ```
 
 The source variant compiles the current checkout with the pinned published
@@ -137,7 +137,7 @@ and reports the build profile:
 
 - `platform-syscall-present`: the core emits `System.Contract.CallWithGasLimit`
   (interop `1371299780`) once for `validateSignature` and once for `postExecute`
-  (DEC-AA-1). No published Neo core registers that interop, so both verifier
+  (DEC-SA-1). No published Neo core registers that interop, so both verifier
   paths must **fault** with `The given key '1371299780' was not present in the
   dictionary.` The suite asserts that fault and that nothing moved.
 - `platform-syscall-absent`: after the public build profile lands (CU-29) the
@@ -160,7 +160,7 @@ This readback covers the eight artifacts deployed by this suite; it does not
 claim runtime coverage of all twenty-four release modules or public deployment.
 `SRC-03` covers the proxy-witness path with no verifier: it never reaches the
 gas-bounded syscall and must keep working in both profiles, which is what makes
-the DEC-AA-1 fault specific to the verifier callbacks. Expect approximately one
+the DEC-SA-1 fault specific to the verifier callbacks. Expect approximately one
 minute, 19 successful checks, 26 executed transactions, 2 simulated faults and
 1 node refusal while the fault is present. The public profile additionally runs
 SRC-09: 19 checks, 34 executed transactions and 4 node refusals in total.
@@ -181,20 +181,20 @@ missing or duplicated scenario, outcome drift, deployed digest reuse).
 
 ## Provenance and scope
 
-Ported from the 2026-10-05 AA assessment (`rpcx.py`, `aa_rpc_scenarios.py`,
+Ported from the 2026-10-05 SA assessment (`rpcx.py`, `sa_rpc_scenarios.py`,
 `relay_probe.mjs`). The eight NEFs and manifests under `contracts/build` are
 pinned by SHA-256 in the deployed expectations; the core script was observed
 identical to MainNet in that assessment. This suite performs no public-chain
 readback and local contract addresses differ because every run generates a new
 deployer. The source variant deliberately does not re-run the deployed scenario
 list: the current source differs from the deployed artifact in more ways than
-DEC-AA-1, so it asserts the native path, the verifier callbacks and the proxy
+DEC-SA-1, so it asserts the native path, the verifier callbacks and the proxy
 witness cases that its profile decides.
 
 The current relay includes CU-06's false-transfer refusal. Five historical
-AA-09 checks now require preflight/broadcast refusal, the preserved false stack
+SA-09 checks now require preflight/broadcast refusal, the preserved false stack
 result, and unchanged nonce and balance. The deployed contract's owner-only
-false-return/nonce-consumption behavior is still tested directly in AA-03.
+false-return/nonce-consumption behavior is still tested directly in SA-03.
 Session keys, proxy witnesses, hooks, recovery and paymaster scenarios retain
 the assessor's assertions. These are regression expectations, not a claim that
 the deployed contract has self-service proxy setup or a complete WebAuthn flow.
@@ -223,14 +223,14 @@ shaped sponsored witness envelope, as well as wrong-account and wrong-scope
 variants. A source receipt stores raw transaction, witness, balance and nonce
 readback under `sourceProxyRelay`; `test_source_gate.py` mutates that evidence to
 ensure a txid or green assertion by itself cannot pass acceptance. See
-`docs/AA-PROXY-TRANSFERS.md` for the settlement authority boundary.
+`docs/SA-PROXY-TRANSFERS.md` for the settlement authority boundary.
 
 ## Callback-free recovery and shared sponsorship budget
 
 The current-source inventory additionally requires two source-only paths, using
 only the same eight compiled/deployed artifacts:
 
-- `SRC-08` registers a native-fallback account, funds AAPaymaster and creates its
+- `SRC-08` registers a native-fallback account, funds SAPaymaster and creates its
   scoped policy. It combines a single sponsored entrypoint and a sponsored batch
   entrypoint into **one signed Neo transaction**. RPC pricing executes that exact
   complete script. The first request consumes only part of the fee budget; the

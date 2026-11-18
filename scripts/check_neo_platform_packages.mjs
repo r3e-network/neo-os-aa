@@ -11,7 +11,7 @@
 //   * every project in the selected profile must have a committed lock file (packages.lock.json, or
 //     packages.ProjectName.lock.json where a directory holds several projects) whose Neo packages
 //     are the audited versions with the audited content hashes;
-//   * the tests project, which also builds the AA core, must restore in locked mode, and every
+//   * the tests project, which also builds the SA core, must restore in locked mode, and every
 //     Neo package it restored must have the audited SHA-512 (a Neo package that is not listed in
 //     the manifest is refused too);
 //   * with --compiler-only, the installed nccs must be the pinned compiler package, byte for byte.
@@ -41,7 +41,7 @@ export const PATHS = {
   coreAssets: "contracts/obj/project.assets.json",
   testsAssets: "tests/SmartAccount.Contracts.Tests/obj/project.assets.json",
   manifest: "contracts/neo-platform-packages.json",
-  doc: "docs/AA-REPRODUCIBLE-BUILD.md",
+  doc: "docs/SA-REPRODUCIBLE-BUILD.md",
 };
 
 const NEO_OWNED = /^Neo(\.|$)/i;

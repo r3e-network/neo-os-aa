@@ -19,7 +19,7 @@ node "$ROOT_DIR/scripts/check_neo_platform_packages.mjs" --compiler-only
 # file-scoped. Define PLATFORM in every disposable source copy; never mutate the
 # public sources or write private bytes to bin/v3.
 if [[ "${1:-}" == "--platform" ]]; then
-  profile_dir="$(mktemp -d "${TMPDIR:-/tmp}/aa-platform.XXXXXX")"
+  profile_dir="$(mktemp -d "${TMPDIR:-/tmp}/sa-platform.XXXXXX")"
   trap 'rm -rf "$profile_dir"' EXIT
   mkdir -p "$profile_dir/contracts"
   cp "$ROOT_DIR/Directory.Build.props" "$ROOT_DIR/nuget.config" "$profile_dir/"
@@ -72,7 +72,7 @@ popd >/dev/null
 # name, so the mocks never reach a network. INCLUDE_VALIDATION_MOCKS is accepted
 # for compatibility with older runbooks but no longer changes the output.
 # Phase 1b: PlatformRegistrarMock was removed — the registrar suites now deploy the
-# real AAPlatformRegistrar service contract built below.
+# real SAPlatformRegistrar service contract built below.
 echo "Compiling test-support mocks..."
 pushd mocks >/dev/null
 "$NCCS_BIN" ./MockVerifierCore.csproj -o ../bin/v3
@@ -85,11 +85,11 @@ popd >/dev/null
 
 echo "Compiling Market Contracts..."
 pushd market >/dev/null
-"$NCCS_BIN" ./AAAddressMarket.csproj -o ../bin/v3
+"$NCCS_BIN" ./SAAddressMarket.csproj -o ../bin/v3
 popd >/dev/null
 
 # Phase 1b: the paymaster service contract settles sponsored reimbursements and is
-# deployed by the runtime test suite from bin/v3 (AAPaymaster.nef), so it is built
+# deployed by the runtime test suite from bin/v3 (SAPaymaster.nef), so it is built
 # alongside the other service contracts instead of relying on a manual nccs run.
 echo "Compiling Paymaster Contracts..."
 pushd paymaster >/dev/null
@@ -98,7 +98,7 @@ popd >/dev/null
 
 # Phase 1b: the platform registrar service owns pending platform-account owner
 # rotations and is deployed by the runtime test suite from bin/v3
-# (AAPlatformRegistrar.nef) with the core hash as deploy data.
+# (SAPlatformRegistrar.nef) with the core hash as deploy data.
 echo "Compiling Registrar Contracts..."
 pushd registrar >/dev/null
 "$NCCS_BIN" ./PlatformRegistrar.csproj -o ../bin/v3

@@ -165,7 +165,7 @@ def project_source(inventory):
                         sort_keys=True, separators=(",", ":")).encode()
     tree = {"initializers": bound_nodes, "staticConstructor": constructor,
             "methodIds": [m["id"] for m in methods]}
-    return {"schema": "neoos-aa-initializer-source/v1", "initializers": found,
+    return {"schema": "neoos-sa-initializer-source/v1", "initializers": found,
             "staticConstructor": constructor,
             "excludedSynthesizedEventFields": [f["id"] for f in excluded],
             "sourceProjectionSha256": hashlib.sha256(serial).hexdigest(),

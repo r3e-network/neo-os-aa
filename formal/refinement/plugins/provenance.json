@@ -1,5 +1,5 @@
 {
-  "schema": "aa-plugin-provenance/v1",
+  "schema": "sa-plugin-provenance/v1",
   "note": [
     "AssertV3Verifier and AssertV3Hook read a deployed contract's manifest, so the plugin admission check is a claim about bytes rather than about a source file. These bytes are pinned by hash below, and the gate reads the hashes.",
     "That the pinned compiler turns these sources into these bytes is a recorded build step, not something any run re-derives. build-plugins.sh is that step: it refuses to run against a different compiler and exits non-zero if any artifact it produces hashes differently from what is written here. This is the same standing contracts/bin/v3 has for the main contract, and no stronger.",
@@ -108,7 +108,7 @@
       "permissions": 4
     },
     {
-      "name": "AAPlatformRegistrar",
+      "name": "SAPlatformRegistrar",
       "project": "contracts/registrar/PlatformRegistrar.csproj",
       "projectSha256": "1a904f50b17a93d7c1525b4849025804ce2bf14f725e7be10551aade688c2ac6",
       "sources": [
@@ -123,11 +123,11 @@
       ],
       "artifacts": {
         "nef": {
-          "file": "AAPlatformRegistrar.nef",
+          "file": "SAPlatformRegistrar.nef",
           "sha256": "598a769f28539398c89f38c280f4d031d6308af8653b4ec9c8771ecf83fd2c1c"
         },
         "manifest": {
-          "file": "AAPlatformRegistrar.manifest.json",
+          "file": "SAPlatformRegistrar.manifest.json",
           "sha256": "58d19b545c4484eaa0c9ecebcd78f543556eddb79a6e3e297640ac0f4468df78"
         }
       },
@@ -162,7 +162,7 @@
       "why": "Not a plugin either: it is the caller this scenario uses as the market. It exposes forward(target, method, args) and is permitted to call anything, so a listing can be opened, cancelled and settled with the market itself as the calling script - which is the only shape those entries accept."
     },
     {
-      "name": "AAPaymaster",
+      "name": "SAPaymaster",
       "project": "contracts/paymaster/Paymaster.csproj",
       "projectSha256": "db4eb4f1980fcaf349d6ae42e081773bcb7d28187e3188275a263b2aeae7a89a",
       "sources": [
@@ -177,11 +177,11 @@
       ],
       "artifacts": {
         "nef": {
-          "file": "AAPaymaster.nef",
+          "file": "SAPaymaster.nef",
           "sha256": "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1"
         },
         "manifest": {
-          "file": "AAPaymaster.manifest.json",
+          "file": "SAPaymaster.manifest.json",
           "sha256": "a066faf3ee31e9c1e716bf26f0ccfab74f1c9639adacb1adab0502b20918ca54"
         }
       },

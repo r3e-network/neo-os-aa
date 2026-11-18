@@ -1,0 +1,556 @@
+{
+  "schema": "sa-abi-scenario-input/v1",
+  "name": "account-timelock-boundaries-batch-registration-and-post-recovery-reads",
+  "contractAddress": "0x4560a7a7346fad0826fb5d5ef9fdaff55a0fa294",
+  "contractAddressNote": "The deployment this scenario drives. A function of the NEF, the manifest name and the deploy signer, so the receipt records the address the engine actually deployed and requires it to equal this one.",
+  "note": [
+    "The first scenario sends one call sequence at one block time. Every timelock in this contract is a comparison against Runtime.Time, so a harness frozen at one timestamp can only reach the refusing side of each of them: it can show that a call before the window faults, and never that the same call at the window succeeds.",
+    "Each step therefore declares the block time it runs at. Three pairs below are the same call one millisecond before a window and exactly at it - admin transfer confirmation, escape cooldown, escape timelock - and each pair faults and then halts. That pair is not decoration: it cannot happen at a single timestamp, so the receipt containing it is evidence that the harness moved.",
+    "The times are deliberately adjacent rather than far apart. A step a year late would pass every assertion a step one millisecond late passes, and would not show where the boundary is.",
+    "The account id is the value computeRegistrationAccountId derives for these parameters, pinned as a literal so every step's script bytes are a function of this file alone; the compute step is joined to it by readsForward so a wrong literal is caught before it is used.",
+    "The two batch accounts are registered in one call with distinct verifierParameters, which is what makes their ids distinct under one backup owner. Their ids are pinned literals as well, and RegisterAccount recomputes each one and faults on a mismatch, so a wrong literal is caught by the contract rather than by the reader.",
+    "A step that expects FAULT is placed only after the writes later steps read, because this harness shares one storage snapshot across steps and does not roll a faulting step back.",
+    "Two escape finalizations are exercised on purpose. finalizeEscape(id, 0x0) clears the verifier and hook; finalizeEscapeToOwner(id) additionally marks the account permanently owner-only. The first draft of this file assumed they were the same and expected owner-only recovery after the verifier-returning call; the engine said otherwise (isOwnerOnlyRecovery stayed false, and a later finalizeEscapeToOwner reported 'Escape not initiated' rather than 'Already recovered'). The expectations here are the ones the contract actually has, and the second account is the one that is driven all the way to the permanent state."
+  ],
+  "blockTimestamp": 1700000000000,
+  "defaultSigner": "0x1111111111111111111111111111111111111111",
+  "deploySigner": "0x1111111111111111111111111111111111111111",
+  "steps": [
+    {
+      "id": "compute-account-id",
+      "method": "computeRegistrationAccountId",
+      "args": [
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" },
+        { "type": "ByteString", "value": "" },
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" },
+        { "type": "Hash160", "value": "0x1111111111111111111111111111111111111111" },
+        { "type": "Integer", "value": "604800" }
+      ],
+      "expect": "HALT",
+      "readsForward": { "step": "register-account", "arg": 0 }
+    },
+    {
+      "id": "register-account",
+      "method": "registerAccount",
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" },
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" },
+        { "type": "ByteString", "value": "" },
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" },
+        { "type": "Hash160", "value": "0x1111111111111111111111111111111111111111" },
+        { "type": "Integer", "value": "604800" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "propose-admin-transfer",
+      "method": "proposeAdminTransfer",
+      "args": [
+        { "type": "Hash160", "value": "0x2222222222222222222222222222222222222222" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-pending-admin",
+      "method": "getPendingContractAdmin",
+      "args": [],
+      "expect": "HALT",
+      "readsBack": { "step": "propose-admin-transfer", "arg": 0 }
+    },
+    {
+      "id": "read-admin-available-at",
+      "method": "getAdminTransferAvailableAt",
+      "args": [],
+      "expect": "HALT",
+      "integer": "1700604800000"
+    },
+    {
+      "id": "confirm-admin-transfer-too-early",
+      "method": "confirmAdminTransfer",
+      "timestamp": 1700604799999,
+      "signer": "0x2222222222222222222222222222222222222222",
+      "args": [],
+      "expect": "FAULT",
+      "reason": "Admin transfer timelock not expired"
+    },
+    {
+      "id": "confirm-admin-transfer",
+      "method": "confirmAdminTransfer",
+      "timestamp": 1700604800000,
+      "signer": "0x2222222222222222222222222222222222222222",
+      "args": [],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-contract-admin",
+      "method": "getContractAdmin",
+      "timestamp": 1700604800000,
+      "args": [],
+      "expect": "HALT",
+      "readsBack": { "step": "propose-admin-transfer", "arg": 0 }
+    },
+    {
+      "id": "read-admin-available-at-cleared",
+      "method": "getAdminTransferAvailableAt",
+      "timestamp": 1700604800000,
+      "args": [],
+      "expect": "HALT",
+      "integer": "0"
+    },
+    {
+      "id": "confirm-admin-transfer-again",
+      "method": "confirmAdminTransfer",
+      "timestamp": 1700604800000,
+      "signer": "0x2222222222222222222222222222222222222222",
+      "args": [],
+      "expect": "FAULT",
+      "reason": "No pending admin transfer"
+    },
+    {
+      "id": "initiate-escape",
+      "method": "initiateEscape",
+      "timestamp": 1700604800000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-escape-triggered",
+      "method": "getEscapeTriggeredAt",
+      "timestamp": 1700604800000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "HALT",
+      "integer": "1700604800000"
+    },
+    {
+      "id": "read-escape-active",
+      "method": "isEscapeActive",
+      "timestamp": 1700604800000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "HALT",
+      "boolean": true
+    },
+    {
+      "id": "initiate-escape-in-cooldown",
+      "method": "initiateEscape",
+      "timestamp": 1700608399999,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "FAULT",
+      "reason": "Escape cooldown active"
+    },
+    {
+      "id": "initiate-escape-after-cooldown",
+      "method": "initiateEscape",
+      "timestamp": 1700608400000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-escape-restamped",
+      "method": "getEscapeTriggeredAt",
+      "timestamp": 1700608400000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "HALT",
+      "integer": "1700608400000"
+    },
+    {
+      "id": "finalize-escape-to-owner-too-early",
+      "method": "finalizeEscapeToOwner",
+      "timestamp": 1701213199999,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "FAULT",
+      "reason": "Timelock active"
+    },
+    {
+      "id": "finalize-escape-too-early",
+      "method": "finalizeEscape",
+      "timestamp": 1701213199999,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" },
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" }
+      ],
+      "expect": "FAULT",
+      "reason": "Timelock active"
+    },
+    {
+      "id": "finalize-escape",
+      "method": "finalizeEscape",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" },
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-owner-only-recovery",
+      "method": "isOwnerOnlyRecovery",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "read-escape-active-after",
+      "method": "isEscapeActive",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "read-verifier-after-escape",
+      "method": "getVerifier",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "HALT",
+      "readsBack": { "step": "register-account", "arg": 1 }
+    },
+    {
+      "id": "finalize-escape-to-owner-after-finalize",
+      "method": "finalizeEscapeToOwner",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" }
+      ],
+      "expect": "FAULT",
+      "reason": "Escape not initiated"
+    },
+    {
+      "id": "call-verifier-without-verifier",
+      "method": "callVerifier",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0xd2e008ec22c8323d9701092b2a20f8a1267ae7cc" },
+        { "type": "String", "value": "clearAccount" },
+        { "type": "Array", "items": [] }
+      ],
+      "expect": "FAULT",
+      "reason": "Verifier not configured"
+    },
+    {
+      "id": "register-batch",
+      "method": "registerAccounts",
+      "timestamp": 1701213200000,
+      "signer": "0x3333333333333333333333333333333333333333",
+      "args": [
+        {
+          "type": "Array",
+          "items": [
+            { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" },
+            { "type": "Hash160", "value": "0xe5d31e0a6e48d442945b021d766e52b250780599" }
+          ]
+        },
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" },
+        {
+          "type": "Array",
+          "items": [
+            { "type": "ByteString", "value": "01" },
+            { "type": "ByteString", "value": "02" }
+          ]
+        },
+        { "type": "Hash160", "value": "0x0000000000000000000000000000000000000000" },
+        { "type": "Hash160", "value": "0x3333333333333333333333333333333333333333" },
+        { "type": "Integer", "value": "604800" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-batch-owner-first",
+      "method": "getBackupOwner",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT",
+      "readsBack": { "step": "register-batch", "arg": 4 }
+    },
+    {
+      "id": "read-batch-owner-second",
+      "method": "getBackupOwner",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0xe5d31e0a6e48d442945b021d766e52b250780599" }
+      ],
+      "expect": "HALT",
+      "readsBack": { "step": "register-batch", "arg": 4 }
+    },
+    {
+      "id": "read-batch-timelock",
+      "method": "getEscapeTimelock",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT",
+      "integer": "604800"
+    },
+    {
+      "id": "read-batch-recovery-second",
+      "method": "isOwnerOnlyRecovery",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0xe5d31e0a6e48d442945b021d766e52b250780599" }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "read-batch-nonce",
+      "method": "getNonce",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" },
+        { "type": "Integer", "value": "0" }
+      ],
+      "expect": "HALT",
+      "integer": "0"
+    },
+    {
+      "id": "read-batch-execution-active",
+      "method": "isExecutionActive",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "read-batch-escrow-active",
+      "method": "isMarketEscrowActive",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "read-pending-verifier-call-hash",
+      "method": "getPendingVerifierCallHash",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-pending-hook-call-time",
+      "method": "getPendingHookCallTime",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT",
+      "integer": "0"
+    },
+    {
+      "id": "read-has-pending-hook-call",
+      "method": "hasPendingHookCall",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "compute-args-hash",
+      "method": "computeArgsHash",
+      "timestamp": 1701213200000,
+      "args": [
+        {
+          "type": "Array",
+          "items": [
+            { "type": "ByteString", "value": "4151" },
+            { "type": "Integer", "value": "1" }
+          ]
+        }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-account-implementation-id",
+      "method": "getAccountImplementationId",
+      "timestamp": 1701213200000,
+      "args": [],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-proxy-script-hash",
+      "method": "getProxyScriptHash",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "supports-execution-mode",
+      "method": "supportsExecutionMode",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "String", "value": "batch" }
+      ],
+      "expect": "HALT",
+      "boolean": true
+    },
+    {
+      "id": "supports-unknown-execution-mode",
+      "method": "supportsExecutionMode",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "String", "value": "streaming" }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "read-platform-registrar",
+      "method": "getPlatformRegistrar",
+      "timestamp": 1701213200000,
+      "args": [],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-pending-platform-registrar",
+      "method": "getPendingPlatformRegistrar",
+      "timestamp": 1701213200000,
+      "args": [],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-platform-registrar-available-at",
+      "method": "getPlatformRegistrarAvailableAt",
+      "timestamp": 1701213200000,
+      "args": [],
+      "expect": "HALT",
+      "integer": "0"
+    },
+    {
+      "id": "read-verify-scope-target",
+      "method": "getVerifyScopeTarget",
+      "timestamp": 1701213200000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "initiate-escape-batch",
+      "method": "initiateEscape",
+      "timestamp": 1701213200000,
+      "signer": "0x3333333333333333333333333333333333333333",
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "finalize-to-owner-batch-too-early",
+      "method": "finalizeEscapeToOwner",
+      "timestamp": 1701817999999,
+      "signer": "0x3333333333333333333333333333333333333333",
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "FAULT",
+      "reason": "Timelock active"
+    },
+    {
+      "id": "finalize-to-owner-batch",
+      "method": "finalizeEscapeToOwner",
+      "timestamp": 1701818000000,
+      "signer": "0x3333333333333333333333333333333333333333",
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT"
+    },
+    {
+      "id": "read-batch-owner-only-recovery",
+      "method": "isOwnerOnlyRecovery",
+      "timestamp": 1701818000000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT",
+      "boolean": true
+    },
+    {
+      "id": "read-batch-escape-cleared",
+      "method": "getEscapeTriggeredAt",
+      "timestamp": 1701818000000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "HALT",
+      "integer": "0"
+    },
+    {
+      "id": "read-batch-second-untouched",
+      "method": "isOwnerOnlyRecovery",
+      "timestamp": 1701818000000,
+      "args": [
+        { "type": "Hash160", "value": "0xe5d31e0a6e48d442945b021d766e52b250780599" }
+      ],
+      "expect": "HALT",
+      "boolean": false
+    },
+    {
+      "id": "finalize-to-owner-batch-again",
+      "method": "finalizeEscapeToOwner",
+      "timestamp": 1701818000000,
+      "signer": "0x3333333333333333333333333333333333333333",
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" }
+      ],
+      "expect": "FAULT",
+      "reason": "Already recovered to owner-only"
+    },
+    {
+      "id": "call-verifier-after-recovery",
+      "method": "callVerifier",
+      "timestamp": 1701818000000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" },
+        { "type": "String", "value": "clearAccount" },
+        { "type": "Array", "items": [] }
+      ],
+      "expect": "FAULT",
+      "reason": "Owner-only recovery is permanent"
+    },
+    {
+      "id": "call-hook-after-recovery",
+      "method": "callHook",
+      "timestamp": 1701818000000,
+      "args": [
+        { "type": "Hash160", "value": "0x1b67fa1558bbb5cacac055d7e4aa6105ee5e7868" },
+        { "type": "String", "value": "clearAccount" },
+        { "type": "Array", "items": [] }
+      ],
+      "expect": "FAULT",
+      "reason": "Owner-only recovery is permanent"
+    }
+  ]
+}

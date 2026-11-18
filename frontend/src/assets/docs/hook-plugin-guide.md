@@ -4,7 +4,7 @@ This guide replaces the old "type a raw method name and paste JSON args" workflo
 
 ## Choose In Layers
 
-Treat an AA policy stack as three layers:
+Treat an SA policy stack as three layers:
 
 1. **Verifier plugin**
    Use this to decide **who is allowed to authorize**.
@@ -188,7 +188,7 @@ Input shape:
 ### ZkLoginVerifier
 
 Purpose:
-bind an AA account to a privacy-preserving Morpheus NeoDID identity root and authorize each `executeUserOp` with an operation-bound zklogin ticket.
+bind an SA account to a privacy-preserving Morpheus NeoDID identity root and authorize each `executeUserOp` with an operation-bound zklogin ticket.
 
 Input shape:
 
@@ -200,11 +200,11 @@ Operational notes:
 
 - Google / Twitter / GitHub style Web2 login can flow through Web3Auth while the TEE keeps the raw provider identity private.
 - Each signature is a compact proof blob containing the provider id, `master_nullifier`, `action_nullifier`, and Morpheus signer signature.
-- The account still relies on AA nonce + deadline replay protection; the verifier only binds the private identity root to each operation payload.
+- The account still relies on SA nonce + deadline replay protection; the verifier only binds the private identity root to each operation payload.
 
 ## Paymaster + Hook Combinations
 
-The on-chain `AAPaymaster` contract (`contracts/paymaster/Paymaster.cs`) lets sponsors cover relay fees for accounts, but it never authorizes execution. Verifier and hook plugins still run independently. This separation makes it safe to combine Paymaster sponsorship with any policy stack.
+The on-chain `SAPaymaster` contract (`contracts/paymaster/Paymaster.cs`) lets sponsors cover relay fees for accounts, but it never authorizes execution. Verifier and hook plugins still run independently. This separation makes it safe to combine Paymaster sponsorship with any policy stack.
 
 ### Sponsored Consumer Wallet
 
@@ -240,7 +240,7 @@ The Paymaster only funds the relay after verifier and hook checks pass. This mea
 
 ## Market Readiness
 
-When listing an AA address in the market, publish at minimum:
+When listing an SA address in the market, publish at minimum:
 
 - active verifier profile
 - active hook profile
@@ -249,4 +249,4 @@ When listing an AA address in the market, publish at minimum:
 
 That lets buyers understand whether they are purchasing a clean shell or a heavily opinionated policy stack.
 
-For trustless escrow sales, the market should transfer only the AA shell. Existing verifier and hook bindings are cleared during settlement, and the buyer should configure fresh plugins in the app workspace after purchase.
+For trustless escrow sales, the market should transfer only the SA shell. Existing verifier and hook bindings are cleared during settlement, and the buyer should configure fresh plugins in the app workspace after purchase.

@@ -19,7 +19,7 @@ import { assertLocalchainProbe } from './probe_isolation.mjs';
 
 // URL.pathname keeps a POSIX leading slash (" /D:/...") which breaks Windows
 // path resolution; fileURLToPath is the portable conversion.
-const AA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const SA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function emit(body) {
   process.stdout.write(`${JSON.stringify(body)}\n`);
@@ -359,9 +359,9 @@ async function main() {
     NEP21Provider: provider,
   };
 
-  const walletModule = await import(pathToFileURL(path.join(AA, 'frontend/src/services/walletService.js')).href);
-  const execution = await import(pathToFileURL(path.join(AA, 'frontend/src/features/operations/execution.js')).href);
-  const errorCodes = await import(pathToFileURL(path.join(AA, 'frontend/src/config/errorCodes.js')).href);
+  const walletModule = await import(pathToFileURL(path.join(SA, 'frontend/src/services/walletService.js')).href);
+  const execution = await import(pathToFileURL(path.join(SA, 'frontend/src/features/operations/execution.js')).href);
+  const errorCodes = await import(pathToFileURL(path.join(SA, 'frontend/src/config/errorCodes.js')).href);
   const { walletService } = walletModule;
   walletService.rpcUrl = request.rpcUrl;
 
@@ -389,7 +389,7 @@ async function main() {
 
   // The user operation is signed by a session key that is not in this process: the harness hands us
   // the signature the session key produced. The frontend assembles the rest.
-  const metaTx = await import(pathToFileURL(path.join(AA, 'frontend/src/features/operations/metaTx.js')).href);
+  const metaTx = await import(pathToFileURL(path.join(SA, 'frontend/src/features/operations/metaTx.js')).href);
   const invocation = metaTx.buildExecuteUserOpInvocation({
     aaContractHash: request.core,
     accountIdHash: request.accountId,

@@ -60,7 +60,7 @@ namespace SmartAccount
         }
 
         /// <summary>
-        /// Creates a new deterministic AA account and optionally configures its initial verifier and hook.
+        /// Creates a new deterministic SA account and optionally configures its initial verifier and hook.
         /// </summary>
         public static void RegisterAccount(UInt160 accountId, UInt160 verifier, ByteString verifierParams, UInt160 hookId, UInt160 backupOwner, uint escapeTimelock)
         {
@@ -127,7 +127,7 @@ namespace SmartAccount
         }
 
         /// <summary>
-        /// Registers multiple deterministic AA accounts atomically with shared owner, verifier, hook, and timelock.
+        /// Registers multiple deterministic SA accounts atomically with shared owner, verifier, hook, and timelock.
         /// Each account remains bound to its own verifier params, so anchors can derive 21 agent accounts from
         /// anchor/app/agent/nonce material without exposing a front-running registration path.
         /// </summary>

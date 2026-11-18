@@ -349,7 +349,7 @@ def project_sources(contents, *, enforce_identity=True):
     require(program['interop_pushes_result'] is True, 'Reduced descriptor push flag')
     require(('IsDynamicCall' in methods['OnCallT']['bodyTokens']) == program['token_marks_dynamic'],
             'OnCallT dynamic marker no longer matches the projection')
-    return dict(schema='neoos-aa-syscall-dispatch-source/v1',scope=SCOPE,entryBoundary=ENTRY_BOUNDARY,
+    return dict(schema='neoos-sa-syscall-dispatch-source/v1',scope=SCOPE,entryBoundary=ENTRY_BOUNDARY,
                 coreSourceCommit=CORE_COMMIT,neoVmSourceCommit=VM_COMMIT,
                 sourceHashes={k:sha(v.encode()) for k,v in contents.items()},
                 methods=methods,program=program,handlerParameters=[list(p) for p in handler_params],
@@ -379,7 +379,7 @@ def mirror_source(key,row):
     same pinned value a download would have to reach, so a mirror cannot
     launder a different artifact. This only substitutes for a stalled network.
     """
-    mirror=os.environ.get('AA_SYSCALL_DISPATCH_SOURCE_MIRROR')
+    mirror=os.environ.get('SA_SYSCALL_DISPATCH_SOURCE_MIRROR')
     if not mirror: return None
     candidate=Path(mirror)/(key.replace('/','-')+'.cs')
     if not candidate.is_file(): return None

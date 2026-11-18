@@ -4,7 +4,7 @@ import { apiFetch } from './outboundFetch.js';
 const WINDOW_MS = 60000;
 const MAX_REQUESTS = 10;
 // AA-07: default cap for the in-memory fallback store (override via
-// AA_RATE_LIMIT_IN_MEMORY_MAX). Without a bound the Map grew forever per instance under
+// SA_RATE_LIMIT_IN_MEMORY_MAX). Without a bound the Map grew forever per instance under
 // hostile identifier churn.
 const IN_MEMORY_MAX_ENTRIES_DEFAULT = 10000;
 const TRUSTED_PROXY_HEADER_NAMES = new Set([
@@ -33,7 +33,7 @@ function headerValue(headers = {}, name) {
 
 function trustProxyHeaders() {
   return /^(1|true|yes|on)$/i.test(trimString(
-    process.env.AA_TRUST_PROXY_HEADERS
+    process.env.SA_TRUST_PROXY_HEADERS
       || process.env.TRUST_PROXY_HEADERS
       || ''
   ));
@@ -41,7 +41,7 @@ function trustProxyHeaders() {
 
 function trustedProxyHeaderName() {
   const configured = trimString(
-    process.env.AA_TRUST_PROXY_HEADER
+    process.env.SA_TRUST_PROXY_HEADER
       || process.env.TRUST_PROXY_HEADER
       || ''
   ).toLowerCase();
@@ -80,7 +80,9 @@ async function rateLimitWithRedis(identifier) {
   const client = getRedisClient();
   if (!client) return null;
 
-  const key = `ratelimit:${identifier}`;
+  // F-12 (re-verified from code): live under the sa:* Redis namespace like the
+  // request-persistence keys (sa:request:*), not the pre-rename flat namespace.
+  const key = `sa:ratelimit:${identifier}`;
 
   try {
     const response = await apiFetch(`${client.url}/pipeline`, {
@@ -97,11 +99,26 @@ async function rateLimitWithRedis(identifier) {
     if (!response.ok) return null;
 
     const result = await response.json();
-    const count = Number(result?.[0]?.result || 0);
-    let ttl = Number(result?.[1]?.result || -1);
+    const incrEntry = Array.isArray(result) ? result[0] : null;
+    const pttlEntry = Array.isArray(result) ? result[1] : null;
+
+    // F-12 (re-verified from code): Upstash answers a failed command inside an
+    // HTTP 200 pipeline as { error } or a non-numeric result. Previously that was
+    // read as "count = 0" and the request was allowed — the limiter failed OPEN on
+    // a broken backend while looking healthy. A command error is a backend
+    // failure: return null so the AA-07 fail-closed path decides.
+    if (!incrEntry || incrEntry.error != null || incrEntry.result == null
+      || !Number.isFinite(Number(incrEntry.result))) {
+      return null;
+    }
+    const count = Number(incrEntry.result);
+    let ttl = -1;
+    if (pttlEntry && pttlEntry.error == null && Number.isFinite(Number(pttlEntry.result))) {
+      ttl = Number(pttlEntry.result);
+    }
 
     if (count <= 1 || ttl < 0) {
-      await apiFetch(`${client.url}/pipeline`, {
+      const expireResponse = await apiFetch(`${client.url}/pipeline`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${client.token}`,
@@ -111,6 +128,17 @@ async function rateLimitWithRedis(identifier) {
           ['PEXPIRE', key, String(WINDOW_MS)],
         ]),
       });
+      if (!expireResponse.ok) return null;
+      const expireResult = await expireResponse.json().catch(() => null);
+      const expireEntry = Array.isArray(expireResult) ? expireResult[0] : null;
+      // F-12 (re-verified from code): an unconfirmed PEXPIRE leaves the counter
+      // without a TTL — the identifier would be locked out forever because the
+      // count only grows. A failed PEXPIRE command is a backend failure, not a
+      // silent success.
+      if (!expireEntry || expireEntry.error != null
+        || (!Number.isFinite(Number(expireEntry.result)) && expireEntry.result !== 'OK')) {
+        return null;
+      }
       ttl = WINDOW_MS;
     }
 
@@ -131,7 +159,7 @@ async function rateLimitWithRedis(identifier) {
 const inMemoryRequests = new Map();
 
 function inMemoryMaxEntries() {
-  const raw = trimString(process.env.AA_RATE_LIMIT_IN_MEMORY_MAX || '');
+  const raw = trimString(process.env.SA_RATE_LIMIT_IN_MEMORY_MAX || '');
   if (!raw) return IN_MEMORY_MAX_ENTRIES_DEFAULT;
   const parsed = Number(raw);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : IN_MEMORY_MAX_ENTRIES_DEFAULT;

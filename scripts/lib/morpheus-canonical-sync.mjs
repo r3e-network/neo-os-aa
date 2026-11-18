@@ -2,7 +2,7 @@
 // frontend/tests/morpheusCanonicalSync.test.js so both compare the same bytes.
 //
 // neo-os-services is the single source of truth for the Morpheus public network
-// registry, the public runtime catalog and the confidential-envelope module. AA
+// registry, the public runtime catalog and the confidential-envelope module. SA
 // keeps generated copies of all three under frontend/src. This module resolves
 // the neo-os-services checkout, loads its canonical exports and renders the
 // exact file contents those copies must have.
@@ -27,7 +27,7 @@ export const REQUIRE_SERVICES_ENV = 'NEOOS_REQUIRE_SERVICES_ARTIFACTS';
 // be reviewed (and the SDK round-trip test re-run) before the pin moves.
 export const CANONICAL_ENVELOPE_RELATIVE_PATH = 'packages/shared/src/confidential-envelope.js';
 export const CANONICAL_ENVELOPE_SHA256 =
-  '6071fcbe03f66281c9504a200a2505e12896c69ca2df305bb81c3ac91bf8ab5d';
+  'c93323b2696683fe355823921639a1f6495a876abf4d862ca4b6b4081e37f0a7';
 
 const CHECKOUT_HINT = `${ORACLE_ROOT_ENV} (else a sibling ../neo-os-services) must name a neo-os-services checkout`;
 

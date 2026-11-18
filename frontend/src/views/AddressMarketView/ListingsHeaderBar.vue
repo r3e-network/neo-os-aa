@@ -1,16 +1,16 @@
 <template>
   <div
-    class="flex flex-col gap-3 rounded-2xl border border-aa-border bg-aa-panel/60 p-5 backdrop-blur-xl md:flex-row md:items-center md:justify-between"
+    class="flex flex-col gap-3 rounded-2xl border border-sa-border bg-sa-panel/60 p-5 backdrop-blur-xl md:flex-row md:items-center md:justify-between"
   >
     <div>
-      <h2 class="text-lg font-bold text-aa-text">
+      <h2 class="text-lg font-bold text-sa-text">
         {{ t("market.onChainListings", "On-Chain Listings") }}
       </h2>
-      <p class="mt-1 text-sm text-aa-muted">
+      <p class="mt-1 text-sm text-sa-muted">
         {{
           t(
             "market.onChainListingsHint",
-            "Listings, escrow status, and settlement are read directly from the market contract and AA core contract.",
+            "Listings, escrow status, and settlement are read directly from the market contract and SA core contract.",
           )
         }}
       </p>

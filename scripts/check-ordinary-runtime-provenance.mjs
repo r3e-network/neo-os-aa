@@ -23,13 +23,13 @@ function validateSourceOracle(receipt, releaseRoot) {
   const code = `import json,sys
 from pathlib import Path
 sys.path.insert(0, str(Path(sys.argv[1]) / 'scripts/localchain'))
-import aa_rpc_scenarios as suite
+import sa_rpc_scenarios as suite
 import source_build
 r=json.load(sys.stdin)
 expected=json.loads((Path(sys.argv[1]) / 'tests/localchain/expected-source.json').read_text())
 failures=suite.validate_source_receipt(r,expected)
 if failures: raise ValueError('Source acceptance oracle failed: ' + '; '.join(failures))
-p=source_build.profile_of(Path(sys.argv[2]) / 'SmartAccountV3.nef')
+p=source_build.profile_of(Path(sys.argv[2]) / 'SmartAccount.nef')
 if p['profile'] != source_build.PROFILE_SYSCALL_ABSENT: raise ValueError('Ordinary build contains a private bounded syscall')
 if r['source']['coreSha256'] != p['coreSha256']: raise ValueError('Source receipt core differs from release NEF')
 print(json.dumps(list(source_build.REQUIRED_ARTIFACTS)))`;
@@ -41,7 +41,7 @@ print(json.dumps(list(source_build.REQUIRED_ARTIFACTS)))`;
 }
 
 export function verifyOrdinaryRuntimeProvenance({ repro, receipt, repoRoot = root, releaseRoot = path.join(repoRoot, 'contracts/bin/v3') }) {
-  assert.equal(repro.certificate?.schema, 'neoos-aa-source-to-artifact-certificate/v1', 'Missing source certificate');
+  assert.equal(repro.certificate?.schema, 'neoos-sa-source-to-artifact-certificate/v1', 'Missing source certificate');
   assert.equal(repro.certificate.source_root, 'repository');
   const sources = buildInputSnapshot(repoRoot);
   assert.deepEqual(sources, repro.certificate.source_files, 'Current source inputs differ from certificate');
@@ -52,7 +52,7 @@ export function verifyOrdinaryRuntimeProvenance({ repro, receipt, repoRoot = roo
   assert.deepEqual(receipt.gateFailures, [], 'Recorded source acceptance gate did not pass');
   const names = validateSourceOracle(receipt, releaseRoot).sort();
   const runtime = receipt.sourceArtifactRuntime;
-  assert.equal(runtime?.schema, 'neoos-aa-ordinary-source-artifact-runtime/v1', 'Missing source runtime artifact evidence');
+  assert.equal(runtime?.schema, 'neoos-sa-ordinary-source-artifact-runtime/v1', 'Missing source runtime artifact evidence');
   assert.equal(runtime.publicNetwork, false);
   assert.deepEqual(Object.keys(receipt.contracts).sort(), names, 'Deployment roster differs');
   for (const field of ['artifacts', 'readback']) {
@@ -90,7 +90,7 @@ export function verifyOrdinaryRuntimeProvenance({ repro, receipt, repoRoot = roo
     return { contractName: name, contractHash: chain.contractHash, nefSha256: artifact.nefSha256,
       manifestSha256: artifact.manifestSha256, manifestCanonicalSha256, nefScriptSha256: artifact.nefScriptSha256, nefChecksum: checksum };
   });
-  return { schema: 'neoos-aa-ordinary-runtime-provenance/v1', status: 'PASS', sourceSnapshotSha256: repro.certificate.source_snapshot_sha256,
+  return { schema: 'neoos-sa-ordinary-runtime-provenance/v1', status: 'PASS', sourceSnapshotSha256: repro.certificate.source_snapshot_sha256,
     publicNetworkWritesPerformed: false, runtimeArtifactsChecked: rows.length, rows,
     measuredSubset: 'source_build.REQUIRED_ARTIFACTS', fullModuleProvenanceVerified: false,
     boundary: 'Public-runtime source acceptance for the eight deployed modules; no full-module, compiler refinement or public deployment claim.' };

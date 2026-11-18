@@ -12,11 +12,11 @@ namespace SmartAccount.Hooks
         private static readonly byte[] Prefix_AuthorizedCore = new byte[] { 0xF1 };
         private static readonly byte[] Prefix_PendingAdmin = new byte[] { 0xF2 };
         private static readonly byte[] Prefix_AdminRotationTimelock = new byte[] { 0xF3 };
-        // Audit fix M-7: timelocked change of the trusted AA core (repointing it
+        // Audit fix M-7: timelocked change of the trusted SA core (repointing it
         // disables every account's hook policy, so it must not be instant).
         private static readonly byte[] Prefix_PendingCore = new byte[] { 0xF4 };
         private static readonly byte[] Prefix_CoreTimelock = new byte[] { 0xF5 };
-        // AA-D-01: timelocked contract upgrade. The admin first proposes the sha256 of the
+        // SA-D-01: timelocked contract upgrade. The admin first proposes the sha256 of the
         // new NEF and manifest, then can only apply that exact artifact pair after the
         // 7-day window. This is one-way: once deployed, every future upgrade waits 7 days.
         private static readonly byte[] Prefix_PendingUpdateNefHash = new byte[] { 0xF6 };
@@ -156,7 +156,7 @@ namespace SmartAccount.Hooks
             Storage.Delete(Storage.CurrentContext, Prefix_RegistryTimelock);
         }
 
-        // AA-D-01: contract upgrade is timelocked. ProposeUpdate pins the sha256 of the
+        // SA-D-01: contract upgrade is timelocked. ProposeUpdate pins the sha256 of the
         // new NEF and manifest; Update/ConfirmUpdate applies exactly that artifact pair
         // only after the 7-day window. There is intentionally no instant upgrade path.
         internal static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash)
@@ -201,7 +201,7 @@ namespace SmartAccount.Hooks
             NativeAuthority.Require(AuthorizedCore(), accountId, "hook", "configuration");
 #else
             UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
             ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
 
             bool authorized = (bool)Contract.Call(
@@ -216,7 +216,7 @@ namespace SmartAccount.Hooks
         internal static void ValidateExecutionCaller(UInt160 accountId, UInt160 callerContract, UInt160 hookContract)
         {
             UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
 
             bool authorized = (bool)Contract.Call(
                 core,

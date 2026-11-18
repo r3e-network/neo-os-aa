@@ -1,0 +1,204 @@
+{
+  "vectorId": "sa4-rejection-regression-template",
+  "kind": "operation-envelope",
+  "constantsRevision": "TODO(kernel39|40): pin after the constants files land",
+  "description": "Skeleton for the closed rejection table: every SA_* error code must have at least one failing input row on EACH kernel, plus the legacy replay regressions (F-2 seeds: Fix_sessionkeyrevocation_repro_Tests.cs, Fix_subscriptionsubid_repro_Tests.cs).",
+  "rejections": [
+    {
+      "error": "SA_PROTOCOL_VERSION",
+      "input": "TODO: version != 4 operation"
+    },
+    {
+      "error": "SA_OPERATION_FIELD_COUNT",
+      "input": "TODO: 12- or 14-field array"
+    },
+    {
+      "error": "SA_OPERATION_MALFORMED",
+      "input": "TODO: Struct, oversized args, depth 9, unsorted hookProofs, non-canonical integer"
+    },
+    {
+      "error": "SA_MODULE_TYPE_UNSUPPORTED",
+      "input": "TODO: installModule with type 2 or 3"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_VALIDATOR",
+      "input": "TODO: 33rd validator instance"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_HOOK",
+      "input": "TODO: 9th hook instance"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_THRESHOLD",
+      "input": "TODO: threshold 11"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_MEMBERS",
+      "input": "TODO: 11th policy member"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_ACTIONS",
+      "input": "TODO: 17-action intent"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_INTENTS",
+      "input": "TODO: 17th unresolved intent"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_BATCH",
+      "input": "TODO: 33-operation batch"
+    },
+    {
+      "error": "SA_MODULE_NOT_INSTALLED",
+      "input": "TODO: route to uninstalled moduleId"
+    },
+    {
+      "error": "SA_MODULE_ID_INVALID",
+      "input": "TODO: moduleId 0 for a module route; never-allocated id"
+    },
+    {
+      "error": "SA_MODULE_INSTANCE_ISOLATION_REQUIRED",
+      "input": "TODO: same-address second install without instanceIsolation"
+    },
+    {
+      "error": "SA_MODULE_CODE_BINDING_MISMATCH",
+      "input": "TODO: contractId/updateCounter/NEF/profile drift before and after the callback"
+    },
+    {
+      "error": "SA_MODULE_NOT_ROUTABLE",
+      "input": "TODO: route directly to a threshold policy member"
+    },
+    {
+      "error": "SA_MODULE_MESSAGE_CAPABILITY_ABSENT",
+      "input": "TODO: message envelope naming a SessionKeyValidator instance"
+    },
+    {
+      "error": "SA_VALIDATION_REJECTED",
+      "input": "TODO: validator returns rejection"
+    },
+    {
+      "error": "SA_VALIDATOR_NOT_FOUND",
+      "input": "TODO: route to removed validator"
+    },
+    {
+      "error": "SA_HOOK_REJECTED",
+      "input": "TODO: hook preCheck throws or returns false"
+    },
+    {
+      "error": "SA_HOOK_DATA_TOO_LARGE",
+      "input": "TODO: 513-byte hookData return"
+    },
+    {
+      "error": "SA_PROOF_INVALID",
+      "input": "TODO: duplicate hookId proof; unsorted proofs; aggregate > 4096"
+    },
+    {
+      "error": "SA_NONCE_INVALID",
+      "input": "TODO: sequence mismatch"
+    },
+    {
+      "error": "SA_NONCE_EXHAUSTED",
+      "input": "TODO: channel at sentinel"
+    },
+    {
+      "error": "SA_NONCE_CHANNEL_COLLISION",
+      "input": "TODO: second derivation, same 191-bit channel"
+    },
+    {
+      "error": "SA_DEADLINE_EXPIRED",
+      "input": "TODO: past deadline"
+    },
+    {
+      "error": "SA_EPOCH_STALE",
+      "input": "TODO: old authorityEpoch after freeze/recovery"
+    },
+    {
+      "error": "SA_CONFIGURATION_NONCE_STALE",
+      "input": "TODO: old configurationNonce after config commit"
+    },
+    {
+      "error": "SA_CREDENTIAL_STALE",
+      "input": "TODO: old credentialGeneration after revocation/regrant"
+    },
+    {
+      "error": "SA_INTENT_IMMATURE",
+      "input": "TODO: confirm before matureAt"
+    },
+    {
+      "error": "SA_INTENT_EXPIRED",
+      "input": "TODO: confirm after expiry"
+    },
+    {
+      "error": "SA_INTENT_CONFLICT",
+      "input": "TODO: parallel intents on the same module revision"
+    },
+    {
+      "error": "SA_INTENT_NOT_FOUND",
+      "input": "TODO: cancel unknown intentId"
+    },
+    {
+      "error": "SA_INTENT_LIMIT",
+      "input": "TODO: 17th intent"
+    },
+    {
+      "error": "SA_ACCOUNT_NOT_FOUND",
+      "input": "TODO: unknown accountId"
+    },
+    {
+      "error": "SA_ACCOUNT_FROZEN",
+      "input": "TODO: each state-changing ABI while frozen"
+    },
+    {
+      "error": "SA_ACCOUNT_STATUS",
+      "input": "TODO: MigrationRequired execution attempt"
+    },
+    {
+      "error": "SA_RECOVERY_PENDING",
+      "input": "TODO: configuration during recovery"
+    },
+    {
+      "error": "SA_RECOVERY_LOCKED",
+      "input": "TODO: execute before recovery timelock"
+    },
+    {
+      "error": "SA_REENTRANCY_FORBIDDEN",
+      "input": "TODO: same-account nested execution; cross-account nested execution"
+    },
+    {
+      "error": "SA_PHASE_VIOLATION",
+      "input": "TODO: module writes post/configuration state during validation"
+    },
+    {
+      "error": "SA_GAS_BUDGET_EXCEEDED",
+      "input": "TODO: callback burning past its Plan B budget (Verification and Application separately)"
+    },
+    {
+      "error": "SA_MESSAGE_INVALID",
+      "input": "TODO: every message-envelope mutation row"
+    },
+    {
+      "error": "SA_MIGRATION_REQUIRED",
+      "input": "TODO: legacy-plugin account execution"
+    },
+    {
+      "error": "SA_MARKET_LOCKED",
+      "input": "TODO: settle/cancel against an escaped account's old epoch binding"
+    },
+    {
+      "error": "SA_UNAUTHORIZED",
+      "input": "TODO: caller/subject witness failure"
+    },
+    {
+      "error": "LEGACY_REPLAY_SESSION_KEY_REVOCATION",
+      "input": "TODO: seed from Fix_sessionkeyrevocation_repro_Tests.cs — must keep failing"
+    },
+    {
+      "error": "LEGACY_REPLAY_SUBSCRIPTION_SUBID",
+      "input": "TODO: seed from Fix_subscriptionsubid_repro_Tests.cs — must keep failing"
+    },
+    {
+      "error": "LEGACY_REPLAY_RECOVERY_TICKET",
+      "input": "TODO: unconsumed ticket across clear/setup (F-11) — must fail with generation binding"
+    }
+  ]
+}

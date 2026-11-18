@@ -1,15 +1,15 @@
 <template>
-  <section class="aa-focus-shell">
+  <section class="sa-focus-shell">
     <div
       class="absolute inset-0 bg-gradient-to-br from-neo-500/5 to-transparent pointer-events-none"
     ></div>
     <div class="relative z-10">
-      <div class="aa-focus-header">
+      <div class="sa-focus-header">
         <div>
           <p class="mb-2 text-xs font-bold uppercase text-emerald-700">
-            {{ t("operations.workspaceTitle", "Abstract Account Workspace") }} · Focus workflow
+            {{ t("operations.workspaceTitle", "Smart Account Workspace") }} · Focus workflow
           </p>
-          <h2 class="text-2xl md:text-3xl font-semibold text-aa-text">
+          <h2 class="text-2xl md:text-3xl font-semibold text-sa-text">
             {{
               t(
                 "operations.workspaceHero",
@@ -17,7 +17,7 @@
               )
             }}
           </h2>
-          <p class="mt-3 text-sm text-aa-muted max-w-2xl">
+          <p class="mt-3 text-sm text-sa-muted max-w-2xl">
             {{
               t(
                 "operations.subtitle",
@@ -26,7 +26,7 @@
             }}
           </p>
         </div>
-        <div class="aa-focus-wallet-actions">
+        <div class="sa-focus-wallet-actions">
           <router-link
             v-if="didConnection.isConfigured.value"
             class="btn-secondary"
@@ -121,17 +121,17 @@
               <div
                 id="actions-menu-content"
                 v-if="showActionsMenu"
-                class="absolute right-0 mt-3 w-64 rounded-xl bg-aa-panel shadow-2xl border border-aa-border py-2 z-50 overflow-hidden backdrop-blur-lg"
+                class="absolute right-0 mt-3 w-64 rounded-xl bg-sa-panel shadow-2xl border border-sa-border py-2 z-50 overflow-hidden backdrop-blur-lg"
               >
                 <button
-                  class="w-full px-5 py-2.5 text-left text-sm text-aa-text hover:bg-aa-dark/50 hover:text-aa-text transition-colors duration-200 disabled:opacity-50"
+                  class="w-full px-5 py-2.5 text-left text-sm text-sa-text hover:bg-sa-dark/50 hover:text-sa-text transition-colors duration-200 disabled:opacity-50"
                   :disabled="!shareUrl"
                   @click="copyShareLink"
                 >
                   {{ t("operations.copyShareLink", "Copy Share Link") }}
                 </button>
                 <button
-                  class="w-full px-5 py-2.5 text-left text-sm text-aa-text hover:bg-aa-dark/50 hover:text-aa-text transition-colors duration-200 disabled:opacity-50"
+                  class="w-full px-5 py-2.5 text-left text-sm text-sa-text hover:bg-sa-dark/50 hover:text-sa-text transition-colors duration-200 disabled:opacity-50"
                   :disabled="!collaborationUrl"
                   @click="copyCollaboratorLink"
                 >
@@ -143,15 +143,15 @@
                   }}
                 </button>
                 <button
-                  class="w-full px-5 py-2.5 text-left text-sm text-aa-text hover:bg-aa-dark/50 hover:text-aa-text transition-colors duration-200 disabled:opacity-50"
+                  class="w-full px-5 py-2.5 text-left text-sm text-sa-text hover:bg-sa-dark/50 hover:text-sa-text transition-colors duration-200 disabled:opacity-50"
                   :disabled="!operatorUrl"
                   @click="copyOperatorLink"
                 >
                   {{ t("operations.copyOperatorLink", "Copy Operator Link") }}
                 </button>
-                <div class="border-t border-aa-border my-1"></div>
+                <div class="border-t border-sa-border my-1"></div>
                 <button
-                  class="w-full px-5 py-2.5 text-left text-sm text-aa-text hover:bg-aa-dark/50 hover:text-aa-text transition-colors duration-200 disabled:opacity-50"
+                  class="w-full px-5 py-2.5 text-left text-sm text-sa-text hover:bg-sa-dark/50 hover:text-sa-text transition-colors duration-200 disabled:opacity-50"
                   :disabled="!collaborationUrl || isSubmissionPending"
                   @click="requestConfirmation('rotate-collaborator')"
                 >
@@ -163,7 +163,7 @@
                   }}
                 </button>
                 <button
-                  class="w-full px-5 py-2.5 text-left text-sm text-aa-text hover:bg-aa-dark/50 hover:text-aa-text transition-colors duration-200 disabled:opacity-50"
+                  class="w-full px-5 py-2.5 text-left text-sm text-sa-text hover:bg-sa-dark/50 hover:text-sa-text transition-colors duration-200 disabled:opacity-50"
                   :disabled="!operatorUrl || isSubmissionPending"
                   @click="requestConfirmation('rotate-operator')"
                 >
@@ -172,7 +172,7 @@
                   }}
                 </button>
                 <button
-                  class="w-full px-5 py-2.5 text-left text-sm text-aa-text hover:bg-aa-dark/50 hover:text-aa-text transition-colors duration-200 disabled:opacity-50"
+                  class="w-full px-5 py-2.5 text-left text-sm text-sa-text hover:bg-sa-dark/50 hover:text-sa-text transition-colors duration-200 disabled:opacity-50"
                   :disabled="!workspace.transactionBody.value"
                   @click="exportDraftJson"
                 >
@@ -203,7 +203,7 @@
         @toggle-shortcuts="showShortcuts = !showShortcuts"
       />
 
-      <details class="aa-focus-reference">
+      <details class="sa-focus-reference">
         <summary>
           <span>{{ t("operations.activitySidebarTitle", "Draft Activity") }}</span>
           <strong>Connection details</strong>
@@ -231,20 +231,20 @@
       <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div class="space-y-6">
           <div
-            class="rounded-[20px] border border-aa-border bg-aa-panel/60 overflow-hidden shadow-glow-panel backdrop-blur-lg transition-all duration-200"
+            class="rounded-[20px] border border-sa-border bg-sa-panel/60 overflow-hidden shadow-glow-panel backdrop-blur-lg transition-all duration-200"
           >
             <button
               @click="step1Expanded = !step1Expanded"
               :aria-expanded="step1Expanded"
               aria-controls="step1-content"
-              class="w-full bg-aa-panel/40 px-6 py-5 border-b border-aa-border flex items-center justify-between hover:bg-aa-dark/40 transition-colors duration-200"
+              class="w-full bg-sa-panel/40 px-6 py-5 border-b border-sa-border flex items-center justify-between hover:bg-sa-dark/40 transition-colors duration-200"
             >
               <div class="flex items-center gap-4">
                 <div
                   class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
                   :class="
                     steps[0].state === 'completed'
-                      ? 'bg-aa-success/20 border border-aa-success/50 text-aa-success shadow-glow-green-sm'
+                      ? 'bg-sa-success/20 border border-sa-success/50 text-sa-success shadow-glow-green-sm'
                       : 'bg-neo-500/20 border border-neo-500/50 text-neo-400 shadow-glow-green-sm'
                   "
                 >
@@ -266,12 +266,12 @@
                   <span v-else>1</span>
                 </div>
                 <div>
-                  <h2 class="text-lg font-bold text-aa-text font-outfit">
+                  <h2 class="text-lg font-bold text-sa-text font-outfit">
                     {{ t("operations.stepLoadTitle", "Load Account") }}
                   </h2>
                   <p
                     v-if="steps[0].state === 'completed'"
-                    class="text-xs text-aa-success mt-0.5"
+                    class="text-xs text-sa-success mt-0.5"
                   >
                     {{ t("operations.accountLoadedLabel", "Account loaded") }}
                   </p>
@@ -279,7 +279,7 @@
               </div>
               <svg
                 aria-hidden="true"
-                class="w-4 h-4 text-aa-muted transition-transform duration-200"
+                class="w-4 h-4 text-sa-muted transition-transform duration-200"
                 :class="step1Expanded ? 'rotate-180' : ''"
                 fill="none"
                 stroke="currentColor"
@@ -315,20 +315,20 @@
           </div>
 
           <div
-            class="rounded-[20px] border border-aa-border bg-aa-panel/60 overflow-hidden shadow-glow-panel backdrop-blur-lg transition-all duration-200"
+            class="rounded-[20px] border border-sa-border bg-sa-panel/60 overflow-hidden shadow-glow-panel backdrop-blur-lg transition-all duration-200"
           >
             <button
               @click="step2Expanded = !step2Expanded"
               :aria-expanded="step2Expanded"
               aria-controls="step2-content"
-              class="w-full bg-aa-panel/40 px-6 py-5 border-b border-aa-border flex items-center justify-between hover:bg-aa-dark/40 transition-colors duration-200"
+              class="w-full bg-sa-panel/40 px-6 py-5 border-b border-sa-border flex items-center justify-between hover:bg-sa-dark/40 transition-colors duration-200"
             >
               <div class="flex items-center gap-4">
                 <div
                   class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
                   :class="
                     steps[1].state === 'completed'
-                      ? 'bg-aa-success/20 border border-aa-success/50 text-aa-success shadow-glow-green-sm'
+                      ? 'bg-sa-success/20 border border-sa-success/50 text-sa-success shadow-glow-green-sm'
                       : 'bg-neo-500/20 border border-neo-500/50 text-neo-400 shadow-glow-green-sm'
                   "
                 >
@@ -350,12 +350,12 @@
                   <span v-else>2</span>
                 </div>
                 <div>
-                  <h2 class="text-lg font-bold text-aa-text font-outfit">
+                  <h2 class="text-lg font-bold text-sa-text font-outfit">
                     {{ t("operations.stepComposeTitle", "Compose Operation") }}
                   </h2>
                   <p
                     v-if="steps[1].state === 'completed'"
-                    class="text-xs text-aa-success mt-0.5"
+                    class="text-xs text-sa-success mt-0.5"
                   >
                     {{
                       t("operations.operationStagedLabel", "Operation staged")
@@ -365,7 +365,7 @@
               </div>
               <svg
                 aria-hidden="true"
-                class="w-4 h-4 text-aa-muted transition-transform duration-200"
+                class="w-4 h-4 text-sa-muted transition-transform duration-200"
                 :class="step2Expanded ? 'rotate-180' : ''"
                 fill="none"
                 stroke="currentColor"
@@ -426,20 +426,20 @@
           </div>
 
           <div
-            class="rounded-[20px] border border-aa-border bg-aa-panel/60 overflow-hidden shadow-glow-panel backdrop-blur-lg transition-all duration-200"
+            class="rounded-[20px] border border-sa-border bg-sa-panel/60 overflow-hidden shadow-glow-panel backdrop-blur-lg transition-all duration-200"
           >
             <button
               @click="step3Expanded = !step3Expanded"
               :aria-expanded="step3Expanded"
               aria-controls="step3-content"
-              class="w-full bg-aa-panel/40 px-6 py-5 border-b border-aa-border flex items-center justify-between hover:bg-aa-dark/40 transition-colors duration-200"
+              class="w-full bg-sa-panel/40 px-6 py-5 border-b border-sa-border flex items-center justify-between hover:bg-sa-dark/40 transition-colors duration-200"
             >
               <div class="flex items-center gap-4">
                 <div
                   class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
                   :class="
                     steps[2].state === 'completed'
-                      ? 'bg-aa-success/20 border border-aa-success/50 text-aa-success shadow-glow-green-sm'
+                      ? 'bg-sa-success/20 border border-sa-success/50 text-sa-success shadow-glow-green-sm'
                       : 'bg-neo-500/20 border border-neo-500/50 text-neo-400 shadow-glow-green-sm'
                   "
                 >
@@ -461,12 +461,12 @@
                   <span v-else>3</span>
                 </div>
                 <div>
-                  <h2 class="text-lg font-bold text-aa-text font-outfit">
+                  <h2 class="text-lg font-bold text-sa-text font-outfit">
                     {{ t("operations.stepSignTitle", "Collect Signatures") }}
                   </h2>
                   <p
                     v-if="steps[2].state === 'completed'"
-                    class="text-xs text-aa-success mt-0.5"
+                    class="text-xs text-sa-success mt-0.5"
                   >
                     {{
                       t("operations.signaturesReadyLabel", "Signatures ready")
@@ -476,7 +476,7 @@
               </div>
               <svg
                 aria-hidden="true"
-                class="w-4 h-4 text-aa-muted transition-transform duration-200"
+                class="w-4 h-4 text-sa-muted transition-transform duration-200"
                 :class="step3Expanded ? 'rotate-180' : ''"
                 fill="none"
                 stroke="currentColor"
@@ -513,7 +513,7 @@
                   }}
                 </button>
                 <button
-                  class="btn-secondary flex-1 border-aa-info/30 text-aa-info-light hover:bg-aa-info/10 hover:border-aa-info/60 hover:text-aa-text"
+                  class="btn-secondary flex-1 border-sa-info/30 text-sa-info-light hover:bg-sa-info/10 hover:border-sa-info/60 hover:text-sa-text"
                   :class="{ 'btn-loading': signingWithZkLogin }"
                   :disabled="
                     !workspace.transactionBody.value ||
@@ -557,7 +557,7 @@
           />
 
           <div
-            class="rounded-[20px] border border-neo-500/20 bg-aa-panel/60 overflow-hidden shadow-glow-green-diffuse backdrop-blur-lg transition-all duration-200 relative"
+            class="rounded-[20px] border border-neo-500/20 bg-sa-panel/60 overflow-hidden shadow-glow-green-diffuse backdrop-blur-lg transition-all duration-200 relative"
           >
             <div
               class="absolute inset-0 bg-gradient-to-t from-neo-500/5 to-transparent pointer-events-none"
@@ -566,21 +566,21 @@
               @click="step4Expanded = !step4Expanded"
               :aria-expanded="step4Expanded"
               aria-controls="step4-content"
-              class="relative w-full bg-aa-panel/40 px-6 py-5 border-b border-neo-500/20 flex items-center justify-between hover:bg-aa-dark/60 transition-colors duration-200"
+              class="relative w-full bg-sa-panel/40 px-6 py-5 border-b border-neo-500/20 flex items-center justify-between hover:bg-sa-dark/60 transition-colors duration-200"
             >
               <div class="flex items-center gap-4">
                 <div
-                  class="w-8 h-8 rounded-full bg-neo-500 text-aa-dark flex items-center justify-center font-bold text-sm shadow-glow-green-lg"
+                  class="w-8 h-8 rounded-full bg-neo-500 text-sa-dark flex items-center justify-center font-bold text-sm shadow-glow-green-lg"
                 >
                   4
                 </div>
-                <h2 class="text-lg font-bold text-aa-text font-outfit">
+                <h2 class="text-lg font-bold text-sa-text font-outfit">
                   {{ t("operations.stepBroadcastTitle", "Broadcast") }}
                 </h2>
               </div>
               <svg
                 aria-hidden="true"
-                class="w-4 h-4 text-aa-muted transition-transform duration-200"
+                class="w-4 h-4 text-sa-muted transition-transform duration-200"
                 :class="step4Expanded ? 'rotate-180' : ''"
                 fill="none"
                 stroke="currentColor"
@@ -603,7 +603,7 @@
                 <div class="empty-state">
                   <svg
                     aria-hidden="true"
-                    class="w-10 h-10 mx-auto mb-3 text-aa-muted"
+                    class="w-10 h-10 mx-auto mb-3 text-sa-muted"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -615,10 +615,10 @@
                       d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
                     ></path>
                   </svg>
-                  <p class="text-sm font-semibold text-aa-text mb-1">
+                  <p class="text-sm font-semibold text-sa-text mb-1">
                     {{ t("didPanel.broadcastLockedTitle", "Broadcast Locked") }}
                   </p>
-                  <p class="text-xs text-aa-muted max-w-sm mx-auto">
+                  <p class="text-xs text-sa-muted max-w-sm mx-auto">
                     {{
                       t(
                         "didPanel.broadcastLockedHint",
@@ -710,7 +710,7 @@
                   @persist-draft="persistDraft"
                 />
                 <RelayPreflightPanel
-                  class="mt-6 border-aa-border"
+                  class="mt-6 border-sa-border"
                   v-if="relayCheck.level !== 'idle'"
                   :level="relayCheck.level"
                   :status-label="relayCheck.label"
@@ -756,17 +756,17 @@
             :aria-label="
               t('operations.toggleActivitySidebar', 'Toggle activity sidebar')
             "
-            class="xl:hidden w-full mb-3 flex items-center justify-between rounded-xl border border-aa-border bg-aa-panel/60 px-4 py-3 text-sm font-semibold text-aa-text hover:bg-aa-dark/60 transition-colors duration-200 backdrop-blur-md"
+            class="xl:hidden w-full mb-3 flex items-center justify-between rounded-xl border border-sa-border bg-sa-panel/60 px-4 py-3 text-sm font-semibold text-sa-text hover:bg-sa-dark/60 transition-colors duration-200 backdrop-blur-md"
           >
             <span class="flex items-center gap-2">
               <span
-                class="w-2 h-2 rounded-full bg-aa-orange animate-pulse"
+                class="w-2 h-2 rounded-full bg-sa-orange animate-pulse"
               ></span>
               {{ t("operations.activitySidebarTitle", "Draft Activity") }}
             </span>
             <svg
               aria-hidden="true"
-              class="w-3.5 h-3.5 text-aa-muted transition-transform duration-200"
+              class="w-3.5 h-3.5 text-sa-muted transition-transform duration-200"
               :class="sidebarExpanded ? 'rotate-180' : ''"
               fill="none"
               stroke="currentColor"
@@ -787,7 +787,7 @@
               :access-slug="workspace.share.value.operatorSlug"
             />
             <ActivitySidebar
-              class="xl:sticky xl:top-8 xl:max-h-[calc(100vh-4rem)] overflow-y-auto rounded-[20px] border border-aa-border bg-aa-panel/50 shadow-2xl backdrop-blur-xl"
+              class="xl:sticky xl:top-8 xl:max-h-[calc(100vh-4rem)] overflow-y-auto rounded-[20px] border border-sa-border bg-sa-panel/50 shadow-2xl backdrop-blur-xl"
               :draft-id="workspace.share.value.draftId"
               :share-path="workspace.share.value.sharePath"
               :share-url="shareUrl"
@@ -952,7 +952,7 @@ const presetOptions = computed(() =>
       multisigDraft: "Multisig Draft",
     };
     const fallbackDescs = {
-      invoke: "Compose any AA wrapper contract call manually.",
+      invoke: "Compose any SA wrapper contract call manually.",
       nep17Transfer:
         "Build a token transfer payload with account and recipient hashes.",
       multisigDraft:
@@ -1859,7 +1859,7 @@ async function loadAccount(overrideAddress = "") {
   try {
     await assertV3AccountExists({
       rpcUrl: walletService.rpcUrl,
-      aaContractHash: getSmartAccountHash(),
+      saContractHash: getSmartAccountHash(),
       accountIdHash: resolvedAccountIdHash,
     });
     accountAddressScriptHash.value = resolvedAccountIdHash;
@@ -1905,7 +1905,7 @@ function stageOperation() {
   workspace.setOperationBody(nextOperationBody);
   workspace.setTransactionBody(
     buildStagedTransactionBody({
-      aaContractHash: getSmartAccountHash(),
+      saContractHash: getSmartAccountHash(),
       account: workspace.account.value,
       operationBody: nextOperationBody,
       signerAddress: walletService.address,
@@ -2059,7 +2059,7 @@ async function signWithEvmWallet() {
 
     const { signatureRecord, metaInvocation } = await signUserOpWithEvm({
       rpcUrl: walletService.rpcUrl,
-      aaContractHash: getSmartAccountHash(),
+      saContractHash: getSmartAccountHash(),
       accountIdHash: workspace.account.value.accountIdHash,
       operationBody: workspace.operationBody.value,
       signerId: evmAddress.value,
@@ -2114,11 +2114,11 @@ async function signWithZkLogin() {
       await didConnection.connectDid();
     }
 
-    const aaContractHash = getSmartAccountHash();
+    const saContractHash = getSmartAccountHash();
     const { argsHashHex, verifierHash, nonce, deadline } =
       await prepareV3UserOpContext({
         rpcUrl: walletService.rpcUrl,
-        aaContractHash,
+        saContractHash,
         accountIdHash: workspace.account.value.accountIdHash,
         operationBody: workspace.operationBody.value,
         missingAccountError: EC.v3AccountIdHashMissing,
@@ -2137,7 +2137,7 @@ async function signWithZkLogin() {
     });
 
     const metaInvocation = buildExecuteUserOpInvocation({
-      aaContractHash,
+      saContractHash,
       accountIdHash: workspace.account.value.accountIdHash,
       targetContract: workspace.operationBody.value?.targetContract,
       method: workspace.operationBody.value?.method,
@@ -2537,7 +2537,7 @@ function exportDraftJson() {
   const blob = new Blob([json], { type: "application/json" });
   const anchor = document.createElement("a");
   anchor.href = URL.createObjectURL(blob);
-  anchor.download = `${workspace.share.value.shareSlug || "aa-draft"}.json`;
+  anchor.download = `${workspace.share.value.shareSlug || "sa-draft"}.json`;
   anchor.click();
   URL.revokeObjectURL(anchor.href);
   toast.success(

@@ -1,6 +1,6 @@
 <template>
   <article
-    class="gradient-border-card bg-aa-panel/60 backdrop-blur-xl overflow-hidden"
+    class="gradient-border-card bg-sa-panel/60 backdrop-blur-xl overflow-hidden"
   >
     <div class="p-6">
       <!-- Header row: title, status, price -->
@@ -12,9 +12,9 @@
             v-if="metadata?.logo_url"
             :src="metadata.logo_url"
             :alt="t('market.listingLogo', 'Listing logo')"
-            class="w-6 h-6 rounded border border-aa-border object-cover"
+            class="w-6 h-6 rounded border border-sa-border object-cover"
           />
-          <h3 class="text-lg font-bold text-aa-text">
+          <h3 class="text-lg font-bold text-sa-text">
             {{
               listing.title ||
               `${t("market.listingPrefix", "Listing #")}${listing.id}`
@@ -26,48 +26,48 @@
           >
             <span
               v-if="listing.status === 'active'"
-              class="w-1.5 h-1.5 rounded-full bg-aa-success"
+              class="w-1.5 h-1.5 rounded-full bg-sa-success"
             ></span>
             {{ translatedStatus }}
           </span>
           <span
             v-if="listing.escrow_active"
-            class="rounded-full border border-aa-success/30 px-2.5 py-0.5 text-[11px] font-semibold uppercase text-aa-success-light bg-aa-success/10"
+            class="rounded-full border border-sa-success/30 px-2.5 py-0.5 text-[11px] font-semibold uppercase text-sa-success-light bg-sa-success/10"
           >
             {{ t("market.escrowLocked", "escrow locked") }}
           </span>
         </div>
         <div class="flex items-baseline gap-1.5 shrink-0">
           <span
-            class="text-3xl font-extrabold text-aa-text font-outfit"
+            class="text-3xl font-extrabold text-sa-text font-outfit"
             >{{ listing.price_gas }}</span
           >
-          <span class="text-sm font-semibold text-aa-muted">GAS</span>
+          <span class="text-sm font-semibold text-sa-muted">GAS</span>
         </div>
       </div>
 
       <p
         v-if="metadata?.description"
-        class="text-sm text-aa-muted mb-4"
+        class="text-sm text-sa-muted mb-4"
       >
         {{ metadata.description }}
       </p>
 
       <!-- Account info row -->
       <div
-        class="rounded-xl border border-aa-border bg-aa-dark/50 p-4 mb-4"
+        class="rounded-xl border border-sa-border bg-sa-dark/50 p-4 mb-4"
       >
-        <p class="text-xs font-semibold uppercase text-aa-muted mb-2">
-          {{ t("market.aaAddress", "AA Address") }}
+        <p class="text-xs font-semibold uppercase text-sa-muted mb-2">
+          {{ t("market.saAddress", "SA Address") }}
         </p>
         <div class="flex items-start gap-2">
-          <p class="break-all font-mono text-sm text-aa-text flex-1">
+          <p class="break-all font-mono text-sm text-sa-text flex-1">
             {{ listing.account_address }}
           </p>
           <button
             type="button"
             :aria-label="t('market.copyAddress', 'Copy address')"
-            class="shrink-0 text-xs text-aa-muted hover:text-aa-text transition-colors duration-200"
+            class="shrink-0 text-xs text-sa-muted hover:text-sa-text transition-colors duration-200"
             @click="
               $emit('copy', {
                 value: listing.account_address,
@@ -92,11 +92,11 @@
           </button>
         </div>
         <div
-          class="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-aa-muted"
+          class="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-sa-muted"
         >
           <span class="flex items-center"
             >{{ t("market.accountIdLabel", "Account ID") }}:
-            <span class="font-mono text-aa-muted"
+            <span class="font-mono text-sa-muted"
               >0x{{ listing.accountIdHash?.slice(0, 8) }}...{{
                 listing.accountIdHash?.slice(-4)
               }}</span
@@ -112,7 +112,7 @@
                   markKey: 'listing-accid-' + listing.id,
                 })
               "
-              class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+              class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
             >
               <svg
                 aria-hidden="true"
@@ -133,7 +133,7 @@
                 aria-hidden="true"
                 v-else
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-3.5 w-3.5 text-aa-success"
+                class="h-3.5 w-3.5 text-sa-success"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -147,7 +147,7 @@
           </span>
           <span class="flex items-center"
             >{{ t("market.seller", "Seller") }}:
-            <span class="font-mono text-aa-muted">{{
+            <span class="font-mono text-sa-muted">{{
               listing.seller_address
                 ? listing.seller_address.slice(0, 8) +
                   "..." +
@@ -165,7 +165,7 @@
                   markKey: 'listing-seller-' + listing.id,
                 })
               "
-              class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+              class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
             >
               <svg
                 aria-hidden="true"
@@ -186,7 +186,7 @@
                 aria-hidden="true"
                 v-else
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-3.5 w-3.5 text-aa-success"
+                class="h-3.5 w-3.5 text-sa-success"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -204,27 +204,27 @@
       <!-- Details grid -->
       <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <div>
-          <p class="text-xs font-semibold uppercase text-aa-muted">
+          <p class="text-xs font-semibold uppercase text-sa-muted">
             {{ t("market.verifier", "Verifier") }}
           </p>
-          <p class="mt-1 text-sm text-aa-text">
+          <p class="mt-1 text-sm text-sa-text">
             {{ listing.verifier_profile || t("market.none", "None") }}
           </p>
         </div>
         <div>
-          <p class="text-xs font-semibold uppercase text-aa-muted">
+          <p class="text-xs font-semibold uppercase text-sa-muted">
             {{ t("market.hook", "Hook") }}
           </p>
-          <p class="mt-1 text-sm text-aa-text">
+          <p class="mt-1 text-sm text-sa-text">
             {{ listing.hook_profile || t("market.none", "None") }}
           </p>
         </div>
         <div>
-          <p class="text-xs font-semibold uppercase text-aa-muted">
+          <p class="text-xs font-semibold uppercase text-sa-muted">
             {{ t("market.backupOwner", "Backup Owner") }}
           </p>
           <div class="mt-1 flex items-center">
-            <span class="font-mono text-sm text-aa-text flex-1">{{
+            <span class="font-mono text-sm text-sa-text flex-1">{{
               listing.backup_owner
                 ? listing.backup_owner.slice(0, 8) +
                   "..." +
@@ -242,7 +242,7 @@
                   markKey: 'listing-backup-' + listing.id,
                 })
               "
-              class="ml-1.5 text-aa-muted hover:text-aa-text transition-colors duration-200 flex-shrink-0"
+              class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
             >
               <svg
                 aria-hidden="true"
@@ -263,7 +263,7 @@
                 aria-hidden="true"
                 v-else
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-3.5 w-3.5 text-aa-success"
+                class="h-3.5 w-3.5 text-sa-success"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -277,7 +277,7 @@
           </div>
         </div>
         <div>
-          <p class="text-xs font-semibold uppercase text-aa-muted">
+          <p class="text-xs font-semibold uppercase text-sa-muted">
             {{ t("market.metadata", "Metadata") }}
           </p>
           <a
@@ -285,11 +285,11 @@
             :href="listing.metadataUri"
             target="_blank"
             rel="noopener noreferrer"
-            class="mt-1 text-sm text-aa-info-light hover:text-aa-info transition-colors duration-200"
+            class="mt-1 text-sm text-sa-info-light hover:text-sa-info transition-colors duration-200"
           >
             {{ t("market.viewMetadata", "View") }} &rarr;
           </a>
-          <p v-else class="mt-1 text-sm text-aa-muted">
+          <p v-else class="mt-1 text-sm text-sa-muted">
             {{ t("market.noMetadataUrl", "No metadata URL") }}
           </p>
         </div>
@@ -297,23 +297,23 @@
     </div>
 
     <!-- Actions footer -->
-    <div class="border-t border-aa-border bg-aa-panel/40 p-4">
+    <div class="border-t border-sa-border bg-sa-panel/40 p-4">
       <div
         class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between"
       >
         <div
-          class="rounded-xl border border-aa-border bg-aa-dark/50 p-3 flex-1 max-w-xl"
+          class="rounded-xl border border-sa-border bg-sa-dark/50 p-3 flex-1 max-w-xl"
         >
           <p
-            class="text-xs font-semibold uppercase text-aa-muted mb-2"
+            class="text-xs font-semibold uppercase text-sa-muted mb-2"
           >
             {{ t("market.buyerTransferPlan", "Buyer Transfer Plan") }}
           </p>
-          <p class="text-xs leading-6 text-aa-muted">
+          <p class="text-xs leading-6 text-sa-muted">
             {{
               t(
                 "market.buyerTransferPlanHint",
-                "Settlement transfers only the AA shell. Existing verifier and hook bindings are cleared during settlement. Reconfigure fresh plugins afterward.",
+                "Settlement transfers only the SA shell. Existing verifier and hook bindings are cleared during settlement. Reconfigure fresh plugins afterward.",
               )
             }}
           </p>
@@ -322,7 +322,7 @@
             :for="'market-backup-owner-' + listing.id"
           >
             <span
-              class="mb-1 block text-xs font-semibold uppercase text-aa-muted"
+              class="mb-1 block text-xs font-semibold uppercase text-sa-muted"
               >{{
                 t("market.newBackupOwner", "New Backup Owner")
               }}</span
@@ -331,7 +331,7 @@
               :id="'market-backup-owner-' + listing.id"
               :value="newBackupOwner"
               type="text"
-              class="input-field w-full bg-aa-dark font-mono text-sm"
+              class="input-field w-full bg-sa-dark font-mono text-sm"
               :placeholder="
                 connectedAccount ||
                 t('market.addressPlaceholder', 'N...')
@@ -430,7 +430,7 @@
           :for="'market-update-price-' + listing.id"
         >
           <span
-            class="mb-1 block text-xs font-semibold uppercase text-aa-muted"
+            class="mb-1 block text-xs font-semibold uppercase text-sa-muted"
             >{{ t("market.updatePrice", "Update Price") }}</span
           >
           <input
@@ -438,7 +438,7 @@
             :value="priceDraft"
             type="text"
             inputmode="decimal"
-            class="input-field w-full bg-aa-dark font-mono text-sm"
+            class="input-field w-full bg-sa-dark font-mono text-sm"
             :placeholder="listing.price_gas"
             @input="$emit('update:priceDraft', $event.target.value)"
           />

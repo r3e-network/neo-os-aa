@@ -1,22 +1,22 @@
 <template>
-  <details class="rounded-xl border border-aa-border bg-aa-panel p-4 my-4">
-    <summary class="cursor-pointer font-semibold text-sm text-aa-text">{{ t('operatorBackup.title') }}</summary>
-    <p class="text-sm text-aa-muted my-3">{{ t('operatorBackup.description') }}</p>
+  <details class="rounded-xl border border-sa-border bg-sa-panel p-4 my-4">
+    <summary class="cursor-pointer font-semibold text-sm text-sa-text">{{ t('operatorBackup.title') }}</summary>
+    <p class="text-sm text-sa-muted my-3">{{ t('operatorBackup.description') }}</p>
     <div class="grid gap-3">
-      <label class="text-sm text-aa-text">
+      <label class="text-sm text-sa-text">
         <span class="block mb-1">{{ t('operatorBackup.password') }}</span>
         <input v-model="passphrase" type="password" autocomplete="new-password" maxlength="1024"
-          :disabled="busy" class="w-full rounded-lg border border-aa-border bg-aa-dark px-3 py-2" />
+          :disabled="busy" class="w-full rounded-lg border border-sa-border bg-sa-dark px-3 py-2" />
       </label>
-      <label class="text-sm text-aa-text">
+      <label class="text-sm text-sa-text">
         <span class="block mb-1">{{ t('operatorBackup.confirmPassword') }}</span>
         <input v-model="confirmation" type="password" autocomplete="new-password" maxlength="1024"
-          :disabled="busy" class="w-full rounded-lg border border-aa-border bg-aa-dark px-3 py-2" />
+          :disabled="busy" class="w-full rounded-lg border border-sa-border bg-sa-dark px-3 py-2" />
       </label>
       <button type="button" class="btn-secondary" :disabled="busy || passphrase.length < 12 || !confirmation" @click="exportBackup">
         {{ t('operatorBackup.export') }}
       </button>
-      <label class="text-sm text-aa-text">
+      <label class="text-sm text-sa-text">
         <span class="block mb-1">{{ t('operatorBackup.file') }}</span>
         <input ref="fileInput" type="file" accept=".json,application/json" :disabled="busy" @change="selectFile" class="w-full text-sm" />
       </label>
@@ -94,7 +94,7 @@ async function exportBackup() {
   if (passphrase.value !== confirmation.value) { errorKey.value = 'operatorBackup.mismatch'; return; }
   await run(async (args) => {
     const backup = await transport.exportBackup(args);
-    if (!downloadJsonFile(backup, { filename: 'neo-aa-operator-backup.json' })) throw new Error('download_failed');
+    if (!downloadJsonFile(backup, { filename: 'neo-sa-operator-backup.json' })) throw new Error('download_failed');
   }, 'operatorBackup.exported');
 }
 

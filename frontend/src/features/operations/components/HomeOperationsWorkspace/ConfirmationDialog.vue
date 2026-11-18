@@ -13,11 +13,11 @@
     <div class="modal-panel">
       <h3
         id="confirmation-dialog-title"
-        class="text-lg font-bold text-aa-text font-outfit"
+        class="text-lg font-bold text-sa-text font-outfit"
       >
         {{ title }}
       </h3>
-      <p class="mt-3 text-sm text-aa-text leading-relaxed">
+      <p class="mt-3 text-sm text-sa-text leading-relaxed">
         {{ message }}
       </p>
       <div class="mt-6 flex gap-3 justify-end">

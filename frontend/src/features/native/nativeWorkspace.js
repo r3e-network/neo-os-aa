@@ -153,7 +153,7 @@ export function createNativeWalletAdapter(
       ...(nep ? [{ name: nep.name || "NEP-21", api: nep.api }] : []),
       { name: "neo3Dapi", api: windowObject?.neo3Dapi },
       ...service.getNeoLineProviderCandidates(),
-      { name: "aaWallet", api: windowObject?.aaWallet },
+      { name: "saWallet", api: windowObject?.saWallet },
     ];
     const candidate = providers.find(
       (p) => p.name === selected.name && typeof p.api?.invoke === "function",

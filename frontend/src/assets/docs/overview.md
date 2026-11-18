@@ -1,12 +1,12 @@
 # Overview & Description
 
-The Neo N3 Abstract Account protocol is a robust, enterprise-grade smart contract wallet standard designed to decouple account identities from their underlying cryptographic key pairs. Conceptually similar to Ethereum's ERC-4337, this architecture transforms standard accounts into policy-gated programmable wallets.
+The Neo N3 Smart Account protocol is a robust, enterprise-grade smart contract wallet standard designed to decouple account identities from their underlying cryptographic key pairs. Conceptually similar to Ethereum's ERC-4337, this architecture transforms standard accounts into policy-gated programmable wallets.
 
 By transitioning from standard ECDSA signatures to deterministic proxy contracts, developers and users can implement advanced multi-signature structures, EVM cross-chain execution capabilities, social recovery mechanisms, and fine-grained operational limits without sacrificing user experience.
 
 ```mermaid
 mindmap
-  root((Abstract Account))
+  root((Smart Account))
     Identity
       Deterministic Address
       Zero Deployment Cost
@@ -22,7 +22,7 @@ mindmap
       Custom Verifiers
       EVM EIP-712 MetaTx
     Sponsored Execution
-      AAPaymaster
+      SAPaymaster
       Policy-Based Gas Sponsorship
     Recovery
       Oracle Gating
@@ -35,7 +35,7 @@ mindmap
 3. **Execution Limits:** Policy-gated method access plus universal Blacklists, Whitelists, and Token Transfer Limits.
 4. **EIP-712 Compatibility:** Support for standard EVM wallets like MetaMask natively.
 5. **Custom Verifiers:** Build and deploy fully custom C# smart contracts to govern verification (e.g. ZK-proofs, time-locks).
-6. **Sponsored / Gasless Transactions:** The on-chain `AAPaymaster` contract lets sponsors deposit GAS and create policies that cover relay fees for specific accounts, contracts, or methods. Settlement is atomic: policy validation, deposit deduction, and relay reimbursement happen in a single call, and the Paymaster never authorizes execution itself.
+6. **Sponsored / Gasless Transactions:** The on-chain `SAPaymaster` contract lets sponsors deposit GAS and create policies that cover relay fees for specific accounts, contracts, or methods. Settlement is atomic: policy validation, deposit deduction, and relay reimbursement happen in a single call, and the Paymaster never authorizes execution itself.
 
 ## Navigation Guide
 

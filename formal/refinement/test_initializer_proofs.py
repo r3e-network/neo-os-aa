@@ -22,7 +22,7 @@ class InitializerProofTests(unittest.TestCase):
             cls.inventory["sourceMap"]["debug"]["static-variables"] = current["staticVariables"]
         else:
             cls.inventory["source"] = json.loads((Path(__file__).with_name("fixtures") / "initializer-source.json").read_text())["source"]
-        cls.directory = tempfile.TemporaryDirectory(prefix="aa-source-init-fixture-")
+        cls.directory = tempfile.TemporaryDirectory(prefix="sa-source-init-fixture-")
         cls.addClassCleanup(cls.directory.cleanup)
         nef = materialize_nef_fixture(cls.inventory, cls.directory.name)
         cls.inventory["inputs"] = {str(nef): cls.inventory["nef"]["sha256"]}
@@ -76,7 +76,7 @@ class InitializerProofTests(unittest.TestCase):
         self.assertEqual(before["initializer"], after["initializer"])
 
     def test_full_kernel_and_semantic_rejection(self):
-        with tempfile.TemporaryDirectory(prefix="aa-source-init-kernel-") as output:
+        with tempfile.TemporaryDirectory(prefix="sa-source-init-kernel-") as output:
             result = proof.run_proofs(self.inventory, output)
             self.assertTrue(result["kernelChecked"])
             self.assertEqual(result["fieldCount"], len(self.inventory["sourceMap"]["debug"]["static-variables"]))

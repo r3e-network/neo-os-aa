@@ -1,4 +1,4 @@
-# Neo N3 Abstract Account Security Model
+# Neo N3 Smart Account Security Model
 
 ## Runtime and authority versions (2026-10-09 convergence)
 
@@ -38,7 +38,7 @@ VM budget evidence, separate from the bounded policy proofs.
 
 ## Executive Summary
 
-The Neo N3 Abstract Account system implements a policy-gated, plugin-based account abstraction architecture. This document defines the threat model, trust assumptions, security properties, and defense-in-depth mechanisms across all layers of the system.
+The Neo N3 Smart Account system implements a policy-gated, plugin-based account abstraction architecture. This document defines the threat model, trust assumptions, security properties, and defense-in-depth mechanisms across all layers of the system.
 
 The deployed-contract profile is not automatically compatible with native
 SmartAccount. The native NeoNativeVerifier, WhitelistHook, SessionKeyVerifier,
@@ -46,7 +46,7 @@ DailyLimitHook and TokenRestrictedHook historical ABI 1 profiles
 have private-chain evidence for actual witnesses, exact invocation grants,
 delayed configuration, rollback and cleanup. The remaining modules still require
 their own native-profile adaptation and validation. The consolidated evidence is
-`docs/reports/aa-native-restricted-validation-20261008.json`; the detailed
+`docs/reports/sa-native-restricted-validation-20261008.json`; the detailed
 scope is `docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md`. None of these
 receipts establishes complete cryptographic or compiler refinement.
 
@@ -73,7 +73,7 @@ overflowing and noncanonical byte encodings. The historical lifecycle matrix
 covers the four-prefix layout; amended ABI 2 requires new replay for both split
 entries.
 The additional scope matrix is
-`docs/reports/aa-native-session-scope-validation-20261007.json`. Zero means no
+`docs/reports/sa-native-session-scope-validation-20261007.json`. Zero means no
 session spending cap, not zero allowance. A wildcard method remains bound to one
 target but can authorize its entire value-moving surface; a whole-balance GAS
 transfer is exercised. Uncapped Boolean-false HALT consumes nonce and updates
@@ -89,7 +89,7 @@ bytes and reject them after regrant, then accept a freshly signed operation.
 Old ABI 1 receipts remain historical evidence and must not be relabelled.
 
 DailyLimitHook native-profile evidence is recorded separately in
-`docs/reports/aa-native-daily-balance-validation-20261007.json`. Its net-outflow meter
+`docs/reports/sa-native-daily-balance-validation-20261007.json`. Its net-outflow meter
 uses every configured token's proxy balance rather than inferring success from
 the target return value. False results leave no persistent snapshot. Fixed
 window anchors do not slide on subsequent transfers; rolling history has an
@@ -128,7 +128,7 @@ host-injected malformed callback Arrays reject. These diagnostic injections do
 not establish that malformed callbacks are reachable through the native parser.
 Full-NEF measured instruction/conditional-edge coverage is 83.64%/68.13%, below
 the completion threshold; it is not C# source coverage. See
-`docs/reports/aa-native-nef-phases-validation-20261008.json`. Arbitrary token
+`docs/reports/sa-native-nef-phases-validation-20261008.json`. Arbitrary token
 honesty, gross intermediate movement, large configured sets and complete C#/NEF
 branch coverage remain outside the demonstrated scope.
 
@@ -372,14 +372,14 @@ artifact instead uses the platform-level `System.Contract.CallWithGasLimit`
 capability. Its 1,000,000,000-datoshi (10 GAS) budget is charged against the
 child and every ancestor before counters mutate; ordinary nested calls inherit
 the budget and fee whitelisting cannot bypass it. The matching core passes 9/9
-targeted vectors and 1,435/1,435 full unit tests. The matching AA artifact
+targeted vectors and 1,435/1,435 full unit tests. The matching SA artifact
 passes 571/571 contract tests, and the current private NeoExpress receipt drives
 burning verifier and hook callbacks to the bounded gas fault with
 nonce/configuration rollback and 25-artifact RPC readback parity. See
-`docs/reports/aa-neoexpress-validation-20261031.json`,
-`docs/reports/aa-private-artifact-provenance-20261031.json`,
-`docs/reports/aa-platform-gas-cap-20260921.json` and
-`docs/reports/aa-neoexpress-gas-cap-20260921.json`. VULN-001 is mitigated for
+`docs/reports/sa-neoexpress-validation-20261031.json`,
+`docs/reports/sa-private-artifact-provenance-20261031.json`,
+`docs/reports/sa-platform-gas-cap-20260921.json` and
+`docs/reports/sa-neoexpress-gas-cap-20260921.json`. VULN-001 is mitigated for
 this private integrated artifact; public activation and deployment remain
 pending. These dated receipts describe the private artifact tested then, not the
 current public `contracts/bin/v3` build. The source lock scopes
@@ -425,7 +425,7 @@ primitives, arbitrary plugins, or C#-to-NEF callback refinement.
 The isolated NeoExpress receipt now also drives the concrete boundary with independently
 bounded verifier and hook callbacks plus a hand-built,
 P-256-signed transaction: a real proxy verification script is carried by a `WitnessRules`
-signer scoped to both the AA core and `NeoDIDRegistry`, consumes an action ticket, and rejects
+signer scoped to both the SA core and `NeoDIDRegistry`, consumes an action ticket, and rejects
 same-nullifier replay and action-id retargeting. The receipt deploys 25 artifacts, runs 15
 scenarios, and reads every deployed artifact back with byte-identical NEF scripts, matching
 checksums, and semantically equal manifests over RPC. This is private-chain
@@ -439,7 +439,7 @@ shape; complete NeoVM/ApplicationEngine semantics remain outside this model.
 The core also rejects oversized verifier signatures and argument arrays before nonce
 consumption or external dispatch. This is input-amplification mitigation only; it cannot cap a
 verifier that is already executing inside the shared NeoVM gas budget.
-A read-only RPC comparison of the known canonical TestNet/MainNet AA core hashes also
+A read-only RPC comparison of the known canonical TestNet/MainNet SA core hashes also
 found different NEF scripts than the current local artifact. This is a detected deployment
 drift, not a current-artifact deployment proof; no public write was performed.
 
@@ -465,7 +465,7 @@ settle the account to any address it chooses; no owner action is required. The o
 therefore protects against a market that is destroyed, upgraded without `abandonListing`, never
 settles, or throws. It does not protect against a market that aborts inside its own
 `abandonListing`, and it cannot: NeoVM `ASSERT`/`ABORT` faults are uncatchable and no
-call-site guard exists. Only list accounts on audited markets; the shipped `AAAddressMarket`
+call-site guard exists. Only list accounts on audited markets; the shipped `SAAddressMarket`
 allowlists the core it trusts, and the same allowlisting discipline applies in the other direction.
 
 ---
@@ -519,7 +519,7 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 
 ### 8.2 Paymaster Security
 
-#### On-Chain Paymaster (`AAPaymaster`)
+#### On-Chain Paymaster (`SAPaymaster`)
 
 | Mechanism | Purpose |
 | --- | --- |
@@ -529,7 +529,7 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 | **Daily Budget** | Rolling 24-hour settlement cap per resolved policy scope; global policies require a positive budget shared across all sponsored accounts |
 | **Total Budget** | Lifetime settlement cap per resolved policy scope, with overflow protection |
 | **Expiry Timestamps** | Policies auto-expire at `ValidUntil` |
-| **Core-Only Settlement** | Only the authorized AA core contract can call `settleReimbursement` |
+| **Core-Only Settlement** | Only the authorized SA core contract can call `settleReimbursement` |
 | **Checks-Effects-Interactions** | Deposit deducted before GAS transferred to relay |
 | **Atomic Execution** | Settlement reverts if policy check or GAS transfer fails |
 
@@ -653,7 +653,7 @@ market escrow or remove the independent core upgrade administrator.
 ### 11.2 Medium Priority
 
 4. **TEE Attestation:** Integrate remote attestation verification
-5. ~~**Paymaster Staking:**~~ Resolved — `AAPaymaster` contract provides on-chain deposit-backed sponsorship
+5. ~~**Paymaster Staking:**~~ Resolved — `SAPaymaster` contract provides on-chain deposit-backed sponsorship
 6. **Plugin Audit System:** Verified plugin marketplace
 
 ### 11.3 Low Priority
@@ -671,5 +671,5 @@ market escrow or remove the independent core upgrade administrator.
 - **ERC-4337:** https://eips.ethereum.org/EIPS/eip-4337
 - **ERC-7579:** https://eips.ethereum.org/EIPS/eip-7579
 - **Neo Documentation:** https://docs.neo.org/
-- **Security Audit:** `docs/SECURITY_AUDIT.md`
-- **Plugin Matrix:** `docs/PLUGIN_MATRIX.md`
+- **Protocol Audit:** `docs/PROTOCOL_COMPLETENESS_AUDIT.md`
+- **Formal Verification:** `docs/SA-FORMAL-VERIFICATION.md`

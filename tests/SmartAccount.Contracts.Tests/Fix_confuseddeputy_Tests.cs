@@ -11,12 +11,12 @@ using Neo.VM;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Confused-deputy regression suite for <c>SmartAccountV3.ExecuteUserOp</c>.
+/// Confused-deputy regression suite for <c>SmartAccount.ExecuteUserOp</c>.
 /// </summary>
 /// <remarks>
 /// One core contract backs every virtual account, so the target of a user operation always
 /// observes the same <c>Runtime.CallingScriptHash</c> no matter which account authorized the
-/// call. A contract that authorizes on "the caller is the AA core" therefore cannot tell one
+/// call. A contract that authorizes on "the caller is the SA core" therefore cannot tell one
 /// account from another, and the core must not lend that identity to an operation's target.
 /// Each test drives a real compiled core with an ordinary, correctly authorized user
 /// operation whose target is one of those caller-identity gates.
@@ -52,7 +52,7 @@ public class Fix_confuseddeputy_Tests
 
         public Harness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
+            Wallet = Fx.Deploy("SmartAccount");
         }
 
         /// <summary>Registers a verifier-less account, so the backup owner's witness authorizes operations.</summary>
@@ -104,7 +104,7 @@ public class Fix_confuseddeputy_Tests
         nef.CheckSum = NefFile.ComputeChecksum(nef);
 
         const string manifest =
-            "{\"name\":\"SmartAccountV3\",\"groups\":[],\"features\":{},\"supportedstandards\":[],"
+            "{\"name\":\"SmartAccount\",\"groups\":[],\"features\":{},\"supportedstandards\":[],"
             + "\"abi\":{\"methods\":[{\"name\":\"verify\",\"parameters\":[{\"name\":\"accountId\",\"type\":\"Hash160\"}],"
             + "\"returntype\":\"Boolean\",\"offset\":0,\"safe\":true}],\"events\":[]},"
             + "\"permissions\":[{\"contract\":\"*\",\"methods\":\"*\"}],\"trusts\":[],\"extra\":null}";
@@ -151,7 +151,7 @@ public class Fix_confuseddeputy_Tests
     public void ExecuteUserOp_CannotSettlePaymasterReimbursementWithoutSponsoredExecution()
     {
         Harness h = new();
-        UInt160 paymaster = h.Fx.Deploy("AAPaymaster", h.Wallet.ToArray());
+        UInt160 paymaster = h.Fx.Deploy("SAPaymaster", h.Wallet.ToArray());
         BigInteger deposit = 5 * OneGas;
         h.Fx.FundGasFromValidators(Sponsor, deposit * 2);
         h.Fx.SetSigners(Sponsor);
@@ -179,15 +179,15 @@ public class Fix_confuseddeputy_Tests
     public void ExecuteUserOp_CannotAbandonAnotherAccountsMarketListing()
     {
         Harness h = new();
-        UInt160 market = h.Fx.Deploy("AAAddressMarket");
-        h.Fx.CallVoid(market, "setAllowedAA", h.Wallet, true);
+        UInt160 market = h.Fx.Deploy("SAAddressMarket");
+        h.Fx.CallVoid(market, "setAllowedSA", h.Wallet, true);
         // Phase 1b: the core admin (the deploying validators account) registers the
         // market as an approved escrow service.
         h.Fx.CallVoid(h.Wallet, "setMarketService", market, true);
 
         UInt160 victimAccount = h.RegisterAccount(Victim);
         h.Fx.SetSigners(Victim);
-        h.Fx.CallVoid(market, "createListing", h.Wallet, victimAccount, (BigInteger)OneGas, "AA address", "");
+        h.Fx.CallVoid(market, "createListing", h.Wallet, victimAccount, (BigInteger)OneGas, "SA address", "");
         BigInteger listingId = h.Fx.CallInteger(market, "getListingCount");
 
         UInt160 attackerAccount = h.RegisterAccount(Attacker);

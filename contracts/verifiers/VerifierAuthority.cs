@@ -12,12 +12,12 @@ namespace SmartAccount
         private static readonly byte[] Prefix_AuthorizedCore = new byte[] { 0xE1 };
         private static readonly byte[] Prefix_PendingAdmin = new byte[] { 0xE2 };
         private static readonly byte[] Prefix_AdminRotationTimelock = new byte[] { 0xE3 };
-        // Audit fix M-7 (parity with HookAuthority): timelocked change of the trusted AA
+        // Audit fix M-7 (parity with HookAuthority): timelocked change of the trusted SA
         // core (repointing it lets the new "core" reconfigure every bound account, so it
         // must not be instant). New prefixes — never written by previous deployments.
         private static readonly byte[] Prefix_PendingCore = new byte[] { 0xE4 };
         private static readonly byte[] Prefix_CoreTimelock = new byte[] { 0xE5 };
-        // AA-D-01: timelocked contract upgrade. The admin first proposes the sha256 of the
+        // SA-D-01: timelocked contract upgrade. The admin first proposes the sha256 of the
         // new NEF and manifest, then can only apply that exact artifact pair after the
         // 7-day window. This is one-way: once deployed, every future upgrade waits 7 days.
         private static readonly byte[] Prefix_PendingUpdateNefHash = new byte[] { 0xE6 };
@@ -105,7 +105,7 @@ namespace SmartAccount
             Storage.Delete(Storage.CurrentContext, Prefix_CoreTimelock);
         }
 
-        // AA-D-01: contract upgrade is timelocked. ProposeUpdate pins the sha256 of the
+        // SA-D-01: contract upgrade is timelocked. ProposeUpdate pins the sha256 of the
         // new NEF and manifest; Update/ConfirmUpdate applies exactly that artifact pair
         // only after the 7-day window. There is intentionally no instant upgrade path.
         internal static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash)
@@ -150,7 +150,7 @@ namespace SmartAccount
             NativeAuthority.Require(AuthorizedCore(), accountId, "verifier", "configuration");
 #else
             UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
             ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
 
             bool authorized = (bool)Contract.Call(
@@ -168,13 +168,38 @@ namespace SmartAccount
             NativeAuthority.Require(AuthorizedCore(), accountId, "verifier", "postExecute");
 #else
             UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
 
             bool authorized = (bool)Contract.Call(
                 core,
                 "canExecuteVerifier",
                 CallFlags.ReadOnly,
                 new object[] { accountId, callerContract, verifierContract });
+            ExecutionEngine.Assert(authorized, "Unauthorized");
+#endif
+        }
+
+        /// <summary>
+        /// Validation-phase caller check (read-only). The v4 core authorizes a
+        /// validator for the PhaseValidation writer phase only, and calls it
+        /// with CallFlags.ReadOnly, so post-execution authorization would be
+        /// wrong here. Same shape as <see cref="ValidateExecutionCaller"/>:
+        /// nothing about the surrounding authority architecture changes.
+        /// </summary>
+        internal static void ValidateValidationCaller(UInt160 accountId, UInt160 verifierContract)
+        {
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.Require(AuthorizedCore(), accountId, "verifier", "validate");
+#else
+            UInt160 core = AuthorizedCore();
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
+            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
+
+            bool authorized = (bool)Contract.Call(
+                core,
+                "canValidateVerifier",
+                CallFlags.ReadOnly,
+                new object[] { accountId, verifierContract });
             ExecutionEngine.Assert(authorized, "Unauthorized");
 #endif
         }

@@ -28,7 +28,7 @@ function createPanel({
   recoveryVerifierPrefill = '',
   reactiveRuntime = true,
 }) {
-  const props = reactive({ aaContractHash: core, accountIdPrefill: accountA, accountAddressScriptHash: '', neoWalletAddress: '', recoveryVerifierPrefill, recoveryNewOwnerPrefill, recoveryExpiryPrefill: '', autoPreviewRecovery: false });
+  const props = reactive({ saContractHash: core, accountIdPrefill: accountA, accountAddressScriptHash: '', neoWalletAddress: '', recoveryVerifierPrefill, recoveryNewOwnerPrefill, recoveryExpiryPrefill: '', autoPreviewRecovery: false });
   const runtime = { rpcUrl: 'http://127.0.0.1:10332' };
   const runtimeConfig = reactiveRuntime ? reactive(runtime) : runtime;
   const errors = [];
@@ -80,15 +80,15 @@ test('identity panel accepts only the newest account context after out-of-order 
 test('switching core clears identity and stale verifier state even if an old read succeeds', async () => {
   const stateRead = pending();
   const panel = createPanel({
-    identityReader: async ({ aaContractHash }) => {
-      if (aaContractHash !== core) throw new Error('unknown account on this core');
+    identityReader: async ({ saContractHash }) => {
+      if (saContractHash !== core) throw new Error('unknown account on this core');
       return { accountIdHex: accountA, verifierHash: verifierA };
     },
     stateReader: () => stateRead.promise,
   });
   try {
     await flush();
-    panel.props.aaContractHash = '99'.repeat(20);
+    panel.props.saContractHash = '99'.repeat(20);
     await flush();
     stateRead.resolve({ owner: 'old owner' });
     await flush();
@@ -131,7 +131,7 @@ test('recovery and action previews require valid text, network, core, and non-ze
   const validState = {
     verifierHash: `0x${verifierA}`,
     network: 'neo3-testnet',
-    aaContract: core,
+    saContract: core,
     accountIdText: 'shared-account-text',
     accountAddress,
     recoveryNonce: '0',
@@ -170,7 +170,7 @@ test('recovery and action previews require valid text, network, core, and non-ze
     for (const [field, value] of [
       ['network', ''],
       ['accountIdText', ''],
-      ['aaContract', '00'.repeat(20)],
+      ['saContract', '00'.repeat(20)],
       ['accountAddress', undefined],
       ['accountAddress', '00'.repeat(20)],
     ]) {
@@ -189,7 +189,7 @@ test('recovery and action previews require valid text, network, core, and non-ze
 
 const configuredState = (verifier, sessionNonce = '0', extra = {}) => ({
   verifierHash: `0x${verifier}`,
-  network: 'neo3-testnet', aaContract: core, accountIdText: `account-${verifier.slice(0, 2)}`,
+  network: 'neo3-testnet', saContract: core, accountIdText: `account-${verifier.slice(0, 2)}`,
   accountAddress: '66'.repeat(20), recoveryNonce: '0', sessionNonce, actionProtocolVersion: '4', actionAuthorizationEpoch: '2', ...extra,
 });
 
@@ -216,7 +216,7 @@ test('proxy preview uses B context and nonce independently of recovery verifier 
     assert.equal(actionCalls[0].sessionNonce, '7');
     assert.equal(actionCalls[0].expiresAt, 1800000000000);
     assert.equal(actionCalls[0].network, 'neo3-testnet');
-    assert.equal(actionCalls[0].aaContract, core);
+    assert.equal(actionCalls[0].saContract, core);
     assert.equal(actionCalls[0].accountIdRaw, accountA);
     assert.equal(actionCalls[0].executor, '88'.repeat(20));
     assert.ok(reads.some(read => read.verifierHash === verifierB), 'B must be read');
@@ -276,9 +276,9 @@ test('valid proxy B remains available when recovery A has no stored context', as
 for (const [label, invalid] of [
   ['wrong returned verifier', { verifierHash: `0x${verifierA}` }],
   ['missing returned verifier', { verifierHash: undefined }],
-  ['wrong stored AA core', { aaContract: '99'.repeat(20) }],
+  ['wrong stored SA core', { saContract: '99'.repeat(20) }],
   ['malformed returned verifier', { verifierHash: 'Not an address' }],
-  ['malformed stored AA core', { aaContract: 'Not an address' }],
+  ['malformed stored SA core', { saContract: 'Not an address' }],
 ]) {
   test(`proxy admission and direct preview reject ${label}`, async () => {
     const calls = [];
@@ -363,17 +363,17 @@ for (const key of ['rpc', 'core', 'account']) {
       const refresh = panel.state.refreshVerifierStateAction(); await flush();
       holdFresh = true;
       if (key === 'rpc') panel.runtimeConfig.rpcUrl = 'http://127.0.0.1:20332';
-      if (key === 'core') panel.props.aaContractHash = '99'.repeat(20);
+      if (key === 'core') panel.props.saContractHash = '99'.repeat(20);
       if (key === 'account') panel.props.accountIdPrefill = accountB;
       assert.equal(panel.state.canPreviewProxy.value, false, 'context changes must reject old admission immediately');
       await flush();
       const nextCore = key === 'core' ? '99'.repeat(20) : core;
-      fresh.resolve(configuredState(verifierB, '11', { aaContract: nextCore })); await flush();
+      fresh.resolve(configuredState(verifierB, '11', { saContract: nextCore })); await flush();
       old.resolve(configuredState(verifierB, '7')); await refresh; await flush();
       assert.equal(panel.state.canPreviewProxy.value, true);
       await panel.state.previewProxyAction();
       assert.equal(calls[0].sessionNonce, '11');
-      assert.equal(calls[0].aaContract, nextCore);
+      assert.equal(calls[0].saContract, nextCore);
       assert.equal(calls[0].accountIdRaw, key === 'account' ? accountB : accountA);
       assert.equal(reads.at(-1).rpcUrl, panel.runtimeConfig.rpcUrl);
       assert.equal(reads.at(-1).accountIdHex, key === 'account' ? accountB : accountA);
@@ -445,7 +445,7 @@ test('action enrollment and legacy reauthorization require explicit user handler
   const calls = [];
   const panel = createPanel({ connected: true,
     identityReader: async () => ({ accountIdHex: accountA, verifierHash: verifierA }),
-    stateReader: async () => configuredState(verifierA, '0', { activeSession: { active: true, executor: '88'.repeat(20), actionId: 'aa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: '99'.repeat(32) } }),
+    stateReader: async () => configuredState(verifierA, '0', { activeSession: { active: true, executor: '88'.repeat(20), actionId: 'sa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: '99'.repeat(32) } }),
     didService: { setActionIdentity: async p => { calls.push(['enroll', p]); return {}; }, reauthorizeActiveActionSession: async p => { calls.push(['reauthorize', p]); return {}; } },
   });
   try {
@@ -455,7 +455,7 @@ test('action enrollment and legacy reauthorization require explicit user handler
     assert.equal(calls[0][1].accountIdHex, accountA); assert.equal(calls[0][1].enabled, true);
     await panel.state.reauthorizeActionSession();
     assert.equal(calls[1][1].session.executor, '88'.repeat(20));
-    panel.props.aaContractHash = 'ff'.repeat(20);
+    panel.props.saContractHash = 'ff'.repeat(20);
     await panel.state.manageActionIdentity(true);
     assert.equal(calls.length, 2, 'plain stale context cannot submit an enrollment');
   } finally { panel.stop(); }

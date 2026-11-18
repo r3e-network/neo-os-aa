@@ -8,7 +8,7 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral VM tests for <c>AAPaymaster</c>: GAS deposits, withdrawal limits, and settlement
+/// Behavioral VM tests for <c>SAPaymaster</c>: GAS deposits, withdrawal limits, and settlement
 /// policy enforcement (per-op cap, daily window, total budget, deposit backing, core-only
 /// caller) with real GAS balance assertions. The paymaster is bound to the MockVerifierCore
 /// stub so settlements can be driven through the authorized-core call path.
@@ -41,7 +41,7 @@ public class PaymasterRuntimeTests
         public PaymasterHarness(BigInteger depositAmount)
         {
             Core = Fx.Deploy("MockVerifierCore");
-            Paymaster = Fx.Deploy("AAPaymaster", Core.ToArray());
+            Paymaster = Fx.Deploy("SAPaymaster", Core.ToArray());
 
             Fx.FundGasFromValidators(Sponsor, depositAmount * 2);
             Fx.SetSigners(Sponsor);

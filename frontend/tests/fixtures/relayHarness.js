@@ -1,11 +1,11 @@
-// Test harness for the AA relay route: a loopback JSON-RPC node that counts every method it receives, an
-// environment isolator for the AA_RELAY_* switches, and a request helper for the real handler. No live host is
+// Test harness for the SA relay route: a loopback JSON-RPC node that counts every method it receives, an
+// environment isolator for the SA_RELAY_* switches, and a request helper for the real handler. No live host is
 // contacted: the node listens on 127.0.0.1 only.
 import http from 'node:http';
 import { createRequire } from 'node:module';
 
 import relayHandler from '../../api/relay-transaction.js';
-import { CORE_HASH, chain, relayRoute } from './aaChainFixtures.js';
+import { CORE_HASH, chain, relayRoute } from './saChainFixtures.js';
 
 const sdkRequire = createRequire(new URL('../../../sdk/js/package.json', import.meta.url));
 const { wallet } = sdkRequire('@cityofzion/neon-js');
@@ -63,7 +63,7 @@ export async function startNode({ invokeScript }) {
   };
 }
 
-const ENV_OWNED = /^(AA_RELAY|AA_PAYMASTER|AA_API_FETCH|MORPHEUS_|UPSTASH_|VITE_AA_|VITE_MORPHEUS_)/;
+const ENV_OWNED = /^(SA_RELAY|SA_PAYMASTER|SA_API_FETCH|MORPHEUS_|UPSTASH_|VITE_SA_|VITE_MORPHEUS_)/;
 
 export async function withRelay(node, overrides, fn) {
   const snapshot = {};
@@ -74,12 +74,12 @@ export async function withRelay(node, overrides, fn) {
     }
   }
   const env = {
-    AA_RELAY_RPC_URL: node.url,
-    AA_RELAY_WIF: RELAY_WIF,
-    AA_RELAY_ALLOWED_HASH: `0x${CORE_HASH}`,
-    AA_RELAY_ALLOW_UNSPONSORED: '1',
-    AA_RELAY_MAX_SYSTEM_FEE: '2000000000',
-    AA_RELAY_MAX_NETWORK_FEE: '2000000000',
+    SA_RELAY_RPC_URL: node.url,
+    SA_RELAY_WIF: RELAY_WIF,
+    SA_RELAY_ALLOWED_HASH: `0x${CORE_HASH}`,
+    SA_RELAY_ALLOW_UNSPONSORED: '1',
+    SA_RELAY_MAX_SYSTEM_FEE: '2000000000',
+    SA_RELAY_MAX_NETWORK_FEE: '2000000000',
     ...overrides,
   };
   const touched = [];

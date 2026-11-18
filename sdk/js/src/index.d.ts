@@ -1,5 +1,5 @@
 /**
- * Type definitions for the Neo N3 Abstract Account SDK.
+ * Type definitions for the Neo N3 Smart Account SDK.
  *
  * These declarations describe the public surface exported from
  * `src/index.js` (the package `main`). All Hash160 values are hex strings
@@ -161,7 +161,7 @@ export interface UserOperationTypedData {
   message: {
     /** `0x`-prefixed account id (20 bytes, `bytes20`). */
     accountId: string;
-    /** `0x`-prefixed authorized AA core hash (20 bytes, `bytes20`). */
+    /** `0x`-prefixed authorized SA core hash (20 bytes, `bytes20`). */
     coreContract: string;
     /** `0x`-prefixed target contract hash (20 bytes). */
     targetContract: string;
@@ -198,7 +198,7 @@ export interface BuildV3UserOperationTypedDataOptions {
   /** Verifier contract hash. */
   verifyingContract: Hash160;
   accountIdHash: Hash160;
-  /** Authorized AA core hash; signatures are invalid on another core. */
+  /** Authorized SA core hash; signatures are invalid on another core. */
   coreContractHash: Hash160;
   targetContract: Hash160;
   method: string;
@@ -226,7 +226,7 @@ export declare function buildV3UserOperationTypedData(
 /** Options for {@link buildContractCompatibleStructHash}. */
 export interface BuildContractCompatibleStructHashOptions {
   accountIdHash: Hash160;
-  /** Authorized AA core hash; signatures are invalid on another core. */
+  /** Authorized SA core hash; signatures are invalid on another core. */
   coreContractHash: Hash160;
   targetContract: Hash160;
   method: string;
@@ -242,7 +242,7 @@ export interface BuildWeb3AuthSigningPayloadOptions {
   chainId: IntegerLike;
   verifierHash: Hash160;
   accountIdHash: Hash160;
-  /** Authorized AA core hash; signatures are invalid on another core. */
+  /** Authorized SA core hash; signatures are invalid on another core. */
   coreContractHash: Hash160;
   targetContract: Hash160;
   method: string;
@@ -481,7 +481,7 @@ export declare class UserOperationBuilder {
   autoDeadline(bufferSeconds?: number): this;
   /** Sets the verifier contract hash for V3 EIP-712 signing. */
   setVerifier(verifierHash: string): this;
-  /** Sets the authorized AA core hash for V3 EIP-712 signing. */
+  /** Sets the authorized SA core hash for V3 EIP-712 signing. */
   setCoreContract(coreContractHash: string): this;
   /** Sets the chain id for EIP-712 signing. */
   setChainId(chainId: IntegerLike): this;
@@ -533,6 +533,17 @@ export interface SimulationChecks {
   verifier: string;
   /** Hook hash (big-endian display hex), or empty. */
   hook: string;
+  /**
+   * How `executeUserOp` authorizes the operation: through the configured verifier, or (no verifier) through the
+   * backup owner's native witness. An account without a verifier is valid and is not refused.
+   */
+  authorization: 'verifier' | 'owner-witness';
+  /** Backup owner hash (big-endian display hex) on the owner-witness path; empty when it was not read. */
+  backupOwner: string;
+  /**
+   * Only on the owner-witness path when `signers` were supplied: whether they carry the backup owner's witness.
+   */
+  ownerWitnessPresent?: boolean;
 }
 
 /**
@@ -563,11 +574,19 @@ export interface SimulateUserOperationOptions {
   nonce?: IntegerLike;
   /** Deadline in Neo Runtime.Time milliseconds. */
   deadline?: IntegerLike;
+  /**
+   * RPC signers of the transaction that will carry the operation. Only used for an account without a verifier,
+   * to check that the backup owner's witness is among them.
+   */
+  signers?: unknown[];
 }
 
 /**
  * Simulates a UserOperation against the contract preview. Pre-flight only:
  * it never verifies the signature (see {@link SimulationResult}).
+ *
+ * An account without a verifier is not refused: `checks.authorization` is `'owner-witness'` and the result
+ * requires a non-zero backup owner (and, when `signers` are supplied, that owner's witness among them).
  *
  * A token `transfer` whose source is the account's own proxy address is reported in `errors` (`OP_001`,
  * {@link EC}`.OPERATION_PROXY_TRANSFER_REFUSED`) and `passed` is false: it would HALT with result false, move
@@ -970,7 +989,7 @@ export interface ValidatePaymasterOpOptions {
 }
 
 /**
- * The Neo N3 Abstract Account SDK client.
+ * The Neo N3 Smart Account SDK client.
  *
  * Provides account derivation, payload construction, EIP-712 signing-data
  * generation, read-only contract queries, and paymaster/sponsored-operation
@@ -1124,7 +1143,7 @@ export declare class SmartAccountClient {
     options: UserOpSimulationOptions,
   ): Promise<UserOpSimulation>;
 
-  /** Returns the full state of an abstract account. */
+  /** Returns the full state of a smart account. */
   getAccountState(
     accountHashOrAddress: Hash160 | NeoAddress,
   ): Promise<AccountState>;

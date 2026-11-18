@@ -151,13 +151,18 @@ const EIP712_DOMAIN_TYPE_HASH = new Uint8Array([
 ]);
 
 /**
- * Pre-computed keccak256 of "Neo N3 Abstract Account" name.
+ * Pre-computed keccak256 of "Neo Smart Account" name.
+ *
+ * AA→SA wave-2 protocol switch: the domain name changed from
+ * "Neo N3 Abstract Account" (keccak256
+ * 0x2e3d38ea0055ad99b5572e066658431ff4c40dbaf3e16e2154639dc6e2634803);
+ * signatures over the old domain are invalid after the switch.
  */
 const EIP712_NAME_HASH = new Uint8Array([
-  0x2e, 0x3d, 0x38, 0xea, 0x00, 0x55, 0xad, 0x99,
-  0xb5, 0x57, 0x2e, 0x06, 0x66, 0x58, 0x43, 0x1f,
-  0xf4, 0xc4, 0x0d, 0xba, 0xf3, 0xe1, 0x6e, 0x21,
-  0x54, 0x63, 0x9d, 0xc6, 0xe2, 0x63, 0x48, 0x03,
+  0x4f, 0x42, 0x00, 0x1f, 0xc9, 0x80, 0xd0, 0x8b,
+  0xd6, 0xd9, 0xd5, 0x4e, 0x72, 0x87, 0x95, 0xfc,
+  0x53, 0xe9, 0x6c, 0x20, 0x1e, 0x9a, 0xac, 0x28,
+  0xf0, 0xc9, 0x11, 0x19, 0xe9, 0x8d, 0xc9, 0x21,
 ]);
 
 /**
@@ -218,7 +223,7 @@ function buildContractCompatibleDomainSeparator(network, verifyingContract) {
  *
  * This function replicates the contract's custom encoding:
  * - Uses raw keccak256 of method string (not EIP-712 string encoding)
- * - Right-pads the big-endian accountId and AA core bytes to 32 bytes (ToBytes20Word)
+ * - Right-pads the big-endian accountId and SA core bytes to 32 bytes (ToBytes20Word)
  * - Left-pads the big-endian targetContract bytes to 32 bytes (ToAddressWord)
  * - Uses big-endian encoding for nonce/deadline
  *
@@ -228,7 +233,7 @@ function buildContractCompatibleDomainSeparator(network, verifyingContract) {
  *
  * @param {Object} options - Struct hash options
  * @param {string} options.accountIdHash - Account ID hash (40 hex chars)
- * @param {string} options.coreContractHash - Authorized AA core hash (40 hex chars)
+ * @param {string} options.coreContractHash - Authorized SA core hash (40 hex chars)
  * @param {string} options.targetContract - Target contract hash (40 hex chars)
  * @param {string} options.method - Method name
  * @param {string} options.argsHash - Serialized args hash (32 bytes, 64 hex chars)
@@ -336,7 +341,7 @@ function buildContractCompatibleStructHash({
  * @param {number|string|bigint} options.chainId - Network chain ID
  * @param {string} options.verifierHash - Verifier contract hash (40 hex chars)
  * @param {string} options.accountIdHash - Account ID hash (40 hex chars)
- * @param {string} options.coreContractHash - Authorized AA core hash (40 hex chars)
+ * @param {string} options.coreContractHash - Authorized SA core hash (40 hex chars)
  * @param {string} options.targetContract - Target contract hash (40 hex chars)
  * @param {string} options.method - Method name
  * @param {string} options.argsHash - Args hash (32 bytes, 64 hex chars)

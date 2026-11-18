@@ -1,6 +1,8 @@
 # Morpheus 私密操作与 NeoDID 绑定（V3 架构）
 
-在 V3 统一智能钱包架构下，沉重的链上组件（如预言机失能开关和社交恢复）已被移除，取而代之的是轻量级的 **L1 原生逃生舱 (Escape Hatch)**。然而，Neo 抽象账户系统仍然与 **Morpheus TEE 环境** 无缝集成，以启用私密操作 (Private Actions)、会话密钥 (Session Keys) 和 NeoDID 绑定。
+> 中文版本与 `docs/MORPHEUS_PRIVATE_ACTIONS.md` 同构。若两者冲突，以英文版本为准。
+
+在 V3 统一智能钱包架构下，沉重的链上组件（如预言机失能开关和社交恢复）已被移除，取而代之的是轻量级的 **L1 原生逃生舱 (Escape Hatch)**。然而，Neo 智能账户系统仍然与 **Morpheus TEE 环境** 无缝集成，以启用私密操作 (Private Actions)、会话密钥 (Session Keys) 和 NeoDID 绑定。
 
 ## 工作原理
 
@@ -9,7 +11,7 @@ Morpheus 提供了一个基于 AWS Nitro Enclaves 的**可信执行环境 (TEE)*
 该过程完全通过 `TEEVerifier`、`NeoDIDCredentialHook` 和链上的 `NeoDIDRegistry` 完成。
 
 ### 1. 通过 Web3Auth 绑定 NeoDID
-用户可以将他们的 NeoDID 绑定到抽象账户。这允许用户通过 Web3Auth 通过他们的社交账户（Google、Discord 等）授权操作，Web3Auth 解析为 NeoDID 签名。
+用户可以将他们的 NeoDID 绑定到智能账户。这允许用户通过 Web3Auth 通过他们的社交账户（Google、Discord 等）授权操作，Web3Auth 解析为 NeoDID 签名。
 
 - **前端:** 用户通过 Web3Auth 进行身份验证。
 - **飞地 (Enclave):** Morpheus 飞地验证 Web3Auth 令牌并签署授权有效负载。

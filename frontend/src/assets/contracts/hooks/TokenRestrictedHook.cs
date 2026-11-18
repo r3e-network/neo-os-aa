@@ -13,7 +13,7 @@ namespace SmartAccount.Hooks
     /// </summary>
     /// <remarks>
     /// This is useful for forbidding calls into sensitive or governance-critical assets even if
-    /// the rest of the AA account remains broadly usable.
+    /// the rest of the SA account remains broadly usable.
     /// </remarks>
     [DisplayName("TokenRestrictedHook")]
 #if SMARTACCOUNT_NATIVE
@@ -54,7 +54,7 @@ namespace SmartAccount.Hooks
         public static void ConfirmAdminRotation(UInt160 newAdmin) => HookAuthority.ConfirmAdminRotation(newAdmin);
         public static void CancelAdminRotation() => HookAuthority.CancelAdminRotation();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => HookAuthority.ProposeUpdate(nefHash, manifestHash);
 

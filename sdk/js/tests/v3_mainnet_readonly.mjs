@@ -13,7 +13,7 @@ const NEO_NNS_CONTRACT_HASH = "50ac1c37690cc2cfc594472833cf57505d5f46de";
 const NEO_NNS_ADDRESS_RECORD_TYPE = 16;
 
 const EXPECTED_CONTRACTS = {
-  aaCore: {
+  saCore: {
     manifestName: "SmartAccountV3",
     methods: [
       "registerAccount",
@@ -33,7 +33,7 @@ const EXPECTED_CONTRACTS = {
       "verify",
     ],
   },
-  aaWeb3AuthVerifier: {
+  saWeb3AuthVerifier: {
     manifestName: "Web3AuthVerifier",
     methods: [
       "authorizedCore",
@@ -46,7 +46,7 @@ const EXPECTED_CONTRACTS = {
       "update",
     ],
   },
-  aaSessionKeyVerifier: {
+  saSessionKeyVerifier: {
     manifestName: "SessionKeyVerifier",
     methods: [
       "authorizedCore",
@@ -60,7 +60,7 @@ const EXPECTED_CONTRACTS = {
       "update",
     ],
   },
-  aaSocialRecoveryVerifier: {
+  saSocialRecoveryVerifier: {
     manifestName: "SocialRecoveryVerifier",
     methods: [
       "setupRecovery",
@@ -74,11 +74,11 @@ const EXPECTED_CONTRACTS = {
       "verifyMetaTx",
     ],
   },
-  aaAddressMarket: {
+  saAddressMarket: {
     manifestName: "AAAddressMarket",
     methods: ["createListing", "updateListingPrice", "settleListing", "getListingCount", "getListing", "update"],
   },
-  aaPaymaster: {
+  saPaymaster: {
     manifestName: "AAPaymaster",
     methods: [
       "authorizedCore",
@@ -211,14 +211,14 @@ async function main() {
     ),
   ]);
   const domainChecks = [
-    ["aa", mainnet.domains.aa, "aaCore"],
-    ["aaAlias", mainnet.domains.aaAlias, "aaCore"],
-    ["aaCore", mainnet.domains.aaCore, "aaCore"],
-    ["aaWeb3AuthVerifier", mainnet.domains.aaWeb3AuthVerifier, "aaWeb3AuthVerifier"],
-    ["aaSessionKeyVerifier", mainnet.domains.aaSessionKeyVerifier, "aaSessionKeyVerifier"],
-    ["aaSocialRecoveryVerifier", mainnet.domains.aaSocialRecoveryVerifier, "aaSocialRecoveryVerifier"],
-    ["aaAddressMarket", mainnet.domains.aaAddressMarket, "aaAddressMarket"],
-    ["aaPaymaster", mainnet.domains.aaPaymaster, "aaPaymaster"],
+    ["sa", mainnet.domains.sa, "saCore"],
+    ["saAlias", mainnet.domains.saAlias, "saCore"],
+    ["saCore", mainnet.domains.saCore, "saCore"],
+    ["saWeb3AuthVerifier", mainnet.domains.saWeb3AuthVerifier, "saWeb3AuthVerifier"],
+    ["saSessionKeyVerifier", mainnet.domains.saSessionKeyVerifier, "saSessionKeyVerifier"],
+    ["saSocialRecoveryVerifier", mainnet.domains.saSocialRecoveryVerifier, "saSocialRecoveryVerifier"],
+    ["saAddressMarket", mainnet.domains.saAddressMarket, "saAddressMarket"],
+    ["saPaymaster", mainnet.domains.saPaymaster, "saPaymaster"],
   ].filter(([, domain]) => domain);
   const domains = (await Promise.all(
     domainChecks.map(([key, domain, contractKey]) => validateDomain(client, key, domain, mainnet.contracts[contractKey])),

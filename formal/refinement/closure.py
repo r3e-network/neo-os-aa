@@ -542,16 +542,16 @@ def tool_paths():
                'abi_dispatch.py', 'test_abi_dispatch.py',
                'dispatch_footprint.py', 'test_dispatch_footprint.py',
                'abi_scenario.py', 'test_abi_scenario.py',
-               'scenarios/aa-account-roundtrip.json',
-               'scenarios/aa-account-windows.json',
-               'scenarios/aa-account-plugins.json',
-               'scenarios/aa-account-registrar.json',
+               'scenarios/sa-account-roundtrip.json',
+               'scenarios/sa-account-windows.json',
+               'scenarios/sa-account-plugins.json',
+               'scenarios/sa-account-registrar.json',
                'plugins/MultiSigVerifier.nef', 'plugins/MultiSigVerifier.manifest.json',
                'plugins/NeoDIDCredentialHook.nef', 'plugins/NeoDIDCredentialHook.manifest.json',
                'plugins/MultiHook.nef', 'plugins/MultiHook.manifest.json',
-               'plugins/AAPlatformRegistrar.nef', 'plugins/AAPlatformRegistrar.manifest.json',
+               'plugins/SAPlatformRegistrar.nef', 'plugins/SAPlatformRegistrar.manifest.json',
                'plugins/MockVerifierCore.nef', 'plugins/MockVerifierCore.manifest.json',
-               'plugins/AAPaymaster.nef', 'plugins/AAPaymaster.manifest.json',
+               'plugins/SAPaymaster.nef', 'plugins/SAPaymaster.manifest.json',
                'plugins/provenance.json',
                'csharp_directives.py']
     pending, seen = [HERE/name for name in entries], set()
@@ -699,7 +699,7 @@ def join_scopes(inventory, receipts, native_vector_sha=None):
         controls = report.get('semanticControls')
         if name == 'composition':
             require(isinstance(controls, dict)
-                    and controls.get('schema') == 'neoos-aa-reimbursement-composition-controls/v1'
+                    and controls.get('schema') == 'neoos-sa-reimbursement-composition-controls/v1'
                     and controls.get('scope') == scope, 'composition invalid control receipt schema/scope')
         control_count = checked_controls(controls, name)
         require(report.get('modelSha256') or report.get('inputSha256'), name + ' missing model/source identity')
@@ -762,7 +762,7 @@ def join_scopes(inventory, receipts, native_vector_sha=None):
         require(type(end) is int and row['start'] < end <= len(raw) and
                 row.get('bytes') == list(raw[row['start']:end]) and row.get('methodSha256') == sha(raw[row['start']:end]), 'public method byte mismatch')
     getters = receipts['storage-getters']
-    require(getters.get('schema') == 'neoos-aa-storage-getter-source-refinement/v1'
+    require(getters.get('schema') == 'neoos-sa-storage-getter-source-refinement/v1'
             and getters.get('coqchkChecked') is True and getters.get('assumptionsClosed') is True
             and getters.get('vmCorrespondenceProven') is True
             and identity(getters.get('projectionSha256'))
@@ -922,7 +922,7 @@ def join_scopes(inventory, receipts, native_vector_sha=None):
             and artifacts.get('scriptSha256') == inventory['nef']['scriptSha256']
             and artifacts.get('manifestSha256') == inventory['manifest']['sha256']
             and artifacts.get('helperSha256') == method.get('methodSha256'), 'helper gas artifact identity mismatch')
-    return {'schema': 'neoos-aa-integrated-closure/v1', 'status': 'NO-GO', 'selectedScopeStatus': 'PASS',
+    return {'schema': 'neoos-sa-integrated-closure/v1', 'status': 'NO-GO', 'selectedScopeStatus': 'PASS',
             'implementationVerified': False, 'fullImplementationVerified': False, 'verifiedEntrypoints': [],
             'abiEntryCount': len(inventory['manifest']['methods']), 'fullUnprovedCount': len(inventory['manifest']['methods']),
             'entrypointCoverage': entrypoint_coverage(inventory, receipts),
@@ -942,7 +942,7 @@ def require_bound_artifact(bound, inventory, label):
 def validate_entry_dispatch_join(inventory, receipts):
     """Join the admission/frame slice without promoting it to complete execution."""
     report = receipts['entry-dispatch']
-    require(report.get('schema') == 'neoos-aa-entry-dispatch-proof/v1'
+    require(report.get('schema') == 'neoos-sa-entry-dispatch-proof/v1'
             and report.get('entryBoundary') == 'CallContract-after-interop-admission-and-argument-conversion'
             and report.get('productionSourceBound') is True
             and report.get('coqchkChecked') is True and report.get('assumptionsClosed') is True
@@ -1037,7 +1037,7 @@ def validate_syscall_dispatch_join(receipts):
     cannot close an entrypoint either.
     """
     report = receipts['syscall-dispatch']
-    require(report.get('schema') == 'neoos-aa-syscall-dispatch-proof/v1'
+    require(report.get('schema') == 'neoos-sa-syscall-dispatch-proof/v1'
             and report.get('entryBoundary') == 'CallContractInternal-parameter-tuple'
             and report.get('productionSourceBound') is True
             and report.get('kernelChecked') is True
@@ -1153,7 +1153,7 @@ def validate_contract_handoff_join(receipts):
     cannot close an entrypoint either.
     """
     report = receipts['contract-handoff']
-    require(report.get('schema') == 'neoos-aa-contract-handoff-proof/v1'
+    require(report.get('schema') == 'neoos-sa-contract-handoff-proof/v1'
             and report.get('entryBoundary') == 'LoadContract-returned-context-before-callee-execution'
             and report.get('productionSourceBound') is True
             and report.get('kernelChecked') is True
@@ -1267,7 +1267,7 @@ def validate_interop_conversion_join(receipts):
     before the handler body runs, so it cannot close an entrypoint either.
     """
     report = receipts['interop-conversion']
-    require(report.get('schema') == 'neoos-aa-interop-conversion-proof/v1'
+    require(report.get('schema') == 'neoos-sa-interop-conversion-proof/v1'
             and report.get('entryBoundary') == 'OnSysCall-argument-window-to-invoked-handler-parameters'
             and report.get('productionSourceBound') is True
             and report.get('kernelChecked') is True
@@ -1384,7 +1384,7 @@ def validate_interop_fee_join(receipts):
     model the conversion, the handler, or how the fee factor was obtained.
     """
     report = receipts['interop-fee-order']
-    require(report.get('schema') == 'neoos-aa-interop-charge-proof/v1'
+    require(report.get('schema') == 'neoos-sa-interop-charge-proof/v1'
             and report.get('entryBoundary') == 'OnSysCall-descriptor-charge-to-argument-window-effect'
             and report.get('productionSourceBound') is True
             and report.get('kernelChecked') is True
@@ -1497,7 +1497,7 @@ def validate_exception_identity_join(receipts):
     protocol, or any transaction composition.
     """
     report = receipts['exception-identity']
-    require(report.get('schema') == 'neoos-aa-exception-identity-proof/v1'
+    require(report.get('schema') == 'neoos-sa-exception-identity-proof/v1'
             and report.get('entryBoundary')
                 == 'ExecuteNext-fault-surfacing-and-catch-admission-effect'
             and report.get('productionSourceBound') is True
@@ -1617,7 +1617,7 @@ def validate_load_admission_join(receipts):
     compiler correspondence.
     """
     report = receipts['load-admission']
-    require(report.get('schema') == 'neoos-aa-load-admission-proof/v1'
+    require(report.get('schema') == 'neoos-sa-load-admission-proof/v1'
             and report.get('entryBoundary')
                 == 'manifest-parse-and-nef-deserialize-admission-to-exact-arity-resolution'
             and report.get('productionSourceBound') is True
@@ -2078,7 +2078,7 @@ def main(argv=None):
     parser.add_argument('--timeout-seconds', type=int, default=1800, help='Positive per-subprocess time limit')
     parser.add_argument('--allow-partial', action='store_true', help='Exit zero for all selected scoped proofs; full status stays NO-GO')
     parser.add_argument('--native-vectors', type=Path, help='Optional supplied finite native vectors; does not rerun ApplicationEngine')
-    parser.add_argument('--helper-gas-runtime-receipts', type=Path, default=Path('/tmp/aa-gas-runtime-evidence'),
+    parser.add_argument('--helper-gas-runtime-receipts', type=Path, default=Path('/tmp/sa-gas-runtime-evidence'),
                         help='Reviewed 5-shape runtime receipt directory (default local reviewed evidence path)')
     args = parser.parse_args(argv)
     output = None
@@ -2099,7 +2099,7 @@ def main(argv=None):
             snapshot.update(native)
             native_sha = next(iter(native.values()))['sha256']
             native_path = Path(next(iter(native.values()))['copy'])
-        gas_runtime_paths = [args.helper_gas_runtime_receipts/('aa-gas-runtime-helper-'+shape+'.json')
+        gas_runtime_paths = [args.helper_gas_runtime_receipts/('sa-gas-runtime-helper-'+shape+'.json')
                              for shape in ('absent','same','reset','exhausted','zero')]
         gas_runtime_dir = output/'helper-gas-runtime'
         gas_runtime_snapshot = capture_files(gas_runtime_paths, gas_runtime_dir, args.helper_gas_runtime_receipts.resolve())
@@ -2472,10 +2472,10 @@ def main(argv=None):
         # All four have to agree, and none stands in for another - which is why the
         # union at the end is taken over every face that ran.
         scenario_runs = (
-            ('abiScenario', 'aa-account-roundtrip.json', 'abi-scenario.json'),
-            ('abiScenarioWindows', 'aa-account-windows.json', 'abi-scenario-windows.json'),
-            ('abiScenarioPlugins', 'aa-account-plugins.json', 'abi-scenario-plugins.json'),
-            ('abiScenarioRegistrar', 'aa-account-registrar.json', 'abi-scenario-registrar.json'),
+            ('abiScenario', 'sa-account-roundtrip.json', 'abi-scenario.json'),
+            ('abiScenarioWindows', 'sa-account-windows.json', 'abi-scenario-windows.json'),
+            ('abiScenarioPlugins', 'sa-account-plugins.json', 'abi-scenario-plugins.json'),
+            ('abiScenarioRegistrar', 'sa-account-registrar.json', 'abi-scenario-registrar.json'),
         )
         scenario_receipts = {}
         for scenario_key, scenario_file, dump_name in scenario_runs:
@@ -2591,7 +2591,7 @@ def main(argv=None):
         return 0 if args.allow_partial else 2
     except Exception as error:
         if output is not None:
-            (output/'result.json').write_text(json.dumps({'schema':'neoos-aa-integrated-closure/v1', 'status':'FAIL',
+            (output/'result.json').write_text(json.dumps({'schema':'neoos-sa-integrated-closure/v1', 'status':'FAIL',
                 'selectedScopeStatus':'FAIL', 'implementationVerified':False, 'fullImplementationVerified':False,
                 'verifiedEntrypoints':[], 'commands':results, 'failure':type(error).__name__+': '+str(error)}, indent=2)+'\n')
         print(str(error), file=sys.stderr)

@@ -25,7 +25,7 @@ class CompositionProofTests(unittest.TestCase):
         cls.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.module)
         cls.temporary = tempfile.TemporaryDirectory()
-        cls.helper_report = Path(os.environ.get("AA_HELPER_PROOF_REPORT", str(DEFAULT_REPORT)))
+        cls.helper_report = Path(os.environ.get("SA_HELPER_PROOF_REPORT", str(DEFAULT_REPORT)))
         directory = Path(cls.temporary.name)
         cls.proof_directory = directory / "proof"
         receipt = directory / "receipt.json"
@@ -44,7 +44,7 @@ class CompositionProofTests(unittest.TestCase):
         return self.module
 
     def report(self):
-        return Path(os.environ.get("AA_HELPER_PROOF_REPORT", str(DEFAULT_REPORT)))
+        return Path(os.environ.get("SA_HELPER_PROOF_REPORT", str(DEFAULT_REPORT)))
 
     def test_actual_helper_serial_nested_and_outer_snapshot_proofs(self):
         result = self.receipt

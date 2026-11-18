@@ -13,7 +13,7 @@ namespace SmartAccount
         // ========================================================================
         // 9. Platform Registrar boundary (service extraction, Phase 1b)
         // ========================================================================
-        // Pending platform-account owner rotations moved to the AAPlatformRegistrar
+        // Pending platform-account owner rotations moved to the SAPlatformRegistrar
         // service contract (contracts/registrar/). The core keeps the platform account
         // STATE: deterministic id computation, the registrar-gated registration entry
         // points, the registrar pointer with its 7-day timelock, the app binding, and
@@ -27,7 +27,7 @@ namespace SmartAccount
         private static readonly byte[] Prefix_PlatformAccountBinding = new byte[] { 0x1E };
         // Reverse index for platform virtual-account witnesses.  The proxy hash
         // is the address that holds the account's assets and appears as the
-        // witness/caller at platform contracts; accountId is the AA core's
+        // witness/caller at platform contracts; accountId is the SA core's
         // authorization subject.  Only the platform registrar may create this
         // binding, and it is immutable for the lifetime of the account.
         private static readonly byte[] Prefix_PlatformProxyAccount = new byte[] { 0x1F };
@@ -80,14 +80,18 @@ namespace SmartAccount
         {
             AssertPlatformRegistrar();
             ValidatePlatformAccountBinding(appBinding);
-            RegisterAccountCore(
+            // v4 registration core with the registrar's own authorization
+            // (caller identity) and the LEGACY deterministic identity, so
+            // platform account ids stay stable across the v4 upgrade. The
+            // app binding doubles as the registration salt.
+            CreateAccountCore(
                 accountId,
-                UInt160.Zero,
-                appBinding,
-                UInt160.Zero,
                 backupOwner!,
-                escapeTimelock,
-                false);
+                appBinding,
+                (BigInteger)escapeTimelock * 1000,
+                new object[0],
+                false,
+                ComputePlatformAccountId(appBinding, backupOwner, escapeTimelock));
             Storage.Put(
                 Storage.CurrentContext,
                 Helper.Concat(Prefix_PlatformAccountBinding, (ByteString)accountId),
@@ -102,13 +106,14 @@ namespace SmartAccount
             ExecutionEngine.Assert(
                 backupOwner != null && backupOwner != UInt160.Zero && backupOwner.IsValid,
                 "Invalid platform backup owner");
-            RegisterAccountCore(
+            // v4 registration core with the registrar's authorization (caller
+            // identity) and the pinned stable platform identity.
+            CreateAccountCore(
                 accountId,
-                UInt160.Zero,
-                appBinding,
-                UInt160.Zero,
                 backupOwner!,
-                escapeTimelock,
+                appBinding,
+                (BigInteger)escapeTimelock * 1000,
+                new object[0],
                 false,
                 ComputeStablePlatformAccountId(appBinding, escapeTimelock));
             Storage.Put(
@@ -148,23 +153,39 @@ namespace SmartAccount
                 "Platform account binding mismatch");
             AssertNoMarketEscrow(accountId);
 
-            AccountState state = GetAccountState(accountId);
-            ExecutionEngine.Assert(state.EscapeTriggeredAt == 0, "Platform account escape active");
+            // Rotation is custody-gated state change on the v4 control
+            // record: frozen or migration-required accounts refuse it, a
+            // pending recovery refuses it, and the control epoch advances so
+            // stale intents and signatures die with the old custody.
+            AccountControl control = MaterializeAccountControl(accountId!);
+            ExecutionEngine.Assert(control.Status == AccountStatusActive, ErrorAccountStatus);
+            ExecutionEngine.Assert(GetCoreRecoveryRecord(accountId) == null, "Platform account recovery active");
             ExecutionEngine.Assert(
-                previousOwner != null && previousOwner == state.BackupOwner,
+                previousOwner != null && previousOwner == control.Custody,
                 "Platform owner rotation stale");
-            ExecutionEngine.Assert(state.BackupOwner != newBackupOwner, "Platform backup owner unchanged");
+            ExecutionEngine.Assert(control.Custody != newBackupOwner, "Platform backup owner unchanged");
             ExecutionEngine.Assert(Runtime.CheckWitness(newBackupOwner!), "New platform owner witness required");
-            state.BackupOwner = newBackupOwner!;
-            Storage.Put(
-                Storage.CurrentContext,
-                Helper.Concat(Prefix_AccountState, (ByteString)accountId),
-                StdLib.Serialize(state));
+            control.Custody = newBackupOwner!;
+            control.AuthorityEpoch += BigInteger.One;
+            control.ConfigurationNonce += BigInteger.One;
+            control.ControlRevision += BigInteger.One;
+            PutAccountControl(accountId!, control);
+
+            // Keep the legacy five-field row truthful as migration input when
+            // it still exists (pre-upgrade platform account).
+            byte[] legacyKey = Helper.Concat(Prefix_AccountState, (ByteString)accountId);
+            ByteString? legacyRow = Storage.Get(Storage.CurrentContext, legacyKey);
+            if (legacyRow != null)
+            {
+                AccountState state = (AccountState)StdLib.Deserialize(legacyRow!);
+                state.BackupOwner = newBackupOwner!;
+                Storage.Put(Storage.CurrentContext, legacyKey, StdLib.Serialize(state));
+            }
             OnPlatformAccountOwnerRotated(accountId, previousOwner!, newBackupOwner!);
         }
 
         /// <summary>
-        /// Resolves a platform virtual-account witness address to its AA
+        /// Resolves a platform virtual-account witness address to its SA
         /// account identifier.  The result is only populated by the trusted
         /// platform registrar during account creation; callers cannot register
         /// or overwrite an index row.

@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { MORPHEUS_PUBLIC_REGISTRY } from '../src/config/generatedMorpheusRegistry.js';
 import {
-  DEFAULT_ABSTRACT_ACCOUNT_HASH,
-  DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET,
+  DEFAULT_SMART_ACCOUNT_HASH,
+  DEFAULT_SMART_ACCOUNT_HASH_TESTNET,
   DEFAULT_DID_PROVIDER,
   DEFAULT_EXPLORER_BASE_URL,
   DEFAULT_MATRIX_CONTRACT_HASH,
@@ -56,15 +56,15 @@ test('resolveSmartAccountHash accepts valid 40-byte hex values', () => {
 });
 
 test('resolveSmartAccountHash falls back for invalid values', () => {
-  assert.equal(resolveSmartAccountHash('bad-value'), DEFAULT_ABSTRACT_ACCOUNT_HASH);
+  assert.equal(resolveSmartAccountHash('bad-value'), DEFAULT_SMART_ACCOUNT_HASH);
 });
 
-test('default abstract account hash tracks the hardened verified deployment', () => {
-  assert.equal(DEFAULT_ABSTRACT_ACCOUNT_HASH, '0268a387913b250166ddec032b03332690a1ef78');
+test('default smart account hash tracks the hardened verified deployment', () => {
+  assert.equal(DEFAULT_SMART_ACCOUNT_HASH, '0268a387913b250166ddec032b03332690a1ef78');
 });
 
-test('testnet abstract account hash tracks the published V3 testnet deployment', () => {
-  assert.equal(DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET, 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2');
+test('testnet smart account hash tracks the published V3 testnet deployment', () => {
+  assert.equal(DEFAULT_SMART_ACCOUNT_HASH_TESTNET, 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2');
 });
 
 test('resolveRpcUrl preserves explicit values and defaults otherwise', () => {
@@ -82,14 +82,14 @@ test('frontend ships a runtime env example for browser and server routes', () =>
   assert.equal(fs.existsSync(examplePath), true, 'expected frontend/.env.example to exist');
 
   const example = fs.readFileSync(examplePath, 'utf8');
-  assert.match(example, /VITE_AA_RPC_URL=/);
+  assert.match(example, /VITE_SA_RPC_URL=/);
   assert.match(example, /VITE_SUPABASE_URL=/);
   assert.match(example, /VITE_SUPABASE_ANON_KEY=/);
-  assert.match(example, /VITE_AA_RELAY_URL=/);
-  assert.match(example, /VITE_AA_RELAY_META_ENABLED=/);
-  assert.match(example, /VITE_AA_MATRIX_CONTRACT_HASH=/);
-  assert.match(example, /VITE_AA_MARKET_HASH=/);
-  assert.match(example, /VITE_AA_PAYMASTER_HASH=/);
+  assert.match(example, /VITE_SA_RELAY_URL=/);
+  assert.match(example, /VITE_SA_RELAY_META_ENABLED=/);
+  assert.match(example, /VITE_SA_MATRIX_CONTRACT_HASH=/);
+  assert.match(example, /VITE_SA_MARKET_HASH=/);
+  assert.match(example, /VITE_SA_PAYMASTER_HASH=/);
   assert.match(example, /VITE_WEB3AUTH_CLIENT_ID=/);
   assert.match(example, /VITE_WEB3AUTH_PROJECT_NAME=/);
   assert.match(example, /VITE_WEB3AUTH_NETWORK=/);
@@ -98,10 +98,10 @@ test('frontend ships a runtime env example for browser and server routes', () =>
   assert.match(example, /VITE_DID_NOTIFICATION_ENDPOINT=/);
   assert.match(example, /VITE_MORPHEUS_NEODID_ENDPOINT=/);
   assert.match(example, /VITE_MORPHEUS_ORACLE_KEY_ENDPOINT=/);
-  assert.match(example, /AA_RELAY_RPC_URL=/);
-  assert.match(example, /AA_RELAY_WIF=/);
-  assert.match(example, /AA_RELAY_ALLOWED_HASH=/);
-  assert.match(example, /AA_RELAY_ALLOW_RAW_FORWARD=/);
+  assert.match(example, /SA_RELAY_RPC_URL=/);
+  assert.match(example, /SA_RELAY_WIF=/);
+  assert.match(example, /SA_RELAY_ALLOWED_HASH=/);
+  assert.match(example, /SA_RELAY_ALLOW_RAW_FORWARD=/);
   assert.match(example, /SUPABASE_SERVICE_ROLE_KEY=/);
   assert.match(example, /DID_EMAIL_WEBHOOK_URL=/);
   assert.match(example, /DID_SMS_WEBHOOK_URL=/);
@@ -120,24 +120,24 @@ test('frontend env example overrides agree with the generated Morpheus registry'
       .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1).trim()])
   );
   const { mainnet, testnet } = MORPHEUS_PUBLIC_REGISTRY;
-  assert.equal(entries.get('VITE_AA_NETWORK'), 'mainnet');
+  assert.equal(entries.get('VITE_SA_NETWORK'), 'mainnet');
 
   // Each of these overrides replaces a registry value, so the example must either
   // leave it empty or restate the canonical value; a stale copy would silently
   // retarget whoever copies the example.
   const registryBacked = {
-    VITE_AA_HASH: mainnet.contracts.aaCore,
-    VITE_AA_DOMAIN: mainnet.domains.aa,
-    VITE_AA_NETWORK_MAGIC: String(mainnet.networkMagic),
-    VITE_AA_MATRIX_CONTRACT_HASH: mainnet.contracts.matrixNameService,
-    VITE_AA_MARKET_HASH: mainnet.contracts.aaAddressMarket,
-    VITE_AA_PAYMASTER_HASH: mainnet.contracts.aaPaymaster,
+    VITE_SA_HASH: mainnet.contracts.saCore,
+    VITE_SA_DOMAIN: mainnet.domains.sa,
+    VITE_SA_NETWORK_MAGIC: String(mainnet.networkMagic),
+    VITE_SA_MATRIX_CONTRACT_HASH: mainnet.contracts.matrixNameService,
+    VITE_SA_MARKET_HASH: mainnet.contracts.saAddressMarket,
+    VITE_SA_PAYMASTER_HASH: mainnet.contracts.saPaymaster,
     VITE_NEODID_DOMAIN: mainnet.domains.neodid,
     VITE_MORPHEUS_RUNTIME_URL: mainnet.morpheus.publicApiUrl,
     VITE_MORPHEUS_TESTNET_RUNTIME_URL: testnet.morpheus.publicApiUrl,
     VITE_MORPHEUS_API_BASE_URL: mainnet.morpheus.publicApiUrl,
     VITE_MORPHEUS_NEODID_SERVICE_DID: mainnet.morpheus.neoDidServiceDid,
-    AA_RELAY_ALLOWED_HASH: mainnet.contracts.aaCore,
+    SA_RELAY_ALLOWED_HASH: mainnet.contracts.saCore,
     MORPHEUS_RUNTIME_URL: mainnet.morpheus.publicApiUrl,
     MORPHEUS_MAINNET_RUNTIME_URL: mainnet.morpheus.publicApiUrl,
     MORPHEUS_TESTNET_RUNTIME_URL: testnet.morpheus.publicApiUrl,
@@ -155,14 +155,14 @@ test('frontend env example overrides agree with the generated Morpheus registry'
 
 test('getRuntimeConfig prefers Vite overrides', () => {
   const config = getRuntimeConfig({
-    VITE_AA_HASH: '0x1111111111111111111111111111111111111111',
-    VITE_AA_RPC_URL: 'https://rpc.example.org'
+    VITE_SA_HASH: '0x1111111111111111111111111111111111111111',
+    VITE_SA_RPC_URL: 'https://rpc.example.org'
   });
 
   assert.deepEqual(config, {
     morpheusNetwork: 'mainnet',
-    abstractAccountHash: '1111111111111111111111111111111111111111',
-    abstractAccountDomain: 'smartwallet.neo',
+    smartAccountHash: '1111111111111111111111111111111111111111',
+    smartAccountDomain: 'smartwallet.neo',
     rpcUrl: 'https://rpc.example.org',
     networkMagic: 860833102,
     supabaseUrl: '',
@@ -176,7 +176,7 @@ test('getRuntimeConfig prefers Vite overrides', () => {
     addressMarketHash: 'ae7afe3a85ab08bfd1d4907b35ae8b80c75b3a69',
     paymasterHash: 'a0defa2bc6d7a71ba1e237149287c8ca4ff46caf',
     n3IndexApiBaseUrl: DEFAULT_N3INDEX_API_BASE_URL,
-    aaReadApiBaseUrl: '',
+    saReadApiBaseUrl: '',
     n3IndexNetwork: 'mainnet',
     neoNnsContractHash: '50ac1c37690cc2cfc594472833cf57505d5f46de',
     web3AuthClientId: '',
@@ -215,19 +215,19 @@ test('getRuntimeConfig prefers Vite overrides', () => {
 });
 
 test('resolveRuntimeNetwork switches defaults to testnet when requested', () => {
-  assert.equal(resolveRuntimeNetwork({ VITE_AA_NETWORK: 'testnet' }), 'testnet');
+  assert.equal(resolveRuntimeNetwork({ VITE_SA_NETWORK: 'testnet' }), 'testnet');
   assert.equal(resolveRuntimeNetwork({ VITE_MORPHEUS_NETWORK: 'testnet' }), 'testnet');
   assert.equal(resolveRuntimeNetwork({ VITE_N3INDEX_NETWORK: 'testnet' }), 'testnet');
-  assert.equal(resolveRuntimeNetwork({ VITE_AA_NETWORK: 'mainnet' }), 'mainnet');
+  assert.equal(resolveRuntimeNetwork({ VITE_SA_NETWORK: 'mainnet' }), 'mainnet');
 });
 
 test('getRuntimeConfig uses testnet defaults when the selected runtime network is testnet', () => {
   const config = getRuntimeConfig({
-    VITE_AA_NETWORK: 'testnet',
+    VITE_SA_NETWORK: 'testnet',
   });
 
-  assert.equal(config.abstractAccountHash, DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET);
-  assert.equal(config.abstractAccountDomain, '');
+  assert.equal(config.smartAccountHash, DEFAULT_SMART_ACCOUNT_HASH_TESTNET);
+  assert.equal(config.smartAccountDomain, '');
   assert.equal(config.rpcUrl, DEFAULT_RPC_URL_TESTNET);
   assert.equal(config.relayRpcUrl, DEFAULT_RPC_URL_TESTNET);
   assert.equal(config.networkMagic, 894710606);
@@ -238,23 +238,23 @@ test('getRuntimeConfig uses testnet defaults when the selected runtime network i
 });
 
 test('network magic follows the active runtime network', () => {
-  assert.equal(getRuntimeConfig({ VITE_AA_NETWORK: 'mainnet' }).networkMagic, 860833102);
-  assert.equal(getRuntimeConfig({ VITE_AA_NETWORK: 'testnet' }).networkMagic, 894710606);
+  assert.equal(getRuntimeConfig({ VITE_SA_NETWORK: 'mainnet' }).networkMagic, 860833102);
+  assert.equal(getRuntimeConfig({ VITE_SA_NETWORK: 'testnet' }).networkMagic, 894710606);
   // Implicit default (no network override) resolves to mainnet, matching walletService.
   assert.equal(getRuntimeConfig({}).networkMagic, 860833102);
 });
 
 test('network magic honours an explicit override and rejects junk', () => {
   assert.equal(resolveNetworkMagic('123456789'), 123456789);
-  assert.equal(getRuntimeConfig({ VITE_AA_NETWORK: 'testnet', VITE_AA_NETWORK_MAGIC: '111222333' }).networkMagic, 111222333);
+  assert.equal(getRuntimeConfig({ VITE_SA_NETWORK: 'testnet', VITE_SA_NETWORK_MAGIC: '111222333' }).networkMagic, 111222333);
   // Non-numeric / non-positive values fall back to the network default.
-  assert.equal(getRuntimeConfig({ VITE_AA_NETWORK: 'testnet', VITE_AA_NETWORK_MAGIC: 'nope' }).networkMagic, 894710606);
+  assert.equal(getRuntimeConfig({ VITE_SA_NETWORK: 'testnet', VITE_SA_NETWORK_MAGIC: 'nope' }).networkMagic, 894710606);
 });
 
 test('network defaults keep mainnet and testnet anchors explicit', () => {
   assert.deepEqual(MORPHEUS_NETWORK_DEFAULTS.mainnet, {
-    abstractAccountHash: '0268a387913b250166ddec032b03332690a1ef78',
-    abstractAccountDomain: 'smartwallet.neo',
+    smartAccountHash: '0268a387913b250166ddec032b03332690a1ef78',
+    smartAccountDomain: 'smartwallet.neo',
     addressMarketHash: 'ae7afe3a85ab08bfd1d4907b35ae8b80c75b3a69',
     paymasterHash: 'a0defa2bc6d7a71ba1e237149287c8ca4ff46caf',
     rpcUrl: 'https://api.n3index.dev/mainnet',
@@ -264,8 +264,8 @@ test('network defaults keep mainnet and testnet anchors explicit', () => {
     morpheusApiBaseUrl: DEFAULT_MORPHEUS_API_BASE_URL,
   });
   assert.deepEqual(MORPHEUS_NETWORK_DEFAULTS.testnet, {
-    abstractAccountHash: 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2',
-    abstractAccountDomain: '',
+    smartAccountHash: 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2',
+    smartAccountDomain: '',
     addressMarketHash: '6b979cdd246cc6491a20000a2a822e497c92c23b',
     paymasterHash: '',
     rpcUrl: 'https://api.n3index.dev/testnet',
@@ -283,7 +283,7 @@ test('Matrix resolver is network-scoped and testnet env cannot configure mainnet
   assert.equal(DEFAULT_MATRIX_CONTRACT_HASH, '');
   assert.equal(DEFAULT_MATRIX_CONTRACT_HASH_TESTNET, '');
   assert.equal(getRuntimeConfig({}).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH);
-  assert.equal(getRuntimeConfig({ VITE_AA_NETWORK: 'testnet' }).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH_TESTNET);
+  assert.equal(getRuntimeConfig({ VITE_SA_NETWORK: 'testnet' }).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH_TESTNET);
   assert.equal(getRuntimeConfig({ VITE_MATRIX_CONTRACT_HASH_TESTNET: '2'.repeat(40) }).matrixContractHash, DEFAULT_MATRIX_CONTRACT_HASH);
   assert.equal(getRuntimeConfig({ VITE_MATRIX_CONTRACT_HASH_MAINNET: '1'.repeat(40) }).matrixContractHash, '1'.repeat(40));
 });

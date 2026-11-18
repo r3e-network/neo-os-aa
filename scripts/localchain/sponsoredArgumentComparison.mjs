@@ -1,6 +1,6 @@
 // Whether a sponsored payload reproduces the operation the account signed, parameter by parameter.
 //
-// The AA-11 fixture used to compare nested ByteArray bytes and then report success for every other
+// The SA-11 fixture used to compare nested ByteArray bytes and then report success for every other
 // nested type: a reviewer changed a nested Integer(7) to Integer(999) and the fixture still answered
 // ok=true. A comparison that pins one parameter kind while claiming to pin the operation pins less
 // than it claims, so this walk is total over the kinds the relay carries and counts every node it

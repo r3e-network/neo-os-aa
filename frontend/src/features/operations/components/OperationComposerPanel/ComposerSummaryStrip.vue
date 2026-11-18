@@ -1,11 +1,11 @@
 <template>
   <div
-    class="mt-5 rounded-lg border border-aa-border bg-gradient-to-br from-aa-dark to-aa-panel px-4 py-3.5 shadow-sm"
+    class="mt-5 rounded-lg border border-sa-border bg-gradient-to-br from-sa-dark to-sa-panel px-4 py-3.5 shadow-sm"
   >
     <div class="flex items-start gap-3">
       <svg
         aria-hidden="true"
-        class="w-5 h-5 text-aa-muted flex-shrink-0 mt-0.5"
+        class="w-5 h-5 text-sa-muted flex-shrink-0 mt-0.5"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -18,11 +18,11 @@
         ></path>
       </svg>
       <div class="flex-1 min-w-0">
-        <p class="text-xs font-semibold text-aa-muted uppercase mb-1">
+        <p class="text-xs font-semibold text-sa-muted uppercase mb-1">
           {{ t("operations.presetSummaryLabel", "Operation Summary") }}
         </p>
-        <p class="text-sm font-medium text-aa-text">{{ summaryTitle }}</p>
-        <p class="text-sm text-aa-muted mt-0.5">{{ summaryDetail }}</p>
+        <p class="text-sm font-medium text-sa-text">{{ summaryTitle }}</p>
+        <p class="text-sm text-sa-muted mt-0.5">{{ summaryDetail }}</p>
       </div>
     </div>
   </div>

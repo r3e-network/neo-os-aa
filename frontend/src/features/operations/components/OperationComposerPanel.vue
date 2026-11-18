@@ -2,14 +2,14 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("operations.composeTitle", "Compose Operation") }}
         </h2>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{
             t(
               "operations.composeSubtitle",
-              "Build common AA wrapper payloads with presets, then stage an immutable draft.",
+              "Build common SA wrapper payloads with presets, then stage an immutable draft.",
             )
           }}
         </p>
@@ -59,7 +59,7 @@
         class="space-y-1.5 text-sm md:col-span-1"
         for="op-composer-multisig-title"
       >
-        <span class="font-medium text-aa-text">{{
+        <span class="font-medium text-sa-text">{{
           t("operations.draftTitleLabel", "Draft Title")
         }}</span>
         <input
@@ -74,7 +74,7 @@
         class="space-y-1.5 text-sm md:col-span-2"
         for="op-composer-multisig-description"
       >
-        <span class="font-medium text-aa-text">{{
+        <span class="font-medium text-sa-text">{{
           t("operations.draftDescriptionLabel", "Draft Description")
         }}</span>
         <input
@@ -85,13 +85,13 @@
         />
       </label>
       <div class="space-y-2 text-sm md:col-span-2">
-        <span id="target-contract-label" class="font-medium text-aa-text">{{
+        <span id="target-contract-label" class="font-medium text-sa-text">{{
           t("operations.targetContractLabel", "Target Contract")
         }}</span>
         <input
           :value="targetContract"
           class="input-field font-mono text-xs"
-          :class="{ 'border-aa-error': invokeErrors.targetContract }"
+          :class="{ 'border-sa-error': invokeErrors.targetContract }"
           aria-labelledby="target-contract-label"
           :placeholder="
             t(
@@ -104,14 +104,14 @@
         <p
           v-if="invokeErrors.targetContract"
           role="alert"
-          class="text-xs text-aa-error mt-1"
+          class="text-xs text-sa-error mt-1"
         >
           {{ invokeErrors.targetContract }}
         </p>
         <p
           v-else-if="contractLookupError"
           role="alert"
-          class="text-xs text-aa-error"
+          class="text-xs text-sa-error"
         >
           {{ contractLookupError }}
         </p>
@@ -119,15 +119,15 @@
           v-else-if="contractLookupStatus"
           role="status"
           aria-live="polite"
-          class="text-xs text-aa-muted"
+          class="text-xs text-sa-muted"
         >
           {{ contractLookupStatus }}
         </p>
         <div
           v-if="resolvedContractHash"
-          class="glass-panel px-3 py-2 text-xs text-aa-muted"
+          class="glass-panel px-3 py-2 text-xs text-sa-muted"
         >
-          <div class="font-semibold text-aa-text">
+          <div class="font-semibold text-sa-text">
             {{ t("operations.resolvedContract", "Resolved Contract") }}
           </div>
           <div class="font-mono">
@@ -144,13 +144,13 @@
             :key="`${suggestion.contractHash}-${suggestion.displayName}`"
             :aria-label="suggestion.displayName"
             type="button"
-            class="w-full border-b border-aa-border px-3 py-2 text-left last:border-b-0 hover:bg-aa-panel transition-colors duration-200"
+            class="w-full border-b border-sa-border px-3 py-2 text-left last:border-b-0 hover:bg-sa-panel transition-colors duration-200"
             @click="$emit('select-contract-suggestion', suggestion)"
           >
-            <div class="text-xs font-semibold text-aa-text">
+            <div class="text-xs font-semibold text-sa-text">
               {{ suggestion.displayName }}
             </div>
-            <div class="font-mono text-[11px] text-aa-muted">
+            <div class="font-mono text-[11px] text-sa-muted">
               0x{{ suggestion.contractHash }}
             </div>
           </button>
@@ -163,7 +163,7 @@
             !contractLookupStatus &&
             !contractLookupError
           "
-          class="text-xs text-aa-muted px-3 py-2"
+          class="text-xs text-sa-muted px-3 py-2"
         >
           {{
             t("operations.noContractsFound", "No matching contracts found yet.")
@@ -171,7 +171,7 @@
         </p>
       </div>
       <label class="space-y-1.5 text-sm md:col-span-1" for="op-composer-method">
-        <span class="font-medium text-aa-text">{{
+        <span class="font-medium text-sa-text">{{
           t("operations.methodLabel", "Method")
         }}</span>
         <select
@@ -179,7 +179,7 @@
           v-if="methodOptions.length"
           :value="method"
           class="input-field"
-          :class="{ 'border-aa-error': invokeErrors.method }"
+          :class="{ 'border-sa-error': invokeErrors.method }"
           @change="onMethodInput"
         >
           <option value="">
@@ -198,13 +198,13 @@
           v-else
           :value="method"
           class="input-field"
-          :class="{ 'border-aa-error': invokeErrors.method }"
+          :class="{ 'border-sa-error': invokeErrors.method }"
           @input="onMethodInput"
         />
         <p
           v-if="invokeErrors.method"
           role="alert"
-          class="text-xs text-aa-error mt-1"
+          class="text-xs text-sa-error mt-1"
         >
           {{ invokeErrors.method }}
         </p>
@@ -219,9 +219,9 @@
           class="space-y-1.5 text-sm"
           :for="'op-composer-param-' + field.key"
         >
-          <span class="font-medium text-aa-text"
+          <span class="font-medium text-sa-text"
             >{{ field.name }}
-            <span class="text-xs text-aa-muted">({{ field.type }})</span></span
+            <span class="text-xs text-sa-muted">({{ field.type }})</span></span
           >
           <input
             v-if="!isBooleanField(field.type) && !isComplexField(field.type)"
@@ -238,8 +238,8 @@
           <div v-else-if="isBooleanField(field.type)" class="flex items-center">
             <button
               type="button"
-              class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-aa-orange focus:ring-offset-2 focus:ring-offset-aa-dark"
-              :class="field.value ? 'bg-aa-orange' : 'bg-aa-dark'"
+              class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-sa-orange focus:ring-offset-2 focus:ring-offset-sa-dark"
+              :class="field.value ? 'bg-sa-orange' : 'bg-sa-dark'"
               @click="
                 $emit('update:parameterValue', {
                   key: field.key,
@@ -256,7 +256,7 @@
                 :class="field.value ? 'translate-x-6' : 'translate-x-1'"
               />
             </button>
-            <span class="ml-3 text-sm text-aa-muted">{{
+            <span class="ml-3 text-sm text-sa-muted">{{
               field.value
                 ? t("operations.true", "true")
                 : t("operations.false", "false")
@@ -282,7 +282,7 @@
         class="space-y-1.5 text-sm md:col-span-3"
         for="op-composer-args-json"
       >
-        <span class="font-medium text-aa-text">{{
+        <span class="font-medium text-sa-text">{{
           t("operations.argsJsonLabel", "Args JSON")
         }}</span>
         <textarea
@@ -294,7 +294,7 @@
           @input="$emit('update:argsText', $event.target.value)"
           @blur="validateArgsJson"
         />
-        <p v-if="argsError" role="alert" class="text-xs text-aa-error mt-1">
+        <p v-if="argsError" role="alert" class="text-xs text-sa-error mt-1">
           {{ argsError }}
         </p>
       </label>

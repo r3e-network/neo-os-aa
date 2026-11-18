@@ -21,9 +21,9 @@ namespace SmartAccount.Verifiers
     /// Verifier for EVM-style secp256k1 signatures produced through Web3Auth or compatible wallets.
     /// </summary>
     /// <remarks>
-    /// This plugin verifies an EIP-712-style user operation payload inside Neo N3 so a V3 AA
-    /// account can be controlled by an EVM identity without changing the AA core contract.
-    /// Public-key setup is still routed through the AA core authorization boundary.
+    /// This plugin verifies an EIP-712-style user operation payload inside Neo N3 so a V3 SA
+    /// account can be controlled by an EVM identity without changing the SA core contract.
+    /// Public-key setup is still routed through the SA core authorization boundary.
     /// </remarks>
     [DisplayName("Web3AuthVerifier")]
     [ContractPermission("*", "canConfigureVerifier")]
@@ -42,12 +42,17 @@ namespace SmartAccount.Verifiers
             0x23, 0x9f, 0x7b, 0x17, 0x9b, 0x0f, 0xfa, 0xca,
             0xa9, 0xa7, 0x5d, 0x52, 0x2b, 0x39, 0x40, 0x0f
         };
+        // keccak256("Neo Smart Account") — AA→SA wave-2 protocol switch: the
+        // EIP-712 domain name changed from "Neo N3 Abstract Account"
+        // (0x2e3d38ea0055ad99b5572e066658431ff4c40dbaf3e16e2154639dc6e2634803).
+        // Signatures over the old domain are invalid after the switch; there is
+        // no dual-domain verification. Update the SDK/frontend constants in lockstep.
         private static readonly byte[] Eip712NameHash = new byte[]
         {
-            0x2e, 0x3d, 0x38, 0xea, 0x00, 0x55, 0xad, 0x99,
-            0xb5, 0x57, 0x2e, 0x06, 0x66, 0x58, 0x43, 0x1f,
-            0xf4, 0xc4, 0x0d, 0xba, 0xf3, 0xe1, 0x6e, 0x21,
-            0x54, 0x63, 0x9d, 0xc6, 0xe2, 0x63, 0x48, 0x03
+            0x4f, 0x42, 0x00, 0x1f, 0xc9, 0x80, 0xd0, 0x8b,
+            0xd6, 0xd9, 0xd5, 0x4e, 0x72, 0x87, 0x95, 0xfc,
+            0x53, 0xe9, 0x6c, 0x20, 0x1e, 0x9a, 0xac, 0x28,
+            0xf0, 0xc9, 0x11, 0x19, 0xe9, 0x8d, 0xc9, 0x21
         };
         private static readonly byte[] Eip712VersionHash = new byte[]
         {
@@ -84,7 +89,7 @@ namespace SmartAccount.Verifiers
         public static void ConfirmAuthorizedCore(UInt160 coreContract) => VerifierAuthority.ConfirmAuthorizedCore(coreContract);
         public static void CancelAuthorizedCoreChange() => VerifierAuthority.CancelAuthorizedCoreChange();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => VerifierAuthority.ProposeUpdate(nefHash, manifestHash);
 
@@ -142,7 +147,7 @@ namespace SmartAccount.Verifiers
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
             // Audit fix M-6: the ordinary-build validation entry is only reachable
-            // through the AA core's execution context; direct callers are rejected.
+            // through the SA core's execution context; direct callers are rejected.
             VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
             ByteString pubKey = GetPublicKey(accountId);
             ExecutionEngine.Assert(pubKey.Length == 65, "No pubkey configured");

@@ -8,13 +8,13 @@
     >
       <p
         class="text-xs uppercase font-bold mb-1"
-        :class="isDidConnected ? 'text-aa-success' : 'text-aa-muted'"
+        :class="isDidConnected ? 'text-sa-success' : 'text-sa-muted'"
       >
         {{ t("operations.didCardLabel", "Web3Auth") }}
       </p>
       <p
         class="text-sm font-semibold truncate"
-        :class="isDidConnected ? 'text-aa-success-light' : 'text-aa-text'"
+        :class="isDidConnected ? 'text-sa-success-light' : 'text-sa-text'"
       >
         {{ didLabel }}
       </p>
@@ -25,13 +25,13 @@
     >
       <p
         class="text-xs uppercase font-bold mb-1"
-        :class="isNeoConnected ? 'text-aa-success' : 'text-aa-muted'"
+        :class="isNeoConnected ? 'text-sa-success' : 'text-sa-muted'"
       >
         {{ t("operations.neoWallet", "Neo Wallet") }}
       </p>
       <p
         class="text-sm font-semibold truncate"
-        :class="isNeoConnected ? 'text-aa-success-light' : 'text-aa-text'"
+        :class="isNeoConnected ? 'text-sa-success-light' : 'text-sa-text'"
       >
         {{ neoWalletLabel }}
       </p>
@@ -42,26 +42,26 @@
     >
       <p
         class="text-xs uppercase font-bold mb-1"
-        :class="evmAddress ? 'text-aa-success' : 'text-aa-muted'"
+        :class="evmAddress ? 'text-sa-success' : 'text-sa-muted'"
       >
         {{ t("operations.evmWallet", "EVM Wallet") }}
       </p>
       <p
         class="text-sm font-semibold truncate"
-        :class="evmAddress ? 'text-aa-success-light' : 'text-aa-text'"
+        :class="evmAddress ? 'text-sa-success-light' : 'text-sa-text'"
       >
         {{ evmWalletLabel }}
       </p>
     </div>
     <div
-      class="rounded-2xl border border-aa-border bg-aa-panel/40 p-5 shadow-inner backdrop-blur-md"
+      class="rounded-2xl border border-sa-border bg-sa-panel/40 p-5 shadow-inner backdrop-blur-md"
     >
-      <p class="text-xs uppercase text-aa-muted font-bold mb-1">
+      <p class="text-xs uppercase text-sa-muted font-bold mb-1">
         {{ t("operations.signaturesCardLabel", "Signatures") }}
       </p>
       <div class="flex items-center gap-2 mt-1">
         <div
-          class="w-full bg-aa-dark rounded-full h-1.5"
+          class="w-full bg-sa-dark rounded-full h-1.5"
           role="progressbar"
           :aria-valuenow="signatureCount"
           aria-valuemin="0"
@@ -83,7 +83,7 @@
             }"
           ></div>
         </div>
-        <p class="text-sm text-aa-text font-semibold tabular-nums">
+        <p class="text-sm text-sa-text font-semibold tabular-nums">
           {{ signatureCount }} /
           {{ requiredSignerCount || 0 }}
         </p>
@@ -95,7 +95,7 @@
     >
       <p
         class="text-xs uppercase font-bold mb-1"
-        :class="collaborationEnabled ? 'text-neo-400' : 'text-aa-muted'"
+        :class="collaborationEnabled ? 'text-neo-400' : 'text-sa-muted'"
       >
         {{ t("operations.collaborationCardLabel", "Collaboration") }}
       </p>
@@ -105,12 +105,12 @@
           :class="
             collaborationEnabled
               ? 'bg-neo-500 animate-pulse'
-              : 'bg-aa-muted'
+              : 'bg-sa-muted'
           "
         ></span>
         <p
           class="text-sm font-semibold"
-          :class="collaborationEnabled ? 'text-neo-300' : 'text-aa-text'"
+          :class="collaborationEnabled ? 'text-neo-300' : 'text-sa-text'"
         >
           {{
             collaborationEnabled
@@ -171,7 +171,7 @@ function statusCardClass(active, color = "emerald") {
   if (active)
     return color === "neo"
       ? "border-neo-500/30 bg-neo-500/5"
-      : "border-aa-success/30 bg-aa-success/5";
-  return "border-aa-border bg-aa-panel/40";
+      : "border-sa-success/30 bg-sa-success/5";
+  return "border-sa-border bg-sa-panel/40";
 }
 </script>

@@ -1,4 +1,4 @@
-# gitleaks configuration for neo-os-aa.
+# gitleaks configuration for neo-os-sa.
 #
 # Keeps every default rule. Every allowlist below names one rule and one file,
 # and admits one value class on a line of that file, so the same value anywhere
@@ -169,7 +169,7 @@ and the reviewed inventory pins the matched line count and the report SHA-256.\
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^docs/reports/aa-artifact-reproducibility-20261025\.json$''']
+paths = ['''^docs/reports/sa-artifact-reproducibility-20261025\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
 
@@ -184,7 +184,7 @@ and the reviewed inventory pins the matched line count and the report SHA-256.\
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^docs/reports/aa-artifact-reproducibility-20261030\.json$''']
+paths = ['''^docs/reports/sa-artifact-reproducibility-20261030\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
 
@@ -199,7 +199,7 @@ and the reviewed inventory pins the matched line count and the report SHA-256.\
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^docs/reports/aa-artifact-reproducibility-20261031\.json$''']
+paths = ['''^docs/reports/sa-artifact-reproducibility-20261031\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
 
@@ -214,7 +214,7 @@ and the reviewed inventory pins the matched line count and the report SHA-256.\
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^docs/reports/aa-artifact-reproducibility-20261113\.json$''']
+paths = ['''^docs/reports/sa-artifact-reproducibility-20261113\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
 
@@ -229,7 +229,7 @@ and the reviewed inventory pins the matched line count and the report SHA-256.\
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^docs/reports/aa-artifact-reproducibility-20261116\.json$''']
+paths = ['''^docs/reports/sa-artifact-reproducibility-20261116\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
 
@@ -244,7 +244,7 @@ line count and the receipt SHA-256.\
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^docs/reports/aa-formal-gate-20261030\.json$''']
+paths = ['''^docs/reports/sa-formal-gate-20261030\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
 
@@ -259,7 +259,7 @@ line count and the receipt SHA-256.\
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^docs/reports/aa-formal-gate-20261031\.json$''']
+paths = ['''^docs/reports/sa-formal-gate-20261031\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
 
@@ -273,6 +273,6 @@ the reviewed inventory pins the matched line count and the report SHA-256.\
 """
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''^docs/reports/aa-native-ci-probe-consistency-20261009\.json$''']
+paths = ['''^docs/reports/sa-native-ci-probe-consistency-20261009\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']

@@ -59,7 +59,7 @@ VM_MODULE = 'StorageGetterVm'
 PRELUDE = ('From Coq Require Import ZArith List Bool Lia PeanoNat.\n'
            'Require Import IntegerSemantics StorageGetter.\n'
            'Import ListNotations. Open Scope Z_scope.\n')
-SCHEMA = 'neoos-aa-storage-getter-source-refinement/v1'
+SCHEMA = 'neoos-sa-storage-getter-source-refinement/v1'
 SCOPE = 'storage-getter-source-refinement'
 GETCONTEXT_HASH = 0xce67f69b
 STORAGE_GET_HASH = 0x31e85d92

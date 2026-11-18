@@ -63,7 +63,7 @@ public class ContractTests
         "hooks/NeoDIDCredentialHook.csproj",
         "hooks/TokenRestrictedHook.csproj",
         "hooks/WhitelistHook.csproj",
-        "market/AAAddressMarket.csproj",
+        "market/SAAddressMarket.csproj",
         "mocks/MarkerOnlyModule.csproj",
         "mocks/MockTransferTarget.csproj",
         "paymaster/Paymaster.csproj",
@@ -116,13 +116,13 @@ public class ContractTests
     }
 
     [TestMethod]
-    public void ContractAssemblyExposesSmartAccountV3Metadata()
+    public void ContractAssemblyExposesSmartAccountMetadata()
     {
         Assert.AreEqual("SmartAccount", ContractType.Name);
 
         DisplayNameAttribute? displayName = ContractType.GetCustomAttribute<DisplayNameAttribute>();
         Assert.IsNotNull(displayName);
-        Assert.AreEqual("SmartAccountV3", displayName.DisplayName);
+        Assert.AreEqual("SmartAccount", displayName.DisplayName);
 
         CustomAttributeData? manifestExtra = ContractType.CustomAttributes
             .FirstOrDefault(attribute => attribute.AttributeType.Name == "ManifestExtraAttribute");
@@ -131,7 +131,7 @@ public class ContractTests
         Assert.AreEqual(2, manifestExtra!.ConstructorArguments.Count);
         Assert.AreEqual("Description", manifestExtra.ConstructorArguments[0].Value);
         Assert.AreEqual(
-            "ERC-4337 Aligned Minimalist AA Engine for Neo N3",
+            "ERC-4337 Aligned Minimalist SA Engine for Neo N3",
             manifestExtra.ConstructorArguments[1].Value);
     }
 
@@ -724,8 +724,8 @@ public class ContractTests
     {
         string source = ReadContractFile("registrar/PlatformRegistrar.cs");
 
-        StringAssert.Contains(source, "[DisplayName(\"AAPlatformRegistrar\")]");
-        StringAssert.Contains(source, "Platform Account Registrar Service for Neo N3 AA");
+        StringAssert.Contains(source, "[DisplayName(\"SAPlatformRegistrar\")]");
+        StringAssert.Contains(source, "Platform Account Registrar Service for Neo N3 SA");
         StringAssert.Contains(source, "[ContractPermission(\"*\", \"applyPlatformAccountOwnerRotation\")]");
     }
 
@@ -777,8 +777,8 @@ public class ContractTests
     {
         string source = ReadContractFile("paymaster/Paymaster.cs");
 
-        StringAssert.Contains(source, "[DisplayName(\"AAPaymaster\")]");
-        StringAssert.Contains(source, "On-Chain Paymaster for Sponsored Transactions on Neo N3 AA");
+        StringAssert.Contains(source, "[DisplayName(\"SAPaymaster\")]");
+        StringAssert.Contains(source, "On-Chain Paymaster for Sponsored Transactions on Neo N3 SA");
         StringAssert.Contains(source, "0xd2a4cff31913016155e38e474a2c06d08be276cf");
     }
 

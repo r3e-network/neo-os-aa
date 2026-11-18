@@ -2,10 +2,10 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between gap-4">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("txPreview.title", "Transaction Preview") }}
         </h2>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{ t("txPreview.subtitle", "Review your operation before signing.") }}
         </p>
       </div>
@@ -18,11 +18,11 @@
     <!-- Empty state when no transaction is staged -->
     <div v-if="!transaction" class="empty-state">
       <div
-        class="mx-auto w-12 h-12 rounded-full bg-aa-panel/30 flex items-center justify-center mb-3"
+        class="mx-auto w-12 h-12 rounded-full bg-sa-panel/30 flex items-center justify-center mb-3"
       >
         <svg
           aria-hidden="true"
-          class="w-6 h-6 text-aa-muted"
+          class="w-6 h-6 text-sa-muted"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -35,10 +35,10 @@
           ></path>
         </svg>
       </div>
-      <p class="text-sm text-aa-text font-medium mb-1">
+      <p class="text-sm text-sa-text font-medium mb-1">
         {{ t("txPreview.noTransaction", "No transaction staged") }}
       </p>
-      <p class="text-xs text-aa-muted">
+      <p class="text-xs text-sa-muted">
         {{
           t(
             "txPreview.stageTransactionHint",
@@ -51,7 +51,7 @@
     <!-- Transaction preview when staged -->
     <template v-else>
       <!-- Operation Summary -->
-      <div class="mb-5 rounded-lg border border-aa-border bg-aa-panel/50 p-4">
+      <div class="mb-5 rounded-lg border border-sa-border bg-sa-panel/50 p-4">
         <div class="flex items-start gap-4">
           <div
             class="w-12 h-12 rounded-xl flex items-center justify-center"
@@ -91,21 +91,21 @@
             </svg>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-xs font-bold uppercase text-aa-muted">
+            <p class="text-xs font-bold uppercase text-sa-muted">
               {{ t("txPreview.operation", "Operation") }}
             </p>
-            <p class="text-sm font-semibold text-aa-text">
+            <p class="text-sm font-semibold text-sa-text">
               {{ transaction.title }}
             </p>
-            <p class="text-xs text-aa-muted mt-0.5">
+            <p class="text-xs text-sa-muted mt-0.5">
               {{ transaction.description }}
             </p>
           </div>
           <div class="text-right">
-            <p class="text-sm font-mono text-aa-text">
+            <p class="text-sm font-mono text-sa-text">
               {{ transaction.value || t("txPreview.noValue", "No value") }}
             </p>
-            <p class="text-xs text-aa-muted">
+            <p class="text-xs text-sa-muted">
               {{ transaction.token || t("txPreview.native", "Native") }}
             </p>
           </div>
@@ -115,15 +115,15 @@
       <!-- Target Contract Information -->
       <div
         v-if="transaction.contract"
-        class="mb-5 rounded-lg border border-aa-border bg-aa-panel/50 p-4"
+        class="mb-5 rounded-lg border border-sa-border bg-sa-panel/50 p-4"
       >
         <div class="flex items-start gap-3">
           <div
-            class="w-10 h-10 rounded-lg bg-aa-panel flex items-center justify-center"
+            class="w-10 h-10 rounded-lg bg-sa-panel flex items-center justify-center"
           >
             <svg
               aria-hidden="true"
-              class="w-5 h-5 text-aa-muted"
+              class="w-5 h-5 text-sa-muted"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -137,11 +137,11 @@
             </svg>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-xs font-bold uppercase text-aa-muted">
+            <p class="text-xs font-bold uppercase text-sa-muted">
               {{ t("txPreview.targetContract", "Target Contract") }}
             </p>
             <div class="flex items-center gap-2 mt-1">
-              <p class="text-sm font-semibold text-aa-text truncate">
+              <p class="text-sm font-semibold text-sa-text truncate">
                 {{
                   transaction.contract.name ||
                   t("txPreview.unknownContract", "Unknown Contract")
@@ -169,7 +169,7 @@
                 {{ t("txPreview.verified", "Verified") }}
               </span>
             </div>
-            <p class="text-xs font-mono text-aa-muted">
+            <p class="text-xs font-mono text-sa-muted">
               {{ formatContractHash(transaction.contract.hash) }}
             </p>
           </div>
@@ -188,15 +188,15 @@
       <!-- Method Information -->
       <div
         v-if="transaction.method"
-        class="mb-5 rounded-lg border border-aa-border bg-aa-panel/50 p-4"
+        class="mb-5 rounded-lg border border-sa-border bg-sa-panel/50 p-4"
       >
         <div class="flex items-start gap-3">
           <div
-            class="w-10 h-10 rounded-lg bg-aa-panel flex items-center justify-center"
+            class="w-10 h-10 rounded-lg bg-sa-panel flex items-center justify-center"
           >
             <svg
               aria-hidden="true"
-              class="w-5 h-5 text-aa-muted"
+              class="w-5 h-5 text-sa-muted"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -210,11 +210,11 @@
             </svg>
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-xs font-bold uppercase text-aa-muted">
+            <p class="text-xs font-bold uppercase text-sa-muted">
               {{ t("txPreview.method", "Method") }}
             </p>
             <div class="flex items-center gap-2 mt-1">
-              <code class="text-sm font-mono text-aa-text">{{
+              <code class="text-sm font-mono text-sa-text">{{
                 transaction.method.name
               }}</code>
               <span
@@ -225,7 +225,7 @@
             </div>
             <p
               v-if="transaction.method.signature"
-              class="text-xs font-mono text-aa-muted mt-0.5 break-all"
+              class="text-xs font-mono text-sa-muted mt-0.5 break-all"
             >
               {{ transaction.method.signature }}
             </p>
@@ -237,7 +237,7 @@
               class="mt-3"
             >
               <summary
-                class="cursor-pointer text-xs font-semibold text-aa-muted hover:text-aa-text transition-colors duration-200 flex items-center gap-1"
+                class="cursor-pointer text-xs font-semibold text-sa-muted hover:text-sa-text transition-colors duration-200 flex items-center gap-1"
               >
                 <svg
                   aria-hidden="true"
@@ -259,10 +259,10 @@
                 <div
                   v-for="(param, idx) in transaction.method.parameters"
                   :key="idx"
-                  class="rounded bg-aa-dark/40 px-3 py-2"
+                  class="rounded bg-sa-dark/40 px-3 py-2"
                 >
                   <div class="flex items-center gap-2 mb-1">
-                    <span class="text-xs font-mono text-aa-muted"
+                    <span class="text-xs font-mono text-sa-muted"
                       >param{{ idx }}</span
                     >
                     <span
@@ -271,11 +271,11 @@
                       >{{ param.type }}</span
                     >
                   </div>
-                  <p v-if="param.name" class="text-xs text-aa-text">
+                  <p v-if="param.name" class="text-xs text-sa-text">
                     {{ param.name }}
                   </p>
                   <p
-                    class="text-xs font-mono text-aa-muted truncate"
+                    class="text-xs font-mono text-sa-muted truncate"
                     :title="param.value"
                   >
                     {{ param.value }}
@@ -290,12 +290,12 @@
       <!-- Estimated Cost -->
       <div
         v-if="estimatedCost"
-        class="mb-5 rounded-lg border border-aa-border bg-gradient-to-br from-aa-panel/80 to-aa-dark/60 p-4"
+        class="mb-5 rounded-lg border border-sa-border bg-gradient-to-br from-sa-panel/80 to-sa-dark/60 p-4"
       >
         <div class="flex items-center gap-3">
           <svg
             aria-hidden="true"
-            class="w-10 h-10 text-aa-muted"
+            class="w-10 h-10 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -308,18 +308,18 @@
             ></path>
           </svg>
           <div class="flex-1">
-            <p class="text-xs font-bold uppercase text-aa-muted">
+            <p class="text-xs font-bold uppercase text-sa-muted">
               {{ t("txPreview.estimatedCost", "Estimated Cost") }}
             </p>
             <div class="flex items-baseline gap-1 mt-1">
-              <p class="text-2xl font-bold text-aa-text">
+              <p class="text-2xl font-bold text-sa-text">
                 {{ estimatedCost.amount }}
               </p>
-              <p class="text-sm text-aa-muted">{{ estimatedCost.token }}</p>
+              <p class="text-sm text-sa-muted">{{ estimatedCost.token }}</p>
             </div>
             <p
               v-if="estimatedCost.isSponsored"
-              class="text-xs text-aa-success mt-1"
+              class="text-xs text-sa-success mt-1"
             >
               <svg
                 aria-hidden="true"
@@ -337,10 +337,10 @@
             </p>
             <div v-if="estimatedCost.breakdown" class="mt-2 space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-aa-muted">{{
+                <span class="text-sa-muted">{{
                   t("txPreview.gasCost", "Gas Cost")
                 }}</span>
-                <span class="font-mono text-aa-text">{{
+                <span class="font-mono text-sa-text">{{
                   estimatedCost.breakdown.gas
                 }}</span>
               </div>
@@ -348,10 +348,10 @@
                 v-if="estimatedCost.breakdown.fee"
                 class="flex justify-between text-xs"
               >
-                <span class="text-aa-muted">{{
+                <span class="text-sa-muted">{{
                   t("txPreview.networkFee", "Network Fee")
                 }}</span>
-                <span class="font-mono text-aa-text">{{
+                <span class="font-mono text-sa-text">{{
                   estimatedCost.breakdown.fee
                 }}</span>
               </div>
@@ -398,7 +398,7 @@
                 <svg
                   v-if="indicator.severity === 'high'"
                   aria-hidden="true"
-                  class="w-4 h-4 text-aa-error"
+                  class="w-4 h-4 text-sa-error"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -413,7 +413,7 @@
                 <svg
                   v-else-if="indicator.severity === 'medium'"
                   aria-hidden="true"
-                  class="w-4 h-4 text-aa-warning"
+                  class="w-4 h-4 text-sa-warning"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -428,7 +428,7 @@
                 <svg
                   v-else
                   aria-hidden="true"
-                  class="w-4 h-4 text-aa-info"
+                  class="w-4 h-4 text-sa-info"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -442,10 +442,10 @@
                 </svg>
               </span>
               <div class="flex-1">
-                <p class="text-sm font-medium text-aa-text">
+                <p class="text-sm font-medium text-sa-text">
                   {{ indicator.title }}
                 </p>
-                <p class="text-xs text-aa-muted">{{ indicator.description }}</p>
+                <p class="text-xs text-sa-muted">{{ indicator.description }}</p>
               </div>
               <router-link
                 v-if="indicator.docLink"
@@ -462,10 +462,10 @@
       <!-- UserOperation Breakdown -->
       <details
         v-if="userOperation"
-        class="mt-5 rounded-lg border border-aa-border bg-aa-panel/50 p-4"
+        class="mt-5 rounded-lg border border-sa-border bg-sa-panel/50 p-4"
       >
         <summary
-          class="cursor-pointer text-sm font-semibold text-aa-muted hover:text-aa-text transition-colors duration-200 flex items-center gap-2"
+          class="cursor-pointer text-sm font-semibold text-sa-muted hover:text-sa-text transition-colors duration-200 flex items-center gap-2"
         >
           <svg
             aria-hidden="true"
@@ -485,36 +485,36 @@
         </summary>
         <div class="mt-4 space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="rounded bg-aa-dark/40 px-3 py-2">
-              <p class="text-xs text-aa-muted">
+            <div class="rounded bg-sa-dark/40 px-3 py-2">
+              <p class="text-xs text-sa-muted">
                 {{ t("txPreview.sender", "Sender") }}
               </p>
-              <p class="text-sm font-mono text-aa-text truncate">
+              <p class="text-sm font-mono text-sa-text truncate">
                 {{ userOperation.sender }}
               </p>
             </div>
-            <div class="rounded bg-aa-dark/40 px-3 py-2">
-              <p class="text-xs text-aa-muted">
+            <div class="rounded bg-sa-dark/40 px-3 py-2">
+              <p class="text-xs text-sa-muted">
                 {{ t("txPreview.nonce", "Nonce") }}
               </p>
-              <p class="text-sm font-mono text-aa-text">
+              <p class="text-sm font-mono text-sa-text">
                 {{ userOperation.nonce }}
               </p>
             </div>
-            <div class="rounded bg-aa-dark/40 px-3 py-2">
-              <p class="text-xs text-aa-muted">
+            <div class="rounded bg-sa-dark/40 px-3 py-2">
+              <p class="text-xs text-sa-muted">
                 {{ t("txPreview.initCode", "Init Code") }}
               </p>
-              <p class="text-sm font-mono text-aa-text truncate">
+              <p class="text-sm font-mono text-sa-text truncate">
                 {{ userOperation.initCode || t("txPreview.none", "None") }}
               </p>
             </div>
-            <div class="rounded bg-aa-dark/40 px-3 py-2">
-              <p class="text-xs text-aa-muted">
+            <div class="rounded bg-sa-dark/40 px-3 py-2">
+              <p class="text-xs text-sa-muted">
                 {{ t("txPreview.callData", "Call Data") }}
               </p>
               <p
-                class="text-sm font-mono text-aa-muted truncate"
+                class="text-sm font-mono text-sa-muted truncate"
                 :title="userOperation.callData"
               >
                 {{ userOperation.callData }}
@@ -559,7 +559,7 @@ const riskLevel = computed(() => {
     return {
       label: t("txPreview.lowRisk", "Low Risk"),
       badgeClass: "badge-green",
-      dotClass: "bg-aa-success",
+      dotClass: "bg-sa-success",
     };
   }
   const hasHighRisk = props.riskIndicators.some((r) => r.severity === "high");
@@ -567,7 +567,7 @@ const riskLevel = computed(() => {
     return {
       label: t("txPreview.highRisk", "High Risk"),
       badgeClass: "badge-red",
-      dotClass: "bg-aa-error animate-pulse",
+      dotClass: "bg-sa-error animate-pulse",
     };
   }
   const hasMediumRisk = props.riskIndicators.some(
@@ -577,13 +577,13 @@ const riskLevel = computed(() => {
     return {
       label: t("txPreview.mediumRisk", "Medium Risk"),
       badgeClass: "badge-orange",
-      dotClass: "bg-aa-warning",
+      dotClass: "bg-sa-warning",
     };
   }
   return {
     label: t("txPreview.lowRisk", "Low Risk"),
     badgeClass: "badge-green",
-    dotClass: "bg-aa-success",
+    dotClass: "bg-sa-success",
   };
 });
 
@@ -594,42 +594,42 @@ const riskDotClass = computed(() => riskLevel.value.dotClass);
 const riskBorderClass = computed(() => {
   const hasHigh = props.riskIndicators.some((r) => r.severity === "high");
   return hasHigh
-    ? "border-aa-error/30 bg-aa-error/5"
-    : "border-aa-warning/30 bg-aa-warning/5";
+    ? "border-sa-error/30 bg-sa-error/5"
+    : "border-sa-warning/30 bg-sa-warning/5";
 });
 
 const riskIconClass = computed(() => {
   const hasHigh = props.riskIndicators.some((r) => r.severity === "high");
-  return hasHigh ? "text-aa-error" : "text-aa-warning";
+  return hasHigh ? "text-sa-error" : "text-sa-warning";
 });
 
 const riskTextClass = computed(() => {
   const hasHigh = props.riskIndicators.some((r) => r.severity === "high");
-  return hasHigh ? "text-aa-error" : "text-aa-warning";
+  return hasHigh ? "text-sa-error" : "text-sa-warning";
 });
 
 const indicatorBgClass = computed(() => {
   const hasHigh = props.riskIndicators.some((r) => r.severity === "high");
-  return hasHigh ? "bg-aa-error/10" : "bg-aa-warning/10";
+  return hasHigh ? "bg-sa-error/10" : "bg-sa-warning/10";
 });
 
 function indicatorIconClass(severity) {
-  if (severity === "high") return "text-aa-error";
-  if (severity === "medium") return "text-aa-warning";
-  return "text-aa-info";
+  if (severity === "high") return "text-sa-error";
+  if (severity === "medium") return "text-sa-warning";
+  return "text-sa-info";
 }
 
 // Operation icon styling
 const operationIconBg = computed(() => {
-  if (!props.transaction) return "bg-aa-panel";
+  if (!props.transaction) return "bg-sa-panel";
   if (props.transaction.type === "transfer") return "bg-neo-500/20";
-  return "bg-aa-panel";
+  return "bg-sa-panel";
 });
 
 const operationIconClass = computed(() => {
-  if (!props.transaction) return "text-aa-muted";
+  if (!props.transaction) return "text-sa-muted";
   if (props.transaction.type === "transfer") return "text-neo-400";
-  return "text-aa-muted";
+  return "text-sa-muted";
 });
 
 function getParameterBadgeClass(type) {

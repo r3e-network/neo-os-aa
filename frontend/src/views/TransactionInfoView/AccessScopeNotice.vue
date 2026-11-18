@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="hasDraft && accessScope === 'read'"
-    class="mb-6 rounded-lg border border-aa-warning/30 bg-aa-warning/10 px-4 py-3 text-sm text-aa-warning font-medium"
+    class="mb-6 rounded-lg border border-sa-warning/30 bg-sa-warning/10 px-4 py-3 text-sm text-sa-warning font-medium"
   >
     {{
       t(
@@ -12,7 +12,7 @@
   </div>
   <div
     v-else-if="hasDraft && accessScope === 'sign'"
-    class="mb-6 rounded-lg border border-aa-info/30 bg-aa-info/10 px-4 py-3 text-sm text-aa-info font-medium"
+    class="mb-6 rounded-lg border border-sa-info/30 bg-sa-info/10 px-4 py-3 text-sm text-sa-info font-medium"
   >
     {{
       t(

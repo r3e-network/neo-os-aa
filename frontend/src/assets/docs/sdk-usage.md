@@ -1,6 +1,6 @@
-# Abstract Account SDK Integration
+# Smart Account SDK Integration
 
-The JavaScript SDK exposes the current Abstract Account client surface used by the live validation suite. It covers deterministic address derivation, account-creation payloads, and EIP-712 typed-data generation backed by the contract's `computeArgsHash` method.
+The JavaScript SDK exposes the current Smart Account client surface used by the live validation suite. It covers deterministic address derivation, account-creation payloads, and EIP-712 typed-data generation backed by the contract's `computeArgsHash` method.
 
 ## Installation
 
@@ -10,7 +10,7 @@ npm install @cityofzion/neon-js ethers
 
 ## 1. Initialize the Client
 
-Use a Neo N3 RPC endpoint and the canonical shared testnet AA core, unless you explicitly override it
+Use a Neo N3 RPC endpoint and the canonical shared testnet SA core, unless you explicitly override it
 with another instance. The canonical anchors are generated from neo-os-services into
 `frontend/src/config/generatedMorpheusRegistry.js`; the repository README restates them and that
 generated module wins on any conflict.
@@ -59,7 +59,7 @@ const payload = aaClient.createAccountPayload({
 });
 
 console.log(accountIdHash);      // deterministic registration-bound accountId
-console.log(payload.scriptHash); // AA master contract
+console.log(payload.scriptHash); // SA master contract
 console.log(payload.operation);  // registerAccount
 console.log(payload.args);
 ```
@@ -91,7 +91,7 @@ const signature = await signer.signTypedData(
 
 ## 5. Paymaster / Sponsored Execution
 
-The SDK provides helpers for building sponsored (gasless) transactions that settle relay fees through the on-chain `AAPaymaster` contract (`contracts/paymaster/Paymaster.cs`). Sponsors deposit GAS into the Paymaster via NEP-17 transfer, then create policies that define which accounts, contracts, and methods they are willing to fund.
+The SDK provides helpers for building sponsored (gasless) transactions that settle relay fees through the on-chain `SAPaymaster` contract (`contracts/paymaster/Paymaster.cs`). Sponsors deposit GAS into the Paymaster via NEP-17 transfer, then create policies that define which accounts, contracts, and methods they are willing to fund.
 
 ### Query a Sponsor Balance
 
@@ -114,7 +114,7 @@ const payload = await aaClient.createSponsoredUserOpPayload({
 });
 ```
 
-The AA core method called under the hood is `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)`. A batch variant `createSponsoredBatchPayload` works identically but targets the batch execution entrypoint.
+The SA core method called under the hood is `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)`. A batch variant `createSponsoredBatchPayload` works identically but targets the batch execution entrypoint.
 
 These payloads are relay DTOs: their `ByteArray` values are explicit `0x` hex,
 including the signature. They are not direct Neo RPC JSON (which uses base64).
@@ -181,7 +181,7 @@ VITE_AA_RELAY_META_ENABLED=1
 - `AA_RELAY_WIF` on the server enables relay submission of stored `executeUserOp` invocations built from collected EVM signatures.
 - shared draft metadata is intentionally bounded: the frontend retains the latest 100 activity entries and the latest 12 submission receipts per draft in both local and Supabase-backed storage.
 - client-side broadcast remains the default safe path, while relay mode is reserved for already-signed raw transactions.
-- the app workspace presets now stage concrete AA wrapper payloads, so a browser-wallet submission targets `executeUserOp` on the AA contract rather than the downstream contract directly.
+- the app workspace presets now stage concrete SA wrapper payloads, so a browser-wallet submission targets `executeUserOp` on the SA contract rather than the downstream contract directly.
 
 ### Server Runtime Add-Ons
 
@@ -221,7 +221,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 | `VITE_AA_MATRIX_CONTRACT_HASH` | Frontend | Optional `.matrix` contract hash override used for domain resolution and same-transaction registration. |
 | `AA_RELAY_RPC_URL` | Server | Preferred RPC for `frontend/api/relay-transaction.js` when you do not want the server to inherit the browser-facing RPC setting. |
 | `AA_RELAY_WIF` | Server | Enables server-side submission of stored `executeUserOp` invocations. |
-| `AA_RELAY_ALLOWED_HASH` | Server | Pins relayable meta invocations to the expected Abstract Account contract hash. |
+| `AA_RELAY_ALLOWED_HASH` | Server | Pins relayable meta invocations to the expected Smart Account contract hash. |
 | `AA_RELAY_ALLOW_RAW_FORWARD` | Server | Explicit opt-in for relaying already-signed raw transactions; keep disabled by default. |
 | `AA_RELAY_INCLUDE_RAW_ERRORS` | Server | Optional operator debug switch that includes the unsanitized exception message and stack in relay API responses. |
 | `MORPHEUS_PAYMASTER_TESTNET_ENDPOINT` / `MORPHEUS_PAYMASTER_MAINNET_ENDPOINT` | Server | Optional Morpheus paymaster endpoint used before relay submission. |
@@ -256,7 +256,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 | Missing optional piece | What still works |
 | --- | --- |
 | without Supabase | Local-only drafts, browser-wallet signing, relay checks, and client-side broadcast still work in the current browser. |
-| without relay | Abstract Account loading, draft persistence, local/manual signature collection, and client-side broadcast still work. |
+| without relay | Smart Account loading, draft persistence, local/manual signature collection, and client-side broadcast still work. |
 | without explorer | Draft sharing, relay checks, and broadcast still work; only external tx links and explorer shortcuts are reduced. |
 
 ## Recommended Deployment Profiles
@@ -264,7 +264,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 - **local-only** — use browser wallets with no Supabase and no relay when you only need one-device compose, sign, and client-side broadcast.
 - **collaborative** — add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` when you want anonymous shared drafts and mixed approval collection, even if final submission still happens client-side. The default read-only share link is safe for review, the collaborator link is for signature collection, and the operator link is for relay checks, broadcasts, and link rotation. Collaborator links also cannot append operator-class relay/broadcast timeline events. Operators can use the Rotate Collaborator Link or Rotate Operator Link actions to invalidate older write-capable URLs in-place.
 - **full relay-enabled** — add Supabase, `VITE_AA_RELAY_URL`, `VITE_AA_RELAY_META_ENABLED`, `VITE_AA_EXPLORER_BASE_URL`, and server-side `AA_RELAY_WIF` when you want shared drafts, relay preflight, signed raw relay, and meta relay submission together.
-- **operator-hardened** — add `SUPABASE_SERVICE_ROLE_KEY`, keep `AA_RELAY_ALLOWED_HASH` pinned to the deployed AA contract, and leave `AA_RELAY_ALLOW_RAW_FORWARD=0` unless your operators explicitly need raw-transaction passthrough. This profile keeps `draft-operator` signed operator mutation writes available without widening relay scope.
+- **operator-hardened** — add `SUPABASE_SERVICE_ROLE_KEY`, keep `AA_RELAY_ALLOWED_HASH` pinned to the deployed SA contract, and leave `AA_RELAY_ALLOW_RAW_FORWARD=0` unless your operators explicitly need raw-transaction passthrough. This profile keeps `draft-operator` signed operator mutation writes available without widening relay scope.
 
 ## .env.local Examples
 
@@ -308,14 +308,14 @@ VITE_AA_EXPLORER_BASE_URL=https://testnet.ndoras.com/transaction
 - **Missing `AA_RELAY_WIF`:** relay submission can be configured in the UI, but the backend cannot actually sign and send relay-ready meta invocations.
 - **Missing `SUPABASE_SERVICE_ROLE_KEY`:** `frontend/api/draft-operator.js` returns `operator_mutation_not_configured`, so signed operator mutation requests cannot persist operator-only status, receipt, or link-rotation changes.
 - **Relay meta mode disabled:** if `VITE_AA_RELAY_META_ENABLED` is unset, collected meta invocations stay stored on the draft but the UI treats them as not directly relayable.
-- **Relay hash/raw settings feel inconsistent:** confirm `AA_RELAY_ALLOWED_HASH` matches the deployed AA hash and remember that `AA_RELAY_ALLOW_RAW_FORWARD` is off by default, so raw passthrough only works after an explicit server opt-in.
+- **Relay hash/raw settings feel inconsistent:** confirm `AA_RELAY_ALLOWED_HASH` matches the deployed SA hash and remember that `AA_RELAY_ALLOW_RAW_FORWARD` is off by default, so raw passthrough only works after an explicit server opt-in.
 - **Missing explorer base url:** if `VITE_AA_EXPLORER_BASE_URL` is absent, explorer links fall back to the default base URL or may not match your preferred explorer.
 
 ## 7. Execution Model Reminder
 
-The typed-data signature authorizes an Abstract Account wrapper call. On hardened deployments, external interactions must flow through the canonical V3 runtime entrypoint `executeUserOp` (or `executeUserOps` for a batch); raw direct proxy-signed external spends are intentionally rejected. The `executeUnified` and `executeUnifiedByAddress` wrappers of the V1/V2 runtime were removed: no deployed manifest and no contract source defines them, so a payload naming them cannot execute.
+The typed-data signature authorizes a Smart Account wrapper call. On hardened deployments, external interactions must flow through the canonical V3 runtime entrypoint `executeUserOp` (or `executeUserOps` for a batch); raw direct proxy-signed external spends are intentionally rejected. The `executeUnified` and `executeUnifiedByAddress` wrappers of the V1/V2 runtime were removed: no deployed manifest and no contract source defines them, so a payload naming them cannot execute.
 
 
 ## Matrix Domain Support
 
-The frontend can register a `.matrix` domain in the same wallet transaction as AA creation when the wallet supports batched invocations. Domain resolution is then used as a discovery step: the `.matrix` domain resolves to the controlling wallet address, and the frontend queries the AA contract for bound AA addresses where that wallet is an admin or manager.
+The frontend can register a `.matrix` domain in the same wallet transaction as SA creation when the wallet supports batched invocations. Domain resolution is then used as a discovery step: the `.matrix` domain resolves to the controlling wallet address, and the frontend queries the SA contract for bound SA addresses where that wallet is an admin or manager.

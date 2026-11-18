@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://github.com/r3e-network/neo-os-aa",
+  "homepage": "https://github.com/r3e-network/neo-os-sa",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/r3e-network/neo-os-aa.git"
+    "url": "git+https://github.com/r3e-network/neo-os-sa.git"
   },
   "engines": {
     "node": ">=22"

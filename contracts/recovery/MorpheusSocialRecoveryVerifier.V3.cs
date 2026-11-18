@@ -11,7 +11,7 @@ namespace Neo.SmartContract.Examples
     public partial class SocialRecoveryVerifier
     {
         /// <summary>
-        /// ABI-compatible operation shape used by SmartAccountV3 verifier plugins.
+        /// ABI-compatible operation shape used by SmartAccount verifier plugins.
         /// The recovery verifier authorizes the transaction witness rather than this payload's
         /// signature bytes, but it must still accept the canonical operation structure.
         /// </summary>
@@ -35,7 +35,7 @@ namespace Neo.SmartContract.Examples
         public static bool SupportsMessageSignatures() => false;
 
         /// <summary>
-        /// Authorizes an AA operation with either the current recovery owner witness or an
+        /// Authorizes an SA operation with either the current recovery owner witness or an
         /// unexpired Morpheus action-session executor witness.
         /// </summary>
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
@@ -54,7 +54,7 @@ namespace Neo.SmartContract.Examples
         }
 
         /// <summary>
-        /// Mandatory V3 lifecycle cleanup. The AA core calls this before it rotates the account
+        /// Mandatory V3 lifecycle cleanup. The SA core calls this before it rotates the account
         /// away from this verifier (<c>confirmVerifierUpdate</c>), completes a backup-owner escape
         /// (<c>finalizeEscape</c>) or hands the shell to a market buyer (<c>settleMarketEscrow</c>).
         /// A verifier without this method faults every one of those transitions uncatchably, so
@@ -89,7 +89,7 @@ namespace Neo.SmartContract.Examples
             }
 
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_OWNER, accountId));
-            Storage.Delete(Storage.CurrentContext, Key(PREFIX_AA_CONTRACT, accountId));
+            Storage.Delete(Storage.CurrentContext, Key(PREFIX_SA_CONTRACT, accountId));
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_ACCOUNT_ADDRESS, accountId));
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_MORPHEUS_ORACLE, accountId));
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_NETWORK, accountId));
@@ -118,14 +118,14 @@ namespace Neo.SmartContract.Examples
 
         /// <summary>
         /// Configuration-phase gate, mirroring <c>VerifierAuthority.ValidateConfigCaller</c>: the
-        /// caller must be the pinned AA core and that core must currently hold this verifier in
+        /// caller must be the pinned SA core and that core must currently hold this verifier in
         /// its per-account configuration context (<c>canConfigureVerifier</c>).
         /// </summary>
         private static void AssertV3ConfigCaller(UInt160 accountId)
         {
             UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "Authorized AA core not configured");
-            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized AA core caller");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "Authorized SA core not configured");
+            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized SA core caller");
 
             bool authorized = (bool)Contract.Call(
                 core,
@@ -140,8 +140,8 @@ namespace Neo.SmartContract.Examples
             ExecutionEngine.Assert(accountId != UInt160.Zero && accountId.IsValid, "Invalid account id");
 
             UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "Authorized AA core not configured");
-            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized AA core caller");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "Authorized SA core not configured");
+            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized SA core caller");
 
             bool authorized = (bool)Contract.Call(
                 core,

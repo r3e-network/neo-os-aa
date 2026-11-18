@@ -2,10 +2,10 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between">
       <div>
-        <h2 class="text-lg font-bold text-aa-text flex items-center gap-2">
+        <h2 class="text-lg font-bold text-sa-text flex items-center gap-2">
           <svg
             aria-hidden="true"
-            class="w-5 h-5 text-aa-orange"
+            class="w-5 h-5 text-sa-orange"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -19,7 +19,7 @@
           </svg>
           {{ t("operations.discoverTitle", "Discover Your Accounts") }}
         </h2>
-        <p class="text-sm text-aa-muted mt-1">
+        <p class="text-sm text-sa-muted mt-1">
           {{
             t(
               "operations.discoverSubtitle",
@@ -67,7 +67,7 @@
     <div v-if="!isConfigured" class="empty-state">
       <svg
         aria-hidden="true"
-        class="w-10 h-10 mx-auto mb-3 text-aa-muted"
+        class="w-10 h-10 mx-auto mb-3 text-sa-muted"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -79,16 +79,16 @@
           d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
         ></path>
       </svg>
-      <p class="text-sm font-semibold text-aa-text mb-1">
+      <p class="text-sm font-semibold text-sa-text mb-1">
         {{
           t("operations.discoverNotConfigured", "Account Discovery Not Configured")
         }}
       </p>
-      <p class="text-xs text-aa-muted max-w-sm mx-auto">
+      <p class="text-xs text-sa-muted max-w-sm mx-auto">
         {{
           t(
             "operations.discoverNotConfiguredHint",
-            "Account discovery reads registered accounts from the NeoOS read API. Set the read API base URL and the abstract account core hash for this network, or use direct account lookup below.",
+            "Account discovery reads registered accounts from the NeoOS read API. Set the read API base URL and the smart account core hash for this network, or use direct account lookup below.",
           )
         }}
       </p>
@@ -97,9 +97,9 @@
     <div
       v-else-if="error"
       role="alert"
-      class="mb-4 rounded-xl border border-aa-error/30 bg-aa-error/10 p-4 flex items-center gap-3"
+      class="mb-4 rounded-xl border border-sa-error/30 bg-sa-error/10 p-4 flex items-center gap-3"
     >
-      <p class="text-sm text-aa-error font-medium flex-1">{{ error }}</p>
+      <p class="text-sm text-sa-error font-medium flex-1">{{ error }}</p>
       <button
         class="btn-ghost btn-sm"
         :class="{ 'btn-loading': searching }"
@@ -120,7 +120,7 @@
     >
       <svg
         aria-hidden="true"
-        class="w-10 h-10 mx-auto mb-3 text-aa-muted"
+        class="w-10 h-10 mx-auto mb-3 text-sa-muted"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -132,10 +132,10 @@
           d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
         ></path>
       </svg>
-      <p class="text-sm font-semibold text-aa-text mb-1">
+      <p class="text-sm font-semibold text-sa-text mb-1">
         {{ t("operations.noAccountsFound", "No accounts found") }}
       </p>
-      <p class="text-xs text-aa-muted max-w-sm mx-auto">
+      <p class="text-xs text-sa-muted max-w-sm mx-auto">
         {{
           t(
             "operations.noAccountsHint",
@@ -146,27 +146,27 @@
     </div>
 
     <div v-if="registeredAccounts.length > 0" class="space-y-3 mb-6">
-      <p class="text-xs font-bold uppercase text-aa-muted">
+      <p class="text-xs font-bold uppercase text-sa-muted">
         {{ t("operations.discoveredRegisteredAccounts", "Registered Accounts") }}
       </p>
       <div
         v-for="account in registeredAccounts"
         :key="account.accountIdHash"
-        class="rounded-xl border border-aa-border bg-aa-panel/40 p-4 hover:border-aa-orange/30 transition-colors duration-200"
+        class="rounded-xl border border-sa-border bg-sa-panel/40 p-4 hover:border-sa-orange/30 transition-colors duration-200"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <p class="text-xs text-aa-muted font-mono truncate">
+            <p class="text-xs text-sa-muted font-mono truncate">
               {{ truncateHash(account.accountIdHash) }}
             </p>
             <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2">
               <span
                 v-if="account.registryBlockIndex"
-                class="text-xs text-aa-muted"
+                class="text-xs text-sa-muted"
                 >{{ t("operations.registeredAtBlock", "Registered at block") }}
                 {{ account.registryBlockIndex }}</span
               >
-              <span v-if="account.verifier" class="text-xs text-aa-muted"
+              <span v-if="account.verifier" class="text-xs text-sa-muted"
                 >{{ t("operations.verifierShort", "Verifier") }}:
                 {{ truncateHash(account.verifier) }}</span
               >
@@ -183,18 +183,18 @@
     </div>
 
     <div v-if="discoveredListings.length > 0" class="space-y-3 mb-6">
-      <p class="text-xs font-bold uppercase text-aa-muted">
+      <p class="text-xs font-bold uppercase text-sa-muted">
         {{ t("operations.discoveredListings", "Market Listings") }}
       </p>
       <div
         v-for="listing in discoveredListings"
         :key="listing.id"
-        class="rounded-xl border border-aa-border bg-aa-panel/40 p-4 hover:border-aa-orange/30 transition-colors duration-200"
+        class="rounded-xl border border-sa-border bg-sa-panel/40 p-4 hover:border-sa-orange/30 transition-colors duration-200"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 mb-1">
-              <p class="text-sm font-semibold text-aa-text truncate">
+              <p class="text-sm font-semibold text-sa-text truncate">
                 {{
                   listing.title ||
                   t("operations.untitledListing", "Untitled Listing")
@@ -204,14 +204,14 @@
                 translateStatus(listing.status)
               }}</span>
             </div>
-            <p class="text-xs text-aa-muted font-mono truncate">
+            <p class="text-xs text-sa-muted font-mono truncate">
               {{ listing.account_address }}
             </p>
             <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-              <span v-if="listing.price_gas" class="text-xs text-aa-text"
+              <span v-if="listing.price_gas" class="text-xs text-sa-text"
                 >{{ listing.price_gas }} GAS</span
               >
-              <span v-if="listing.backup_owner" class="text-xs text-aa-muted"
+              <span v-if="listing.backup_owner" class="text-xs text-sa-muted"
                 >{{ t("operations.backupOwnerShort", "Backup") }}:
                 {{ truncateHash(listing.backup_owner) }}</span
               >
@@ -227,8 +227,8 @@
       </div>
     </div>
 
-    <div class="border-t border-aa-border pt-4">
-      <p class="text-xs font-bold uppercase text-aa-muted mb-3">
+    <div class="border-t border-sa-border pt-4">
+      <p class="text-xs font-bold uppercase text-sa-muted mb-3">
         {{ t("operations.directLookup", "Direct Lookup") }}
       </p>
       <div class="flex gap-3">
@@ -277,9 +277,9 @@ import {
   isAddressMarketConfigured,
 } from "@/services/addressMarketService.js";
 import {
-  discoverAAAccountsForWallet,
-  isAAReadApiConfigured,
-} from "@/services/aaAccountDiscoveryService.js";
+  discoverSAAccountsForWallet,
+  isSAReadApiConfigured,
+} from "@/services/saAccountDiscoveryService.js";
 import { translateError } from "@/config/errorCodes.js";
 
 const props = defineProps({
@@ -299,7 +299,7 @@ const directLookupValue = ref("");
 
 // Discovery reads the NeoOS read API, so it no longer depends on the address
 // market being configured; the market listing scan stays an extra when it is.
-const isConfigured = computed(() => isAAReadApiConfigured());
+const isConfigured = computed(() => isSAReadApiConfigured());
 
 const canSearch = computed(() => {
   if (!isConfigured.value) return false;
@@ -338,7 +338,7 @@ async function discoverAccounts() {
   searching.value = true;
   error.value = "";
   try {
-    registeredAccounts.value = await discoverAAAccountsForWallet({
+    registeredAccounts.value = await discoverSAAccountsForWallet({
       address: scriptHash,
     });
     searched.value = true;

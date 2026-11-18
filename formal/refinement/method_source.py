@@ -462,7 +462,7 @@ class Projector:
                    meta={"IMethodBodyBaseOperation.BlockBody": CHILD, "IMethodBodyBaseOperation.ExpressionBody": None})
         statements = self.block(body["children"][0], root=True)
         require(len(self.local_names) == 8, "Helper frame local count changed")
-        result = dict(schema="neoos-aa-cap-source-program/v1", method=METHOD, statements=statements,
+        result = dict(schema="neoos-sa-cap-source-program/v1", method=METHOD, statements=statements,
                     locals=self.local_names, localTypes=self.local_types, staticKey=self.static_key,
                     recordLayout=layout, recordInitializers=self.record_values,
                     dialect="Neo framework immutable-byte equality and ordered scalar record intrinsics; unbounded BigInteger",

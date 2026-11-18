@@ -1,4 +1,4 @@
-# Neo N3 Abstract Account Architecture
+# Neo N3 Smart Account Architecture
 
 The active `main` branch is a **policy-gated** V3 architecture centered on `SmartAccountV3`.
 
@@ -14,7 +14,7 @@ flowchart LR
   Core[SmartAccountV3]
   Verifier[Verifier Plugin]
   Hook[Hook Plugin]
-  Paymaster[AAPaymaster]
+  Paymaster[SAPaymaster]
   Target[Target Contract]
 
   User --> Frontend
@@ -132,11 +132,11 @@ This keeps recovery auditable without reintroducing large role graphs into the c
 
 ## 9. Paymaster (Sponsored Transactions)
 
-The `AAPaymaster` contract enables trustless gasless execution on Neo N3:
+The `SAPaymaster` contract enables trustless gasless execution on Neo N3:
 
 1. **Deposit:** Sponsors send GAS to the Paymaster via NEP-17 transfer.
 2. **Policy:** Sponsors call `setPolicy(accountId, targetContract, method, maxPerOp, dailyBudget, totalBudget, validUntil)`. Use `accountId = Zero` for a global policy sponsoring any account.
-3. **Execution:** Relay calls `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)` on the AA core.
+3. **Execution:** Relay calls `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)` on the SA core.
 4. **Settlement:** Core validates policy, executes the UserOp, then calls `paymaster.settleReimbursement()` to atomically deduct from the sponsor deposit and transfer GAS to the relay.
 
 For a fee-bearing transaction the settled reimbursement is
@@ -157,5 +157,5 @@ The Paymaster never authorizes execution — it only funds the relay after the v
 3. Verifier plugins do not bypass hook or target-contract policy.
 4. Backup-owner recovery is timelocked.
 5. New integrations target `executeUserOp`; the V1/V2 wrappers `executeUnified` and `executeUnifiedByAddress` were removed and are absent from every deployed manifest and every contract source, so a transaction naming them fails in its verify phase.
-6. Paymaster settlement only succeeds when called by the authorized AA core contract.
+6. Paymaster settlement only succeeds when called by the authorized SA core contract.
 7. Paymaster deposit deduction happens before the GAS transfer to the relay (checks-effects-interactions).

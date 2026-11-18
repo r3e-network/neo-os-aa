@@ -2,10 +2,10 @@
   <section class="glass-panel p-6">
     <div class="mb-4 flex items-center justify-between gap-4">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">
+        <h2 class="text-lg font-bold text-sa-text">
           {{ t("timelock.title", "Pending Updates & Timelocks") }}
         </h2>
-        <p class="text-sm text-aa-muted">
+        <p class="text-sm text-sa-muted">
           {{
             t(
               "timelock.subtitle",
@@ -22,11 +22,11 @@
       class="empty-state"
     >
       <div
-        class="mx-auto w-12 h-12 rounded-full bg-aa-panel/30 flex items-center justify-center mb-3"
+        class="mx-auto w-12 h-12 rounded-full bg-sa-panel/30 flex items-center justify-center mb-3"
       >
         <svg
           aria-hidden="true"
-          class="w-6 h-6 text-aa-muted"
+          class="w-6 h-6 text-sa-muted"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -39,10 +39,10 @@
           ></path>
         </svg>
       </div>
-      <p class="text-sm text-aa-text font-medium mb-1">
+      <p class="text-sm text-sa-text font-medium mb-1">
         {{ t("timelock.noPendingUpdates", "No pending updates") }}
       </p>
-      <p class="text-xs text-aa-muted">
+      <p class="text-xs text-sa-muted">
         {{
           t(
             "timelock.noPendingUpdatesHint",
@@ -103,7 +103,7 @@
           <!-- Countdown timer -->
           <div class="mb-4 rounded-lg" :class="escapeUpdate.timerBg">
             <div class="p-4">
-              <p class="text-xs font-bold uppercase text-aa-muted mb-2">
+              <p class="text-xs font-bold uppercase text-sa-muted mb-2">
                 {{ t("timelock.timeRemaining", "Time Remaining") }}
               </p>
               <div class="flex items-baseline gap-1">
@@ -122,12 +122,12 @@
           <!-- Timeline visualization -->
           <div class="mb-4">
             <div class="flex items-center justify-between mb-2">
-              <p class="text-xs font-bold uppercase text-aa-muted">
+              <p class="text-xs font-bold uppercase text-sa-muted">
                 {{ t("timelock.timeline", "Timeline") }}
               </p>
               <button
                 v-if="escapeUpdate.canCancel"
-                class="text-xs text-aa-error hover:text-aa-error-light transition-colors duration-200"
+                class="text-xs text-sa-error hover:text-sa-error-light transition-colors duration-200"
                 @click="$emit('cancel-escape')"
               >
                 {{ t("timelock.cancelEscape", "Cancel Escape") }}
@@ -153,12 +153,12 @@
                 <div class="flex items-center justify-center mb-1">
                   <div
                     class="w-4 h-4 rounded-full flex items-center justify-center"
-                    :class="step.completed ? 'bg-aa-success' : 'bg-aa-border'"
+                    :class="step.completed ? 'bg-sa-success' : 'bg-sa-border'"
                   >
                     <svg
                       v-if="step.completed"
                       aria-hidden="true"
-                      class="w-2.5 h-2.5 text-aa-dark"
+                      class="w-2.5 h-2.5 text-sa-dark"
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >
@@ -170,7 +170,7 @@
                     </svg>
                   </div>
                 </div>
-                <p class="text-[10px] text-aa-muted">{{ step.label }}</p>
+                <p class="text-[10px] text-sa-muted">{{ step.label }}</p>
               </div>
             </div>
           </div>
@@ -210,16 +210,16 @@
       <!-- Plugin rotation updates -->
       <div
         v-if="pluginUpdates.length > 0"
-        class="rounded-lg border border-aa-border bg-aa-panel/60 p-5"
+        class="rounded-lg border border-sa-border bg-sa-panel/60 p-5"
       >
-        <p class="text-xs font-bold uppercase text-aa-muted mb-3">
+        <p class="text-xs font-bold uppercase text-sa-muted mb-3">
           {{ t("timelock.pluginRotations", "Plugin Rotations") }}
         </p>
         <div class="space-y-3">
           <div
             v-for="update in pluginUpdates"
             :key="update.id"
-            class="flex items-start gap-4 rounded-lg bg-aa-dark/40 p-4"
+            class="flex items-start gap-4 rounded-lg bg-sa-dark/40 p-4"
           >
             <div
               class="w-10 h-10 rounded-lg flex items-center justify-center"
@@ -260,21 +260,21 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1">
-                <p class="text-sm font-semibold text-aa-text">
+                <p class="text-sm font-semibold text-sa-text">
                   {{ update.title }}
                 </p>
                 <span class="badge" :class="update.badgeClass">{{
                   update.statusText
                 }}</span>
               </div>
-              <p class="text-xs text-aa-muted mb-2">{{ update.description }}</p>
+              <p class="text-xs text-sa-muted mb-2">{{ update.description }}</p>
               <div class="flex items-center gap-4">
                 <div>
-                  <p class="text-[10px] uppercase text-aa-muted">
+                  <p class="text-[10px] uppercase text-sa-muted">
                     {{ t("timelock.from", "From") }}
                   </p>
                   <p
-                    class="text-xs font-mono text-aa-text truncate"
+                    class="text-xs font-mono text-sa-text truncate"
                     :title="update.from"
                   >
                     {{ formatHash(update.from) }}
@@ -282,7 +282,7 @@
                 </div>
                 <svg
                   aria-hidden="true"
-                  class="w-4 h-4 text-aa-muted"
+                  class="w-4 h-4 text-sa-muted"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -295,11 +295,11 @@
                   ></path>
                 </svg>
                 <div>
-                  <p class="text-[10px] uppercase text-aa-muted">
+                  <p class="text-[10px] uppercase text-sa-muted">
                     {{ t("timelock.to", "To") }}
                   </p>
                   <p
-                    class="text-xs font-mono text-aa-text truncate"
+                    class="text-xs font-mono text-sa-text truncate"
                     :title="update.to"
                   >
                     {{ formatHash(update.to) }}
@@ -311,10 +311,10 @@
               <p class="text-lg font-bold font-mono" :class="update.timeClass">
                 {{ formatCountdown(update.timeRemaining) }}
               </p>
-              <p class="text-xs text-aa-muted">{{ update.timeUnit }}</p>
+              <p class="text-xs text-sa-muted">{{ update.timeUnit }}</p>
               <button
                 v-if="update.canCancel"
-                class="mt-2 text-xs text-aa-error hover:text-aa-error-light transition-colors duration-200"
+                class="mt-2 text-xs text-sa-error hover:text-sa-error-light transition-colors duration-200"
                 @click="$emit('cancel-plugin-update', update.id)"
               >
                 {{ t("timelock.cancel", "Cancel") }}
@@ -327,15 +327,15 @@
       <!-- Unauthorized change alert -->
       <div
         v-if="unauthorizedChanges.length > 0"
-        class="mt-5 rounded-xl border-2 border-aa-error bg-aa-error/5 p-5"
+        class="mt-5 rounded-xl border-2 border-sa-error bg-sa-error/5 p-5"
       >
         <div class="flex items-start gap-3">
           <div
-            class="w-10 h-10 rounded-full bg-aa-error/20 flex items-center justify-center"
+            class="w-10 h-10 rounded-full bg-sa-error/20 flex items-center justify-center"
           >
             <svg
               aria-hidden="true"
-              class="w-5 h-5 text-aa-error"
+              class="w-5 h-5 text-sa-error"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -349,7 +349,7 @@
             </svg>
           </div>
           <div class="flex-1">
-            <p class="text-sm font-bold text-aa-error mb-2">
+            <p class="text-sm font-bold text-sa-error mb-2">
               {{
                 t(
                   "timelock.unauthorizedChangesDetected",
@@ -357,7 +357,7 @@
                 )
               }}
             </p>
-            <p class="text-xs text-aa-error-light mb-3">
+            <p class="text-xs text-sa-error-light mb-3">
               {{
                 t(
                   "timelock.unauthorizedChangesDesc",
@@ -369,12 +369,12 @@
               <div
                 v-for="change in unauthorizedChanges"
                 :key="change.id"
-                class="flex items-start gap-2 rounded bg-aa-error/10 px-3 py-2"
+                class="flex items-start gap-2 rounded bg-sa-error/10 px-3 py-2"
               >
-                <span class="text-xs text-aa-error font-medium"
+                <span class="text-xs text-sa-error font-medium"
                   >{{ change.type }}:</span
                 >
-                <span class="text-xs font-mono text-aa-muted">{{
+                <span class="text-xs font-mono text-sa-muted">{{
                   change.details
                 }}</span>
               </div>
@@ -405,11 +405,11 @@
         <div class="modal-panel">
           <h3
             id="cancel-dialog-title"
-            class="text-lg font-bold font-outfit text-aa-text mb-2"
+            class="text-lg font-bold font-outfit text-sa-text mb-2"
           >
             {{ t("timelock.cancelEscapeTitle", "Cancel Escape Hatch?") }}
           </h3>
-          <p class="text-sm text-aa-muted mb-6">
+          <p class="text-sm text-sa-muted mb-6">
             {{
               t(
                 "timelock.cancelEscapeDesc",
@@ -476,44 +476,44 @@ const escapeUpdate = computed(() => {
   const progressPercentage = (elapsed / totalTime) * 100;
 
   let status = t("timelock.pending", "Pending");
-  let statusClass = "text-aa-warning";
+  let statusClass = "text-sa-warning";
   let badgeClass = "badge-orange";
-  let borderClass = "border-aa-warning/30 bg-aa-warning/5";
-  let timerBg = "bg-aa-dark/60";
-  let timerTextClass = "text-aa-warning";
-  let timerUnitClass = "text-aa-muted";
-  let progressBg = "bg-aa-border";
-  let progressClass = "bg-aa-warning";
-  let iconBg = "bg-aa-warning/20";
-  let iconClass = "text-aa-warning";
-  let labelClass = "text-aa-warning";
+  let borderClass = "border-sa-warning/30 bg-sa-warning/5";
+  let timerBg = "bg-sa-dark/60";
+  let timerTextClass = "text-sa-warning";
+  let timerUnitClass = "text-sa-muted";
+  let progressBg = "bg-sa-border";
+  let progressClass = "bg-sa-warning";
+  let iconBg = "bg-sa-warning/20";
+  let iconClass = "text-sa-warning";
+  let labelClass = "text-sa-warning";
 
   if (escape.status === "active") {
     status = t("timelock.active", "Active");
-    statusClass = "text-aa-error";
+    statusClass = "text-sa-error";
     badgeClass = "badge-red";
-    borderClass = "border-aa-error/30 bg-aa-error/5";
-    timerBg = "bg-aa-error/10";
-    timerTextClass = "text-aa-error";
-    timerUnitClass = "text-aa-error-light";
-    progressBg = "bg-aa-border";
-    progressClass = "bg-aa-error";
-    iconBg = "bg-aa-error/20";
-    iconClass = "text-aa-error";
-    labelClass = "text-aa-error";
+    borderClass = "border-sa-error/30 bg-sa-error/5";
+    timerBg = "bg-sa-error/10";
+    timerTextClass = "text-sa-error";
+    timerUnitClass = "text-sa-error-light";
+    progressBg = "bg-sa-border";
+    progressClass = "bg-sa-error";
+    iconBg = "bg-sa-error/20";
+    iconClass = "text-sa-error";
+    labelClass = "text-sa-error";
   } else if (escape.status === "ready") {
     status = t("timelock.ready", "Ready to Finalize");
-    statusClass = "text-aa-success";
+    statusClass = "text-sa-success";
     badgeClass = "badge-green";
-    borderClass = "border-aa-success/30 bg-aa-success/5";
-    timerBg = "bg-aa-success/10";
-    timerTextClass = "text-aa-success";
-    timerUnitClass = "text-aa-success-light";
-    progressBg = "bg-aa-border";
-    progressClass = "bg-aa-success";
-    iconBg = "bg-aa-success/20";
-    iconClass = "text-aa-success";
-    labelClass = "text-aa-success";
+    borderClass = "border-sa-success/30 bg-sa-success/5";
+    timerBg = "bg-sa-success/10";
+    timerTextClass = "text-sa-success";
+    timerUnitClass = "text-sa-success-light";
+    progressBg = "bg-sa-border";
+    progressClass = "bg-sa-success";
+    iconBg = "bg-sa-success/20";
+    iconClass = "text-sa-success";
+    labelClass = "text-sa-success";
   }
 
   return {
@@ -570,9 +570,9 @@ const pluginUpdates = computed(() => {
         ...u,
         timeRemaining: remaining,
         timeUnit: remaining > 3600 ? "h" : "m",
-        timeClass: remaining < 3600 ? "text-aa-warning" : "text-aa-muted",
-        iconBg: u.type === "verifier" ? "bg-neo-500/20" : "bg-aa-info/20",
-        iconClass: u.type === "verifier" ? "text-neo-400" : "text-aa-info",
+        timeClass: remaining < 3600 ? "text-sa-warning" : "text-sa-muted",
+        iconBg: u.type === "verifier" ? "bg-neo-500/20" : "bg-sa-info/20",
+        iconClass: u.type === "verifier" ? "text-neo-400" : "text-sa-info",
         badgeClass: u.status === "ready" ? "badge-green" : "badge-orange",
         statusText:
           u.status === "ready"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the AA formal gate inside the pinned environment described by
+# Runs the SA formal gate inside the pinned environment described by
 # formal/Dockerfile, so a reviewer without Rocq/Coq, Z3, a JDK or the TLA+ tools
 # on the host gets the same fail-closed result the maintainers get. The image
 # build itself fails closed: a TLA+ jar whose SHA-256 differs from the pin is
@@ -9,23 +9,23 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${AA_FORMAL_IMAGE:-neo-os-aa-formal:local}"
+IMAGE="${SA_FORMAL_IMAGE:-neo-os-sa-formal:local}"
 
 build_args=()
 # Docker Desktop/Colima may inject a stale localhost proxy from the user's
 # Docker config. Allow the caller to provide the host-reachable proxy without
 # changing the pinned image or silently falling back to an unverified toolchain.
-if [[ -n "${AA_FORMAL_HTTP_PROXY:-}" ]]; then
-  build_args+=(--build-arg "HTTP_PROXY=$AA_FORMAL_HTTP_PROXY"
-               --build-arg "http_proxy=$AA_FORMAL_HTTP_PROXY")
+if [[ -n "${SA_FORMAL_HTTP_PROXY:-}" ]]; then
+  build_args+=(--build-arg "HTTP_PROXY=$SA_FORMAL_HTTP_PROXY"
+               --build-arg "http_proxy=$SA_FORMAL_HTTP_PROXY")
 fi
-if [[ -n "${AA_FORMAL_HTTPS_PROXY:-${AA_FORMAL_HTTP_PROXY:-}}" ]]; then
-  build_args+=(--build-arg "HTTPS_PROXY=${AA_FORMAL_HTTPS_PROXY:-$AA_FORMAL_HTTP_PROXY}"
-               --build-arg "https_proxy=${AA_FORMAL_HTTPS_PROXY:-$AA_FORMAL_HTTP_PROXY}")
+if [[ -n "${SA_FORMAL_HTTPS_PROXY:-${SA_FORMAL_HTTP_PROXY:-}}" ]]; then
+  build_args+=(--build-arg "HTTPS_PROXY=${SA_FORMAL_HTTPS_PROXY:-$SA_FORMAL_HTTP_PROXY}"
+               --build-arg "https_proxy=${SA_FORMAL_HTTPS_PROXY:-$SA_FORMAL_HTTP_PROXY}")
 fi
-if [[ -n "${AA_FORMAL_NO_PROXY:-}" ]]; then
-  build_args+=(--build-arg "NO_PROXY=$AA_FORMAL_NO_PROXY"
-               --build-arg "no_proxy=$AA_FORMAL_NO_PROXY")
+if [[ -n "${SA_FORMAL_NO_PROXY:-}" ]]; then
+  build_args+=(--build-arg "NO_PROXY=$SA_FORMAL_NO_PROXY"
+               --build-arg "no_proxy=$SA_FORMAL_NO_PROXY")
 fi
 
 if [[ -z "${NEOOS_NATIVE_CORE_SOURCE:-}" || ! -d "$NEOOS_NATIVE_CORE_SOURCE" ]]; then

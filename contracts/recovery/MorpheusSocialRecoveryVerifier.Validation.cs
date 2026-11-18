@@ -14,7 +14,7 @@ namespace Neo.SmartContract.Examples
     {
         private static ByteString ComputeRecoveryDigest(
             string network,
-            UInt160 aaContract,
+            UInt160 saContract,
             UInt160 accountId,
             UInt160 accountAddress,
             string accountIdText,
@@ -27,7 +27,7 @@ namespace Neo.SmartContract.Examples
         {
             ByteString payload = (ByteString)RECOVERY_DOMAIN;
             payload = Helper.Concat(payload, EncodeSegment(network));
-            payload = Helper.Concat(payload, (ByteString)(byte[])aaContract);
+            payload = Helper.Concat(payload, (ByteString)(byte[])saContract);
             payload = Helper.Concat(payload, (ByteString)(byte[])accountId);
             payload = Helper.Concat(payload, (ByteString)(byte[])Runtime.ExecutingScriptHash);
             payload = Helper.Concat(payload, (ByteString)(byte[])accountAddress);
@@ -48,11 +48,16 @@ namespace Neo.SmartContract.Examples
             ulong expiresAt,
             ByteString masterNullifier, BigInteger authorizationEpoch, ByteString actionNullifier)
         {
-            // Bind the AA core, raw account id, verifier, network and action so a
+            // Bind the SA core, raw account id, verifier, network and action so a
             // ticket cannot be replayed across cores, accounts or sessions.
-            ByteString payload = (ByteString)"neodid-aa-action-v3";
+            // AA→SA wave-2 protocol switch: the action digest domain moved from
+            // "neodid-aa-action-v3" to "neodid-sa-action-v3" (v3 stays as the
+            // compact-ticket protocol version). Old-domain tickets signed before
+            // this switch are cutoff-invalid: they fail verification outright —
+            // there is no dual-domain acceptance path.
+            ByteString payload = (ByteString)"neodid-sa-action-v3";
             payload = Helper.Concat(payload, EncodeSegment(GetNetwork(accountId)));
-            payload = Helper.Concat(payload, (ByteString)(byte[])GetAAContract(accountId));
+            payload = Helper.Concat(payload, (ByteString)(byte[])GetSAContract(accountId));
             payload = Helper.Concat(payload, (ByteString)(byte[])accountId);
             payload = Helper.Concat(payload, (ByteString)(byte[])Runtime.ExecutingScriptHash);
             payload = Helper.Concat(payload, EncodeSegment(GetAccountIdText(accountId)));
@@ -69,7 +74,7 @@ namespace Neo.SmartContract.Examples
         {
             ByteString material = (ByteString)GetNetwork(accountId);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
-            material = Helper.Concat(material, (ByteString)(byte[])GetAAContract(accountId));
+            material = Helper.Concat(material, (ByteString)(byte[])GetSAContract(accountId));
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)(byte[])accountId);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
@@ -78,21 +83,21 @@ namespace Neo.SmartContract.Examples
             material = Helper.Concat(material, (ByteString)sessionNonce.ToString());
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)expiresAt.ToString());
-            return "aa_proxy:" + BytesToHex(CryptoLib.Sha256(material));
+            return "sa_proxy:" + BytesToHex(CryptoLib.Sha256(material));
         }
 
         private static string BuildRecoveryActionId(UInt160 accountId, UInt160 newOwner, string recoveryNonceText)
         {
             ByteString material = (ByteString)GetNetwork(accountId);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
-            material = Helper.Concat(material, (ByteString)(byte[])GetAAContract(accountId));
+            material = Helper.Concat(material, (ByteString)(byte[])GetSAContract(accountId));
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)(byte[])accountId);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)(byte[])newOwner);
             material = Helper.Concat(material, (ByteString)new byte[] { 0x1f });
             material = Helper.Concat(material, (ByteString)recoveryNonceText);
-            return "aa_recovery:" + BytesToHex(CryptoLib.Sha256(material));
+            return "sa_recovery:" + BytesToHex(CryptoLib.Sha256(material));
         }
 
         private static ByteString EncodeSegment(string value)

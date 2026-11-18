@@ -27,9 +27,9 @@ Integer exhaustion faults atomically; the epoch never wraps or resets to zero.
 
 - Encoding: `neo_n3_action_v4`; both existing selector names `callback_encoding`
   and `result_encoding` reach the same issuer guard. Conflicting values fail.
-- Action ID keeps the existing exact `aa_proxy:` formula binding network text,
+- Action ID keeps the exact `sa_proxy:` formula binding network text,
   raw core/account/executor bytes, session nonce and expiry.
-- Digest: SHA256 of `UTF8("neodid-aa-action-v3") || LP(network) || rawCore20 ||
+- Digest: SHA256 of `UTF8("neodid-sa-action-v3") || LP(network) || rawCore20 ||
   rawAccount20 || rawVerifier20 || LP(accountText) || rawExecutor20 ||
   LP(actionId) || LP(expiryDecimal) || actionNullifier32 || masterNullifier32 ||
   LP(authorizationEpochDecimal)`. `LP` is one UTF-8 byte-count byte followed by

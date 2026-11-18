@@ -1,15 +1,15 @@
 <template>
-  <div class="rounded-lg border border-aa-border bg-aa-dark/50 p-4">
-    <p class="text-xs font-semibold uppercase text-aa-text mb-3">
+  <div class="rounded-lg border border-sa-border bg-sa-dark/50 p-4">
+    <p class="text-xs font-semibold uppercase text-sa-text mb-3">
       {{ t("market.vanityResultsTitle", "Generated Addresses") }}
     </p>
 
     <div v-if="results.length === 0" class="text-center py-8">
       <div
-        class="mx-auto w-12 h-12 rounded-full bg-aa-panel/30 flex items-center justify-center mb-3"
+        class="mx-auto w-12 h-12 rounded-full bg-sa-panel/30 flex items-center justify-center mb-3"
       >
         <svg
-          class="w-6 h-6 text-aa-text/70"
+          class="w-6 h-6 text-sa-text/70"
           aria-hidden="true"
           fill="none"
           stroke="currentColor"
@@ -23,10 +23,10 @@
           ></path>
         </svg>
       </div>
-      <p class="text-sm text-aa-text/80 font-medium mb-1">
+      <p class="text-sm text-sa-text/80 font-medium mb-1">
         {{ t("market.vanityNoResultsYet", "No results yet") }}
       </p>
-      <p class="text-xs text-aa-text/75">
+      <p class="text-xs text-sa-text/75">
         {{
           t(
             "market.vanityNoResultsHint",
@@ -40,15 +40,15 @@
       <div
         v-for="(result, index) in results"
         :key="index"
-        class="rounded-lg border border-aa-border bg-aa-dark/50 p-3"
+        class="rounded-lg border border-sa-border bg-sa-dark/50 p-3"
       >
-        <p class="break-all font-mono text-sm text-aa-text">
+        <p class="break-all font-mono text-sm text-sa-text">
           {{ result.address }}
         </p>
-        <p class="mt-1 break-all font-mono text-xs text-aa-muted">
+        <p class="mt-1 break-all font-mono text-xs text-sa-muted">
           {{ t("market.seed", "Seed:") }} {{ result.seed }}
         </p>
-        <p class="mt-0.5 break-all font-mono text-xs text-aa-muted">
+        <p class="mt-0.5 break-all font-mono text-xs text-sa-muted">
           {{ t("market.hash", "Hash:") }} {{ result.accountIdHash }}
         </p>
 

@@ -24,7 +24,7 @@ let RPC_URL =
 const TEST_WIF = process.env.TEST_WIF || "";
 const REPORT_DIR = path.resolve(__dirname, "..", "..", "docs", "reports");
 const SELECTED_SCENARIOS = new Set(
-  String(process.env.AA_MATRIX_SCENARIOS || "")
+  String(process.env.SA_MATRIX_SCENARIOS || "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean),
@@ -496,7 +496,7 @@ function randomAccountId() {
 
 function validationRunId() {
   return (
-    process.env.AA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString("hex")}`
+    process.env.SA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString("hex")}`
   ).toLowerCase();
 }
 
@@ -632,7 +632,7 @@ async function main() {
   );
   const networkMagic = Number(version.protocol.network);
   const deploymentTag =
-    process.env.AA_VALIDATION_DEPLOY_TAG ||
+    process.env.SA_VALIDATION_DEPLOY_TAG ||
     `validation-plugin-matrix-${validationRunId()}`;
   const results = {
     env: {
@@ -701,7 +701,7 @@ async function main() {
     rpcClient,
     account,
     networkMagic,
-    "SmartAccountV3",
+    "SmartAccount",
     `${deploymentTag}-core`,
   );
   const web3AuthA = needWeb3AuthA
@@ -977,7 +977,7 @@ async function main() {
     );
   }
 
-  const aaClient = new SmartAccountClient(RPC_URL, core.hash);
+  const saClient = new SmartAccountClient(RPC_URL, core.hash);
 
   async function registerAccount(label, options = {}) {
     const initialVerifier = normalizeHash(options.verifier || "0".repeat(40));
@@ -987,14 +987,14 @@ async function main() {
       : "";
     const effectiveVerifierParams = initialVerifierParams || registrationSalt;
     const initialHook = normalizeHash(options.hook || "0".repeat(40));
-    const accountId = aaClient.deriveRegistrationAccountIdHash({
+    const accountId = saClient.deriveRegistrationAccountIdHash({
       verifierContractHash: initialVerifier,
       verifierParamsHex: effectiveVerifierParams,
       hookContractHash: initialHook,
       backupOwnerAddress: account.scriptHash,
       escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
     });
-    const virtual = aaClient.deriveVirtualAccount(accountId);
+    const virtual = saClient.deriveVirtualAccount(accountId);
     const register = await invokePersisted(
       rpcClient,
       core.hash,
@@ -1960,7 +1960,7 @@ async function main() {
     // The disabled verifier advertises no V3 capability, so the core's
     // AssertV3Verifier must reject binding at registration time (simulated,
     // not persisted: a deliberately faulting registration spends no fees).
-    const zkAccountId = aaClient.deriveRegistrationAccountIdHash({
+    const zkAccountId = saClient.deriveRegistrationAccountIdHash({
       verifierContractHash: normalizeHash(zkEmailVerifier.hash),
       verifierParamsHex: "",
       hookContractHash: "0x0000000000000000000000000000000000000000",

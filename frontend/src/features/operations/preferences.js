@@ -3,7 +3,7 @@ export const DEFAULT_OPERATIONS_PREFERENCES = {
   activityFilter: {},
 };
 
-export const OPERATIONS_PREFERENCES_STORAGE_KEY = 'aa_operations_preferences_v1';
+export const OPERATIONS_PREFERENCES_STORAGE_KEY = 'sa_operations_preferences_v1';
 
 const VALID_RELAY_PAYLOAD_MODES = new Set(['best', 'raw', 'meta']);
 const VALID_ACTIVITY_FILTERS = new Set(['all', 'workflow', 'identity', 'signatures', 'relay', 'broadcast']);

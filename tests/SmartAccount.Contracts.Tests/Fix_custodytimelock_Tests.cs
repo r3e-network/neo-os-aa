@@ -10,14 +10,14 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral VM tests for audit findings H5 / H6 / AA-04: the two fund-holding auxiliary
+/// Behavioral VM tests for audit findings H5 / H6 / SA-04: the two fund-holding auxiliary
 /// contracts had INSTANT admin operations while the rest of the repo enforces the
-/// AA-D-01/AA-D-02 7-day timelock standard.
+/// SA-D-01/SA-D-02 7-day timelock standard.
 ///
 ///   H5  — <c>SocialRecoveryVerifier.Update</c> was instant although the contract custodies
 ///         user GAS (the per-account oracle-credit pool funded via <c>onNEP17Payment</c>).
-///   AA-04 — <c>SocialRecoveryVerifier.TransferAdmin</c> was an instant role hand-off.
-///   H6  — <c>AAAddressMarket.Update</c> and <c>AAAddressMarket.SetAdmin</c> were instant
+///   SA-04 — <c>SocialRecoveryVerifier.TransferAdmin</c> was an instant role hand-off.
+///   H6  — <c>SAAddressMarket.Update</c> and <c>SAAddressMarket.SetAdmin</c> were instant
 ///         although the contract holds in-flight buyer escrow.
 ///
 /// The fix mirrors the shared <c>VerifierAuthority</c> idiom inline (neither contract routes
@@ -47,7 +47,7 @@ public class Fix_CustodyTimelock_Tests
     private static readonly TimeSpan Window = TimeSpan.FromDays(7);
 
     private const string RecoveryArtifact = "SocialRecoveryVerifier";
-    private const string MarketArtifact = "AAAddressMarket";
+    private const string MarketArtifact = "SAAddressMarket";
 
     private static (byte[] Nef, string Manifest) ReadArtifact(string baseName)
     {
@@ -298,7 +298,7 @@ public class Fix_CustodyTimelock_Tests
     }
 
     // ========================================================================
-    // AA-04 — SocialRecoveryVerifier: timelocked admin rotation
+    // SA-04 — SocialRecoveryVerifier: timelocked admin rotation
     // ========================================================================
 
     [TestMethod]
@@ -342,7 +342,7 @@ public class Fix_CustodyTimelock_Tests
     }
 
     // ========================================================================
-    // H6 — AAAddressMarket: timelocked upgrade + timelocked admin rotation
+    // H6 — SAAddressMarket: timelocked upgrade + timelocked admin rotation
     // ========================================================================
 
     [TestMethod]

@@ -27,7 +27,7 @@ nccs ./MyVerifier.csproj -o build               # or compile standalone
 - **Exact binding ABI** — `supportsV3` marker plus `validateSignature` /
   `preExecute` / `postExecute` / `clearAccount` in the shapes the core's
   bind-time gate (`AssertV3Verifier` / `AssertV3Hook`) demands.
-- **Authority plumbing** — every configuration write is gated through the AA
+- **Authority plumbing** — every configuration write is gated through the SA
   core (`canConfigureVerifier` / `canConfigureHook`), every execution callback
   proves it runs inside the core's context (`canExecuteVerifier` /
   `canExecuteHook`).

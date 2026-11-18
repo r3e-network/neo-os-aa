@@ -1,19 +1,19 @@
 <template>
   <div
     v-if="txid"
-    class="mt-4 rounded-lg border border-aa-border bg-aa-dark p-4"
+    class="mt-4 rounded-lg border border-sa-border bg-sa-dark p-4"
   >
-    <p class="text-xs font-semibold uppercase text-aa-muted">
+    <p class="text-xs font-semibold uppercase text-sa-muted">
       {{ t("sharedDraft.latestSubmission", "Latest Submission") }}
     </p>
     <div class="flex items-start gap-2">
-      <code class="mt-1 block break-all text-xs text-aa-text flex-1">{{
+      <code class="mt-1 block break-all text-xs text-sa-text flex-1">{{
         txid
       }}</code>
       <button
         @click="$emit('copy')"
         :aria-label="t('operations.copyTxid', 'Copy transaction ID')"
-        class="shrink-0 mt-1 text-aa-muted hover:text-aa-text transition-colors duration-200"
+        class="shrink-0 mt-1 text-sa-muted hover:text-sa-text transition-colors duration-200"
       >
         <svg
           aria-hidden="true"
@@ -32,7 +32,7 @@
           aria-hidden="true"
           v-else
           xmlns="http://www.w3.org/2000/svg"
-          class="h-3.5 w-3.5 text-aa-success"
+          class="h-3.5 w-3.5 text-sa-success"
           viewBox="0 0 20 20"
           fill="currentColor"
         >
@@ -49,7 +49,7 @@
       :href="explorerUrl"
       target="_blank"
       rel="noopener noreferrer"
-      class="mt-2 inline-flex rounded-md border border-aa-border bg-aa-panel px-3 py-1.5 text-xs font-medium text-aa-text hover:bg-aa-dark transition-colors duration-200"
+      class="mt-2 inline-flex rounded-md border border-sa-border bg-sa-panel px-3 py-1.5 text-xs font-medium text-sa-text hover:bg-sa-dark transition-colors duration-200"
       >{{ t("sharedDraft.viewLatestInExplorer", "View Latest in Explorer") }}</a
     >
   </div>

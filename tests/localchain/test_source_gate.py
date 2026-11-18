@@ -18,20 +18,20 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/localchain"))
-import aa_rpc_scenarios as suite  # noqa: E402
+import sa_rpc_scenarios as suite  # noqa: E402
 import source_build  # noqa: E402
 
 SOURCE_EXPECTED = ROOT / "tests/localchain/expected-source.json"
-DEPLOYED_CORE = ROOT / "contracts/build/SmartAccountV3.nef"
+DEPLOYED_CORE = ROOT / "contracts/build/SmartAccount.nef"
 
 
 class ReceiptPrivacyTest(unittest.TestCase):
     def test_receipt_redaction_removes_machine_specific_locations(self):
         raw = {
             "trace": f"file://{ROOT}/frontend/node_modules/x.js",
-            "workdir": "/private" + "/tmp/aa-localchain-1234",
+            "workdir": "/private" + "/tmp/sa-localchain-1234",
             "tool": "/opt/homebrew/Cellar/openssl@3/bin/openssl",
-            "nested": ["/tmp/aa-localchain-5678"],
+            "nested": ["/tmp/sa-localchain-5678"],
         }
         rendered = json.dumps(suite._redact_receipt_value(raw))
         for marker in ("/Users/", "/private/tmp/", "/tmp/", "/opt/homebrew/", "node_modules/"):
@@ -96,9 +96,9 @@ def proxy_relay_proof():
                        "response": {"vmState": "FAULT"}, "execution": None, "transaction": None}]
     proof["refusals"] = [{"name": name, "before": dict(initial), "after": dict(initial), "status": 502,
                            "response": {"rawMessage": marker}, "execution": None} for name, marker in (
-                             ("missingReserve", "AA_RELAY_PROXY_NETWORK_FEE_RESERVE"),
+                             ("missingReserve", "SA_RELAY_PROXY_NETWORK_FEE_RESERVE"),
                              ("insufficientReserve", "InsufficientFunds"),
-                             ("networkFeeCeiling", "AA_RELAY_MAX_NETWORK_FEE"))]
+                             ("networkFeeCeiling", "SA_RELAY_MAX_NETWORK_FEE"))]
     previous = initial
     for name in ("direct",):
         after = dict(previous, proxy=str(int(previous["proxy"]) - proof["amount"]), buyer=str(int(previous["buyer"]) + proof["amount"]),
@@ -111,7 +111,7 @@ def proxy_relay_proof():
         method = "executeUserOp" if name == "direct" else "executeSponsoredUserOp"
         tail = b"\x0c\x14" + suite.v.hash_le(proof["accountId"]) + bytes([0x12 if name == "direct" else 0x15, 0xC0, 0x1F, 0x0C, len(method)]) + method.encode() + b"\x0c\x14" + suite.v.hash_le(proof["core"]) + bytes.fromhex("41627d5b52")
         tx = {"hash": txid, "sysfee": "100", "netfee": "20", "script": base64.b64encode(tail).decode(),
-              "signers": [{"account": proof["relay"], "scopes": "CalledByEntry"}, {"account": proof["proxy"], "scopes": "WitnessRules", "rules": suite.v.aa_proxy_rules(proof["core"], suite.GAS_HASH)}],
+              "signers": [{"account": proof["relay"], "scopes": "CalledByEntry"}, {"account": proof["proxy"], "scopes": "WitnessRules", "rules": suite.v.sa_proxy_rules(proof["core"], suite.GAS_HASH)}],
               "witnesses": [{}, {"invocation": "", "verification": base64.b64encode(suite.proxy_script_for(proof["accountId"], proof["core"])).decode()}]}
         events = []
         if name == "sponsored":
@@ -187,7 +187,7 @@ class DetectorTest(unittest.TestCase):
 def source_new_path_proofs(contracts):
     """Independent minimal RPC observations for the new causal evidence mutation gates."""
     core, verifier, hook, target, pm = [contracts[name] for name in
-        ("SmartAccountV3", "WebAuthnVerifier", "WhitelistHook", "MockTransferTarget", "AAPaymaster")]
+        ("SmartAccount", "WebAuthnVerifier", "WhitelistHook", "MockTransferTarget", "SAPaymaster")]
     owner, relay, sponsor = ["0x" + digit * 40 for digit in ("a", "b", "c")]
     account = "0x" + "d" * 40
     proxy = "0x" + suite.v.hash160(suite.proxy_script_for(account, core))[::-1].hex()
@@ -252,7 +252,7 @@ class SourceReceiptGateTest(unittest.TestCase):
         receipt["contracts"] = {name: "0x" + format(index + 1, "040x")
                                 for index, name in enumerate(source_build.REQUIRED_ARTIFACTS)}
         receipt["sourceArtifactRuntime"] = {
-            "schema": "neoos-aa-ordinary-source-artifact-runtime/v1", "publicNetwork": False,
+            "schema": "neoos-sa-ordinary-source-artifact-runtime/v1", "publicNetwork": False,
             "scope": "8 deployed artifacts only", "artifacts": artifacts,
             "runnerSourceSha256": suite.source_runner_snapshot(),
             "readback": [{"contractName": artifact["contractName"],
@@ -273,7 +273,7 @@ class SourceReceiptGateTest(unittest.TestCase):
             receipt["records"].extend({"outcome": outcome} for _ in range(wanted["totals"][key]))
         if profile == source_build.PROFILE_SYSCALL_ABSENT:
             receipt["sourceProxyRelay"] = proxy_relay_proof()
-            receipt["contracts"]["SmartAccountV3"] = receipt["sourceProxyRelay"]["core"]
+            receipt["contracts"]["SmartAccount"] = receipt["sourceProxyRelay"]["core"]
             receipt["sourceArtifactRuntime"]["readback"][0]["contractHash"] = receipt["sourceProxyRelay"]["core"]
         receipt["sourceOwnerRecovery"], receipt["sourceSponsorshipCap"] = source_new_path_proofs(receipt["contracts"])
         return receipt
@@ -354,15 +354,15 @@ class SourceReceiptGateTest(unittest.TestCase):
                 Path(output, name + ".manifest.json").write_text(json.dumps({"name": name}))
             rows = source_build.artifact_snapshot(output)
             self.assertEqual(list(source_build.REQUIRED_ARTIFACTS), [row["contractName"] for row in rows])
-            core = Path(output, "SmartAccountV3.nef")
+            core = Path(output, "SmartAccount.nef")
             core.write_bytes(core.read_bytes()[:-1] + b"\x00")
             with self.assertRaises(source_build.NefError):
                 source_build.artifact_snapshot(output)
             core.write_bytes(nef_bytes(b"\x40"))
-            Path(output, "SmartAccountV3.manifest.json").write_text('{"name":"HistoricalOther"}')
+            Path(output, "SmartAccount.manifest.json").write_text('{"name":"HistoricalOther"}')
             with self.assertRaises(source_build.BuildError):
                 source_build.artifact_snapshot(output)
-            Path(output, "SmartAccountV3.manifest.json").unlink()
+            Path(output, "SmartAccount.manifest.json").unlink()
             with self.assertRaises(source_build.BuildError):
                 source_build.artifact_snapshot(output)
 
@@ -461,7 +461,7 @@ class SourceReceiptGateTest(unittest.TestCase):
 
 class CliTest(unittest.TestCase):
     def test_suite_cli_offers_the_source_variant(self):
-        done = subprocess.run([sys.executable, str(ROOT / "scripts/localchain/aa_rpc_scenarios.py"), "--help"],
+        done = subprocess.run([sys.executable, str(ROOT / "scripts/localchain/sa_rpc_scenarios.py"), "--help"],
                               capture_output=True, text=True, timeout=60)
         self.assertEqual(0, done.returncode, done.stderr[-400:])
         self.assertIn("source", done.stdout)

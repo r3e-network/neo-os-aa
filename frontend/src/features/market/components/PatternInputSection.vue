@@ -5,10 +5,10 @@
         v-for="typeOption in patternTypes"
         :key="typeOption.value"
         type="button"
-        class="rounded-full border px-3 py-1.5 text-xs font-semibold uppercase transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-aa-orange/40"
+        class="rounded-full border px-3 py-1.5 text-xs font-semibold uppercase transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sa-orange/40"
         :class="
           selectedType === typeOption.value
-            ? 'border-aa-orange/40 bg-aa-orange/10 text-aa-orange'
+            ? 'border-sa-orange/40 bg-sa-orange/10 text-sa-orange'
             : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-900'
         "
         :aria-label="typeOption.label"
@@ -23,7 +23,7 @@
         id="vanity-pattern-input"
         :value="pattern"
         type="text"
-        class="input-field w-full bg-aa-dark font-mono text-sm"
+        class="input-field w-full bg-sa-dark font-mono text-sm"
         :class="inputClass"
         :placeholder="placeholder"
         maxlength="6"
@@ -37,11 +37,11 @@
       <p
         v-if="validationError"
         role="alert"
-        class="mt-1 text-xs text-aa-error-light"
+        class="mt-1 text-xs text-sa-error-light"
       >
         {{ validationError }}
       </p>
-      <p v-else class="mt-1 text-xs text-aa-text/80">
+      <p v-else class="mt-1 text-xs text-sa-text/80">
         {{ hintText }}
       </p>
     </label>
@@ -90,14 +90,14 @@ const validationError = computed(() => {
 
 const inputClass = computed(() => {
   if (validationError.value)
-    return "border-aa-error focus:border-aa-error-light focus:ring-aa-error-light/20";
-  if (props.pattern.trim()) return "border-aa-success/50";
+    return "border-sa-error focus:border-sa-error-light focus:ring-sa-error-light/20";
+  if (props.pattern.trim()) return "border-sa-success/50";
   return "";
 });
 
 const placeholder = computed(() => {
   if (props.selectedType === "prefix")
-    return t("market.vanityPatternPlaceholderPrefix", "e.g. AA");
+    return t("market.vanityPatternPlaceholderPrefix", "e.g. SA");
   if (props.selectedType === "suffix")
     return t("market.vanityPatternPlaceholderSuffix", "e.g. 99");
   return t("market.vanityPatternPlaceholderContains", "e.g. ABC");
@@ -107,7 +107,7 @@ const hintText = computed(() => {
   if (props.selectedType === "prefix") {
     return t(
       "market.vanityPrefixHint",
-      'Addresses always start with N. Your pattern will match N + your input (e.g. "AA" matches "NAA...")',
+      'Addresses always start with N. Your pattern will match N + your input (e.g. "SA" matches "NAA...")',
     );
   }
 

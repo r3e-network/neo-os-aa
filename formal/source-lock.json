@@ -1,5 +1,5 @@
 {
-  "schema": "aa-formal-source-lock/v2",
+  "schema": "sa-formal-source-lock/v2",
   "boundary": "Manual correspondence snapshot for explicitly scoped public, PLATFORM, and native ABI 2 abstractions; NOT a C#/NeoVM/NEF refinement proof, arbitrary-plugin liveness proof, or deployed-artifact attestation. External native core content, not its checkout path or HEAD alone, identifies the implementation.",
   "sources": {
     "Directory.Build.props": "238142472d060ba6f700e972a154572593fa21cb942c0ef410c8354f47fce60f",
@@ -482,7 +482,7 @@
     "coq/SignerIndependence.v": [
       "native"
     ],
-    "coq/SmartAccountAA.v": [
+    "coq/SmartAccountSA.v": [
       "v3",
       "platform"
     ],
@@ -499,15 +499,15 @@
     "coq/WitnessRuleSemantics.v": [
       "native"
     ],
-    "smt/aa_core.smt2": [
+    "smt/sa_core.smt2": [
       "v3",
       "platform"
     ],
-    "tla/SmartAccountAA.cfg": [
+    "tla/SmartAccountSA.cfg": [
       "v3",
       "platform"
     ],
-    "tla/SmartAccountAA.tla": [
+    "tla/SmartAccountSA.tla": [
       "v3",
       "platform"
     ]

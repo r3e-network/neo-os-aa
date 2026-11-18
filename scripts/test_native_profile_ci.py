@@ -67,7 +67,7 @@ class NativeProfileCiTests(unittest.TestCase):
         sources = {name: "3" * 64 for name in ci.PROBE_FILES}
         # Retained real VM trace supplies schema-valid cases, not fabricated PASS
         # rows. The current source/artifact identity guard is exercised separately.
-        receipt = json.loads((Path(__file__).resolve().parents[1] / "docs/reports/aa-native-ci-probe-consistency-20261009.json").read_text())
+        receipt = json.loads((Path(__file__).resolve().parents[1] / "docs/reports/sa-native-ci-probe-consistency-20261009.json").read_text())
         receipt.update(runtimeAssemblyHashes=copy.deepcopy(runtime), artifactHashes=copy.deepcopy(modules), probeSourceHashes=copy.deepcopy(sources))
         return receipt, runtime, modules, sources
 
@@ -133,7 +133,7 @@ class NativeProfileCiTests(unittest.TestCase):
             patterns = re.findall(r"      - '([^']+)'", section)
             for changed in (".editorconfig", "global.json", "Directory.Build.props", "Directory.Build.targets", "nuget.config",
                     "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md", "docs/proposals/smartaccount-native-profile-v2-parameters.json",
-                    "docs/proposals/test_native_profile_v2.py", "docs/reports/aa-native-ci-probe-consistency-20261009.json",
+                    "docs/proposals/test_native_profile_v2.py", "docs/reports/sa-native-ci-probe-consistency-20261009.json",
                     "implementations/native/profile.json", "shared/nativeSmartAccountClient.mjs",
                     "frontend/src/features/native/NativeAccountWorkspace.vue", "frontend/tests/fixtures/nativeRpcFixture.js",
                     "sdk/js/src/native.js", "sdk/js/tests/fixtures/native-signed-execution.json",

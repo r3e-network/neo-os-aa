@@ -69,10 +69,10 @@ async function invokeRead({ rpcUrl, scriptHash, operation, args = [], fetchImpl 
   return payload.result;
 }
 
-export async function computeArgsHash({ rpcUrl, aaContractHash, args = [], fetchImpl } = {}) {
+export async function computeArgsHash({ rpcUrl, saContractHash, args = [], fetchImpl } = {}) {
   const result = await invokeRead({
     rpcUrl,
-    scriptHash: sanitizeHex(aaContractHash),
+    scriptHash: sanitizeHex(saContractHash),
     operation: 'computeArgsHash',
     args: [{ type: 'Array', value: args }],
     fetchImpl,
@@ -93,14 +93,14 @@ export async function computeArgsHash({ rpcUrl, aaContractHash, args = [], fetch
 
 export async function fetchV3Nonce({
   rpcUrl,
-  aaContractHash,
+  saContractHash,
   accountIdHash,
   channel = 0n,
   fetchImpl,
 } = {}) {
   const result = await invokeRead({
     rpcUrl,
-    scriptHash: sanitizeHex(aaContractHash),
+    scriptHash: sanitizeHex(saContractHash),
     operation: 'getNonce',
     args: [
       { type: 'Hash160', value: `0x${sanitizeHex(accountIdHash)}` },
@@ -120,14 +120,14 @@ export async function fetchV3Nonce({
 
 export async function fetchNonceForAddress({
   rpcUrl,
-  aaContractHash,
+  saContractHash,
   accountAddressScriptHash,
   evmSignerAddress,
   fetchImpl,
 } = {}) {
   const result = await invokeRead({
     rpcUrl,
-    scriptHash: sanitizeHex(aaContractHash),
+    scriptHash: sanitizeHex(saContractHash),
     operation: 'getNonceForAccount',
     args: [
       { type: 'Hash160', value: `0x${sanitizeHex(accountAddressScriptHash)}` },
@@ -147,13 +147,13 @@ export async function fetchNonceForAddress({
 
 export async function fetchV3Verifier({
   rpcUrl,
-  aaContractHash,
+  saContractHash,
   accountIdHash,
   fetchImpl,
 } = {}) {
   const result = await invokeRead({
     rpcUrl,
-    scriptHash: sanitizeHex(aaContractHash),
+    scriptHash: sanitizeHex(saContractHash),
     operation: 'getVerifier',
     args: [
       { type: 'Hash160', value: `0x${sanitizeHex(accountIdHash)}` },
@@ -172,7 +172,7 @@ export async function fetchV3Verifier({
 
 export async function fetchV3ValidationPreview({
   rpcUrl,
-  aaContractHash,
+  saContractHash,
   accountIdHash,
   targetContract,
   method,
@@ -183,7 +183,7 @@ export async function fetchV3ValidationPreview({
 } = {}) {
   const result = await invokeRead({
     rpcUrl,
-    scriptHash: sanitizeHex(aaContractHash),
+    scriptHash: sanitizeHex(saContractHash),
     operation: 'previewUserOpValidation',
     args: [
       { type: 'Hash160', value: `0x${sanitizeHex(accountIdHash)}` },
@@ -213,13 +213,13 @@ export async function fetchV3ValidationPreview({
 
 export async function assertV3AccountExists({
   rpcUrl,
-  aaContractHash,
+  saContractHash,
   accountIdHash,
   fetchImpl,
 } = {}) {
   const result = await invokeRead({
     rpcUrl,
-    scriptHash: sanitizeHex(aaContractHash),
+    scriptHash: sanitizeHex(saContractHash),
     operation: 'getBackupOwner',
     args: [
       { type: 'Hash160', value: `0x${sanitizeHex(accountIdHash)}` },
@@ -237,7 +237,7 @@ export async function assertV3AccountExists({
 }
 
 export function buildExecuteUserOpInvocation({
-  aaContractHash,
+  saContractHash,
   accountIdHash,
   targetContract,
   method,
@@ -246,7 +246,7 @@ export function buildExecuteUserOpInvocation({
   deadline,
   signatureHex = '',
 } = {}) {
-  const normalizedContractHash = sanitizeHex(aaContractHash);
+  const normalizedContractHash = sanitizeHex(saContractHash);
   const normalizedAccountIdHash = sanitizeHex(accountIdHash);
   const normalizedTargetContract = sanitizeHex(targetContract);
   const normalizedMethod = String(method || '').trim();

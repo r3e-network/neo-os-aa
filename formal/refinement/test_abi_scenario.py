@@ -92,7 +92,7 @@ class EncoderTests(unittest.TestCase):
 
 class ScenarioFaceTests(unittest.TestCase):
     def setUp(self):
-        self.directory = tempfile.mkdtemp(prefix='aa-scenario-')
+        self.directory = tempfile.mkdtemp(prefix='sa-scenario-')
         self.addCleanup(shutil.rmtree, self.directory, True)
         self.scenario_path = os.path.join(self.directory, 'scenario.json')
         self.dump_path = os.path.join(self.directory, 'dump.json')

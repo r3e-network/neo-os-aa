@@ -1,4 +1,4 @@
-# neo-os-aa in the NeoOS architecture
+# neo-os-sa in the NeoOS architecture
 
 This file is a pointer, not an authority. The enforced binding is the `Architecture authority`
 section of `README.md`, declared in `neo-os-web/docs/workspace/neoos-target-architecture.v1.json`
@@ -10,7 +10,7 @@ its design is `neo-os/claudedocs/NEOOS-TARGET-ARCHITECTURE-V2-20260921.md`.
 
 | Component | Plane | Published interfaces |
 | --- | --- | --- |
-| `protocol-aa-core` | protocol plane | interfaces: SmartAccountV3, UserOperation, AAAuthorization |
+| `protocol-sa-core` | protocol plane | interfaces: SmartAccountV3, UserOperation, SAAuthorization |
 
 ## v2 binding (proposed)
 

@@ -14,7 +14,7 @@ namespace SmartAccount.Verifiers
     /// </summary>
     /// <remarks>
     /// The signature field carries the subscription identifier, and the nonce must encode the
-    /// current billing period so the AA core replay checks prevent duplicate charges.
+    /// current billing period so the SA core replay checks prevent duplicate charges.
     /// </remarks>
     [DisplayName("SubscriptionVerifier")]
     [ContractPermission("*", "canConfigureVerifier")]
@@ -54,7 +54,7 @@ namespace SmartAccount.Verifiers
         public static void ConfirmAuthorizedCore(UInt160 coreContract) => VerifierAuthority.ConfirmAuthorizedCore(coreContract);
         public static void CancelAuthorizedCoreChange() => VerifierAuthority.CancelAuthorizedCoreChange();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => VerifierAuthority.ProposeUpdate(nefHash, manifestHash);
 
@@ -99,8 +99,10 @@ namespace SmartAccount.Verifiers
         public static bool ValidateSignature(UInt160 accountId, UserOperation op)
         {
             // Audit fix M-6: the ordinary-build validation entry is only reachable
-            // through the AA core's execution context; direct callers are rejected.
-            VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
+            // through the SA core's execution context; direct callers are rejected.
+            // v4: the core calls validators in the PhaseValidation phase, so this is
+            // the read-only validation-phase authorization (not the completion one).
+            VerifierAuthority.ValidateValidationCaller(accountId, Runtime.ExecutingScriptHash);
             // Signature field acts as the Subscription ID being claimed by the merchant
             ByteString subId = op.Signature;
             byte[] key = Helper.Concat(Helper.Concat(Prefix_Subscription, (byte[])accountId), (byte[])subId);
@@ -124,7 +126,7 @@ namespace SmartAccount.Verifiers
             ExecutionEngine.Assert(op.Args != null && op.Args.Length == 4, "Invalid NEP-17 transfer args");
             ExecutionEngine.Assert(op.Args[2] is BigInteger, "Transfer amount must be an integer");
             ExecutionEngine.Assert((BigInteger)op.Args[2] > 0, "Subscription amount must be positive");
-            // A virtual AA account never holds a balance at its accountId: its assets sit at the
+            // A virtual SA account never holds a balance at its accountId: its assets sit at the
             // core's proxy script hash, which is also the only "from" the token's CheckWitness can
             // accept during executeUserOp (SmartAccount.Proxy.cs). Pinning the source to the
             // accountId therefore authorized a transfer that could never move funds; the source
@@ -151,10 +153,10 @@ namespace SmartAccount.Verifiers
             ByteString? counterData = Storage.Get(Storage.CurrentContext, counterKey);
             BigInteger nonceCounter = counterData == null ? 0 : (BigInteger)counterData;
 
-            // Replay protection via the AA core's canonical ERC-4337 2D nonce: each subscription
+            // Replay protection via the SA core's canonical ERC-4337 2D nonce: each subscription
             // gets its own parallel channel (derived from the subscription id) and the per-charge
             // counter is the strictly incrementing sequence within that channel (starts at 0). The
-            // AA core enforces sequence == cursor and advances it, so a charge can never be replayed
+            // SA core enforces sequence == cursor and advances it, so a charge can never be replayed
             // and charges from other subscriptions never collide. The billing-period gate above is
             // the authoritative throttle; the nonce only fixes the in-channel ordering.
             ByteString digest = CryptoLib.Sha256(subId);
@@ -177,7 +179,7 @@ namespace SmartAccount.Verifiers
         private static UInt160 AssetAddressOf(UInt160 accountId)
         {
             UInt160 core = VerifierAuthority.AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "AA core not configured");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
             return (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, new object[] { accountId });
         }
 

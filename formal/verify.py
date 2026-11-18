@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed, offline AA model checks; never substitutes tests for proofs."""
+"""Fail-closed, offline SA model checks; never substitutes tests for proofs."""
 import argparse
 import hashlib
 import itertools
@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-ARTIFACTS = {"coq/SmartAccountAA.v", "coq/MultiSigPolicy.v",
+ARTIFACTS = {"coq/SmartAccountSA.v", "coq/MultiSigPolicy.v",
              "coq/ProxyWitnessScript.v",
              "coq/OrdinaryGovernance.v",
              "coq/OrdinarySponsorship.v",
@@ -30,8 +30,8 @@ ARTIFACTS = {"coq/SmartAccountAA.v", "coq/MultiSigPolicy.v",
              "coq/NativeSessionScope.v",
              "coq/NativeDailyPolicy.v",
              "coq/NativeRestrictedPolicy.v", "coq/NativeCompositePhase.v",
-             "tla/SmartAccountAA.tla",
-             "tla/SmartAccountAA.cfg", "smt/aa_core.smt2"}
+             "tla/SmartAccountSA.tla",
+             "tla/SmartAccountSA.cfg", "smt/sa_core.smt2"}
 # Scope is part of the fail-closed source correspondence record. Successful
 # abstract budget proofs must never be attributed to standard public Call.
 RUNTIME_PROFILES = {
@@ -44,11 +44,11 @@ RUNTIME_PROFILES = {
                "verifierCall": "bounded native callback", "verifierChildBudgetEnforced": True,
                "verifierBudgetDatoshi": 100000000, "hookBudgetDatoshi": 250000000},
 }
-PUBLIC_MODELS = {"coq/SmartAccountAA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
+PUBLIC_MODELS = {"coq/SmartAccountSA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
                  "coq/OrdinaryGovernance.v",
                  "coq/OrdinarySponsorship.v",
                  "coq/OrdinaryRecovery.v",
-                 "tla/SmartAccountAA.tla", "tla/SmartAccountAA.cfg", "smt/aa_core.smt2"}
+                 "tla/SmartAccountSA.tla", "tla/SmartAccountSA.cfg", "smt/sa_core.smt2"}
 MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
                          ["v3", "platform"] if name in PUBLIC_MODELS else ["native"])
                   for name in sorted(ARTIFACTS)}
@@ -798,7 +798,7 @@ COQ_MODULES = {
     "NativeSessionScope.v": NATIVE_SESSION_SCOPE_COQ_MUTATIONS,
     "NativeDailyPolicy.v": NATIVE_DAILY_COQ_MUTATIONS,
     "NativeSessionPolicy.v": NATIVE_SESSION_COQ_MUTATIONS,
-    "SmartAccountAA.v": COQ_MUTATIONS,
+    "SmartAccountSA.v": COQ_MUTATIONS,
     "OrdinaryGovernance.v": ORDINARY_GOVERNANCE_COQ_MUTATIONS,
     "OrdinarySponsorship.v": ORDINARY_SPONSORSHIP_COQ_MUTATIONS,
     "OrdinaryRecovery.v": ORDINARY_RECOVERY_COQ_MUTATIONS,
@@ -892,7 +892,7 @@ def check_inventory(root=ROOT):
              for p in (root / d).rglob("*") if p.suffix in {".v", ".tla", ".cfg", ".smt2"}}
     require(found == ARTIFACTS, f"Artifact inventory mismatch: {found ^ ARTIFACTS}")
     lock = json.loads((root / "source-lock.json").read_text())
-    require(lock["schema"] == "aa-formal-source-lock/v2", "Unknown source-lock schema")
+    require(lock["schema"] == "sa-formal-source-lock/v2", "Unknown source-lock schema")
     check_profile_scope(lock)
     require(set(lock["sources"]) == SOURCE_FILES, "Source roster changed; explicit review required")
     for name, expected in lock["sources"].items():
@@ -1251,7 +1251,7 @@ def parse_smt(source, output, returncode):
     expected = []
     for label in labels:
         expected += [label, "unsat" if label.startswith("OBL:") else "sat"]
-    expected += ["DONE:aa_core"]
+    expected += ["DONE:sa_core"]
     require(tokens == expected, "SMT verdict missing, unexpected, reordered, unknown or incorrect")
     return {"obligations": sum(s.startswith("OBL:") for s in labels),
             "controls": sum(s.startswith("CTRL:") for s in labels)}
@@ -1367,7 +1367,7 @@ def main():
             rc, output = run(command, ROOT, logs, name + "-version")
             require(rc == 0 and output.strip(), f"Cannot read {name} version")
             report["toolVersions"][name] = output.splitlines()[0]
-        with tempfile.TemporaryDirectory(prefix="aa-formal-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="sa-formal-") as scratch:
             work = Path(scratch)
             for relative in ARTIFACTS:
                 shutil.copyfile(ROOT / relative, work / Path(relative).name)
@@ -1405,23 +1405,23 @@ def main():
                             f"Coq mutation escaped or failed without proof rejection: {name}")
                 report["coqMutationsRejected"][module] = list(mutations)
             command = [java, "-Xmx1g", "-XX:+UseParallelGC", "-cp", jar, "tlc2.TLC",
-                       "-workers", "1", "-coverage", "1", "-config", "SmartAccountAA.cfg",
-                       "SmartAccountAA.tla"]
+                       "-workers", "1", "-coverage", "1", "-config", "SmartAccountSA.cfg",
+                       "SmartAccountSA.tla"]
             rc, out = run(command, work, logs, "tlc")
             report["tlc"] = parse_tlc(out, rc)
             report["toolVersions"]["tlc"] = out.splitlines()[0]
-            model = (work / "SmartAccountAA.tla").read_text()
+            model = (work / "SmartAccountSA.tla").read_text()
             for name, (old, new, invariant) in TLA_MUTATIONS.items():
                 directory = work / ("tla-" + name)
                 directory.mkdir()
-                shutil.copyfile(work / "SmartAccountAA.cfg", directory / "SmartAccountAA.cfg")
-                (directory / "SmartAccountAA.tla").write_text(replace_once(model, old, new))
+                shutil.copyfile(work / "SmartAccountSA.cfg", directory / "SmartAccountSA.cfg")
+                (directory / "SmartAccountSA.tla").write_text(replace_once(model, old, new))
                 rc, out = run(command, directory, logs, "tlc-" + name + "-mutant")
                 require(rc != 0 and f"Invariant {invariant} is violated" in out,
                         f"TLC mutation did not produce the expected counterexample: {name}")
             report["tlcMutationsRejected"] = list(TLA_MUTATIONS)
-            smt = (work / "aa_core.smt2").read_text()
-            rc, out = run([z3, "-T:120", "aa_core.smt2"], work, logs, "z3")
+            smt = (work / "sa_core.smt2").read_text()
+            rc, out = run([z3, "-T:120", "sa_core.smt2"], work, logs, "z3")
             report["smt"] = parse_smt(smt, out, rc)
         # Detect edits made while the tools were running.
         check_inventory()
@@ -1430,7 +1430,7 @@ def main():
         require(artifact_hashes() == report["artifactSha256"], "Model artifacts changed during this run")
         report["modelChecksPassed"] = True
         coq_mutation_count = sum(len(m) for m in COQ_MODULES.values())
-        print(f"PASS: AA model checks over {len(COQ_MODULES)} Coq modules, MultiSig bounded "
+        print(f"PASS: SA model checks over {len(COQ_MODULES)} Coq modules, MultiSig bounded "
               f"model, source snapshot gate and "
               f"{coq_mutation_count + len(TLA_MUTATIONS)} semantic mutations")
         return 0

@@ -41,7 +41,7 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 def pinned_sources(cache=None):
-    directory = Path(cache) if cache else Path(tempfile.gettempdir()) / 'aa-helper-gas-pinned-source'
+    directory = Path(cache) if cache else Path(tempfile.gettempdir()) / 'sa-helper-gas-pinned-source'
     directory.mkdir(parents=True, exist_ok=True)
     sources = {}
     local = REPO.parent.parent / 'neo/neo'
@@ -323,7 +323,7 @@ def crosscheck_runtime(model, directory):
     fees = model['fees']
     nodes = {i['offset']: i for i in bind_artifact()['instructions']}
     for shape in ['absent', 'same', 'reset', 'exhausted', 'zero']:
-        path = Path(directory) / ('aa-gas-runtime-helper-' + shape + '.json')
+        path = Path(directory) / ('sa-gas-runtime-helper-' + shape + '.json')
         raw = path.read_bytes(); receipt = json.loads(raw)
         require(receipt.get('scope') == 'actual-pinned-AE-instruction-fee-observation'
                 and receipt.get('name') == 'helper-' + shape, 'Runtime receipt scope/shape mismatch')

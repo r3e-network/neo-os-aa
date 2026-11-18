@@ -166,7 +166,7 @@ test('frontend encryptor roundtrips through the vendored worker decryptor', asyn
   const recipient = await generateRecipientKeyMaterial();
   const payload = {
     provider_uid: 'github_uid_777',
-    account_id: 'aa-social-recovery-demo',
+    account_id: 'sa-social-recovery-demo',
     recovery_nonce: '7',
   };
   const envelopeBase64 = await encryptJsonWithMorpheusOracleKey(

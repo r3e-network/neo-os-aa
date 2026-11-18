@@ -1,5 +1,5 @@
 /**
- * Error codes for the Neo Abstract Account SDK.
+ * Error codes for the Neo Smart Account SDK.
  * Each error code maps to a specific failure mode with descriptive messages.
  */
 

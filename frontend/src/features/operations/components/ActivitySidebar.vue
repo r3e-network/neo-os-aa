@@ -4,8 +4,8 @@
     class="glass-panel p-6 shadow-glow-blue"
   >
     <div class="mb-5 flex items-center justify-between">
-      <h2 class="text-lg font-bold text-aa-text flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-aa-orange animate-pulse"></span>
+      <h2 class="text-lg font-bold text-sa-text flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-sa-orange animate-pulse"></span>
         {{ t("operations.activitySidebarTitle", "Draft Activity") }}
       </h2>
       <span :class="shareStatus === 'draft' ? 'badge-amber' : 'badge-orange'">
@@ -15,15 +15,15 @@
 
     <div class="space-y-3 text-sm">
       <details
-        class="group rounded-lg border border-aa-border bg-aa-dark/30"
+        class="group rounded-lg border border-sa-border bg-sa-dark/30"
         open
       >
         <summary
-          class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none font-semibold text-aa-text hover:text-aa-text transition-colors duration-200"
+          class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none font-semibold text-sa-text hover:text-sa-text transition-colors duration-200"
         >
           <svg
             aria-hidden="true"
-            class="w-4 h-4 text-aa-muted"
+            class="w-4 h-4 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -38,7 +38,7 @@
           {{ t("operations.shareLinksTitle", "Share Links") }}
           <svg
             aria-hidden="true"
-            class="w-4 h-4 ml-auto text-aa-muted group-open:rotate-180 transition-transform duration-200"
+            class="w-4 h-4 ml-auto text-sa-muted group-open:rotate-180 transition-transform duration-200"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -52,22 +52,22 @@
           </svg>
         </summary>
         <div class="px-4 pb-4 space-y-3">
-          <div class="rounded bg-aa-panel/50 p-3">
-            <p class="text-xs font-medium text-aa-muted mb-1">
+          <div class="rounded bg-sa-panel/50 p-3">
+            <p class="text-xs font-medium text-sa-muted mb-1">
               {{ t("operations.draftIdLabel", "Draft ID") }}
             </p>
-            <p class="font-mono text-xs text-aa-text truncate" :title="draftId">
+            <p class="font-mono text-xs text-sa-text truncate" :title="draftId">
               {{
                 draftId || t("operations.notPersistedYet", "Not persisted yet")
               }}
             </p>
           </div>
-          <div class="rounded bg-aa-panel/50 p-3">
-            <p class="text-xs font-medium text-aa-muted mb-1">
+          <div class="rounded bg-sa-panel/50 p-3">
+            <p class="text-xs font-medium text-sa-muted mb-1">
               {{ t("operations.shareUrlReadOnly", "Share URL (read-only)") }}
             </p>
             <p
-              class="font-mono text-xs text-aa-text truncate"
+              class="font-mono text-xs text-sa-text truncate"
               :title="shareUrl"
             >
               {{
@@ -77,14 +77,14 @@
               }}
             </p>
           </div>
-          <div class="rounded bg-aa-panel/50 p-3">
-            <p class="text-xs font-medium text-aa-muted mb-1">
+          <div class="rounded bg-sa-panel/50 p-3">
+            <p class="text-xs font-medium text-sa-muted mb-1">
               {{
                 t("operations.collaboratorUrlSign", "Collaborator URL (sign)")
               }}
             </p>
             <p
-              class="font-mono text-xs text-aa-text truncate"
+              class="font-mono text-xs text-sa-text truncate"
               :title="collaborationUrl"
             >
               {{
@@ -96,12 +96,12 @@
               }}
             </p>
           </div>
-          <div class="rounded bg-aa-panel/50 p-3">
-            <p class="text-xs font-medium text-aa-muted mb-1">
+          <div class="rounded bg-sa-panel/50 p-3">
+            <p class="text-xs font-medium text-sa-muted mb-1">
               {{ t("operations.operatorUrlOperate", "Operator URL (operate)") }}
             </p>
             <p
-              class="font-mono text-xs text-aa-text truncate"
+              class="font-mono text-xs text-sa-text truncate"
               :title="operatorUrl"
             >
               {{
@@ -114,15 +114,15 @@
       </details>
 
       <details
-        class="group rounded-lg border border-aa-border bg-aa-dark/30"
+        class="group rounded-lg border border-sa-border bg-sa-dark/30"
         open
       >
         <summary
-          class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none font-semibold text-aa-text hover:text-aa-text transition-colors duration-200"
+          class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none font-semibold text-sa-text hover:text-sa-text transition-colors duration-200"
         >
           <svg
             aria-hidden="true"
-            class="w-4 h-4 text-aa-muted"
+            class="w-4 h-4 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -140,7 +140,7 @@
           }}</span>
           <svg
             aria-hidden="true"
-            class="w-4 h-4 ml-auto text-aa-muted group-open:rotate-180 transition-transform duration-200"
+            class="w-4 h-4 ml-auto text-sa-muted group-open:rotate-180 transition-transform duration-200"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -155,41 +155,41 @@
         </summary>
         <div class="px-4 pb-4 space-y-3">
           <div class="flex justify-between items-center">
-            <span class="text-xs text-aa-muted">{{
+            <span class="text-xs text-sa-muted">{{
               t("operations.accessMode", "Access Mode")
             }}</span>
             <span
-              class="text-xs font-semibold text-aa-text bg-aa-dark px-2 py-0.5 rounded"
+              class="text-xs font-semibold text-sa-text bg-sa-dark px-2 py-0.5 rounded"
               >{{ accessModeLabel }}</span
             >
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-xs text-aa-muted">{{
+            <span class="text-xs text-sa-muted">{{
               t("operations.broadcast", "Broadcast")
             }}</span>
-            <span class="text-xs font-semibold text-aa-text">{{
+            <span class="text-xs font-semibold text-sa-text">{{
               broadcastMode
             }}</span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-xs text-aa-muted">{{
+            <span class="text-xs text-sa-muted">{{
               t("operations.signatures", "Signatures")
             }}</span>
             <span class="text-xs font-semibold"
-              ><span class="text-aa-orange">{{ signatureCount }}</span> /
+              ><span class="text-sa-orange">{{ signatureCount }}</span> /
               {{ requiredSignerCount }}</span
             >
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-xs text-aa-muted">{{
+            <span class="text-xs text-sa-muted">{{
               t("operations.pending", "Pending")
             }}</span>
-            <span class="text-xs font-semibold text-aa-text">{{
+            <span class="text-xs font-semibold text-sa-text">{{
               pendingSignerCount
             }}</span>
           </div>
           <div class="flex justify-between items-center">
-            <span class="text-xs text-aa-muted">{{
+            <span class="text-xs text-sa-muted">{{
               t("operations.relay", "Relay")
             }}</span>
             <span class="text-xs font-semibold" :class="relayLevelClass">{{
@@ -201,15 +201,15 @@
       </details>
 
       <details
-        class="group rounded-lg border border-aa-border bg-aa-dark/30"
+        class="group rounded-lg border border-sa-border bg-sa-dark/30"
         open
       >
         <summary
-          class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none font-semibold text-aa-text hover:text-aa-text transition-colors duration-200"
+          class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none font-semibold text-sa-text hover:text-sa-text transition-colors duration-200"
         >
           <svg
             aria-hidden="true"
-            class="w-4 h-4 text-aa-muted"
+            class="w-4 h-4 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -224,7 +224,7 @@
           {{ t("operations.recentActivity", "Recent Activity") }}
           <svg
             aria-hidden="true"
-            class="w-4 h-4 ml-auto text-aa-muted group-open:rotate-180 transition-transform duration-200"
+            class="w-4 h-4 ml-auto text-sa-muted group-open:rotate-180 transition-transform duration-200"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -285,8 +285,8 @@ const accessModeLabel = computed(() => {
   return t("operations.readOnlyLabel", "Read-only");
 });
 const relayLevelClass = computed(() => {
-  if (props.relayReadinessLevel === "ready") return "text-aa-orange";
-  if (props.relayReadinessLevel === "warning") return "text-aa-warning";
-  return "text-aa-error";
+  if (props.relayReadinessLevel === "ready") return "text-sa-orange";
+  if (props.relayReadinessLevel === "warning") return "text-sa-warning";
+  return "text-sa-error";
 });
 </script>

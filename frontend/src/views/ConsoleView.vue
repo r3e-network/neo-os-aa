@@ -1,11 +1,11 @@
 <template>
-  <div class="min-h-screen bg-aa-dark text-slate-950">
+  <div class="min-h-screen bg-sa-dark text-slate-950">
     <section class="border-b border-slate-200 bg-white">
       <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p class="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-              Neo Abstract Account
+              Neo Smart Account
             </p>
             <h1 class="mt-2 text-3xl font-semibold text-slate-950">
               {{ t("console.title", "Console") }}
@@ -14,7 +14,7 @@
               {{
                 t(
                   "console.subtitle",
-                  "Manage your abstract accounts and smart wallet operations",
+                  "Manage your smart accounts and smart wallet operations",
                 )
               }}
             </p>
@@ -204,7 +204,7 @@
           <dl class="mt-4 space-y-3 text-sm">
             <div>
               <dt class="text-xs text-slate-500">{{ t("console.statMasterContract", "Master contract") }}</dt>
-              <dd class="mt-1 break-all font-mono text-xs text-slate-950">{{ RUNTIME_CONFIG.abstractAccountHash || "--" }}</dd>
+              <dd class="mt-1 break-all font-mono text-xs text-slate-950">{{ RUNTIME_CONFIG.smartAccountHash || "--" }}</dd>
             </div>
             <div>
               <dt class="text-xs text-slate-500">Paymaster</dt>
@@ -212,7 +212,7 @@
             </div>
             <div>
               <dt class="text-xs text-slate-500">Domain</dt>
-              <dd class="mt-1 break-all text-xs text-slate-950">{{ RUNTIME_CONFIG.abstractAccountDomain || "--" }}</dd>
+              <dd class="mt-1 break-all text-xs text-slate-950">{{ RUNTIME_CONFIG.smartAccountDomain || "--" }}</dd>
             </div>
           </dl>
         </div>
@@ -264,7 +264,7 @@ const blockHeight = computed(() => {
 });
 
 const contractHashShort = computed(() =>
-  formatHash(RUNTIME_CONFIG.abstractAccountHash),
+  formatHash(RUNTIME_CONFIG.smartAccountHash),
 );
 const marketHashShort = computed(() => formatHash(RUNTIME_CONFIG.addressMarketHash));
 const explorerUrl = computed(() =>
@@ -300,7 +300,7 @@ const stats = computed(() => [
     label: t("console.statContract", "Contract"),
     value: contractHashShort.value,
     caption: t("console.statMasterContract", "Master contract"),
-    title: RUNTIME_CONFIG.abstractAccountHash || "",
+    title: RUNTIME_CONFIG.smartAccountHash || "",
   },
 ]);
 
@@ -339,7 +339,7 @@ const workflowNav = computed(() => [
 const primaryActions = computed(() => [
   {
     title: t("console.quickCreateAccount", "Create Account"),
-    body: "Derive, register, and verify a deterministic AA account.",
+    body: "Derive, register, and verify a deterministic SA account.",
     to: "/app",
   },
   {
@@ -365,7 +365,7 @@ const services = computed(() => [
   },
   {
     title: t("console.serviceMarketTitle", "Address Market"),
-    body: `${t("console.serviceMarketBody", "Browse, buy, and sell vanity AA addresses with on-chain escrow")} · ${marketHashShort.value}`,
+    body: `${t("console.serviceMarketBody", "Browse, buy, and sell vanity SA addresses with on-chain escrow")} · ${marketHashShort.value}`,
     to: "/market",
   },
   {

@@ -88,7 +88,7 @@ def run_proofs(output_dir):
     work, coqc, names = prepare(output_dir, raw)
     _, version = command([coqc, "--version"], work, work / "tool-version.log")
     unchanged(hashes)
-    return {"schema": "neoos-aa-reservation-arithmetic-proof/v1", "scope": "reservation-arithmetic",
+    return {"schema": "neoos-sa-reservation-arithmetic-proof/v1", "scope": "reservation-arithmetic",
         "kernelChecked": True, "kernelRecheck": "coqchk -silent", "toolVersion": version.splitlines()[0],
         "fullHelperVerified": False, "suffixBytecodeVerified": False, "fullImplementationVerified": False,
         "closedDeclarations": names, "newClosedDeclarations": declarations(raw[MODEL].decode("utf-8")),
@@ -127,7 +127,7 @@ def run_semantic_controls(output_dir):
                 "Semantic mutation escaped or failed without proof rejection: " + name)
         rejected.append(name)
     unchanged(hashes)
-    return {"schema": "neoos-aa-reservation-semantic-controls/v1", "definitionsCompiled": True,
+    return {"schema": "neoos-sa-reservation-semantic-controls/v1", "definitionsCompiled": True,
         "scope": "reservation-arithmetic", "fullHelperVerified": False,
         "rejected": rejected, "inputSha256": hashes, "outputDirectory": str(work)}
 

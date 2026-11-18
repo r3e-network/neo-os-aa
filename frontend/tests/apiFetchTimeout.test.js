@@ -11,14 +11,14 @@ import relayHandler from '../api/relay-transaction.js';
 // platform kills it.
 
 const ENV_KEYS = [
-  'AA_API_FETCH_TIMEOUT_MS',
+  'SA_API_FETCH_TIMEOUT_MS',
   'MORPHEUS_NETWORK',
   'MORPHEUS_MAINNET_RUNTIME_URL',
-  'AA_RELAY_ALLOW_RAW_FORWARD',
-  'AA_RELAY_MAINNET_RPC_URL',
-  'AA_RELAY_RPC_URL',
-  'AA_RELAY_MAINNET_WIF',
-  'AA_RELAY_WIF',
+  'SA_RELAY_ALLOW_RAW_FORWARD',
+  'SA_RELAY_MAINNET_RPC_URL',
+  'SA_RELAY_RPC_URL',
+  'SA_RELAY_MAINNET_WIF',
+  'SA_RELAY_WIF',
 ];
 
 function snapshotEnv() {
@@ -89,15 +89,15 @@ test('L1: apiFetch rejects a stalled upstream with EC_request_timed_out inside t
   assert.equal(calls[0].redirect, 'error', 'apiFetch callers cannot re-enable redirect following');
 });
 
-test('L1: the API timeout defaults to the shared default and honors AA_API_FETCH_TIMEOUT_MS', () => {
+test('L1: the API timeout defaults to the shared default and honors SA_API_FETCH_TIMEOUT_MS', () => {
   const snapshot = snapshotEnv();
-  delete process.env.AA_API_FETCH_TIMEOUT_MS;
+  delete process.env.SA_API_FETCH_TIMEOUT_MS;
 
   try {
     assert.equal(resolveApiFetchTimeoutMs(), DEFAULT_FETCH_TIMEOUT_MS, 'default matches the shared helper default');
-    process.env.AA_API_FETCH_TIMEOUT_MS = '25';
+    process.env.SA_API_FETCH_TIMEOUT_MS = '25';
     assert.equal(resolveApiFetchTimeoutMs(), 25, 'operator override honored');
-    process.env.AA_API_FETCH_TIMEOUT_MS = 'not-a-number';
+    process.env.SA_API_FETCH_TIMEOUT_MS = 'not-a-number';
     assert.equal(resolveApiFetchTimeoutMs(), DEFAULT_FETCH_TIMEOUT_MS, 'invalid override falls back to the default');
   } finally {
     restoreEnv(snapshot);
@@ -109,7 +109,7 @@ test('L1: morpheus oracle-key proxy cannot be wedged by a hung upstream', async 
   const originalFetch = global.fetch;
   const calls = [];
 
-  process.env.AA_API_FETCH_TIMEOUT_MS = '25';
+  process.env.SA_API_FETCH_TIMEOUT_MS = '25';
   delete process.env.MORPHEUS_NETWORK;
   process.env.MORPHEUS_MAINNET_RUNTIME_URL = 'https://oracle.example.invalid';
   global.fetch = neverResolvingFetch(calls);
@@ -139,11 +139,11 @@ test('L1: relay raw-forward answers 502 (not a hung invocation) when the RPC sta
   const originalFetch = global.fetch;
   const calls = [];
 
-  process.env.AA_API_FETCH_TIMEOUT_MS = '25';
+  process.env.SA_API_FETCH_TIMEOUT_MS = '25';
   delete process.env.MORPHEUS_NETWORK;
-  process.env.AA_RELAY_ALLOW_RAW_FORWARD = '1';
-  process.env.AA_RELAY_MAINNET_RPC_URL = 'https://rpc.example.invalid';
-  process.env.AA_RELAY_MAINNET_WIF = 'dummy-wif';
+  process.env.SA_RELAY_ALLOW_RAW_FORWARD = '1';
+  process.env.SA_RELAY_MAINNET_RPC_URL = 'https://rpc.example.invalid';
+  process.env.SA_RELAY_MAINNET_WIF = 'dummy-wif';
   global.fetch = neverResolvingFetch(calls);
 
   try {

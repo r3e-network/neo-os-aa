@@ -1049,7 +1049,7 @@ def _corpus_roots():
 
 def _copy_corpus(roots):
     """Copy every .cs from `roots` into one flat scratch directory."""
-    scratch = tempfile.mkdtemp(prefix='aa-corpus-copy-')
+    scratch = tempfile.mkdtemp(prefix='sa-corpus-copy-')
     for path in roots:
         for name in sorted(os.listdir(path)):
             if not name.endswith('.cs'):
@@ -1063,7 +1063,7 @@ def _copy_corpus(roots):
 
 def _fixture_root():
     """A one-file corpus, so the shape tests run even with no mirrors."""
-    scratch = tempfile.mkdtemp(prefix='aa-correspondence-')
+    scratch = tempfile.mkdtemp(prefix='sa-correspondence-')
     with open(os.path.join(scratch, 'fixture.cs'), 'w', encoding='utf-8') as handle:
         handle.write('class C\n{\n    void F()\n    {\n        S("}");\n    }\n}\n')
     return [scratch]

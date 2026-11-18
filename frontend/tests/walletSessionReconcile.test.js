@@ -71,12 +71,12 @@ function makeNep21Provider(accounts) {
 
 test('persisted session restores as pending and keeps hash metadata', async () => {
   const storage = createMemoryStorage({
-    aa_connected_account: JSON.stringify({
+    sa_connected_account: JSON.stringify({
       address: 'NAddrCachedAAAAAAAAAAAAAAAAAAAAAAA',
       hash: '0x1122',
       provider: 'StubWallet',
     }),
-    aa_wallet_connected: 'true',
+    sa_wallet_connected: 'true',
   });
   const windowStub = createWindowStub({ storage });
 
@@ -85,13 +85,13 @@ test('persisted session restores as pending and keeps hash metadata', async () =
   assert.equal(walletService.sessionState, 'pending');
   assert.equal(walletService.address, 'NAddrCachedAAAAAAAAAAAAAAAAAAAAAAA');
   assert.equal(walletService.account.hash, '0x1122');
-  assert.equal(storage.has('aa_wallet_connected'), false, 'legacy flag key is removed');
+  assert.equal(storage.has('sa_wallet_connected'), false, 'legacy flag key is removed');
   walletService.disconnect();
 });
 
 test('legacy plain-address persistence is still accepted', async () => {
   const storage = createMemoryStorage({
-    aa_connected_account: 'NAddrLegacyAAAAAAAAAAAAAAAAAAAAAAA',
+    sa_connected_account: 'NAddrLegacyAAAAAAAAAAAAAAAAAAAAAAA',
   });
   const windowStub = createWindowStub({ storage });
 
@@ -104,7 +104,7 @@ test('legacy plain-address persistence is still accepted', async () => {
 
 test('reconcile clears the session when no provider is present', async () => {
   const storage = createMemoryStorage({
-    aa_connected_account: JSON.stringify({ address: 'NAddrGoneAAAAAAAAAAAAAAAAAAAAAAAAA' }),
+    sa_connected_account: JSON.stringify({ address: 'NAddrGoneAAAAAAAAAAAAAAAAAAAAAAAAA' }),
   });
   const windowStub = createWindowStub({ storage });
 
@@ -114,7 +114,7 @@ test('reconcile clears the session when no provider is present', async () => {
     const state = await walletService.reconcileSession({ providerTimeoutMs: 10 });
     assert.equal(state, 'disconnected');
     assert.equal(walletService.isConnected, false);
-    assert.equal(storage.has('aa_connected_account'), false, 'stale session is purged');
+    assert.equal(storage.has('sa_connected_account'), false, 'stale session is purged');
   } finally {
     delete globalThis.window;
   }
@@ -122,7 +122,7 @@ test('reconcile clears the session when no provider is present', async () => {
 
 test('reconcile adopts the provider account when the selection changed', async () => {
   const storage = createMemoryStorage({
-    aa_connected_account: JSON.stringify({
+    sa_connected_account: JSON.stringify({
       address: 'NAddrOldAAAAAAAAAAAAAAAAAAAAAAAAAA',
       hash: '0xold',
     }),
@@ -139,7 +139,7 @@ test('reconcile adopts the provider account when the selection changed', async (
     assert.equal(state, 'verified');
     assert.equal(walletService.address, 'NAddrNewAAAAAAAAAAAAAAAAAAAAAAAAAA');
     assert.equal(walletService.account.hash, '0xnew');
-    const persisted = JSON.parse(storage.getItem('aa_connected_account'));
+    const persisted = JSON.parse(storage.getItem('sa_connected_account'));
     assert.equal(persisted.address, 'NAddrNewAAAAAAAAAAAAAAAAAAAAAAAAAA');
   } finally {
     delete globalThis.window;
@@ -148,7 +148,7 @@ test('reconcile adopts the provider account when the selection changed', async (
 
 test('reconcile verifies a matching cached account and clears it when the roster is empty', async () => {
   const matchingStorage = createMemoryStorage({
-    aa_connected_account: JSON.stringify({
+    sa_connected_account: JSON.stringify({
       address: 'NAddrSameAAAAAAAAAAAAAAAAAAAAAAAAA',
       hash: '0xkeep',
     }),
@@ -172,7 +172,7 @@ test('reconcile verifies a matching cached account and clears it when the roster
   }
 
   const emptyStorage = createMemoryStorage({
-    aa_connected_account: JSON.stringify({ address: 'NAddrEmptyAAAAAAAAAAAAAAAAAAAAAAAA' }),
+    sa_connected_account: JSON.stringify({ address: 'NAddrEmptyAAAAAAAAAAAAAAAAAAAAAAAA' }),
   });
   const emptyWindow = createWindowStub({
     storage: emptyStorage,
@@ -183,7 +183,7 @@ test('reconcile verifies a matching cached account and clears it when the roster
   try {
     const state = await empty.walletService.reconcileSession({ providerTimeoutMs: 10 });
     assert.equal(state, 'disconnected');
-    assert.equal(emptyStorage.has('aa_connected_account'), false);
+    assert.equal(emptyStorage.has('sa_connected_account'), false);
   } finally {
     delete globalThis.window;
   }
@@ -191,7 +191,7 @@ test('reconcile verifies a matching cached account and clears it when the roster
 
 test('ACCOUNT_CHANGED events rebind the session to the new account', async () => {
   const storage = createMemoryStorage({
-    aa_connected_account: JSON.stringify({ address: 'NAddrFirstAAAAAAAAAAAAAAAAAAAAAAAA' }),
+    sa_connected_account: JSON.stringify({ address: 'NAddrFirstAAAAAAAAAAAAAAAAAAAAAAAA' }),
   });
   const windowStub = createWindowStub({ storage });
 
@@ -203,7 +203,7 @@ test('ACCOUNT_CHANGED events rebind the session to the new account', async () =>
       detail: { address: 'NAddrSwitchedAAAAAAAAAAAAAAAAAAAAA' },
     });
     assert.equal(walletService.address, 'NAddrSwitchedAAAAAAAAAAAAAAAAAAAAA');
-    const persisted = JSON.parse(storage.getItem('aa_connected_account'));
+    const persisted = JSON.parse(storage.getItem('sa_connected_account'));
     assert.equal(persisted.address, 'NAddrSwitchedAAAAAAAAAAAAAAAAAAAAA');
   } finally {
     delete globalThis.window;
@@ -215,7 +215,7 @@ test('NETWORK_CHANGED events force the session back to pending re-verification',
     { address: 'NAddrNetAAAAAAAAAAAAAAAAAAAAAAAAAA', isDefault: true },
   ]);
   const storage = createMemoryStorage({
-    aa_connected_account: JSON.stringify({ address: 'NAddrNetAAAAAAAAAAAAAAAAAAAAAAAAAA' }),
+    sa_connected_account: JSON.stringify({ address: 'NAddrNetAAAAAAAAAAAAAAAAAAAAAAAAAA' }),
   });
   const windowStub = createWindowStub({ storage, providers: { NEP21Provider: provider } });
 
@@ -240,7 +240,7 @@ test('useWalletConnection no longer mirrors the session into a second storage ke
     path.resolve('src/composables/useWalletConnection.js'),
     'utf8',
   );
-  assert.doesNotMatch(source, /aa_wallet_connected/);
+  assert.doesNotMatch(source, /sa_wallet_connected/);
   assert.match(source, /reconcileSession/);
   assert.doesNotMatch(source, /await walletService\.connect\(\)\s*;?\s*\}\s*catch/);
 });

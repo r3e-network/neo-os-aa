@@ -249,7 +249,7 @@ def run_proofs(inventory, output_dir, controls=True):
     results = semantic_controls(bound, work, inventory) if controls else []
     require(bind_methods(inventory) == bound, 'Artifact changed during proof')
     require(all(sha(Path(p).read_bytes()) == h for p, h in {**models, **tools}.items()), 'Model/tool changed during proof')
-    return dict(schema='neoos-aa-public-pure-refinement/v1', scope='public-pure-reference-refinement',
+    return dict(schema='neoos-sa-public-pure-refinement/v1', scope='public-pure-reference-refinement',
                 kernelChecked=True, fullImplementationVerified=False, vmCorrespondenceProven=False,
                 referenceVerifiedEntrypoints=list(bound['methods']), fullUnprovedEntrypointCount=len(inventory['manifest']['methods']), nefSha256=bound['nefSha256'],
                 scriptSha256=bound['scriptSha256'], methods=bound['methods'],
@@ -340,7 +340,7 @@ def main():
     parser.add_argument('--json-report', type=Path, required=True)
     args = parser.parse_args()
     args.json_report.parent.mkdir(parents=True, exist_ok=True)
-    failure = dict(schema='neoos-aa-public-pure-refinement/v1', scope='public-pure-reference-refinement',
+    failure = dict(schema='neoos-sa-public-pure-refinement/v1', scope='public-pure-reference-refinement',
                    kernelChecked=False, fullImplementationVerified=False, vmCorrespondenceProven=False,
                    referenceVerifiedEntrypoints=[], status='FAIL', error='Verification has not completed')
     args.json_report.write_text(json.dumps(failure, indent=2)+'\n')

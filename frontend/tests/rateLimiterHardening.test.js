@@ -15,7 +15,7 @@ const ENV_KEYS = [
   'UPSTASH_REDIS_REST_TOKEN',
   'NODE_ENV',
   'VERCEL_ENV',
-  'AA_RATE_LIMIT_IN_MEMORY_MAX',
+  'SA_RATE_LIMIT_IN_MEMORY_MAX',
 ];
 
 function snapshotEnv() {
@@ -37,7 +37,7 @@ test('AA-07: in-memory fallback store is bounded and evicts the least-recently-u
   const snapshot = snapshotEnv();
   delete process.env.UPSTASH_REDIS_REST_URL;
   delete process.env.UPSTASH_REDIS_REST_TOKEN;
-  process.env.AA_RATE_LIMIT_IN_MEMORY_MAX = '50';
+  process.env.SA_RATE_LIMIT_IN_MEMORY_MAX = '50';
 
   try {
     // Fill the victim's bucket (10 req/min) so it is rate limited.
@@ -169,6 +169,173 @@ test('AA-07: unconfigured Redis is not an outage — in-memory fallback stays si
   } finally {
     console.error = originalError;
     console.warn = originalWarn;
+    restoreEnv(snapshot);
+  }
+});
+
+test('F-12: an Upstash command error inside an HTTP 200 pipeline is a backend failure, not "count = 0"', async () => {
+  // Re-verified from code: the pipeline parser used to read the first entry as
+  // `Number(result?.[0]?.result || 0)`, so a failed INCR command answered inside
+  // an HTTP 200 body ({ error: ... }) became count = 0 and the request was
+  // ALLOWED — the limiter failed OPEN on a broken backend while looking
+  // healthy. It must fail closed instead (production: 503 backend unavailable).
+  const snapshot = snapshotEnv();
+  const originalFetch = global.fetch;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const errorLogs = [];
+  const warnLogs = [];
+
+  process.env.UPSTASH_REDIS_REST_URL = 'https://upstash.example.invalid';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'token';
+  process.env.NODE_ENV = 'production';
+  // HTTP 200 — but the INCR command itself failed inside the pipeline body.
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ([{ result: null, error: 'WRONGTYPE Operation against a key holding the wrong kind of value' }, { result: 60000 }]),
+  });
+  console.error = (...args) => errorLogs.push(args.join(' '));
+  console.warn = (...args) => warnLogs.push(args.join(' '));
+
+  try {
+    const rate = await checkRateLimit(uniqueId('f12-command-error'));
+    assert.equal(rate.allowed, false, 'a failed INCR command must not be read as count = 0');
+    assert.equal(rate.error, 'rate_limit_backend_unavailable', 'a command error is a backend failure');
+    assert.equal(resolveRateLimitFailure(rate).statusCode, 503, 'fail closed with a clear 503');
+    assert.ok(errorLogs.length >= 1, 'the fail-closed decision is logged loudly');
+  } finally {
+    global.fetch = originalFetch;
+    console.error = originalError;
+    console.warn = originalWarn;
+    restoreEnv(snapshot);
+  }
+});
+
+test('F-12: a non-numeric INCR result inside an HTTP 200 pipeline is a backend failure, not "count = 0"', async () => {
+  const snapshot = snapshotEnv();
+  const originalFetch = global.fetch;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const errorLogs = [];
+  const warnLogs = [];
+
+  process.env.UPSTASH_REDIS_REST_URL = 'https://upstash.example.invalid';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'token';
+  process.env.NODE_ENV = 'production';
+  // 200 OK, but the INCR entry carries a non-numeric result payload.
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ([{ result: null }, { result: 60000 }]),
+  });
+  console.error = (...args) => errorLogs.push(args.join(' '));
+  console.warn = (...args) => warnLogs.push(args.join(' '));
+
+  try {
+    const rate = await checkRateLimit(uniqueId('f12-non-numeric'));
+    assert.equal(rate.allowed, false, 'a null INCR result must not fall back to count = 0');
+    assert.equal(rate.error, 'rate_limit_backend_unavailable');
+  } finally {
+    global.fetch = originalFetch;
+    console.error = originalError;
+    console.warn = originalWarn;
+    restoreEnv(snapshot);
+  }
+});
+
+test('F-12: a failed PEXPIRE command (HTTP 200, command error) is a backend failure — an unconfirmed TTL must never silently succeed', async () => {
+  // Re-verified from code: PEXPIRE's response was never inspected. If the
+  // command fails, the counter is left WITHOUT a TTL: the count only grows and
+  // the identifier is locked out forever. That silent success must instead be
+  // treated as a backend failure (fail closed in production).
+  const snapshot = snapshotEnv();
+  const originalFetch = global.fetch;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const errorLogs = [];
+  const warnLogs = [];
+  let calls = 0;
+
+  process.env.UPSTASH_REDIS_REST_URL = 'https://upstash.example.invalid';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'token';
+  process.env.NODE_ENV = 'production';
+  // First pipeline (INCR/PTTL on a fresh window) succeeds, the PEXPIRE
+  // pipeline answers 200 with a failed command entry.
+  global.fetch = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ([{ result: 1 }, { result: -1 }]),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ([{ result: null, error: 'OOM command not allowed' }]),
+    };
+  };
+  console.error = (...args) => errorLogs.push(args.join(' '));
+  console.warn = (...args) => warnLogs.push(args.join(' '));
+
+  try {
+    const rate = await checkRateLimit(uniqueId('f12-pexpire-error'));
+    assert.equal(calls, 2, 'the PEXPIRE pipeline was attempted');
+    assert.equal(rate.allowed, false, 'an unconfirmed TTL is not a success');
+    assert.equal(rate.error, 'rate_limit_backend_unavailable', 'failed PEXPIRE fails closed');
+  } finally {
+    global.fetch = originalFetch;
+    console.error = originalError;
+    console.warn = originalWarn;
+    restoreEnv(snapshot);
+  }
+});
+
+test('F-12: Redis limiter keys live under the sa:* namespace and stay per-identifier', async () => {
+  // Re-verified from code: the counter key was `ratelimit:<identifier>` — the
+  // only sa:* Redis keys NOT under the renamed sa: namespace. It must be
+  // sa:ratelimit:<identifier>, and distinct identifiers must get distinct keys.
+  const snapshot = snapshotEnv();
+  const originalFetch = global.fetch;
+  const seenKeys = new Set();
+  let upstashBodies = [];
+
+  process.env.UPSTASH_REDIS_REST_URL = 'https://upstash.example.invalid';
+  process.env.UPSTASH_REDIS_REST_TOKEN = 'token';
+  delete process.env.NODE_ENV;
+  delete process.env.VERCEL_ENV;
+  global.fetch = async (url, cfg) => {
+    upstashBodies.push(String(cfg?.body || ''));
+    const parsed = JSON.parse(cfg?.body || '[]');
+    const key = parsed?.[0]?.[1];
+    if (key) seenKeys.add(key);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => (parsed.length === 2
+        ? [{ result: 1 }, { result: -1 }]
+        : [{ result: 1 }]),
+    };
+  };
+
+  try {
+    const one = uniqueId('f12-key-a');
+    const two = uniqueId('f12-key-b');
+    assert.equal((await checkRateLimit(one)).allowed, true);
+    assert.equal((await checkRateLimit(two)).allowed, true);
+
+    assert.ok(seenKeys.size >= 2, 'distinct identifiers use distinct Redis keys');
+    for (const key of seenKeys) {
+      assert.match(key, /^sa:ratelimit:/, 'every rate-limit key is namespaced under sa:');
+    }
+    assert.ok(
+      upstashBodies.every((body) => body.includes('sa:ratelimit:')),
+      'every pipeline command targets the sa:ratelimit namespace',
+    );
+  } finally {
+    global.fetch = originalFetch;
     restoreEnv(snapshot);
   }
 });

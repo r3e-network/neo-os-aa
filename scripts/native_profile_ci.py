@@ -280,7 +280,7 @@ def execute(args):
     try:
         check_core_identity(core, args.core_commit)
         env = build_environment(work, cache)
-        # AA/probe commands use the checkout selector created by the workflow;
+        # SA/probe commands use the checkout selector created by the workflow;
         # core and module compilation use the independent work-tree selector.
         version = subprocess.check_output(["dotnet", "--version"], cwd=repo, text=True).strip()
         require(version == SDK, f"Expected .NET SDK {SDK}; found {version}")

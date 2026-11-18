@@ -21,7 +21,7 @@ namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
 /// Cross-contract proof for the M0-C identity-kernel boundary:
-/// an AA proxy witness must authorize NeoDIDRegistry.UseActionTicket for the
+/// an SA proxy witness must authorize NeoDIDRegistry.UseActionTicket for the
 /// exact virtual account, while the registry's action signature and nullifier
 /// remain independently binding and single-use.
 /// </summary>
@@ -66,7 +66,7 @@ public sealed class NeoDidActionTicketIntegrationRuntimeTests
 
         public Harness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
+            Wallet = Fx.Deploy("SmartAccount");
             WalletAdmin = Fx.Engine.Sender;
 
             string serviceBuild = ResolveServicesBuildDirectory()
@@ -238,7 +238,7 @@ public sealed class NeoDidActionTicketIntegrationRuntimeTests
     }
 
     [TestMethod]
-    public void AaProxyWitnessConsumesDidActionTicketExactlyOnce()
+    public void SaProxyWitnessConsumesDidActionTicketExactlyOnce()
     {
         Harness h = new();
         byte[] nullifier = h.ActionNullifier(0x51);
@@ -246,7 +246,7 @@ public sealed class NeoDidActionTicketIntegrationRuntimeTests
 
         Assert.IsTrue(
             h.ExecuteTicket(nullifier, signature, h.BackupOwner),
-            "AA proxy witness must authorize the nested NeoDIDRegistry call");
+            "SA proxy witness must authorize the nested NeoDIDRegistry call");
         Assert.IsTrue(h.Fx.CallBoolean(h.Registry, "isActionNullifierUsed", nullifier));
 
         TestException replay = Assert.ThrowsExactly<TestException>(() =>

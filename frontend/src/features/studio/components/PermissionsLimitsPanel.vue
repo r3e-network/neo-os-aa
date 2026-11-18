@@ -1,9 +1,9 @@
 <template>
   <section class="card">
-    <h2 class="text-lg font-bold text-aa-text mb-2">
+    <h2 class="text-lg font-bold text-sa-text mb-2">
       {{ t("studioPanels.permissionsTitle", "Permissions & Limits") }}
     </h2>
-    <p class="text-sm text-aa-muted mb-8">
+    <p class="text-sm text-sa-muted mb-8">
       {{
         t(
           "studioPanels.permissionsSubtitle",
@@ -12,17 +12,17 @@
       }}
     </p>
 
-    <p v-if="isOwnerOnlyPermissionsTarget" role="status" class="mb-5 text-sm text-aa-warning">{{ t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.') }}</p>
+    <p v-if="isOwnerOnlyPermissionsTarget" role="status" class="mb-5 text-sm text-sa-warning">{{ t('ordinary.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.') }}</p>
     <div class="space-y-8">
-      <div class="rounded-lg border border-aa-border/60 bg-aa-panel/60 p-5">
+      <div class="rounded-lg border border-sa-border/60 bg-sa-panel/60 p-5">
         <div
           class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
         >
           <div>
-            <h3 class="text-sm font-bold text-aa-text mb-2">
+            <h3 class="text-sm font-bold text-sa-text mb-2">
               {{ t("studioPanels.presetCatalog", "Preset Catalog") }}
             </h3>
-            <p class="text-sm text-aa-muted">
+            <p class="text-sm text-sa-muted">
               {{
                 t(
                   "studioPanels.presetCatalogSubtitle",
@@ -40,7 +40,7 @@
         </div>
         <div class="mt-5 grid gap-4 lg:grid-cols-2">
           <div>
-            <p class="mb-2 text-xs font-semibold uppercase text-aa-muted">
+            <p class="mb-2 text-xs font-semibold uppercase text-sa-muted">
               {{ t("studioPanels.verifierPresets", "Verifier Presets") }}
             </p>
             <div class="grid gap-2">
@@ -51,20 +51,20 @@
                 :aria-label="
                   preset.label + ' ' + t('studioPanels.presetSuffix', 'preset')
                 "
-                class="rounded-lg border border-aa-border bg-aa-dark/70 px-4 py-3 text-left transition-colors duration-200 hover:border-aa-orange/50 hover:bg-aa-dark"
+                class="rounded-lg border border-sa-border bg-sa-dark/70 px-4 py-3 text-left transition-colors duration-200 hover:border-sa-orange/50 hover:bg-sa-dark"
                 @click="applyVerifierPreset(preset)"
               >
-                <p class="text-sm font-semibold text-aa-text">
+                <p class="text-sm font-semibold text-sa-text">
                   {{ t("studio.presets." + preset.label, preset.label) }}
                 </p>
-                <p class="mt-1 text-xs text-aa-muted">
+                <p class="mt-1 text-xs text-sa-muted">
                   {{ preset.description }}
                 </p>
               </button>
             </div>
           </div>
           <div>
-            <p class="mb-2 text-xs font-semibold uppercase text-aa-muted">
+            <p class="mb-2 text-xs font-semibold uppercase text-sa-muted">
               {{ t("studioPanels.hookPresets", "Hook Presets") }}
             </p>
             <div class="grid gap-2">
@@ -75,13 +75,13 @@
                 :aria-label="
                   preset.label + ' ' + t('studioPanels.presetSuffix', 'preset')
                 "
-                class="rounded-lg border border-aa-border bg-aa-dark/70 px-4 py-3 text-left transition-colors duration-200 hover:border-aa-orange/50 hover:bg-aa-dark"
+                class="rounded-lg border border-sa-border bg-sa-dark/70 px-4 py-3 text-left transition-colors duration-200 hover:border-sa-orange/50 hover:bg-sa-dark"
                 @click="applyHookPreset(preset)"
               >
-                <p class="text-sm font-semibold text-aa-text">
+                <p class="text-sm font-semibold text-sa-text">
                   {{ t("studio.presets." + preset.label, preset.label) }}
                 </p>
-                <p class="mt-1 text-xs text-aa-muted">
+                <p class="mt-1 text-xs text-sa-muted">
                   {{ preset.description }}
                 </p>
               </button>
@@ -90,10 +90,10 @@
         </div>
       </div>
 
-      <div class="bg-aa-panel p-5 rounded-lg border border-aa-border/60">
+      <div class="bg-sa-panel p-5 rounded-lg border border-sa-border/60">
         <label
           for="permissions-target-account"
-          class="block text-sm font-semibold text-aa-text mb-3"
+          class="block text-sm font-semibold text-sa-text mb-3"
           >{{
             t("studioPanels.targetAccountLabel", "Target AccountId Hash")
           }}</label
@@ -104,7 +104,7 @@
             v-model="permissionsForm.accountAddress"
             type="text"
             list="loaded-permissions-accounts"
-            class="input-field flex-1 font-mono text-sm py-2.5 px-4 bg-aa-dark"
+            class="input-field flex-1 font-mono text-sm py-2.5 px-4 bg-sa-dark"
             :placeholder="
               t('studioPanels.targetAccountPlaceholder', '20-byte hash160')
             "
@@ -117,7 +117,7 @@
             />
           </datalist>
         </div>
-        <p class="mt-2 text-xs text-aa-muted">
+        <p class="mt-2 text-xs text-sa-muted">
           {{
             t(
               "studioPanels.permissionsHint",
@@ -130,11 +130,11 @@
       <!-- Empty state when no account is loaded -->
       <div v-if="!permissionsForm.accountAddress" class="empty-state">
         <div
-          class="mx-auto w-12 h-12 rounded-full bg-aa-panel/30 flex items-center justify-center mb-3"
+          class="mx-auto w-12 h-12 rounded-full bg-sa-panel/30 flex items-center justify-center mb-3"
         >
           <svg
             aria-hidden="true"
-            class="w-6 h-6 text-aa-muted"
+            class="w-6 h-6 text-sa-muted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -147,10 +147,10 @@
             ></path>
           </svg>
         </div>
-        <p class="text-sm text-aa-text font-medium mb-1">
+        <p class="text-sm text-sa-text font-medium mb-1">
           {{ t("studioPanels.noAccountForPermissions", "No account loaded") }}
         </p>
-        <p class="text-xs text-aa-muted">
+        <p class="text-xs text-sa-muted">
           {{
             t(
               "studioPanels.loadAccountForPermissions",
@@ -165,9 +165,9 @@
         class="grid grid-cols-1 md:grid-cols-2 gap-8"
       >
         <div
-          class="card hover:border-aa-muted transition-colors duration-200 flex flex-col p-5 rounded-lg"
+          class="card hover:border-sa-muted transition-colors duration-200 flex flex-col p-5 rounded-lg"
         >
-          <h3 class="text-sm font-bold text-aa-text mb-5">
+          <h3 class="text-sm font-bold text-sa-text mb-5">
             {{
               t(
                 "studioPanels.callActiveVerifier",
@@ -179,14 +179,14 @@
             <div>
               <label
                 for="verifier-method-input"
-                class="block text-xs font-semibold text-aa-muted mb-1"
+                class="block text-xs font-semibold text-sa-muted mb-1"
                 >{{ t("studioPanels.methodLabel", "Method") }}</label
               >
               <input
                 id="verifier-method-input"
                 v-model="permissionsForm.verifierMethod"
                 type="text"
-                class="input-field text-sm font-mono py-2 px-3 bg-aa-dark"
+                class="input-field text-sm font-mono py-2 px-3 bg-sa-dark"
                 :placeholder="
                   t(
                     'studioPanels.verifierMethodPlaceholder',
@@ -198,20 +198,20 @@
             <div>
               <label
                 for="verifier-args-input"
-                class="block text-xs font-semibold text-aa-muted mb-1"
+                class="block text-xs font-semibold text-sa-muted mb-1"
                 >{{ t("studioPanels.argsJsonLabel", "Args JSON") }}</label
               >
               <textarea
                 id="verifier-args-input"
                 v-model="permissionsForm.verifierArgsJson"
-                class="input-field text-xs font-mono py-2 px-3 bg-aa-dark min-h-32"
+                class="input-field text-xs font-mono py-2 px-3 bg-sa-dark min-h-32"
                 :placeholder="verifierArgsPlaceholder"
                 @blur="validateVerifierArgsJson"
               ></textarea>
               <p
                 v-if="verifierArgsError"
                 role="alert"
-                class="text-xs text-aa-error mt-1"
+                class="text-xs text-sa-error mt-1"
               >
                 {{ verifierArgsError }}
               </p>
@@ -219,10 +219,10 @@
             <div
               v-if="sessionKeyValueWarning"
               role="alert"
-              class="flex items-start gap-2 rounded-lg border border-aa-warning/40 bg-aa-warning/10 px-3 py-2"
+              class="flex items-start gap-2 rounded-lg border border-sa-warning/40 bg-sa-warning/10 px-3 py-2"
             >
-              <span class="text-aa-warning text-sm leading-none mt-0.5" aria-hidden="true">⚠</span>
-              <p class="text-xs text-aa-warning-light leading-relaxed">
+              <span class="text-sa-warning text-sm leading-none mt-0.5" aria-hidden="true">⚠</span>
+              <p class="text-xs text-sa-warning-light leading-relaxed">
                 {{ sessionKeyValueWarning }}
               </p>
             </div>
@@ -244,23 +244,23 @@
         </div>
 
         <div
-          class="card hover:border-aa-muted transition-colors duration-200 flex flex-col p-5 rounded-lg"
+          class="card hover:border-sa-muted transition-colors duration-200 flex flex-col p-5 rounded-lg"
         >
-          <h3 class="text-sm font-bold text-aa-text mb-5">
+          <h3 class="text-sm font-bold text-sa-text mb-5">
             {{ t("studioPanels.callActiveHook", "Call Active Hook Plugin") }}
           </h3>
           <div class="space-y-4">
             <div>
               <label
                 for="hook-method-input"
-                class="block text-xs font-semibold text-aa-muted mb-1"
+                class="block text-xs font-semibold text-sa-muted mb-1"
                 >{{ t("studioPanels.methodLabel", "Method") }}</label
               >
               <input
                 id="hook-method-input"
                 v-model="permissionsForm.hookMethod"
                 type="text"
-                class="input-field text-sm font-mono py-2 px-3 bg-aa-dark"
+                class="input-field text-sm font-mono py-2 px-3 bg-sa-dark"
                 :placeholder="
                   t(
                     'studioPanels.hookMethodPlaceholder',
@@ -272,20 +272,20 @@
             <div>
               <label
                 for="hook-args-input"
-                class="block text-xs font-semibold text-aa-muted mb-1"
+                class="block text-xs font-semibold text-sa-muted mb-1"
                 >{{ t("studioPanels.argsJsonLabel", "Args JSON") }}</label
               >
               <textarea
                 id="hook-args-input"
                 v-model="permissionsForm.hookArgsJson"
-                class="input-field text-xs font-mono py-2 px-3 bg-aa-dark min-h-32"
+                class="input-field text-xs font-mono py-2 px-3 bg-sa-dark min-h-32"
                 :placeholder="hookArgsPlaceholder"
                 @blur="validateHookArgsJson"
               ></textarea>
               <p
                 v-if="hookArgsError"
                 role="alert"
-                class="text-xs text-aa-error mt-1"
+                class="text-xs text-sa-error mt-1"
               >
                 {{ hookArgsError }}
               </p>
@@ -310,10 +310,10 @@
 
       <details
         v-if="permissionsForm.accountAddress"
-        class="rounded-lg border border-aa-border/60 bg-aa-panel/60 p-5"
+        class="rounded-lg border border-sa-border/60 bg-sa-panel/60 p-5"
       >
         <summary
-          class="cursor-pointer text-sm font-semibold text-aa-muted hover:text-aa-text transition-colors duration-200 flex items-center gap-2"
+          class="cursor-pointer text-sm font-semibold text-sa-muted hover:text-sa-text transition-colors duration-200 flex items-center gap-2"
         >
           <svg
             aria-hidden="true"
@@ -332,20 +332,20 @@
           {{ t("studioPanels.commonExamples", "Common Examples") }}
         </summary>
         <div
-          class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs text-aa-muted font-mono"
+          class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs text-sa-muted font-mono"
         >
           <div
             v-for="example in commonExamples"
             :key="example.label"
-            class="rounded-lg border border-aa-border/40 bg-aa-dark/30 p-4"
+            class="rounded-lg border border-sa-border/40 bg-sa-dark/30 p-4"
           >
             <div class="flex items-center justify-between mb-2">
-              <p class="text-aa-orange font-semibold">
+              <p class="text-sa-orange font-semibold">
                 {{ t("studio.presets." + example.label, example.label) }}
               </p>
               <button
                 @click="applyExample(example)"
-                class="text-xs text-aa-muted hover:text-aa-text transition-colors duration-200 flex items-center gap-1"
+                class="text-xs text-sa-muted hover:text-sa-text transition-colors duration-200 flex items-center gap-1"
               >
                 <svg
                   aria-hidden="true"

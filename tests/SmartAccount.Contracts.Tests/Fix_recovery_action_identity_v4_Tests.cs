@@ -9,7 +9,7 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 // Test-source preparation only. Run against freshly generated exact269
-// SmartAccountV3 and SocialRecoveryVerifier artifacts in contracts/bin/v3.
+// SmartAccount and SocialRecoveryVerifier artifacts in contracts/bin/v3.
 // RuntimeFixture loads actual NEFs into TestEngine; no authorization model is
 // substituted. The protocol-version check rejects pre-v4 artifacts, but does
 // not replace an external source/compiler/NEF hash provenance receipt.

@@ -133,7 +133,7 @@ def project_source(source):
     factors = re.findall(r"\bpublic\s+static\s+readonly\s+BigInteger\s+FeeFactor\s*=\s*(\d+)\s*;", source)
     require(len(factors) == 1, "expected exactly one fee factor constant")
     program = method_body(source)
-    result = {"schema": "neoos-aa-add-fee-source/v1", "program": program, "feeFactor": int(factors[0]),
+    result = {"schema": "neoos-sa-add-fee-source/v1", "program": program, "feeFactor": int(factors[0]),
               "sourceSha256": digest(source.encode()), "sourceFrontendVerified": False}
     result["projectionSha256"] = digest(json.dumps({"program": program, "feeFactor": result["feeFactor"]}, sort_keys=True, separators=(",", ":")).encode())
     return result
@@ -194,7 +194,7 @@ def command(arguments, directory, log, success=True):
 
 
 def pinned_source(cache=None):
-    cache = Path(cache) if cache else Path(tempfile.gettempdir()) / "aa-pinned-neo-gas-d10e9cee.cs"
+    cache = Path(cache) if cache else Path(tempfile.gettempdir()) / "sa-pinned-neo-gas-d10e9cee.cs"
     if not cache.exists():
         with urllib.request.urlopen(SOURCE_URL, timeout=30) as response:
             data = response.read()
@@ -266,7 +266,7 @@ def run_proofs(output_dir, *, source_text=None, controls=True, cache=None):
     if source_text is None:
         require(pinned_source(cache) == source, "pinned source changed during run")
     _, version = command([coqc, "--version"], directory, directory / "version.log")
-    return {"schema": "neoos-aa-gas-refinement/v1", "scope": "source-derived-add-fee-and-metered-traces",
+    return {"schema": "neoos-sa-gas-refinement/v1", "scope": "source-derived-add-fee-and-metered-traces",
             "kernelChecked": True, "sourceProjectionVerified": True, "sourceFrontendVerified": False,
             "applicationEngineVerified": False, "fullImplementationVerified": False,
             "productionSourceBound": source_text is None, "sourceCommit": COMMIT if source_text is None else None,

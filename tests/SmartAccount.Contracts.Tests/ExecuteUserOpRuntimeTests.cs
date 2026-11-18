@@ -9,7 +9,7 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral VM tests for <c>SmartAccountV3.ExecuteUserOp</c>: the happy path, replay
+/// Behavioral VM tests for <c>SmartAccount.ExecuteUserOp</c>: the happy path, replay
 /// protection, deadline expiry, witness enforcement on the native fallback path, the verifier
 /// delegation path with real secp256r1 signatures, and the escape-hatch interaction that only
 /// the backup owner may implicitly cancel an active escape by executing.
@@ -40,7 +40,7 @@ public class ExecuteUserOpRuntimeTests
 
         public WalletHarness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
+            Wallet = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
             Core = Fx.Deploy("MockVerifierCore");
         }
@@ -70,7 +70,7 @@ public class ExecuteUserOpRuntimeTests
             Fx.CallInteger(Wallet, "getNonce", accountId, channel);
 
         /// <summary>
-        /// Deploys a SessionKeyVerifier bound to the real AA core, registers a wallet account
+        /// Deploys a SessionKeyVerifier bound to the real SA core, registers a wallet account
         /// using it, and authorizes <paramref name="key"/> for transfer calls on the mock target.
         /// Audit fix M-1: session-key configuration goes through the core's timelocked
         /// callVerifier path (stage, 24h, confirm); the verifier rejects direct calls.
@@ -112,7 +112,7 @@ public class ExecuteUserOpRuntimeTests
         UInt160 accountId = h.RegisterAccount(UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
         UInt160 otherId = h.RegisterAccount(UInt160.Zero, Stranger, EscapeTimelockSeconds);
         // A second deployment with a different sender gives the nested caller
-        // a distinct script hash without mocking AA's verification result.
+        // a distinct script hash without mocking SA's verification result.
         h.Fx.SetSigners(Stranger);
         UInt160 relay = h.Fx.Deploy("MockVerifierCore");
         h.Fx.Engine.SetTransactionSigners(new Signer
@@ -469,13 +469,13 @@ public class ExecuteUserOpRuntimeTests
 
         TestException directValidate = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallBoolean(recoveryVerifier, "validateSignature", accountId, op),
-            "validateSignature must only run inside the bound AA Core execution context");
-        StringAssert.Contains(directValidate.Message, "Unauthorized AA core caller");
+            "validateSignature must only run inside the bound SA Core execution context");
+        StringAssert.Contains(directValidate.Message, "Unauthorized SA core caller");
 
         TestException directPost = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(recoveryVerifier, "postExecute", accountId, op, true),
-            "postExecute must only run inside the bound AA Core execution context");
-        StringAssert.Contains(directPost.Message, "Unauthorized AA core caller");
+            "postExecute must only run inside the bound SA Core execution context");
+        StringAssert.Contains(directPost.Message, "Unauthorized SA core caller");
 
         h.Fx.SetSigners(BackupOwner);
         Assert.IsTrue(h.ExecuteUserOp(accountId, op));

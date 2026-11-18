@@ -253,17 +253,17 @@ function invokeRpcReadWithRetry(fn, attempts = DEFAULT_RPC_READ_RETRY_ATTEMPTS) 
 }
 
 /**
- * Neo N3 Abstract Account SDK Client.
+ * Neo N3 Smart Account SDK Client.
  *
  * The SDK provides methods for:
- * - Creating and managing abstract accounts
+ * - Creating and managing smart accounts
  * - Building UserOperations for signing
  * - Validating operations before submission
  * - Managing verifiers and hooks
  *
  * @example
  * ```javascript
- * const { SmartAccountClient } = require('smart-account');
+ * const { SmartAccountClient } = require('@r3e-network/neo-smart-account');
  *
  * const client = new SmartAccountClient(
  *   'https://rpc.example.com',
@@ -462,7 +462,7 @@ class SmartAccountClient {
   }
 
   /**
-   * Derives an Abstract Account Neo address from an EVM public key.
+   * Derives a Smart Account Neo address from an EVM public key.
    *
    * @param {string} uncompressedPubKey - Uncompressed public key (130 hex chars or with 0x prefix)
    * @returns {string} Neo address
@@ -486,7 +486,7 @@ class SmartAccountClient {
   }
 
   /**
-   * Creates the payload required to register a new V3 Abstract Account.
+   * Creates the payload required to register a new V3 Smart Account.
    *
    * @param {Object} options - Account creation options
    * @param {string} [options.verifierContractHash=''] - Verifier contract hash (40 hex chars)
@@ -1235,7 +1235,7 @@ class SmartAccountClient {
   }
 
   /**
-   * Gets the complete state of an abstract account.
+   * Gets the complete state of a smart account.
    *
    * All Hash160 fields are returned as big-endian display hex (the same
    * byte order every SDK hash input accepts), regardless of the node's

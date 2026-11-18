@@ -10,9 +10,9 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral VM tests for the AA-D-01 authority hardening:
+/// Behavioral VM tests for the SA-D-01 authority hardening:
 /// (1) <c>setAuthorizedCore</c> is initial-set-only on every shared verifier and on the
-///     paymaster (M-7 parity with <c>HookAuthority</c>) — re-pointing the trusted AA core
+///     paymaster (M-7 parity with <c>HookAuthority</c>) — re-pointing the trusted SA core
 ///     must flow through <c>proposeAuthorizedCore</c>/<c>confirmAuthorizedCore</c> with a
 ///     7-day window;
 /// (2) contract upgrades on the verifier/hook/paymaster family are timelocked —
@@ -53,7 +53,7 @@ public class AuthorityTimelockRuntimeTests
         "verifiers/MultiSigVerifier",
         "verifiers/SubscriptionVerifier",
         "verifiers/SessionKeyVerifier",
-        "AAPaymaster",
+        "SAPaymaster",
     };
 
     private static (byte[] Nef, string Manifest) ReadArtifact(string baseName)
@@ -117,7 +117,7 @@ public class AuthorityTimelockRuntimeTests
     [TestMethod]
     public void AuthorityCore_ProposeConfirm_HonorsSevenDayWindow()
     {
-        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "AAPaymaster" })
+        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "SAPaymaster" })
         {
             RuntimeFixture fx = new();
             UInt160 core = fx.Deploy("MockVerifierCore");
@@ -195,13 +195,13 @@ public class AuthorityTimelockRuntimeTests
     }
 
     // ========================================================================
-    // 2. update — timelocked upgrades (AA-D-01)
+    // 2. update — timelocked upgrades (SA-D-01)
     // ========================================================================
 
     [TestMethod]
     public void AuthorityUpdate_WithoutProposal_IsRejected()
     {
-        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "hooks/WhitelistHook", "AAPaymaster" })
+        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "hooks/WhitelistHook", "SAPaymaster" })
         {
             RuntimeFixture fx = new();
             UInt160 contract = fx.Deploy(artifact);
@@ -218,7 +218,7 @@ public class AuthorityTimelockRuntimeTests
     [TestMethod]
     public void AuthorityUpdate_ProposeConfirm_HonorsWindowAndHashes()
     {
-        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "hooks/WhitelistHook", "AAPaymaster" })
+        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "hooks/WhitelistHook", "SAPaymaster" })
         {
             RuntimeFixture fx = new();
             UInt160 contract = fx.Deploy(artifact);
@@ -281,8 +281,8 @@ public class AuthorityTimelockRuntimeTests
     public void AuthorityUpdate_Cancel_ClearsPendingUpdate()
     {
         RuntimeFixture fx = new();
-        UInt160 paymaster = fx.Deploy("AAPaymaster");
-        (byte[] nef, string manifest) = ReadArtifact("AAPaymaster");
+        UInt160 paymaster = fx.Deploy("SAPaymaster");
+        (byte[] nef, string manifest) = ReadArtifact("SAPaymaster");
 
         fx.CallVoid(paymaster, "proposeUpdate", Sha256(nef), Sha256(manifest));
         fx.AdvanceTime(Window);

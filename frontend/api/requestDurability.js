@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { apiFetch } from './outboundFetch.js';
+import { isProductionDeployment } from './deploymentEnv.js';
 
 const DEFAULT_JOURNAL_TTL_MS = 24 * 60 * 60 * 1000;
+// F-13 (re-verified from code): how long a caller should wait before retrying
+// after a durability-backend outage fails the request closed in production.
+const BACKEND_UNAVAILABLE_RETRY_AFTER_SECONDS = 60;
 
 function trimString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -57,7 +61,12 @@ async function upstashGetJson(key) {
   const response = await apiFetch(`${client.url}/get/${encodeURIComponent(key)}`, {
     headers: { authorization: `Bearer ${client.token}` },
   });
-  if (!response.ok) return null;
+  // F-13 (re-verified from code): a failed GET is a backend error, not a cache
+  // miss — distinguish them so the caller can fail closed instead of silently
+  // proceeding as if no cached response existed.
+  if (!response.ok) {
+    throw new Error(`Upstash get failed (${response.status})`);
+  }
 
   const raw = await response.text();
   if (!raw || raw === 'null') return null;
@@ -129,17 +138,17 @@ function deriveIdempotencyKey(req, payload = {}, fingerprint = null) {
 function buildJournalKey(routeName, requestId) {
   // L3: the request id can be client-supplied (x-request-id header / request_id payload
   // field), so it must never become a Redis key verbatim — raw ids give callers unbounded
-  // key cardinality and key-injection into the shared aa:request:* namespace. Hash it like
+  // key cardinality and key-injection into the shared sa:request:* namespace. Hash it like
   // the lock/response siblings do; the raw value stays available for logs/echo responses.
-  return `aa:request:journal:${routeName}:${sha256Hex(requestId)}`;
+  return `sa:request:journal:${routeName}:${sha256Hex(requestId)}`;
 }
 
 function buildLockKey(routeName, idempotencyKey) {
-  return `aa:request:lock:${routeName}:${sha256Hex(idempotencyKey)}`;
+  return `sa:request:lock:${routeName}:${sha256Hex(idempotencyKey)}`;
 }
 
 function buildResponseKey(routeName, idempotencyKey) {
-  return `aa:request:response:${routeName}:${sha256Hex(idempotencyKey)}`;
+  return `sa:request:response:${routeName}:${sha256Hex(idempotencyKey)}`;
 }
 
 export async function beginDurableRequest({ req, routeName, payload = {}, fingerprint = null, replay = true, journalTtlMs = DEFAULT_JOURNAL_TTL_MS, lockTtlMs = 30_000, responseTtlMs = 15 * 60_000 } = {}) {
@@ -165,95 +174,132 @@ export async function beginDurableRequest({ req, routeName, payload = {}, finger
     return { ok: true, context };
   }
 
-  if (context.responseKey) {
-    const cached = await upstashGetJson(context.responseKey);
-    if (cached?.status && cached.body) {
-      await upstashSetJson(journalKey, {
+  // F-13 (re-verified from code): previously a configured-but-erroring Upstash
+  // backend (HTTP error, command error, auth/quota failure) THREW straight out of
+  // beginDurableRequest, crashing the route with an opaque platform 500 — the
+  // opposite of the AA-07 fail-closed policy the rate limiter already follows.
+  // Mirror that policy: in production fail closed with a clear 503; outside
+  // production degrade to no durability with a warning.
+  try {
+    if (context.responseKey) {
+      const cached = await upstashGetJson(context.responseKey);
+      if (cached?.status && cached.body) {
+        await upstashSetJson(journalKey, {
+          request_id: requestId,
+          route: routeName,
+          status: 'replayed',
+          replayed_at: new Date().toISOString(),
+          idempotency_key: idempotencyKey,
+        }, { ttlMs: journalTtlMs });
+        return {
+          ok: false,
+          context,
+          replayed: true,
+          cached,
+        };
+      }
+    }
+
+    if (context.lockKey) {
+      const claimed = await upstashSetJson(context.lockKey, {
         request_id: requestId,
         route: routeName,
-        status: 'replayed',
-        replayed_at: new Date().toISOString(),
-        idempotency_key: idempotencyKey,
-      }, { ttlMs: journalTtlMs });
-      return {
-        ok: false,
-        context,
-        replayed: true,
-        cached,
-      };
-    }
-  }
+        accepted_at: new Date().toISOString(),
+      }, { ttlMs: lockTtlMs, nx: true });
 
-  if (context.lockKey) {
-    const claimed = await upstashSetJson(context.lockKey, {
+      if (claimed !== 'OK') {
+        return {
+          ok: false,
+          context,
+          inProgress: true,
+        };
+      }
+    }
+
+    await upstashSetJson(journalKey, {
       request_id: requestId,
       route: routeName,
+      status: 'accepted',
       accepted_at: new Date().toISOString(),
-    }, { ttlMs: lockTtlMs, nx: true });
+      idempotency_key: idempotencyKey || null,
+      fingerprint: fingerprint ? sha256Hex(fingerprint) : null,
+    }, { ttlMs: journalTtlMs });
 
-    if (claimed !== 'OK') {
+    return { ok: true, context };
+  } catch (error) {
+    if (isProductionDeployment()) {
+      console.error(`[requestDurability] CRITICAL: durability backend failed for route ${routeName} in production deployment; failing closed (request_persistence_backend_unavailable):`, error?.message || error);
       return {
         ok: false,
+        backendUnavailable: true,
         context,
-        inProgress: true,
+        retryAfter: BACKEND_UNAVAILABLE_RETRY_AFTER_SECONDS,
       };
     }
+    console.warn(`[requestDurability] durability backend failed for route ${routeName} outside production; proceeding without replay cache, idempotency lock and journal:`, error?.message || error);
+    return { ok: true, context, degraded: true };
   }
+}
 
-  await upstashSetJson(journalKey, {
-    request_id: requestId,
-    route: routeName,
-    status: 'accepted',
-    accepted_at: new Date().toISOString(),
-    idempotency_key: idempotencyKey || null,
-    fingerprint: fingerprint ? sha256Hex(fingerprint) : null,
-  }, { ttlMs: journalTtlMs });
-
-  return { ok: true, context };
+// F-14 (re-verified from code): complete/fail run AFTER the relayed work — often
+// after a transaction was already broadcast. A backend error here used to throw
+// out of the handler, turning a completed broadcast into a client-visible 500
+// that invites a retry (and a duplicate broadcast). Bookkeeping is best-effort:
+// log and swallow, never fail the response.
+async function bestEffortJournalWrite(label, routeName, run) {
+  try {
+    await run();
+  } catch (error) {
+    console.error(`[requestDurability] ${label} for route ${routeName} failed after the request executed; the client response is preserved:`, error?.message || error);
+  }
 }
 
 export async function completeDurableRequest(context, { statusCode = 200, body = null, headers = {} } = {}) {
   if (!context?.upstashEnabled) return;
 
-  if (context.responseKey && statusCode < 500 && body && typeof body === 'object') {
-    await upstashSetJson(context.responseKey, {
-      status: statusCode,
-      headers,
-      body,
-    }, { ttlMs: context.responseTtlMs });
-  }
+  await bestEffortJournalWrite('response-cache write', context.routeName, async () => {
+    if (context.responseKey && statusCode < 500 && body && typeof body === 'object') {
+      await upstashSetJson(context.responseKey, {
+        status: statusCode,
+        headers,
+        body,
+      }, { ttlMs: context.responseTtlMs });
+    }
 
-  await upstashSetJson(context.journalKey, {
-    request_id: context.requestId,
-    route: context.routeName,
-    status: 'completed',
-    completed_at: new Date().toISOString(),
-    response_status: statusCode,
-    idempotency_key: context.idempotencyKey || null,
-  }, { ttlMs: context.journalTtlMs });
+    await upstashSetJson(context.journalKey, {
+      request_id: context.requestId,
+      route: context.routeName,
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      response_status: statusCode,
+      idempotency_key: context.idempotencyKey || null,
+    }, { ttlMs: context.journalTtlMs });
 
-  if (context.lockKey) {
-    await upstashDelete(context.lockKey);
-  }
+    if (context.lockKey) {
+      await upstashDelete(context.lockKey);
+    }
+  });
 }
 
 export async function failDurableRequest(context, { statusCode = 500, error = '', phase = '' } = {}) {
   if (!context?.upstashEnabled) return;
 
-  await upstashSetJson(context.journalKey, {
-    request_id: context.requestId,
-    route: context.routeName,
-    status: 'failed',
-    failed_at: new Date().toISOString(),
-    response_status: statusCode,
-    error: trimString(error),
-    phase: trimString(phase),
-    idempotency_key: context.idempotencyKey || null,
-  }, { ttlMs: context.journalTtlMs });
+  await bestEffortJournalWrite('failure journal write', context.routeName, async () => {
+    await upstashSetJson(context.journalKey, {
+      request_id: context.requestId,
+      route: context.routeName,
+      status: 'failed',
+      failed_at: new Date().toISOString(),
+      response_status: statusCode,
+      error: trimString(error),
+      phase: trimString(phase),
+      idempotency_key: context.idempotencyKey || null,
+    }, { ttlMs: context.journalTtlMs });
 
-  if (context.lockKey) {
-    await upstashDelete(context.lockKey);
-  }
+    if (context.lockKey) {
+      await upstashDelete(context.lockKey);
+    }
+  });
 }
 
 export function attachRequestId(payload, requestId) {

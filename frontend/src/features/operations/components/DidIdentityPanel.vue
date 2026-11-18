@@ -1,26 +1,26 @@
 <template>
   <div
-    class="rounded-[20px] border border-aa-border bg-aa-panel/60 overflow-hidden shadow-glow-panel backdrop-blur-lg transition-all duration-200"
+    class="rounded-[20px] border border-sa-border bg-sa-panel/60 overflow-hidden shadow-glow-panel backdrop-blur-lg transition-all duration-200"
   >
     <button
       @click="expanded = !expanded"
       :aria-expanded="expanded"
       aria-controls="did-panel-content"
-      class="w-full bg-aa-panel/40 px-6 py-5 border-b border-aa-border flex items-center justify-between hover:bg-aa-dark/40 transition-colors duration-200"
+      class="w-full bg-sa-panel/40 px-6 py-5 border-b border-sa-border flex items-center justify-between hover:bg-sa-dark/40 transition-colors duration-200"
     >
       <div class="flex items-center gap-4">
         <div
-          class="w-8 h-8 rounded-full bg-aa-info/20 border border-aa-info/50 text-aa-info flex items-center justify-center font-bold text-sm shadow-glow-sky"
+          class="w-8 h-8 rounded-full bg-sa-info/20 border border-sa-info/50 text-sa-info flex items-center justify-center font-bold text-sm shadow-glow-sky"
         >
           D
         </div>
-        <h2 class="text-lg font-bold text-aa-text font-outfit">
+        <h2 class="text-lg font-bold text-sa-text font-outfit">
           {{ t("didPanel.title", "NeoDID / Web3Auth") }}
         </h2>
       </div>
       <svg
         aria-hidden="true"
-        class="w-4 h-4 text-aa-muted transform transition-transform duration-200"
+        class="w-4 h-4 text-sa-muted transform transition-transform duration-200"
         :class="expanded ? 'rotate-180' : ''"
         fill="none"
         stroke="currentColor"
@@ -39,15 +39,15 @@
       v-show="expanded"
       class="p-6 md:p-8 animate-fade-in space-y-6"
     >
-      <div class="rounded-xl border border-aa-info/20 bg-aa-info/5 p-5">
+      <div class="rounded-xl border border-sa-info/20 bg-sa-info/5 p-5">
         <div
           class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between"
         >
           <div>
-            <p class="text-xs uppercase text-aa-info font-bold mb-2">
+            <p class="text-xs uppercase text-sa-info font-bold mb-2">
               {{ t("didPanel.connectTitle", "Connect Web3Auth First") }}
             </p>
-            <p class="text-sm text-aa-text leading-6">
+            <p class="text-sm text-sa-text leading-6">
               {{
                 didAvailable
                   ? t(
@@ -146,12 +146,12 @@
       />
 
       <div class="grid gap-4 xl:grid-cols-2">
-        <div class="rounded-xl border border-aa-border bg-aa-panel/40 p-4">
-          <p class="text-xs uppercase text-aa-muted font-bold mb-2">
+        <div class="rounded-xl border border-sa-border bg-sa-panel/40 p-4">
+          <p class="text-xs uppercase text-sa-muted font-bold mb-2">
             {{ t("didPanel.resolver", "Resolver") }}
           </p>
-          <p class="text-sm text-aa-text break-all">{{ resolverUrl }}</p>
-          <p class="mt-2 text-xs text-aa-muted">
+          <p class="text-sm text-sa-text break-all">{{ resolverUrl }}</p>
+          <p class="mt-2 text-xs text-sa-muted">
             {{
               t(
                 "didPanel.resolverHint",
@@ -160,11 +160,11 @@
             }}
           </p>
         </div>
-        <div class="rounded-xl border border-aa-border bg-aa-panel/40 p-4">
-          <p class="text-xs uppercase text-aa-muted font-bold mb-2">
+        <div class="rounded-xl border border-sa-border bg-sa-panel/40 p-4">
+          <p class="text-xs uppercase text-sa-muted font-bold mb-2">
             {{ t("didPanel.runtimeStatus", "Runtime Status") }}
           </p>
-          <p class="text-sm text-aa-text font-semibold break-all">
+          <p class="text-sm text-sa-text font-semibold break-all">
             {{ runtimeSummary }}
           </p>
           <div class="mt-3 flex flex-wrap gap-3">
@@ -237,7 +237,7 @@
               : t("didPanel.sendSmsNotice", "Send SMS Notice")
           }}
         </button>
-        <span class="text-xs text-aa-muted">{{
+        <span class="text-xs text-sa-muted">{{
           t(
             "didPanel.flowHint",
             "Recommended flow: Connect Web3Auth → Bind NeoDID → Start Recovery / Private Session → Finalize / Revoke.",
@@ -259,14 +259,14 @@
 
       <div class="grid gap-6 xl:grid-cols-3">
         <section
-          class="rounded-xl border border-aa-border bg-aa-panel/40 p-5 space-y-4"
+          class="rounded-xl border border-sa-border bg-sa-panel/40 p-5 space-y-4"
         >
           <div>
-            <p class="text-xs uppercase text-aa-muted font-bold">
+            <p class="text-xs uppercase text-sa-muted font-bold">
               {{ t("didPanel.stepBind", "1. Bind NeoDID") }}
               {{ bindStatusLabel }}
             </p>
-            <p class="mt-1 text-sm text-aa-text">
+            <p class="mt-1 text-sm text-sa-text">
               {{
                 t(
                   "didPanel.stepBindHint",
@@ -276,7 +276,7 @@
             </p>
           </div>
           <label for="did-panel-vault-script-hash" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.vaultScriptHash", "Vault Script Hash")
             }}</span>
             <input
@@ -287,7 +287,7 @@
             />
           </label>
           <label for="did-panel-claim-type" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.claimType", "Claim Type")
             }}</span>
             <input
@@ -297,7 +297,7 @@
             />
           </label>
           <label for="did-panel-claim-value" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.claimValue", "Claim Value")
             }}</span>
             <input
@@ -324,16 +324,16 @@
 
           <div
             v-if="zkloginVerifierParamsHex"
-            class="rounded-xl border border-aa-info/20 bg-aa-info/5 p-4 space-y-3"
+            class="rounded-xl border border-sa-info/20 bg-sa-info/5 p-4 space-y-3"
           >
             <div class="flex items-start justify-between gap-4">
               <div>
-                <p class="text-xs uppercase text-aa-info font-bold">
+                <p class="text-xs uppercase text-sa-info font-bold">
                   {{
                     t("didPanel.zkloginParamsTitle", "ZK Login Verifier Params")
                   }}
                 </p>
-                <p class="mt-1 text-xs text-aa-muted">
+                <p class="mt-1 text-xs text-sa-muted">
                   {{
                     t(
                       "didPanel.zkloginParamsHint",
@@ -393,15 +393,15 @@
               </button>
             </div>
 
-            <p class="font-mono text-xs break-all text-aa-text">
+            <p class="font-mono text-xs break-all text-sa-text">
               0x{{ zkloginVerifierParamsHex }}
             </p>
 
             <details
-              class="rounded-lg border border-aa-border bg-aa-panel/30 p-3"
+              class="rounded-lg border border-sa-border bg-sa-panel/30 p-3"
             >
               <summary
-                class="cursor-pointer text-xs font-semibold text-aa-muted hover:text-aa-text transition-colors duration-200 flex items-center gap-2"
+                class="cursor-pointer text-xs font-semibold text-sa-muted hover:text-sa-text transition-colors duration-200 flex items-center gap-2"
               >
                 <svg
                   aria-hidden="true"
@@ -424,7 +424,7 @@
               <div class="mt-3 space-y-3">
                 <div v-if="zkloginPublicKey" class="space-y-1">
                   <div class="flex items-center justify-between gap-3">
-                    <p class="text-xs uppercase text-aa-muted font-bold">
+                    <p class="text-xs uppercase text-sa-muted font-bold">
                       {{ t("didPanel.zkloginSignerKey", "Signer Public Key") }}
                     </p>
                     <button
@@ -476,14 +476,14 @@
                       </span>
                     </button>
                   </div>
-                  <p class="font-mono text-xs break-all text-aa-muted">
+                  <p class="font-mono text-xs break-all text-sa-muted">
                     0x{{ zkloginPublicKey }}
                   </p>
                 </div>
 
                 <div v-if="zkloginMasterNullifier" class="space-y-1">
                   <div class="flex items-center justify-between gap-3">
-                    <p class="text-xs uppercase text-aa-muted font-bold">
+                    <p class="text-xs uppercase text-sa-muted font-bold">
                       {{
                         t("didPanel.zkloginMasterNullifier", "Master Nullifier")
                       }}
@@ -537,7 +537,7 @@
                       </span>
                     </button>
                   </div>
-                  <p class="font-mono text-xs break-all text-aa-muted">
+                  <p class="font-mono text-xs break-all text-sa-muted">
                     0x{{ zkloginMasterNullifier }}
                   </p>
                 </div>
@@ -547,14 +547,14 @@
         </section>
 
         <section
-          class="rounded-xl border border-aa-border bg-aa-panel/40 p-5 space-y-4"
+          class="rounded-xl border border-sa-border bg-sa-panel/40 p-5 space-y-4"
         >
           <div>
-            <p class="text-xs uppercase text-aa-muted font-bold">
+            <p class="text-xs uppercase text-sa-muted font-bold">
               {{ t("didPanel.stepRecovery", "2. Social Recovery") }}
               {{ recoveryStatusLabel }}
             </p>
-            <p class="mt-1 text-sm text-aa-text">
+            <p class="mt-1 text-sm text-sa-text">
               {{
                 t(
                   "didPanel.stepRecoveryHint",
@@ -564,7 +564,7 @@
             </p>
           </div>
           <label for="did-panel-recovery-verifier-hash" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.recoveryVerifierHash", "Recovery Verifier Hash")
             }}</span>
             <input
@@ -575,7 +575,7 @@
             />
           </label>
           <label for="did-panel-recovery-new-owner" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.newOwnerAddress", "New Owner Address / Script Hash")
             }}</span>
             <input
@@ -588,7 +588,7 @@
             />
           </label>
           <label for="did-panel-recovery-expiry" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.expiryMinutes", "Expiry (minutes)")
             }}</span>
             <input
@@ -637,14 +637,14 @@
         </section>
 
         <section
-          class="rounded-xl border border-aa-border bg-aa-panel/40 p-5 space-y-4"
+          class="rounded-xl border border-sa-border bg-sa-panel/40 p-5 space-y-4"
         >
           <div>
-            <p class="text-xs uppercase text-aa-muted font-bold">
+            <p class="text-xs uppercase text-sa-muted font-bold">
               {{ t("didPanel.stepPrivateActions", "3. Private Actions") }}
               {{ sessionStatusLabel }}
             </p>
-            <p class="mt-1 text-sm text-aa-text">
+            <p class="mt-1 text-sm text-sa-text">
               {{
                 t(
                   "didPanel.stepPrivateActionsHint",
@@ -654,7 +654,7 @@
             </p>
           </div>
           <label for="did-panel-proxy-verifier-hash" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.proxyVerifierHash", "Proxy Verifier Hash")
             }}</span>
             <input
@@ -664,7 +664,7 @@
               :placeholder="t('operations.hexPlaceholder', '0x...')"
             />
           </label>
-          <div class="rounded-xl border border-aa-border p-3 space-y-2">
+          <div class="rounded-xl border border-sa-border p-3 space-y-2">
             <p class="text-sm">Action identities require a separate owner-wallet enrollment. Recovery factors do not grant session access.</p>
             <label for="did-panel-action-identity" class="block text-sm">Action master nullifier (32 bytes)</label>
             <input id="did-panel-action-identity" v-model="actionMasterNullifier" class="input-field" :placeholder="zkloginMasterNullifier || '0x...'" />
@@ -679,7 +679,7 @@
             </div>
           </div>
           <label for="did-panel-proxy-executor" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.executorAddress", "Executor Address / Script Hash")
             }}</span>
             <input
@@ -692,7 +692,7 @@
             />
           </label>
           <label for="did-panel-proxy-expiry" class="block text-sm">
-            <span class="text-aa-muted">{{
+            <span class="text-sa-muted">{{
               t("didPanel.expiryMinutes", "Expiry (minutes)")
             }}</span>
             <input
@@ -740,10 +740,10 @@
 
       <div
         v-if="resultJson"
-        class="rounded-xl border border-aa-border bg-aa-dark/70 p-4"
+        class="rounded-xl border border-sa-border bg-sa-dark/70 p-4"
       >
         <div class="flex items-center justify-between mb-2">
-          <p class="text-xs uppercase text-aa-muted font-bold">
+          <p class="text-xs uppercase text-sa-muted font-bold">
             {{ t("didPanel.latestResult", "Latest Result") }}
           </p>
           <button
@@ -790,7 +790,7 @@
             </span>
           </button>
         </div>
-        <pre class="text-xs text-aa-text whitespace-pre-wrap break-all">{{
+        <pre class="text-xs text-sa-text whitespace-pre-wrap break-all">{{
           resultJson
         }}</pre>
       </div>
@@ -822,7 +822,7 @@ import DidPendingStateCards from "./DidIdentityPanel/DidPendingStateCards.vue";
 import DidMaintenanceList from "./DidIdentityPanel/DidMaintenanceList.vue";
 
 const props = defineProps({
-  aaContractHash: {
+  saContractHash: {
     type: String,
     default: "",
   },
@@ -1097,7 +1097,7 @@ async function refreshAccountContext() {
   try {
     const identity = await fetchAccountIdentity({
       rpcUrl: RUNTIME_CONFIG.rpcUrl,
-      aaContractHash: props.aaContractHash || getSmartAccountHash(),
+      saContractHash: props.saContractHash || getSmartAccountHash(),
       accountIdHex: props.accountIdPrefill,
       accountAddressScriptHash: props.accountAddressScriptHash,
     });
@@ -1117,7 +1117,7 @@ async function refreshAccountContext() {
 }
 
 watch(
-  () => [props.accountAddressScriptHash, props.accountIdPrefill, props.aaContractHash, RUNTIME_CONFIG.rpcUrl],
+  () => [props.accountAddressScriptHash, props.accountIdPrefill, props.saContractHash, RUNTIME_CONFIG.rpcUrl],
   () => { void refreshAccountContext(); },
   { immediate: true },
 );
@@ -1155,7 +1155,7 @@ function getVerifierContext(verifier) {
   const contextHash = (value) => hasNonZeroHash160(value) ? normalizeHashOrAddress(value) : "";
   return {
     rpcUrl: RUNTIME_CONFIG.rpcUrl,
-    aaContractHash: contextHash(props.aaContractHash || getAbstractAccountHash()),
+    saContractHash: contextHash(props.saContractHash || getSmartAccountHash()),
     accountIdHex: contextHash(resolvedAccountId.value),
     verifierHash: contextHash(verifier),
   };
@@ -1164,7 +1164,7 @@ function getVerifierContext(verifier) {
 function sameVerifierContext(left, right) {
   return Boolean(left && right &&
     left.rpcUrl === right.rpcUrl &&
-    left.aaContractHash === right.aaContractHash &&
+    left.saContractHash === right.saContractHash &&
     left.accountIdHex === right.accountIdHex &&
     left.verifierHash === right.verifierHash);
 }
@@ -1186,12 +1186,12 @@ async function refreshVerifierState(context) {
   verifierState.value = null;
   verifierStateContext.value = null;
   maintenanceState.value = null;
-  if (!context.accountIdHex || !context.aaContractHash) return false;
+  if (!context.accountIdHex || !context.saContractHash) return false;
   try {
     const [maintenance, state] = await Promise.all([
       fetchAccountMaintenanceState({
         rpcUrl: context.rpcUrl,
-        aaContractHash: context.aaContractHash,
+        saContractHash: context.saContractHash,
         accountIdHex: context.accountIdHex,
       }),
       context.verifierHash ? fetchUnifiedVerifierState({
@@ -1219,7 +1219,7 @@ async function refreshProxyVerifierState(context) {
   const requestId = ++proxyVerifierStateRequestId;
   proxyVerifierState.value = null;
   proxyVerifierStateContext.value = null;
-  if (!context.accountIdHex || !context.aaContractHash || !context.verifierHash) return false;
+  if (!context.accountIdHex || !context.saContractHash || !context.verifierHash) return false;
   try {
     const state = await fetchUnifiedVerifierState({
       rpcUrl: context.rpcUrl,
@@ -1280,9 +1280,9 @@ function hasVerifierPreviewContext(state, context, verifier) {
     state &&
     sameVerifierContext(context, expected) &&
     hasNonZeroHash160(state.verifierHash) &&
-    hasNonZeroHash160(state.aaContract) &&
+    hasNonZeroHash160(state.saContract) &&
     normalizeHashOrAddress(state.verifierHash) === expected.verifierHash &&
-    normalizeHashOrAddress(state.aaContract) === expected.aaContractHash &&
+    normalizeHashOrAddress(state.saContract) === expected.saContractHash &&
     hasRequiredText(state.network) &&
     hasRequiredText(state.accountIdText) &&
     hasNonZeroHash160(state.accountAddress) &&
@@ -1405,7 +1405,7 @@ async function bindDidAction() {
       claimType: claimType.value,
       claimValue: claimValue.value,
       metadata: {
-        aa_contract: props.aaContractHash || getSmartAccountHash(),
+        sa_contract: props.saContractHash || getSmartAccountHash(),
         account_address: props.accountAddressScriptHash || undefined,
         account_id: resolvedAccountId.value || undefined,
       },
@@ -1457,7 +1457,7 @@ async function previewRecoveryAction() {
   try {
     const response = await morpheusDidService.previewRecoveryTicket({
       network: verifierState.value?.network,
-      aaContract: verifierState.value?.aaContract,
+      saContract: verifierState.value?.saContract,
       verifierContract: recoveryVerifierHash.value,
       accountId: resolvedAccountId.value,
       accountIdText: verifierState.value?.accountIdText,
@@ -1509,7 +1509,7 @@ async function previewProxyAction() {
   try {
     const response = await morpheusDidService.previewActionTicket({
       network: proxyVerifierState.value?.network,
-      aaContract: proxyVerifierState.value?.aaContract,
+      saContract: proxyVerifierState.value?.saContract,
       verifierContract: effectiveProxyVerifierHash.value,
       accountId: resolvedAccountId.value,
       accountIdText: proxyVerifierState.value?.accountIdText,
@@ -1680,7 +1680,7 @@ async function sendEmailNoticeAction() {
       did: didProfile.value?.did,
       email: didProfile.value?.email,
       payload: {
-        aa_contract: props.aaContractHash || getSmartAccountHash(),
+        sa_contract: props.saContractHash || getSmartAccountHash(),
         account_id: resolvedAccountId.value || "",
         verifier:
           recoveryVerifierHash.value || effectiveProxyVerifierHash.value || "",
@@ -1706,7 +1706,7 @@ async function sendSmsNoticeAction() {
       did: didProfile.value?.did,
       phone: didProfile.value?.phone,
       payload: {
-        aa_contract: props.aaContractHash || getSmartAccountHash(),
+        sa_contract: props.saContractHash || getSmartAccountHash(),
         account_id: resolvedAccountId.value || "",
         verifier:
           recoveryVerifierHash.value || effectiveProxyVerifierHash.value || "",

@@ -1,5 +1,5 @@
 // CU-06 route tests: the real api/relay-transaction.js handler against a loopback JSON-RPC node that answers
-// with the results recorded on the deployed AA core (AA-09 cases 1, 7, 8, 9; aa-chain-records-20261005.json).
+// with the results recorded on the deployed SA core (AA-09 cases 1, 7, 8, 9; sa-chain-records-20261005.json).
 //
 // Recorded fault (AA-09 case 8 and 9): a session-signed GAS transfer out of the account's proxy address, with the
 // relay as the only signer, simulates as ok:true, HALT, stack [false]; the route then broadcast it (system fee
@@ -21,7 +21,7 @@ import {
   gasTransferArgs,
   relayRoute,
   userOpParam,
-} from './fixtures/aaChainFixtures.js';
+} from './fixtures/saChainFixtures.js';
 import { RELAY_WIF, haltResult, post, relayAccount, startNode, withRelay } from './fixtures/relayHarness.js';
 
 const case7 = relayRoute.case7BroadcastGaslessOp;
@@ -228,11 +228,11 @@ test('CU-06: the result is checked again on the simulation that prices the trans
 test('CU-06 acceptance: the route still refuses without an opt-in (case 3) and without a fee ceiling (case 4)', async () => {
   const node = await startNode({ invokeScript: () => haltResult('2000', boolItem(true)) });
   try {
-    const noOptIn = await withRelay(node, { AA_RELAY_ALLOW_UNSPONSORED: null, AA_RELAY_MAX_SYSTEM_FEE: '2000000000' }, () => post({ metaInvocation: transferInvocation({ target: MOCK_TARGET_HASH }) }));
+    const noOptIn = await withRelay(node, { SA_RELAY_ALLOW_UNSPONSORED: null, SA_RELAY_MAX_SYSTEM_FEE: '2000000000' }, () => post({ metaInvocation: transferInvocation({ target: MOCK_TARGET_HASH }) }));
     assert.equal(noOptIn.status, 402);
     assert.equal(noOptIn.body.error, 'paymaster_denied');
 
-    const noCeiling = await withRelay(node, { AA_RELAY_MAX_SYSTEM_FEE: null, AA_RELAY_MAX_NETWORK_FEE: null }, () => post({ metaInvocation: transferInvocation({ target: MOCK_TARGET_HASH }) }));
+    const noCeiling = await withRelay(node, { SA_RELAY_MAX_SYSTEM_FEE: null, SA_RELAY_MAX_NETWORK_FEE: null }, () => post({ metaInvocation: transferInvocation({ target: MOCK_TARGET_HASH }) }));
     assert.equal(noCeiling.status, 400);
     assert.equal(noCeiling.body.error, 'relay_fee_ceiling_not_configured');
 

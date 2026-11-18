@@ -20,8 +20,8 @@ FILTER="FullyQualifiedName~SourceInvariant_"
 # failure and read as an invariant counterexample, so fail fast here instead.
 CONTRACTS_BIN="$(cd "$(dirname "$0")/.." && pwd)/contracts/bin/v3"
 REQUIRED_ARTIFACTS=(
-  "SmartAccountV3.nef"
-  "SmartAccountV3.manifest.json"
+  "SmartAccount.nef"
+  "SmartAccount.manifest.json"
   "MockTransferTarget.nef"
   "MockTransferTarget.manifest.json"
 )
@@ -33,7 +33,7 @@ for artifact in "${REQUIRED_ARTIFACTS[@]}"; do
   fi
 done
 if [[ "$MISSING" -ne 0 ]]; then
-  echo "environment not ready: the SourceInvariant suite deploys SmartAccountV3 and" >&2
+  echo "environment not ready: the SourceInvariant suite deploys SmartAccount and" >&2
   echo "environment not ready: MockTransferTarget from contracts/bin/v3 before it can run." >&2
   echo "environment not ready: build the artifacts with:" >&2
   echo "environment not ready:   dotnet build contracts/SmartAccount.csproj -c Release -nologo" >&2

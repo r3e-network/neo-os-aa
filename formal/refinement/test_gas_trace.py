@@ -145,7 +145,7 @@ class ArchivedReceiptStalenessTests(unittest.TestCase):
                                  gas_trace.extract_fees(gas_trace.pinned_sources()))
         with tempfile.TemporaryDirectory() as directory:
             for shape, receipt in pre_rename_receipts().items():
-                (Path(directory) / ('aa-gas-runtime-helper-' + shape + '.json')
+                (Path(directory) / ('sa-gas-runtime-helper-' + shape + '.json')
                  ).write_text(json.dumps(receipt))
             with self.assertRaises(ValueError) as caught:
                 gas_trace.crosscheck_runtime(model, directory)
@@ -184,7 +184,7 @@ class LiveReceiptArchiveTests(unittest.TestCase):
                                  gas_trace.extract_fees(gas_trace.pinned_sources()))
         with tempfile.TemporaryDirectory() as directory:
             for shape, receipt in live_receipts().items():
-                (Path(directory) / ('aa-gas-runtime-helper-' + shape + '.json')
+                (Path(directory) / ('sa-gas-runtime-helper-' + shape + '.json')
                  ).write_text(json.dumps(receipt))
             joins = gas_trace.crosscheck_runtime(model, directory)
         self.assertEqual(5, len(joins))
@@ -207,7 +207,7 @@ class RuntimeReceiptTests(unittest.TestCase):
     def check(self, receipts):
         with tempfile.TemporaryDirectory() as directory:
             for shape, receipt in receipts.items():
-                (Path(directory) / ('aa-gas-runtime-helper-' + shape + '.json')).write_text(json.dumps(receipt))
+                (Path(directory) / ('sa-gas-runtime-helper-' + shape + '.json')).write_text(json.dumps(receipt))
             return gas_trace.crosscheck_runtime(self.model, directory)
 
     def reject_change(self, change, shape='same'):

@@ -13,7 +13,7 @@ import socket
 import tempfile
 import time
 
-from neoexpress_validate import Chain, RawKey, P256Key, ValidationFailure, H, B, I, S, A, ZERO, decode, hash_le, serialize_unsigned, serialize_witnesses, aa_proxy_rules
+from neoexpress_validate import Chain, RawKey, P256Key, ValidationFailure, H, B, I, S, A, ZERO, decode, hash_le, serialize_unsigned, serialize_witnesses, sa_proxy_rules
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
 from neoexpress_native_service_validate import (CORE, DIGEST, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
     check_native, persist, execution_arguments, transaction_system_fee)
@@ -149,7 +149,7 @@ class CompositeTransactions:
         before = self.state(self.account); other = self.state(self.other)
         recipient = self.value(GAS_TOKEN, 'balanceOf', [H(self.recipient)])
         rows = signers(keys, self.modules[NAMES[0]], scoped)
-        if proxy: rows.append({'account': proxy_address(self.account), 'scopes': 'WitnessRules', 'rules': aa_proxy_rules(CORE, GAS_TOKEN)})
+        if proxy: rows.append({'account': proxy_address(self.account), 'scopes': 'WitnessRules', 'rules': sa_proxy_rules(CORE, GAS_TOKEN)})
         if target == CORE and method in ('executeUserOp', 'executeUserOps'):
             require(len(args) == 2, 'Fresh execution requires account and payload')
             args = execution_arguments(self.account, args[1], before['account'])

@@ -64,7 +64,7 @@ test(
       });
       await page.addInitScript(
         ({ address, hash }) => {
-          localStorage.setItem("aa_locale", "en");
+          localStorage.setItem("sa_locale", "en");
           window.neo3Dapi = {
             getAccount: async () => ({ address, hash }),
             getNetwork: async () => ({ magic: 123 }),
@@ -482,7 +482,7 @@ test(
         return { txid: "aa".repeat(32) };
       });
       await page.addInitScript(({ address, hash }) => {
-        localStorage.setItem("aa_locale", "en");
+        localStorage.setItem("sa_locale", "en");
         window.__nativeWalletAccount = { address, hash };
         window.neo3Dapi = {
           getAccount: async () => window.__nativeWalletAccount,
@@ -675,7 +675,7 @@ test("signed artifact import verifies public signatures, fresh preflight, exact 
   try {
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
-    await page.addInitScript(() => localStorage.setItem("aa_locale", "en"));
+    await page.addInitScript(() => localStorage.setItem("sa_locale", "en"));
     await page.route("https://native.fixture.test/rpc", async (route) => {
       const { id, method, params } = route.request().postDataJSON();
       if (historical) historicalRpc.push({ method, params });

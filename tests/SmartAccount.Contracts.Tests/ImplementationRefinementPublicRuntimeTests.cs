@@ -76,7 +76,7 @@ public class ImplementationRefinementPublicRuntimeTests
             Assert.AreEqual(v.Canonical, Hex(actual), v.Name);
             receipt.Add(new { name = v.Name, input = v.Input, canonical = Hex(actual) });
         }
-        File.WriteAllText(Path.Combine(Path.GetTempPath(), "aa-public-native-codec-vectors.json"),
+        File.WriteAllText(Path.Combine(Path.GetTempPath(), "sa-public-native-codec-vectors.json"),
             System.Text.Json.JsonSerializer.Serialize(new { runtime = Identity(), vectors = receipt }, new JsonSerializerOptions { WriteIndented = true }));
     }
 
@@ -336,15 +336,15 @@ public class ImplementationRefinementPublicRuntimeTests
         public UInt160 Account { get; }
         public Harness()
         {
-            VerifyArtifact("SmartAccountV3", "9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76",
+            VerifyArtifact("SmartAccount", "9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76",
                 "a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31");
-            VerifyArtifact("AAPaymaster", "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1",
+            VerifyArtifact("SAPaymaster", "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1",
                 "a066faf3ee31e9c1e716bf26f0ccfab74f1c9639adacb1adab0502b20918ca54");
             VerifyArtifact("MockTransferTarget", "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
                 "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c");
-            core = fx.Deploy("SmartAccountV3");
+            core = fx.Deploy("SmartAccount");
             target = fx.Deploy("MockTransferTarget");
-            paymaster = fx.Deploy("AAPaymaster", core.ToArray());
+            paymaster = fx.Deploy("SAPaymaster", core.ToArray());
             ContractState state = NativeContract.ContractManagement.GetContract(fx.Engine.Storage.Snapshot, core)!;
             budget = new StorageKey { Id = state.Id, Key = new byte[] { 0x21 } };
             Account = Register(2_592_000);
@@ -464,7 +464,7 @@ public class ImplementationRefinementPublicRuntimeTests
             RunResult result = new(fault, app.FaultException?.Message, hash,
                 fx.Engine.Storage.Snapshot.TryGet(budget)?.Value.ToArray(), pending.TryGet(budget)?.Value.ToArray(),
                 observer.Observations, app.Notifications.ToArray());
-            File.WriteAllText(Path.Combine(Path.GetTempPath(), "aa-public-run-" + Hex(hash) + "-" + flags + "-" + gas + ".json"),
+            File.WriteAllText(Path.Combine(Path.GetTempPath(), "sa-public-run-" + Hex(hash) + "-" + flags + "-" + gas + ".json"),
                 System.Text.Json.JsonSerializer.Serialize(new
                 {
                     runtime = Identity(),

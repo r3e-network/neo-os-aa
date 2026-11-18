@@ -4,9 +4,10 @@ import { RUNTIME_CONFIG } from '../config/runtimeConfig.js';
 import { EC, isConnectRefusal } from '../config/errorCodes.js';
 import { getScriptHashFromAddress } from '../utils/neo.js';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout.js';
+import { resolveSameOriginApiEndpoint } from '../utils/sameOriginEndpoint.js';
 
 export function getSmartAccountHash() {
-  return RUNTIME_CONFIG.abstractAccountHash;
+  return RUNTIME_CONFIG.smartAccountHash;
 }
 
 const MAINNET_MAGIC = 860833102;
@@ -21,8 +22,8 @@ export const SESSION_STATES = {
 // Single persistence key for the wallet session. The value is a JSON envelope
 // ({ address, hash, provider }) so account metadata survives reloads; legacy
 // plain-address strings written by earlier versions are still accepted.
-export const SESSION_STORAGE_KEY = 'aa_connected_account';
-const LEGACY_SESSION_FLAG_KEY = 'aa_wallet_connected';
+export const SESSION_STORAGE_KEY = 'sa_connected_account';
+const LEGACY_SESSION_FLAG_KEY = 'sa_wallet_connected';
 
 const ACCOUNT_CHANGED_EVENTS = [
   'NEOLine.NEO.EVENT.ACCOUNT_CHANGED',
@@ -699,10 +700,10 @@ class WalletService {
       }
     }
 
-    if (window.aaWallet?.invoke) {
+    if (window.saWallet?.invoke) {
       return {
-        name: 'aaWallet',
-        invoke: (params) => window.aaWallet.invoke(params),
+        name: 'saWallet',
+        invoke: (params) => window.saWallet.invoke(params),
       };
     }
 
@@ -783,6 +784,14 @@ class WalletService {
 
   async relayTransaction(request = {}) {
     const { relayEndpoint, ...requestBody } = request || {};
+    // F-15 (re-verified from code): the relay broadcast POSTs a fully-signed
+    // transaction, so the endpoint must be provably same-origin. Previously any
+    // absolute URL supplied in the request was fetched, letting a misconfigured
+    // or attacker-influenced endpoint exfiltrate the signed transaction.
+    // Fail closed before any fetch.
+    if (!resolveSameOriginApiEndpoint(relayEndpoint).ok) {
+      throw new Error(EC.credentialEndpointNotSameOrigin);
+    }
     const response = await fetchWithTimeout(relayEndpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

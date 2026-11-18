@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative min-h-screen bg-aa-dark overflow-hidden font-sans text-aa-text"
+    class="relative min-h-screen bg-sa-dark overflow-hidden font-sans text-sa-text"
   >
     <div
       class="absolute inset-0 z-0 pointer-events-none bg-[linear-gradient(rgba(123,97,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(123,97,255,0.035)_1px,transparent_1px)] bg-[size:48px_48px]"
@@ -10,10 +10,10 @@
     >
       <div class="glass-panel p-6 sm:p-10 relative">
         <template v-if="draftId">
-          <h1 class="text-2xl font-bold text-aa-text mb-2">
+          <h1 class="text-2xl font-bold text-sa-text mb-2">
             {{ t("sharedDraft.title", "Shared Transaction Draft") }}
           </h1>
-          <p class="text-sm text-aa-muted mb-8 max-w-2xl">
+          <p class="text-sm text-sa-muted mb-8 max-w-2xl">
             {{
               t(
                 "sharedDraft.subtitle",
@@ -113,11 +113,11 @@
                 markCopied('operatorUrl');
               "
             />
-            <div class="rounded-lg border border-aa-border bg-aa-dark p-4">
-              <p class="text-xs font-semibold text-aa-muted uppercase mb-1">
+            <div class="rounded-lg border border-sa-border bg-sa-dark p-4">
+              <p class="text-xs font-semibold text-sa-muted uppercase mb-1">
                 {{ t("sharedDraft.statusLabel", "Status") }}
               </p>
-              <div class="text-sm font-medium text-aa-text">
+              <div class="text-sm font-medium text-sa-text">
                 {{ draft?.status || t("sharedDraft.loadingStatus", "loading") }}
               </div>
             </div>
@@ -142,7 +142,7 @@
           <div
             v-else-if="loadError"
             role="alert"
-            class="flex items-center gap-3 text-sm text-aa-error font-medium"
+            class="flex items-center gap-3 text-sm text-sa-error font-medium"
           >
             <span>{{ loadError }}</span>
             <button
@@ -170,10 +170,10 @@
             <div class="grid gap-6 lg:grid-cols-2">
               <section class="glass-panel p-5">
                 <div class="mb-4">
-                  <h2 class="text-base font-bold font-outfit text-aa-text">
+                  <h2 class="text-base font-bold font-outfit text-sa-text">
                     {{ t("sharedDraft.signatureActions", "Signature Actions") }}
                   </h2>
-                  <p class="text-sm text-aa-muted">
+                  <p class="text-sm text-sa-muted">
                     {{
                       t(
                         "sharedDraft.signatureActionsDesc",
@@ -257,7 +257,7 @@
                 </div>
                 <div class="grid gap-4 md:grid-cols-3">
                   <label class="space-y-1 text-sm" for="shared-draft-signer-id">
-                    <span class="font-medium text-aa-text">{{
+                    <span class="font-medium text-sa-text">{{
                       t("sharedDraft.signerIdLabel", "Signer ID")
                     }}</span>
                     <input
@@ -270,7 +270,7 @@
                     class="space-y-1 text-sm"
                     for="shared-draft-signer-kind"
                   >
-                    <span class="font-medium text-aa-text">{{
+                    <span class="font-medium text-sa-text">{{
                       t("sharedDraft.signerKindLabel", "Signer Kind")
                     }}</span>
                     <select
@@ -290,7 +290,7 @@
                     class="space-y-1 text-sm"
                     for="shared-draft-signature-hex"
                   >
-                    <span class="font-medium text-aa-text">{{
+                    <span class="font-medium text-sa-text">{{
                       t("sharedDraft.signatureHexLabel", "Signature Hex")
                     }}</span>
                     <input
@@ -323,7 +323,7 @@
                     {{ t("operations.connectEvmWallet", "Connect EVM Wallet") }}
                   </button>
                 </div>
-                <p class="mt-4 text-xs text-aa-muted">
+                <p class="mt-4 text-xs text-sa-muted">
                   {{
                     t(
                       "sharedDraft.manualSignatureHint",
@@ -335,10 +335,10 @@
 
               <section class="glass-panel p-5">
                 <div class="mb-4">
-                  <h2 class="text-base font-bold font-outfit text-aa-text">
+                  <h2 class="text-base font-bold font-outfit text-sa-text">
                     {{ t("sharedDraft.broadcastRelay", "Broadcast & Relay") }}
                   </h2>
-                  <p class="text-sm text-aa-muted">
+                  <p class="text-sm text-sa-muted">
                     {{
                       t(
                         "sharedDraft.broadcastRelayDesc",
@@ -349,12 +349,12 @@
                 </div>
                 <div class="grid gap-3 sm:grid-cols-2">
                   <div
-                    class="rounded-lg border border-aa-border/40 bg-aa-dark/40 p-4"
+                    class="rounded-lg border border-sa-border/40 bg-sa-dark/40 p-4"
                   >
-                    <p class="text-xs font-semibold uppercase text-aa-muted">
+                    <p class="text-xs font-semibold uppercase text-sa-muted">
                       {{ t("sharedDraft.clientBroadcast", "Client Broadcast") }}
                     </p>
-                    <div class="mt-1 text-sm font-medium text-aa-text">
+                    <div class="mt-1 text-sm font-medium text-sa-text">
                       {{
                         clientBroadcastReady
                           ? t(
@@ -367,7 +367,7 @@
                             )
                       }}
                     </div>
-                    <p class="mt-1 text-xs text-aa-muted">
+                    <p class="mt-1 text-xs text-sa-muted">
                       {{
                         walletConnection.isConnected.value
                           ? t(
@@ -382,15 +382,15 @@
                     </p>
                   </div>
                   <div
-                    class="rounded-lg border border-aa-border/40 bg-aa-dark/40 p-4"
+                    class="rounded-lg border border-sa-border/40 bg-sa-dark/40 p-4"
                   >
-                    <p class="text-xs font-semibold uppercase text-aa-muted">
+                    <p class="text-xs font-semibold uppercase text-sa-muted">
                       {{ t("sharedDraft.relaySubmission", "Relay Submission") }}
                     </p>
-                    <div class="mt-1 text-sm font-medium text-aa-text">
+                    <div class="mt-1 text-sm font-medium text-sa-text">
                       {{ relayReadiness.label }}
                     </div>
-                    <p class="mt-1 text-xs text-aa-muted">
+                    <p class="mt-1 text-xs text-sa-muted">
                       {{ relayReadiness.detail }}
                     </p>
                   </div>
@@ -495,14 +495,14 @@
                     </option>
                   </select>
                 </div>
-                <p class="mt-4 text-xs text-aa-muted">
+                <p class="mt-4 text-xs text-sa-muted">
                   {{
                     t(
                       "sharedDraft.selectedRelayPayload",
                       "Selected relay payload:",
                     )
                   }}
-                  <span class="font-semibold text-aa-text">{{
+                  <span class="font-semibold text-sa-text">{{
                     selectedRelayPayloadLabel
                   }}</span>
                 </p>
@@ -535,7 +535,7 @@
             />
 
             <section class="glass-panel p-5">
-              <h2 class="text-base font-bold font-outfit text-aa-text mb-3">
+              <h2 class="text-base font-bold font-outfit text-sa-text mb-3">
                 {{ t("sharedDraft.recentActivityTitle", "Recent Activity") }}
               </h2>
               <ActivityTimeline
@@ -552,7 +552,7 @@
             v-if="statusMessage"
             role="status"
             aria-live="polite"
-            class="mt-6 rounded-lg border border-aa-border bg-aa-panel px-4 py-3 text-sm text-aa-text font-medium"
+            class="mt-6 rounded-lg border border-sa-border bg-sa-panel px-4 py-3 text-sm text-sa-text font-medium"
           >
             {{ statusMessage }}
           </p>
@@ -1044,7 +1044,7 @@ async function signWithEvmWallet() {
 
     const { signatureRecord } = await signUserOpWithEvm({
       rpcUrl: walletService.rpcUrl,
-      aaContractHash: getSmartAccountHash(),
+      saContractHash: getSmartAccountHash(),
       accountIdHash: draft.value.account?.accountIdHash,
       operationBody: draft.value.operation_body,
       signerId: evmAddress.value,

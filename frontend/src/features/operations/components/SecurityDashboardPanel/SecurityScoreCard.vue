@@ -1,10 +1,10 @@
 <template>
   <div
-    class="mb-6 rounded-lg border border-aa-border bg-gradient-to-br from-aa-panel/80 to-aa-dark/60 p-5"
+    class="mb-6 rounded-lg border border-sa-border bg-gradient-to-br from-sa-panel/80 to-sa-dark/60 p-5"
   >
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1">
-        <p class="text-xs font-bold uppercase text-aa-muted mb-2">
+        <p class="text-xs font-bold uppercase text-sa-muted mb-2">
           {{ t("security.overallScore", "Overall Security Score") }}
         </p>
         <div class="flex items-center gap-4">
@@ -17,7 +17,7 @@
                 fill="none"
                 stroke="currentColor"
                 stroke-width="3"
-                class="text-aa-border"
+                class="text-sa-border"
               />
               <circle
                 cx="18"
@@ -38,10 +38,10 @@
             </span>
           </div>
           <div class="flex-1">
-            <p class="text-sm font-semibold text-aa-text">
+            <p class="text-sm font-semibold text-sa-text">
               {{ overallSecurityLevel.description }}
             </p>
-            <p class="mt-1 text-xs text-aa-muted">
+            <p class="mt-1 text-xs text-sa-muted">
               {{ overallSecurityLevel.hint }}
             </p>
           </div>

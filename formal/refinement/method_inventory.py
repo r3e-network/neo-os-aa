@@ -3,7 +3,7 @@
 Instruction bytes and local edges come from nef_decode's independently attested
 Neo.VM table. Method/source identity comes from bound exporter debug metadata;
 its compiler correspondence is an explicit open obligation. The environment
-plan targets ordinary Neo 3.10.1, not the native AA fork. No syscall/native
+plan targets ordinary Neo 3.10.1, not the native SA fork. No syscall/native
 handler, exception, gas, storage, or whole-method theorem is proved here.
 """
 import argparse
@@ -128,7 +128,7 @@ def build_method_inventory(inventory, method_id=METHOD):
     source_methods = inventory.get("source", {}).get("methods", [])
     locations = [r.get("location") for r in source_methods if r.get("id") == "M:" + method_id]
     counts = dict(sorted(Counter(r["name"] for r in rows).items()))
-    return {"schema": "neoos-aa-complete-method-inventory/v1", "status": "STRUCTURAL_INVENTORY_ONLY",
+    return {"schema": "neoos-sa-complete-method-inventory/v1", "status": "STRUCTURAL_INVENTORY_ONLY",
             "methodId": method_id, "nefSha256": target["sha256"], "scriptSha256": target["scriptSha256"],
             "methodBytesSha256": hashlib.sha256(script[start:end]).hexdigest(), "start": start, "endExclusive": end,
             "byteCount": end - start, "instructionCount": len(rows), "distinctOpcodeCount": len(counts),

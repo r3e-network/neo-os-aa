@@ -13,6 +13,7 @@ import {
   ALLOWED_RELAY_META_OPERATIONS,
   sanitizeMetaInvocationForRelay,
 } from '../api/relayHelpers.js';
+import { buildAccountMetadataControlChallenge } from '../src/shared/accountMetadataProof.mjs';
 
 const { resolveRelayExecutionConfig } = relayModule;
 
@@ -79,15 +80,15 @@ test('relay API does not rate limit the first request for a fresh client IP', as
 
 test('relay API reports missing client identity distinctly', async () => {
   const snapshot = {
-    AA_TRUST_PROXY_HEADERS: process.env.AA_TRUST_PROXY_HEADERS,
+    SA_TRUST_PROXY_HEADERS: process.env.SA_TRUST_PROXY_HEADERS,
     TRUST_PROXY_HEADERS: process.env.TRUST_PROXY_HEADERS,
-    AA_TRUST_PROXY_HEADER: process.env.AA_TRUST_PROXY_HEADER,
+    SA_TRUST_PROXY_HEADER: process.env.SA_TRUST_PROXY_HEADER,
     TRUST_PROXY_HEADER: process.env.TRUST_PROXY_HEADER,
   };
 
-  delete process.env.AA_TRUST_PROXY_HEADERS;
+  delete process.env.SA_TRUST_PROXY_HEADERS;
   delete process.env.TRUST_PROXY_HEADERS;
-  delete process.env.AA_TRUST_PROXY_HEADER;
+  delete process.env.SA_TRUST_PROXY_HEADER;
   delete process.env.TRUST_PROXY_HEADER;
 
   try {
@@ -222,13 +223,13 @@ test('relay API fails closed and caps the system fee when no paymaster is config
   const source = fs.readFileSync(path.resolve('api/relay-transaction.js'), 'utf8');
 
   // Unsponsored opt-in gate guards the broadcast path.
-  assert.match(source, /AA_RELAY_ALLOW_UNSPONSORED/);
+  assert.match(source, /SA_RELAY_ALLOW_UNSPONSORED/);
   assert.match(source, /shouldAllowUnsponsoredRelay/);
   assert.match(source, /paymaster_not_configured/);
   // System fee cap rejects oversized simulations before signing.
-  assert.match(source, /AA_RELAY_MAX_SYSTEM_FEE/);
+  assert.match(source, /SA_RELAY_MAX_SYSTEM_FEE/);
   assert.match(source, /resolveMaxSystemFee/);
-  assert.match(source, /exceeds AA_RELAY_MAX_SYSTEM_FEE/);
+  assert.match(source, /exceeds SA_RELAY_MAX_SYSTEM_FEE/);
 });
 
 test('relay API binds paymaster requests to dapp and operation hashes', () => {
@@ -255,19 +256,19 @@ test('relay API no longer routes paymaster authorization through the retired Pha
 
 test('relay blocks unsponsored broadcasts when no paymaster is configured', async () => {
   const snapshot = {
-    AA_RELAY_RPC_URL: process.env.AA_RELAY_RPC_URL,
-    AA_RELAY_WIF: process.env.AA_RELAY_WIF,
-    AA_RELAY_ALLOWED_HASH: process.env.AA_RELAY_ALLOWED_HASH,
-    AA_RELAY_ALLOW_UNSPONSORED: process.env.AA_RELAY_ALLOW_UNSPONSORED,
+    SA_RELAY_RPC_URL: process.env.SA_RELAY_RPC_URL,
+    SA_RELAY_WIF: process.env.SA_RELAY_WIF,
+    SA_RELAY_ALLOWED_HASH: process.env.SA_RELAY_ALLOWED_HASH,
+    SA_RELAY_ALLOW_UNSPONSORED: process.env.SA_RELAY_ALLOW_UNSPONSORED,
     MORPHEUS_NETWORK: process.env.MORPHEUS_NETWORK,
     MORPHEUS_PAYMASTER_ENDPOINT: process.env.MORPHEUS_PAYMASTER_ENDPOINT,
     MORPHEUS_PAYMASTER_TESTNET_ENDPOINT: process.env.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT,
     MORPHEUS_PAYMASTER_MAINNET_ENDPOINT: process.env.MORPHEUS_PAYMASTER_MAINNET_ENDPOINT,
-    AA_PAYMASTER_ENDPOINT: process.env.AA_PAYMASTER_ENDPOINT,
+    SA_PAYMASTER_ENDPOINT: process.env.SA_PAYMASTER_ENDPOINT,
     MORPHEUS_PAYMASTER_API_TOKEN: process.env.MORPHEUS_PAYMASTER_API_TOKEN,
     MORPHEUS_PAYMASTER_TESTNET_API_TOKEN: process.env.MORPHEUS_PAYMASTER_TESTNET_API_TOKEN,
     MORPHEUS_PAYMASTER_MAINNET_API_TOKEN: process.env.MORPHEUS_PAYMASTER_MAINNET_API_TOKEN,
-    AA_PAYMASTER_API_TOKEN: process.env.AA_PAYMASTER_API_TOKEN,
+    SA_PAYMASTER_API_TOKEN: process.env.SA_PAYMASTER_API_TOKEN,
     MORPHEUS_PAYMASTER_APP_ID: process.env.MORPHEUS_PAYMASTER_APP_ID,
     MORPHEUS_TESTNET_PAYMASTER_APP_ID: process.env.MORPHEUS_TESTNET_PAYMASTER_APP_ID,
     MORPHEUS_MAINNET_PAYMASTER_APP_ID: process.env.MORPHEUS_MAINNET_PAYMASTER_APP_ID,
@@ -275,13 +276,13 @@ test('relay blocks unsponsored broadcasts when no paymaster is configured', asyn
 
   const allowedHash = `0x${'ab'.repeat(20)}`;
   for (const key of Object.keys(snapshot)) {
-    if (key.includes('PAYMASTER') || key === 'AA_RELAY_ALLOW_UNSPONSORED') {
+    if (key.includes('PAYMASTER') || key === 'SA_RELAY_ALLOW_UNSPONSORED') {
       delete process.env[key];
     }
   }
-  process.env.AA_RELAY_RPC_URL = 'https://relay-rpc.invalid';
-  process.env.AA_RELAY_WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
-  process.env.AA_RELAY_ALLOWED_HASH = allowedHash;
+  process.env.SA_RELAY_RPC_URL = 'https://relay-rpc.invalid';
+  process.env.SA_RELAY_WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
+  process.env.SA_RELAY_ALLOWED_HASH = allowedHash;
   process.env.MORPHEUS_NETWORK = 'testnet';
 
   const originalFetch = globalThis.fetch;
@@ -483,22 +484,22 @@ test('paymaster authorization rejects malformed account or target hashes', () =>
 
 function feePolicyEnvSnapshot() {
   return {
-    AA_RELAY_MAX_SYSTEM_FEE: process.env.AA_RELAY_MAX_SYSTEM_FEE,
-    AA_RELAY_MAX_NETWORK_FEE: process.env.AA_RELAY_MAX_NETWORK_FEE,
-    AA_RELAY_MAX_TOTAL_FEE: process.env.AA_RELAY_MAX_TOTAL_FEE,
+    SA_RELAY_MAX_SYSTEM_FEE: process.env.SA_RELAY_MAX_SYSTEM_FEE,
+    SA_RELAY_MAX_NETWORK_FEE: process.env.SA_RELAY_MAX_NETWORK_FEE,
+    SA_RELAY_MAX_TOTAL_FEE: process.env.SA_RELAY_MAX_TOTAL_FEE,
   };
 }
 
 function clearFeePolicyEnv() {
-  delete process.env.AA_RELAY_MAX_SYSTEM_FEE;
-  delete process.env.AA_RELAY_MAX_NETWORK_FEE;
-  delete process.env.AA_RELAY_MAX_TOTAL_FEE;
+  delete process.env.SA_RELAY_MAX_SYSTEM_FEE;
+  delete process.env.SA_RELAY_MAX_NETWORK_FEE;
+  delete process.env.SA_RELAY_MAX_TOTAL_FEE;
 }
 
 test('relay declares the network fee cap and a sponsored fee ceiling requirement', () => {
   const source = fs.readFileSync(path.resolve('api/relay-transaction.js'), 'utf8');
 
-  assert.match(source, /AA_RELAY_MAX_NETWORK_FEE/);
+  assert.match(source, /SA_RELAY_MAX_NETWORK_FEE/);
   assert.match(source, /resolveMaxNetworkFee/);
   assert.match(source, /hasConfiguredFeeCeiling/);
   assert.match(source, /relay_fee_ceiling_not_configured/);
@@ -506,11 +507,11 @@ test('relay declares the network fee cap and a sponsored fee ceiling requirement
   assert.match(source, /enforceRelayFeePolicy/);
 });
 
-test('relay blocks a sponsored op whose networkFee exceeds AA_RELAY_MAX_NETWORK_FEE before broadcast', () => {
+test('relay blocks a sponsored op whose networkFee exceeds SA_RELAY_MAX_NETWORK_FEE before broadcast', () => {
   assert.equal(typeof relayModule.enforceRelayFeePolicy, 'function');
   const snapshot = feePolicyEnvSnapshot();
   clearFeePolicyEnv();
-  process.env.AA_RELAY_MAX_NETWORK_FEE = '100000';
+  process.env.SA_RELAY_MAX_NETWORK_FEE = '100000';
   try {
     assert.throws(
       () => relayModule.enforceRelayFeePolicy({
@@ -518,7 +519,7 @@ test('relay blocks a sponsored op whose networkFee exceeds AA_RELAY_MAX_NETWORK_
         systemFee: '10',
         networkFee: '200000',
       }),
-      /networkFee 200000 exceeds AA_RELAY_MAX_NETWORK_FEE 100000/,
+      /networkFee 200000 exceeds SA_RELAY_MAX_NETWORK_FEE 100000/,
     );
   } finally {
     restoreEnv(snapshot);
@@ -528,8 +529,8 @@ test('relay blocks a sponsored op whose networkFee exceeds AA_RELAY_MAX_NETWORK_
 test('relay caps the system fee and combined total when both ceilings are configured', () => {
   const snapshot = feePolicyEnvSnapshot();
   clearFeePolicyEnv();
-  process.env.AA_RELAY_MAX_SYSTEM_FEE = '500000';
-  process.env.AA_RELAY_MAX_TOTAL_FEE = '600000';
+  process.env.SA_RELAY_MAX_SYSTEM_FEE = '500000';
+  process.env.SA_RELAY_MAX_TOTAL_FEE = '600000';
   try {
     assert.throws(
       () => relayModule.enforceRelayFeePolicy({
@@ -537,7 +538,7 @@ test('relay caps the system fee and combined total when both ceilings are config
         systemFee: '600000',
         networkFee: '1',
       }),
-      /systemFee 600000 exceeds AA_RELAY_MAX_SYSTEM_FEE 500000/,
+      /systemFee 600000 exceeds SA_RELAY_MAX_SYSTEM_FEE 500000/,
     );
     assert.throws(
       () => relayModule.enforceRelayFeePolicy({
@@ -545,7 +546,7 @@ test('relay caps the system fee and combined total when both ceilings are config
         systemFee: '400000',
         networkFee: '300000',
       }),
-      /total fee 700000 exceeds AA_RELAY_MAX_TOTAL_FEE 600000/,
+      /total fee 700000 exceeds SA_RELAY_MAX_TOTAL_FEE 600000/,
     );
   } finally {
     restoreEnv(snapshot);
@@ -611,9 +612,9 @@ test('relay allows the canonical capped path when every fee is within bounds', (
   const expected = `0x${'ab'.repeat(32)}`;
   const snapshot = feePolicyEnvSnapshot();
   clearFeePolicyEnv();
-  process.env.AA_RELAY_MAX_SYSTEM_FEE = '1000000';
-  process.env.AA_RELAY_MAX_NETWORK_FEE = '1000000';
-  process.env.AA_RELAY_MAX_TOTAL_FEE = '1500000';
+  process.env.SA_RELAY_MAX_SYSTEM_FEE = '1000000';
+  process.env.SA_RELAY_MAX_NETWORK_FEE = '1000000';
+  process.env.SA_RELAY_MAX_TOTAL_FEE = '1500000';
   try {
     const bound = relayModule.verifyPaymasterApproval(
       { approved: true, operation_hash: expected, approved_max_fee: '1500000' },
@@ -637,10 +638,10 @@ test('relay allows the canonical capped path when every fee is within bounds', (
 test('relay refuses to sponsor a broadcast when no fee ceiling is configured', async () => {
   const snapshot = {
     ...feePolicyEnvSnapshot(),
-    AA_RELAY_RPC_URL: process.env.AA_RELAY_RPC_URL,
-    AA_RELAY_WIF: process.env.AA_RELAY_WIF,
-    AA_RELAY_ALLOWED_HASH: process.env.AA_RELAY_ALLOWED_HASH,
-    AA_RELAY_ALLOW_UNSPONSORED: process.env.AA_RELAY_ALLOW_UNSPONSORED,
+    SA_RELAY_RPC_URL: process.env.SA_RELAY_RPC_URL,
+    SA_RELAY_WIF: process.env.SA_RELAY_WIF,
+    SA_RELAY_ALLOWED_HASH: process.env.SA_RELAY_ALLOWED_HASH,
+    SA_RELAY_ALLOW_UNSPONSORED: process.env.SA_RELAY_ALLOW_UNSPONSORED,
     MORPHEUS_NETWORK: process.env.MORPHEUS_NETWORK,
     MORPHEUS_PAYMASTER_ENDPOINT: process.env.MORPHEUS_PAYMASTER_ENDPOINT,
     MORPHEUS_PAYMASTER_TESTNET_ENDPOINT: process.env.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT,
@@ -648,11 +649,11 @@ test('relay refuses to sponsor a broadcast when no fee ceiling is configured', a
   };
 
   clearFeePolicyEnv();
-  delete process.env.AA_RELAY_ALLOW_UNSPONSORED;
+  delete process.env.SA_RELAY_ALLOW_UNSPONSORED;
   const allowedHash = `0x${'ab'.repeat(20)}`;
-  process.env.AA_RELAY_RPC_URL = 'https://relay-rpc.invalid';
-  process.env.AA_RELAY_WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
-  process.env.AA_RELAY_ALLOWED_HASH = allowedHash;
+  process.env.SA_RELAY_RPC_URL = 'https://relay-rpc.invalid';
+  process.env.SA_RELAY_WIF = 'KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn';
+  process.env.SA_RELAY_ALLOWED_HASH = allowedHash;
   process.env.MORPHEUS_NETWORK = 'testnet';
   // Configure a paymaster (sponsoring path) but deliberately leave every fee
   // ceiling unset so the relay must fail closed before broadcasting.
@@ -704,14 +705,14 @@ test('relay refuses to sponsor a broadcast when no fee ceiling is configured', a
 
 test('rate limiter trusts only the configured proxy header', () => {
   const snapshot = {
-    AA_TRUST_PROXY_HEADERS: process.env.AA_TRUST_PROXY_HEADERS,
+    SA_TRUST_PROXY_HEADERS: process.env.SA_TRUST_PROXY_HEADERS,
     TRUST_PROXY_HEADERS: process.env.TRUST_PROXY_HEADERS,
-    AA_TRUST_PROXY_HEADER: process.env.AA_TRUST_PROXY_HEADER,
+    SA_TRUST_PROXY_HEADER: process.env.SA_TRUST_PROXY_HEADER,
     TRUST_PROXY_HEADER: process.env.TRUST_PROXY_HEADER,
   };
 
-  process.env.AA_TRUST_PROXY_HEADERS = 'true';
-  process.env.AA_TRUST_PROXY_HEADER = 'cf-connecting-ip';
+  process.env.SA_TRUST_PROXY_HEADERS = 'true';
+  process.env.SA_TRUST_PROXY_HEADER = 'cf-connecting-ip';
   delete process.env.TRUST_PROXY_HEADERS;
   delete process.env.TRUST_PROXY_HEADER;
 
@@ -738,14 +739,14 @@ test('rate limiter trusts only the configured proxy header', () => {
 
 test('rate limiter refuses generic forwarded-for as a trusted proxy header', () => {
   const snapshot = {
-    AA_TRUST_PROXY_HEADERS: process.env.AA_TRUST_PROXY_HEADERS,
+    SA_TRUST_PROXY_HEADERS: process.env.SA_TRUST_PROXY_HEADERS,
     TRUST_PROXY_HEADERS: process.env.TRUST_PROXY_HEADERS,
-    AA_TRUST_PROXY_HEADER: process.env.AA_TRUST_PROXY_HEADER,
+    SA_TRUST_PROXY_HEADER: process.env.SA_TRUST_PROXY_HEADER,
     TRUST_PROXY_HEADER: process.env.TRUST_PROXY_HEADER,
   };
 
-  process.env.AA_TRUST_PROXY_HEADERS = 'true';
-  process.env.AA_TRUST_PROXY_HEADER = 'x-forwarded-for';
+  process.env.SA_TRUST_PROXY_HEADERS = 'true';
+  process.env.SA_TRUST_PROXY_HEADER = 'x-forwarded-for';
   delete process.env.TRUST_PROXY_HEADERS;
   delete process.env.TRUST_PROXY_HEADER;
 
@@ -767,15 +768,15 @@ test('rate limiter refuses generic forwarded-for as a trusted proxy header', () 
 
 test('rate limiter requires a socket or explicitly configured trusted proxy header', () => {
   const snapshot = {
-    AA_TRUST_PROXY_HEADERS: process.env.AA_TRUST_PROXY_HEADERS,
+    SA_TRUST_PROXY_HEADERS: process.env.SA_TRUST_PROXY_HEADERS,
     TRUST_PROXY_HEADERS: process.env.TRUST_PROXY_HEADERS,
-    AA_TRUST_PROXY_HEADER: process.env.AA_TRUST_PROXY_HEADER,
+    SA_TRUST_PROXY_HEADER: process.env.SA_TRUST_PROXY_HEADER,
     TRUST_PROXY_HEADER: process.env.TRUST_PROXY_HEADER,
   };
 
-  delete process.env.AA_TRUST_PROXY_HEADERS;
+  delete process.env.SA_TRUST_PROXY_HEADERS;
   delete process.env.TRUST_PROXY_HEADERS;
-  delete process.env.AA_TRUST_PROXY_HEADER;
+  delete process.env.SA_TRUST_PROXY_HEADER;
   delete process.env.TRUST_PROXY_HEADER;
 
   try {
@@ -814,33 +815,33 @@ test('rate limiter formats missing client identity without retry-after', () => {
 
 test('relay execution config prefers network-scoped server settings when the server network is testnet', () => {
   const snapshot = {
-    AA_RELAY_MAINNET_RPC_URL: process.env.AA_RELAY_MAINNET_RPC_URL,
-    AA_RELAY_TESTNET_RPC_URL: process.env.AA_RELAY_TESTNET_RPC_URL,
-    AA_RELAY_RPC_URL: process.env.AA_RELAY_RPC_URL,
-    AA_RELAY_MAINNET_ALLOWED_HASH: process.env.AA_RELAY_MAINNET_ALLOWED_HASH,
-    AA_RELAY_TESTNET_ALLOWED_HASH: process.env.AA_RELAY_TESTNET_ALLOWED_HASH,
-    AA_RELAY_ALLOWED_HASH: process.env.AA_RELAY_ALLOWED_HASH,
-    AA_RELAY_MAINNET_WIF: process.env.AA_RELAY_MAINNET_WIF,
-    AA_RELAY_TESTNET_WIF: process.env.AA_RELAY_TESTNET_WIF,
-    AA_RELAY_WIF: process.env.AA_RELAY_WIF,
-    AA_RELAY_MAINNET_ALLOW_RAW_FORWARD: process.env.AA_RELAY_MAINNET_ALLOW_RAW_FORWARD,
-    AA_RELAY_TESTNET_ALLOW_RAW_FORWARD: process.env.AA_RELAY_TESTNET_ALLOW_RAW_FORWARD,
-    AA_RELAY_ALLOW_RAW_FORWARD: process.env.AA_RELAY_ALLOW_RAW_FORWARD,
+    SA_RELAY_MAINNET_RPC_URL: process.env.SA_RELAY_MAINNET_RPC_URL,
+    SA_RELAY_TESTNET_RPC_URL: process.env.SA_RELAY_TESTNET_RPC_URL,
+    SA_RELAY_RPC_URL: process.env.SA_RELAY_RPC_URL,
+    SA_RELAY_MAINNET_ALLOWED_HASH: process.env.SA_RELAY_MAINNET_ALLOWED_HASH,
+    SA_RELAY_TESTNET_ALLOWED_HASH: process.env.SA_RELAY_TESTNET_ALLOWED_HASH,
+    SA_RELAY_ALLOWED_HASH: process.env.SA_RELAY_ALLOWED_HASH,
+    SA_RELAY_MAINNET_WIF: process.env.SA_RELAY_MAINNET_WIF,
+    SA_RELAY_TESTNET_WIF: process.env.SA_RELAY_TESTNET_WIF,
+    SA_RELAY_WIF: process.env.SA_RELAY_WIF,
+    SA_RELAY_MAINNET_ALLOW_RAW_FORWARD: process.env.SA_RELAY_MAINNET_ALLOW_RAW_FORWARD,
+    SA_RELAY_TESTNET_ALLOW_RAW_FORWARD: process.env.SA_RELAY_TESTNET_ALLOW_RAW_FORWARD,
+    SA_RELAY_ALLOW_RAW_FORWARD: process.env.SA_RELAY_ALLOW_RAW_FORWARD,
     MORPHEUS_NETWORK: process.env.MORPHEUS_NETWORK,
   };
 
-  process.env.AA_RELAY_MAINNET_RPC_URL = 'https://mainnet.rpc.example';
-  process.env.AA_RELAY_TESTNET_RPC_URL = 'https://testnet.rpc.example';
-  process.env.AA_RELAY_RPC_URL = 'https://global.rpc.example';
-  process.env.AA_RELAY_MAINNET_ALLOWED_HASH = `0x${'11'.repeat(20)}`;
-  process.env.AA_RELAY_TESTNET_ALLOWED_HASH = `0x${'22'.repeat(20)}`;
-  process.env.AA_RELAY_ALLOWED_HASH = `0x${'33'.repeat(20)}`;
-  process.env.AA_RELAY_MAINNET_WIF = 'mainnet-wif';
-  process.env.AA_RELAY_TESTNET_WIF = 'testnet-wif';
-  process.env.AA_RELAY_WIF = 'global-wif';
-  process.env.AA_RELAY_MAINNET_ALLOW_RAW_FORWARD = '0';
-  process.env.AA_RELAY_TESTNET_ALLOW_RAW_FORWARD = '1';
-  process.env.AA_RELAY_ALLOW_RAW_FORWARD = '0';
+  process.env.SA_RELAY_MAINNET_RPC_URL = 'https://mainnet.rpc.example';
+  process.env.SA_RELAY_TESTNET_RPC_URL = 'https://testnet.rpc.example';
+  process.env.SA_RELAY_RPC_URL = 'https://global.rpc.example';
+  process.env.SA_RELAY_MAINNET_ALLOWED_HASH = `0x${'11'.repeat(20)}`;
+  process.env.SA_RELAY_TESTNET_ALLOWED_HASH = `0x${'22'.repeat(20)}`;
+  process.env.SA_RELAY_ALLOWED_HASH = `0x${'33'.repeat(20)}`;
+  process.env.SA_RELAY_MAINNET_WIF = 'mainnet-wif';
+  process.env.SA_RELAY_TESTNET_WIF = 'testnet-wif';
+  process.env.SA_RELAY_WIF = 'global-wif';
+  process.env.SA_RELAY_MAINNET_ALLOW_RAW_FORWARD = '0';
+  process.env.SA_RELAY_TESTNET_ALLOW_RAW_FORWARD = '1';
+  process.env.SA_RELAY_ALLOW_RAW_FORWARD = '0';
   // AA-08: the request-payload network is ignored by default; the server env selects the
   // network whose scoped settings (RPC URL, WIF, allowed hash, raw-forward) must win.
   process.env.MORPHEUS_NETWORK = 'testnet';
@@ -859,7 +860,7 @@ test('relay execution config prefers network-scoped server settings when the ser
 
     assert.equal(config.network, 'testnet');
     assert.equal(config.rpcUrl, 'https://testnet.rpc.example');
-    assert.equal(config.allowedAaContractHash, '2222222222222222222222222222222222222222');
+    assert.equal(config.allowedSaContractHash, '2222222222222222222222222222222222222222');
     assert.equal(config.relayWif, 'testnet-wif');
     assert.equal(config.allowRawRelayForwarding, true);
   } finally {
@@ -873,16 +874,16 @@ test('relay execution config prefers network-scoped server settings when the ser
 test('account metadata API does not require a browser-visible API key for upserts', () => {
   const source = fs.readFileSync(path.resolve('api/account-metadata.js'), 'utf8');
 
-  assert.doesNotMatch(source, /AA_METADATA_API_KEY/);
+  assert.doesNotMatch(source, /SA_METADATA_API_KEY/);
   assert.doesNotMatch(source, /x-api-key header required/);
 });
 
 function metadataEnvSnapshot() {
   const keys = [
     'SUPABASE_URL', 'VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
-    'AA_RELAY_TESTNET_RPC_URL', 'AA_RELAY_RPC_URL', 'VITE_AA_RPC_URL', 'VITE_NEO_RPC_URL',
-    'AA_RELAY_TESTNET_ALLOWED_HASH', 'AA_RELAY_ALLOWED_HASH', 'VITE_AA_HASH_TESTNET', 'VITE_ABSTRACT_ACCOUNT_HASH_TESTNET',
-    'VITE_AA_NETWORK', 'MORPHEUS_NETWORK',
+    'SA_RELAY_TESTNET_RPC_URL', 'SA_RELAY_RPC_URL', 'VITE_SA_RPC_URL', 'VITE_NEO_RPC_URL',
+    'SA_RELAY_TESTNET_ALLOWED_HASH', 'SA_RELAY_ALLOWED_HASH', 'VITE_SA_HASH_TESTNET', 'VITE_SMART_ACCOUNT_HASH_TESTNET',
+    'VITE_SA_NETWORK', 'MORPHEUS_NETWORK',
   ];
   return Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 }
@@ -966,13 +967,14 @@ test('account metadata upsert accepts a backup-owner signed proof of control', a
   const snapshot = metadataEnvSnapshot();
   process.env.SUPABASE_URL = 'https://stub.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
-  process.env.AA_RELAY_TESTNET_RPC_URL = 'https://aa-rpc.invalid';
+  process.env.SA_RELAY_TESTNET_RPC_URL = 'https://sa-rpc.invalid';
   process.env.MORPHEUS_NETWORK = 'testnet';
 
   const owner = new neonWallet.Account();
   const ownerScriptHash = neonWallet.getScriptHashFromPublicKey(owner.publicKey).replace(/^0x/i, '').toLowerCase();
   const accountIdHash = 'ef'.repeat(20);
-  const message = `aa-metadata-control:${accountIdHash}:${Date.now()}`;
+  // F-10: the proof must sign the exact canonical challenge for this account.
+  const message = buildAccountMetadataControlChallenge(accountIdHash);
   const signature = neonWallet.sign(Buffer.from(message, 'utf8').toString('hex'), owner.privateKey);
 
   const stub = stubMetadataNetwork({ backupOwnerScriptHash: ownerScriptHash });
@@ -1008,14 +1010,14 @@ test('account metadata upsert rejects a signed proof from a non-owner key', asyn
   const snapshot = metadataEnvSnapshot();
   process.env.SUPABASE_URL = 'https://stub.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
-  process.env.AA_RELAY_TESTNET_RPC_URL = 'https://aa-rpc.invalid';
+  process.env.SA_RELAY_TESTNET_RPC_URL = 'https://sa-rpc.invalid';
   process.env.MORPHEUS_NETWORK = 'testnet';
 
   const owner = new neonWallet.Account();
   const ownerScriptHash = neonWallet.getScriptHashFromPublicKey(owner.publicKey).replace(/^0x/i, '').toLowerCase();
   const attacker = new neonWallet.Account();
   const accountIdHash = 'ef'.repeat(20);
-  const message = `aa-metadata-control:${accountIdHash}:${Date.now()}`;
+  const message = buildAccountMetadataControlChallenge(accountIdHash);
   const signature = neonWallet.sign(Buffer.from(message, 'utf8').toString('hex'), attacker.privateKey);
 
   const stub = stubMetadataNetwork({ backupOwnerScriptHash: ownerScriptHash });
@@ -1043,6 +1045,59 @@ test('account metadata upsert rejects a signed proof from a non-owner key', asyn
 
   assert.equal(response.statusCode, 403);
   assert.equal(stub.calls.upsert, 0);
+});
+
+test('F-10: a real backup-owner signature over a message that merely contains the account hash is refused', async () => {
+  // Re-verified from code: the upsert used to accept any backup-owner signature
+  // over any message CONTAINING the account hash, so a signature produced for
+  // another context (a login challenge, a payment request) could be replayed to
+  // overwrite metadata. Only the exact canonical challenge may authorize a write.
+  const snapshot = metadataEnvSnapshot();
+  process.env.SUPABASE_URL = 'https://stub.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
+  process.env.SA_RELAY_TESTNET_RPC_URL = 'https://sa-rpc.invalid';
+  process.env.MORPHEUS_NETWORK = 'testnet';
+
+  const owner = new neonWallet.Account();
+  const ownerScriptHash = neonWallet.getScriptHashFromPublicKey(owner.publicKey).replace(/^0x/i, '').toLowerCase();
+  const accountIdHash = 'ef'.repeat(20);
+
+  const stub = stubMetadataNetwork({ backupOwnerScriptHash: ownerScriptHash });
+  try {
+    // Each variant is signed by the REAL backup owner but the message is not
+    // the canonical challenge: superset text, prefixed challenge, and a login
+    // challenge from an unrelated dApp that happens to name the account.
+    const replayVariants = [
+      `Login to evil.example, account ${accountIdHash}, nonce ${Date.now()}`,
+      `prefix ${buildAccountMetadataControlChallenge(accountIdHash)} suffix`,
+      `${buildAccountMetadataControlChallenge(accountIdHash)}:${Date.now()}`,
+    ];
+    for (const message of replayVariants) {
+      const signature = neonWallet.sign(Buffer.from(message, 'utf8').toString('hex'), owner.privateKey);
+      const attempt = createResponse();
+      await accountMetadataHandler({
+        method: 'POST',
+        headers: { 'x-forwarded-for': `metadata-replay-${Date.now()}` },
+        socket: { remoteAddress: `metadata-replay-${Date.now()}` },
+        body: {
+          action: 'upsert',
+          accountIdHash,
+          description: 'replayed proof',
+          ownerProof: { publicKey: owner.publicKey, signature, message },
+        },
+      }, attempt);
+      assert.equal(attempt.statusCode, 403, `variant message must be refused: ${message}`);
+      assert.match(
+        String(attempt.payload?.error || ''),
+        /account metadata challenge/,
+        'the refusal names the canonical-challenge requirement',
+      );
+    }
+    assert.equal(stub.calls.upsert, 0, 'no replayed proof reached the table');
+  } finally {
+    stub.restore();
+    restoreEnv(snapshot);
+  }
 });
 
 test('account metadata reads remain open without a control proof', async () => {
@@ -1092,12 +1147,12 @@ test('gitignore quarantines local testnet secret artifacts', () => {
 });
 
 test('sanitizeMetaInvocationForRelay allows sponsored user operations that carry the on-chain paymaster budget', () => {
-  const aaContractHash = '0x5be915aea3ce85e4752d522632f0a9520e377aaf';
+  const saContractHash = '0x5be915aea3ce85e4752d522632f0a9520e377aaf';
   assert.ok(ALLOWED_RELAY_META_OPERATIONS.includes('executeSponsoredUserOp'));
   assert.ok(ALLOWED_RELAY_META_OPERATIONS.includes('executeSponsoredUserOps'));
 
   const sponsoredOp = {
-    scriptHash: aaContractHash,
+    scriptHash: saContractHash,
     operation: 'executeSponsoredUserOp',
     args: [
       { type: 'Hash160', value: `0x${'aa'.repeat(20)}` },
@@ -1119,7 +1174,7 @@ test('sanitizeMetaInvocationForRelay allows sponsored user operations that carry
     signers: [{ account: '0xattacker', scopes: 255 }],
   };
 
-  const sanitized = sanitizeMetaInvocationForRelay(sponsoredOp, { aaContractHash });
+  const sanitized = sanitizeMetaInvocationForRelay(sponsoredOp, { saContractHash });
   assert.ok(sanitized, 'executeSponsoredUserOp should be relayable');
   assert.equal(sanitized.operation, 'executeSponsoredUserOp');
   assert.equal(sanitized.scriptHash, '5be915aea3ce85e4752d522632f0a9520e377aaf');
@@ -1128,7 +1183,7 @@ test('sanitizeMetaInvocationForRelay allows sponsored user operations that carry
   assert.equal(sanitized.args.length, 5);
 
   const sponsoredBatch = {
-    scriptHash: aaContractHash,
+    scriptHash: saContractHash,
     operation: 'executeSponsoredUserOps',
     args: [
       { type: 'Hash160', value: `0x${'aa'.repeat(20)}` },
@@ -1138,23 +1193,23 @@ test('sanitizeMetaInvocationForRelay allows sponsored user operations that carry
       { type: 'Integer', value: '1000000' },
     ],
   };
-  const sanitizedBatch = sanitizeMetaInvocationForRelay(sponsoredBatch, { aaContractHash });
+  const sanitizedBatch = sanitizeMetaInvocationForRelay(sponsoredBatch, { saContractHash });
   assert.ok(sanitizedBatch, 'executeSponsoredUserOps should be relayable');
   assert.equal(sanitizedBatch.operation, 'executeSponsoredUserOps');
 });
 
 test('sanitizeMetaInvocationForRelay rejects operations outside the relay allowlist', () => {
-  const aaContractHash = '0x5be915aea3ce85e4752d522632f0a9520e377aaf';
+  const saContractHash = '0x5be915aea3ce85e4752d522632f0a9520e377aaf';
   // An operation that is not part of the contract surface (and therefore not in
   // the allowlist) must never be forwarded to the relay signer.
   for (const operation of ['executeArbitrary', 'drainPaymaster', 'transfer']) {
     assert.ok(!ALLOWED_RELAY_META_OPERATIONS.includes(operation));
     assert.equal(
       sanitizeMetaInvocationForRelay({
-        scriptHash: aaContractHash,
+        scriptHash: saContractHash,
         operation,
         args: [],
-      }, { aaContractHash }),
+      }, { saContractHash }),
       null,
       `${operation} must be rejected`,
     );
@@ -1166,7 +1221,7 @@ test('relay refuses an entrypoint the deployed ABI does not export before any RP
   // fix it passed the helper and the route asked a node to invoke it, so the caller saw a
   // simulation or paymaster error instead of "that operation does not exist". The refusal must now
   // happen at validation, name the operation, and touch no RPC.
-  const { CORE_HASH } = await import('./fixtures/aaChainFixtures.js');
+  const { CORE_HASH } = await import('./fixtures/saChainFixtures.js');
   const { withRelay, post, startNode } = await import('./fixtures/relayHarness.js');
 
   // Count outbound calls without breaking the ones the accepted control needs: the SDK's RPC
@@ -1194,7 +1249,7 @@ test('relay refuses an entrypoint the deployed ABI does not export before any RP
     assert.equal(refused.body.error, 'relay_meta_invocation_not_allowed');
     assert.equal(
       refused.body.reason,
-      'unsupported relay operation: executeUnified is not in the deployed Abstract Account ABI',
+      'unsupported relay operation: executeUnified is not in the deployed Smart Account ABI',
     );
     assert.equal(node.count('invokescript'), 0, 'the node was never asked to invoke a dead entrypoint');
     assert.equal(fetchAttempts, 0, 'no outbound call was attempted for a refused operation');

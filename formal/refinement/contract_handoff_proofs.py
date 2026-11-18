@@ -347,7 +347,7 @@ def run(output,report_path):
     for path,expected in inputs.items():
         require(sha(Path(path).read_bytes())==expected,'Tool/model changed during proof')
     require(source.project_captured(rows)==projection,'Source changed during proof')
-    result=dict(schema='neoos-aa-contract-handoff-proof/v1',scope=source.SCOPE,
+    result=dict(schema='neoos-sa-contract-handoff-proof/v1',scope=source.SCOPE,
         entryBoundary=source.ENTRY_BOUNDARY,kernelChecked=True,coqchkChecked=True,assumptionsClosed=True,
         productionSourceBound=True,implementationVerified=False,fullImplementationVerified=False,
         sourceFrontendVerified=False,applicationEngineVerified=False,vmCorrespondenceProven=False,
@@ -371,7 +371,7 @@ def main(argv=None):
     parser.add_argument('--output-dir',type=Path,required=True)
     parser.add_argument('--json-report',type=Path,required=True)
     args=parser.parse_args(argv)
-    failure=dict(schema='neoos-aa-contract-handoff-proof/v1',scope=source.SCOPE,status='FAIL',
+    failure=dict(schema='neoos-sa-contract-handoff-proof/v1',scope=source.SCOPE,status='FAIL',
                  kernelChecked=False,fullImplementationVerified=False)
     args.json_report.parent.mkdir(parents=True,exist_ok=True)
     args.json_report.write_text(json.dumps(failure)+'\n')

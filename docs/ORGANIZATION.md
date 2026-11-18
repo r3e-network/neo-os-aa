@@ -1,19 +1,20 @@
 # Repository Organization
 
-Updated for the ordinary/native layout on 2026-10-13. The previous tracked
-[2026-09-27 organization snapshot](history/ORGANIZATION-20260927.md) is retained
-for provenance; the current layout and ownership rules are below.
+Updated for the ordinary/native layout on 2026-10-13. The earlier 2026-09-27
+organization snapshot was deleted with the pre-deployment compatibility surfaces,
+so this file is the only tracked layout statement; the current layout and ownership
+rules are below.
 
 ## Purpose
 
 neo-os-aa is the NeoOS account-abstraction repository. It contains the
-Neo N3 AA contracts, frontend tooling, and SDK surfaces for creating and using
-Abstract Accounts.
+Neo N3 SA contracts, frontend tooling, and SDK surfaces for creating and using
+Smart Accounts.
 
 ## Authority Boundaries
 
-- This repo OWNS: AA user operations, verifier and hook plugin bindings,
-  recovery policy, paymaster policy, AA contract behavior, and AA-specific
+- This repo OWNS: SA user operations, verifier and hook plugin bindings,
+  recovery policy, paymaster policy, SA contract behavior, and SA-specific
   frontend and SDK integration.
 - This repo NEVER OWNS: DID eligibility or identity issuance, network identity
   selection, signer custody, catalog publication, MiniApp product behavior, or
@@ -24,12 +25,12 @@ Abstract Accounts.
     implementations/ordinary/ user-contract delivery profile and entrypoint
     implementations/native/   native ABI 2 submission profile and entrypoint
     .github/                 CI workflows
-    contracts/               Neo N3 AA contract sources
+    contracts/               Neo N3 SA contract sources
     formal/                  formal verification inputs and checks
-    frontend/                AA application and server routes
-    sdk/                     AA SDK surfaces
-    shared/                  shared AA types and helpers
-    supabase/                AA database migrations
+    frontend/                SA application and server routes
+    sdk/                     SA SDK surfaces
+    shared/                  shared SA types and helpers
+    supabase/                SA database migrations
     tests/                   test suites
     scripts/                 repository tooling
     docs/                    project documentation
@@ -59,7 +60,7 @@ profile prepared for standard submission, while the consensus
   `implementations/native/profile.json`; ordinary source must not import native
   entrypoints as proof of native activation.
 - Keep frontend routes, UI, and frontend configuration under frontend/.
-- Keep AA client types and builders under sdk/ and shared/.
+- Keep SA client types and builders under sdk/ and shared/.
 - Keep formal evidence and verification inputs under formal/.
 - Keep database migrations under supabase/migrations/ and apply them only
   through the repository's documented migration process.
@@ -69,28 +70,28 @@ profile prepared for standard submission, while the consensus
 ## Cross-Repository Dependencies
 
 - neo-os-contracts owns platform/app/Oracle contract source, while this repository
-  owns AA contract source. AA consumes reviewed artifacts and interfaces.
+  owns SA contract source. SA consumes reviewed artifacts and interfaces.
 - neo-os-devpack supplies versioned SDK packages; consumers use reviewed pins
   instead of copying its implementation.
 - neo-os-workspace and neo-os-admin own workspace registries and release/catalog
-  publication respectively; AA integration does not transfer these authorities.
+  publication respectively; SA integration does not transfer these authorities.
 
 - neo-os-web owns the current architecture contract until the documented v2
   adoption completes. neo-os-services is the source for the public Morpheus
-  registry, public runtime catalog, and confidential-envelope inputs that AA
+  registry, public runtime catalog, and confidential-envelope inputs that SA
   synchronizes through `scripts/lib/morpheus-canonical-sync.mjs`.
-- neo-os-did owns DID identity and eligibility; AA may consume a verified
+- neo-os-did owns DID identity and eligibility; SA may consume a verified
   eligibility proof but does not make identity decisions.
 - neo-os-services supplies service-side integrations and generated registry
   inputs where the repository contracts require them.
 - contracts/neo-platform-packages.json records the contract build's package
   provenance. Package availability is a build-environment prerequisite; this
-  repository remains authoritative for AA contract sources and does not assign
+  repository remains authoritative for SA contract sources and does not assign
   contract authority to another repository.
 
 ## Maintenance Guidelines
 
-1. Route new integrations through the centralized AA operation and validation
+1. Route new integrations through the centralized SA operation and validation
    surfaces so authorization and execution remain distinct.
 2. Keep relay and paymaster paths as convenience or funding layers; they must
    not replace on-chain authorization.

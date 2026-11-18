@@ -35,7 +35,7 @@ def require(condition, message):
 
 
 def pinned_sources(cache=None):
-    cache = Path(cache) if cache else Path(tempfile.gettempdir()) / 'aa-pinned-neovm-runtime-004cd607'
+    cache = Path(cache) if cache else Path(tempfile.gettempdir()) / 'sa-pinned-neovm-runtime-004cd607'
     result = {}
     for path, expected in SOURCE_HASHES.items():
         target = cache / path
@@ -271,7 +271,7 @@ def extract_runtime(cache=None):
     helpers = {name: parse_handler(sources[path], name, True) for path, names in
                [('JumpTable/JumpTable.Slot.cs', ('ExecuteLoadFromSlot', 'ExecuteStoreToSlot')),
                 ('JumpTable/JumpTable.Control.cs', ('ExecuteJump', 'ExecuteJumpOffset'))] for name in names}
-    return {'schema': 'neoos-aa-runtime-handler-source/v1', 'sourceCommit': COMMIT,
+    return {'schema': 'neoos-sa-runtime-handler-source/v1', 'sourceCommit': COMMIT,
         'sourceSha256': SOURCE_HASHES, 'handlers': handlers, 'helpers': helpers,
         'sourceExtractionTrusted': True, 'runtimeImplementationProven': False,
         'unsupported': ['InitSlot/Pack/PickItem/SetItem heap operations', 'Equal/NotEqual comparison limits',

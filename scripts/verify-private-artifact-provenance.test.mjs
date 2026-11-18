@@ -55,15 +55,15 @@ test("the provenance map covers the 24 repository artifacts", () => {
 
 test("default report selection excludes stale and explicitly ineligible receipts", () => {
   const selected = selectLatestDatedReport([
-    "aa-neoexpress-validation-20261004-final.json",
-    "aa-neoexpress-validation-20261005-unmatched-runner.json",
-    "aa-neoexpress-validation-20261005.json",
-    "aa-neoexpress-validation-20261003.json",
-  ], "aa-neoexpress-validation");
-  assert.equal(selected, "aa-neoexpress-validation-20261005.json");
+    "sa-neoexpress-validation-20261004-final.json",
+    "sa-neoexpress-validation-20261005-unmatched-runner.json",
+    "sa-neoexpress-validation-20261005.json",
+    "sa-neoexpress-validation-20261003.json",
+  ], "sa-neoexpress-validation");
+  assert.equal(selected, "sa-neoexpress-validation-20261005.json");
   assert.throws(
-    () => selectLatestDatedReport(["aa-neoexpress-validation-20261005-unmatched-runner.json"], "aa-neoexpress-validation"),
-    /no dated aa-neoexpress-validation report found/,
+    () => selectLatestDatedReport(["sa-neoexpress-validation-20261005-unmatched-runner.json"], "sa-neoexpress-validation"),
+    /no dated sa-neoexpress-validation report found/,
   );
 });
 
@@ -154,7 +154,7 @@ test("provenance join rejects a stale source certificate before deployment check
   const repro = {
     release_matches_fresh_build: true,
     certificate: {
-      schema: "neoos-aa-source-to-artifact-certificate/v1",
+      schema: "neoos-sa-source-to-artifact-certificate/v1",
       source_root: "repository",
       source_snapshot_sha256: "0".repeat(64),
       source_files: {},
@@ -167,10 +167,10 @@ test("provenance join rejects a stale source certificate before deployment check
 });
 
 function certificateFixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aa-certificate-test-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "sa-certificate-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const files = Object.fromEntries(["v3", "platform"].flatMap((profile) => [
-    [`${profile}/SmartAccountV3.nef`, profile], [`${profile}/SmartAccountV3.manifest.json`, "{}"],
+    [`${profile}/SmartAccount.nef`, profile], [`${profile}/SmartAccount.manifest.json`, "{}"],
   ]));
   const hashes = {};
   for (const [name, contents] of Object.entries(files)) {
@@ -197,21 +197,21 @@ test("release certificate compares every fresh/release NEF and manifest to disk"
 
 for (const [name, mutate] of Object.entries({
   "false certificate verdict": (r) => { r.certificate.byte_equal_release = false; },
-  "contradictory drift list": (r) => { r.drifted = ["v3/SmartAccountV3.nef"]; },
-  "contradictory missing list": (r) => { r.missing = ["v3/SmartAccountV3.nef"]; },
+  "contradictory drift list": (r) => { r.drifted = ["v3/SmartAccount.nef"]; },
+  "contradictory missing list": (r) => { r.missing = ["v3/SmartAccount.nef"]; },
   "wrong artifact count": (r) => { r.artifacts_compared = 1; },
-  "missing fresh manifest": (r) => { delete r.certificate.fresh_artifact_sha256["v3/SmartAccountV3.manifest.json"]; },
-  "missing release manifest": (r) => { delete r.certificate.release_artifact_sha256["v3/SmartAccountV3.manifest.json"]; },
-  "different fresh bytes": (r) => { r.certificate.fresh_artifact_sha256["v3/SmartAccountV3.nef"] = "0".repeat(64); },
+  "missing fresh manifest": (r) => { delete r.certificate.fresh_artifact_sha256["v3/SmartAccount.manifest.json"]; },
+  "missing release manifest": (r) => { delete r.certificate.release_artifact_sha256["v3/SmartAccount.manifest.json"]; },
+  "different fresh bytes": (r) => { r.certificate.fresh_artifact_sha256["v3/SmartAccount.nef"] = "0".repeat(64); },
   "matching maps but different disk bytes": (r) => {
-    r.certificate.fresh_artifact_sha256["v3/SmartAccountV3.manifest.json"] = "0".repeat(64);
-    r.certificate.release_artifact_sha256["v3/SmartAccountV3.manifest.json"] = "0".repeat(64);
+    r.certificate.fresh_artifact_sha256["v3/SmartAccount.manifest.json"] = "0".repeat(64);
+    r.certificate.release_artifact_sha256["v3/SmartAccount.manifest.json"] = "0".repeat(64);
   },
   "missing private profile": (r, root) => { fs.rmSync(path.join(root, "../platform"), { recursive: true }); },
   "private profile falsely marked missing": (r) => { r.profiles.platform.required_core_present = false; },
-  "stale private release bytes": (r, root) => { fs.writeFileSync(path.join(root, "../platform/SmartAccountV3.nef"), "stale"); },
+  "stale private release bytes": (r, root) => { fs.writeFileSync(path.join(root, "../platform/SmartAccount.nef"), "stale"); },
   "additional release output": (r, root) => { fs.writeFileSync(path.join(root, "Extra.nef"), "extra"); },
-  "deleted local output": (r, root) => { fs.unlinkSync(path.join(root, "SmartAccountV3.nef")); },
+  "deleted local output": (r, root) => { fs.unlinkSync(path.join(root, "SmartAccount.nef")); },
 })) {
   test(`release certificate rejects ${name}`, (t) => {
     const { root, repro } = certificateFixture(t);
@@ -221,7 +221,7 @@ for (const [name, mutate] of Object.entries({
 }
 
 test("provenance joins the private core and public modules to their exact RPC readbacks", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aa-full-provenance-test-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "sa-full-provenance-test-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
   const script = Buffer.from([0x40]); const nef = syntheticNef(script); const manifest = Buffer.from("{}");
@@ -234,7 +234,7 @@ test("provenance joins the private core and public modules to their exact RPC re
     }
   };
   for (const [contractName, relative] of Object.entries(LOCAL_ARTIFACTS)) {
-    const profile = contractName === "SmartAccountV3" ? "platform" : "v3";
+    const profile = contractName === "SmartAccount" ? "platform" : "v3";
     const artifactNef = profile === "platform" ? platformNef : nef;
     const artifactManifest = profile === "platform" ? platformManifest : manifest;
     writePair(`v3/${relative}`);
@@ -243,12 +243,12 @@ test("provenance joins the private core and public modules to their exact RPC re
     contracts.push({ contractName, nefScriptSha256: hash(profile === "platform" ? Buffer.from([0x41]) : script),
       nefChecksumEquality: true, manifestSemanticEquality: true, nefScriptByteEquality: true });
   }
-  writePair("platform/SmartAccountV3.nef", platformNef, platformManifest);
+  writePair("platform/SmartAccount.nef", platformNef, platformManifest);
   const source = buildInputSnapshot();
   const repro = { release_matches_fresh_build: true, artifacts_compared: 50, drifted: [], missing: [],
     profiles: { v3: { artifacts_compared: 48, required_core_present: true, matches_fresh_build: true },
       platform: { artifacts_compared: 2, required_core_present: true, matches_fresh_build: true } },
-    certificate: { schema: "neoos-aa-source-to-artifact-certificate/v1", source_root: "repository",
+    certificate: { schema: "neoos-sa-source-to-artifact-certificate/v1", source_root: "repository",
       source_files: source, source_snapshot_sha256: hash(JSON.stringify(source)), byte_equal_release: true,
       fresh_artifact_sha256: { ...hashes }, release_artifact_sha256: { ...hashes } } };
   const receipt = { status: "PASS", releaseEvidenceEligible: true, network: { publicNetwork: false },

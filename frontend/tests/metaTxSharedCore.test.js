@@ -148,7 +148,7 @@ test('frontend builders carry the SDK validation guards', () => {
   assert.throws(
     () => buildV3UserOperationTypedData({ ...base, coreContractHash: '' }),
     { code: 'METATX_CORE_CONTRACT_REQUIRED' },
-    'an AA core hash is required to prevent cross-core signature replay',
+    'an SA core hash is required to prevent cross-core signature replay',
   );
   assert.throws(
     () => buildMetaTransactionTypedData({
@@ -196,7 +196,7 @@ test('fetchV3Verifier surfaces the big-endian display hash from real-node wire e
 
   const verifierHash = await fetchV3Verifier({
     rpcUrl: 'https://rpc.example.org',
-    aaContractHash: USER_OP.masterHash,
+    saContractHash: USER_OP.masterHash,
     accountIdHash: USER_OP.accountIdHash,
     fetchImpl,
   });

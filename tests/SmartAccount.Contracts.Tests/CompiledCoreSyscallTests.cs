@@ -113,7 +113,7 @@ public class CompiledCoreSyscallTests
     [TestMethod]
     public void PublicCoreNeverEmitsTheGasBoundedSyscall()
     {
-        var syscalls = Syscalls("SmartAccountV3");
+        var syscalls = Syscalls("SmartAccount");
 
         Assert.AreEqual(0, syscalls.Count(s => s.Hash == GasBounded),
             "Public builds must never emit CallWithGasLimit");
@@ -124,8 +124,8 @@ public class CompiledCoreSyscallTests
     [TestMethod]
     public void MessageSignatureAdaptersUseTheProfileSpecificVerifierCall()
     {
-        var publicRange = MethodRange("SmartAccountV3", "isValidSignature");
-        var publicSites = Syscalls("SmartAccountV3")
+        var publicRange = MethodRange("SmartAccount", "isValidSignature");
+        var publicSites = Syscalls("SmartAccount")
             .Where(site => site.Offset >= publicRange.Start && site.Offset < publicRange.End)
             .ToArray();
         Assert.AreEqual(2, publicSites.Count(site => site.Hash == Unbounded),
@@ -133,7 +133,7 @@ public class CompiledCoreSyscallTests
         Assert.AreEqual(0, publicSites.Count(site => site.Hash == GasBounded),
             "The public ERC-1271 adapter must not emit CallWithGasLimit");
 
-        const string platformArtifact = "../platform/SmartAccountV3";
+        const string platformArtifact = "../platform/SmartAccount";
         var platformRange = MethodRange(platformArtifact, "isValidSignature");
         var platformSites = Syscalls(platformArtifact)
             .Where(site => site.Offset >= platformRange.Start && site.Offset < platformRange.End)
@@ -166,7 +166,7 @@ public class CompiledCoreSyscallTests
     [TestMethod]
     public void PlatformCoreEmitsTheGasBoundedCallSurface()
     {
-        var syscalls = Syscalls("../platform/SmartAccountV3");
+        var syscalls = Syscalls("../platform/SmartAccount");
         // Five source call sites (two verifier callbacks plus the verifier, leaf
         // maintenance and composite-root maintenance helpers) compile to five
         // SYSCALL drains, and nccs retains one extern-declaration stub.
@@ -182,7 +182,7 @@ public class CompiledCoreSyscallTests
         foreach (string nef in nefs)
         {
             string artifact = Path.GetRelativePath(CompiledContractsDir, nef)[..^".nef".Length];
-            if (artifact == "SmartAccountV3")
+            if (artifact == "SmartAccount")
                 continue;
 
             Assert.AreEqual(

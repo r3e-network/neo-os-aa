@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-aa-dark text-slate-950">
+  <div class="min-h-screen bg-sa-dark text-slate-950">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
     <div class="mb-6 border-b border-slate-200">
       <div
@@ -14,7 +14,7 @@
           <h1
             class="text-2xl md:text-3xl font-semibold text-slate-950 leading-tight mb-2"
           >
-            {{ t("studio.title", "Abstract Account Workspace") }}
+            {{ t("studio.title", "Smart Account Workspace") }}
           </h1>
           <p class="text-sm md:text-base text-slate-600 max-w-3xl leading-relaxed">
             {{
@@ -112,7 +112,7 @@
             {{
               t(
                 "studio.onboardingBody",
-                "The Abstract Account workspace lets you create, configure, and operate programmable smart-contract accounts on Neo N3.",
+                "The Smart Account workspace lets you create, configure, and operate programmable smart-contract accounts on Neo N3.",
               )
             }}
           </p>
@@ -153,7 +153,7 @@
           </div>
         </div>
 
-        <!-- AA Pipeline Steps -->
+        <!-- SA Pipeline Steps -->
         <div
           class="flex flex-wrap items-center gap-2 mb-8 stagger-children"
         >
@@ -259,7 +259,7 @@
       </div>
 
       <aside>
-        <details class="aa-focus-reference lg:sticky lg:top-24">
+        <details class="sa-focus-reference lg:sticky lg:top-24">
           <summary>
             <span>{{ t("studio.readinessLabel", "Workspace readiness") }}</span>
             <strong>Deployment reference</strong>
@@ -392,7 +392,7 @@ const panelErrorMsg = t(
   "Failed to load panel. Please refresh.",
 );
 const PanelError = {
-  template: `<div class="card p-6 text-center"><p class="text-aa-error text-sm font-medium">${panelErrorMsg}</p></div>`,
+  template: `<div class="card p-6 text-center"><p class="text-sa-error text-sm font-medium">${panelErrorMsg}</p></div>`,
 };
 const asyncErr = {
   loadingComponent: PanelSkeleton,
@@ -462,14 +462,14 @@ function handleTabKeydown(event, currentIndex) {
 
 const pipelineSteps = [
   t("studio.pipelineConnect", "Connect"),
-  t("studio.pipelineCreate", "Create AA"),
+  t("studio.pipelineCreate", "Create SA"),
   t("studio.pipelineConfigure", "Configure"),
   t("studio.pipelineOperate", "Operate"),
 ];
 
 const onboardingHints = [
   {
-    label: t("studio.onboardingHint1", "Create AA accounts"),
+    label: t("studio.onboardingHint1", "Create SA accounts"),
     desc: t("studio.onboardingHint1Desc", "Deploy programmable wallets"),
     icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>',
   },
@@ -511,8 +511,8 @@ const readinessItems = computed(() => [
     value: networkLabel.value,
   },
   {
-    label: t("studio.readinessCore", "AA Core"),
-    value: formatHash(RUNTIME_CONFIG.abstractAccountHash),
+    label: t("studio.readinessCore", "SA Core"),
+    value: formatHash(RUNTIME_CONFIG.smartAccountHash),
   },
   {
     label: t("studio.readinessPaymaster", "Paymaster"),
@@ -530,7 +530,7 @@ const validationCoverage = computed(() => [
     state: t("studio.validationRequiresWallet", "Wallet required"),
     detail: t(
       "studio.validationAccountDeploymentDetail",
-      `AA core ${formatHash(RUNTIME_CONFIG.abstractAccountHash)}`,
+      `SA core ${formatHash(RUNTIME_CONFIG.smartAccountHash)}`,
     ),
   },
   {

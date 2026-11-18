@@ -15,7 +15,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 LOCALCHAIN = ROOT / "scripts/localchain"
 sys.path.insert(0, str(LOCALCHAIN))
-import aa_rpc_scenarios as suite  # noqa: E402
+import sa_rpc_scenarios as suite  # noqa: E402
 
 NODE = shutil.which("node") or "node"
 LOOPBACK_ERROR = "Disposable loopback RPC required"
@@ -90,7 +90,7 @@ class RecordingHandler(BaseHTTPRequestHandler):
 
 class ProbeIsolationTest(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="aa-probe-isolation-")
+        self.temp = tempfile.TemporaryDirectory(prefix="sa-probe-isolation-")
         self.addCleanup(self.temp.cleanup)
         self.workdir = Path(self.temp.name)
 
@@ -281,10 +281,10 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
             RELAY_PRIVATE_KEY_HEX=private_key,
             UPSTASH_REDIS_REST_URL=trap_url,
             UPSTASH_REDIS_REST_TOKEN="local-upstash-token",
-            AA_RELAY_MAINNET_RPC_URL=trap_url,
+            SA_RELAY_MAINNET_RPC_URL=trap_url,
             MORPHEUS_PAYMASTER_ENDPOINT=trap_url,
             MORPHEUS_PAYMASTER_API_TOKEN="local-paymaster-token",
-            VITE_AA_RELAY_RPC_URL=trap_url,
+            VITE_SA_RELAY_RPC_URL=trap_url,
             VITE_NEO_RPC_URL=trap_url,
         )
         done = self.run_entry("relay_probe.mjs", self.relay_fixture(rpc_url), env)
@@ -296,7 +296,7 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
                          "the real relay route did not run all probe cases")
         self.assertTrue("invokescript" in rpc.rpc_methods, "the relay route never reached the loopback RPC node")
         self.assertFalse("sendrawtransaction" in rpc.rpc_methods, "the refusing RPC stub unexpectedly broadcast")
-        self.assertFalse(trap.requests, "inherited AA/MORPHEUS/UPSTASH/VITE configuration was used externally")
+        self.assertFalse(trap.requests, "inherited SA/MORPHEUS/UPSTASH/VITE configuration was used externally")
 
     def test_source_clears_inherited_external_configuration(self):
         rpc, rpc_url = self.start_server(is_rpc=True, profile="source")
@@ -306,10 +306,10 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
             RELAY_PRIVATE_KEY_HEX=private_key,
             UPSTASH_REDIS_REST_URL=trap_url,
             UPSTASH_REDIS_REST_TOKEN="local-upstash-token",
-            AA_RELAY_MAINNET_RPC_URL=trap_url,
+            SA_RELAY_MAINNET_RPC_URL=trap_url,
             MORPHEUS_PAYMASTER_ENDPOINT=trap_url,
             MORPHEUS_PAYMASTER_API_TOKEN="local-paymaster-token",
-            VITE_AA_RELAY_RPC_URL=trap_url,
+            VITE_SA_RELAY_RPC_URL=trap_url,
             VITE_NEO_RPC_URL=trap_url,
         )
         done = self.run_entry("source_proxy_relay_probe.mjs", self.source_fixture(rpc_url, private_key), env)
@@ -327,10 +327,10 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
         env = self.env(
             UPSTASH_REDIS_REST_URL=trap_url,
             UPSTASH_REDIS_REST_TOKEN="local-upstash-token",
-            AA_RELAY_MAINNET_RPC_URL=trap_url,
+            SA_RELAY_MAINNET_RPC_URL=trap_url,
             MORPHEUS_PAYMASTER_ENDPOINT=trap_url,
             MORPHEUS_PAYMASTER_API_TOKEN="local-paymaster-token",
-            VITE_AA_RELAY_RPC_URL=trap_url,
+            VITE_SA_RELAY_RPC_URL=trap_url,
             VITE_NEO_RPC_URL=trap_url,
         )
         done = self.run_entry("wallet_shim_sign_proxy_transfer.mjs", self.wallet_request(rpc_url, private_key), env)

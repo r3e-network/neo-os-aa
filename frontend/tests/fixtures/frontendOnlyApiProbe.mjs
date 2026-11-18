@@ -32,10 +32,10 @@ const rpcUrl = `http://127.0.0.1:${server.address().port}`;
 const coreHash = '11'.repeat(20);
 const account = new wallet.Account(); // Ephemeral test key, never persisted or printed.
 Object.assign(process.env, {
-  AA_RELAY_RPC_URL: rpcUrl,
-  AA_RELAY_WIF: account.WIF,
-  AA_RELAY_ALLOWED_HASH: coreHash,
-  AA_RELAY_ALLOW_UNSPONSORED: '1',
+  SA_RELAY_RPC_URL: rpcUrl,
+  SA_RELAY_WIF: account.WIF,
+  SA_RELAY_ALLOWED_HASH: coreHash,
+  SA_RELAY_ALLOW_UNSPONSORED: '1',
   SUPABASE_URL: rpcUrl,
   SUPABASE_SERVICE_ROLE_KEY: 'local-test-service-key',
 });

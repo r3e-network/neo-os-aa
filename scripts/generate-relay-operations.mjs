@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DEFAULT_MANIFEST = path.join(ROOT, 'contracts', 'build', 'SmartAccountV3.manifest.json');
+const DEFAULT_MANIFEST = path.join(ROOT, 'contracts', 'build', 'SmartAccount.manifest.json');
 const TARGET = path.join(ROOT, 'frontend', 'api', 'relayOperations.generated.js');
 
 function resolveManifestPath() {

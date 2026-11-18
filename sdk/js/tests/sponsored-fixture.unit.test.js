@@ -1,4 +1,4 @@
-// The local-chain fixture drives the SDK payload builder for AA-11 and asserts that the payload
+// The local-chain fixture drives the SDK payload builder for SA-11 and asserts that the payload
 // reproduces the requested operation. A byte-string argument reaches it in two spellings: the DTO
 // the builder emits is explicit 0x hex, while an RPC-sourced value is canonical base64. Comparing
 // one spelling as if it were the other silently passes on Node 24 (Buffer.from('0x', 'base64') is
@@ -41,7 +41,7 @@ function request(args) {
 function runFixture(args) {
   const fs = require('node:fs');
   const os = require('node:os');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aa-fixture-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-fixture-'));
   const file = path.join(dir, 'request.json');
   fs.writeFileSync(file, JSON.stringify(request(args)));
   try {

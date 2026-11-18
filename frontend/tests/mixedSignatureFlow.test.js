@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { CORE_HASH, executeUserOpInvocation } from './fixtures/aaChainFixtures.js';
+import { CORE_HASH, executeUserOpInvocation } from './fixtures/saChainFixtures.js';
 import { EC } from '../src/config/errorCodes.js';
 
 import {
@@ -89,7 +89,7 @@ test('buildStagedTransactionBody refuses an account without a V3 id instead of w
   // exports. The V3 guard now refuses the input that produced it.
   assert.throws(
     () => buildStagedTransactionBody({
-      aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+      saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
       account: {
         accountIdHex: '56e5bbd0603bdf01699c047b2397ee0e',
         accountAddressScriptHash: '13ef519c362973f9a34648a9eac5b71250b2a80a',
@@ -109,7 +109,7 @@ test('buildStagedTransactionBody refuses an account without a V3 id instead of w
 test('buildStagedTransactionBody prefers executeUserOp when accountIdHash is present', () => {
   const before = Date.now();
   const body = buildStagedTransactionBody({
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     account: {
       accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
       accountAddressScriptHash: '13ef519c362973f9a34648a9eac5b71250b2a80a',
@@ -134,7 +134,7 @@ test('buildStagedTransactionBody prefers executeUserOp when accountIdHash is pre
 
 test('buildStagedTransactionBody labels the network from the active morpheus network', () => {
   const baseArgs = {
-    aaContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
+    saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     account: {
       accountIdHash: 'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
       accountAddressScriptHash: '13ef519c362973f9a34648a9eac5b71250b2a80a',
@@ -191,7 +191,7 @@ test('buildDraftApprovalTypedData creates an EVM-friendly approval payload from 
     },
   });
 
-  assert.equal(typedData.domain.name, 'Neo Abstract Account Workspace');
+  assert.equal(typedData.domain.name, 'Neo Smart Account Workspace');
   assert.equal(typedData.domain.version, '1');
   assert.equal(typedData.message.shareSlug, 'share-1');
   assert.match(typedData.message.payloadDigest, /^0x[0-9a-f]{64}$/i);
@@ -387,7 +387,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
     relayPayloadMode: 'meta',
     transactionBody: {
       paymaster: {
-        account_id: 'aa-test',
+        account_id: 'sa-test',
         zerc20Proof: {
           public_inputs: { recipient: '0x' + '11'.repeat(20) },
         },
@@ -408,7 +408,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
     morpheus_network: 'testnet',
     metaInvocation: executeUserOpInvocation(),
     paymaster: {
-      account_id: 'aa-test',
+      account_id: 'sa-test',
       zerc20Proof: {
         public_inputs: { recipient: '0x' + '11'.repeat(20) },
       },

@@ -8,14 +8,60 @@ using Neo.SmartContract.Framework.Services;
 
 namespace SmartAccount
 {
+    /// <summary>
+    /// v4 account registration (spec §16.1: registration identity is
+    /// custody+salt, the full initial configuration installs atomically).
+    ///
+    /// The legacy single-pointer registration surfaces (RegisterAccount with
+    /// verifier/hook pointers, UpdateHook/UpdateVerifier/Confirm*Update, the
+    /// composite dependency registry, CallVerifier/CallHook and the pending
+    /// module-call machinery) are removed with this rework: new code never
+    /// routes through the old Verifier/HookId pointers (spec §7.4), and every
+    /// module-model change now travels through the 24h configuration intents
+    /// in SmartAccount.Intents.cs. The legacy registration identity helper is
+    /// kept only because the platform registrar reuses it for deterministic
+    /// platform-account ids that must survive the upgrade unchanged.
+    /// </summary>
     public partial class SmartAccount
     {
         // ========================================================================
-        // 2. Account Initialization / Configuration
+        // 1. Registration identity (spec §16.1: custody + salt)
         // ========================================================================
 
+        // v4 account identity domain.
+        private static readonly byte[] AccountIdentityDomainV4 = new byte[] { 0xAA, 0x52, 0x47, 0x04 };
+        // Legacy (pre-v4) registration identity domain — retained for the
+        // platform registrar's deterministic account ids only.
         private static readonly byte[] RegistrationAccountIdDomain = new byte[] { 0xAA, 0x52, 0x47, 0x01 };
 
+        // 128 bytes covers both the user-chosen registration salt and the
+        // platform registrar's app binding (which doubles as the salt).
+        private static readonly BigInteger RegistrationSaltMinBytes = 1;
+        private static readonly BigInteger RegistrationSaltMaxBytes = 128;
+
+        /// <summary>
+        /// Deterministic v4 account identity: RIPEMD160(SHA256(domain ||
+        /// custody || salt)). The salt is attacker-free uniqueness material
+        /// chosen by the custody; the identity binds the custody at creation.
+        /// </summary>
+        [Safe]
+        public static UInt160 ComputeAccountIdentity(UInt160 custody, ByteString salt)
+        {
+            ExecutionEngine.Assert(custody != null && custody != UInt160.Zero, "Custody required");
+            ExecutionEngine.Assert(salt != null && salt.Length >= RegistrationSaltMinBytes
+                && salt.Length <= RegistrationSaltMaxBytes, "Invalid registration salt");
+            byte[] payload = AccountIdentityDomainV4;
+            payload = Helper.Concat(payload, (byte[])custody!);
+            payload = Helper.Concat(payload, (byte[])salt!);
+            byte[] hash = (byte[])CryptoLib.Ripemd160((ByteString)CryptoLib.Sha256((ByteString)payload));
+            return (UInt160)(ByteString)ReverseBytes(hash);
+        }
+
+        /// <summary>
+        /// Legacy registration identity (pre-v4). Retained ONLY for the
+        /// platform registrar: registered platform account ids must remain
+        /// stable across the v4 upgrade. Not a v4 authorization source.
+        /// </summary>
         [Safe]
         public static UInt160 ComputeRegistrationAccountId(UInt160 verifier, ByteString verifierParams, UInt160 hookId, UInt160 backupOwner, uint escapeTimelock)
         {
@@ -59,546 +105,134 @@ namespace SmartAccount
             return reversed;
         }
 
+        // ========================================================================
+        // 2. v4 registration (atomic initial install, spec §10 exception list)
+        // ========================================================================
+
         /// <summary>
-        /// Creates a new deterministic AA account and optionally configures its initial verifier and hook.
+        /// Creates a fresh v4 account. Identity is custody+salt (spec §16.1);
+        /// the initial configuration (module installs, hook order, threshold
+        /// policies, message subjects, recovery policy) installs atomically
+        /// with no timelock — a fresh account has no assets and no prior
+        /// policy to protect. After registration every further change
+        /// travels through the 24h intent path.
         /// </summary>
-        public static void RegisterAccount(UInt160 accountId, UInt160 verifier, ByteString verifierParams, UInt160 hookId, UInt160 backupOwner, uint escapeTimelock)
+        public static void createAccount(UInt160 accountId, UInt160 custody, ByteString salt, BigInteger recoveryTimelockMs, object[] actions)
         {
-            RegisterAccountCore(accountId, verifier, verifierParams, hookId, backupOwner, escapeTimelock, true);
-        }
-
-        private static void RegisterAccountCore(UInt160 accountId, UInt160 verifier, ByteString verifierParams, UInt160 hookId, UInt160 backupOwner, uint escapeTimelock, bool requireBackupOwnerWitness, UInt160? expectedAccountId = null)
-        {
-            ExecutionEngine.Assert(accountId != null && accountId != UInt160.Zero, "Account id required");
-            ExecutionEngine.Assert(backupOwner != null && backupOwner != UInt160.Zero, "Backup owner required");
-            AssertAccountConfigurationIdle(accountId!);
-            if (requireBackupOwnerWitness)
-            {
-                ExecutionEngine.Assert(Runtime.CheckWitness(backupOwner!), "Backup owner witness required");
-            }
-            ExecutionEngine.Assert(escapeTimelock >= 604800, "Escape timelock must be at least 7 days");
-            ExecutionEngine.Assert(escapeTimelock <= 7776000, "Escape timelock must not exceed 90 days");
-            UInt160 expected = expectedAccountId ?? ComputeRegistrationAccountId(verifier, verifierParams, hookId, backupOwner!, escapeTimelock);
-            ExecutionEngine.Assert(accountId == expected, "Account id does not match registration parameters");
-
-            if (verifier != UInt160.Zero)
-            {
-                AssertV3Verifier(verifier);
-            }
-            if (hookId != UInt160.Zero)
-            {
-                AssertV3Hook(hookId);
-            }
-
-            byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId!);
-            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, key) == null, "Account already exists");
-
-            AccountState state = new AccountState
-            {
-                Verifier = verifier!,
-                HookId = hookId!,
-                BackupOwner = backupOwner!,
-                EscapeTimelock = escapeTimelock,
-                EscapeTriggeredAt = 0
-            };
-            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(state));
-            OnAccountRegistered(accountId!, backupOwner!, verifier, hookId);
-            if (verifier != UInt160.Zero)
-            {
-                OnModuleInstalled(accountId!, ModuleTypeVerifier, verifier);
-            }
-            if (hookId != UInt160.Zero)
-            {
-                OnModuleInstalled(accountId!, ModuleTypeHook, hookId);
-            }
-
-            if (verifier != UInt160.Zero && verifierParams != null && verifierParams.Length > 0)
-            {
-                SetVerifierConfigContext(accountId!, verifier);
-                try
-                {
-                    CallModuleWithMaintenanceBudget(verifier, "setPublicKey", CallFlags.All, new object[] { accountId!, verifierParams });
-                }
-                finally
-                {
-                    ClearVerifierConfigContext(accountId!);
-                }
-            }
+            CreateAccountCore(accountId, custody, salt, recoveryTimelockMs, actions, true, null);
         }
 
         /// <summary>
-        /// Registers multiple deterministic AA accounts atomically with shared owner, verifier, hook, and timelock.
-        /// Each account remains bound to its own verifier params, so anchors can derive 21 agent accounts from
-        /// anchor/app/agent/nonce material without exposing a front-running registration path.
+        /// Batch v4 registration of plain accounts for a single custody: each
+        /// salt becomes its own deterministic account with the default
+        /// built-in route and no modules — module configuration afterwards
+        /// always travels the 24h intent path. Atomic; one malformed entry
+        /// reverts the whole batch.
         /// </summary>
-        public static void RegisterAccounts(UInt160[] accountIds, UInt160 verifier, ByteString[] verifierParamsList, UInt160 hookId, UInt160 backupOwner, uint escapeTimelock)
+        public static void createAccounts(UInt160[] accountIds, UInt160 custody, ByteString[] salts, BigInteger recoveryTimelockMs)
         {
-            ExecutionEngine.Assert(accountIds != null && verifierParamsList != null, "Account batch required");
+            ExecutionEngine.Assert(accountIds != null && salts != null, "Account batch required");
             UInt160[] ids = accountIds!;
-            ByteString[] paramList = verifierParamsList!;
+            ByteString[] saltList = salts!;
             ExecutionEngine.Assert(ids.Length > 0 && ids.Length <= 64, "Account batch size must be 1-64");
-            ExecutionEngine.Assert(ids.Length == paramList.Length, "Account batch params mismatch");
-            ExecutionEngine.Assert(ids[0] != null && ids[0] != UInt160.Zero, "Account id required");
-            AssertAccountConfigurationIdle(ids[0]);
-
+            ExecutionEngine.Assert(ids.Length == saltList.Length, "Account batch salts mismatch");
             for (int i = 0; i < ids.Length; i++)
             {
-                RegisterAccount(ids[i]!, verifier, paramList[i], hookId, backupOwner!, escapeTimelock);
+                CreateAccountCore(ids[i], custody, saltList[i], recoveryTimelockMs, new object[0], true, null);
             }
-        }
-
-
-        /// <summary>
-        /// Initiates a hook plugin replacement with a timelock delay for security.
-        /// If no hook is currently set, the hook is updated instantly.
-        /// </summary>
-        public static void UpdateHook(UInt160 accountId, UInt160 newHookId)
-        {
-            AssertBackupOwner(accountId);
-            AssertPluginInstallationAllowed(accountId, newHookId);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            AssertNoMarketEscrow(accountId);
-            if (newHookId != UInt160.Zero)
-            {
-                AssertV3Hook(newHookId);
-            }
-
-            AccountState state = GetAccountState(accountId);
-
-            if (state.HookId == UInt160.Zero)
-            {
-                state.HookId = newHookId;
-                byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId);
-                Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(state));
-                if (newHookId != UInt160.Zero)
-                {
-                    OnModuleInstalled(accountId, ModuleTypeHook, newHookId);
-                }
-                OnHookUpdateConfirmed(accountId, newHookId);
-                return;
-            }
-
-            byte[] key2 = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
-            ByteString? existing = Storage.Get(Storage.CurrentContext, key2);
-            ExecutionEngine.Assert(existing == null, "Cancel or confirm pending update first");
-
-            PendingConfigUpdate update = new PendingConfigUpdate
-            {
-                NewHookId = newHookId,
-                InitiatedAt = Runtime.Time
-            };
-            Storage.Put(Storage.CurrentContext, key2, StdLib.Serialize(update));
-            OnModuleUpdateInitiated(accountId, ModuleTypeHook, newHookId);
-            OnHookUpdateInitiated(accountId, newHookId);
         }
 
         /// <summary>
-        /// Confirms a pending hook update after the timelock has elapsed.
+        /// Shared v4 registration core. The custody witness is normally
+        /// required; the platform registrar path is gated by the registrar
+        /// pointer instead (caller identity) and pins its own legacy-derived
+        /// expected id so platform identities stay stable.
         /// </summary>
-        public static void ConfirmHookUpdate(UInt160 accountId)
-        {
-            AssertBackupOwner(accountId);
-            AssertPluginConfigurationAllowed(accountId);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            AssertNoMarketEscrow(accountId);
-
-            byte[] key = Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            ExecutionEngine.Assert(data != null, "No pending hook update");
-
-            PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
-            ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + ConfigUpdateTimelockMs, "Timelock not elapsed");
-
-            AccountState state = GetAccountState(accountId);
-            UInt160 previousHook = state.HookId;
-
-            AssertPluginInstallationAllowed(accountId, pending.NewHookId);
-            if (pending.NewHookId != UInt160.Zero)
-            {
-                AssertV3Hook(pending.NewHookId);
-            }
-
-            // Clear old plugin state before replacing it. A cleanup fault must abort the update,
-            // otherwise the new pointer could coexist with an old plugin's durable authority.
-            if (previousHook != UInt160.Zero)
-            {
-                SetHookConfigContext(accountId, previousHook);
-                try
-                {
-                    CallRootWithMaintenanceBudget(previousHook, "clearAccount", CallFlags.All, new object[] { accountId });
-                }
-                finally
-                {
-                    ClearHookConfigContext(accountId);
-                }
-            }
-
-            state.HookId = pending.NewHookId;
-            byte[] stateKey = Helper.Concat(Prefix_AccountState, (byte[])accountId);
-            Storage.Put(Storage.CurrentContext, stateKey, StdLib.Serialize(state));
-            Storage.Delete(Storage.CurrentContext, key);
-            if (pending.NewHookId == UInt160.Zero)
-            {
-                if (previousHook != UInt160.Zero)
-                {
-                    OnModuleRemoved(accountId, ModuleTypeHook, previousHook);
-                }
-            }
-            else
-            {
-                OnModuleUpdateConfirmed(accountId, ModuleTypeHook, pending.NewHookId);
-            }
-            OnHookUpdateConfirmed(accountId, pending.NewHookId);
-        }
-
-        /// <summary>
-        /// Initiates a verifier plugin replacement with a timelock delay for security.
-        /// If no verifier is currently set, the verifier is updated instantly.
-        /// </summary>
-        public static void UpdateVerifier(UInt160 accountId, UInt160 newVerifier, ByteString verifierParams)
-        {
-            AssertBackupOwner(accountId);
-            AssertPluginInstallationAllowed(accountId, newVerifier);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            AssertNoMarketEscrow(accountId);
-
-            AccountState state = GetAccountState(accountId);
-
-            if (state.Verifier == UInt160.Zero)
-            {
-                if (newVerifier != UInt160.Zero)
-                {
-                    AssertV3Verifier(newVerifier);
-                }
-
-                state.Verifier = newVerifier;
-                byte[] key = Helper.Concat(Prefix_AccountState, (byte[])accountId);
-                Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(state));
-
-                if (newVerifier != UInt160.Zero && verifierParams != null && verifierParams.Length > 0)
-                {
-                    SetVerifierConfigContext(accountId, newVerifier);
-                    try
-                    {
-                        CallModuleWithMaintenanceBudget(newVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, verifierParams });
-                    }
-                    finally
-                    {
-                        ClearVerifierConfigContext(accountId!);
-                    }
-                }
-                if (newVerifier != UInt160.Zero)
-                {
-                    OnModuleInstalled(accountId, ModuleTypeVerifier, newVerifier);
-                }
-                OnVerifierUpdateConfirmed(accountId, newVerifier);
-                return;
-            }
-
-            byte[] key2 = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
-            ByteString? existing = Storage.Get(Storage.CurrentContext, key2);
-            ExecutionEngine.Assert(existing == null, "Cancel or confirm pending update first");
-
-            PendingConfigUpdate update = new PendingConfigUpdate
-            {
-                NewVerifier = newVerifier,
-                VerifierParams = verifierParams,
-                InitiatedAt = Runtime.Time
-            };
-            Storage.Put(Storage.CurrentContext, key2, StdLib.Serialize(update));
-            OnModuleUpdateInitiated(accountId, ModuleTypeVerifier, newVerifier);
-            OnVerifierUpdateInitiated(accountId, newVerifier);
-        }
-
-        /// <summary>
-        /// Confirms a pending verifier update after the timelock has elapsed.
-        /// </summary>
-        public static void ConfirmVerifierUpdate(UInt160 accountId)
-        {
-            AssertBackupOwner(accountId);
-            AssertPluginConfigurationAllowed(accountId);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            AssertNoMarketEscrow(accountId);
-
-            byte[] key = Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            ExecutionEngine.Assert(data != null, "No pending verifier update");
-
-            PendingConfigUpdate pending = (PendingConfigUpdate)StdLib.Deserialize(data!);
-            ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + ConfigUpdateTimelockMs, "Timelock not elapsed");
-
-            AssertPluginInstallationAllowed(accountId, pending.NewVerifier);
-            if (pending.NewVerifier != UInt160.Zero)
-            {
-                AssertV3Verifier(pending.NewVerifier);
-            }
-
-            AccountState state = GetAccountState(accountId);
-            UInt160 previousVerifier = state.Verifier;
-
-            // Clear old plugin state before replacing it. A cleanup fault must abort the update,
-            // otherwise the new pointer could coexist with an old plugin's durable authority.
-            if (previousVerifier != UInt160.Zero)
-            {
-                SetVerifierConfigContext(accountId, previousVerifier);
-                try
-                {
-                    CallRootWithMaintenanceBudget(previousVerifier, "clearAccount", CallFlags.All, new object[] { accountId });
-                }
-                finally
-                {
-                    ClearVerifierConfigContext(accountId!);
-                }
-            }
-
-            state.Verifier = pending.NewVerifier;
-            byte[] stateKey = Helper.Concat(Prefix_AccountState, (byte[])accountId);
-            Storage.Put(Storage.CurrentContext, stateKey, StdLib.Serialize(state));
-
-            if (pending.NewVerifier != UInt160.Zero && pending.VerifierParams != null && pending.VerifierParams.Length > 0)
-            {
-                SetVerifierConfigContext(accountId, pending.NewVerifier);
-                try
-                {
-                    CallModuleWithMaintenanceBudget(pending.NewVerifier, "setPublicKey", CallFlags.All, new object[] { accountId, pending.VerifierParams });
-                }
-                finally
-                {
-                    ClearVerifierConfigContext(accountId!);
-                }
-            }
-
-            Storage.Delete(Storage.CurrentContext, key);
-            if (pending.NewVerifier == UInt160.Zero)
-            {
-                if (previousVerifier != UInt160.Zero)
-                {
-                    OnModuleRemoved(accountId, ModuleTypeVerifier, previousVerifier);
-                }
-            }
-            else
-            {
-                OnModuleUpdateConfirmed(accountId, ModuleTypeVerifier, pending.NewVerifier);
-            }
-            OnVerifierUpdateConfirmed(accountId, pending.NewVerifier);
-        }
-
-        // =====================================================================================
-        // Composite module dependency registry (audit fix 2026-10-24)
-        //
-        // A composite module - MultiHook today, the native MultiSig profile under
-        // SMARTACCOUNT_NATIVE - forwards an account's policy to several child
-        // contracts. Those children hold per-account storage of their own, so a
-        // composite that is reconfigured or cleared must cascade `clearAccount`
-        // to its children, and the core is the party that can do it in one
-        // place: it owns the module pointer, and the cascade has to reach
-        // children the composite no longer references. Both composites already
-        // call these four names (MultiHook unconditionally, MultiSigVerifier in
-        // its native profile), and MockVerifierCore exercises the same contract
-        // in tests - but this build of the core did not export them, so a
-        // confirmed MultiHook cleanup faulted at `clearHookDependencies` and no
-        // composite lifecycle could complete against the real core.
-        //
-        // Authorization is the installed pointer, not a witness: only the
-        // account's current hook may register or clear that account's hook
-        // dependencies, and likewise for verifiers. Every core path that drives
-        // a module's `clearAccount` (confirm-update, escape, market settle)
-        // calls it before moving the pointer, so a module calling back into
-        // `clear*Dependencies` from inside its own cleanup still satisfies the
-        // check. Nobody else can write another account's dependency list.
-        // =====================================================================================
-
-        private static byte[] DependencyKey(UInt160 accountId, bool verifier) =>
-            verifier
-                ? Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId)
-                : Helper.Concat(Prefix_HookDependencies, (byte[])accountId);
-
-        public static void SetHookDependencies(UInt160 accountId, UInt160[] children) =>
-            SetDependencies(accountId, children, false);
-
-        public static void ClearHookDependencies(UInt160 accountId) =>
-            ClearDependencies(accountId, false);
-
-        public static void SetVerifierDependencies(UInt160 accountId, UInt160[] children) =>
-            SetDependencies(accountId, children, true);
-
-        public static void ClearVerifierDependencies(UInt160 accountId) =>
-            ClearDependencies(accountId, true);
-
-        private static void SetDependencies(UInt160 accountId, UInt160[] children, bool verifier)
-        {
-            UInt160 root = ValidateDependencyCall(accountId, verifier, false);
-            ValidateDependencyChildren(children, root, verifier);
-            byte[] lockKey = Helper.Concat(Prefix_DependencyMaintenance, (byte[])accountId);
-            AcquireDependencyMaintenance(lockKey, accountId);
-            try
-            {
-                byte[] key = DependencyKey(accountId, verifier);
-                ByteString? data = Storage.Get(Storage.CurrentContext, key);
-                if (data != null)
-                {
-                    UInt160[] previous = (UInt160[])StdLib.Deserialize(data!);
-                    for (int i = 0; i < previous.Length; i++)
-                    {
-                        bool retained = false;
-                        for (int j = 0; j < children.Length; j++)
-                        {
-                            if (previous[i] == children[j])
-                            {
-                                retained = true;
-                                break;
-                            }
-                        }
-                        if (!retained) CleanupDependency(accountId, previous[i], verifier);
-                    }
-                }
-                Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
-            }
-            finally
-            {
-                Storage.Delete(Storage.CurrentContext, lockKey);
-            }
-        }
-
-        private static void ClearDependencies(UInt160 accountId, bool verifier)
-        {
-            UInt160 root = ValidateDependencyCall(accountId, verifier, true);
-            byte[] lockKey = Helper.Concat(Prefix_DependencyMaintenance, (byte[])accountId);
-            AcquireDependencyMaintenance(lockKey, accountId);
-            try
-            {
-                UInt160[] children = ReadDependencyChildren(accountId, verifier);
-                ValidateDependencyChildren(children, root, verifier);
-                for (int i = 0; i < children.Length; i++)
-                {
-                    CleanupDependency(accountId, children[i], verifier);
-                }
-                Storage.Delete(Storage.CurrentContext, DependencyKey(accountId, verifier));
-            }
-            finally
-            {
-                Storage.Delete(Storage.CurrentContext, lockKey);
-            }
-        }
-
-        private static UInt160[] ReadDependencyChildren(UInt160 accountId, bool verifier)
-        {
-            // The cache is authoritative: children can only be registered through
-            // SetDependencies, which writes this row, so a missing row means no children.
-            byte[] key = DependencyKey(accountId, verifier);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            return data == null ? new UInt160[0] : (UInt160[])StdLib.Deserialize(data!)!;
-        }
-
-        private static UInt160 ValidateDependencyCall(UInt160 accountId, bool verifier, bool clearing)
+        private static void CreateAccountCore(
+            UInt160 accountId, UInt160 custody, ByteString salt, BigInteger recoveryTimelockMs,
+            object[] actions, bool requireCustodyWitness, UInt160? expectedAccountId)
         {
             ValidateAccountId(accountId);
-            ExecutionEngine.Assert(!IsExecutionActive(accountId)
-                && Storage.Get(Storage.CurrentContext,
-                    Helper.Concat(Prefix_VerifyContext, (byte[])accountId)) == null,
-                "Cannot maintain dependencies during execution");
-            AccountState state = GetAccountState(accountId);
-            UInt160 root = (verifier ? state.Verifier : state.HookId)!;
-            ExecutionEngine.Assert(root != null && root != UInt160.Zero
-                && Runtime.CallingScriptHash == root, "Dependency caller is not installed root");
-            byte[] configKey = Helper.Concat(
-                verifier ? Prefix_VerifierConfigContext : Prefix_HookConfigContext, (byte[])accountId);
-            ByteString? configuredRoot = Storage.Get(Storage.CurrentContext, configKey);
-            BigInteger depth = GetConfigurationContextDepth();
-            bool rootContext = depth == 1 && configuredRoot != null && (UInt160)configuredRoot! == root;
-            ExecutionEngine.Assert(depth == 0 || rootContext,
-                "Cannot maintain dependencies during execution");
-            // The authenticated settlement path may clear dependencies during
-            // escrow, but replacement always requires an idle account.
-            if (!clearing || !rootContext) AssertNoMarketEscrow(accountId);
-            return root!;
-        }
-
-        private static void ValidateDependencyChildren(UInt160[] children, UInt160 root, bool verifier)
-        {
-            ExecutionEngine.Assert(children != null && children.Length <= 10, "Invalid dependency count");
-            for (int i = 0; i < children!.Length; i++)
+            ExecutionEngine.Assert(custody != null && custody != UInt160.Zero && custody.IsValid, "Custody required");
+            if (requireCustodyWitness)
             {
-                UInt160 child = children[i]!;
-                ExecutionEngine.Assert(child != null && child!.IsValid && child != UInt160.Zero
-                    && child != root && child != Runtime.ExecutingScriptHash, "Invalid dependency child");
-                for (int j = i + 1; j < children.Length; j++)
+                ExecutionEngine.Assert(Runtime.CheckWitness(custody!), "Custody witness required");
+            }
+            ExecutionEngine.Assert(salt != null && salt.Length >= RegistrationSaltMinBytes
+                && salt.Length <= RegistrationSaltMaxBytes, "Invalid registration salt");
+
+            // Neither a v4 control record nor a legacy row may exist.
+            ExecutionEngine.Assert(GetAccountControl(accountId) == null, "Account already exists");
+            ExecutionEngine.Assert(
+                Storage.Get(Storage.CurrentContext, Helper.Concat(Prefix_AccountState, (byte[])accountId!)) == null,
+                "Account already exists");
+            AssertAccountConfigurationIdle(accountId!);
+
+            UInt160 expected = expectedAccountId ?? ComputeAccountIdentity(custody!, salt!);
+            ExecutionEngine.Assert(accountId == expected, "Account id does not match registration parameters");
+
+            if (recoveryTimelockMs == 0) recoveryTimelockMs = RecoveryTimelockMinMs;
+            ExecutionEngine.Assert(recoveryTimelockMs >= RecoveryTimelockMinMs && recoveryTimelockMs <= RecoveryTimelockMaxMs,
+                "Recovery timelock must be 7-90 days");
+
+            if (actions == null) actions = new object[0];
+            ExecutionEngine.Assert(actions.Length <= MaxActionsPerConfigurationIntent, ErrorModuleLimitActions);
+            for (int i = 0; i < actions.Length; i++)
+            {
+                ValidateActionShape((object[])actions[i]);
+            }
+
+            AccountControl control = new AccountControl();
+            control.Status = AccountStatusActive;
+            control.Custody = custody!;
+            control.RecoveryAuthority = UInt160.Zero;
+            control.AuthorityEpoch = BigInteger.One;
+            control.ConfigurationNonce = BigInteger.Zero;
+            control.NextModuleId = BigInteger.One;
+            control.NextIntentId = BigInteger.One;
+            // Built-in route (validatorId = 0) is authorized until the first
+            // validator installs; ExecuteInstallModuleAction disables it then.
+            control.DefaultOperationAuthorization = true;
+            control.DefaultMessageAuthorization = true;
+            control.RecoveryTimelockMs = recoveryTimelockMs;
+            control.HookOrderRevision = BigInteger.Zero;
+            control.DefaultPolicyRevision = BigInteger.Zero;
+            control.ControlRevision = BigInteger.One;
+            control.OwnerOnlyRecovery = false;
+            PutAccountControl(accountId!, control);
+
+            // Registration default message subject (spec §8): a fresh account
+            // must carry a subject; the default slot value is unsatisfiable by
+            // any canonical P-256 script until real subjects are configured.
+            InitializeDefaultMessageSubjects(accountId!, control);
+
+            // Atomic initial install — the same executors the 24h intent path
+            // uses, so registration can never install anything the intent
+            // path could not (same validation, same limits, same callbacks).
+            if (actions.Length > 0)
+            {
+                ExecuteConfigurationActions(accountId!, control, actions!);
+                // Last-validator rule (spec §10): a registered account with no
+                // validator must keep the built-in operation route enabled.
+                if (CountModulesOfType(accountId!, ModuleTypeCodeValidator) == 0)
                 {
-                    ExecutionEngine.Assert(child != children[j], "Duplicate dependency child");
+                    ExecutionEngine.Assert(control.DefaultOperationAuthorization, ErrorOperationMalformed);
                 }
-                ExecutionEngine.Assert(ModuleExposesMethod(child!, "clearAccount",
-                    ContractParameterType.Void, ContractParameterType.Hash160),
-                    "Child cleanup ABI missing");
+                control.ConfigurationNonce += 1;
+                PutAccountControl(accountId!, control);
             }
+
+            OnAccountRegistered(accountId!, custody!, UInt160.Zero, UInt160.Zero);
         }
 
-        private static void CleanupDependency(UInt160 accountId, UInt160 child, bool verifier)
-        {
-            byte[] configKey = Helper.Concat(
-                verifier ? Prefix_VerifierConfigContext : Prefix_HookConfigContext,
-                (byte[])accountId);
-            ByteString? previousContext = Storage.Get(Storage.CurrentContext, configKey);
-            if (verifier) SetVerifierConfigContext(accountId, child);
-            else SetHookConfigContext(accountId, child);
-            try
-            {
-                CallModuleWithMaintenanceBudget(
-                    child, "clearAccount", CallFlags.All, new object[] { accountId });
-            }
-            finally
-            {
-                if (verifier) ClearVerifierConfigContext(accountId);
-                else ClearHookConfigContext(accountId);
-                if (previousContext != null && GetConfigurationContextDepth() > 0)
-                {
-                    Storage.Put(Storage.CurrentContext, configKey, previousContext);
-                }
-            }
-        }
-
-        private static void AcquireDependencyMaintenance(byte[] lockKey, UInt160 accountId)
-        {
-            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, lockKey) == null,
-                "Dependency maintenance already active");
-            Storage.Put(Storage.CurrentContext, lockKey, (byte[])accountId);
-        }
-
-        private static void AssertV3Verifier(UInt160 verifier)
-        {
-            // A marker alone is not enough: a stale or malicious module could return true
-            // from supportsV3 while omitting a lifecycle entrypoint. Missing-method faults
-            // are not catchable by the caller, so reject an incomplete ABI before binding.
-            ExecutionEngine.Assert(ModuleExposesSafeMethod(verifier, "supportsV3", ContractParameterType.Boolean), "Verifier V3 marker missing");
-            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "validateSignature", ContractParameterType.Boolean,
-                ContractParameterType.Hash160, ContractParameterType.Any), "Verifier V3 validation ABI missing");
-            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "postExecute", ContractParameterType.Void,
-                ContractParameterType.Hash160, ContractParameterType.Any, ContractParameterType.Any), "Verifier V3 post ABI missing");
-            ExecutionEngine.Assert(ModuleExposesMethod(verifier, "clearAccount", ContractParameterType.Void,
-                ContractParameterType.Hash160), "Verifier V3 cleanup ABI missing");
-            bool supported = (bool)CallModuleWithMaintenanceBudget(verifier, "supportsV3", CallFlags.ReadOnly, new object[] { });
-            ExecutionEngine.Assert(supported, "Verifier does not implement V3 interface");
-        }
-
-        private static void AssertV3Hook(UInt160 hook)
-        {
-            ExecutionEngine.Assert(ModuleExposesSafeMethod(hook, "supportsV3", ContractParameterType.Boolean), "Hook V3 marker missing");
-            ExecutionEngine.Assert(ModuleExposesMethod(hook, "preExecute", ContractParameterType.Void,
-                ContractParameterType.Hash160, ContractParameterType.Array), "Hook V3 pre ABI missing");
-            ExecutionEngine.Assert(ModuleExposesMethod(hook, "postExecute", ContractParameterType.Void,
-                ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any), "Hook V3 post ABI missing");
-            ExecutionEngine.Assert(ModuleExposesMethod(hook, "clearAccount", ContractParameterType.Void,
-                ContractParameterType.Hash160), "Hook V3 cleanup ABI missing");
-            bool supported = (bool)CallModuleWithMaintenanceBudget(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
-            ExecutionEngine.Assert(supported, "Hook does not implement V3 interface");
-        }
+        // ========================================================================
+        // 3. Deployed-module manifest ABI helpers
+        //    Retained for the TODO(26) plugin adaptation layer (profile /
+        //    capability probing before callbacks). A marker alone is never
+        //    enough: a stale or malicious module could advertise a method
+        //    while omitting it, and missing-method faults are not catchable,
+        //    so the full ABI shape is checked before any binding.
+        // ========================================================================
 
         private static bool ModuleExposesSafeMethod(UInt160 module, string methodName, ContractParameterType returnType,
             params ContractParameterType[] parameterTypes)
@@ -653,149 +287,6 @@ namespace SmartAccount
                 }
             }
             return false;
-        }
-
-        private static readonly string[] AllowedVerifierMethods = new string[]
-        {
-            "clearAccount",
-            "setSessionKey",
-            "clearSessionKey",
-            "setConfig",
-            "createSubscription",
-            "setDKIMRegistry"
-        };
-
-        private static readonly string[] AllowedHookMethods = new string[]
-        {
-            "setDailyLimit",
-            "setWhitelist",
-            "setRestrictedToken",
-            "requireCredentialCommitmentForContract",
-            "setRegistry",
-            "setHooks",
-            "setConfig",
-            "clearAccount"
-        };
-
-        private static bool IsMethodAllowed(string method, string[] allowlist)
-        {
-            for (int i = 0; i < allowlist.Length; i++)
-            {
-                if (method == allowlist[i]) return true;
-            }
-            return false;
-        }
-
-        private static ByteString ComputeModuleCallHash(string method, object[] args)
-        {
-            return CryptoLib.Sha256(StdLib.Serialize(new object[] { method, args }));
-        }
-
-        private static void StorePendingModuleCall(byte[] pendingKey, UInt160 moduleHash, ByteString callHash)
-        {
-            PendingModuleCall pending = new PendingModuleCall
-            {
-                ModuleHash = moduleHash,
-                CallHash = callHash,
-                InitiatedAt = Runtime.Time
-            };
-            Storage.Put(Storage.CurrentContext, pendingKey, StdLib.Serialize(pending));
-        }
-
-        private static bool TryConfirmPendingModuleCall(byte[] pendingKey, UInt160 moduleHash, string method, object[] args)
-        {
-            ByteString callHash = ComputeModuleCallHash(method, args);
-            ByteString? data = Storage.Get(Storage.CurrentContext, pendingKey);
-            if (data == null)
-            {
-                StorePendingModuleCall(pendingKey, moduleHash, callHash);
-                return false;
-            }
-
-            PendingModuleCall pending = (PendingModuleCall)StdLib.Deserialize(data!);
-            if (pending.ModuleHash != moduleHash || pending.CallHash != callHash)
-            {
-                // Audit fix L-1: a different pending call must no longer silently overwrite
-                // the stored one and restart its 24h window — that allowed a caller to keep
-                // swapping in a new call (or repeatedly resetting the timer) so a malicious
-                // change could perpetually ride just behind the confirmation horizon. The
-                // pending slot stays single: a replacement is only accepted once the previous
-                // pending call has expired (or the account escaped, which clears the slot).
-                ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + ConfigUpdateTimelockMs,
-                    "Pending module call in flight");
-                StorePendingModuleCall(pendingKey, moduleHash, callHash);
-                return false;
-            }
-
-            ExecutionEngine.Assert(Runtime.Time >= pending.InitiatedAt + ConfigUpdateTimelockMs, "Timelock not elapsed");
-            Storage.Delete(Storage.CurrentContext, pendingKey);
-            return true;
-        }
-
-        /// <summary>
-        /// Allows the backup owner to call an account verifier for configuration or maintenance tasks.
-        /// Only methods in the allowlist may be called to prevent timelock bypass.
-        /// </summary>
-        public static object CallVerifier(UInt160 accountId, string method, object[] args)
-        {
-            AssertPluginConfigurationAllowed(accountId);
-            ExecutionEngine.Assert(IsMethodAllowed(method, AllowedVerifierMethods), "Verifier method not allowed");
-            AssertBackupOwner(accountId);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            AssertNoMarketEscrow(accountId);
-            AccountState state = GetAccountState(accountId);
-            ExecutionEngine.Assert(state.Verifier != null && state.Verifier != UInt160.Zero, "Verifier not configured");
-
-            byte[] pendingKey = Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId);
-            if (!TryConfirmPendingModuleCall(pendingKey, state.Verifier!, method, args))
-            {
-                return false;
-            }
-
-            SetVerifierConfigContext(accountId, state.Verifier!);
-            try
-            {
-                return CallRootWithMaintenanceBudget(state.Verifier!, method, CallFlags.All, args);
-            }
-            finally
-            {
-                ClearVerifierConfigContext(accountId!);
-            }
-        }
-
-        /// <summary>
-        /// Allows the backup owner to call an account hook for configuration or maintenance tasks.
-        /// Only methods in the allowlist may be called to prevent timelock bypass.
-        /// </summary>
-        public static object CallHook(UInt160 accountId, string method, object[] args)
-        {
-            AssertPluginConfigurationAllowed(accountId);
-            ExecutionEngine.Assert(IsMethodAllowed(method, AllowedHookMethods), "Hook method not allowed");
-            AssertBackupOwner(accountId);
-            // Audit fix M-4: frozen accounts reject every plugin configuration path.
-            AssertNotFrozen(accountId);
-            AssertAccountConfigurationIdle(accountId);
-            AssertNoMarketEscrow(accountId);
-            AccountState state = GetAccountState(accountId);
-            ExecutionEngine.Assert(state.HookId != null && state.HookId != UInt160.Zero, "Hook not configured");
-
-            byte[] pendingKey = Helper.Concat(Prefix_PendingHookCall, (byte[])accountId);
-            if (!TryConfirmPendingModuleCall(pendingKey, state.HookId!, method, args))
-            {
-                return false;
-            }
-
-            SetHookConfigContext(accountId, state.HookId!);
-            try
-            {
-                return CallRootWithMaintenanceBudget(state.HookId!, method, CallFlags.All, args);
-            }
-            finally
-            {
-                ClearHookConfigContext(accountId);
-            }
         }
     }
 }

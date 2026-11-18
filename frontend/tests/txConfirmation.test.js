@@ -17,7 +17,7 @@ import {
   integerItem,
   records,
   userOpExecutedNotification,
-} from './fixtures/aaChainFixtures.js';
+} from './fixtures/saChainFixtures.js';
 
 const RPC_URL = 'https://rpc.example/neo';
 const TXID = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2';
@@ -139,7 +139,7 @@ test('waitForTransactionConfirmation returns pending for an empty txid without p
 });
 
 // --- CU-06: HALT is not success for a transfer that returned false -----------------------------------------------
-// Fixtures: the recorded AA-03 steps (aa-chain-records-20261005.json). Step 36 is GAS.transfer(proxy -> buyer)
+// Fixtures: the recorded AA-03 steps (sa-chain-records-20261005.json). Step 36 is GAS.transfer(proxy -> buyer)
 // submitted with the owner's witness: HALT, result false, nothing moved, nonce consumed.
 
 async function confirm(log) {

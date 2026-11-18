@@ -44,7 +44,7 @@ public class ImplementationRefinementRuntimeTests
     {
         Assert.AreEqual(new Version(3, 10, 1, 0), typeof(ExecutionEngine).Assembly.GetName().Version,
             "Execution must use the locked Neo.VM 3.10.1 runtime");
-        byte[] bytes = File.ReadAllBytes(Path.Combine(RepoRoot, "contracts/bin/v3/SmartAccountV3.nef"));
+        byte[] bytes = File.ReadAllBytes(Path.Combine(RepoRoot, "contracts/bin/v3/SmartAccount.nef"));
         Assert.AreEqual(NefHash, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(), "Unreviewed NEF identity");
         byte[] script = NefFile.Parse(bytes, verify: true).Script.ToArray();
         CollectionAssert.AreEqual(new byte[] { (byte)OpCode.INITSLOT, 8, 1 }, script[MethodEntry..(MethodEntry + 3)]);

@@ -14,11 +14,11 @@
       <div class="modal-panel">
         <h3
           id="governance-dialog-title"
-          class="text-lg font-bold font-outfit text-aa-text mb-2"
+          class="text-lg font-bold font-outfit text-sa-text mb-2"
         >
           {{ modal.title }}
         </h3>
-        <p class="text-sm text-aa-muted mb-6 whitespace-pre-line">{{ modal.message }}</p>
+        <p class="text-sm text-sa-muted mb-6 whitespace-pre-line">{{ modal.message }}</p>
         <div class="flex gap-3 justify-end">
           <button class="btn-ghost" @click="$emit('close')">
             {{ t("studioPanels.cancel", "Cancel") }}

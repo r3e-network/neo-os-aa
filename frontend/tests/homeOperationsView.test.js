@@ -70,8 +70,8 @@ test("home view is a focus workflow entry with app, market, and deployment refer
   assert.match(homeSource, /Programmable Accounts for Neo N3/);
   assert.match(homeSource, /Open App Workspace/);
   assert.match(homeSource, /Browse Address Market/);
-  assert.match(homeSource, /aa-home-focus/);
-  assert.match(homeSource, /aa-home-step-link/);
+  assert.match(homeSource, /sa-home-focus/);
+  assert.match(homeSource, /sa-home-step-link/);
   assert.match(homeSource, /Deployment reference/);
   assert.match(homeSource, /Address Market/);
   assert.match(homeSource, /Paymaster Readiness/);
@@ -118,7 +118,7 @@ test("operations workspace exposes load, compose, signature, and broadcast secti
   const didPanelSource = readComponentTree(didPanelPath);
   assert.match(
     fs.readFileSync(workspacePath, "utf8"),
-    /Abstract Account Workspace/,
+    /Smart Account Workspace/,
   );
   assert.doesNotMatch(
     fs.readFileSync(workspacePath, "utf8"),
@@ -417,13 +417,13 @@ test("router includes console route", () => {
   const routerSource = fs.readFileSync(routerPath, "utf8");
   assert.match(routerSource, /path: 'console'/);
   assert.match(routerSource, /ConsoleView/);
-  assert.match(routerSource, /Console — Neo Abstract Account/);
+  assert.match(routerSource, /Console — Neo Smart Account/);
 });
 
 test("home view prioritizes focus workflow entry points", () => {
   const homeSource = fs.readFileSync(homePath, "utf8");
-  assert.match(homeSource, /aa-home-focus/);
-  assert.match(homeSource, /aa-home-step-link/);
+  assert.match(homeSource, /sa-home-focus/);
+  assert.match(homeSource, /sa-home-step-link/);
   assert.match(homeSource, /to="\/app" class="btn-primary/);
   assert.match(homeSource, /to="\/market" class="btn-secondary/);
   assert.match(homeSource, /Deployment reference/);

@@ -1,5 +1,5 @@
 /**
- * Input validation utilities for the Neo Abstract Account SDK.
+ * Input validation utilities for the Neo Smart Account SDK.
  * Provides validation for addresses, hashes, hex strings, and public keys.
  */
 

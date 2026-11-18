@@ -18,16 +18,16 @@ import {
 } from './fixtures/ordinaryGovernanceFixture.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const evidenceDir = process.env.ORDINARY_METADATA_EVIDENCE_DIR || join(tmpdir(), 'aa-ordinary-metadata');
+const evidenceDir = process.env.ORDINARY_METADATA_EVIDENCE_DIR || join(tmpdir(), 'sa-ordinary-metadata');
 
 async function withWorkspace(name, run, setup = () => {}) {
   const fixture = createOrdinaryGovernanceFixture();
   setup(fixture);
   const errors = [];
   const env = {
-    VITE_AA_RPC_URL: ordinaryRpcUrl,
-    VITE_AA_HASH: ordinaryCore,
-    VITE_AA_NETWORK_MAGIC: String(ordinaryMagic),
+    VITE_SA_RPC_URL: ordinaryRpcUrl,
+    VITE_SA_HASH: ordinaryCore,
+    VITE_SA_NETWORK_MAGIC: String(ordinaryMagic),
   };
   const previousEnv = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   Object.assign(process.env, env);
@@ -51,7 +51,7 @@ async function withWorkspace(name, run, setup = () => {}) {
     await page.route('**/*', (route) => fixture.route(route, origin));
     await page.exposeFunction('ordinaryWalletInvoke', (request) => fixture.invoke(request));
     await page.addInitScript(({ address, hash, magic }) => {
-      localStorage.setItem('aa_locale', 'en');
+      localStorage.setItem('sa_locale', 'en');
       let override = null;
       try { override = JSON.parse(localStorage.getItem('ordinary-wallet-override') || 'null'); } catch (_) { /* fixture storage only */ }
       window.__ordinaryWallet = override?.address && override?.hash ? override : { address, hash };
@@ -62,7 +62,7 @@ async function withWorkspace(name, run, setup = () => {}) {
       };
     }, { address: getAddressFromScriptHash(ordinaryOwner), hash: ordinaryOwner, magic: ordinaryMagic });
     await page.goto(`${origin}/app`);
-    await page.getByRole('heading', { name: /Abstract Account Workspace/i }).waitFor();
+    await page.getByRole('heading', { name: /Smart Account Workspace/i }).waitFor();
     await page.locator('#main-content').getByRole('button', { name: 'Connect Wallet', exact: true }).click();
     await page.getByRole('tab', { name: 'Manage Governance', exact: true }).click();
     await loadGovernance(page);
@@ -205,7 +205,7 @@ test('wallet switch followed by reload keeps metadata unavailable to a non-owner
       localStorage.setItem('ordinary-wallet-override', JSON.stringify({ address, hash }));
     }, { address: getAddressFromScriptHash(ordinaryOtherOwner), hash: ordinaryOtherOwner });
     await page.reload();
-    await page.getByRole('heading', { name: /Abstract Account Workspace/i }).waitFor();
+    await page.getByRole('heading', { name: /Smart Account Workspace/i }).waitFor();
     await page.evaluate(({ address, hash }) => {
       window.__ordinaryWallet = { address, hash };
       window.dispatchEvent(new CustomEvent('Neo.DapiProvider.ACCOUNT_CHANGED', { detail: { address, hash } }));

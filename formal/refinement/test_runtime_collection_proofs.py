@@ -47,7 +47,7 @@ class KernelIntegrationTests(unittest.TestCase):
  def test_fresh_kernel_and_real_source_controls(self):
   import tempfile
   from pathlib import Path
-  with tempfile.TemporaryDirectory(prefix='aa-collection-kernel-') as directory:
+  with tempfile.TemporaryDirectory(prefix='sa-collection-kernel-') as directory:
    out=Path(directory)
    report=proof.run(out,out/'receipt.json')
    self.assertTrue(report['kernelChecked'])

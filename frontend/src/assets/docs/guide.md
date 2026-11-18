@@ -1,23 +1,23 @@
 # How It Works & Usage Guide
 
-This guide explains the Neo Abstract Account system end to end: what the contract does, how the website is organized, how a user creates and uses an account, how collaboration drafts work, and how transactions finally reach the chain.
+This guide explains the Neo Smart Account system end to end: what the contract does, how the website is organized, how a user creates and uses an account, how collaboration drafts work, and how transactions finally reach the chain.
 
 ## 1. Who This Is For
 
 Use this page if you are trying to answer any of these questions:
 
-- **New user:** What is an Abstract Account and what do I click first?
+- **New user:** What is a Smart Account and what do I click first?
 - **Signer:** What can I review and sign without taking operator actions?
 - **Operator:** How do I collect approvals, run relay checks, and submit safely?
 - **Integrator:** Which parts are on-chain, off-chain, and server-side?
 
 If you only want one mental model, use this:
 
-> One global AA contract stores account configuration, while each logical account gets a deterministic verify address that routes authorization back through the shared policy-gated engine.
+> One global SA contract stores account configuration, while each logical account gets a deterministic verify address that routes authorization back through the shared policy-gated engine.
 
 ## 2. Mental Model
 
-An Abstract Account in this project is **not** a new smart contract deployed per user.
+An Smart Account in this project is **not** a new smart contract deployed per user.
 
 Instead, the system uses one global master contract plus a deterministic verification proxy address for each logical account.
 
@@ -76,7 +76,7 @@ sequenceDiagram
   participant Relay
   participant Chain
 
-  User->>Frontend: Load abstract account
+  User->>Frontend: Load Smart Account
   User->>Frontend: Compose operation
   Frontend->>DraftStore: Persist draft
   User->>Wallet: Sign natively or via EVM typed data
@@ -110,7 +110,7 @@ That means:
 ### For a new user
 
 1. Open **App**
-2. Load or derive the abstract account
+2. Load or derive the smart account
 3. Choose an operation preset or create a custom invocation
 4. Persist the draft
 5. Share links depending on the collaborator role
@@ -164,7 +164,7 @@ Every execution path still flows through the same protection layer:
 
 The practical security result is:
 
-- deterministic proxy witnesses are limited to hardened AA wrapper flows
+- deterministic proxy witnesses are limited to hardened SA wrapper flows
 - public links are read-only
 - collaborator links are signature-only
 - operator actions use signed server-side mutations
@@ -182,15 +182,15 @@ If you are learning the system for the first time, read these pages in order:
 
 ## 11. Glossary
 
-- **Abstract Account** — a logical account identified by an `accountId`, enforced by the shared AA contract
+- **Smart Account** — a logical account identified by an `accountId`, enforced by the shared SA contract
 - **Deterministic proxy address** — the Neo address derived from the `verify(accountId)` script
 - **Master contract** — the shared on-chain execution and permission engine
 - **Draft** — the off-chain collaboration record containing operation data, signatures, and metadata
 - **Collaborator link** — a scoped link for signature collection only
 - **Operator link** — a scoped link for relay, broadcast, receipts, and link rotation
 - **Relay preflight** — a server-backed simulation of a relay-ready invocation before submission
-- **Meta invocation** — the AA wrapper payload created from EVM typed-data signatures
+- **Meta invocation** — the SA wrapper payload created from EVM typed-data signatures
 
 ## Matrix Domain Access
 
-Users do not have to memorize raw `accountId` values. The frontend can register a `.matrix` domain during AA creation and later resolve that domain to the controller wallet address. V3 has no admin or manager role query, so a domain does not by itself discover linked accounts: read them one at a time with `getAccountState(accountIdHash)`. The V2 account-discovery helper that named the removed `getAccountAddressesByAdmin` / `getAccountAddressesByManager` reads has been deleted, so no frontend path targets those reads any more.
+Users do not have to memorize raw `accountId` values. The frontend can register a `.matrix` domain during SA creation and later resolve that domain to the controller wallet address. V3 has no admin or manager role query, so a domain does not by itself discover linked accounts: read them one at a time with `getAccountState(accountIdHash)`. The V2 account-discovery helper that named the removed `getAccountAddressesByAdmin` / `getAccountAddressesByManager` reads has been deleted, so no frontend path targets those reads any more.

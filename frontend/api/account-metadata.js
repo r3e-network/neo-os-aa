@@ -2,14 +2,15 @@ import { createRequire } from 'node:module';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createClient } from '@supabase/supabase-js';
 import {
-  DEFAULT_ABSTRACT_ACCOUNT_HASH,
-  DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET,
+  DEFAULT_SMART_ACCOUNT_HASH,
+  DEFAULT_SMART_ACCOUNT_HASH_TESTNET,
   DEFAULT_RPC_URL,
   DEFAULT_RPC_URL_TESTNET,
   resolveSmartAccountHash,
 } from '../src/config/runtimeConfig.js';
 import { checkRateLimit, resolveClientIp, resolveRateLimitFailure, sanitizeError } from './rateLimiter.js';
 import { apiFetch } from './outboundFetch.js';
+import { buildAccountMetadataControlChallenge } from '../src/shared/accountMetadataProof.mjs';
 
 function trim(value) {
   return String(value || '').trim();
@@ -33,8 +34,8 @@ function resolveControlNetwork(req) {
   const candidate = trim(
     req?.body?.network
       || req?.query?.network
-      || req?.headers?.['x-aa-network']
-      || process.env.VITE_AA_NETWORK
+      || req?.headers?.['x-sa-network']
+      || process.env.VITE_SA_NETWORK
       || process.env.MORPHEUS_NETWORK
       || '',
   ).toLowerCase();
@@ -44,23 +45,23 @@ function resolveControlNetwork(req) {
 function resolveControlRpcUrl(network) {
   const upper = network === 'testnet' ? 'TESTNET' : 'MAINNET';
   return trim(
-    process.env[`AA_RELAY_${upper}_RPC_URL`]
-      || process.env.AA_RELAY_RPC_URL
-      || process.env.VITE_AA_RPC_URL
+    process.env[`SA_RELAY_${upper}_RPC_URL`]
+      || process.env.SA_RELAY_RPC_URL
+      || process.env.VITE_SA_RPC_URL
       || process.env.VITE_NEO_RPC_URL
       || (network === 'testnet' ? DEFAULT_RPC_URL_TESTNET : DEFAULT_RPC_URL),
   );
 }
 
-function resolveControlAaHash(network) {
+function resolveControlSaHash(network) {
   const defaultHash = network === 'testnet'
-    ? DEFAULT_ABSTRACT_ACCOUNT_HASH_TESTNET
-    : DEFAULT_ABSTRACT_ACCOUNT_HASH;
+    ? DEFAULT_SMART_ACCOUNT_HASH_TESTNET
+    : DEFAULT_SMART_ACCOUNT_HASH;
   const configured = network === 'testnet'
-    ? process.env.AA_RELAY_TESTNET_ALLOWED_HASH || process.env.VITE_AA_HASH_TESTNET || process.env.VITE_ABSTRACT_ACCOUNT_HASH_TESTNET
-    : process.env.AA_RELAY_MAINNET_ALLOWED_HASH || process.env.VITE_AA_HASH || process.env.VITE_ABSTRACT_ACCOUNT_HASH;
+    ? process.env.SA_RELAY_TESTNET_ALLOWED_HASH || process.env.VITE_SA_HASH_TESTNET || process.env.VITE_SMART_ACCOUNT_HASH_TESTNET
+    : process.env.SA_RELAY_MAINNET_ALLOWED_HASH || process.env.VITE_SA_HASH || process.env.VITE_SMART_ACCOUNT_HASH;
   return resolveSmartAccountHash(
-    trim(process.env.AA_RELAY_ALLOWED_HASH) || trim(configured) || defaultHash,
+    trim(process.env.SA_RELAY_ALLOWED_HASH) || trim(configured) || defaultHash,
     defaultHash,
   );
 }
@@ -83,8 +84,8 @@ function decodeHash160StackValue(item, u) {
 
 async function readBackupOwnerScriptHash({ accountIdHash, network }) {
   const rpcUrl = resolveControlRpcUrl(network);
-  const aaHash = resolveControlAaHash(network);
-  if (!rpcUrl || !aaHash) return '';
+  const saHash = resolveControlSaHash(network);
+  if (!rpcUrl || !saHash) return '';
 
   const { u } = getNeonWallet();
   const response = await apiFetch(rpcUrl, {
@@ -95,7 +96,7 @@ async function readBackupOwnerScriptHash({ accountIdHash, network }) {
       id: 1,
       method: 'invokefunction',
       params: [
-        `0x${normalizeHex(aaHash)}`,
+        `0x${normalizeHex(saHash)}`,
         'getBackupOwner',
         [{ type: 'Hash160', value: `0x${normalizeHex(accountIdHash)}` }],
       ],
@@ -178,10 +179,13 @@ async function authorizeUpsertControl(req, accountIdHash) {
   if (!signerScriptHash) {
     return { ok: false, statusCode: 401, error: 'Invalid backup owner signature' };
   }
-  // Bind the signed challenge to the target account so a signature for one
-  // account cannot be replayed against another.
-  if (!trim(ownerProof.message).includes(account)) {
-    return { ok: false, statusCode: 403, error: 'Signed message is not bound to this account' };
+  // F-10 (re-verified from code): the signed message must be the EXACT canonical
+  // challenge for this account. Previously any signature over any message that
+  // merely contained the account hash authorized the upsert, so a backup-owner
+  // signature produced for another context (login, payment request) could be
+  // replayed here. Fail closed on anything but the canonical challenge.
+  if (trim(ownerProof.message) !== buildAccountMetadataControlChallenge(account)) {
+    return { ok: false, statusCode: 403, error: 'Signed message is not the account metadata challenge for this account' };
   }
   if (signerScriptHash !== onChainBackupOwner) {
     return { ok: false, statusCode: 403, error: 'Signer is not the account backup owner' };
@@ -255,7 +259,7 @@ export default async function handler(req, res) {
       if (!accountIdHash) return res.status(400).json({ error: 'accountIdHash required' });
 
       const { data, error } = await supabase
-        .from('aa_account_metadata')
+        .from('sa_account_metadata')
         .select('description, logo_url, metadata_uri, updated_at')
         .eq('account_id_hash', accountIdHash)
         .maybeSingle();
@@ -274,7 +278,7 @@ export default async function handler(req, res) {
       }
 
       const { data, error } = await supabase
-        .from('aa_account_metadata')
+        .from('sa_account_metadata')
         .select('account_id_hash, description, logo_url, metadata_uri')
         .in('account_id_hash', accountIdHashes);
 
@@ -309,7 +313,7 @@ export default async function handler(req, res) {
       }
 
       const { error } = await supabase
-        .from('aa_account_metadata')
+        .from('sa_account_metadata')
         .upsert(sanitized, { onConflict: 'account_id_hash' });
 
       if (error) throw error;

@@ -464,7 +464,7 @@ test('remote activity syncs with only an accessSlug and lets the server resolve 
 
   assert.equal(updated.metadata.activity[0].type, 'signature_added');
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].name, 'append_aa_draft_activity');
+  assert.equal(calls[0].name, 'append_sa_draft_activity');
   assert.equal(calls[0].args.p_access_slug, 'collab-remote-3');
   assert.equal(calls[0].args.p_event.type, 'signature_added');
 });
@@ -534,7 +534,7 @@ test('remote collaborator activity stays on the anonymous Supabase path for sign
 
   assert.equal(updated.access_scope, 'sign');
   assert.equal(calls[0].kind, 'rpc');
-  assert.equal(calls[0].name, 'append_aa_draft_activity');
+  assert.equal(calls[0].name, 'append_sa_draft_activity');
   assert.equal(calls[0].args.p_access_slug, 'collab-remote-2');
   assert.equal(calls.find((entry) => entry.kind === 'transport'), undefined);
 });

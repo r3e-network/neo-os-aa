@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Compiles the plugin templates under contracts/templates/ into a throwaway
-// directory and asserts their manifests still satisfy the exact ABI the AA core
+// directory and asserts their manifests still satisfy the exact ABI the SA core
 // requires at bind time (AssertV3Verifier / AssertV3Hook in
 // contracts/SmartAccount.Accounts.cs). The templates are the documented starting
 // point for third-party plugins; if the shared plugin layer
@@ -88,7 +88,7 @@ function assertSharedLayer(template) {
 }
 
 function main() {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "aa-plugin-templates-"));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sa-plugin-templates-"));
   try {
     for (const template of TEMPLATES) {
       execFileSync(nccs, [template.project, "-o", scratch], { stdio: ["ignore", "pipe", "inherit"] });

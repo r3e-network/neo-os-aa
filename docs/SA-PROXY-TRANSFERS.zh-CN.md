@@ -1,0 +1,50 @@
+# 代理资产转账
+
+> 中文版本与 `docs/SA-PROXY-TRANSFERS.md` 同构。若两者冲突，以英文版本为准。
+
+虚拟账户的资产位于其代理验证脚本的哈希处，而不是其账户 ID 处。仅有所有者或中继见证，并不授权从该地址进行 NEP-17 转账。当运营者启用 `AA_RELAY_PROXY_WITNESS_ENABLED=1` 并配置账户的验证作用域目标时，中继可以构造额外的见证。
+
+## 确切的交易形态
+
+交易恰好只有一个应用层调用：`core.executeUserOp(accountId, op)` 或 `core.executeUserOps(accountId, ops)`，各有两个参数。参数构造只允许包含常量压栈与数据构造操作码。验证器把最终调用绑定到实际核心与实际账户 ID。其他入口点、其他核心 / 账户、额外调用与控制流都会被拒绝。
+
+0 号签名方是支付费用的中继，作用域为 `CalledByEntry`。1 号签名方是推导出的代理，恰好带一条 `Allow` 规则，包含 `Or(CalledByContract(core), CalledByContract(configuredTarget))`。代理见证的调用脚本为空，验证脚本由 `core.verify(accountId)` 构成。中继签名覆盖完整交易，包括两个签名方、脚本与费用。在计算网络费用与最终序列化时，两个见证都存在。绝不允许代理支付外层交易的费用。
+
+中继在本地推导脚本，把其哈希与 `getProxyScriptHash(accountId)` 比对，并从选定的核心 / RPC 读取 `getVerifyScopeTarget(accountId)`。配置的目标必须等于被转移的代币。批次中的每个操作都必须指名同一个目标。与提交竞争的作用域变更会被交易验证拒绝。客户端提供的签名方或见证元数据不会用于构造该权限。
+
+## SDK 构造器
+
+整笔交易在一个地方组装——`shared/proxyWitness.mjs`，中继路由与钱包前端都调用它：
+
+- `buildExecuteUserOpScript({ coreHash, accountId, invocation })` 输出受形态约束的脚本。它拒绝除 `executeUserOp`/`executeUserOps` 之外的每个入口点、错误的核心、错误的账户、错误的参数个数与空批次，因此它产出的字节只能是那一个应用层调用。其 Neo VM 压栈编码器由测试固定，在单条、批量与嵌套参数调用上与节点自身的汇编器（`neon-js sc.createScript`）逐字节一致。
+- `buildProxyWitnessTransaction({ coreHash, accountId, invocation, scopeTarget, expectedProxyHash, feePayer, … })` 按该签名方顺序返回脚本、费用支付方签名方、受限的 `WitnessRules` 代理签名方与代理验证见证。它会以 `PROXY_SCOPE_TARGET_REQUIRED` 拒绝缺失或全零的 `scopeTarget`，拒绝作用域目标为核心、作用域目标不是被转移代币、批次中目标混用，以及费用支付方是代理的情况。
+- `resolveProxyWitnessTransaction({ …, readState })` 通过注入的读取器读取 `scopeTarget` 与 `expectedProxyHash` 之后执行同样的构建。读取器必须是提交所用的核心 / RPC；任何调用方都不能从请求元数据传入这两个值。
+- `buildProxyWalletSignRequest({ transaction, scope, allowedContracts })` 是浏览器钱包签名路径。它把费用支付方重新表达为自定义作用域——带显式白名单的 `CustomContracts`，或 `Global`——而代理保留其受限规则与见证。
+
+`sdk/js/src/proxyWitness.js` 重新导出该模块，因此 SDK 携带同一个构造器。前端在 `frontend/src/shared/` 下内置了一份逐字节相同的副本（由 `frontend/tests/transferOutcomeShared.test.js` 强制）。
+
+本地链场景 `SA-12` 在已部署核心上端到端驱动该构造器：一把非合约管理员的临时密钥注册账户、支付费用，并从 SDK 构造的交易中把恰好 1 GAS 移出账户的代理地址；同一个构造器在交易存在之前就拒绝管理员从未配置作用域的账户。回执记录了构造出的脚本、两个签名方与钱包签名请求。
+
+## 费用估算
+
+已发布的 Neo RPC 在 `calculatenetworkfee` 中会省略自定义的非空验证脚本：其估算不包含代理的 VM 验证开销与序列化见证字节。因此代理模式还要求以 datoshi 计的正数 `AA_RELAY_PROXY_NETWORK_FEE_RESERVE`，以及网络或总费用上限。中继在强制所有既有上限之前，会把该运营者选定的预留加到 RPC 估算之上。
+
+这是有界的运营预留，不是自动的精确费用估算。预留不足会被节点拒绝；不必要地过大的预留会支付不必要地过高的网络费用。运营者必须针对自己的节点、脚本大小与接受的操作族进行验证。私有链验收为其测试过的直接转账使用 2 GAS 预留。该测试值不是公开部署的建议值。
+
+中继会保留显式的不赞助选择加入、链下赞助批准绑定，以及系统 / 网络 / 总费用上限。代币转账返回 Boolean false 时，会在预检期间被拒绝，并在费用估算期间再次被拒绝。预检失败或超出上限之后不会广播任何交易。
+
+## 赞助边界
+
+**通过 `executeSponsoredUserOp` 与 `executeSponsoredUserOps` 的代理转账仍处于禁用状态。** 合约的 Verification 入口会拒绝这些信封，中继也会在计算费用或为广播签名交易之前，显式拒绝使用这两个入口的代理转账。
+
+交易见证在 `executeUserOp` 清除其钩子与验证上下文之后仍然存在。当前赞助接受一个基于其自报 `authorizedCore` 的 Paymaster；那不是独立的信任决策。若结算调用了代理见证作用域覆盖的合约，该权限可能在已签名操作的钩子记账之外被复用。因此支持受赞助的代理转账，需要针对 Paymaster 权限与见证生命周期的经评审设计。通过常规 Paymaster 的正常路径测试是不够的。
+
+直接代理转账仍可使用链下的中继赞助策略：交易本身仍是单次 `executeUserOp(s)` 调用，支付费用的中继不会通过链上结算回调获得报销。
+
+## 钱包行为与验收
+
+NEP-17 预设可以在中继模式下暂存一次代理转账。暂存的操作会记录需要代理见证。客户端路径现在用 SDK 构造器（`buildClientProxyWitnessTransaction`）构建完整的代理见证交易，并携带其自定义作用域的钱包签名请求，因此能为构造出的交易签名的钱包可以完成转移：dApp 请钱包以费用支付方身份签署交易，并自行附加代理验证见证。普通钱包的 `invoke` API 会广播它自己的交易，无法携带不是它创建的验证脚本，因此 `executeBroadcast` 仍拒绝经此类钱包发送，而不是提交一笔会返回 false 却仍燃烧费用的转账；导入的草稿在客户端广播时也接受同样的检查。钱包端到端路径（本地链上的钱包垫片）单独跟踪。未启用该特性的中继保留其先前行为，并拒绝缺少有效见证的标准代币转账。
+
+配置的作用域仍是管理员管理的前置条件。该变更不会让任意账户自助配置作用域，也不会激活某个原生 SmartAccount 配置。
+
+当前源码的私有链场景 `SRC-09` 验证真实直接转账的余额、nonce、所有者余额不变、费用支付方、确切的签名方规则与代理脚本。它还验证无效签名、缺失 / 不足的费用预留、超出的网络上限、中继赞助拒绝，以及节点对受赞助信封的拒绝。其回执门禁会拒绝缺失或被改动的原始状态 / 交易证据。历史已部署工件的预期另行处理。

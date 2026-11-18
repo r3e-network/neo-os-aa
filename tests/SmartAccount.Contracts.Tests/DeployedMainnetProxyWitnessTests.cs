@@ -55,11 +55,11 @@ public class DeployedMainnetProxyWitnessTests
     public void DeployedMainnet_FixtureMatchesTrackedBuildAnchor()
     {
         CollectionAssert.AreEqual(
-            File.ReadAllBytes(Path.Combine(ContractsBuildDir, "SmartAccountV3.nef")),
+            File.ReadAllBytes(Path.Combine(ContractsBuildDir, "SmartAccount.nef")),
             File.ReadAllBytes(Path.Combine(FixtureDir, "SmartAccountV3.nef")),
             "The deployed-mainnet fixture must be the tracked byte anchor used by the read-back report.");
         CollectionAssert.AreEqual(
-            File.ReadAllBytes(Path.Combine(ContractsBuildDir, "SmartAccountV3.manifest.json")),
+            File.ReadAllBytes(Path.Combine(ContractsBuildDir, "SmartAccount.manifest.json")),
             File.ReadAllBytes(Path.Combine(FixtureDir, "SmartAccountV3.manifest.json")),
             "The deployed-mainnet manifest must match the tracked byte anchor used by the read-back report.");
     }
@@ -171,7 +171,7 @@ public class DeployedMainnetProxyWitnessTests
     public void CandidateBuild_EmitsVerifyScopeTargetEvent()
     {
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 target = fx.Deploy("MockTransferTarget");
         UInt160 accountId = UInt160.Parse("0x1111111111111111111111111111111111111111");
         fx.CallVoid(wallet, "setVerifyScopeTarget", accountId, target);

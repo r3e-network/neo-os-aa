@@ -1,7 +1,7 @@
 # Neo N3 native smart accounts
 
 This document describes the native implementation of the parallel
-[smart-account strategy](AA-IMPLEMENTATION-STRATEGY.md). The deployed-contract
+[smart-account strategy](SA-IMPLEMENTATION-STRATEGY.md). The deployed-contract
 implementation is the near-term NeoOS delivery priority. The native path is
 `SmartAccount`, a protocol service with a
 small, explicit authorization boundary. The [ABI 2 profile](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)
@@ -197,8 +197,8 @@ Source, contract bytecode, native runtime, RPC and client tests cover distinct
 layers. Native module VM probes do not prove the native recovery state machine.
 Mock browser tests do not prove a network transaction. Handwritten formal models
 do not establish complete NeoVM/compiler refinement or cryptographic soundness.
-See the [formal scope](AA-FORMAL-VERIFICATION.md) and
-[remaining proof boundaries](reports/aa-native-open-boundaries-20261008.json).
+See the [formal scope](SA-FORMAL-VERIFICATION.md) and
+[remaining proof boundaries](reports/sa-native-open-boundaries-20261008.json).
 
 Release evidence must identify the exact source and rebuilt artifacts, exercise
 the complete signed transaction on the matching private runtime, verify state and

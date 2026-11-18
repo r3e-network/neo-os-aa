@@ -7,11 +7,11 @@
     ></div>
 
     <div class="relative z-10 glass-panel max-w-lg mx-auto p-10">
-      <h1 class="text-7xl font-outfit font-bold text-aa-orange mb-3">404</h1>
-      <p class="text-lg text-aa-muted mb-2">
+      <h1 class="text-7xl font-outfit font-bold text-sa-orange mb-3">404</h1>
+      <p class="text-lg text-sa-muted mb-2">
         {{ t("nav.pageNotFound", "Page not found") }}
       </p>
-      <p class="text-sm text-aa-muted/70 mb-8">
+      <p class="text-sm text-sa-muted/70 mb-8">
         {{
           t(
             "nav.pageNotFoundDesc",
@@ -25,11 +25,11 @@
           v-for="link in suggestions"
           :key="link.to"
           :to="link.to"
-          class="flex items-center gap-2 rounded-2xl border border-aa-border bg-aa-dark/60 px-4 py-3 text-sm text-aa-muted hover:text-aa-text hover:border-aa-orange/40 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-aa-orange/40"
+          class="flex items-center gap-2 rounded-2xl border border-sa-border bg-sa-dark/60 px-4 py-3 text-sm text-sa-muted hover:text-sa-text hover:border-sa-orange/40 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sa-orange/40"
         >
           <svg
             aria-hidden="true"
-            class="w-4 h-4 flex-shrink-0 text-aa-orange/60"
+            class="w-4 h-4 flex-shrink-0 text-sa-orange/60"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

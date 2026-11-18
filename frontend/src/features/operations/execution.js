@@ -65,9 +65,9 @@ function buildV3UserOperationParam({ operationBody = null, nonce = '0', deadline
   };
 }
 
-function buildExecuteUserOpInvocation({ aaContractHash = '', account = {}, operationBody = null, signerAddress = '', nonce = '0', deadline = '' } = {}) {
+function buildExecuteUserOpInvocation({ saContractHash = '', account = {}, operationBody = null, signerAddress = '', nonce = '0', deadline = '' } = {}) {
   const invocation = buildV3ExecuteUserOpInvocation({
-    aaContractHash,
+    saContractHash,
     accountIdHash: account.accountIdHash || '',
     targetContract: operationBody?.targetContract,
     method: operationBody?.method,
@@ -126,7 +126,7 @@ function resolveNetworkLabel(network, morpheusNetwork) {
 }
 
 export function buildStagedTransactionBody({
-  aaContractHash = '',
+  saContractHash = '',
   account = {},
   operationBody = null,
   signerAddress = '',
@@ -140,7 +140,7 @@ export function buildStagedTransactionBody({
   // invocation naming an entrypoint no deployed contract exports, which the relay now refuses at
   // validation; refusing here keeps the caller from staging a draft that can never be submitted.
   const v3Invocation = buildExecuteUserOpInvocation({
-    aaContractHash,
+    saContractHash,
     account,
     operationBody,
     signerAddress,
@@ -170,7 +170,7 @@ export function buildDraftApprovalTypedData({ draftRecord, chainId = RUNTIME_CON
 
   return {
     domain: {
-      name: 'Neo Abstract Account Workspace',
+      name: 'Neo Smart Account Workspace',
       version: '1',
       chainId,
       verifyingContract: buildVerifyingContract(draftRecord),
@@ -474,7 +474,7 @@ export async function executeBroadcast({
   const typedRecords = signatures.filter((item) => item?.metadata?.metaInvocation && item?.metadata?.typedData);
   if (request.operation === 'executeUserOp' && typedRecords.length) {
     // Metadata hashes are untrusted. Recompute the actual staged argument hash with the target core.
-    const hash = await (deps.computeArgsHash || computeArgsHash)({ rpcUrl: walletService.rpcUrl, aaContractHash: request.scriptHash, args: request.args[1].value[2].value });
+    const hash = await (deps.computeArgsHash || computeArgsHash)({ rpcUrl: walletService.rpcUrl, saContractHash: request.scriptHash, args: request.args[1].value[2].value });
     if (typedRecords.some((item) => sanitizeHex(item.metadata.typedData.message?.argsHash) !== sanitizeHex(hash))) {
       throw new Error('Draft signed invocation mismatch: on-chain arguments hash');
     }

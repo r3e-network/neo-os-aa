@@ -50,8 +50,8 @@ function handleReload() {
   justify-content: center;
   min-height: 100vh;
   padding: 2rem;
-  background: var(--aa-dark, #0a0a0a);
-  color: var(--aa-text, #e5e5e5);
+  background: var(--sa-dark, #0a0a0a);
+  color: var(--sa-text, #e5e5e5);
   font-family: Inter, sans-serif;
 }
 
@@ -59,20 +59,20 @@ function handleReload() {
   text-align: center;
   max-width: 32rem;
   padding: 2.5rem;
-  border: 1px solid var(--aa-border, #262626);
+  border: 1px solid var(--sa-border, #262626);
   border-radius: 0.75rem;
-  background: var(--aa-dark, #0a0a0a);
+  background: var(--sa-dark, #0a0a0a);
 }
 
 .error-title {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--aa-orange, #ff4400);
+  color: var(--sa-orange, #ff4400);
   margin-bottom: 0.75rem;
 }
 
 .error-message {
-  color: var(--aa-muted, #a3a3a3);
+  color: var(--sa-muted, #a3a3a3);
   margin-bottom: 1.5rem;
   line-height: 1.6;
 }
@@ -82,9 +82,9 @@ function handleReload() {
   padding: 1rem;
   margin-bottom: 1.5rem;
   border-radius: 0.5rem;
-  background: rgba(var(--aa-orange-rgb), 0.08);
-  border: 1px solid rgba(var(--aa-orange-rgb), 0.2);
-  color: var(--aa-orange, #ff4400);
+  background: rgba(var(--sa-orange-rgb), 0.08);
+  border: 1px solid rgba(var(--sa-orange-rgb), 0.2);
+  color: var(--sa-orange, #ff4400);
   font-size: 0.8rem;
   overflow-x: auto;
   white-space: pre-wrap;
@@ -93,8 +93,8 @@ function handleReload() {
 
 .btn-reload {
   padding: 0.625rem 2rem;
-  background: var(--aa-orange, #ff4400);
-  color: var(--aa-dark, #0a0a0a);
+  background: var(--sa-orange, #ff4400);
+  color: var(--sa-dark, #0a0a0a);
   border: none;
   border-radius: 0.5rem;
   font-weight: 600;
@@ -108,7 +108,7 @@ function handleReload() {
 }
 
 .btn-reload:focus-visible {
-  outline: 2px solid var(--aa-orange, #ff4400);
+  outline: 2px solid var(--sa-orange, #ff4400);
   outline-offset: 2px;
 }
 </style>

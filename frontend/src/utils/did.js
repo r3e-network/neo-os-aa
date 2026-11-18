@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 
 export const connectedDidProfile = ref(null);
-const DID_STORAGE_KEY = 'aa_connected_did_profile';
+const DID_STORAGE_KEY = 'sa_connected_did_profile';
 
 export function setConnectedDidProfile(profile) {
   connectedDidProfile.value = profile || null;

@@ -1,9 +1,9 @@
 <template>
-  <div class="card hover:border-aa-muted transition-colors duration-200">
-    <h3 class="text-sm font-bold text-aa-text mb-2">
+  <div class="card hover:border-sa-muted transition-colors duration-200">
+    <h3 class="text-sm font-bold text-sa-text mb-2">
       {{ t("studioPanels.metadataTitle", "Account Metadata") }}
     </h3>
-    <p class="text-xs text-aa-muted mb-5">
+    <p class="text-xs text-sa-muted mb-5">
       {{
         t(
           "studioPanels.metadataSubtitle",
@@ -15,7 +15,7 @@
       <div>
         <label
           for="governance-metadata-uri"
-          class="block text-xs font-semibold text-aa-muted mb-1"
+          class="block text-xs font-semibold text-sa-muted mb-1"
           >{{
             t(
               "studioPanels.metadataUriLabel",
@@ -29,7 +29,7 @@
           @input="$emit('update:metadataUri', $event.target.value)"
           type="text"
           maxlength="240"
-          class="input-field font-mono text-sm py-2 px-3 bg-aa-dark"
+          class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
           :placeholder="
             t(
               'studioPanels.metadataUriPlaceholder',
@@ -37,7 +37,7 @@
             )
           "
         />
-        <p class="mt-1 text-xs text-aa-muted">
+        <p class="mt-1 text-xs text-sa-muted">
           {{ metadataUri.length }} / 240 —
           {{
             t(
@@ -50,7 +50,7 @@
       <div>
         <label
           for="governance-description"
-          class="block text-xs font-semibold text-aa-muted mb-1"
+          class="block text-xs font-semibold text-sa-muted mb-1"
           >{{
             t(
               "studioPanels.descriptionLabel",
@@ -63,7 +63,7 @@
           :value="description"
           @input="$emit('update:description', $event.target.value)"
           maxlength="500"
-          class="input-field font-mono text-sm py-2 px-3 bg-aa-dark min-h-20 resize-y"
+          class="input-field font-mono text-sm py-2 px-3 bg-sa-dark min-h-20 resize-y"
           :placeholder="
             t(
               'studioPanels.descriptionPlaceholder',
@@ -71,14 +71,14 @@
             )
           "
         ></textarea>
-        <p class="mt-1 text-xs text-aa-muted">
+        <p class="mt-1 text-xs text-sa-muted">
           {{ description.length }} / 500
         </p>
       </div>
       <div>
         <label
           for="governance-logo-url"
-          class="block text-xs font-semibold text-aa-muted mb-1"
+          class="block text-xs font-semibold text-sa-muted mb-1"
           >{{
             t("studioPanels.logoUrlLabel", "Logo URL (off-chain, HTTPS only)")
           }}</label
@@ -89,7 +89,7 @@
             :value="logoUrl"
             @input="$emit('update:logoUrl', $event.target.value)"
             type="text"
-            class="input-field font-mono text-sm py-2 px-3 bg-aa-dark flex-1"
+            class="input-field font-mono text-sm py-2 px-3 bg-sa-dark flex-1"
             :placeholder="
               t(
                 'studioPanels.logoUrlPlaceholder',
@@ -101,7 +101,7 @@
             v-if="logoUrl"
             :src="logoUrl"
             :alt="t('studioPanels.logoPreview', 'Logo preview')"
-            class="w-8 h-8 rounded border border-aa-border object-cover"
+            class="w-8 h-8 rounded border border-sa-border object-cover"
             @error="$event.target.style.display = 'none'"
           />
         </div>
@@ -127,7 +127,7 @@
                 : t("studioPanels.uploadToNeoFS", "Upload to NeoFS")
             }}
           </button>
-          <span class="text-xs text-aa-muted">{{
+          <span class="text-xs text-sa-muted">{{
             t(
               "studioPanels.uploadLogoHint",
               "Upload an image to NeoFS and set the URL automatically.",

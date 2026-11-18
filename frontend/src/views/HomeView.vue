@@ -1,8 +1,8 @@
 <template>
-  <div class="aa-home-focus">
-    <section class="aa-home-band">
+  <div class="sa-home-focus">
+    <section class="sa-home-band">
       <div class="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:px-8">
-        <div class="aa-home-workflow-card">
+        <div class="sa-home-workflow-card">
           <p class="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
             {{ t("home.powered", "Neo N3 Powered") }} · Focus mode
           </p>
@@ -23,9 +23,9 @@
               v-for="step in primarySteps"
               :key="step.title"
               :to="step.to"
-              class="aa-home-step-link group"
+              class="sa-home-step-link group"
             >
-              <span class="aa-home-step-index">{{ step.index }}</span>
+              <span class="sa-home-step-index">{{ step.index }}</span>
               <span class="min-w-0">
                 <span class="block text-sm font-semibold text-slate-950">{{ step.title }}</span>
                 <span class="mt-1 block text-xs leading-5 text-slate-600">{{ step.body }}</span>
@@ -35,14 +35,14 @@
           </div>
         </div>
 
-        <aside class="aa-home-workflow-card">
+        <aside class="sa-home-workflow-card">
           <div class="flex items-start justify-between gap-4">
             <div>
               <p class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                AA action dock
+                SA action dock
               </p>
               <h2 class="mt-2 text-xl font-semibold text-slate-950">
-                {{ t("home.entryAppTitle", "Create and operate AA accounts") }}
+                {{ t("home.entryAppTitle", "Create and operate SA accounts") }}
               </h2>
             </div>
             <span
@@ -61,7 +61,7 @@
             {{ t("home.entryMarketAction", "Browse Address Market") }}
           </router-link>
 
-          <details class="aa-home-reference mt-5">
+          <details class="sa-home-reference mt-5">
             <summary class="cursor-pointer text-sm font-semibold text-slate-950">
               Deployment reference
             </summary>
@@ -127,7 +127,7 @@ const networkName = computed(() =>
     : t("nav.networkTestnet", "Neo N3 Testnet"),
 );
 
-const accountHash = computed(() => formatHash(RUNTIME_CONFIG.abstractAccountHash));
+const accountHash = computed(() => formatHash(RUNTIME_CONFIG.smartAccountHash));
 const marketHash = computed(() => formatHash(RUNTIME_CONFIG.addressMarketHash));
 
 const statusCards = computed(() => [
@@ -139,7 +139,7 @@ const statusCards = computed(() => [
   {
     label: t("console.statContract", "Contract"),
     value: accountHash.value,
-    title: RUNTIME_CONFIG.abstractAccountHash || "",
+    title: RUNTIME_CONFIG.smartAccountHash || "",
   },
   {
     label: t("console.serviceMarketTitle", "Address Market"),
@@ -172,7 +172,7 @@ const primarySteps = computed(() => [
     title: t("console.serviceMarketTitle", "Address Market"),
     body: t(
       "console.serviceMarketBody",
-      "Browse, buy, and sell vanity AA addresses with on-chain escrow",
+      "Browse, buy, and sell vanity SA addresses with on-chain escrow",
     ),
     to: "/market",
   },

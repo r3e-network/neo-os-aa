@@ -184,7 +184,7 @@ class BindingTests(unittest.TestCase):
         self.manifest.write_text(json.dumps({"abi": {"methods": methods}}))
         self.source = self.root / "Contract.cs"; self.source.write_text("class Contract {}")
         self.inventory = {
-            "schema": "neoos-aa-refinement-inventory/v1", "status": "INVENTORY_ONLY",
+            "schema": "neoos-sa-refinement-inventory/v1", "status": "INVENTORY_ONLY",
             "inputs": {str(p): gate.sha256(p) for p in [self.source, self.nef, self.manifest]},
             "nef": {"sha256": gate.sha256(self.nef), "scriptSha256": hashlib.sha256(b"\x11\x40").hexdigest(),
                     "scriptHex": "1140", "instructions": [

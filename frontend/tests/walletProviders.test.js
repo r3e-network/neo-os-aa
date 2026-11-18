@@ -31,7 +31,7 @@ test('wallet service prefers standard NEP-21 providers for OneGate and NeoLine',
   assert.match(source, /provider\.authenticate/);
 });
 
-test('wallet service maps AA invokes onto NEP-21 invoke arrays', () => {
+test('wallet service maps SA invokes onto NEP-21 invoke arrays', () => {
   const source = read('src/services/walletService.js');
 
   assert.match(source, /buildNep21Invocation/);

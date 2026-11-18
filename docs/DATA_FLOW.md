@@ -1,6 +1,6 @@
 # Contract Data Flow & Storage
 
-The Abstract Account model centralizes all on-chain authority inside the **Master Entry Contract**, while using the browser, Supabase, and optional relay services to improve usability and collaboration.
+The Smart Account model centralizes all on-chain authority inside the **Master Entry Contract**, while using the browser, Supabase, and optional relay services to improve usability and collaboration.
 
 ## 1. System Boundaries
 
@@ -19,7 +19,7 @@ flowchart TD
   end
 
   subgraph Blockchain [Neo N3 Network]
-    Chain[On-Chain AA Contract]
+    Chain[On-Chain SA Contract]
   end
 
   Browser -->|Offline Fallback| Local
@@ -49,7 +49,7 @@ Those boundaries do different jobs:
 
 | Boundary | What lives there | Who can mutate it | Why it exists |
 | --- | --- | --- | --- |
-| On-chain master contract | Admins, managers, thresholds, whitelist / blacklist, verifier, dome, limits, nonces | Authorized AA governance flows | Source of truth for authorization and execution |
+| On-chain master contract | Per-account state (verifier, hook, backup owner, escape, market escrow, metadata), nonces, execution lock, plus the contract-admin and platform-registrar slots | Authorized SA flows, each gated by its own witness | Source of truth for authorization and execution |
 | Browser memory | Current workspace state, selected payload mode, active wallet session | Current browser session | Fast UX and staging |
 | `localStorage` fallback | Local-only drafts and preferences | Same browser only | Offline / no-Supabase development path |
 | Supabase | Draft body, append-only signatures, bounded activity, bounded receipts, scoped slugs | Scope-limited collaboration flows | Shared review and multi-party coordination |
@@ -64,16 +64,16 @@ flowchart TD
   Public([Public Share Link]) -->|View| ReadOnly[Read-Only Access]
   Collaborator([Collaborator Link]) -->|Sign| SigOnly[Signature-Only Append]
   Operator([Operator Link]) -->|Mutate| SignedServer[Signed Operator Route]
-  
+
   SignedServer --> Receipts[Manage Receipts & Status]
   SignedServer --> Rotation[Link Rotation & Preflight]
-  
+
   Chain([On-Chain Execution]) --> Policy[Final Policy Enforcement]
 
   classDef link fill:#fffbeb,stroke:#fcd34d,stroke-width:2px,color:#92400e
   classDef action fill:#ecfdf5,stroke:#6ee7b7,stroke-width:2px,color:#065f46
   classDef enforce fill:#fef2f2,stroke:#fca5a5,stroke-width:2px,color:#991b1b
-  
+
   class Public,Collaborator,Operator link
   class ReadOnly,SigOnly,SignedServer,Receipts,Rotation action
   class Chain,Policy enforce
@@ -96,19 +96,19 @@ flowchart TD
       A[Unified Storage Map]
     end
 
-    A --> B(Admins Map)
-    A --> C(Managers Map)
-    A --> D(Dome Configuration)
-    A --> E(Limits & Restrictions)
+    A --> B(Account State)
+    A --> C(Verifier / Hook Config)
+    A --> D(Escape & Market Escrow)
+    A --> E(Nonces, Limits, Execution Lock)
 
-    B -.-> B1[Prefix: 0x01 + sha256]
-    C -.-> C1[Prefix: 0x03 + sha256]
-    D -.-> D1[Prefix: 0x0E + sha256]
-    E -.-> E1[Prefix: 0x09/0x0B/0x0C composite]
+    B -.-> B1[Prefix 0x01 + accountId]
+    C -.-> C1[Prefix 0x04 / 0x05 + accountId]
+    D -.-> D1[Prefix 0x06 / 0x07 / 0x08 + accountId]
+    E -.-> E1[Prefix 0x03 / 0x0B + accountId]
 
     classDef map fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,color:#334155
     classDef prefix fill:#f0fdfa,stroke:#5eead4,stroke-width:1px,stroke-dasharray: 5 5,color:#115e59
-    
+
     class B,C,D,E map
     class B1,C1,D1,E1 prefix
 ```
@@ -120,7 +120,7 @@ When an execution command enters the Master Contract, it flows through a rigid p
 ```mermaid
 flowchart TD
     Start([Tx Payload Received]) --> HasID{Account ID Valid?}
-    
+
     HasID -- Yes --> ActiveLock{Execution Lock Active?}
     HasID -- No --> Reject1[Revert: Invalid ID]
 
@@ -144,13 +144,13 @@ flowchart TD
     CheckWhitelist -- Yes --> InWhitelist{Target in Whitelist?}
     InWhitelist -- No --> Reject5[Revert: Not Whitelisted]
     InWhitelist -- Yes --> TokenCheck{Is Token Transfer?}
-    
+
     CheckWhitelist -- No --> TokenCheck
 
     TokenCheck -- Yes --> OverLimit{Exceeds Max Limit?}
     OverLimit -- Yes --> Reject6[Revert: Exceeds Limit]
     OverLimit -- No --> Execute[Dynamic Call to Target]
-    
+
     TokenCheck -- No --> Execute
 
     Execute --> Unlock[Remove Execution Lock]
@@ -160,7 +160,7 @@ flowchart TD
     classDef terminal fill:#fef2f2,stroke:#fca5a5,stroke-width:2px,color:#991b1b
     classDef success fill:#ecfdf5,stroke:#6ee7b7,stroke-width:2px,color:#065f46
     classDef action fill:#f0fdfa,stroke:#5eead4,stroke-width:2px,color:#115e59
-    
+
     class HasID,ActiveLock,CustomVer,AuthResult,CheckBlacklist,CheckWhitelist,InWhitelist,TokenCheck,OverLimit decision
     class Reject1,Reject2,Reject3,Reject4,Reject5,Reject6 terminal
     class Start,End success
@@ -201,16 +201,44 @@ This keeps long-lived drafts explainable and reviewable without letting metadata
 
 | Prefix Identifier | Hex Value | Purpose |
 | :--- | :---: | :--- |
-| `AdminsPrefix` | `0x01` | Serialized array of admin addresses. |
-| `AdminThresholdPrefix` | `0x02` | Integer threshold for admins. |
-| `ManagersPrefix` | `0x03` | Serialized array of manager addresses. |
-| `ManagerThresholdPrefix` | `0x04` | Integer threshold for managers. |
-| `BlacklistPrefix` | `0x09` | Composite key for blocked external contracts. |
-| `WhitelistPrefix` | `0x0B` | Composite key for allowed external contracts. |
-| `MaxTransferPrefix` | `0x0C` | Composite key for token transfer caps. |
-| `VerifierContractPrefix` | `0x12` | Script hash of custom verifier logic. |
+| `Prefix_AccountState` | `0x01` | Serialized per-account state: verifier, hook, backup owner, escape timelock. |
+| `Prefix_VerifyContext` | `0x02` | Verification context captured for the running witness check. |
+| `Prefix_Nonce` | `0x03` | Composite key for the per-account nonce channels. |
+| `Prefix_VerifierConfigContext` | `0x04` | Retained verifier configuration context. |
+| `Prefix_HookConfigContext` | `0x05` | Retained hook configuration context. |
+| `Prefix_MarketEscrowContract` | `0x06` | Market escrow contract bound to the account. |
+| `Prefix_MarketEscrowListing` | `0x07` | Market escrow listing records. |
+| `Prefix_EscapeLastInitiated` | `0x08` | Start of the current escape window. |
+| `Prefix_PendingVerifierUpdate` | `0x09` | Delayed verifier update awaiting its maturity time. |
+| `Prefix_PendingHookUpdate` | `0x0A` | Delayed hook update awaiting its maturity time. |
+| `Prefix_ExecutionLock` | `0x0B` | Re-entrancy lock held for the duration of one operation. |
+| `Prefix_MetadataUri` | `0x0C` | Account metadata URI. |
+| `Prefix_HookExecutionContext` | `0x0D` | Per-account hook execution context. |
+| `Prefix_VerifierExecutionContext` | `0x0E` | Per-account verifier execution context. |
+| `Prefix_PendingVerifierCall` | `0x0F` | Deferred verifier call record. |
+| `Prefix_PendingHookCall` | `0x10` | Deferred hook call record. |
+| `Prefix_ContractAdmin` | `0x11` | Bare slot: the contract admin of the shared core. |
+| `Prefix_UpdateTimelock` | `0x14` | Bare slot: timelock for a contract update. |
+| `Prefix_PendingContractAdmin` | `0x15` | Bare slot: pending contract-admin transfer. |
+| `Prefix_AdminTransferTimelock` | `0x16` | Bare slot: timelock for the contract-admin transfer. |
+| `Prefix_PlatformRegistrar` | `0x17` | Bare slot: the platform registrar pointer. |
+| `Prefix_PendingPlatformRegistrar` | `0x18` | Bare slot: pending registrar pointer. |
+| `Prefix_PlatformRegistrarTimelock` | `0x19` | Bare slot: timelock for the registrar pointer. |
+| `Prefix_PendingUpdateNefHash` | `0x1A` | Bare slot: NEF hash of a pending update. |
+| `Prefix_PendingUpdateManifestHash` | `0x1B` | Bare slot: manifest hash of a pending update. |
+| `Prefix_VerifyScopeTarget` | `0x1C` | Target the current witness check is scoped to. |
+| `Prefix_MarketEscrowCancelInitiated` | `0x1D` | Start of the market-escrow cancellation window. |
+| `Prefix_PlatformAccountBinding` | `0x1E` | Per-account platform binding. |
+| `Prefix_PlatformProxyAccount` | `0x1F` | Proxy account of a platform binding. |
+| `Prefix_TransactionReimbursement` | `0x21` | Bare slot: the per-transaction reimbursement ceiling. |
+| `Prefix_HookDependencies` | `0x23` | Composite-module child registry for hooks. |
+| `Prefix_VerifierDependencies` | `0x24` | Composite-module child registry for verifiers. |
+| `Prefix_DependencyMaintenance` | `0x25` | Bare slot: dependency maintenance marker. |
+| `Prefix_ConfigurationContextDepth` | `0x26` | Bare slot: configuration-context nesting depth. |
+
+The prefixes above are the source of truth in `contracts/SmartAccount.Internal.cs` (per-account keys) and `contracts/SmartAccount.Admin.cs` / `contracts/SmartAccount.PlatformRegistrar.cs` (bare slots); a key is the prefix alone or the prefix concatenated with the 20-byte `accountId`.
 
 
 ## Matrix Domain Boundary
 
-The `.matrix` contract acts as an external naming boundary. It is not the source of AA authorization state; instead, it provides a human-readable identifier that resolves to the controlling wallet address. The frontend then combines that address with AA admin/manager discovery reads to find the actual bound AA addresses.
+The `.matrix` contract acts as an external naming boundary. It is not the source of SA authorization state; instead, it provides a human-readable identifier that resolves to the controlling wallet address. V3 keeps no reverse index from that address to the accounts it controls, so a name resolves one way only: read each account you know with `getAccountState` rather than expecting the domain to list them.

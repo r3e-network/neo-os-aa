@@ -1,12 +1,12 @@
 <template>
   <nav class="mb-3" :aria-label="t('nav.breadcrumbAria', 'Breadcrumb')">
-    <ol class="flex flex-wrap gap-1.5 list-none m-0 p-0 text-sm text-aa-text/75">
+    <ol class="flex flex-wrap gap-1.5 list-none m-0 p-0 text-sm text-sa-text/75">
       <template v-for="(item, index) in items" :key="`${item.label}-${index}`">
         <li>
           <RouterLink
             v-if="item.to"
             :to="item.to"
-            class="text-aa-orange hover:text-aa-lightOrange transition-colors duration-200"
+            class="text-sa-orange hover:text-sa-lightOrange transition-colors duration-200"
             >{{ item.label }}</RouterLink
           >
           <span
@@ -15,7 +15,7 @@
             >{{ item.label }}</span
           >
         </li>
-        <li v-if="index < items.length - 1" class="select-none text-aa-text/70">
+        <li v-if="index < items.length - 1" class="select-none text-sa-text/70">
           <svg
             aria-hidden="true"
             class="w-3 h-3"

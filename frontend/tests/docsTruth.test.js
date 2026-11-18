@@ -1,4 +1,4 @@
-// Guards the AA documentation against the drift CU-163 measured: documented entrypoints,
+// Guards the SA documentation against the drift CU-163 measured: documented entrypoints,
 // paymaster ABI names, SDK method names, deployment hashes, the VULN-001 state and cited
 // receipts. The oracles are machine-readable and live in code or in committed artifacts:
 //
@@ -50,11 +50,21 @@ const repoRoot = path.resolve(frontendRoot, '..');
 const read = (relative) => fs.readFileSync(path.join(repoRoot, relative), 'utf8').replace(/\r\n?/g, '\n');
 const exists = (relative) => fs.existsSync(path.join(repoRoot, relative));
 
+// A Chinese counterpart is the SAME document in another language, not an independent one. The guard
+// therefore scans it under the class of the document it mirrors: a mirror of a current document is
+// held to the current runtime with the same rules, a mirror of a ratcheted document must reproduce
+// that document's ledger entry for entry, and a justified fence mention is justified once per
+// document rather than once per language. A `.zh-CN.md` file with no source stays an ordinary
+// document of its own, so an orphan translation is scanned rather than silently demoted.
+const translationSource = (file) => (file.endsWith('.zh-CN.md') ? file.replace(/\.zh-CN\.md$/, '.md') : file);
+const docClass = (file) => (file !== translationSource(file) && exists(translationSource(file)) ? translationSource(file) : file);
+const isMirrorDoc = (file) => file.endsWith('.md') && docClass(file) !== file;
+const mirrorOf = (file) => file.replace(/\.md$/, '.zh-CN.md');
+
 // Documents whose claims must hold for the runtime that ships today. DS-CU-163-20261009.md
 // section 5 lists them and records why the rest of the V2-era documents are debt instead.
 const CURRENT_DOCS = [
   'README.md',
-  'docs/PLUGIN_MATRIX.md',
   'docs/QUICK_REFERENCE.md',
   'docs/architecture.md',
   'frontend/src/assets/docs/repo-readme.md',
@@ -73,11 +83,10 @@ const CURRENT_DOCS = [
   // SmartAccount rename. They describe the source ABI directly, so the
   // historical V2 dead-name ratchet must not classify their reviewed terms as
   // legacy deployment debt.
-  'docs/AA-CONTRACT-HANDOFF.md',
-  'docs/AA-ENTRYPOINT-CLOSURE.md',
-  'docs/AA-FRONTEND-CORRESPONDENCE.md',
-  'docs/AA-INTEROP-CONVERSION.md',
-  'docs/AA-SYSCALL-ADMISSION.md',
+  'docs/SA-CONTRACT-HANDOFF.md',
+  'docs/SA-ENTRYPOINT-CLOSURE.md',
+  'docs/SA-FRONTEND-CORRESPONDENCE.md',
+  'docs/SA-METHOD-REFINEMENT.md',
 ];
 
 // The ordinary delivery track has two additive reads in source that are deliberately not copied
@@ -87,7 +96,7 @@ const CURRENT_DOCS = [
 const SOURCE_ONLY_ORDINARY_READS = new Map([
   ['docs/ORDINARY_ACCOUNT_WORKSPACE.md', {
     names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
-    caveat: /旧部署只提供存在性和成熟时间|完整审阅需要部署/i,
+    caveat: /旧部署只提供存在性和成熟时间|完整审阅需要部署|older deployments? exposes? only\s+existence and maturity/i,
   }],
   ['docs/PENDING_CONFIG_UPDATE_READ_ABI.md', {
     names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
@@ -109,24 +118,20 @@ const SOURCE_ONLY_ORDINARY_READS = new Map([
 // The class is not a suppression list. Every entry names a current document and a visible pinned-
 // source scope, and the source/external sets are derived or exact rather than inferred from shape.
 const SOURCE_BRIDGE_DOCS = new Map([
-  ['docs/AA-CONTRACT-HANDOFF.md', {
-    reason: 'Projects the pinned Neo Core contract-handoff path and records the current AA source implementation boundary beside its ABI consequences.',
+  ['docs/SA-CONTRACT-HANDOFF.md', {
+    reason: 'Projects the pinned Neo Core contract-handoff path and records the current SA source implementation boundary beside its ABI consequences.',
     marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
   }],
-  ['docs/AA-ENTRYPOINT-CLOSURE.md', {
-    reason: 'Maps current AA source entrypoints and helpers to the pinned NEF/VM dispatch corpus; helper names are source identities, not public ABI names.',
+  ['docs/SA-ENTRYPOINT-CLOSURE.md', {
+    reason: 'Maps current SA source entrypoints and helpers to the pinned NEF/VM dispatch corpus; helper names are source identities, not public ABI names.',
     marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
   }],
-  ['docs/AA-FRONTEND-CORRESPONDENCE.md', {
-    reason: 'Records source-to-artifact correspondence across the current AA tree, the pinned compiler, Neo Core and Neo VM, including private source members and runtime APIs.',
+  ['docs/SA-FRONTEND-CORRESPONDENCE.md', {
+    reason: 'Records source-to-artifact correspondence across the current SA tree, the pinned compiler, Neo Core and Neo VM, including private source members and runtime APIs.',
     marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
   }],
-  ['docs/AA-INTEROP-CONVERSION.md', {
-    reason: 'Projects the pinned Neo Core interop argument conversion and names fields of the pinned runtime descriptor rather than AA ABI methods.',
-    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
-  }],
-  ['docs/AA-SYSCALL-ADMISSION.md', {
-    reason: 'Projects the pinned Neo Core System.Contract.Call/CALLT admission paths and names their registration, fields and local state rather than AA ABI methods.',
+  ['docs/SA-METHOD-REFINEMENT.md', {
+    reason: 'Collects the pinned Neo Core interop conversion and System.Contract.Call/CALLT admission lanes beside the SA method-level refinement lanes; its names are SA source identities, fields of pinned runtime descriptors or reviewed pinned-runtime symbols, never deployed ABI claims.',
     marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
   }],
 ]);
@@ -141,15 +146,18 @@ const PINNED_RUNTIME_SYMBOLS = new Map([
   ['IsArray', 'InteropParameterDescriptor member evaluated by the pinned interop-conversion projection.'],
   ['IsDynamicCall', 'ExecutionContextState member set by the pinned System.Contract.Call path.'],
   ['Register', 'ApplicationEngine interop registration method projected by the syscall-admission lane.'],
-  ['callFlags', 'Pinned contract-call argument and validation local, not an AA ABI member.'],
+  ['callFlags', 'Pinned contract-call argument and validation local, not an SA ABI member.'],
   ['executeNext', 'ApplicationEngine instruction loop projected by the exception-identity lane.'],
   ['hasReturnValue', 'Pinned contract-handoff local derived from the selected ABI descriptor.'],
 ]);
 
-// A snapshot audit: its method names are the ones that existed when it was written, so it is not
-// held to the current ABI, but its VULN-001 status must still agree with the deployed artifact and
-// its cited receipts must exist. DS-CU-163 section 4.3 V3.
-const AUDIT_DOCS = ['frontend/src/assets/docs/SECURITY_AUDIT.md'];
+// The snapshot-audit document class, which held a dated audit and its rendered copy (its method
+// names are the ones that existed when it was written, so it is not held to the current ABI, but
+// its VULN-001 status still had to agree with the deployed artifact). DS-CU-163 section 4.3 V3.
+//
+// The class is empty: both members were the March 11, 2026 audit, deleted in the 2026-11 docs
+// cleanup. The surviving protocol audit is a current document and is scanned as one.
+const NO_SNAPSHOT_AUDIT_DOCS = [];
 
 // The native ABI 2 profile is a separate runtime with its own documents (DS-CU-163 section 2.2),
 // and NativeSmartAccountClient declares the exact method set it validates a deployment against.
@@ -172,15 +180,12 @@ const NO_NAMES = new Set();
 // source defines the written spelling (DS-CU-211, DEC-DS-5). CU-202 recorded these entries in a
 // `case:` bucket that described only the letter that differed; CU-211 renamed the bucket to say what
 // they are, and CU-212 widened the vocabulary so the entries the shape rule could not read at all
-// are visible: 34 names became 55 (48 `spelling:` + 7 `entrypoint:`), the rise CU-212 was dispatched
-// to measure and report. The 21 added `spelling:` entries are the same class as the 27 CU-211
-// reclassified, each already justified by the reason its document carries; 0 of the 34 recorded
-// entries was dropped, because the widened vocabulary is a union with the shape rule.
+// are visible. The docs cleanup deleted the 2026-03-29 audit snapshot
+// (docs/SECURITY_AUDIT_RESULTS.md), the 2026-10-08 dependency record and both copies of the
+// March 11, 2026 audit, so their 50 entries left the ledger with them: 5 entries remain
+// (4 `spelling:` + 1 `entrypoint:`) across 3 files, each already justified by the reason its
+// document carries.
 const V2_DEBT = {
-  'docs/DEPENDENCY-CONVERGENCE-20261008.md': {
-    names: ['entrypoint:getAuthTokenInfo'],
-    reason: 'The name is the token API of the Web3Auth v11 SDK upgrade this record rejects, not a Neo contract method; the document is a package decision record, and no deployed manifest carries it.',
-  },
   'docs/ACCOUNT_RECOVERY_AND_IDENTITY.md': {
     names: ['spelling:ClearAccount->clearAccount', 'spelling:VerifyAdmin->verifyAdmin', 'spelling:VerifyExecution->verifyExecution'],
     reason: 'The sentences analyse how the recovery modules clean up and verify (MultiSigVerifier.ClearAccount, MultiHook.ClearAccount, SocialRecoveryVerifier.VerifyExecution/VerifyAdmin) and qualify each name with a C# class that no manifest exports; the deployed ABI of those modules spells them clearAccount, verifyExecution and verifyAdmin, so the names are the C# spelling of exported members and stay recorded (DS-CU-212 section 4, verdict SOUND, recorded).',
@@ -189,31 +194,16 @@ const V2_DEBT = {
     names: ['entrypoint:validateUserOp'],
     reason: 'The name is the Ethereum ERC-4337 validator entry point on the Ethereum side of an explicit mapping (IVerifier.validateSignature is compared with IValidator.validateUserOp), not a Neo entrypoint.',
   },
-  'docs/SECURITY_AUDIT.md': {
-    names: ['entrypoint:IsAnyExecutionActive', 'entrypoint:IsDomeOracleUnlocked', 'spelling:CanExecuteHook->canExecuteHook', 'spelling:ClearAccount->clearAccount', 'spelling:ClearSessionKey->clearSessionKey', 'spelling:EnterMarketEscrow->enterMarketEscrow', 'spelling:SettleMarketEscrow->settleMarketEscrow', 'spelling:SetupRecovery->setupRecovery', 'spelling:ValidateSignature->validateSignature', 'spelling:Verify->verify', 'spelling:VerifyMetaTx->verifyMetaTx'],
-    reason: 'Dated audit (March 11, 2026) of an earlier contract generation: the names and code quotes are that revision\'s, and the document is bannered as historical context rather than a description of the current system.',
-    marker: 'retained as historical security context',
-  },
-  'docs/SECURITY_AUDIT_RESULTS.md': {
-    names: ['entrypoint:IsAnyExecutionActive', 'spelling:CallHook->callHook', 'spelling:CallVerifier->callVerifier', 'spelling:CanConfigureHook->canConfigureHook', 'spelling:CanConfigureVerifier->canConfigureVerifier', 'spelling:ClearAccount->clearAccount', 'spelling:ConfirmHookUpdate->confirmHookUpdate', 'spelling:ConfirmVerifierUpdate->confirmVerifierUpdate', 'spelling:CreateListing->createListing', 'spelling:ExecuteUserOp->executeUserOp', 'spelling:FinalizeEscape->finalizeEscape', 'spelling:InitiateEscape->initiateEscape', 'spelling:OnNEP17Payment->onNEP17Payment', 'spelling:PostExecute->postExecute', 'spelling:PreExecute->preExecute', 'spelling:RefundPendingPayment->refundPendingPayment', 'spelling:RegisterAccount->registerAccount', 'spelling:RotateAdmin->rotateAdmin', 'spelling:SetDailyLimit->setDailyLimit', 'spelling:SetHooks->setHooks', 'spelling:SetSessionKey->setSessionKey', 'spelling:SettleListing->settleListing', 'spelling:SettleMarketEscrow->settleMarketEscrow', 'spelling:UpdateHook->updateHook', 'spelling:UpdateListingPrice->updateListingPrice', 'spelling:UpdateVerifier->updateVerifier', 'spelling:ValidateSignature->validateSignature'],
-    reason: 'Dated audit (2026-03-29): the finding sections preserve original evidence, status labels and code snippets of the audited revision, and the status note says not to read the snippets as a description of the deployed artifact.',
-    marker: 'some original code snippets/status labels are intentionally historical',
-  },
   'frontend/src/assets/docs/custom-verifiers.md': {
     names: ['spelling:Admin->admin'],
-    reason: 'The sentence binds a custom verifier to an account "by an existing Admin of the account": the role is the ABI method the paymaster, the market and the mock target export as admin (contracts/paymaster/Paymaster.cs:93, contracts/market/AAAddressMarket.cs:83, contracts/mocks/MockTransferTarget.cs:36, and the internal HookAuthority.Admin at contracts/hooks/HookAuthority.cs:63), so the C# spelling is a claim about a name the deployment spells admin and it stays recorded (DS-CU-212 section 4).',
-  },
-  'frontend/src/assets/docs/SECURITY_AUDIT.md': {
-    names: ['entrypoint:IsAnyExecutionActive', 'entrypoint:IsDomeOracleUnlocked', 'spelling:CanExecuteHook->canExecuteHook', 'spelling:ClearAccount->clearAccount', 'spelling:ClearSessionKey->clearSessionKey', 'spelling:EnterMarketEscrow->enterMarketEscrow', 'spelling:SettleMarketEscrow->settleMarketEscrow', 'spelling:SetupRecovery->setupRecovery', 'spelling:ValidateSignature->validateSignature', 'spelling:Verify->verify', 'spelling:VerifyMetaTx->verifyMetaTx'],
-    reason: 'The rendered copy of the dated March 11, 2026 audit: the guard requires this file to equal docs/SECURITY_AUDIT.md byte for byte, so its entries stand or fall with that file and its historical banner.',
-    marker: 'retained as historical security context',
+    reason: 'The sentence binds a custom verifier to an account "by an existing Admin of the account": the role is the ABI method the paymaster, the market and the mock target export as admin (contracts/paymaster/Paymaster.cs:93, contracts/market/SAAddressMarket.cs:83, contracts/mocks/MockTransferTarget.cs:36, and the internal HookAuthority.Admin at contracts/hooks/HookAuthority.cs:63), so the C# spelling is a claim about a name the deployment spells admin and it stays recorded (DS-CU-212 section 4).',
   },
 };
 
 // Framework and service calls that share a name with a contract method but are not one.
 // ContractManagement is the Neo native contract: contracts/SmartAccount.Accounts.cs:404 calls
 // ContractManagement.GetContract and tests/SmartAccount.Contracts.Tests/*.cs invoke the native
-// "getContract" by string, so a document that reads a NEF back that way names no AA entrypoint.
+// "getContract" by string, so a document that reads a NEF back that way names no SA entrypoint.
 // CallFlags is the SmartContract.Framework enum used as the third argument of Contract.Call; it is a
 // type, not an entrypoint, and naming it here is what keeps the scan's vocabulary from being widened
 // entry by entry (DS-CU-210 section 3).
@@ -221,13 +211,16 @@ const FRAMEWORK_RECEIVERS = new Set(['Runtime', 'Contract', 'ContractManagement'
 // Inline code that looks like an entrypoint but is a parameter, a field or a service name.
 // callHash is a field of the pending-module-call record (contracts/SmartAccount.Models.cs:65),
 // not a callable; DS-CU-202 section 4.
-const NON_CALLABLES = new Set(['create_aa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash']);
+const NON_CALLABLES = new Set(['create_sa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash']);
 
 const ENTRYPOINT = /^(?:execute|register|preview|initiate|finalize|settle|update|cancel|confirm|propose|compute|get|set|is|has|can|withdraw|revoke|rotate|claim|deposit|call|lock|unlock|create|build|derive|validate|query|prepare|sign|broadcast|discover)[A-Z][A-Za-z0-9]*$/;
 // A line that marks a name as gone. The repository's translation copies state removal in Chinese,
 // so the marker vocabulary is not English-only; "旧版" (legacy) deliberately does NOT mark a
 // removal, because "legacy X is compatibility-only" was itself the false claim (DS-CU-163 B2).
-const REMOVED = /remov|superseded|no longer|not part|does not exist|never existed|absent|retired|deleted|dropped|gone|were never|移除|删除|弃用|废弃|不再/i;
+// The Chinese forms mirror the English ones the vocabulary already carries - `absent` / `does not
+// exist` are `不存在`, `not part of` is `不属于` - so the same sentence is judged the same way in
+// either language instead of the translation having to invent a stronger word than its source.
+const REMOVED = /remov|superseded|no longer|not part|does not exist|never existed|absent|retired|deleted|dropped|gone|were never|移除|删除|弃用|废弃|不再|不存在|不属于/i;
 
 const deployedAbi = new Map(); // exact ABI name -> the manifest that carries it
 for (const file of fs.readdirSync(path.join(repoRoot, 'contracts/build'))) {
@@ -248,17 +241,19 @@ const deployedSpelling = (name) => deployedAbiLower.get(name.toLowerCase());
 // comments do not count: `'executeUnifiedByAddress'` in an allowlist is a string, not a definition.
 const definedNames = new Set(deployedAbi.keys());
 const tracked = [];
-const SKIP_DIRS = new Set(['node_modules', '.git', 'obj', 'bin', 'dist', 'coverage', 'test-results', '.next', '.codegraph', '.turbo', '.vercel', 'tmp',
-  // Generated by the isolated NuGet restore (gitignored, see .gitignore "Isolated NuGet
-  // restore cache"). It appears on any machine that has compiled contracts and carries package
-  // readmes whose fenced C# is not a claim about this repository's runtime.
-  'nuget-isolated',
-  // Second restore lane (dotnet test -p:RestorePackagesPath=./nuget-isolated1): same class of
-  // generated package cache, same reason to stay out of the documentation ratchet.
-  'nuget-isolated1']);
+const SKIP_DIRS = new Set(['node_modules', '.git', 'obj', 'bin', 'dist', 'coverage', 'test-results', '.next', '.codegraph', '.turbo', '.vercel', 'tmp']);
+// Generated by the isolated NuGet restore (gitignored, see .gitignore "Isolated NuGet restore
+// cache"). It appears on any machine that has compiled contracts and carries package readmes
+// whose fenced C# is not a claim about this repository's runtime. The directory is named by
+// whoever runs the restore (README: -p:RestorePackagesPath=./nuget-isolated; later lanes used
+// ./nuget-isolated1 and ./nuget-isolated-v), so the class is matched by its prefix and not by a
+// list of the lanes seen so far: the list missed nuget-isolated-v and let third-party package
+// readmes into the ratchets below. Only a directory matches; no tracked path carries the prefix.
+const ISOLATED_NUGET_CACHE = /^nuget-isolated/;
+const skipped = (entry) => SKIP_DIRS.has(entry.name) || (entry.isDirectory() && ISOLATED_NUGET_CACHE.test(entry.name));
 (function walk(dir) {
   for (const entry of fs.readdirSync(path.join(repoRoot, dir), { withFileTypes: true })) {
-    if (SKIP_DIRS.has(entry.name) || (entry.name.startsWith('.') && entry.name !== '.')) continue;
+    if (skipped(entry) || (entry.name.startsWith('.') && entry.name !== '.')) continue;
     const relative = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(relative);
     // Path-portability: the ratchet below keys and filters these paths with '/'-separated
@@ -325,7 +320,7 @@ function isSourceBridgeName(file, name) {
 // THE DIVERGENT CLASS (DS-CU-212, DEC-DS-6): every C# definition the compiler exports under a
 // DIFFERENT spelling than the source writes. This is the set of names the `ENTRYPOINT` prefix list
 // below could not read, and it is derived from the manifests and the sources rather than listed,
-// because the class is what the renaming rule produces: 194 members at this base, and it moves when
+// because the class is what the renaming rule produces: 191 members at this base, and it moves when
 // a contract exports or loses a member. A name that merely looks capitalised is not in it, and neither is
 // a C# definition no manifest exports (DEC-DS-5 rule 2: that one is live as source).
 const divergentSpellings = new Set([...sourceDefinitions].filter((name) => {
@@ -513,9 +508,9 @@ function isCallableName(name) {
 // `MultiSigVerifier.ClearAccount`, `VerifyAdmin`. A span is a name LIST only when its words are
 // separated by a comma, semicolon or slash, which is how `createListing, updateListingPrice` and
 // `VerifyAdmin, ClearAccount` are written. Anything else is PROSE and contributes nothing:
-// `Transfer amount exceeds subscription` (the quoted fault message at docs/PLUGIN_MATRIX.md:124)
-// names no callable even though its first word is a member of the class, and a span that is only
-// `Transfer(` is a fragment, not a name.
+// `Transfer amount exceeds subscription` (a fault message quoted in prose) names no callable even
+// though its first word is a member of the class, and a span that is only `Transfer(` is a
+// fragment, not a name.
 //
 // The base rule split every span on whitespace, which is why it read the first word of a sentence as
 // a name whenever the shape vocabulary happened to match it, and why a call whose parentheses were
@@ -627,7 +622,7 @@ function isLiveName(name, file) {
   if (deployedAbi.has(name)) return true;
   if (deployedSpelling(name) !== undefined) return false;
   if (sourceDefinitions.has(name) || definedNames.has(name) || sdkMethods.has(name)) return true;
-  if (NATIVE_PROFILE_DOCS.includes(file) && nativeAbiNames.has(name)) return true;
+  if (NATIVE_PROFILE_DOCS.includes(docClass(file)) && nativeAbiNames.has(name)) return true;
   return false;
 }
 
@@ -794,13 +789,14 @@ function fenceClaims(line, language = '') {
 // What the fenced scan finds, as data: { claims: { file: [names] }, mentions: { file: [names] } }.
 // Kept as a function, not as assertions, so the planted-drift test can call it on a temporary copy
 // of a document and see exactly what the guard would report.
-function fenceScan() {
+function fenceScan({ mirrors = false } = {}) {
   const claims = {};
   const mentions = {};
   const snippetScopes = new Set();
   const files = tracked.filter((file) => file.endsWith('.md')
     && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
-    && !CURRENT_DOCS.includes(file));
+    && !CURRENT_DOCS.includes(docClass(file))
+    && (mirrors ? isMirrorDoc(file) : !isMirrorDoc(file)));
   for (const file of files) {
     const text = read(file);
     const lines = text.split('\n');
@@ -878,9 +874,15 @@ function fenceScan() {
 
 function failures() {
   const problems = [];
-  for (const file of [...CURRENT_DOCS, ...AUDIT_DOCS]) {
+  // The mirrors are scanned as their sources: same class, same rules, their own bytes. A Chinese
+  // counterpart that drops the removal marker making a name historical, or spells a current method
+  // differently, therefore fails here instead of escaping because only the English file is listed.
+  const guarded = [...CURRENT_DOCS, ...NO_SNAPSHOT_AUDIT_DOCS];
+  const guardedWithMirrors = [...guarded, ...guarded.map(mirrorOf).filter(exists)];
+  for (const file of guardedWithMirrors) {
     assert.ok(exists(file), `guarded document ${file} does not exist`);
-    const nameRules = CURRENT_DOCS.includes(file);
+    const classFile = docClass(file);
+    const nameRules = CURRENT_DOCS.includes(classFile);
     const lines = read(file).split('\n');
     const historical = historicalSections(lines);
     let fence = false;
@@ -889,13 +891,13 @@ function failures() {
       const markedRemoved = REMOVED.test(line) || historical[index];
       if (/^\s*```/.test(line)) { fence = !fence; return; }
       if (nameRules) for (const { name } of callableNames(line)) {
-        if (isSourceBridgeName(file, name)) continue;
+        if (isSourceBridgeName(classFile, name)) continue;
         if (deployedAbi.has(name)) continue;
         if (deployedAbiLower.has(name.toLowerCase())) {
           problems.push(`${where}: ${name} is not a deployed ABI name; the artifact spells it ${deployedAbiLower.get(name.toLowerCase())}`);
           continue;
         }
-        const sourceOnly = SOURCE_ONLY_ORDINARY_READS.get(file);
+        const sourceOnly = SOURCE_ONLY_ORDINARY_READS.get(classFile);
         if (sourceOnly?.names.has(name)) {
           if (!sourceOnly.caveat.test(read(file))) {
             problems.push(`${where}: ${name} is source-only in the ordinary track but the document does not disclose the unshipped-artifact boundary`);
@@ -908,10 +910,10 @@ function failures() {
       }
       if (nameRules && fence && !markedRemoved) for (const match of line.matchAll(/\b0x[0-9a-fA-F]{40}\b/g)) {
         if (canonicalHashes.has(match[0].toLowerCase())) continue;
-        if (!/current|canonical|verified hardened|masterHash|AA_RELAY_ALLOWED_HASH/i.test(line)) continue;
+        if (!/current|canonical|verified hardened|masterHash|SA_RELAY_ALLOWED_HASH/i.test(line)) continue;
         problems.push(`${where}: ${match[0]} is presented as the current deployment but is not in generatedMorpheusRegistry.js`);
       }
-      if (nameRules && !markedRemoved) for (const match of line.matchAll(/\b(?:aaClient|client|sdk)\.([A-Za-z_]\w*)\s*\(/g)) {
+      if (nameRules && !markedRemoved) for (const match of line.matchAll(/\b(?:saClient|client|sdk)\.([A-Za-z_]\w*)\s*\(/g)) {
         const name = match[1];
         if (legacySdkMethods.has(name)) problems.push(`${where}: ${name} always throws LEGACY_V3_REMOVED in the SDK and must not be documented as usable`);
         else if (!sdkMethods.has(name)) problems.push(`${where}: ${name} is not an SDK method`);
@@ -932,7 +934,7 @@ function failures() {
       const prose = read(file).replace(/^\s*```[\s\S]*?^\s*```/gm, '');
       for (const paragraph of prose.split(/\n\s*\n/)) {
         const flat = paragraph.replace(/\s+/g, ' ');
-        if (!/current|canonical|verified hardened|masterHash|AA_RELAY_ALLOWED_HASH/i.test(flat)) continue;
+        if (!/current|canonical|verified hardened|masterHash|SA_RELAY_ALLOWED_HASH/i.test(flat)) continue;
         if (REMOVED.test(flat)) continue;
         for (const match of flat.matchAll(/\b0x[0-9a-fA-F]{40}\b/g)) {
           if (canonicalHashes.has(match[0].toLowerCase())) continue;
@@ -1018,6 +1020,10 @@ const REVIEWED_GITLEAKS_IGNORE = {
   path: '.gitleaksignore',
   sha256: '2e665bb7444285dcddb0fe507bd3a9a4e852fc22a1b8ab773fa13f3473cc82c3',
   commit: 'da74a6f1870f2749899e60b5ec1b1f22476c6bc4',
+  // The path the fingerprints were produced against is the one that commit carried. A gitleaks
+  // fingerprint names the commit and the path AT that commit, so the later aa- -> sa- rename of the
+  // report file does not rewrite these bytes: the ignore entry still resolves to the historical
+  // finding and nowhere else.
   report: 'docs/reports/aa-artifact-reproducibility-20261025.json',
   findings: 37,
 };
@@ -1161,7 +1167,7 @@ const reviewedAllowlists = () => [
       // The `accounts` and `proxies` entries for `SessionKeyVerifier`: a 20-byte Neo script hash,
       // with and without the `0x` prefix the report uses for contracts. That report declares
       // `publicNetworksTouched: false` and `networkMagic: 2787300650`, an ephemeral neo-express
-      // chain, and its proxy hash differs from the shared TestNet `aaSessionKeyVerifier` the
+      // chain, and its proxy hash differs from the shared TestNet `saSessionKeyVerifier` the
       // registry carries - so this is a private-chain address, not even a public deployment.
       regexes: ['^[[:space:]]*"SessionKeyVerifier": "(0x)?[0-9a-f]{40}",?[[:space:]]*$'],
     },
@@ -1200,32 +1206,34 @@ function digestReportInventoryAllowances() {
     inventory: { lines, sha256 },
   });
   return [
-    entry('aa-formal-source-lock-content-digests',
+    // Re-triaged when the AA -> SA rename changed the schema string to sa-formal-source-lock/v2 and
+    // renamed coq/SmartAccountAA.v to coq/SmartAccountSA.v: same 349 digest lines, new bytes.
+    entry('sa-formal-source-lock-content-digests',
       'formal/source-lock.json', 349,
-      'f7bce73d33b79fd30b35a7ad5d25d5a17e9d006e5d2b7788d1f87a93a1414c27'),
-    entry('aa-artifact-reproducibility-20261025-content-digests',
-      'docs/reports/aa-artifact-reproducibility-20261025.json', 281,
+      '347f3d49316749473cf391619919c56dd3a8e7f3f705aae33e375921bd232306'),
+    entry('sa-artifact-reproducibility-20261025-content-digests',
+      'docs/reports/sa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
-    entry('aa-artifact-reproducibility-20261030-content-digests',
-      'docs/reports/aa-artifact-reproducibility-20261030.json', 281,
+    entry('sa-artifact-reproducibility-20261030-content-digests',
+      'docs/reports/sa-artifact-reproducibility-20261030.json', 281,
       'a4dab5e934898c42c2944ba0ebc16fce3bd25598e33bf17c72fb2c955bc06da4'),
-    entry('aa-artifact-reproducibility-20261031-content-digests',
-      'docs/reports/aa-artifact-reproducibility-20261031.json', 281,
+    entry('sa-artifact-reproducibility-20261031-content-digests',
+      'docs/reports/sa-artifact-reproducibility-20261031.json', 281,
       '1b38295dfc9f13ffab795615864ff3903c7c706616691358e7b63789444d3053'),
-    entry('aa-artifact-reproducibility-20261113-content-digests',
-      'docs/reports/aa-artifact-reproducibility-20261113.json', 283,
+    entry('sa-artifact-reproducibility-20261113-content-digests',
+      'docs/reports/sa-artifact-reproducibility-20261113.json', 283,
       '90a4f52e7cdfaa69a2ae57a349bf20530831e33973f7f05580be6a674825fd2f'),
-    entry('aa-artifact-reproducibility-20261116-content-digests',
-      'docs/reports/aa-artifact-reproducibility-20261116.json', 296,
+    entry('sa-artifact-reproducibility-20261116-content-digests',
+      'docs/reports/sa-artifact-reproducibility-20261116.json', 296,
       '32762269e32af335e5d2a45b95a9a81d00ebc3fdaf2a89a73689a27177441854'),
-    entry('aa-formal-gate-20261030-content-digests',
-      'docs/reports/aa-formal-gate-20261030.json', 346,
+    entry('sa-formal-gate-20261030-content-digests',
+      'docs/reports/sa-formal-gate-20261030.json', 346,
       '6c467afc4865c0ce091f9683772704a8d1b1faf42e9181dee4b65e50fbd32f07'),
-    entry('aa-formal-gate-20261031-content-digests',
-      'docs/reports/aa-formal-gate-20261031.json', 347,
+    entry('sa-formal-gate-20261031-content-digests',
+      'docs/reports/sa-formal-gate-20261031.json', 347,
       '0e4d67450a326c318f971ddd7c31c6c5383fe097d5aa9a33ef48b2e814088198'),
-    entry('aa-native-ci-probe-consistency-20261009-content-digests',
-      'docs/reports/aa-native-ci-probe-consistency-20261009.json', 14,
+    entry('sa-native-ci-probe-consistency-20261009-content-digests',
+      'docs/reports/sa-native-ci-probe-consistency-20261009.json', 14,
       '55c58d6989b3da94bc151b68e0ac43d090cba6121a697a3a04347f3afe79e198'),
   ];
 }
@@ -1248,14 +1256,14 @@ function digestInventoryControls(line) {
 // The scanner-level test below holds both directions against every count.
 const CU231_CLASSIFIED = new Map([
   ['formal/source-lock.json', 18],
-  ['docs/reports/aa-artifact-reproducibility-20261025.json', 37],
-  ['docs/reports/aa-artifact-reproducibility-20261030.json', 37],
-  ['docs/reports/aa-artifact-reproducibility-20261031.json', 37],
-  ['docs/reports/aa-artifact-reproducibility-20261113.json', 37],
-  ['docs/reports/aa-artifact-reproducibility-20261116.json', 37],
-  ['docs/reports/aa-formal-gate-20261030.json', 18],
-  ['docs/reports/aa-formal-gate-20261031.json', 18],
-  ['docs/reports/aa-native-ci-probe-consistency-20261009.json', 1],
+  ['docs/reports/sa-artifact-reproducibility-20261025.json', 37],
+  ['docs/reports/sa-artifact-reproducibility-20261030.json', 37],
+  ['docs/reports/sa-artifact-reproducibility-20261031.json', 37],
+  ['docs/reports/sa-artifact-reproducibility-20261113.json', 37],
+  ['docs/reports/sa-artifact-reproducibility-20261116.json', 37],
+  ['docs/reports/sa-formal-gate-20261030.json', 18],
+  ['docs/reports/sa-formal-gate-20261031.json', 18],
+  ['docs/reports/sa-native-ci-probe-consistency-20261009.json', 1],
   ['docs/reports/native-domain-copy-20261009/runner-build.json', 32],
   ['docs/reports/native-domain-copy-20261009/candidate-acceptance.json', 1],
   ['docs/reports/native-domain-copy-20261009/comparison.json', 2],
@@ -1391,7 +1399,7 @@ function otherGitleaksFiles() {
   const found = [];
   (function walk(dir) {
     for (const entry of fs.readdirSync(path.join(repoRoot, dir), { withFileTypes: true })) {
-      if (SKIP_DIRS.has(entry.name)) continue;
+      if (skipped(entry)) continue;
       const relative = path.join(dir, entry.name);
       if (entry.isDirectory()) { if (!entry.name.startsWith('.')) walk(relative); continue; }
       if (GITLEAKS_CONFIG_FILES.includes(entry.name) && relative !== GITLEAKS_CONFIG)
@@ -1818,17 +1826,17 @@ test('CU-163: source-bridge scope is explicit and admits only current source or 
     assert.ok(used.has(name), `${name}: pinned runtime symbol is no longer cited by a source-bridge document`);
   }
 
-  assert.ok(isSourceBridgeName('docs/AA-SYSCALL-ADMISSION.md', 'Register'));
-  assert.ok(isSourceBridgeName('docs/AA-FRONTEND-CORRESPONDENCE.md', 'ClearAccount'));
+  assert.ok(isSourceBridgeName('docs/SA-METHOD-REFINEMENT.md', 'Register'));
+  assert.ok(isSourceBridgeName('docs/SA-FRONTEND-CORRESPONDENCE.md', 'ClearAccount'));
   assert.ok(!isSourceBridgeName('docs/architecture.md', 'Register'),
     'a source-bridge name escaped into a deployed-ABI document');
-  assert.ok(!isSourceBridgeName('docs/AA-SYSCALL-ADMISSION.md', 'ExecuteInjectedBridgeOp'),
+  assert.ok(!isSourceBridgeName('docs/SA-METHOD-REFINEMENT.md', 'ExecuteInjectedBridgeOp'),
     'the source-bridge class admitted a name from neither permitted oracle');
 
   // The rule itself must be able to fail in the real scanner. Plant a call that exists in neither the
   // current contract source nor the reviewed pinned-runtime set and require the current-runtime gate
   // to report it, then restore the document for every later test.
-  const target = 'docs/AA-SYSCALL-ADMISSION.md';
+  const target = 'docs/SA-METHOD-REFINEMENT.md';
   const absolute = path.join(repoRoot, target);
   // The plant and its checks run on LF-normalized content (the committed form), while the restore
   // writes the raw worktree bytes back, so an autocrlf checkout neither defeats the marker lookup
@@ -1875,7 +1883,7 @@ test('CU-163: VULN-002 records local evidence without claiming public deployment
     assert.ok(exists(file), `VULN-002 cites a missing formal model: ${file}`);
   }
 
-  const receipt = JSON.parse(read('docs/reports/aa-neoexpress-validation-20261031.json'));
+  const receipt = JSON.parse(read('docs/reports/sa-neoexpress-validation-20261031.json'));
   assert.equal(receipt.status, 'PASS');
   assert.equal(receipt.network.publicNetwork, false);
   assert.ok(receipt.scenarios.some((scenario) => scenario.name === 'escape hatch'));
@@ -1893,7 +1901,7 @@ test('CU-163: Web3Auth ERC-1271 documents its Huyao deployment requirement', () 
   for (const file of [
     'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
     'docs/SECURITY_MODEL.md',
-    'docs/AA-FORMAL-VERIFICATION.md',
+    'docs/SA-FORMAL-VERIFICATION.md',
   ]) {
     const text = read(file).replace(/\s+/g, ' ');
     assert.match(text, /Web3Auth\s+ERC-1271.*`?HF_Huyao`? or later/i,
@@ -1938,7 +1946,7 @@ test('CU-163: bounded security claims retain their explicit open boundaries', ()
     assert.ok(exists(file), `bounded security evidence is missing ${file}`);
   }
 
-  const receipt = JSON.parse(read('docs/reports/aa-neoexpress-validation-20261031.json'));
+  const receipt = JSON.parse(read('docs/reports/sa-neoexpress-validation-20261031.json'));
   assert.equal(receipt.status, 'PASS');
   assert.equal(receipt.network.publicNetwork, false);
   for (const prefix of ['MultiSig child pre-check', 'MultiHook child pre-check']) {
@@ -1980,25 +1988,10 @@ test('CU-163: bounded security claims retain their explicit open boundaries', ()
   }
 });
 
-// Presentation rule for snapshot audits: a VULN-00N item must sit under a heading that calls the
-// snapshot historical. This is weaker than the artifact checks above and is stated as such — it
-// cannot prove an item is right, only that a reader is not shown a pre-remediation list as current.
-// The rendered copy must also stay equal to the repository copy, which is the copy the ledger rule
-// above is about.
-test('CU-163: the rendered audit presents its findings as the historical snapshot', () => {
-  for (const file of AUDIT_DOCS) {
-    const lines = read(file).split('\n');
-    let heading = '';
-    lines.forEach((line, index) => {
-      if (/^#{1,4}\s/.test(line)) heading = line;
-      if (!/VULN-00\d/.test(line)) return;
-      const marked = /historical|archived|retained for audit/i.test(line) || /historical|archived|retained for audit/i.test(heading);
-      assert.ok(marked, `${file}:${index + 1}: a VULN-00N item is presented outside a historical section`);
-    });
-  }
-  assert.equal(read('frontend/src/assets/docs/SECURITY_AUDIT.md'), read('docs/SECURITY_AUDIT.md'),
-    'the rendered security audit has drifted from docs/SECURITY_AUDIT.md');
-});
+// The snapshot-audit presentation rule (a VULN-00N item had to sit under a heading that called the
+// snapshot historical, and the rendered copy had to equal the repository copy) retired with the
+// March 11, 2026 audit in the 2026-11 docs cleanup. The identifier rule below still holds for every
+// document: only docs/SECURITY_MODEL.md numbers issues.
 
 // The ledger is the only place that numbers an issue VULN-00N. A second document reusing an id
 // makes a reviewer read two different issues under one name (DS-CU-163 section 4.3 V4).
@@ -2044,7 +2037,7 @@ test('CU-163: no document closes VULN-001 for the public build while the deploye
 //               export even where the C# source defines the PascalCase member (DS-CU-211, DEC-DS-5).
 //               The entry carries the deployed spelling so the ledger says what it should have been;
 //   sdk:        a client method that does not exist, or one that always throws LEGACY_V3_REMOVED.
-function ratchetDebt() {
+function ratchetDebt({ mirrors = false, only = null } = {}) {
   const patterns = {
     entrypoint: (line, file) => (REMOVED.test(line) ? [] : callableNames(line)
       .filter(({ name }) => !(NATIVE_PROFILE_DOCS.includes(file) ? nativeAbiNames : NO_NAMES).has(name))
@@ -2056,25 +2049,25 @@ function ratchetDebt() {
       .filter(({ name }) => deployedSpelling(name) === undefined)
       // A dead reference is a NAME, so a token whose spelling no ABI member carries must still read
       // as one by shape. Without this the widened vocabulary would charge prose that begins with a
-      // word the ABI happens to use - `Transfer amount exceeds subscription`
-      // (docs/PLUGIN_MATRIX.md:124) - as a dead entrypoint, inventing debt for an English word
-      // (DS-CU-212, DEC-DS-6 rule 5).
+      // word the ABI happens to use - `Transfer amount exceeds subscription` - as a dead entrypoint,
+      // inventing debt for an English word (DS-CU-212, DEC-DS-6 rule 5).
       .filter(({ name }) => shapedLikeEntrypoint(name))
       .filter(({ name }) => !isLiveName(name, file))
       .map(({ name }) => `entrypoint:${name}`)),
     spelling: (line) => callableNames(line)
       .filter(({ name }) => !deployedAbi.has(name) && deployedSpelling(name) !== undefined)
       .map(({ name }) => `spelling:${name}->${deployedSpelling(name)}`),
-    sdk: (line) => [...line.matchAll(/\b(?:aaClient|client|sdk)\.([A-Za-z_]\w*)\s*\(/g)].flatMap((match) => legacySdkMethods.has(match[1]) ? [`legacy:${match[1]}`] : sdkMethods.has(match[1]) ? [] : [`sdk:${match[1]}`]),
+    sdk: (line) => [...line.matchAll(/\b(?:saClient|client|sdk)\.([A-Za-z_]\w*)\s*\(/g)].flatMap((match) => legacySdkMethods.has(match[1]) ? [`legacy:${match[1]}`] : sdkMethods.has(match[1]) ? [] : [`sdk:${match[1]}`]),
   };
   const found = {};
-  const files = tracked.filter((file) => file.endsWith('.md')
+  const files = only ?? tracked.filter((file) => file.endsWith('.md')
     && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
-    && !CURRENT_DOCS.includes(file));
+    && !CURRENT_DOCS.includes(docClass(file))
+    && (mirrors ? isMirrorDoc(file) : !isMirrorDoc(file)));
   for (const file of files) {
     const names = new Set();
     for (const line of read(file).split('\n')) {
-      for (const build of Object.values(patterns)) for (const name of build(line, file)) names.add(name);
+      for (const build of Object.values(patterns)) for (const name of build(line, docClass(file))) names.add(name);
     }
     if (names.size) found[file] = [...names].sort();
   }
@@ -2098,6 +2091,23 @@ test('CU-163: the V2-era documents do not grow new dead references (ratchet)', (
       assert.ok(exists(file) && read(file).includes(entry.marker),
         `${file}: the justification claims a scope declaration the document no longer carries: ${entry.marker}`);
     }
+  }
+});
+
+// A counterpart carries the same sentences, so it must carry the same dead references. Each mirror is
+// scanned under its source's class and compared with the source's recorded entry: a translation that
+// introduces a name the English text does not carry, or drops the caveat that made a name historical,
+// changes the entry and fails here. The recorded ledger therefore stays one row per document.
+test('CU-163: a Chinese counterpart records exactly the debt of the document it mirrors', () => {
+  const recorded = ratchetDebt();
+  const mirrors = tracked.filter((file) => file.endsWith('.md') && isMirrorDoc(file)
+    && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
+    && !CURRENT_DOCS.includes(docClass(file)));
+  for (const file of mirrors) {
+    const source = docClass(file);
+    const found = ratchetDebt({ only: [file] });
+    assert.deepEqual(found[file] ?? [], recorded[source] ?? [],
+      `${file}: the translation records different dead references than ${source}`);
   }
 });
 
@@ -2129,11 +2139,11 @@ const V2_FENCE_MENTIONS = {
 // audited rather than a description of the deployed artifact. The guard requires the phrase to be
 // present; this list is what lets a document use it, so an exemption is never implicit and adopting
 // it in a new document fails the test instead of silencing the scan (DS-CU-210 section 3).
-const V2_FENCE_SCOPES = {
-  'docs/SECURITY_AUDIT_RESULTS.md': 'Dated audit (2026-03-29) whose status note ends "Do not use the historical snippets below as a description of the deployed artifact": the fenced C# is that revision\'s code, and the document already carries the note as the reason its inline entries stay in the ratchet.',
-  'docs/SECURITY_AUDIT.md': 'Dated audit (March 11, 2026) whose summary says it "is retained as historical security context rather than as the sole description of the current system": the same reasoning as the results document, in the file the ratchet already justifies with that marker.',
-  'frontend/src/assets/docs/SECURITY_AUDIT.md': 'The rendered copy of the March 11, 2026 audit, required by this guard to equal docs/SECURITY_AUDIT.md byte for byte, so its snippets inherit that document\'s scope note exactly as its ratchet entries already do.',
-};
+//
+// The list is empty. Its only two members were the March 11, 2026 audit and its rendered copy, both
+// deleted in the 2026-11 docs cleanup. An empty list is the enforced state, not a disabled rule: a
+// document that starts carrying the phrase makes the scan report a scope the list does not record.
+const V2_FENCE_SCOPES = {};
 
 test('CU-210: fenced blocks assert nothing the code does not, and the ratchet still holds', () => {
   const scan = fenceScan();
@@ -2161,6 +2171,18 @@ test('CU-210: fenced blocks assert nothing the code does not, and the ratchet st
     'the justified fence mentions changed: a diagram gained a dead label, or a corrected diagram must be removed here');
   for (const [file, entry] of Object.entries(V2_FENCE_MENTIONS)) {
     assert.ok(entry.reason && entry.reason.length >= 40, `${file}: the fence-mention entry needs a reason it must stay`);
+  }
+  // A counterpart's fences are the same fences in another language: the same diagram labels and the
+  // same code positions. Scanning them under their source's class and comparing in both directions
+  // catches a translation that adds a dead label and one that drops a justified label.
+  const mirrorScan = fenceScan({ mirrors: true });
+  assert.deepEqual(mirrorScan.claims, {},
+    `a translated fenced block calls a name the repository does not define:\n${JSON.stringify(mirrorScan.claims, null, 2)}`);
+  for (const file of tracked.filter((entry) => entry.endsWith('.md') && isMirrorDoc(entry)
+    && !entry.startsWith('docs/proposals/') && !entry.startsWith('docs/reports/') && !entry.startsWith('docs/plans/')
+    && !CURRENT_DOCS.includes(docClass(entry)))) {
+    assert.deepEqual(mirrorScan.mentions[file] ?? [], scan.mentions[docClass(file)] ?? [],
+      `${file}: the translation's justified fence mentions differ from ${docClass(file)}`);
   }
   // The scope list is exact: a snapshot may only use the exemption when it says so, and a document
   // that starts saying so must be registered with a reason.
@@ -2636,15 +2658,17 @@ test('CU-210 R3: the lexer names exactly the comment forms the shapes plant', ()
 test('CU-211: the liveness oracle is case-aware in both directions', () => {
   assert.equal(deployedSpelling('CanExecuteHook'), 'canExecuteHook',
     'the VerifyContext member the finding names is no longer spelled canExecuteHook in a manifest');
-  assert.equal(isLiveName('CanExecuteHook', 'docs/SECURITY_AUDIT.md'), false,
+  // The file argument only distinguishes the native-profile class (isLiveName step 4), so any other
+  // document asks the same oracle; the deleted March 11 audit is named as docs/SECURITY_MODEL.md now.
+  assert.equal(isLiveName('CanExecuteHook', 'docs/SECURITY_MODEL.md'), false,
     'the C# source spelling of an exported member is live again; the fence scan cannot see such a name');
-  assert.equal(isLiveName('canExecuteHook', 'docs/SECURITY_AUDIT.md'), true,
+  assert.equal(isLiveName('canExecuteHook', 'docs/SECURITY_MODEL.md'), true,
     'the manifest spelling of an exported member is not live');
   assert.ok(sourceDefinitions.has('CallVerifierChild'),
     'the source-definition oracle lost CallVerifierChild, the C# definition CU-202 finding F1 records as absent from the pinned build');
   assert.equal(deployedSpelling('CallVerifierChild'), undefined,
     'CallVerifierChild is exported by a manifest now, so the live-as-source control is stale');
-  assert.equal(isLiveName('CallVerifierChild', 'docs/SECURITY_AUDIT.md'), true,
+  assert.equal(isLiveName('CallVerifierChild', 'docs/SECURITY_MODEL.md'), true,
     'a C# definition that no manifest exports is treated as dead; the oracle is rejecting names by shape, not by artifact');
   // The ledger keeps the two classes apart and says what the artifact exports, so a reader does not
   // have to open a manifest to know what a `spelling:` entry should have been.
@@ -2672,13 +2696,19 @@ test('CU-211: the liveness oracle is case-aware in both directions', () => {
 // listed, and the recorded ledger is the measurement that widening produced. A reader can check every
 // number here against contracts/build/*.manifest.json and contracts/**/*.cs.
 test('CU-212: the entrypoint vocabulary is derived from the build and both oracles read the class', () => {
-  // 1. The derivation. 194 C# definitions at this base are exported under a different spelling than
+  // 1. The derivation. 191 C# definitions at this base are exported under a different spelling than
   //    the source writes, which is the class CU-211 could not read; the count is what makes this a
   //    derivation over the build rather than a list of names a document happened to use. The count
   //    moved 198 -> 194 when commit 26ad769 deleted contracts/mocks/PlatformRegistrarMock.cs and its
   //    build manifest: the members that artifact exported left the divergent class together with
   //    the artifact that carried them, which is exactly the move a derivation exists to record.
-  assert.equal(divergentSpellings.size, 194,
+  //    It moved 194 -> 191 when the AA -> SA rename spelled SetAllowedAA / IsAllowedAA / GetAAContract
+  //    as SetAllowedSA / IsAllowedSA / GetSAContract in contracts/market/SAAddressMarket.cs and
+  //    contracts/recovery/MorpheusSocialRecoveryVerifier.Queries.cs. The pinned contracts/build
+  //    manifests still export the AA spelling, so the three renamed members have no camelCase export
+  //    to diverge from until the artifacts are regenerated: the class measures the build it is given,
+  //    and this is the build on disk.
+  assert.equal(divergentSpellings.size, 191,
     'the divergent class changed size: a contract member was added, renamed or removed, and the ledger below must be re-measured');
   for (const name of divergentSpellings) {
     assert.equal(deployedSpellingOfSource(name), (() => {
@@ -2703,7 +2733,7 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
     'CallVerifierChild is exported by a manifest now, so the live-as-source control is stale');
   assert.ok(!divergentSpellings.has('CallVerifierChild'),
     'a source-only definition was pulled into the divergent class');
-  assert.equal(isLiveName('CallVerifierChild', 'docs/SECURITY_AUDIT.md'), true,
+  assert.equal(isLiveName('CallVerifierChild', 'docs/SECURITY_MODEL.md'), true,
     'a C# definition that no manifest exports is treated as dead; the oracle is rejecting names by shape, not by artifact');
 
   // 2. Both oracles read the class. The inline oracle is asked through `callableNames`, the fence
@@ -2730,9 +2760,9 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
     'the fence oracle cannot read the deployed spelling of an exported member');
   assert.ok(fenceClaims('OnNEP17Payment(accountId, amount, data)').includes('OnNEP17Payment'),
     'the fence oracle cannot read the source spelling of an exported member');
-  assert.equal(isLiveName('onNEP17Payment', 'docs/SECURITY_AUDIT.md'), true,
+  assert.equal(isLiveName('onNEP17Payment', 'docs/SECURITY_MODEL.md'), true,
     'the deployed spelling of the member is not live, so the oracle would report it as drift');
-  assert.equal(isLiveName('OnNEP17Payment', 'docs/SECURITY_AUDIT.md'), false,
+  assert.equal(isLiveName('OnNEP17Payment', 'docs/SECURITY_MODEL.md'), false,
     'the source spelling of an exported member is live again, so the class is invisible');
 
   // 3. The vocabulary is a union with the shape rule and not a replacement: names only the shape rule
@@ -2742,15 +2772,13 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   assert.equal(isCallableName('exceeds'), false, 'an ordinary word is read as a callable');
   // Prose that STARTS with a name the class carries is read as that name - `Transfer` really is the
   // source spelling of an exported member, and pretending otherwise is the blindness this row fixes.
-  // What keeps it out of the ledger is the document, not a rule that lies about the vocabulary: the
-  // occurrence in docs/PLUGIN_MATRIX.md is written as plain text, and the entrypoint bucket only
-  // charges a token whose spelling no ABI member carries when the shape rule reads it.
+  // What keeps it out of the ledger is the span, not a rule that lies about the vocabulary: the
+  // entrypoint bucket only charges a token whose spelling no ABI member carries when the shape rule
+  // reads it.
   assert.deepEqual(callableNames('the fault says `Transfer amount exceeds subscription`'), [],
     'prose inside a code span is read as a contract name, so an English sentence that begins with a member of the class is charged as debt');
   assert.deepEqual(callableNames('the name `Transfer` alone').map(({ name }) => name),
     ['Transfer'], 'a span that names the class on its own is not read');
-  assert.deepEqual(ratchetDebt()['docs/PLUGIN_MATRIX.md'], undefined,
-    'a current-facing document is in the ratchet ledger');
   assert.deepEqual(callableNames('list `createListing, updateListingPrice`').map(({ name }) => name),
     ['createListing', 'updateListingPrice'], 'a comma-separated name list is no longer read');
   assert.deepEqual(callableNames('call `EnterMarketEscrow(accountId, marketContract, listingId)`').map(({ name }) => name),
@@ -2760,14 +2788,19 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   assert.deepEqual(callableNames('call `enterMarketEscrow(accountId, marketContract, listingId)`').map(({ name }) => name),
     [], 'the vocabulary reads a name the shape rule never read and no source definition carries');
 
-  // 4. The ledger this vocabulary produces: 48 `spelling:` entries and 7 `entrypoint:` entries in 7
-  //    files. The rise from CU-202's 34 is the measurement the row was dispatched to report.
+  // 4. The ledger this vocabulary produces: 4 `spelling:` entries and 1 `entrypoint:` entry in 3
+  //    files. It shrank from the 48/7/7 measurement this row was dispatched to report when the
+  //    documents cleanup retired docs/SECURITY_AUDIT_RESULTS.md and
+  //    docs/DEPENDENCY-CONVERGENCE-20261008.md (28 names), and it shrank again when the same cleanup
+  //    deleted both copies of the March 11, 2026 audit (22 names); the vocabulary rules themselves
+  //    are unchanged, so the r2 measurement of the same corpus in section 7 below must agree with
+  //    these numbers.
   const found = ratchetDebt();
   const entries = Object.values(found).flat();
-  assert.equal(entries.length, 55, `the recorded ledger is not the widened one: ${entries.length} entries`);
-  assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 48, 'the spelling bucket changed size');
-  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 7, 'the entrypoint bucket changed size');
-  assert.equal(Object.keys(found).length, 7, 'the ledger no longer covers 7 files');
+  assert.equal(entries.length, 5, `the recorded ledger is not the widened one: ${entries.length} entries`);
+  assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 4, 'the spelling bucket changed size');
+  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 1, 'the entrypoint bucket changed size');
+  assert.equal(Object.keys(found).length, 3, 'the ledger no longer covers 3 files');
   // Every source-spelled occurrence in a scanned document is now read: the class has no blind spot.
   const missed = [];
   for (const file of Object.keys(found)) {
@@ -3045,60 +3078,53 @@ test('CU-212 R2: a call the sentence punctuates is read, and its drift is report
   assert.deepEqual(lost, [], `the punctuation rule dropped names the r1 parser read:\n${lost.join('\n')}`);
   assert.ok(linesScanned > 10000, `the direction check scanned only ${linesScanned} lines, so it proves little`);
 
-  // 7. On today's corpus the widening moves no entry: the ledger is the same 7 files / 55 names the
-  //    r1 head recorded, so the fix adds enforcement rather than changing what is recorded.
+  // 7. On today's corpus the widening moves no entry: the ledger is 3 files / 5 names, the r1
+  //    records minus the deleted snapshot documents, so the fix adds enforcement rather than
+  //    changing what is recorded.
   const found = ratchetDebt();
   const entries = Object.values(found).flat();
-  assert.equal(entries.length, 55, `the punctuated-call rule changed the ledger size: ${entries.length} entries`);
-  assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 48, 'the spelling bucket changed size');
-  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 7, 'the entrypoint bucket changed size');
-  assert.equal(Object.keys(found).length, 7, 'the ledger no longer covers 7 files');
+  assert.equal(entries.length, 5, `the punctuated-call rule changed the ledger size: ${entries.length} entries`);
+  assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 4, 'the spelling bucket changed size');
+  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 1, 'the entrypoint bucket changed size');
+  assert.equal(Object.keys(found).length, 3, 'the ledger no longer covers 3 files');
   assert.ok(!entries.includes(`entrypoint:InitiateEscape`), 'the punctuated call was recorded in both buckets');
 });
 
 // The integrated closure receipt is deliberately NO-GO: it records a scoped PASS without
 // promoting any public entrypoint or the whole implementation to verified. Keep that distinction
-// machine-checked, and keep every dated evidence reference byte-identical to its cited receipt.
-test('AA integrated closure remains scoped, fail-closed, and bound to current evidence', () => {
-  const receiptPath = 'docs/reports/aa-closure-gate-20261031.json';
+// machine-checked against the receipt the gate document actually cites.
+test('SA integrated closure remains scoped, fail-closed, and bound to current evidence', () => {
+  const receiptPath = 'docs/reports/sa-closure-gate-20261117.json';
   const gate = JSON.parse(read(receiptPath));
 
-  assert.equal(gate.schema, 'neoos-aa-closure-gate/v1');
+  assert.equal(gate.schema, 'neoos-aa-integrated-closure/v1');
   assert.equal(gate.status, 'NO-GO');
   assert.equal(gate.selectedScopeStatus, 'PASS');
-  assert.equal(gate.wholeContractStatus, 'NO-GO');
-  assert.equal(gate.readOnly, true);
-  assert.equal(gate.networkWritesPerformed, false);
-  assert.equal(gate.selection.scopeCount, 22);
-  assert.equal(gate.selection.scopeCount, gate.selection.scopes.length);
-  assert.equal(gate.selection.commandRecords, 27);
-  assert.equal(gate.selection.commandsExitedZero, gate.selection.commandRecords);
-  assert.equal(gate.selection.commandsTimedOut, 0);
-  assert.equal(gate.entrypointCoverage.total, 105);
+  assert.equal(gate.implementationVerified, false);
+  assert.equal(gate.fullImplementationVerified, false);
+  assert.deepEqual(gate.verifiedEntrypoints, []);
+  assert.equal(gate.publicNetworkWritesPerformed, false);
+  assert.equal(gate.abiEntryCount, 109);
+  assert.equal(gate.fullUnprovedCount, 109);
+  assert.equal(gate.entrypointCoverage.total, 109);
   assert.equal(gate.entrypointCoverage.fullyClosed, 0);
   assert.equal(gate.entrypointCoverage.bodyLevelRefined, 34);
-  assert.equal(gate.entrypointCoverage.dispatchLevelOnly, 71);
-  assert.equal(gate.entrypointCoverage.fullUnprovedCount, 105);
-  assert.equal(gate.entrypointCoverage.fullImplementationVerified, false);
   assert.deepEqual(gate.openObligations, [
     'SOURCE_FRONTEND_AND_COMPILER_CORRESPONDENCE',
     'ACTUAL_VM_APPLICATION_ENGINE_ABI_DISPATCH',
     'GAS_RESOURCE_EXCEPTION_AND_TRANSACTION_COMPOSITION',
     'ALL_PUBLIC_ENTRYPOINT_DEPENDENCY_CLOSURES',
   ]);
-
-  for (const evidence of Object.values(gate.evidence)) {
-    // The receipt was produced on an LF checkout, so its pins are LF bytes; read() applies the same
-    // normalization here, and every evidence path is a committed JSON document, not a binary.
-    const digest = createHash('sha256').update(read(evidence.path)).digest('hex');
-    assert.equal(digest, evidence.sha256, `${evidence.path} no longer matches the closure receipt`);
+  // The receipt binds every scoped proof run it consumed, and records at most two concurrent lanes.
+  assert.equal(Object.keys(gate.rawReceiptSha256).length, 24);
+  assert.equal(Object.keys(gate.commands).length, 27);
+  for (const record of Object.values(gate.commands)) {
+    assert.equal(record.exitCode, 0, `${record.log} did not exit zero`);
+    assert.equal(record.timedOut, false, `${record.log} timed out`);
   }
+  assert.equal(gate.maximumConcurrentLanes, 2);
 
-  assert.deepEqual(gate.privacy, {
-    hostPathsIncluded: false,
-    privateKeysIncluded: false,
-    credentialsIncluded: false,
-  });
-  assert.doesNotMatch(read(receiptPath), /\/(?:Users|private|tmp)\//);
-  assert.match(read('docs/AA-CLOSURE-GATE.md'), /2f0cd672/);
+  const gateDoc = read('docs/SA-CLOSURE-GATE.md');
+  assert.match(gateDoc, /sa-closure-gate-20261117\.json/);
+  assert.doesNotMatch(gateDoc, /[A-Za-z]:\\Users\\/);
 });

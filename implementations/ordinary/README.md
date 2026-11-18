@@ -31,7 +31,7 @@ release evidence.
 
 The 108-entry source candidate also reserves sponsored reimbursement against a
 shared per-transaction core budget, provides callback-free permanent owner-only
-recovery, adds the admin-gated freeze surface, and moves its platform services
+recovery, adds the backup-owner-gated freeze surface, and moves its platform services
 (market escrow settlement, paymaster settlement, platform registrar) into
 standalone contracts behind the pending governed upgrade. Recovery keeps
 identity and nonce history but irreversibly disables plugin installation. The
@@ -39,12 +39,14 @@ pinned 90-entry public artifact does not gain these capabilities until its
 governed upgrade and independent readback complete.
 
 The current source candidate passes the declared contract, SDK, frontend and
-formal-model gates. The [dated acceptance report](../../docs/reports/aa-ordinary-acceptance-20261013.md)
-binds the exact candidate, private-chain module scope and remaining integration
-and deployment boundaries. The package entrypoint is `sdk/js/src/index.js`;
+formal-model gates. The [dated candidate-compatibility receipt](../../docs/reports/sa-ordinary-candidate-compatibility-20261116.json)
+records the candidate artifact against the 90-entry pinned public artifact; the
+2026-10-13 acceptance report the status was first recorded against is not part of
+this checkout. Registrar deployment compatibility and native conformance remain
+separate open boundaries. The package entrypoint is `sdk/js/src/index.js`;
 `src/v3` alone is not the complete ordinary client.
 
-The [implementation refinement gate](../../docs/AA-IMPLEMENTATION-REFINEMENT.md)
+The [implementation refinement gate](../../docs/SA-IMPLEMENTATION-REFINEMENT.md)
 binds typed C# source to the exact candidate NEF and checks a universal arithmetic
 region certificate with Coq. Complete C# to NEF to NeoVM refinement remains open;
 the default command returns exit `2` while any public entrypoint is unproved.

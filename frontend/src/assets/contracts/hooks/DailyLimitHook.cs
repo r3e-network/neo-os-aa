@@ -10,7 +10,7 @@ using System.ComponentModel;
 namespace SmartAccount.Hooks
 {
     /// <summary>
-    /// Hook that enforces per-token daily transfer ceilings for an AA account.
+    /// Hook that enforces per-token daily transfer ceilings for an SA account.
     /// </summary>
     /// <remarks>
     /// This hook only inspects transfer-style calls and maintains rolling daily spend state
@@ -26,7 +26,7 @@ namespace SmartAccount.Hooks
     [ContractPermission("*", "canConfigureHook")]
     [ContractPermission("*", "getProxyScriptHash")]
 #endif
-    [ManifestExtra("Description", "Daily Limit Policy Hook Plugin for Neo N3 AA")]
+    [ManifestExtra("Description", "Daily Limit Policy Hook Plugin for Neo N3 SA")]
     public class DailyLimitHook : SmartContract
     {
         private static readonly byte[] Prefix_DailyLimit = new byte[] { 0x01 };
@@ -61,7 +61,7 @@ namespace SmartAccount.Hooks
         public static void ConfirmAdminRotation(UInt160 newAdmin) => HookAuthority.ConfirmAdminRotation(newAdmin);
         public static void CancelAdminRotation() => HookAuthority.CancelAdminRotation();
 
-        // AA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
+        // SA-D-01: timelocked upgrade — Update only succeeds for an artifact pair that was
         // pinned via ProposeUpdate at least 7 days earlier.
         public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash) => HookAuthority.ProposeUpdate(nefHash, manifestHash);
 
@@ -83,7 +83,7 @@ namespace SmartAccount.Hooks
             public BigInteger Amount;
         }
 
-        // Configuration: Only AA account can configure its own limits
+        // Configuration: Only SA account can configure its own limits
         /// <summary>
         /// Sets or clears the maximum amount a given token may transfer in a 24-hour window.
         /// UseRollingWindow enables rolling 24h window (true) vs fixed daily reset at first transaction (false).
@@ -321,7 +321,7 @@ namespace SmartAccount.Hooks
         /// Address that actually holds this account's assets on chain.
         /// </summary>
         /// <remarks>
-        /// A virtual AA account keeps its assets at the script hash of the core's fixed
+        /// A virtual SA account keeps its assets at the script hash of the core's fixed
         /// proxy verification script, not at the accountId - the core states the
         /// invariant in SmartAccount.Proxy.cs: "Hooks, verifiers and consumers
         /// must meter and restrict against this address, not against the accountId

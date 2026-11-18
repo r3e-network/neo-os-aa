@@ -1,7 +1,7 @@
 // CU-209 gate: the client may not build, stage or select an invocation naming an entrypoint the
-// deployed Abstract Account ABI does not export.
+// deployed Smart Account ABI does not export.
 //
-// The oracle is the deployed manifest itself (contracts/build/SmartAccountV3.manifest.json),
+// The oracle is the deployed manifest itself (contracts/build/SmartAccount.manifest.json),
 // never a hand-written list. Two halves:
 //   1. an inventory of every exported function on the client's execution surface, so a new producer
 //      cannot be added without appearing here;
@@ -22,7 +22,7 @@ import * as signedInvocation from '../src/features/operations/signedInvocation.j
 import { EC } from '../src/config/errorCodes.js';
 
 const FRONTEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MANIFEST_PATH = path.resolve(FRONTEND_ROOT, '..', 'contracts', 'build', 'SmartAccountV3.manifest.json');
+const MANIFEST_PATH = path.resolve(FRONTEND_ROOT, '..', 'contracts', 'build', 'SmartAccount.manifest.json');
 const CLIENT_SURFACE = { metaTx, execution, signedInvocation };
 
 // The exported functions of the three client modules that can carry an invocation between them.
@@ -44,7 +44,7 @@ const CLIENT_SURFACE_FUNCTIONS = {
   signedInvocation: ['DEPLOYED_ENTRYPOINTS', 'isDeployedEntrypoint', 'selectSignedInvocation'],
 };
 
-const AA_HASH = '5be915aea3ce85e4752d522632f0a9520e377aaf';
+const SA_HASH = '5be915aea3ce85e4752d522632f0a9520e377aaf';
 const ACCOUNT_ID_HASH = 'f951cd3eb5196dacde99b339c5dcca37ac38cc22';
 const ACCOUNT_ADDRESS_SCRIPT_HASH = '13ef519c362973f9a34648a9eac5b71250b2a80a';
 
@@ -59,7 +59,7 @@ function readDeployedAbi() {
 /** A legacy-shaped invocation: hash160 account, hash160 target, method, args, then the V1/V2 tail. */
 function legacyShapedInvocation(operation) {
   return {
-    scriptHash: AA_HASH,
+    scriptHash: SA_HASH,
     operation,
     args: [
       { type: 'Hash160', value: `0x${ACCOUNT_ADDRESS_SCRIPT_HASH}` },
@@ -77,7 +77,7 @@ function legacyShapedInvocation(operation) {
 
 function stagedV3Body() {
   return execution.buildStagedTransactionBody({
-    aaContractHash: AA_HASH,
+    saContractHash: SA_HASH,
     account: { accountIdHash: ACCOUNT_ID_HASH, accountAddressScriptHash: ACCOUNT_ADDRESS_SCRIPT_HASH },
     operationBody: {
       kind: 'invoke',
@@ -130,7 +130,7 @@ test('the client execution-surface list is exactly the deployed ABI execution su
   assert.deepEqual(
     signedInvocation.DEPLOYED_ENTRYPOINTS.slice().sort(),
     entrypoints.slice().sort(),
-    'the client list drifted from the deployed ABI: derive it from contracts/build/SmartAccountV3.manifest.json',
+    'the client list drifted from the deployed ABI: derive it from contracts/build/SmartAccount.manifest.json',
   );
   for (const operation of entrypoints) {
     assert.equal(signedInvocation.isDeployedEntrypoint(operation), true, `${operation} must be accepted`);
@@ -145,7 +145,7 @@ test('the invocation builders emit only entrypoints the deployed ABI exports', (
   const built = [];
 
   const direct = metaTx.buildExecuteUserOpInvocation({
-    aaContractHash: AA_HASH,
+    saContractHash: SA_HASH,
     accountIdHash: ACCOUNT_ID_HASH,
     targetContract: 'd2a4cff31913016155e38e474a2c06d08be276cf',
     method: 'transfer',
@@ -170,7 +170,7 @@ test('the invocation builders emit only entrypoints the deployed ABI exports', (
   // producer makes it return an invocation instead, that invocation is checked here too.
   try {
     built.push(['execution.buildStagedTransactionBody (no V3 account)', execution.buildStagedTransactionBody({
-      aaContractHash: AA_HASH,
+      saContractHash: SA_HASH,
       account: { accountAddressScriptHash: ACCOUNT_ADDRESS_SCRIPT_HASH },
       operationBody: {
         kind: 'invoke',
@@ -215,7 +215,7 @@ test('the signed-invocation selector accepts only entrypoints the deployed ABI e
   for (const operation of ['executeUserOp', 'executeUserOps']) {
     assert.equal(entrypoints.includes(operation), true, `${operation} must be a deployed entrypoint for this test to mean anything`);
     const invocation = { ...metaTx.buildExecuteUserOpInvocation({
-      aaContractHash: AA_HASH,
+      saContractHash: SA_HASH,
       accountIdHash: ACCOUNT_ID_HASH,
       targetContract: 'd2a4cff31913016155e38e474a2c06d08be276cf',
       method: 'transfer',
@@ -247,7 +247,7 @@ test('the signed-invocation selector accepts only entrypoints the deployed ABI e
       try {
         selected = signedInvocation.selectSignedInvocation(attempt);
       } catch (error) {
-        assert.match(error.message, /unsupported AA wrapper/, `${dead} was refused for the wrong reason: ${error.message}`);
+        assert.match(error.message, /unsupported SA wrapper/, `${dead} was refused for the wrong reason: ${error.message}`);
       }
       assert.equal(selected, null, `${dead} is not a deployed entrypoint and must not be selected`);
     }
@@ -257,7 +257,7 @@ test('the signed-invocation selector accepts only entrypoints the deployed ABI e
 test('staging a body without a V3 accountIdHash fails instead of building a legacy invocation', () => {
   assert.throws(
     () => execution.buildStagedTransactionBody({
-      aaContractHash: AA_HASH,
+      saContractHash: SA_HASH,
       account: { accountAddressScriptHash: ACCOUNT_ADDRESS_SCRIPT_HASH },
       operationBody: {
         kind: 'invoke',
@@ -292,7 +292,7 @@ test('a legacy-shaped client invocation cannot be turned into a client broadcast
     }
     assert.equal(broadcast, null, `a legacy envelope (${clientInvocation.operation}) must never become a wallet request`);
     if (refusal) {
-      assert.match(refusal.message, /unsupported AA wrapper|Invalid account execution envelope|^EC_client_invocation_missing$/, `unexpected refusal: ${refusal.message}`);
+      assert.match(refusal.message, /unsupported SA wrapper|Invalid account execution envelope|^EC_client_invocation_missing$/, `unexpected refusal: ${refusal.message}`);
     }
   }
 });

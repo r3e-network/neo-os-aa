@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build the AA contracts from the current checkout and read their verifier-callback build profile.
+"""Build the SA contracts from the current checkout and read their verifier-callback build profile.
 
 The local-chain suite runs on published Neo.Express, which registers the syscalls of the published
-Neo core. The public AA profile uses standard Contract.Call; its explicit PLATFORM profile declares
+Neo core. The public SA profile uses standard Contract.Call; its explicit PLATFORM profile declares
 `System.Contract.CallWithGasLimit` for both verifier callbacks. A build that carries that interop
 faults on every verifier-signed `executeUserOp` on published Neo; only a private compatible runtime registers it.
 The profile is therefore read from the compiled bytes, never claimed on the command line, so the
@@ -22,8 +22,8 @@ import subprocess
 import sys
 import tempfile
 
-AA = Path(__file__).resolve().parents[2]
-DEFAULT_PROJECT = AA / "contracts/SmartAccount.csproj"
+SA = Path(__file__).resolve().parents[2]
+DEFAULT_PROJECT = SA / "contracts/SmartAccount.csproj"
 
 GAS_BOUNDED_SYSCALL = "System.Contract.CallWithGasLimit"
 FAULT_MARKER = "The given key '1371299780' was not present in the dictionary."
@@ -32,11 +32,11 @@ PROFILE_SYSCALL_ABSENT = "platform-syscall-absent"
 
 # The eight artifacts the local-chain suite deploys, in the names the compiler writes.
 REQUIRED_ARTIFACTS = (
-    "SmartAccountV3",
+    "SmartAccount",
     "MockTransferTarget",
     "WebAuthnVerifier",
     "SessionKeyVerifier",
-    "AAPaymaster",
+    "SAPaymaster",
     "WhitelistHook",
     "DailyLimitHook",
     "SocialRecoveryVerifier",
@@ -284,9 +284,9 @@ def main():
             directory = require_artifacts(args.source_dir)
             built = False
         else:
-            directory = build_source_contracts(args.out or Path(tempfile.mkdtemp(prefix="aa-source-")), args.project)
+            directory = build_source_contracts(args.out or Path(tempfile.mkdtemp(prefix="sa-source-")), args.project)
             built = True
-        report = profile_of(directory / "SmartAccountV3.nef")
+        report = profile_of(directory / "SmartAccount.nef")
         report["out"] = str(directory)
         report["built"] = built
         print(json.dumps(report, indent=2))

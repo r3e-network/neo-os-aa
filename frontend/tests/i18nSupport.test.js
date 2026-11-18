@@ -43,10 +43,10 @@ test('docs registry is guide-first and includes localized Chinese documentation 
   assert.match(registrySource, /How It Works & Usage Guide/);
   assert.match(registrySource, /工作原理与使用指南/);
   assert.match(registrySource, /overview\.zh\.md/);
-  assert.match(registrySource, /architecture\.zh\.md|AA_V3_ARCHITECTURE\.zh-CN\.md/);
+  assert.match(registrySource, /architecture\.zh\.md/);
   assert.match(registrySource, /workflow\.zh\.md/);
   assert.match(registrySource, /data-flow\.zh\.md/);
-  assert.match(guideZh, /抽象账户|Neo/i);
+  assert.match(guideZh, /智能账户|Neo/i);
 });
 
 test('main layout exposes a bilingual language switcher', () => {
@@ -57,23 +57,11 @@ test('main layout exposes a bilingual language switcher', () => {
 });
 
 
-test('docs registry localizes the security audit page for Chinese readers', () => {
+test('docs registry localizes the pages that carry a Chinese edition', () => {
   const registrySource = fs.readFileSync(path.resolve('src/features/docs/registry.js'), 'utf8');
 
-  assert.match(registrySource, /securityAudit/);
-  assert.match(registrySource, /Security Audit/);
-  assert.match(registrySource, /安全审计/);
-  assert.match(registrySource, /security-audit\.zh\.md/);
-});
-
-test('docs registry includes localized paymaster readiness documentation', () => {
-  const registrySource = fs.readFileSync(path.resolve('src/features/docs/registry.js'), 'utf8');
-  const paymasterValidationZh = fs.readFileSync(path.resolve('src/assets/docs/paymaster-validation.zh.md'), 'utf8');
-
-  assert.match(registrySource, /paymasterValidation/);
-  assert.match(registrySource, /Paymaster Readiness/);
-  assert.match(registrySource, /Paymaster 就绪状态/);
-  assert.match(registrySource, /paymaster-validation\.zh\.md/);
-  assert.match(paymasterValidationZh, /paymaster/i);
-  assert.match(paymasterValidationZh, /就绪状态/);
+  for (const asset of ['guide.zh.md', 'overview.zh.md', 'architecture.zh.md', 'workflow.zh.md', 'data-flow.zh.md']) {
+    assert.ok(fs.existsSync(path.resolve('src/assets/docs', asset)), `missing Chinese docs asset: ${asset}`);
+    assert.match(registrySource, new RegExp(asset.replace(/\./g, '\\.')));
+  }
 });

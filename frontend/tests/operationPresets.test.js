@@ -15,7 +15,7 @@ import {
   BUYER_HASH,
   GAS_HASH,
   PROXY_HASH,
-} from './fixtures/aaChainFixtures.js';
+} from './fixtures/saChainFixtures.js';
 
 test('preset registry exposes invoke, NEP-17 transfer, and multisig draft templates', () => {
   assert.deepEqual(

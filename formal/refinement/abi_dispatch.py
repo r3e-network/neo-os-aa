@@ -65,8 +65,8 @@ import hashlib
 import json
 import os
 
-SCHEMA = 'aa-abi-dispatch/v3'
-BOUNDARY_SCHEMA = 'aa-abi-boundary/v1'
+SCHEMA = 'sa-abi-dispatch/v3'
+BOUNDARY_SCHEMA = 'sa-abi-boundary/v1'
 SCOPE = 'actual-vm-application-engine-abi-dispatch'
 
 # The one text that identifies a refusal made by the boundary rather than by the

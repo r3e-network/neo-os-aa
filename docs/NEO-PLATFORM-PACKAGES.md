@@ -3,7 +3,7 @@
 Status on 2026-10-08: the public contract profile and its tests use pinned packages
 published on nuget.org. Public verifier execution and private callback gas isolation are
 separate profiles, with separate artifact directories and evidence
-([AA-REPRODUCIBLE-BUILD.md](AA-REPRODUCIBLE-BUILD.md)).
+([SA-REPRODUCIBLE-BUILD.md](SA-REPRODUCIBLE-BUILD.md)).
 
 ## Historical private-runtime revalidation (2026-10-06)
 
@@ -12,15 +12,15 @@ artifact: a fresh run faults when the VM resolves the
 `System.Contract.CallWithGasLimit` interop hash. This is a runner/runtime
 mismatch, not evidence that the callback cap is optional, and the failed receipt
 is retained separately from release evidence at
-`docs/reports/aa-neoexpress-validation-20261006-v2.json`.
+`docs/reports/sa-neoexpress-validation-20261006-v2.json`.
 
 An independent local NeoExpress build linked to the matching private Neo runtime
 packages was then run against that snapshot of the artifacts. It deployed 25 contracts,
 completed all 14 scenarios with no skipped scenario, persisted 108 transactions,
 and read back all 25 NEF/manifest pairs. The receipt for that historical snapshot is
-`docs/reports/aa-neoexpress-validation-20261006-custom-did.json`; runner source,
+`docs/reports/sa-neoexpress-validation-20261006-custom-did.json`; runner source,
 package hashes, and the temporary API-adapter boundary are recorded in
-`docs/reports/aa-neoexpress-runner-provenance-20261006.json`.
+`docs/reports/sa-neoexpress-runner-provenance-20261006.json`.
 
 This closes the private NeoExpress execution/readback evidence for the matching
 runtime. It does not alter the separate owner action for making the private
@@ -101,9 +101,9 @@ and admission-policy concern. Public activation is a platform decision.
 
 ## Historical public deployment observation
 
-The deployed AA cores do not depend on any of this. Public JSON-RPC reads on 2026-09-28:
+The deployed SA cores do not depend on any of this. Public JSON-RPC reads on 2026-09-28:
 
-| Network | AA core | NEF checksum | Compiler | `CallWithGasLimit` syscall |
+| Network | SA core | NEF checksum | Compiler | `CallWithGasLimit` syscall |
 | --- | --- | --- | --- | --- |
 | MainNet | `0x0268a387913b250166ddec032b03332690a1ef78` | 2035992441 | Neo.Compiler.CSharp 3.9.1 | absent |
 | TestNet | `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2` | 2785794149 | Neo.Compiler.CSharp 3.9.1 | absent |
@@ -133,7 +133,7 @@ the historical test environment, not a new runtime release. Nothing in the defau
 | Neo.Json | 3.10.1.1 | `0275990e41fe6fb6163183ceb5b151a62a16219294852569d1b85a8ef7f4fa63` | no |
 | Neo.VM | 3.10.2-CI00384 | `84bd08d291362cfaf85697f0fb14666719d3443f2f71c39c8de1b9184c20820e` | upstream nightly on the Neo MyGet feed |
 
-The framework and testing hashes equal the ones in `docs/reports/aa-platform-gas-cap-20260921.json`.
+The framework and testing hashes equal the ones in `docs/reports/sa-platform-gas-cap-20260921.json`.
 Compared with the published 3.10.1 framework, the private one adds `Contract.CallWithGasLimit`, lacks
 `AccessControl` and `Ownable2Step`, and otherwise differs only in comments and in the error path of
 `Nep11Token.Burn` (compared on 2026-10-04).

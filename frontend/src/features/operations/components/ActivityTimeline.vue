@@ -8,8 +8,8 @@
         class="rounded-full border px-4 py-1.5 text-xs font-semibold transition-all duration-200"
         :class="
           filter.id === activeFilter
-            ? 'border-aa-orange/50 bg-aa-orange/20 text-aa-orange shadow-sm'
-            : 'border-aa-border bg-aa-panel/40 text-aa-muted hover:bg-aa-panel hover:text-aa-text'
+            ? 'border-sa-orange/50 bg-sa-orange/20 text-sa-orange shadow-sm'
+            : 'border-sa-border bg-sa-panel/40 text-sa-muted hover:bg-sa-panel hover:text-sa-text'
         "
         :aria-pressed="filter.id === activeFilter"
         @click="activeFilter = filter.id"
@@ -19,8 +19,8 @@
           class="ml-2 rounded-full px-2 py-0.5 text-[11px]"
           :class="
             filter.id === activeFilter
-              ? 'bg-aa-orange/30 text-aa-orange'
-              : 'bg-aa-dark text-aa-text'
+              ? 'bg-sa-orange/30 text-sa-orange'
+              : 'bg-sa-dark text-sa-text'
           "
           >{{ filterCounts[filter.id] ?? 0 }}</span
         >
@@ -29,10 +29,10 @@
 
     <div v-if="groupedItems.length === 0" class="empty-state">
       <div
-        class="mx-auto w-12 h-12 rounded-full bg-aa-dark/30 flex items-center justify-center mb-3"
+        class="mx-auto w-12 h-12 rounded-full bg-sa-dark/30 flex items-center justify-center mb-3"
       >
         <svg
-          class="w-6 h-6 text-aa-muted"
+          class="w-6 h-6 text-sa-muted"
           aria-hidden="true"
           fill="none"
           stroke="currentColor"
@@ -46,10 +46,10 @@
           ></path>
         </svg>
       </div>
-      <p class="text-sm text-aa-muted font-medium mb-1">
+      <p class="text-sm text-sa-muted font-medium mb-1">
         {{ emptyStateMessage }}
       </p>
-      <p class="text-xs text-aa-muted">
+      <p class="text-xs text-sa-muted">
         {{
           t(
             "operations.activityEmptyHint",
@@ -60,12 +60,12 @@
     </div>
     <div v-else class="space-y-4">
       <section v-for="group in groupedItems" :key="group.date">
-        <p class="mb-3 text-xs font-bold uppercase text-aa-muted">
+        <p class="mb-3 text-xs font-bold uppercase text-sa-muted">
           {{ formatActivityDateLabel(group.date, { t }) }}
         </p>
         <ul class="space-y-3">
           <li
-            class="rounded-lg border border-aa-border bg-aa-panel/40 px-4 py-3 hover:bg-aa-panel/60 transition-colors duration-200"
+            class="rounded-lg border border-sa-border bg-sa-panel/40 px-4 py-3 hover:bg-sa-panel/60 transition-colors duration-200"
           >
             <div
               v-for="item in group.items"
@@ -82,15 +82,15 @@
                     v-html="presentItem(item).icon"
                   ></span>
                   <div>
-                    <div class="text-xs font-bold uppercase text-aa-muted">
+                    <div class="text-xs font-bold uppercase text-sa-muted">
                       {{ presentItem(item).label }}
                     </div>
-                    <div class="text-sm text-aa-text mt-0.5 leading-relaxed">
+                    <div class="text-sm text-sa-text mt-0.5 leading-relaxed">
                       {{ item.detail }}
                     </div>
                   </div>
                 </div>
-                <div class="text-xs text-aa-muted font-mono whitespace-nowrap">
+                <div class="text-xs text-sa-muted font-mono whitespace-nowrap">
                   {{ formatActivityTimeLabel(item.createdAt, { now, t }) }}
                 </div>
               </div>
@@ -238,14 +238,14 @@ function emitActivityAction(item, action) {
 
 function toneClass(tone) {
   if (tone === "identity")
-    return "bg-aa-info/10 text-aa-info border border-aa-info/30";
+    return "bg-sa-info/10 text-sa-info border border-sa-info/30";
   if (tone === "signature")
-    return "bg-aa-lightOrange/10 text-aa-lightOrange border border-aa-lightOrange/30";
+    return "bg-sa-lightOrange/10 text-sa-lightOrange border border-sa-lightOrange/30";
   if (tone === "relay")
-    return "bg-aa-orange/10 text-aa-orange border border-aa-orange/30";
+    return "bg-sa-orange/10 text-sa-orange border border-sa-orange/30";
   if (tone === "broadcast")
-    return "bg-aa-error/10 text-aa-error border border-aa-error/30";
-  return "bg-aa-panel text-aa-muted border border-aa-border";
+    return "bg-sa-error/10 text-sa-error border border-sa-error/30";
+  return "bg-sa-panel text-sa-muted border border-sa-border";
 }
 
 onBeforeUnmount(() => {

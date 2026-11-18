@@ -9,7 +9,7 @@
 - **钩子插件策略执行**：可附加可选的钩子插件用于每日限额、代币限制、凭证门控和执行后控制。
 - **备份所有者逃生通道**：每个账户可定义原生 Neo 备份所有者及时间锁验证器轮换。
 - **跨链 EVM 兼容**：V3 通过 Web3Auth 验证器路径支持 secp256k1 / Keccak256 EIP-712 `UserOperation` 签名。
-- **链上 Paymaster（赞助交易）**：`AAPaymaster` 为支持的普通 UserOperation 提供无需信任的 GAS 赞助 —— 赞助商存入 GAS，创建每账户或全局策略，中继在成功执行后自动获得报销。代理地址转账仍要求独立见证，赞助代理转账明确拒绝；具体可用性还取决于已部署 Paymaster、策略、费用上限和链上回读。
+- **链上 Paymaster（赞助交易）**：`SAPaymaster` 为支持的普通 UserOperation 提供无需信任的 GAS 赞助 —— 赞助商存入 GAS，创建每账户或全局策略，中继在成功执行后自动获得报销。代理地址转账仍要求独立见证，赞助代理转账明确拒绝；具体可用性还取决于已部署 Paymaster、策略、费用上限和链上回读。
 - **策略门控执行**：新集成应通过 `executeUserOp(accountId, op)` 执行，nonce 处理、验证、钩子和目标执行保持集中化。
 
 ## 项目内容
@@ -22,16 +22,17 @@
 
 ## 建议阅读顺序
 
-1. `README.md`
-2. `docs/HOW_IT_WORKS.zh-CN.md`
-3. `docs/WORKFLOWS.zh-CN.md`
-4. `docs/DATA_FLOW.zh-CN.md`
-5. `docs/architecture.zh-CN.md`
-6. `docs/AA-SYSTEM-STATUS.md`
-7. `docs/ORDINARY_ACCOUNT_WORKSPACE.md`
-8. `docs/AA-FORMAL-VERIFICATION.md`
-9. `docs/AA_V3_ARCHITECTURE.zh-CN.md`（历史架构说明）
-10. `docs/TESTNET_DEPLOYMENT.md`
+完整地图见 [docs/INDEX.zh-CN.md](docs/INDEX.zh-CN.md)。最短路径：
+
+1. [README.md](README.md)（英文规范版）
+2. [docs/HOW_IT_WORKS.zh-CN.md](docs/HOW_IT_WORKS.zh-CN.md) —— 端到端心智模型
+3. [docs/WORKFLOWS.zh-CN.md](docs/WORKFLOWS.zh-CN.md) —— 交易生命周期与提交流程
+4. [docs/DATA_FLOW.zh-CN.md](docs/DATA_FLOW.zh-CN.md) —— 浏览器 / Supabase / 中继 / 链 的边界
+5. [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) —— 技术架构
+6. [docs/SA-SYSTEM-STATUS.zh-CN.md](docs/SA-SYSTEM-STATUS.zh-CN.md) —— 已建成、已部署、已验证，以及尚未成立的部分
+7. [docs/ORDINARY_ACCOUNT_WORKSPACE.zh-CN.md](docs/ORDINARY_ACCOUNT_WORKSPACE.zh-CN.md) —— 普通账户工作区
+8. [docs/SECURITY_MODEL.zh-CN.md](docs/SECURITY_MODEL.zh-CN.md) —— 威胁模型与信任假设
+9. [docs/SA-SPEC.zh-CN.md](docs/SA-SPEC.zh-CN.md) —— 仅有英文的规范与形式化章节导读
 
 同一主分支保留两个实现入口：
 [用户合约实现](implementations/ordinary/README.md) 和
@@ -58,7 +59,7 @@ SmartAccount 共识服务仍属于对应的 Neo core 仓库。
 
 ## 部署配置
 
-对于通过 `AAPaymaster` 合约的链上赞助交易，将 `VITE_AA_PAYMASTER_HASH` 设置为已部署的 Paymaster 合约哈希。赞助商通过 `setPolicy` 将 GAS 存入 Paymaster 并创建赞助策略，中继调用 AA 核心的 `executeSponsoredUserOp`。核心验证策略、执行 UserOp，然后原子性结算报销。参见 SDK 的 `createSponsoredUserOpPayload` 和 `validatePaymasterOp` 方法。
+对于通过 `SAPaymaster` 合约的链上赞助交易，将 `VITE_SA_PAYMASTER_HASH` 设置为已部署的 Paymaster 合约哈希。赞助商通过 `setPolicy` 将 GAS 存入 Paymaster 并创建赞助策略，中继调用 SA 核心的 `executeSponsoredUserOp`。核心验证策略、执行 UserOp，然后原子性结算报销。参见 SDK 的 `createSponsoredUserOpPayload` 和 `validatePaymasterOp` 方法。
 
 当前状态补充：
 

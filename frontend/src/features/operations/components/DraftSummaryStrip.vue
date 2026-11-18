@@ -2,8 +2,8 @@
   <section class="glass-panel p-6 shadow-glow-blue">
     <div class="mb-4 flex items-center justify-between gap-3">
       <div>
-        <h2 class="text-lg font-bold text-aa-text">{{ displayTitle }}</h2>
-        <p class="text-xs text-aa-muted mt-1">
+        <h2 class="text-lg font-bold text-sa-text">{{ displayTitle }}</h2>
+        <p class="text-xs text-sa-muted mt-1">
           {{
             t(
               "operations.draftOverviewSubtitle",
@@ -19,7 +19,7 @@
     >
       <svg
         aria-hidden="true"
-        class="w-10 h-10 text-aa-muted/40 mb-3"
+        class="w-10 h-10 text-sa-muted/40 mb-3"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -31,10 +31,10 @@
           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
         />
       </svg>
-      <p class="text-sm font-semibold text-aa-muted">
+      <p class="text-sm font-semibold text-sa-muted">
         {{ t("operations.noDraftItems", "No draft items yet") }}
       </p>
-      <p class="text-xs text-aa-muted/60 mt-1">
+      <p class="text-xs text-sa-muted/60 mt-1">
         {{
           t(
             "operations.noDraftItemsHint",
@@ -47,10 +47,10 @@
       <div
         v-for="item in summaryItems"
         :key="item.label"
-        class="rounded-lg border border-aa-border bg-aa-dark/40 p-4 shadow-inner hover:bg-aa-dark/60 transition-colors duration-200"
+        class="rounded-lg border border-sa-border bg-sa-dark/40 p-4 shadow-inner hover:bg-sa-dark/60 transition-colors duration-200"
       >
         <div class="mb-2 flex items-start justify-between gap-2">
-          <p class="text-[10px] font-bold uppercase text-aa-orange">
+          <p class="text-[10px] font-bold uppercase text-sa-orange">
             {{ item.label }}
           </p>
           <button
@@ -94,7 +94,7 @@
             </span>
           </button>
         </div>
-        <div class="text-sm font-semibold text-aa-text break-all leading-tight">
+        <div class="text-sm font-semibold text-sa-text break-all leading-tight">
           {{ item.value }}
         </div>
       </div>

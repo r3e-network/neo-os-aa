@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Neo N3 Testnet Validation: On-Chain AAPaymaster Contract
+ * Neo N3 Testnet Validation: On-Chain SAPaymaster Contract
  *
  * Validates the full sponsored transaction lifecycle:
- *   1. Deploy AA Core + Web3AuthVerifier + AAPaymaster
+ *   1. Deploy SA Core + Web3AuthVerifier + SAPaymaster
  *   2. Register an account with Web3Auth verifier
  *   3. Deposit GAS into the Paymaster
  *   4. Create a sponsorship policy
@@ -215,16 +215,16 @@ async function main() {
   }, null, 2));
 
   // ── 1. Deploy Contracts ───────────────────────────────────────────
-  logSection('1. Deploy AA Core + Web3AuthVerifier + AAPaymaster');
+  logSection('1. Deploy SA Core + Web3AuthVerifier + SAPaymaster');
 
-  const core = await deployContract(rpcClient, account, networkMagic, 'SmartAccountV3', `${tag}-core`);
+  const core = await deployContract(rpcClient, account, networkMagic, 'SmartAccount', `${tag}-core`);
   console.log(`  Core: ${core.hash}`);
 
   const verifier = await deployContract(rpcClient, account, networkMagic, 'Web3AuthVerifier', `${tag}-v`);
   console.log(`  Web3AuthVerifier: ${verifier.hash}`);
 
-  const paymaster = await deployContract(rpcClient, account, networkMagic, 'AAPaymaster', `${tag}-pm`);
-  console.log(`  AAPaymaster: ${paymaster.hash}`);
+  const paymaster = await deployContract(rpcClient, account, networkMagic, 'SAPaymaster', `${tag}-pm`);
+  console.log(`  SAPaymaster: ${paymaster.hash}`);
 
   // Authorize verifier and paymaster to know the core
   await invokePersisted(rpcClient, verifier.hash, account, networkMagic, 'setAuthorizedCore', [h160(core.hash)]);
@@ -236,14 +236,14 @@ async function main() {
   results.deployments = { core: core.hash, verifier: verifier.hash, paymaster: paymaster.hash };
 
   const { SmartAccountClient } = await import('../src/index.js');
-  const aaClient = new SmartAccountClient(RPC_URL, core.hash);
+  const saClient = new SmartAccountClient(RPC_URL, core.hash);
 
   // ── 2. Register Account with Web3Auth Verifier ────────────────────
   logSection('2. Register Account with Web3Auth Verifier');
 
   const evmWallet = ethers.Wallet.createRandom();
   const evmPubKeyUncompressed = evmWallet.signingKey.publicKey.slice(2); // remove 0x
-  const accountId = aaClient.deriveRegistrationAccountIdHash({
+  const accountId = saClient.deriveRegistrationAccountIdHash({
     verifierContractHash: verifier.hash,
     verifierParamsHex: evmPubKeyUncompressed,
     backupOwnerAddress: account.scriptHash,
@@ -329,7 +329,7 @@ async function main() {
   const nonceResult = await invokeRead(rpcClient, core.hash, 'getNonce', [h160(accountId), int(0)]);
   const nonce = BigInt(nonceResult?.stack?.[0]?.value || '0');
 
-  const argsHash = await aaClient.computeArgsHash([]);
+  const argsHash = await saClient.computeArgsHash([]);
   const deadline = BigInt(Date.now() + 3600 * 1000);
 
   const typedData = buildV3UserOperationTypedData({

@@ -7,7 +7,7 @@ export const OPERATION_PRESETS = [
   {
     id: 'invoke',
     label: 'Generic Invoke',
-    description: 'Compose any AA wrapper contract call manually.',
+    description: 'Compose any SA wrapper contract call manually.',
   },
   {
     id: 'nep17Transfer',

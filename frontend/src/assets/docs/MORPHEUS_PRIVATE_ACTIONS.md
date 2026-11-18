@@ -1,6 +1,6 @@
 # Morpheus Private Actions & NeoDID Binding (V3 Architecture)
 
-Under the V3 Smart Account architecture, heavy on-chain components (like Oracle Dead-man switches and Social Recovery) have been removed in favor of the lightweight **L1 Native Escape Hatch**. However, the Neo Abstract Account system still seamlessly integrates with the **Morpheus TEE Environment** to enable Private Actions, Session Keys, and NeoDID bindings.
+Under the V3 Smart Account architecture, heavy on-chain components (like Oracle Dead-man switches and Social Recovery) have been removed in favor of the lightweight **L1 Native Escape Hatch**. However, the Neo Smart Account system still seamlessly integrates with the **Morpheus TEE Environment** to enable Private Actions, Session Keys, and NeoDID bindings.
 
 ## How It Works
 
@@ -9,7 +9,7 @@ Instead of storing recovery state on-chain, Morpheus provides a **Trusted Execut
 The process flows exclusively through the `TEEVerifier`, `NeoDIDCredentialHook`, and the on-chain `NeoDIDRegistry`.
 
 ### 1. NeoDID Binding via Web3Auth
-Users can bind their NeoDID to their Abstract Account. This allows a user to authorize actions via their social accounts (Google, Discord, etc.) through Web3Auth, which resolves to a NeoDID signature.
+Users can bind their NeoDID to their Smart Account. This allows a user to authorize actions via their social accounts (Google, Discord, etc.) through Web3Auth, which resolves to a NeoDID signature.
 
 - **Frontend:** User authenticates via Web3Auth.
 - **Enclave:** The Morpheus Enclave validates the Web3Auth token and signs an authorization payload.

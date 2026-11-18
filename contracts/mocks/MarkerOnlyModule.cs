@@ -11,7 +11,7 @@ namespace SmartAccount.Mocks
     /// </summary>
     [DisplayName("MarkerOnlyModule")]
     [ContractPermission("*", "*")]
-    [ManifestExtra("Description", "Test-only incomplete AA module")]
+    [ManifestExtra("Description", "Test-only incomplete SA module")]
     public class MarkerOnlyModule : SmartContract
     {
         [Safe]

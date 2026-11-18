@@ -7,15 +7,15 @@
       @click="sidebarExpanded = !sidebarExpanded"
       :aria-expanded="sidebarExpanded"
       :aria-label="t('studioPanels.toggleSidebar', 'Toggle studio sidebar')"
-      class="lg:hidden w-full flex items-center justify-between rounded-xl border border-aa-border bg-aa-panel/60 px-4 py-3 text-sm font-semibold text-aa-text hover:bg-aa-dark/60 transition-colors duration-200 backdrop-blur-md mb-2"
+      class="lg:hidden w-full flex items-center justify-between rounded-xl border border-sa-border bg-sa-panel/60 px-4 py-3 text-sm font-semibold text-sa-text hover:bg-sa-dark/60 transition-colors duration-200 backdrop-blur-md mb-2"
     >
       <span class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-aa-orange animate-pulse"></span>
+        <span class="w-2 h-2 rounded-full bg-sa-orange animate-pulse"></span>
         {{ t("studioPanels.studioSidebar", "Studio sidebar") }}
       </span>
       <svg
         aria-hidden="true"
-        class="w-3.5 h-3.5 text-aa-muted transition-transform duration-200"
+        class="w-3.5 h-3.5 text-sa-muted transition-transform duration-200"
         :class="sidebarExpanded ? 'rotate-180' : ''"
         fill="none"
         stroke="currentColor"
@@ -34,15 +34,15 @@
       class="space-y-6"
     >
       <div
-        class="bg-aa-panel/60 shadow-glow-blue rounded-lg border border-aa-border p-6 relative overflow-hidden backdrop-blur-xl"
+        class="bg-sa-panel/60 shadow-glow-blue rounded-lg border border-sa-border p-6 relative overflow-hidden backdrop-blur-xl"
       >
         <div
-          class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-aa-dark/30 to-transparent rounded-bl-full -mr-4 -mt-4"
+          class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-sa-dark/30 to-transparent rounded-bl-full -mr-4 -mt-4"
         ></div>
         <h3
-          class="text-xs font-extrabold text-aa-muted uppercase flex items-center gap-2 mb-5 font-outfit"
+          class="text-xs font-extrabold text-sa-muted uppercase flex items-center gap-2 mb-5 font-outfit"
         >
-          <span class="w-2 h-2 rounded-full bg-aa-orange animate-pulse"></span
+          <span class="w-2 h-2 rounded-full bg-sa-orange animate-pulse"></span
           >{{ t("studioPanels.sidebarChecklist", "Pre-flight Checklist") }}
         </h3>
         <ul class="space-y-4">
@@ -50,8 +50,8 @@
             <div
               :class="
                 walletConnected
-                  ? 'bg-aa-success/10 text-aa-success border border-aa-success/30'
-                  : 'bg-aa-dark/50 text-aa-muted border border-aa-border/50'
+                  ? 'bg-sa-success/10 text-sa-success border border-sa-success/30'
+                  : 'bg-sa-dark/50 text-sa-muted border border-sa-border/50'
               "
               class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200"
             >
@@ -90,18 +90,18 @@
               <span
                 :class="
                   walletConnected
-                    ? 'text-aa-text font-bold'
-                    : 'text-aa-muted font-medium'
+                    ? 'text-sa-text font-bold'
+                    : 'text-sa-muted font-medium'
                 "
                 class="block text-sm"
                 >{{
                   t("studioPanels.walletConnected", "Wallet Connected")
                 }}</span
               >
-              <span v-if="walletConnected" class="text-xs text-aa-success">{{
+              <span v-if="walletConnected" class="text-xs text-sa-success">{{
                 t("studioPanels.readyToInteract", "Ready to interact")
               }}</span>
-              <span v-else class="text-xs text-aa-muted">{{
+              <span v-else class="text-xs text-sa-muted">{{
                 t("studioPanels.connectToContinue", "Connect to continue")
               }}</span>
             </div>
@@ -110,8 +110,8 @@
             <div
               :class="
                 computedAddress
-                  ? 'bg-aa-success/10 text-aa-success border border-aa-success/30'
-                  : 'bg-aa-dark/50 text-aa-muted border border-aa-border/50'
+                  ? 'bg-sa-success/10 text-sa-success border border-sa-success/30'
+                  : 'bg-sa-dark/50 text-sa-muted border border-sa-border/50'
               "
               class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200"
             >
@@ -150,24 +150,24 @@
               <span
                 :class="
                   computedAddress
-                    ? 'text-aa-text font-bold'
-                    : 'text-aa-muted font-medium'
+                    ? 'text-sa-text font-bold'
+                    : 'text-sa-muted font-medium'
                 "
                 class="block text-sm"
                 >{{
-                  t("studioPanels.accountAddressReady", "AA Address Ready")
+                  t("studioPanels.accountAddressReady", "SA Address Ready")
                 }}</span
               >
               <span
                 v-if="computedAddress"
-                class="text-xs text-aa-success truncate"
+                class="text-xs text-sa-success truncate"
                 :title="computedAddress"
                 >{{ computedAddress }}</span
               >
-              <span v-else class="text-xs text-aa-muted">{{
+              <span v-else class="text-xs text-sa-muted">{{
                 t(
                   "studioPanels.generateAddressToContinue",
-                  "Generate an AA address to continue",
+                  "Generate an SA address to continue",
                 )
               }}</span>
             </div>
@@ -176,8 +176,8 @@
             <div
               :class="
                 validCreateAdmins.length > 0
-                  ? 'bg-aa-success/10 text-aa-success border border-aa-success/30'
-                  : 'bg-aa-dark/50 text-aa-muted border border-aa-border/50'
+                  ? 'bg-sa-success/10 text-sa-success border border-sa-success/30'
+                  : 'bg-sa-dark/50 text-sa-muted border border-sa-border/50'
               "
               class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200"
             >
@@ -216,15 +216,15 @@
               <span
                 :class="
                   validCreateAdmins.length > 0
-                    ? 'text-aa-text font-bold'
-                    : 'text-aa-muted font-medium'
+                    ? 'text-sa-text font-bold'
+                    : 'text-sa-muted font-medium'
                 "
                 class="block text-sm"
                 >{{ t("studioPanels.backupOwnerSet", "Backup Owner") }}</span
               >
               <span
                 v-if="validCreateAdmins.length > 0"
-                class="text-xs text-aa-success"
+                class="text-xs text-sa-success"
                 >{{
                   t(
                     "studioPanels.backupOwnerConfigured",
@@ -232,7 +232,7 @@
                   )
                 }}</span
               >
-              <span v-else class="text-xs text-aa-muted">{{
+              <span v-else class="text-xs text-sa-muted">{{
                 t(
                   "studioPanels.setBackupOwner",
                   "Set a backup owner for recovery",
@@ -244,12 +244,12 @@
       </div>
 
       <div
-        class="bg-aa-panel/60 shadow-glow-blue rounded-lg border border-aa-border p-6 backdrop-blur-xl"
+        class="bg-sa-panel/60 shadow-glow-blue rounded-lg border border-sa-border p-6 backdrop-blur-xl"
       >
         <h3
-          class="text-xs font-extrabold text-aa-muted uppercase flex items-center gap-2 mb-5 font-outfit"
+          class="text-xs font-extrabold text-sa-muted uppercase flex items-center gap-2 mb-5 font-outfit"
         >
-          <span class="w-2 h-2 rounded-full bg-aa-orange"></span
+          <span class="w-2 h-2 rounded-full bg-sa-orange"></span
           >{{ t("studioPanels.recentActivity", "Recent Activity") }}
         </h3>
         <div
@@ -257,11 +257,11 @@
           class="flex flex-col items-center justify-center py-8 text-center"
         >
           <div
-            class="w-14 h-14 rounded-full bg-aa-panel/60 flex items-center justify-center mb-4 ring-1 ring-aa-border/50 shadow-inner"
+            class="w-14 h-14 rounded-full bg-sa-panel/60 flex items-center justify-center mb-4 ring-1 ring-sa-border/50 shadow-inner"
           >
             <svg
               aria-hidden="true"
-              class="w-6 h-6 text-aa-muted"
+              class="w-6 h-6 text-sa-muted"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -274,10 +274,10 @@
               ></path>
             </svg>
           </div>
-          <span class="text-sm text-aa-muted font-medium mb-1">{{
+          <span class="text-sm text-sa-muted font-medium mb-1">{{
             t("studioPanels.noTransactionsYet", "No transactions yet")
           }}</span>
-          <span class="text-xs text-aa-muted">{{
+          <span class="text-xs text-sa-muted">{{
             t(
               "studioPanels.historyWillAppear",
               "Your transaction history will appear here",
@@ -288,11 +288,11 @@
           <li
             v-for="tx in recentTransactions"
             :key="tx.txid"
-            class="text-sm border border-aa-border rounded-lg bg-aa-dark/40 p-4 hover:bg-aa-dark/60 hover:border-aa-border transition-all duration-200"
+            class="text-sm border border-sa-border rounded-lg bg-sa-dark/40 p-4 hover:bg-sa-dark/60 hover:border-sa-border transition-all duration-200"
           >
             <div class="flex justify-between items-start mb-2">
               <div class="min-w-0">
-                <p class="font-bold text-aa-text">{{ tx.label }}</p>
+                <p class="font-bold text-sa-text">{{ tx.label }}</p>
                 <span
                   class="inline-flex items-center gap-1.5 mt-1 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
                   :class="txStatusBadgeClass(tx.status)"
@@ -304,7 +304,7 @@
               </div>
               <router-link
                 :to="`/transaction-info/${tx.txid}`"
-                class="inline-flex items-center gap-1.5 text-aa-orange hover:text-aa-text font-bold text-[11px] uppercase bg-aa-orange/20 hover:bg-aa-orange/30 px-2.5 py-1.5 rounded transition-colors duration-200"
+                class="inline-flex items-center gap-1.5 text-sa-orange hover:text-sa-text font-bold text-[11px] uppercase bg-sa-orange/20 hover:bg-sa-orange/30 px-2.5 py-1.5 rounded transition-colors duration-200"
               >
                 <svg
                   aria-hidden="true"
@@ -323,7 +323,7 @@
                 {{ t("studioPanels.view", "View") }}
               </router-link>
             </div>
-            <p class="text-xs text-aa-muted font-medium">{{ tx.when }}</p>
+            <p class="text-xs text-sa-muted font-medium">{{ tx.when }}</p>
           </li>
         </ul>
       </div>
@@ -356,12 +356,12 @@ function txStatusLabel(status) {
 function txStatusBadgeClass(status) {
   if (status === "confirmed") return "bg-green-500/15 text-green-400";
   if (status === "failed") return "bg-red-500/15 text-red-400";
-  return "bg-aa-orange/15 text-aa-orange";
+  return "bg-sa-orange/15 text-sa-orange";
 }
 
 function txStatusDotClass(status) {
   if (status === "confirmed") return "bg-green-400";
   if (status === "failed") return "bg-red-400";
-  return "bg-aa-orange animate-pulse";
+  return "bg-sa-orange animate-pulse";
 }
 </script>

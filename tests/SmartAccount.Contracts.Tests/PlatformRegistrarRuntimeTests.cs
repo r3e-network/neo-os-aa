@@ -25,10 +25,10 @@ public class PlatformRegistrarRuntimeTests
     public void TimelockedRegistrarCreatesOwnerControlledPlatformAccount()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 wallet = fixture.Deploy("SmartAccount");
         // Phase 1b: the real registrar service is deployed with the core hash as deploy
         // data (its authorized core), replacing the former PlatformRegistrarMock.
-        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
+        UInt160 registrar = fixture.Deploy("SAPlatformRegistrar", wallet.ToArray());
         UInt160 verifier = fixture.Deploy("verifiers/NeoNativeVerifier");
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:miniapp-jump-rush");
 
@@ -112,8 +112,8 @@ public class PlatformRegistrarRuntimeTests
     public void CurrentOwnerCanCancelPendingPlatformOwnerRotation()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
+        UInt160 wallet = fixture.Deploy("SmartAccount");
+        UInt160 registrar = fixture.Deploy("SAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:rotation-cancel");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -138,8 +138,8 @@ public class PlatformRegistrarRuntimeTests
     public void EscapeBlocksRotationConfirmUntilFinalized()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
+        UInt160 wallet = fixture.Deploy("SmartAccount");
+        UInt160 registrar = fixture.Deploy("SAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:rotation-escape");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -184,7 +184,7 @@ public class PlatformRegistrarRuntimeTests
     public void PlatformRegistryBindingMatchesTheSharedRosterVector()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 wallet = fixture.Deploy("SmartAccount");
         byte[] appId = System.Text.Encoding.UTF8.GetBytes("miniapp-jump-rush");
         byte[] appBinding = new byte[PlatformRegistryBindingPrefix.Length + appId.Length];
         Buffer.BlockCopy(PlatformRegistryBindingPrefix, 0, appBinding, 0, PlatformRegistryBindingPrefix.Length);
@@ -206,8 +206,8 @@ public class PlatformRegistrarRuntimeTests
     public void StablePlatformAccountIdIsIndependentOfBackupOwner()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
+        UInt160 wallet = fixture.Deploy("SmartAccount");
+        UInt160 registrar = fixture.Deploy("SAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:stable-app");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -240,8 +240,8 @@ public class PlatformRegistrarRuntimeTests
     public void StablePlatformAccountIndexesProxyToAccountId()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
+        UInt160 wallet = fixture.Deploy("SmartAccount");
+        UInt160 registrar = fixture.Deploy("SAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:proxy-index");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -264,8 +264,8 @@ public class PlatformRegistrarRuntimeTests
     public void DirectCallerCannotUseRegistrarBypass()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
-        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
+        UInt160 wallet = fixture.Deploy("SmartAccount");
+        UInt160 registrar = fixture.Deploy("SAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:miniapp-sheep-solitaire");
 
         fixture.CallVoid(wallet, "proposePlatformRegistrar", registrar);
@@ -304,7 +304,7 @@ public class PlatformRegistrarRuntimeTests
     public void RegistrarProposalRequiresDeployedContract()
     {
         RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 wallet = fixture.Deploy("SmartAccount");
 
         TestException exception = Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
             wallet,
@@ -322,9 +322,9 @@ public class PlatformRegistrarRuntimeTests
     {
         RuntimeFixture fixture = new();
         fixture.SetSigners(AppAdmin);
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 wallet = fixture.Deploy("SmartAccount");
         UInt160 target = fixture.Deploy("MockVerifierCore");
-        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
+        UInt160 registrar = fixture.Deploy("SAPlatformRegistrar", wallet.ToArray());
         UInt160 accountId = fixture.CallUInt160(
             wallet,
             "computeRegistrationAccountId",
@@ -391,9 +391,9 @@ public class PlatformRegistrarRuntimeTests
     {
         RuntimeFixture fixture = new();
         fixture.SetSigners(AppAdmin);
-        UInt160 wallet = fixture.Deploy("SmartAccountV3");
+        UInt160 wallet = fixture.Deploy("SmartAccount");
         UInt160 target = fixture.Deploy("MockVerifierCore");
-        UInt160 registrar = fixture.Deploy("AAPlatformRegistrar", wallet.ToArray());
+        UInt160 registrar = fixture.Deploy("SAPlatformRegistrar", wallet.ToArray());
         byte[] appBinding = System.Text.Encoding.UTF8.GetBytes(
             "neo-miniapps-platform:reentrant-owner-rotation");
 

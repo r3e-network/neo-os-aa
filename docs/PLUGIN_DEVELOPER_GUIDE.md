@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This guide is for developers building Verifier or Hook plugins for the Neo N3 Abstract Account ecosystem. It covers security best practices, common vulnerabilities, and required interfaces for plugin development.
+This guide is for developers building Verifier or Hook plugins for the Neo N3 Smart Account ecosystem. It covers security best practices, common vulnerabilities, and required interfaces for plugin development.
 
 **Target Audience:** Smart contract developers
 **Prerequisites:** Familiarity with Neo N3, C#, and cryptographic primitives
@@ -64,7 +64,7 @@ public static void SetAdmin(UInt160 newAdmin)
 
 **Rule:** Plugins may keep account-scoped policy state, but they must not have
 independent admin keys or privileged upgradability. All configuration flows
-through the AA core contract, and every storage key must be namespaced by the
+through the SA core contract, and every storage key must be namespaced by the
 account identifier.
 
 ---
@@ -76,16 +76,16 @@ account identifier.
 ```csharp
 public interface IVerifier
 {
-    // Capability marker; the AA core also checks the deployed manifest.
+    // Capability marker; the SA core also checks the deployed manifest.
     bool SupportsV3();
 
-    // Called by AA core during validation
+    // Called by the SA core during validation
     bool ValidateSignature(UInt160 accountId, UserOperation op);
 
     // Called after target execution; implement as a no-op when unused.
     void postExecute(UInt160 accountId, UserOperation op, object result);
 
-    // Mandatory lifecycle cleanup before a verifier is detached or an AA shell
+    // Mandatory lifecycle cleanup before a verifier is detached or an SA shell
     // is transferred. A fault must abort the enclosing transition.
     void clearAccount(UInt160 accountId);
 
@@ -121,7 +121,7 @@ future-plugin storage semantics.
 | **Account ID in payload** | Prevent account confusion | Include `accountId` in hash |
 | **Deadline in payload** | Prevent old signature use | Include `deadline` in hash |
 | **No side effects** | Validation must be read-only | Use `CallFlags.ReadOnly` where applicable |
-| **Bounded gas** | *(CRITICAL)* Prevent DoS | The matching private AA artifact uses `System.Contract.CallWithGasLimit` for verifier and hook callbacks; ordinary descendants inherit the callback's ancestor budget. Native activation and public deployment remain separate gates. |
+| **Bounded gas** | *(CRITICAL)* Prevent DoS | The matching private SA artifact uses `System.Contract.CallWithGasLimit` for verifier and hook callbacks; ordinary descendants inherit the callback's ancestor budget. Native activation and public deployment remain separate gates. |
 | **Signature length check** | Prevent malformed input | Assert `signature.Length == expected` |
 | **Return boolean only** | Validation pattern | Don't throw on normal rejections |
 | **No state mutation** | Pure validation | Never write storage in `validateSignature` |
@@ -226,7 +226,7 @@ public static bool ValidateSignature(UInt160 accountId, UserOperation op)
 ```csharp
 public interface IHook
 {
-    // Capability marker; the AA core also checks the deployed manifest.
+    // Capability marker; the SA core also checks the deployed manifest.
     bool SupportsV3();
 
     // Called before execution (can reject)
@@ -240,7 +240,7 @@ public interface IHook
 }
 ```
 
-The sketch above is written in the deployed spelling deliberately, because these are the names the AA
+The sketch above is written in the deployed spelling deliberately, because these are the names the SA
 core calls: the manifest your plugin deploys has to export them, and a method declared the way the
 sketch declares it exports exactly that name. The contracts build compiles with `nccs`, which
 lower-cases the first letter of every exported member, so a hook contract that declares the same
@@ -273,7 +273,7 @@ market sale). Plugins that custody user funds per account (for example the
 recovery verifier's oracle credit) must return them to the account owner in
 `clearAccount` rather than orphan them.
 
-**Transfer source is the proxy address, never the account id.** A virtual AA
+**Transfer source is the proxy address, never the account id.** A virtual SA
 account holds its assets at the core-derived proxy script hash
 (`getProxyScriptHash(accountId)`), and that address is the only `from` a token's
 `CheckWitness` accepts during `executeUserOp`. Any verifier or hook that pins,
@@ -281,7 +281,7 @@ meters or allowlists a transfer source must compare against that address
 (`Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId)`) and
 must declare `ContractPermission("*", "getProxyScriptHash")`. Comparing against
 the `accountId` authorizes a transfer that can never move funds and meters a
-balance that is always zero. The AA core treats a cleanup fault
+balance that is always zero. The SA core treats a cleanup fault
 as a failed enclosing transition; it must not swallow the fault and hand a
 buyer or replacement module a potentially dirty account shell. This is
 fail-closed for known plugins, not a proof that an arbitrary future contract
@@ -300,8 +300,8 @@ over `Global`.
 
 | Check | Why | Implementation |
 | --- | --- | --- |
-| **Authority validation** | Prevent unauthorized configuration | Configuration reaches a hook through the AA core, and the shipped hooks gate it on their stored `authorizedCore` (`HookAuthority.ValidateAdminCaller`); the core's read method is `canConfigureHook(accountId, hookHash)` |
-| **Context validation** | Ensure AA core is caller | The hook checks the calling core against its stored `authorizedCore`; the core's read method is `canExecuteHook(accountId, hookHash, …)` |
+| **Authority validation** | Prevent unauthorized configuration | Configuration reaches a hook through the SA core, and the shipped hooks gate it on their stored `authorizedCore` (`HookAuthority.ValidateAdminCaller`); the core's read method is `canConfigureHook(accountId, hookHash)` |
+| **Context validation** | Ensure SA core is caller | The hook checks the calling core against its stored `authorizedCore`; the core's read method is `canExecuteHook(accountId, hookHash, …)` |
 | **Revert on reject** | Atomic rejection pattern | Throw `ExecutionEngine.Assert` |
 | **No external calls in pre** | Prevent reentrancy | Only inspect parameters |
 | **Careful post logic** | No validation in post | Only cleanup/logging |
@@ -315,7 +315,7 @@ over `Global`.
 **Severity:** High
 
 ```csharp
-// VULNERABLE: Can call back into AA
+// VULNERABLE: Can call back into the SA
 public static void preExecute(UInt160 accountId, object[] opParams)
 {
     // Check limit in storage
@@ -533,7 +533,7 @@ public static void SetPublicKey(UInt160 accountId, ByteString pubKey)
 # Pass large arrays - should reject or be bounded
 
 # Test 5: Reentrancy
-# Hook that calls AA - should be rejected
+# Hook that calls the SA - should be rejected
 ```
 
 ### 6.3 Audit Requirements
@@ -566,7 +566,7 @@ For official plugin listing, provide:
 
 - **Security Model:** `docs/SECURITY_MODEL.md`
 - **Ethereum Comparison:** `docs/ETHEREUM_AA_COMPARISON.md`
-- **Plugin Matrix:** `docs/PLUGIN_MATRIX.md`
+- **Protocol Coverage:** `docs/PROTOCOL_COMPLETENESS_AUDIT.md`
 - **Core Contract:** `contracts/SmartAccount.cs`
 - **Verifier Examples:**
   - `contracts/verifiers/Web3AuthVerifier.cs`
@@ -606,4 +606,4 @@ Include:
 | **Open Verification** | Signature logic is auditable |
 | **No Secrets** | All state is on-chain |
 
-Follow these principles, and your plugin will be a secure, auditable component of the Neo Abstract Account ecosystem.
+Follow these principles, and your plugin will be a secure, auditable component of the Neo Smart Account ecosystem.

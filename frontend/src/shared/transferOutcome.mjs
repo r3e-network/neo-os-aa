@@ -1,10 +1,10 @@
 /**
- * Transfer outcome rules for the Neo N3 Abstract Account stack.
+ * Transfer outcome rules for the Neo N3 Smart Account stack.
  *
  * Why this exists. The account core hands the result of the call it executes back untouched, and the transaction
  * still HALTs when that result is a refusal. A NEP-17 or NEP-11 `transfer` answers `false` when the move did not
  * happen (the witness of `from` is missing, the balance is too low); the account then burns its nonce and the fee
- * for nothing. Recorded on the deployed core (AA-03 case a, AA-09 cases 8 and 9): GAS.transfer out of the account's
+ * for nothing. Recorded on the deployed core (SA-03 case a, SA-09 cases 8 and 9): GAS.transfer out of the account's
  * proxy address, carried by executeUserOp with only the owner's or the relay's witness, HALTs with result false and
  * moves no GAS; the relay route still broadcast it.
  *
@@ -51,7 +51,7 @@ function normalizeHash(value) {
 
 /**
  * A transfer whose source is the account's own proxy address. The token checks that address as a witness; an
- * owner or relay signature does not provide it, so the call returns false (recorded: AA-03 case a).
+ * owner or relay signature does not provide it, so the call returns false (recorded: SA-03 case a).
  *
  * @param {{ method: string, from: string, proxy: string }} operation hashes as 40 hex characters, 0x optional
  */

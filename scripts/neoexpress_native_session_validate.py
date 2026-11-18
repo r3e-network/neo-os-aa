@@ -15,7 +15,7 @@ import tempfile
 import time
 
 from neoexpress_validate import (Chain, RawKey, P256Key, ValidationFailure, H, B, I, S, A, ZERO,
-                                decode, hash_le, hash160, varint, serialize_unsigned, serialize_witnesses, aa_proxy_rules)
+                                decode, hash_le, hash160, varint, serialize_unsigned, serialize_witnesses, sa_proxy_rules)
 from neoexpress_activation_validate import ACTIVATION_KEY, make_runner, require
 from neoexpress_native_service_validate import (CORE, PRIVATE_CORE_GAS_ENVELOPE_DATOSHI,
     check_native, persist, check_account_record, module_storage_key, transaction_system_fee, execution_arguments)
@@ -115,7 +115,7 @@ class SessionTransactions:
         keys=[payer,*consent_keys]
         require(len({k.script_hash for k in keys})==len(keys),'Consent identities must be distinct')
         signers=[{'account':'0x'+k.script_hash[::-1].hex(),'scopes':'CalledByEntry'}for k in keys]
-        if proxy:signers.append({'account':self.proxy,'scopes':'WitnessRules','rules':aa_proxy_rules(CORE,witness_target)})
+        if proxy:signers.append({'account':self.proxy,'scopes':'WitnessRules','rules':sa_proxy_rules(CORE,witness_target)})
         if target==CORE and method in ('executeUserOp','executeUserOps'):
             require(len(args)==2,'Fresh execution requires account and payload')
             args=execution_arguments(self.account,args[1],before['account'])

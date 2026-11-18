@@ -9,8 +9,8 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral VM tests for the market-escrow lifecycle across <c>AAAddressMarket</c> and
-/// <c>SmartAccountV3</c>: listing locks the account, escrow blocks execution, settlement
+/// Behavioral VM tests for the market-escrow lifecycle across <c>SAAddressMarket</c> and
+/// <c>SmartAccount</c>: listing locks the account, escrow blocks execution, settlement
 /// pays the seller with real GAS and hands the buyer a clean shell, cancellation unlocks, and
 /// only the escrow market contract may drive the wallet's escrow transitions.
 /// </summary>
@@ -40,12 +40,12 @@ public class MarketEscrowRuntimeTests
 
         public MarketHarness()
         {
-            Wallet = Fx.Deploy("SmartAccountV3");
-            Market = Fx.Deploy("AAAddressMarket");
+            Wallet = Fx.Deploy("SmartAccount");
+            Market = Fx.Deploy("SAAddressMarket");
             Target = Fx.Deploy("MockTransferTarget");
-            // The market admin (the deploying validators account) allowlists the genuine AA core
+            // The market admin (the deploying validators account) allowlists the genuine SA core
             // so escrow listings backed by it are accepted. Signers are the validators by default.
-            Fx.CallVoid(Market, "setAllowedAA", Wallet, true);
+            Fx.CallVoid(Market, "setAllowedSA", Wallet, true);
             // Phase 1b: the core admin (the same validators account) must also register the
             // market as an approved escrow service before it can arm escrows.
             Fx.CallVoid(Wallet, "setMarketService", Market, true);
@@ -67,7 +67,7 @@ public class MarketEscrowRuntimeTests
         public BigInteger CreateListing(UInt160 accountId)
         {
             Fx.SetSigners(Seller);
-            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "AA address", "");
+            Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "SA address", "");
             return Fx.CallInteger(Market, "getListingCount");
         }
 
@@ -312,13 +312,13 @@ public class MarketEscrowRuntimeTests
     {
         // Audit Medium 3: the 0x29 registration gate must be reachable as a rejection.
         // Every other fixture registers its market first, so this vector deploys a
-        // genuine AAAddressMarket, allowlists the core on the market side, and never
+        // genuine SAAddressMarket, allowlists the core on the market side, and never
         // calls setMarketService: the market's own createListing must be refused
         // before any escrow state is armed.
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
-        UInt160 market = fx.Deploy("AAAddressMarket");
-        fx.CallVoid(market, "setAllowedAA", wallet, true);
+        UInt160 wallet = fx.Deploy("SmartAccount");
+        UInt160 market = fx.Deploy("SAAddressMarket");
+        fx.CallVoid(market, "setAllowedSA", wallet, true);
 
         UInt160 accountId = fx.CallUInt160(
             wallet, "computeRegistrationAccountId",
@@ -329,7 +329,7 @@ public class MarketEscrowRuntimeTests
             accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, Seller, 2_592_000u);
 
         TestException unregistered = Assert.ThrowsExactly<TestException>(() =>
-            fx.CallVoid(market, "createListing", wallet, accountId, Price, "AA address", ""));
+            fx.CallVoid(market, "createListing", wallet, accountId, Price, "SA address", ""));
         StringAssert.Contains(unregistered.Message, "Market service not registered");
         Assert.IsFalse(fx.CallBoolean(wallet, "isMarketEscrowActive", accountId),
             "An unregistered market must not be able to arm an escrow");
@@ -347,7 +347,7 @@ public class MarketEscrowRuntimeTests
         // state can be written — the caller and 0x29 registration gates behind it
         // never even need to fire on this path.
         RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccountV3");
+        UInt160 wallet = fx.Deploy("SmartAccount");
 
         UInt160 accountId = fx.CallUInt160(
             wallet, "computeRegistrationAccountId",

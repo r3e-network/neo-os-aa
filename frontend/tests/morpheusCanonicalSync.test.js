@@ -87,8 +87,8 @@ function tempDirectory(t, prefix) {
 
 // Nested so that neither sibling-lookup candidate resolves outside the temporary directory.
 function tempRepoRoot(t) {
-  const root = tempDirectory(t, 'aa-morpheus-gate-');
-  const repoRoot = path.join(root, 'a', 'b', 'neo-os-aa');
+  const root = tempDirectory(t, 'sa-morpheus-gate-');
+  const repoRoot = path.join(root, 'a', 'b', 'neo-os-sa');
   fs.mkdirSync(repoRoot, { recursive: true });
   return { root, repoRoot };
 }
@@ -132,7 +132,7 @@ function embeddedEnvelopeSource() {
 }
 
 function fixtureServices(t, { registry = MORPHEUS_PUBLIC_REGISTRY, catalog = MORPHEUS_PUBLIC_RUNTIME_CATALOG } = {}) {
-  const root = tempDirectory(t, 'aa-morpheus-services-');
+  const root = tempDirectory(t, 'sa-morpheus-services-');
   const envelopePath = path.join(root, CANONICAL_ENVELOPE_RELATIVE_PATH);
   fs.mkdirSync(path.join(root, 'scripts'));
   fs.mkdirSync(path.dirname(envelopePath), { recursive: true });
@@ -150,7 +150,7 @@ function fixtureServices(t, { registry = MORPHEUS_PUBLIC_REGISTRY, catalog = MOR
 
 function driftedRegistry() {
   const registry = structuredClone(MORPHEUS_PUBLIC_REGISTRY);
-  registry.mainnet.domains.aa = 'drifted.example.neo';
+  registry.mainnet.domains.sa = 'drifted.example.neo';
   return registry;
 }
 
@@ -196,7 +196,7 @@ test('sync --dry-run and --check exit 1 on a canonical difference and write noth
     const result = runSync([flag], services);
     assert.equal(result.status, 1, `${flag}: ${result.stdout}${result.stderr}`);
     assert.match(result.stdout, /generatedMorpheusRegistry\.js \(1 value path\(s\) differ\)/);
-    assert.match(result.stdout, /mainnet\.domains\.aa: "[^"]+" -> "drifted\.example\.neo"/);
+    assert.match(result.stdout, /mainnet\.domains\.sa: "[^"]+" -> "drifted\.example\.neo"/);
     assert.match(result.stderr, /1 of 3 generated file\(s\) differ/);
   }
   assert.deepEqual(current(), before);
@@ -206,7 +206,7 @@ test('sync exits 1 without a neo-os-services checkout and rejects unknown flags 
   const current = guardGeneratedFiles(t);
   const before = current();
 
-  const missing = runSync(['--dry-run'], path.join(tempDirectory(t, 'aa-morpheus-absent-'), 'absent'));
+  const missing = runSync(['--dry-run'], path.join(tempDirectory(t, 'sa-morpheus-absent-'), 'absent'));
   assert.equal(missing.status, 1, `${missing.stdout}${missing.stderr}`);
   assert.match(missing.stderr, /Missing canonical module: .*; MORPHEUS_ORACLE_ROOT \(else a sibling/);
 

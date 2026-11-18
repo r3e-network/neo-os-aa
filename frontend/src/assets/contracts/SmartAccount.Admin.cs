@@ -12,7 +12,7 @@ namespace SmartAccount
     {
         private static readonly byte[] Prefix_ContractAdmin = new byte[] { 0x11 };
 
-        // AA-D-01: the core contract upgrade is timelocked. A single admin key must not be
+        // SA-D-01: the core contract upgrade is timelocked. A single admin key must not be
         // able to instantly replace the authorization logic of EVERY bound account — that
         // contradicts the timelocked plugin upgrades (UpdateHook/ConfirmHookUpdate) and the
         // verifier authority upgrades (VerifierAuthority.ProposeUpdate/Update). The admin
@@ -24,7 +24,7 @@ namespace SmartAccount
         private static readonly byte[] Prefix_UpdateTimelock = new byte[] { 0x14 };
         private static readonly BigInteger MinUpgradeDelayMs = 7L * 24 * 60 * 60 * 1000;
 
-        // AA-D-02: rotating the contract admin is itself timelocked. An instant Storage.Put
+        // SA-D-02: rotating the contract admin is itself timelocked. An instant Storage.Put
         // hand-off (the old TransferAdmin) was inconsistent with every other privileged role
         // rotation in the project (VerifierAuthority / HookAuthority / PaymasterAuthority all
         // use ProposeAdminTransfer/RotateAdmin -> a 7-day window -> ConfirmAdminRotation gated

@@ -1,7 +1,7 @@
 (*
   NeoOS formal verification -- callback ABI, witness scope and plugin cleanup.
 
-  This is a deliberately small correspondence model of the concrete AA
+  This is a deliberately small correspondence model of the concrete SA
   boundary.  It does not model NeoVM dispatch, cryptography, witness-rule
   evaluation or arbitrary contract storage.  Instead it makes the protocol
   obligations that the C# code exposes explicit and proves them without

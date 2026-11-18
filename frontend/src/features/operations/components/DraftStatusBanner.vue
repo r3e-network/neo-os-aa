@@ -12,10 +12,10 @@
         <p class="text-xs font-bold uppercase" :class="titleToneClass">
           {{ title }}
         </p>
-        <div class="mt-1 text-sm font-semibold text-aa-text">{{ label }}</div>
-        <div class="text-sm text-aa-muted">{{ detail }}</div>
+        <div class="mt-1 text-sm font-semibold text-sa-text">{{ label }}</div>
+        <div class="text-sm text-sa-muted">{{ detail }}</div>
       </div>
-      <div class="text-[11px] font-medium text-aa-muted">
+      <div class="text-[11px] font-medium text-sa-muted">
         {{ timestamp || t("operations.justNow", "Just now") }}
       </div>
     </div>
@@ -55,18 +55,18 @@ const timestamp = computed(() => banner.value.timestamp);
 
 const toneClass = computed(() => {
   if (banner.value.tone === "relay")
-    return "border-aa-orange/30 bg-aa-orange/10";
+    return "border-sa-orange/30 bg-sa-orange/10";
   if (banner.value.tone === "client")
-    return "border-aa-lightOrange/30 bg-aa-lightOrange/10";
+    return "border-sa-lightOrange/30 bg-sa-lightOrange/10";
   if (banner.value.tone === "identity")
-    return "border-aa-info/30 bg-aa-info/10";
-  return "border-aa-warning/30 bg-aa-warning/10";
+    return "border-sa-info/30 bg-sa-info/10";
+  return "border-sa-warning/30 bg-sa-warning/10";
 });
 
 const titleToneClass = computed(() => {
-  if (banner.value.tone === "relay") return "text-aa-orange";
-  if (banner.value.tone === "client") return "text-aa-lightOrange";
-  if (banner.value.tone === "identity") return "text-aa-info";
-  return "text-aa-warning";
+  if (banner.value.tone === "relay") return "text-sa-orange";
+  if (banner.value.tone === "client") return "text-sa-lightOrange";
+  if (banner.value.tone === "identity") return "text-sa-info";
+  return "text-sa-warning";
 });
 </script>

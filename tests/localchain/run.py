@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-SUITE = ROOT / "scripts/localchain/aa_rpc_scenarios.py"
+SUITE = ROOT / "scripts/localchain/sa_rpc_scenarios.py"
 
 
 def command(argv):

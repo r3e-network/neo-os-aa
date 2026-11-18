@@ -11,12 +11,12 @@ using Neo.SmartContract.Framework.Services;
 namespace Neo.SmartContract.Examples
 {
     [ManifestExtra("Author", "R3E Network")]
-    [ManifestExtra("Description", "Morpheus NeoDID-powered social recovery verifier for Neo Abstract Account")]
+    [ManifestExtra("Description", "Morpheus NeoDID-powered social recovery verifier for Neo Smart Account")]
     [ManifestExtra("Version", "3.0.0")]
-    // AA-03: least-privilege method-scoped grants replacing the former wildcard.
+    // SA-03: least-privilege method-scoped grants replacing the former wildcard.
     // Call surface (verified by source sweep):
     //   1. ContractManagement.Update          — the 7-day-timelocked self-upgrade
-    //   2. core.getBackupOwner                — AA-06 setup-time ownership attestation
+    //   2. core.getBackupOwner                — SA-06 setup-time ownership attestation
     //   3. oracle.request                     — recovery/action ticket submission
     //   4. GAS.transfer                       — Lifecycle credit deposits forwarded to the oracle
     //                                            and the ClearAccount credit refund
@@ -32,7 +32,7 @@ namespace Neo.SmartContract.Examples
     public partial class SocialRecoveryVerifier : Framework.SmartContract
     {
         private const byte PREFIX_OWNER = 0x01;
-        private const byte PREFIX_AA_CONTRACT = 0x02;
+        private const byte PREFIX_SA_CONTRACT = 0x02;
         private const byte PREFIX_ACCOUNT_ADDRESS = 0x03;
         private const byte PREFIX_NETWORK = 0x04;
         private const byte PREFIX_ACCOUNT_ID_TEXT = 0x05;
@@ -56,16 +56,16 @@ namespace Neo.SmartContract.Examples
         private const byte PREFIX_PENDING_EXECUTABLE = 0x17;
         private const byte PREFIX_PENDING_ACTIVE = 0x18;
         private const byte PREFIX_CONTRACT_ADMIN = 0xF0;
-        // AA-D-01 (audit fix H5): timelocked contract upgrade. The admin first proposes the
+        // SA-D-01 (audit fix H5): timelocked contract upgrade. The admin first proposes the
         // sha256 of the new NEF and manifest, then can only apply that exact artifact pair
-        // after the 7-day window. AA-D-02 (audit fix AA-04): admin rotation is timelocked
+        // after the 7-day window. SA-D-02 (audit fix SA-04): admin rotation is timelocked
         // the same way. New prefixes — never written by previous deployments.
         private const byte PREFIX_PENDING_UPDATE_NEF_HASH = 0xF1;
         private const byte PREFIX_PENDING_UPDATE_MANIFEST_HASH = 0xF2;
         private const byte PREFIX_UPDATE_TIMELOCK = 0xF3;
         private const byte PREFIX_PENDING_ADMIN = 0xF4;
         private const byte PREFIX_ADMIN_ROTATION_TIMELOCK = 0xF5;
-        // AA-06: the canonical AA core this verifier trusts for ownership attestation in
+        // SA-06: the canonical SA core this verifier trusts for ownership attestation in
         // SetupRecovery. Design choice (mirroring the VerifierAuthority M-7 surface, adapted
         // to this contract's own GetContractAdmin/AssertContractAdmin idiom): the contract
         // admin binds the core exactly once via SetAuthorizedCore (initial-set-only, instant
@@ -85,12 +85,12 @@ namespace Neo.SmartContract.Examples
         private const int COMPACT_TICKET_VERSION = 3;
         private const int COMPACT_ACTION_VERSION = 4;
 
-        // 7-day window shared by the timelocked upgrade (H5) and admin rotation (AA-04),
+        // 7-day window shared by the timelocked upgrade (H5) and admin rotation (SA-04),
         // matching the VerifierAuthority window used across the rest of the repo.
         private static readonly BigInteger AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000;
 
         // ASCII("neodid-recovery-v2"). Action tickets sign an inline
-        // "neodid-aa-action-v3" domain (see Validation.cs).
+        // "neodid-sa-action-v3" domain (see Validation.cs).
         private static readonly byte[] RECOVERY_DOMAIN = new byte[]
         {
             110, 101, 111, 100, 105, 100, 45, 114, 101, 99, 111, 118, 101, 114, 121, 45, 118, 50
@@ -205,7 +205,7 @@ namespace Neo.SmartContract.Examples
             return admin is null ? UInt160.Zero : (UInt160)admin;
         }
 
-        // AA-D-01 (audit fix H5): contract upgrade is timelocked. This contract custodies
+        // SA-D-01 (audit fix H5): contract upgrade is timelocked. This contract custodies
         // user GAS (the per-account oracle-credit pool funded via onNEP17Payment), so a
         // single admin key must not be able to instantly replace the contract logic.
         // ProposeUpdate pins the sha256 of the new NEF and manifest; Update/ConfirmUpdate
@@ -271,7 +271,7 @@ namespace Neo.SmartContract.Examples
         /// <summary>Alias for <see cref="Update"/>, mirroring the verifier/paymaster upgrade naming.</summary>
         public static void ConfirmUpdate(ByteString nef, string manifest) => Update(nef, manifest);
 
-        // AA-D-02 (audit fix AA-04): rotating the contract admin is itself timelocked. The old
+        // SA-D-02 (audit fix SA-04): rotating the contract admin is itself timelocked. The old
         // TransferAdmin did an instant Storage.Put with only the current-admin witness — a
         // single leaked admin key could silently and instantly burn the role to an address
         // nobody controls. The hardened flow mirrors VerifierAuthority.RotateAdmin/
@@ -307,7 +307,7 @@ namespace Neo.SmartContract.Examples
             Storage.Delete(Storage.CurrentContext, new byte[] { PREFIX_ADMIN_ROTATION_TIMELOCK });
         }
 
-        // AA-06: canonical-AA-core administration, mirroring VerifierAuthority's M-7 surface
+        // SA-06: canonical-SA-core administration, mirroring VerifierAuthority's M-7 surface
         // (SetAuthorizedCore initial-set-only; Propose/ConfirmAuthorizedCore with the 7-day
         // window; CancelAuthorizedCoreChange). SetupRecovery only accepts ownership
         // attestations from this pinned core.

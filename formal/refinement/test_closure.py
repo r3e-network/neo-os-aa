@@ -44,7 +44,7 @@ def fixture(module):
                                    sourceFrontendVerified=False, applicationEngineVerified=False)
     receipts['composition'].update(helperCertificateSha256='e'*64, helperMethodSha256=method_hash,
         actualHelperTheoremApplied=True, semanticControls={
-            'schema': 'neoos-aa-reimbursement-composition-controls/v1', 'scope': module.SCOPES['composition'],
+            'schema': 'neoos-sa-reimbursement-composition-controls/v1', 'scope': module.SCOPES['composition'],
             'definitionsCompiled': True, 'rejected': ['valid-mutant'],
             'controls': {'valid-mutant': {**control, 'kernelExitCode': 1}}})
     receipts['public'].update(methods={'pure': dict(abi=inventory['manifest']['methods'][1],
@@ -77,7 +77,7 @@ def fixture(module):
             fullUnprovedEntrypointCount=len(inventory['manifest']['methods']),methodRange=[0,1],byteCount=1,instructionCount=1,
             methodSha256=method_hash,certificateSha256='e'*64,sourceProjection={'sourceProjectionSha256':'f'*64})
     receipts['storage-getters'].update(
-        schema='neoos-aa-storage-getter-source-refinement/v1', coqchkChecked=True, assumptionsClosed=True,
+        schema='neoos-sa-storage-getter-source-refinement/v1', coqchkChecked=True, assumptionsClosed=True,
         vmCorrespondenceProven=True, projectionSha256='7'*64,
         vmCorrespondenceScope='Trace-level bytecode execution of the pinned getter regions',
         referenceVerifiedEntrypoints=[], fullUnprovedEntrypointCount=len(inventory['manifest']['methods']),
@@ -97,7 +97,7 @@ def fixture(module):
                                  baselineAccepted=True, proofRejected=True, kernelExitCode=1,
                                  baselineSha256='8'*64, definitionsSha256='9'*64)],
         semanticControls=[control])
-    receipts['entry-dispatch'].update(schema='neoos-aa-entry-dispatch-proof/v1',
+    receipts['entry-dispatch'].update(schema='neoos-sa-entry-dispatch-proof/v1',
         entryBoundary='CallContract-after-interop-admission-and-argument-conversion',
         productionSourceBound=True, coqchkChecked=True, assumptionsClosed=True, coreSourceCommit=module.CORE_COMMIT, neoVmSourceCommit=module.VM_COMMIT,
         sourceFrontendVerified=False, applicationEngineVerified=False, vmCorrespondenceProven=False,
@@ -116,7 +116,7 @@ def fixture(module):
             url='https://raw.githubusercontent.com/neo-project/' + repository + '/' + commit + '/source.cs')
             for repository, commit in (('neo', module.CORE_COMMIT), ('neo-vm', module.VM_COMMIT))},
         **copy.deepcopy(module.ENTRY_DISPATCH_DOMAIN))
-    receipts['syscall-dispatch'].update(schema='neoos-aa-syscall-dispatch-proof/v1',
+    receipts['syscall-dispatch'].update(schema='neoos-sa-syscall-dispatch-proof/v1',
         entryBoundary='CallContractInternal-parameter-tuple', productionSourceBound=True,
         coqchkChecked=True, assumptionsClosed=True, implementationVerified=False,
         coreSourceCommit=module.CORE_COMMIT, neoVmSourceCommit=module.VM_COMMIT,
@@ -141,7 +141,7 @@ def fixture(module):
                             'SyscallDispatchArtifact': ['cert-a']},
         closedAssumptionCount=3, kernelDeclarations=['cert-a'],
         **copy.deepcopy(module.SYSCALL_DISPATCH_DOMAIN))
-    receipts['contract-handoff'].update(schema='neoos-aa-contract-handoff-proof/v1',
+    receipts['contract-handoff'].update(schema='neoos-sa-contract-handoff-proof/v1',
         entryBoundary='LoadContract-returned-context-before-callee-execution', productionSourceBound=True,
         coqchkChecked=True, assumptionsClosed=True, implementationVerified=False,
         coreSourceCommit=module.CORE_COMMIT, neoVmSourceCommit=module.VM_COMMIT,
@@ -172,7 +172,7 @@ def fixture(module):
                             'ContractHandoffArtifact': ['cert-a']},
         closedAssumptionCount=3, kernelDeclarations=['cert-a'],
         **copy.deepcopy(module.CONTRACT_HANDOFF_DOMAIN))
-    receipts['interop-conversion'].update(schema='neoos-aa-interop-conversion-proof/v1',
+    receipts['interop-conversion'].update(schema='neoos-sa-interop-conversion-proof/v1',
         entryBoundary='OnSysCall-argument-window-to-invoked-handler-parameters',
         productionSourceBound=True, coqchkChecked=True, assumptionsClosed=True,
         implementationVerified=False, coreSourceCommit=module.CORE_COMMIT,
@@ -209,7 +209,7 @@ def fixture(module):
                             'InteropConvertArtifact': ['cert-a']},
         closedAssumptionCount=3, kernelDeclarations=['cert-a'],
         **copy.deepcopy(module.INTEROP_CONVERSION_DOMAIN))
-    receipts['interop-fee-order'].update(schema='neoos-aa-interop-charge-proof/v1',
+    receipts['interop-fee-order'].update(schema='neoos-sa-interop-charge-proof/v1',
         entryBoundary='OnSysCall-descriptor-charge-to-argument-window-effect',
         productionSourceBound=True, coqchkChecked=True, assumptionsClosed=True,
         implementationVerified=False, coreSourceCommit=module.CORE_COMMIT,
@@ -239,7 +239,7 @@ def fixture(module):
                             'InteropFeeArtifact': ['cert-a']},
         closedAssumptionCount=3, kernelDeclarations=['cert-a'],
         **copy.deepcopy(module.INTEROP_FEE_DOMAIN))
-    receipts['exception-identity'].update(schema='neoos-aa-exception-identity-proof/v1',
+    receipts['exception-identity'].update(schema='neoos-sa-exception-identity-proof/v1',
         entryBoundary='ExecuteNext-fault-surfacing-and-catch-admission-effect',
         productionSourceBound=True, coqchkChecked=True, assumptionsClosed=True,
         implementationVerified=False, coreSourceCommit=module.CORE_COMMIT,
@@ -272,7 +272,7 @@ def fixture(module):
                             'ExceptionIdentityArtifact': ['cert-a']},
         closedAssumptionCount=3, kernelDeclarations=['cert-a'],
         **copy.deepcopy(module.EXCEPTION_IDENTITY_DOMAIN))
-    receipts['load-admission'].update(schema='neoos-aa-load-admission-proof/v1',
+    receipts['load-admission'].update(schema='neoos-sa-load-admission-proof/v1',
         entryBoundary='manifest-parse-and-nef-deserialize-admission-to-exact-arity-resolution',
         productionSourceBound=True, coqchkChecked=True, assumptionsClosed=True,
         implementationVerified=False, deploymentPathVerified=False,
