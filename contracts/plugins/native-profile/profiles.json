@@ -1,9 +1,9 @@
 {
-  "NeoNativeVerifier": {
-    "project": "NeoNativeVerifier.Native.csproj",
+  "NeoWitnessValidator": {
+    "project": "NeoWitnessValidator.Native.csproj",
     "role": "verifier",
     "configurationMethods": [
-      "setConfig"
+      "configure"
     ],
     "compositeVerifier": false,
     "compositeProfile": ""
@@ -12,17 +12,16 @@
     "project": "WhitelistHook.Native.csproj",
     "role": "hook",
     "configurationMethods": [
-      "setWhitelist"
+      "configure"
     ],
     "compositeVerifier": false,
     "compositeProfile": ""
   },
-  "SessionKeyVerifier": {
-    "project": "SessionKeyVerifier.Native.csproj",
+  "SessionKeyValidator": {
+    "project": "SessionKeyValidator.Native.csproj",
     "role": "verifier",
     "configurationMethods": [
-      "setSessionKey",
-      "clearSessionKey"
+      "configure"
     ],
     "compositeVerifier": false,
     "compositeProfile": ""
@@ -31,7 +30,7 @@
     "project": "DailyLimitHook.Native.csproj",
     "role": "hook",
     "configurationMethods": [
-      "setDailyLimit"
+      "configure"
     ],
     "compositeVerifier": false,
     "compositeProfile": ""
@@ -40,18 +39,18 @@
     "project": "TokenRestrictedHook.Native.csproj",
     "role": "hook",
     "configurationMethods": [
-      "setRestrictedToken"
+      "configure"
     ],
     "compositeVerifier": false,
     "compositeProfile": ""
   },
-  "MultiSigVerifier": {
-    "project": "MultiSigVerifier.Native.csproj",
+  "MultiSigValidator": {
+    "project": "MultiSigValidator.Native.csproj",
     "role": "verifier",
     "configurationMethods": [
-      "setConfig"
+      "configure"
     ],
-    "compositeVerifier": true,
-    "compositeProfile": "MultiSigVerifier"
+    "compositeVerifier": false,
+    "compositeProfile": ""
   }
 }

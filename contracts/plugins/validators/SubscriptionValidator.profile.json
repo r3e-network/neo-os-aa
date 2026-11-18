@@ -1,0 +1,1 @@
+{"callbacks":["validateUserOp","onUserOpComplete"],"capabilities":{"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},"contractName":"SubscriptionValidator","lifecycle":["onInstall","onUninstall","configure"],"moduleType":"validator","profileVersion":1}

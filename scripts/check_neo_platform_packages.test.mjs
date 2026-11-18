@@ -112,7 +112,7 @@ test("a manifest without the compiler is reported", () => {
 });
 
 test("every project that restores Neo packages has a committed lock file that agrees with the audit", () => {
-  assert.equal(projects.length, 28, "27 contract projects (incl. 2 plugin templates) and the tests project");
+  assert.equal(projects.length, 29, "28 contract projects (incl. 2 plugin templates) and the tests project");
   const locks = locksFromRepository();
   assert.deepEqual(lockFileProblems(locks, manifest), []);
   assert.ok(locks.every(({ lock }) => lock !== null));
@@ -121,8 +121,8 @@ test("every project that restores Neo packages has a committed lock file that ag
 test("public restore gate excludes native projects while explicit native scope includes six modules and the epoch probe", () => {
   const all = listProjects(repoRoot, { includeNative: true });
   const native = all.filter((project) => project.startsWith("contracts/plugins/native-profile/"));
-  assert.equal(projects.length, 28);
-  assert.equal(all.length, 38);
+  assert.equal(projects.length, 29);
+  assert.equal(all.length, 39);
   assert.ok(all.includes("tests/NativeEpochProbe/NativeEpochProbe.csproj"));
   assert.ok(all.includes("tests/NativeEpochProbe/contracts/NativeEpochCore.csproj"));
   assert.ok(projects.every((project) => !project.startsWith("tests/NativeEpochProbe/")));
@@ -174,7 +174,7 @@ test("projects that share a directory get their own lock file, the others use pa
   assert.equal(lockFileFor("contracts/custom/SmartAccount.csproj", projects), "contracts/custom/packages.lock.json");
   assert.equal(lockFileFor(PATHS.testsProject, projects), "tests/SmartAccount.Contracts.Tests/packages.lock.json");
   assert.equal(lockFileFor("contracts/plugins/hooks/MultiHook.csproj", projects), "contracts/plugins/hooks/packages.MultiHook.lock.json");
-  assert.equal(lockFileFor("contracts/plugins/verifiers/ZkLoginVerifier.csproj", projects), "contracts/plugins/verifiers/packages.ZkLoginVerifier.lock.json");
+  assert.equal(lockFileFor("contracts/plugins/validators/DelegatedIdentityValidator.csproj", projects), "contracts/plugins/validators/packages.DelegatedIdentityValidator.lock.json");
 });
 
 test("a missing lock file, a different version and different bytes in a lock file are reported", () => {

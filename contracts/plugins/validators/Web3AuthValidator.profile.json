@@ -1,0 +1,1 @@
+{"callbacks":["validateUserOp","onUserOpComplete","isValidSignature"],"capabilities":{"compositeLayer":0,"instanceIsolation":false,"messageCapability":true,"thresholdMemberEligible":true},"contractName":"Web3AuthValidator","lifecycle":["onInstall","onUninstall","configure"],"moduleType":"validator","profileVersion":1}

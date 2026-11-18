@@ -21,7 +21,7 @@
   ],
   "excludedSourceRoots": [
     "contracts/custom/SmartAccount.cs",
-    "contracts/plugins/verifiers",
+    "contracts/plugins/validators",
     "contracts/plugins/hooks",
     "contracts/custom/paymaster",
     "contracts/custom/market",

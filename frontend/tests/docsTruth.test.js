@@ -1905,8 +1905,8 @@ test('CU-163: VULN-002 records local evidence without claiming public deployment
 // The reviewed path is the Huyao implementation with r/s bounds; the pre-Huyao compatibility
 // implementation remains outside the deployment profile even though it exposes the same method.
 test('CU-163: Web3Auth ERC-1271 documents its Huyao deployment requirement', () => {
-  const web3auth = read('contracts/plugins/verifiers/Web3AuthVerifier.cs');
-  assert.match(web3auth, /CryptoLib\.RecoverSecp256K1\(hash, signature!\)/,
+  const web3auth = read('contracts/plugins/validators/Web3AuthValidator.cs');
+  assert.match(web3auth, /CryptoLib\.RecoverSecp256K1\(hash, signature\)/,
     'the message adapter no longer consumes the supplied digest directly');
 
   for (const file of [

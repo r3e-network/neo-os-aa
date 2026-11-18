@@ -87,7 +87,7 @@ test("the scratch copy carries the sources, the lock files and the restore polic
     for (const file of RESTORE_POLICY_FILES) assert.ok(fs.existsSync(path.join(scratch, file)), `${file} is missing from the scratch copy`);
     assert.ok(fs.existsSync(path.join(scratch, "contracts", "custom", "SmartAccount.Execution.cs")));
     assert.ok(fs.existsSync(path.join(scratch, "contracts", "custom", "packages.lock.json")));
-    assert.ok(fs.existsSync(path.join(scratch, "contracts", "plugins", "verifiers", "packages.SessionKeyVerifier.lock.json")));
+    assert.ok(fs.existsSync(path.join(scratch, "contracts", "plugins", "validators", "packages.SessionKeyValidator.lock.json")));
     assert.ok(fs.existsSync(path.join(scratch, "tests", "mocks", "MockTransferTarget.csproj")), "compile.sh builds the mocks from tests/mocks");
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "dotnet_env.sh")));
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "check_neo_platform_packages.mjs")));

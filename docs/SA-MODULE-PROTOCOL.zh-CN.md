@@ -365,6 +365,74 @@ initData)`、`onUninstall(accountId, moduleId, generation, deInitData)`、
 预算约束。核心不再硬编码 `setPublicKey` 等按方法允许列表 —— 模块经核心配置门解码
 自己的 `configData`。
 
+### 9.1 编译产物的回调 ABI
+
+manifest 方法名是 C# 方法名首字母小写（`OnInstall` → `onInstall`、
+`ValidateUserOp` → `validateUserOp`）。`preCheck` 的参数名为 `operation`；
+`postCheck` 的最后一个参数名为 `hookData`。下表类型均为 manifest 参数类型。
+
+| 方向 | 操作 | manifest ABI | 说明 |
+| --- | --- | --- | --- |
+| module→core | `getModuleProfile()` | `→ String`，**safe** | canonical profile 字节，≤ 2048 字节，无参数、不可写。 |
+| core→module | `onInstall(accountId, moduleId, generation, initData)` | `Hash160, Integer, Integer, Array → Void` | `initData` 是命令数组（见 §9.3）或空数组。 |
+| core→module | `configure(accountId, moduleId, generation, configData)` | `Hash160, Integer, Integer, Array → Void` | 同一命令形态；在配置阶段执行。 |
+| core→module | `onUninstall(accountId, moduleId, generation, deInitData)` | `Hash160, Integer, Integer, Array → Void` | 必须清空 `(accountId, moduleId)` 的全部实例键。 |
+| core→module（validator） | `validateUserOp(accountId, operationDigest, operation)` | `Hash160, ByteArray, Array → Boolean`，**safe** | `operationDigest` 为 §4.3 核心摘要；`operation` 为 canonical 13 字段视图。 |
+| core→module（validator） | `onUserOpComplete(accountId, operation, result)` | `Hash160, Array, Any → Void` | 仅 completion 阶段；`result` 是净化后的目标返回值。 |
+| core→module（hook） | `preCheck(accountId, operation)` | `Hash160, Array → ByteArray` | 返回本实例的 `hookData`；`null` 归一化为空字节串；最多 512 字节，否则 `SA_HOOK_DATA_TOO_LARGE`。 |
+| core→module（hook） | `postCheck(accountId, operation, result, hookData)` | `Hash160, Array, Any, ByteArray → Void` | 收到的正是同一实例 `preCheck` 返回的字节，绝不是另一实例的。 |
+| core→module（validator，`messageCapability`） | `isValidSignature(accountId, originalSender, validatorId, generation, hash, signatures)` | `Hash160, Hash160, Integer, Integer, ByteArray, Array → Boolean`，**safe** | `hash` 是核心域绑定的模块消息摘要，直接验证。调用方被限制为 `ReadOnly`。 |
+
+安装时的检查顺序：profile 摘要 → profile 解析（版本、模块类型、合约名、能力）→
+上述完整回调面。缺方法在写入实例前就失败；`getModuleProfile` 与验证/消息回调必须
+声明为 `safe`，因此调用方即使传入写标志也无法从其中写入。hook pre/post 按设计可写
+（它们要计量余额），但只使用自身实例键。
+
+### 9.2 实例鉴权（模块侧）
+
+模块从不信任调用方声明的实例，按以下顺序解析：
+
+1. `authorizedCore()`（模块存储）必须等于 `Runtime.CallingScriptHash`；为零或非法
+   核心时以 `SA_CORE_NOT_CONFIGURED` 失败，其他调用方以 `Unauthorized caller` 失败。
+2. 核心通过 `getAuthorizedModuleId(accountId, phase)` 回答当前寻址的实例。阶段为
+   `Validation 1`、`HookPre 2`、`TargetDispatch 3`、`HookPost 4`、`Completion 5`、
+   `Configuration 6`；返回 `0` 表示该阶段不寻址本模块。生命周期回调仅当阶段 6
+   返回值与收到的 `moduleId` 完全相等时才获授权。
+3. `validateUserOp` 在只读预览期执行时没有 writer 阶段，模块改用
+   `operation[validatorId]`（索引 7）作为实例 id。
+4. `getModule(accountId, moduleId)` 返回描述符
+   `[moduleId, moduleType, contractHash, contractId, updateCounter, nefSha256,
+   profileSha256, moduleRevision, credentialGeneration, instanceIsolation,
+   messageCapability, thresholdMemberEligible]`。索引 8
+   （`credentialGeneration`）把阈值成员的签名绑定到它自己的实例。
+5. 持有资产的脚本哈希：custom kernel 用 `getProxyScriptHash(accountId)`，原生 kernel
+   用 `getAccountAddress(accountId)`。
+
+实例键为 `prefix（1 字节）‖ accountId（20 字节）‖ moduleId（8 字节大端）`；
+模块绝不以调用方提供的 context blob 为键。
+
+### 9.3 配置命令数组
+
+`initData`、`configData`、`deInitData` 都是 `[command, ...args]` 数组。命令词汇由
+模块自己拥有；核心只约束数组上限（≤ §3 参数上限）与 2.5 GAS 生命周期预算。
+随仓库发布的模块使用：
+
+| 模块 | 命令 |
+| --- | --- |
+| `P256Validator`、`Web3AuthValidator`、`TeeKeyValidator` | `setPublicKey(publicKey)` —— 33 字节压缩或 65 字节未压缩，存储为压缩形式。 |
+| `NeoWitnessValidator` | `setSigners(signers[], threshold)` |
+| `MultiSigValidator` | `setMemberKey(publicKey)` —— 每实例一把密钥。 |
+| `SessionKeyValidator` | `setSessionKey(publicKey, target, method, expiry, cap, subId)` / `clearSessionKey()` |
+| `SubscriptionValidator` | `createSubscription(publicKey, payee, token, amount, period)` / `cancelSubscription(subId)` |
+| `DelegatedIdentityValidator` | `setConfig(publicKey, provider, masterNullifier)` |
+| `ZKEmailVerifier` | 无 —— 证明验证器尚未部署，所有回调 fail-closed。 |
+| `ActionSessionValidator` | `setRecoveryService(service)` / `clearRecoveryService()` |
+| `DailyLimitHook` | `setDailyLimit(token, maxAmount, useRollingWindow)` / `clearDailyLimit(token)` |
+| `TokenRestrictedHook` | `restrictToken(token)` / `unrestrictToken(token)` |
+| `WhitelistHook` | `allowTarget(target)` / `denyTarget(target)` |
+| `NeoDIDCredentialHook` | `requireCredential(target, provider, claimType, commitment)` / `clearRequirement(target)` |
+| `MultiHook` | 无 —— 已退役，安装被拒（§1.2）。 |
+
 ## 10. 生命周期、pending 意图与时间锁
 
 正常配置（空槽安装、卸载、hook 顺序调整、signer 变更、默认授权开关、代码重绑定）
@@ -413,6 +481,28 @@ hook 继续运行；没有自动 owner fallback；仅紧急恢复可 callback-fr
 上限之下的核心调度刻意留白。任何超限使整笔交易 fail-closed 失败；没有
 try-and-continue。
 
+### 11.1 数值位置与覆盖范围
+
+两 kernel 都把四个值钉在各自的协议常量文件里
+（`contracts/custom/SmartAccount.ModuleProtocol.cs` 与
+`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`）：
+`ValidationAggregateGasLimit = 100_000_000`、`HookCallbackGasLimit =
+250_000_000`、`ValidatorCompletionGasLimit = 100_000_000`、
+`LifecycleCallbackGasLimit = 250_000_000`。
+
+决定最坏情况的边界也在同一批文件：`HookDataBytesMax = 512`、
+`ModuleProfileBytesMax = 2048`、`ArgsCountMax = 64`、`HookProofsEntriesMax = 8`、
+`HookProofBytesMax = 4096`（聚合）、`OperationEncodedSizeMax = 16384`、
+`EnvelopeEncodedSizeMax = 65536`。
+
+- `getModuleProfile` 按生命周期回调计费（2.5 GAS），以 `CallFlags.ReadStates`
+  执行：profile 不能读余额、不能调用其他合约、不能写。
+- 每个 hook 回调有自己的 2.5 GAS 上限；一个 hook 的剩余预算绝不结转到下一个。
+  `preCheck` 按 `hookOrder` 升序执行，`postCheck` 对同一获准集合逆序执行。
+- 验证 aggregate 覆盖一笔交易内的全部 validator 调用（含阈值成员）；completion
+  另有自己的 1 GAS aggregate。
+- 返回值 ABI 类型不对的回调在 manifest 检查时失败，而不是 gas：核心不做类型强转。
+
 ## 12. 模块能力声明 profile
 
 每个可安装模块附带 canonical profile JSON（profile 哈希进入 0x52 绑定）。Schema
@@ -440,6 +530,57 @@ try-and-continue。
   升级为任意离线授权。
 - `thresholdMemberEligible` 标记可加入阈值政策的标量 validator。
 - `compositeLayer` ≤ 1（单层；无嵌套/环）。
+
+### 12.1 canonical 字节与唯一事实源
+
+profile 是对象键排序、无空白、**末尾无换行**的 UTF-8 JSON 文档；canonical 形态既是
+模块返回的字节，也是安装方计算哈希的对象。不允许类 `timestamp` 或依赖环境的字段：
+同一源在任何机器上必须产出同一字节。
+
+每个模块把 canonical 字节存两份，两份都要校验：
+
+| 位置 | 用途 |
+| --- | --- |
+| `contracts/plugins/<validators\|hooks\|recovery>/<Name>.profile.json` | 可单独审阅的事实源。 |
+| 模块源码里的 `private const string ModuleProfileJson = "…"` | 上链后 `getModuleProfile()` 实际返回的字节。 |
+
+`scripts/sync-module-profiles.mjs` 重写非 canonical 文件、用 `.profile.json` 回填
+字面量、校验模块确实声明了 profile 声称的回调，并支持 `--check`（STALE/ERROR 时以
+退出码 1 失败）。`contracts/compile.sh` 在编译前先跑 `--check`，因此漂移的字面量
+不可能进入产物。
+
+绑定顺序与失败模式（两 kernel 一致）：
+
+1. `getModuleProfile` 必须存在且为 `safe` → 否则 `SA_MODULE_CODE_BINDING_MISMATCH`。
+2. `SHA-256(返回字节)` 必须等于安装动作里的 `profileDigest32` → 否则
+   `SA_MODULE_CODE_BINDING_MISMATCH`。
+3. `profileVersion` 必须为 1，`moduleType` 必须与请求类型一致，`contractName` 必须
+   等于 manifest 名，四个能力键必须齐全 → 否则
+   `SA_MODULE_CODE_BINDING_MISMATCH` 或 `SA_MODULE_TYPE_UNSUPPORTED`。
+4. hook profile 声称 `messageCapability` 或 `thresholdMemberEligible` 时以
+   `SA_MODULE_TYPE_UNSUPPORTED` 失败；`compositeLayer` 超出 0–1 同样失败。
+5. 只有到这一步才校验 §9.1 的回调 ABI 并写入实例；记录的能力标志读自 profile，
+   绝不由安装方声明。
+
+本仓库发布的能力矩阵：
+
+| 模块 | instanceIsolation | messageCapability | thresholdMemberEligible | compositeLayer |
+| --- | --- | --- | --- | --- |
+| `P256Validator` | false | false | true | 0 |
+| `Web3AuthValidator` | false | true | true | 0 |
+| `TeeKeyValidator` | false | false | true | 0 |
+| `NeoWitnessValidator` | false | false | true | 0 |
+| `DelegatedIdentityValidator` | false | false | true | 0 |
+| `MultiSigValidator` | true | false | true | 0 |
+| `SessionKeyValidator` | true | false | false | 0 |
+| `SubscriptionValidator` | false | false | false | 0 |
+| `ZKEmailVerifier` | false | false | false | 0 |
+| `ActionSessionValidator` | false | false | false | 0 |
+| `DailyLimitHook`、`TokenRestrictedHook`、`WhitelistHook`、`NeoDIDCredentialHook` | false | false | false | 0 |
+| `MultiHook` | false | false | false | 1 |
+
+`Web3AuthValidator` 是唯一实现 `isValidSignature` 的已发布 validator；声称
+`messageCapability` 却没有该方法的 profile 仍会在 §9.1 绑定失败。
 
 ## 13. ERC 对齐边界
 
@@ -493,13 +634,17 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 | §4/§5 envelope + 摘要 | `SmartAccount.Execution.cs`（13 字段解码、摘要、batch）；如拆分则新建 `SmartAccount.Intents.cs` |
 | §6 nonce | `SmartAccount.Internal.cs`/新 nonce partial（0x56/0x5C，与旧 0x03 合并） |
 | §8 消息 | `SmartAccount.State.cs`（内建 P-256 主体，0x57） |
-| §9 接口+生命周期 | `SmartAccount.Accounts.cs`（custody+salt 注册身份、原子初始安装）、`SmartAccount.Internal.cs`/新 modules partial（0x51–0x53、0x5B）、**删除** `SmartAccount.HookChildren.cs` 与 `SmartAccount.VerifierChildren.cs`（改核心持有集合） |
+| §9 接口+生命周期 | `SmartAccount.Accounts.cs`（custody+salt 注册身份、原子初始安装）、`SmartAccount.Modules.cs`（0x51–0x53、0x5B；`AssertModuleCallbackAbi`、`BindModuleProfile`、hook pre/post 调度）、`SmartAccount.State.cs`（`getModule`/`getModules` 描述符）、`SmartAccount.Message.cs`（模块 `isValidSignature` 路由）；不再保留 `HookChildren`/`VerifierChildren` 适配 partial |
 | §10 意图 | 新 intents partial（0x55/0x5E） |
 | §7.5 Market | `SmartAccount.MarketEscrow.cs`（0x5D 绑定、owner 不直写 0x1D、代际校验）、`SmartAccount.Escape.cs`（0x59 记录、callback-free 逃生） |
 | F-1（verify scope） | `SmartAccount.VerifyContext.cs` —— 删除 `verifyScopeTarget` 授权、阶段门 |
 | F-7（阶段门） | `SmartAccount.VerifyContext.cs` + `SmartAccount.Execution.cs`（0x58 上下文、只读回调用直接 caller + ReadOnly + 严格域检查） |
 | 事件 | `SmartAccount.Events.cs`（§18 表；保留既有无 AA 事件） |
-| 插件 | `contracts/plugins/verifiers/*`、`contracts/plugins/hooks/*` 按 §1.2 改名；MultiHook 停止安装 |
+| 插件 | `contracts/plugins/validators/` —— 9 个 validator（`P256Validator`、`Web3AuthValidator`、`TeeKeyValidator`、`NeoWitnessValidator`、`DelegatedIdentityValidator`、`MultiSigValidator`、`SessionKeyValidator`、`SubscriptionValidator`、`ZKEmailVerifier`），加共享层 `ModuleOperation.cs`、`ValidatorAuthority.cs`、`ValidatorPayload.cs`、`ValidatorClock.cs`、`ValidatorModels.cs`、`SignerDomain.cs` |
+| hook | `contracts/plugins/hooks/` —— `DailyLimitHook`、`TokenRestrictedHook`、`WhitelistHook`、`NeoDIDCredentialHook`、退役的 `MultiHook`（安装被拒）、共享 `HookAuthority.cs` |
+| recovery 拆分 | `contracts/plugins/recovery/ActionSessionValidator.cs`（validator 模块）与 `contracts/plugins/recovery/SocialRecoveryService.*.cs`（服务合约）；各自附带 canonical profile |
+| profile 事实源 | 每个模块同目录的 `<Name>.profile.json`，字面量以 `ModuleProfileJson` 嵌入源码，由 `scripts/sync-module-profiles.mjs` 保持同步、`contracts/compile.sh` 门禁（§12.1） |
+| 构建布局 | `contracts/compile.sh` 输出 `contracts/bin/public`（核心、服务、mock）、`bin/public/validators`、`bin/public/hooks`；nccs 会编译传入项目所在目录的全部工程 |
 
 ### 16.2 原生 kernel（#40，与 #29 共享修改批次）
 

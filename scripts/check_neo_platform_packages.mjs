@@ -144,7 +144,7 @@ export function listProjects(root = repoRoot, { includeNative = false } = {}) {
 
 /**
  * The lock file that belongs to a project file. A directory that holds several projects
- * (contracts/plugins/hooks, contracts/plugins/verifiers, tests/mocks) would share one packages.lock.json, so its
+ * (contracts/plugins/hooks, contracts/plugins/validators, tests/mocks) would share one packages.lock.json, so its
  * projects use packages.ProjectName.lock.json, as Directory.Build.props configures.
  */
 export function lockFileFor(project, projects) {

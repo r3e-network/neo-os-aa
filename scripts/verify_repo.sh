@@ -155,13 +155,13 @@ if [[ $run_contracts -eq 1 ]]; then
       echo "cross-repo gate:   set NEOOS_SERVICES_CONTRACT_BUILD to a neo-os-services contract build directory to"
       echo "cross-repo gate:   run it, or NEOOS_REQUIRE_SERVICES_ARTIFACTS=1 to make its absence a hard failure."
     fi
-    echo "public-profile gate: verifier-callback tests run on the published TestEngine; private PLATFORM bytecode is checked separately."
+    echo "public-profile gate: validator-callback tests run on the published TestEngine; private PLATFORM bytecode is checked separately."
     dotnet test SmartAccount.sln -c Release --nologo
     python3 -m unittest discover -s scripts -p 'test_neoexpress_validate.py'
     python3 -m unittest discover -s scripts -p 'test_neoexpress_source_validate.py'
     python3 -m unittest discover -s scripts -p 'test_neoexpress_reproducible_build.py'
     node --test scripts/lib/deploy-helpers.test.mjs \
-      scripts/deploy_latest_sa_verifiers.test.mjs \
+      scripts/deploy_latest_sa_validators.test.mjs \
       scripts/check_neo_platform_packages.test.mjs \
       scripts/check-artifact-reproducibility.test.mjs \
       scripts/check-custom-runtime-provenance.test.mjs \

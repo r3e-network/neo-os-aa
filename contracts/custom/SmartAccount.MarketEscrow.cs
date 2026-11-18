@@ -169,7 +169,7 @@ namespace SmartAccount
         /// the buyer becomes the new custody and receives a clean account —
         /// every module instance, threshold policy, hook order, message
         /// subject set, pending intent, nonce channel and pending migration
-        /// state is swept callback-free (no old plugin clearAccount callback
+        /// state is swept callback-free (no module cleanup callback
         /// can block or corrupt the settlement), and built-in authorization is
         /// enabled so the buyer can operate immediately. The 0x5D binding must
         /// still match the account's control revision: an account whose owner

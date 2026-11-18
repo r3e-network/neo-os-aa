@@ -51,8 +51,8 @@ namespace SmartAccount
         // rows remain as migration-input evidence only (SA-MODULE-PROTOCOL.md §7.4).
         // 0x23/0x24/0x25 legacy composite dependency registry: RETIRED with
         // the v4 module model — module children are core-owned 0x52/0x53
-        // instances now, and the callback-free sweep replaces cascaded
-        // clearAccount. Bytes permanently reserved; surviving rows are
+        // instances now, and the callback-free sweep replaces the cascaded
+        // per-child cleanup callback. Bytes permanently reserved; surviving rows are
         // inert evidence.
         private static readonly byte[] Prefix_HookDependencies = new byte[] { 0x23 };
         private static readonly byte[] Prefix_VerifierDependencies = new byte[] { 0x24 };

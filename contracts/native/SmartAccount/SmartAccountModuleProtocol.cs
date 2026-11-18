@@ -73,6 +73,10 @@ namespace Neo.SmartContract.Native
         internal const int MaxOperationsPerEnvelope = 32;
         internal const int MinEnumerationLimit = 1;
         internal const int MaxEnumerationLimit = 32;
+        // Canonical module profile (spec §12).
+        internal const int ModuleProfileVersion = 1;
+        internal const int ModuleProfileBytesMax = 2048;
+        internal const int ModuleCompositeLayerMax = 1;
 
         // ------------------------------------------------------------------
         // 3. Encoding bounds (spec §4)

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>SocialRecoveryService</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Explicit source inputs: rebuild the NEF and manifest after semantic changes. -->
+    <Compile Include="SocialRecoveryService.ActionAuthorization.cs" />
+    <Compile Include="SocialRecoveryService.Fixed.cs" />
+    <Compile Include="SocialRecoveryService.Flows.cs" />
+    <Compile Include="SocialRecoveryService.Lifecycle.cs" />
+    <Compile Include="SocialRecoveryService.Queries.cs" />
+    <Compile Include="SocialRecoveryService.Storage.cs" />
+    <Compile Include="SocialRecoveryService.Validation.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RunNccsAfterBuild>false</RunNccsAfterBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+  </ItemGroup>
+
+  <!-- Shared plugin layer, compiled in as source (contracts cannot reference the
+       core's assembly). Keep the include list minimal: add VerifierClock.cs only if
+       your policy needs it. -->
+  <ItemGroup>
+    <Compile Include="../../validators/ValidatorAuthority.cs" />
+    <Compile Include="../../validators/ModuleOperation.cs" />
+    <Compile Include="../../validators/ValidatorPayload.cs" />
+    <Compile Include="../../validators/ValidatorModels.cs" />
+    <Compile Include="../../validators/SignerDomain.cs" />
+    <Compile Include="../../validators/ValidatorClock.cs" />
+    <Compile Include="ValidatorTemplate.cs" />
+  </ItemGroup>
+
+  <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
+    <Message Text="Compiling Neo smart contract: ValidatorTemplate.cs" Importance="high" />
+    <Exec Command="nccs ./ValidatorTemplate.csproj -o ./build" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+
+</Project>

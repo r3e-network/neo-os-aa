@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <Compile Include="HookAuthority.cs" />
+    <Compile Include="../validators/ModuleOperation.cs" />
     <Compile Include="WhitelistHook.cs" />
   </ItemGroup>
 

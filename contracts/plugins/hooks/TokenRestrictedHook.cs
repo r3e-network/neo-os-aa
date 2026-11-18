@@ -3,6 +3,7 @@ using Neo;
 using Neo.SmartContract;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
+using Neo.SmartContract.Framework.Native;
 using Neo.SmartContract.Framework.Services;
 using System.ComponentModel;
 
@@ -12,22 +13,28 @@ namespace SmartAccount.Hooks
     /// Hook that blocks interaction with specific token contracts for a given account.
     /// </summary>
     /// <remarks>
-    /// This is useful for forbidding calls into sensitive or governance-critical assets even if
-    /// the rest of the SA account remains broadly usable.
+    /// Protocol v4: one hook instance per <c>(accountId, moduleId)</c>, configured
+    /// through the core configuration gate (docs/SA-MODULE-PROTOCOL.md §9). The
+    /// restriction is enforced twice: by call target in <c>preCheck</c> and by
+    /// effect (a restricted token's balance must not fall) in <c>postCheck</c>,
+    /// which also catches a call routed through an intermediary contract.
     /// </remarks>
     [DisplayName("TokenRestrictedHook")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "hasModuleContext", "getAccountAddress", "getAuthorityEpoch")]
+    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "getAuthorizedModuleId", "getAccountAddress")]
     [ContractPermission("*", "balanceOf")]
-    [ManifestExtra("SmartAccountProfile", "native-v2")]
+    [ManifestExtra("SmartAccountProfile", "native-v4")]
 #else
-    [ContractPermission("*", "canExecuteHook")]
-    [ContractPermission("*", "canConfigureHook")]
+    [ContractPermission("*", "getAuthorizedModuleId")]
     [ContractPermission("*", "getProxyScriptHash")]
+    [ContractPermission("*", "balanceOf")]
 #endif
     [ManifestExtra("Description", "Hook to restrict interacting with specific high-value tokens")]
     public class TokenRestrictedHook : SmartContract
     {
+        // Canonical bytes of TokenRestrictedHook.profile.json (scripts/sync-module-profiles.mjs).
+        private const string ModuleProfileJson = "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"TokenRestrictedHook\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}";
+
         private static readonly byte[] Prefix_RestrictedTokens = new byte[] { 0x01 };
         // Audit fix M-5: transient per-execution balance snapshot of restricted tokens, used to
         // enforce the restriction by EFFECT (balance must not fall) and not just by call target.
@@ -37,10 +44,7 @@ namespace SmartAccount.Hooks
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
 
         [Safe]
-        public static bool SupportsV3() => true;
-
-        [Safe]
-        public static bool SupportsComposition() => false;
+        public static string GetModuleProfile() => ModuleProfileJson;
 
         [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
@@ -64,108 +68,123 @@ namespace SmartAccount.Hooks
 
         public static void Update(ByteString nef, string manifest) => HookAuthority.Update(nef, manifest);
 
+        // ---- Lifecycle (core configuration gate, spec §9) ----
+
+        /// <summary>
+        /// <c>initData</c>: empty, or one command:
+        /// <c>["restrictToken", token]</c>.
+        /// </summary>
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        {
+            HookAuthority.RequireLifecycle(accountId, moduleId);
+            if (initData.Length > 0) ApplyConfig(accountId, moduleId, initData);
+        }
+
+        /// <summary>
+        /// <c>configData</c>: <c>["restrictToken", token]</c> or
+        /// <c>["unrestrictToken", token]</c>.
+        /// </summary>
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        {
+            HookAuthority.RequireLifecycle(accountId, moduleId);
+            ApplyConfig(accountId, moduleId, configData);
+        }
+
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        {
+            HookAuthority.RequireLifecycle(accountId, moduleId);
+            HookAuthority.DeleteInstancePrefix(Prefix_RestrictedTokens, accountId, moduleId);
+            HookAuthority.DeleteInstancePrefix(Prefix_RestrictedSnapshot, accountId, moduleId);
+        }
+
+        private static void ApplyConfig(UInt160 accountId, BigInteger moduleId, object[] data)
+        {
+            string command = ModuleConfig.Name(data);
+            if (command == "restrictToken")
+            {
+                ModuleConfig.RequireArgs(data, 1);
+                SetRestrictedToken(accountId, moduleId, (UInt160)data[1], true);
+                return;
+            }
+            if (command == "unrestrictToken")
+            {
+                ModuleConfig.RequireArgs(data, 1);
+                SetRestrictedToken(accountId, moduleId, (UInt160)data[1], false);
+                return;
+            }
+            ExecutionEngine.Assert(false, "Unknown config command");
+        }
+
         /// <summary>
         /// Marks a token contract as restricted or clears the restriction.
         /// </summary>
-        public static void SetRestrictedToken(UInt160 accountId, UInt160 token, bool isRestricted)
+        private static void SetRestrictedToken(UInt160 accountId, BigInteger moduleId, UInt160 token, bool isRestricted)
         {
-            HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
-            byte[] key = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
-            key = Helper.Concat(key, (byte[])token);
+            byte[] key = TokenKey(Prefix_RestrictedTokens, accountId, moduleId, token);
 
             if (isRestricted)
             {
                 ExecutionEngine.Assert(token != UInt160.Zero && token.IsValid, "Invalid restricted token");
                 if (Storage.Get(Storage.CurrentContext, key) == null)
                 {
-                    byte[] accountPrefix = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
-                    Iterator iterator = Storage.Find(Storage.CurrentContext, accountPrefix, FindOptions.KeysOnly);
+                    Iterator iterator = Storage.Find(Storage.CurrentContext,
+                        HookAuthority.InstanceKey(Prefix_RestrictedTokens, accountId, moduleId), FindOptions.KeysOnly);
                     int configured = 0;
                     while (iterator.Next()) configured++;
                     ExecutionEngine.Assert(configured < MaxRestrictedTokens, "Too many restricted tokens");
                 }
                 Storage.Put(Storage.CurrentContext, key, new byte[] { 1 });
+                return;
             }
-            else
-            {
-                Storage.Delete(Storage.CurrentContext, key);
-#if SMARTACCOUNT_NATIVE
-                Storage.Delete(Storage.CurrentContext, SnapshotKey(accountId, token));
-#endif
-            }
+
+            Storage.Delete(Storage.CurrentContext, key);
+            Storage.Delete(Storage.CurrentContext, TokenKey(Prefix_RestrictedSnapshot, accountId, moduleId, token));
         }
+
+        [Safe]
+        public static bool IsRestricted(UInt160 accountId, BigInteger moduleId, UInt160 token)
+        {
+            return Storage.Get(Storage.CurrentContext, TokenKey(Prefix_RestrictedTokens, accountId, moduleId, token)) != null;
+        }
+
+        // ---- Execution callbacks (spec §9) ----
 
         /// <summary>
         /// Aborts execution if the target contract is in the account's restricted-token set.
         /// </summary>
-        public static void PreExecute(UInt160 accountId, object[] opParams)
+        public static ByteString PreCheck(UInt160 accountId, object[] operation)
         {
-#if SMARTACCOUNT_NATIVE
-            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "preExecute");
-            ExecutionEngine.Assert(opParams.Length == 6 && opParams[0] is ByteString && ((ByteString)opParams[0]).Length == 20,
-                "Invalid native operation shape");
-#else
-            HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
-            // Audit fix L-2: fail-closed, matching the native shape check above. The core
-            // always passes the fixed 6-element operation shape; a shorter array previously
-            // skipped the restricted-target check entirely.
-            ExecutionEngine.Assert(opParams.Length == 6, "Invalid hook operation params");
-#endif
+            BigInteger moduleId = HookAuthority.RequirePreCheck(accountId, operation);
 
             // Audit fix M-5: snapshot every restricted token's balance BEFORE the op runs. The
-            // direct-target check below only sees op.TargetContract, so a call routed through a
-            // whitelisted intermediary (e.g. a DEX router) that internally moves a restricted
-            // token would otherwise slip past. PostExecute compares against this snapshot and
+            // direct-target check below only sees the operation target, so a call routed through
+            // a whitelisted intermediary (e.g. a DEX router) that internally moves a restricted
+            // token would otherwise slip past. PostCheck compares against this snapshot and
             // reverts on any net outflow, enforcing the restriction by effect regardless of path.
-            SnapshotRestrictedBalances(accountId);
+            SnapshotRestrictedBalances(accountId, moduleId);
 
-            UInt160 targetContract = (UInt160)opParams[0];
-
-            byte[] key = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
-            key = Helper.Concat(key, (byte[])targetContract);
+            UInt160 targetContract = ModuleOperation.Target(operation);
 
             // Abort if trying to interact with a restricted token (e.g. NEO/GAS)
-            ExecutionEngine.Assert(Storage.Get(Storage.CurrentContext, key) == null, "Interaction with restricted token is forbidden");
+            ExecutionEngine.Assert(
+                Storage.Get(Storage.CurrentContext, TokenKey(Prefix_RestrictedTokens, accountId, moduleId, targetContract)) == null,
+                "Interaction with restricted token is forbidden");
+            return (ByteString)new byte[0];
         }
 
-        public static void PostExecute(UInt160 accountId, object[] opParams, object result)
+        public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)
         {
-#if SMARTACCOUNT_NATIVE
-            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "postExecute");
-#else
-            HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
-#endif
+            BigInteger moduleId = HookAuthority.RequirePostCheck(accountId, operation);
             // Audit fix M-5: a restricted token's balance must not have decreased during the op,
             // no matter which contract was called directly.
-            EnforceRestrictedBalances(accountId);
+            EnforceRestrictedBalances(accountId, moduleId);
         }
 
-        private static ByteString SnapshotKey(UInt160 accountId, UInt160 token) =>
-            (ByteString)Helper.Concat(HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId), (byte[])token);
-
-        /// <summary>
-        /// Address that actually holds this account's assets on chain - the core's
-        /// proxy script hash, not the accountId, which never holds a balance.
-        /// </summary>
-        private static UInt160 AssetAddressOf(UInt160 accountId)
+        private static byte[] TokenKey(byte[] prefix, UInt160 accountId, BigInteger moduleId, UInt160 token)
         {
-            UInt160 core = HookAuthority.AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "authorized core not set");
-#if SMARTACCOUNT_NATIVE
-            return (UInt160)Contract.Call(core, "getAccountAddress", CallFlags.ReadOnly, accountId);
-#else
-            return (UInt160)Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId);
-#endif
+            return Helper.Concat(HookAuthority.InstanceKey(prefix, accountId, moduleId), (byte[])token);
         }
 
-#if SMARTACCOUNT_NATIVE
-        private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account)
-        {
-            object value = Contract.Call(token, "balanceOf", CallFlags.ReadOnly, new object[] { account });
-            ExecutionEngine.Assert(value is BigInteger && (BigInteger)value >= 0, "Invalid restricted token balance");
-            return (BigInteger)value;
-        }
-#else
         private static BigInteger TokenBalanceOf(UInt160 token, UInt160 account)
         {
             // Audit fix L-4: align with the native build — a restricted token must report
@@ -175,72 +194,46 @@ namespace SmartAccount.Hooks
             ExecutionEngine.Assert(value is BigInteger && (BigInteger)value >= 0, "Invalid restricted token balance");
             return (BigInteger)value;
         }
-#endif
 
         /// <summary>
-        /// Records the account's current balance of every restricted token so PostExecute can
+        /// Records the account's current balance of every restricted token so PostCheck can
         /// detect an outflow caused by any call path. Restricted entries are NEP-17 tokens by
         /// design ("restrict interacting with specific high-value tokens").
         /// </summary>
-        private static void SnapshotRestrictedBalances(UInt160 accountId)
+        private static void SnapshotRestrictedBalances(UInt160 accountId, BigInteger moduleId)
         {
-            byte[] prefix = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
-            Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);
+            UInt160 assetAddress = HookAuthority.AssetAddress(accountId);
+            Iterator iterator = Storage.Find(Storage.CurrentContext,
+                HookAuthority.InstanceKey(Prefix_RestrictedTokens, accountId, moduleId),
+                FindOptions.KeysOnly | FindOptions.RemovePrefix);
             while (iterator.Next())
             {
                 UInt160 token = (UInt160)(ByteString)iterator.Value;
-                BigInteger before = TokenBalanceOf(token, AssetAddressOf(accountId));
-                Storage.Put(Storage.CurrentContext, SnapshotKey(accountId, token), before);
+                BigInteger before = TokenBalanceOf(token, assetAddress);
+                Storage.Put(Storage.CurrentContext, TokenKey(Prefix_RestrictedSnapshot, accountId, moduleId, token), before);
             }
         }
 
         /// <summary>
         /// Asserts no restricted token left the account during the op and clears the snapshots.
         /// </summary>
-        private static void EnforceRestrictedBalances(UInt160 accountId)
+        private static void EnforceRestrictedBalances(UInt160 accountId, BigInteger moduleId)
         {
-            byte[] prefix = HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId);
-            Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);
+            UInt160 assetAddress = HookAuthority.AssetAddress(accountId);
+            Iterator iterator = Storage.Find(Storage.CurrentContext,
+                HookAuthority.InstanceKey(Prefix_RestrictedTokens, accountId, moduleId),
+                FindOptions.KeysOnly | FindOptions.RemovePrefix);
             while (iterator.Next())
             {
                 UInt160 token = (UInt160)(ByteString)iterator.Value;
-                ByteString snapKey = SnapshotKey(accountId, token);
-#if SMARTACCOUNT_NATIVE
+                byte[] snapKey = TokenKey(Prefix_RestrictedSnapshot, accountId, moduleId, token);
                 ByteString? raw = Storage.Get(Storage.CurrentContext, snapKey);
                 ExecutionEngine.Assert(raw != null, "Missing restricted balance snapshot");
                 BigInteger before = (BigInteger)raw!;
-#else
-                ByteString raw = Storage.Get(Storage.CurrentContext, snapKey);
-                BigInteger before = raw == null ? 0 : (BigInteger)raw;
-#endif
-                BigInteger after = TokenBalanceOf(token, AssetAddressOf(accountId));
+                BigInteger after = TokenBalanceOf(token, assetAddress);
                 Storage.Delete(Storage.CurrentContext, snapKey);
                 ExecutionEngine.Assert(after >= before, "Restricted token outflow (incl. via intermediary) is forbidden");
             }
-        }
-
-        public static void ClearAccount(UInt160 accountId)
-        {
-#if SMARTACCOUNT_NATIVE
-            NativeAuthority.Require(HookAuthority.AuthorizedCore(), accountId, "hook", "cleanup");
-            ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId));
-            ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId));
-#else
-            HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
-
-            // Audit fix L-4: the ordinary build previously cleared only the restricted-token
-            // entries, leaving the M-5 balance-snapshot keys behind (the native build cleared
-            // both). Stale snapshots could then poison a later PostExecute comparison.
-            ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedTokens, accountId));
-            ClearPrefix(HookAuthority.AccountKey(Prefix_RestrictedSnapshot, accountId));
-#endif
-        }
-
-        private static void ClearPrefix(byte[] prefix)
-        {
-            Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly);
-            while (iterator.Next())
-                Storage.Delete(Storage.CurrentContext, (ByteString)iterator.Value);
         }
     }
 }

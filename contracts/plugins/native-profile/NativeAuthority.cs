@@ -1,50 +1,25 @@
-using System.Numerics;
 using Neo;
 using Neo.SmartContract;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
-using Neo.SmartContract.Framework.Services;
 
 namespace SmartAccount
 {
+    /// <summary>
+    /// Native-profile builds trust exactly one core: the native SmartAccount
+    /// contract. Instance authentication and per-instance storage keys are the
+    /// same protocol v4 mechanism as the custom profile (ModuleContext); the
+    /// only native-specific rule is that the configured core must be this
+    /// pinned hash.
+    /// </summary>
     internal static class NativeAuthority
     {
         [InitialValue("0x398dc3f0227d7efac5533ed5ce9937390c158084", ContractParameterType.Hash160)]
         internal static readonly UInt160 SmartAccount = default!;
 
-        // ABI 2 policy state belongs to one recovery authority generation. The
-        // leading tag makes prefix scans disjoint from old account-only keys.
-        // L-3: an entrypoint that touches several epoch-scoped slots should read
-        // the authority epoch once per invocation and reuse the encoded suffix
-        // through the epoch-parameterized overload, instead of paying the
-        // cross-contract getAuthorityEpoch call for every single key. The
-        // two-argument convenience overload keeps the fresh per-key read for
-        // entrypoints that touch only one slot.
-        internal static byte[] AccountKey(byte[] prefix, UInt160 accountId)
-        {
-            object raw = Contract.Call(SmartAccount, "getAuthorityEpoch", CallFlags.ReadOnly, new object[] { accountId });
-            ExecutionEngine.Assert(raw is BigInteger, "Invalid authority epoch type");
-            return AccountKey(prefix, accountId, (BigInteger)raw);
-        }
-
-        internal static byte[] AccountKey(byte[] prefix, UInt160 accountId, BigInteger epoch)
-        {
-            ExecutionEngine.Assert(epoch >= 0 && epoch < (BigInteger.One << 64), "Invalid authority epoch range");
-            byte[] encoded = new byte[8];
-            for (int i = 0; i < 8; i++)
-            {
-                encoded[i] = (byte)(epoch & 255);
-                epoch >>= 8;
-            }
-            return Helper.Concat(Helper.Concat(Helper.Concat(new byte[] { 0xA2 }, prefix), (byte[])accountId), encoded);
-        }
-
-        internal static void Require(UInt160 configuredCore, UInt160 accountId, string role, string phase)
+        internal static void RequirePinnedCore(UInt160 configuredCore)
         {
             ExecutionEngine.Assert(configuredCore == SmartAccount, "Wrong native SmartAccount contract");
-            bool authorized = (bool)Contract.Call(SmartAccount, "hasModuleContext", CallFlags.ReadOnly,
-                new object[] { accountId, role, Runtime.ExecutingScriptHash, phase });
-            ExecutionEngine.Assert(authorized, "Missing native module invocation context");
         }
     }
 }

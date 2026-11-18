@@ -16,6 +16,7 @@
        core's assembly). -->
   <ItemGroup>
     <Compile Include="../../hooks/HookAuthority.cs" />
+    <Compile Include="../../validators/ModuleOperation.cs" />
     <Compile Include="HookTemplate.cs" />
   </ItemGroup>
 

@@ -63,6 +63,10 @@ namespace SmartAccount
         private const int MaxOperationsPerEnvelope = 32;
         private const int MinEnumerationLimit = 1;
         private const int MaxEnumerationLimit = 32;
+        // Canonical module profile (spec §12).
+        private const int ModuleProfileVersion = 1;
+        private const int ModuleProfileBytesMax = 2048;
+        private const int ModuleCompositeLayerMax = 1;
 
         // ========================================================================
         // 3. Encoding bounds (spec §4)

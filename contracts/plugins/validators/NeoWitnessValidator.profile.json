@@ -1,0 +1,1 @@
+{"callbacks":["validateUserOp","onUserOpComplete"],"capabilities":{"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":true},"contractName":"NeoWitnessValidator","lifecycle":["onInstall","onUninstall","configure"],"moduleType":"validator","profileVersion":1}

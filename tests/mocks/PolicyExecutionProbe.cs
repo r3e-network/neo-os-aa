@@ -7,9 +7,21 @@ using System.ComponentModel;
 
 namespace SmartAccount.Mocks
 {
-    /// <summary>Test-only stateful adversarial token and atomic policy lifecycle driver.</summary>
+    /// <summary>
+    /// Test-only stateful adversarial token: <c>transfer</c> accepts a data array that
+    /// lets a test debit a different amount than it declares and return an arbitrary
+    /// value, so policy hooks can be probed against NEP-17 violations.
+    /// </summary>
+    /// <remarks>
+    /// Protocol v4 drives hook and validator callbacks from the account core
+    /// (preCheck/postCheck in the core-owned hookOrder, validateUserOp/
+    /// onUserOpComplete in the validation phase), so this mock no longer carries a
+    /// <c>forward</c>-style callback driver: tests exercise callbacks through the real
+    /// core instead of a stub relay.
+    /// </remarks>
     [DisplayName("PolicyExecutionProbe")]
     [ContractPermission("*", "*")]
+    [ManifestExtra("Description", "Test-only adversarial token for policy semantics")]
     public class PolicyExecutionProbe : SmartContract
     {
         public static void SetBalance(UInt160 account, BigInteger amount) => Storage.Put(Storage.CurrentContext, account, amount);
@@ -30,22 +42,6 @@ namespace SmartAccount.Mocks
         public static object Move(UInt160 from, BigInteger debit, object result)
         {
             Storage.Put(Storage.CurrentContext, from, BalanceOf(from) - debit);
-            return result;
-        }
-
-        public static object ExecuteHook(UInt160 core, UInt160 hook, UInt160 accountId, object[] op)
-        {
-            Contract.Call(core, "forward", CallFlags.All, hook, "preExecute", new object[] { accountId, op });
-            object result = Contract.Call((UInt160)op[0], (string)op[1], CallFlags.All, (object[])op[2]);
-            Contract.Call(core, "forward", CallFlags.All, hook, "postExecute", new object[] { accountId, op, result });
-            return result;
-        }
-
-        public static object ExecuteVerifier(UInt160 core, UInt160 verifier, UInt160 accountId, object[] op)
-        {
-            ExecutionEngine.Assert((bool)Contract.Call(verifier, "validateSignature", CallFlags.All, accountId, op));
-            object result = Contract.Call((UInt160)op[0], (string)op[1], CallFlags.All, (object[])op[2]);
-            Contract.Call(core, "forward", CallFlags.All, verifier, "postExecute", new object[] { accountId, op, result });
             return result;
         }
     }

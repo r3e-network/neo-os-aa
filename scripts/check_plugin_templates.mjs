@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 
 // Compiles the plugin templates under contracts/plugins/templates/ into a throwaway
-// directory and asserts their manifests still satisfy the exact ABI the SA core
-// requires at bind time (AssertV3Verifier / AssertV3Hook in
-// contracts/custom/SmartAccount.Accounts.cs). The templates are the documented starting
-// point for third-party plugins; if the shared plugin layer
-// (contracts/plugins/verifiers/Verifier*.cs, contracts/plugins/hooks/HookAuthority.cs) or the core
-// binding gate ever drifts, this gate fails before a developer copies a broken
-// skeleton.
+// directory and asserts their manifests satisfy the exact protocol v4 ABI the SA core
+// requires at bind time (SmartAccount.Modules.cs: AssertModuleCallbackAbi) and that
+// their canonical capability profile (spec §12) is self-consistent.
+//
+// The templates are the documented starting point for third-party plugins; if the
+// shared plugin layer (contracts/plugins/validators/Validator*.cs,
+// contracts/plugins/hooks/HookAuthority.cs) or the core binding gate ever drifts, this
+// gate fails before a developer copies a broken skeleton.
 //
 // Usage: node scripts/check_plugin_templates.mjs
 // Requires: the pinned nccs on PATH or NCCS_BIN (same toolchain as
 // contracts/compile.sh), and NuGet access for the pinned framework package.
 
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,35 +24,41 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nccs = process.env.NCCS_BIN || path.join(os.homedir(), ".dotnet", "tools", "nccs");
 
-// Mirror of the core's bind-time ABI gate: SmartAccount.Accounts.cs
-// AssertV3Verifier / AssertV3Hook. Signature format: "ParamType,...->ReturnType";
+// Mirror of the core's bind-time ABI gate: SmartAccount.Modules.cs
+// AssertModuleCallbackAbi. Signature format: "ParamType,...->ReturnType";
 // safe:true additionally requires the [Safe] (read-only) flag.
 const CORE_BINDING_ABI = {
-  verifier: [
-    { name: "supportsV3", sig: "->Boolean", safe: true },
-    { name: "validateSignature", sig: "Hash160,Any->Boolean" },
-    { name: "postExecute", sig: "Hash160,Any,Any->Void" },
-    { name: "clearAccount", sig: "Hash160->Void" },
+  validator: [
+    { name: "getModuleProfile", sig: "->String", safe: true },
+    { name: "onInstall", sig: "Hash160,Integer,Integer,Array->Void" },
+    { name: "onUninstall", sig: "Hash160,Integer,Integer,Array->Void" },
+    { name: "configure", sig: "Hash160,Integer,Integer,Array->Void" },
+    { name: "validateUserOp", sig: "Hash160,ByteArray,Array->Boolean", safe: true },
+    { name: "onUserOpComplete", sig: "Hash160,Array,Any->Void" },
   ],
   hook: [
-    { name: "supportsV3", sig: "->Boolean", safe: true },
-    { name: "preExecute", sig: "Hash160,Array->Void" },
-    { name: "postExecute", sig: "Hash160,Array,Any->Void" },
-    { name: "clearAccount", sig: "Hash160->Void" },
+    { name: "getModuleProfile", sig: "->String", safe: true },
+    { name: "onInstall", sig: "Hash160,Integer,Integer,Array->Void" },
+    { name: "onUninstall", sig: "Hash160,Integer,Integer,Array->Void" },
+    { name: "configure", sig: "Hash160,Integer,Integer,Array->Void" },
+    { name: "preCheck", sig: "Hash160,Array->ByteArray" },
+    { name: "postCheck", sig: "Hash160,Array,Any,ByteArray->Void" },
   ],
 };
 
 const TEMPLATES = [
   {
-    kind: "verifier",
-    project: path.join(rootDir, "contracts", "plugins", "templates", "verifier", "VerifierTemplate.csproj"),
-    manifest: "VerifierTemplate.manifest.json",
+    kind: "validator",
+    contractName: "ValidatorTemplate",
+    project: path.join(rootDir, "contracts", "plugins", "templates", "validator", "ValidatorTemplate.csproj"),
+    manifest: "ValidatorTemplate.manifest.json",
     // The template must ride on the shared plugin layer, not a private copy.
-    source: path.join(rootDir, "contracts", "plugins", "templates", "verifier", "VerifierTemplate.cs"),
-    sharedLayer: ["VerifierAuthority.", "VerifierPayload.", "SignerDomain."],
+    source: path.join(rootDir, "contracts", "plugins", "templates", "validator", "ValidatorTemplate.cs"),
+    sharedLayer: ["ValidatorAuthority.", "ValidatorPayload.", "SignerDomain."],
   },
   {
     kind: "hook",
+    contractName: "HookTemplate",
     project: path.join(rootDir, "contracts", "plugins", "templates", "hook", "HookTemplate.csproj"),
     manifest: "HookTemplate.manifest.json",
     source: path.join(rootDir, "contracts", "plugins", "templates", "hook", "HookTemplate.cs"),
@@ -75,7 +83,16 @@ function assertTemplateAbi(manifestPath, kind) {
       throw new Error(`${kind} template: ${req.name} lost its [Safe] flag; the core requires a read-only marker`);
     }
   }
-  return methods.length;
+  return manifest;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.keys(value).sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function assertSharedLayer(template) {
@@ -87,14 +104,41 @@ function assertSharedLayer(template) {
   }
 }
 
+// The profile literal is hashed into the install-time profile digest, so it must be
+// canonical and must describe this exact module type and contract name (spec §12).
+function assertProfile(template, manifest) {
+  const source = fs.readFileSync(template.source, "utf8");
+  const match = /private const string ModuleProfileJson =\s*"((?:[^"\\]|\\.)*)";/s.exec(source);
+  if (!match) throw new Error(`${path.basename(template.source)}: ModuleProfileJson constant missing`);
+  const literal = match[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  const profile = JSON.parse(literal);
+  if (profile.profileVersion !== 1) throw new Error(`${template.contractName}: profileVersion must be 1`);
+  if (profile.moduleType !== template.kind) {
+    throw new Error(`${template.contractName}: profile moduleType ${profile.moduleType} does not match ${template.kind}`);
+  }
+  if (profile.contractName !== template.contractName || manifest.name !== template.contractName) {
+    throw new Error(`${template.contractName}: profile/manifest contract name mismatch`);
+  }
+  if (literal !== canonicalJson(profile)) {
+    throw new Error(`${template.contractName}: profile literal is not canonical JSON`);
+  }
+  if (profile.moduleType === "hook"
+      && (profile.capabilities.messageCapability || profile.capabilities.thresholdMemberEligible)) {
+    throw new Error(`${template.contractName}: hooks may not claim message or threshold capabilities`);
+  }
+  const digest = crypto.createHash("sha256").update(literal).digest("hex");
+  console.log(`[plugin templates] ${template.contractName}: profile ${digest.slice(0, 16)}…`);
+}
+
 function main() {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sa-plugin-templates-"));
   try {
     for (const template of TEMPLATES) {
       execFileSync(nccs, [template.project, "-o", scratch], { stdio: ["ignore", "pipe", "inherit"] });
-      assertTemplateAbi(path.join(scratch, template.manifest), template.kind);
+      const manifest = assertTemplateAbi(path.join(scratch, template.manifest), template.kind);
       assertSharedLayer(template);
-      console.log(`[plugin templates] ${template.kind}: compiles, core-binding ABI intact, shared layer in use`);
+      assertProfile(template, manifest);
+      console.log(`[plugin templates] ${template.kind}: compiles, v4 binding ABI intact, shared layer in use`);
     }
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });

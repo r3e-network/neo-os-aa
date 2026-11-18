@@ -9,126 +9,28 @@ using System.ComponentModel;
 namespace SmartAccount.Mocks
 {
     /// <summary>
-    /// Minimal SA-core stub used by verifier runtime tests.
+    /// Minimal protocol-v4 SA-core stub used by module runtime tests.
     /// </summary>
     /// <remarks>
-    /// Verifier plugins gate configuration and post-execution effects through
-    /// <c>VerifierAuthority</c>, which requires the caller to be the authorized SA core and
-    /// asks that core to approve the operation via <c>canConfigureVerifier</c> /
-    /// <c>canExecuteVerifier</c>. This stub plays that core role for tests: it approves both
-    /// checks and exposes a generic <see cref="Forward"/> so a test can invoke a verifier
-    /// method while the verifier observes this contract as <c>Runtime.CallingScriptHash</c>.
-    /// It is test-only infrastructure and must never be deployed to a live network.
+    /// A v4 module never trusts a caller-declared instance. It authenticates the caller,
+    /// then asks the core which of its instances the current writer phase addresses
+    /// (<c>getAuthorizedModuleId(accountId, phase)</c>), reads the recorded instance
+    /// through <c>getModule(accountId, moduleId)</c> (index 8 is the credential
+    /// generation) and resolves the asset-holding script hash through
+    /// <c>getProxyScriptHash</c> / <c>getAccountAddress</c>. This stub answers those
+    /// reads from storage so tests can drive the same code paths as the real core,
+    /// and relays calls through <see cref="Forward"/> so a plugin observes this
+    /// contract as <c>Runtime.CallingScriptHash</c>. It is test-only infrastructure
+    /// and must never be deployed to a live network.
     /// </remarks>
     [DisplayName("MockVerifierCore")]
     [ContractPermission("*", "*")]
-    [ManifestExtra("Description", "Test-only SA core stub for verifier authority checks")]
+    [ManifestExtra("Description", "Test-only protocol-v4 SA core stub for module authority checks")]
     public class MockVerifierCore : SmartContract
     {
-        private static readonly byte[] Prefix_BackupOwner = new byte[] { 0x01 };
-        private static readonly byte[] Prefix_BurnGas = new byte[] { 0x02 };
-        private static readonly byte[] Prefix_VerifierDependencies = new byte[] { 0x03 };
-        private static readonly byte[] Prefix_HookDependencies = new byte[] { 0x04 };
-        private static readonly byte[] Prefix_BurnPostGas = new byte[] { 0x05 };
-        private static readonly byte[] Prefix_LeafMode = new byte[] { 0x06 };
-        private static readonly byte[] Prefix_CleanupRecoveryTarget = new byte[] { 0x07 };
-
-        // Test-only V3 surface used to model a plugin whose cleanup fails. The production SA
-        // core must fail closed rather than silently transferring such a dirty shell.
-        [Safe]
-        public static bool SupportsV3() => true;
-
-        [Safe]
-        public static bool SupportsComposition()
-        {
-            ByteString? leaf = Storage.Get(Storage.CurrentContext, Prefix_LeafMode);
-            return leaf == null || leaf.Length == 0 || leaf[0] != 1;
-        }
-
-        [Safe]
-        public static bool SupportsMessageSignatures() => true;
-
-        [Safe]
-        public static ByteString[] GetSignerDomains(UInt160 accountId)
-        {
-            return new ByteString[] { (ByteString)new byte[] {
-                0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28,
-                0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30,
-                0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
-                0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F, 0x40
-            } };
-        }
-
-        public static void SetLeafMode(bool enabled)
-        {
-            Storage.Put(Storage.CurrentContext, Prefix_LeafMode,
-                (ByteString)new byte[] { enabled ? (byte)1 : (byte)0 });
-        }
-
-        [Safe]
-        public static bool ValidateSignature(UInt160 accountId, object op)
-        {
-            BurnIfEnabled(Prefix_BurnGas);
-            return true;
-        }
-
-        [Safe]
-        public static bool IsValidSignature(UInt160 accountId, ByteString hash, ByteString signature)
-        {
-            BurnIfEnabled(Prefix_BurnGas);
-            return true;
-        }
-
-        public static void SetBurnGas(bool enabled)
-        {
-            Storage.Put(Storage.CurrentContext, Prefix_BurnGas,
-                (ByteString)new byte[] { enabled ? (byte)1 : (byte)0 });
-        }
-
-        public static void SetBurnPostGas(bool enabled)
-        {
-            Storage.Put(Storage.CurrentContext, Prefix_BurnPostGas,
-                (ByteString)new byte[] { enabled ? (byte)1 : (byte)0 });
-        }
-
-        public static void PostExecute(UInt160 accountId, object op, object result)
-        {
-            BurnIfEnabled(Prefix_BurnPostGas);
-        }
-
-        private static void BurnIfEnabled(byte[] prefix)
-        {
-            ByteString? enabled = Storage.Get(Storage.CurrentContext, prefix);
-            if (enabled == null || enabled.Length == 0 || enabled[0] != 1) return;
-
-            ByteString digest = (ByteString)new byte[] { 0x01, 0x02, 0x03, 0x04 };
-            for (int i = 0; i < 2_000_000; i++)
-                digest = CryptoLib.Sha256(digest);
-            ExecutionEngine.Assert(digest.Length > 0, "unreachable");
-        }
-
-        public static void SetCleanupRecoveryTarget(UInt160 core)
-        {
-            Storage.Put(Storage.CurrentContext, Prefix_CleanupRecoveryTarget, (byte[])core);
-        }
-
-        public static void ClearAccount(UInt160 accountId)
-        {
-            // Optional malicious cleanup probe: try to recover while the real core
-            // has delegated cleanup, then return into its old-state rotation frame.
-            ByteString? recoveryCore = Storage.Get(Storage.CurrentContext, Prefix_CleanupRecoveryTarget);
-            if (recoveryCore != null)
-                Contract.Call((UInt160)recoveryCore, "finalizeEscapeToOwner", CallFlags.All, new object[] { accountId });
-            ByteString? leaf = Storage.Get(Storage.CurrentContext, Prefix_LeafMode);
-            if (leaf != null && leaf.Length > 0 && leaf[0] == 1) return;
-            ExecutionEngine.Assert(false, "Mock plugin cleanup failure");
-        }
-
-        [Safe]
-        public static bool CanConfigureVerifier(UInt160 accountId, UInt160 verifier) => true;
-
-        [Safe]
-        public static bool CanConfigureHook(UInt160 accountId, UInt160 hook) => true;
+        private static readonly byte[] Prefix_AuthorizedModule = new byte[] { 0x01 };
+        private static readonly byte[] Prefix_Module = new byte[] { 0x02 };
+        private static readonly byte[] Prefix_AccountAddress = new byte[] { 0x03 };
 
         // Proxy verification script layout, byte-for-byte the core's SmartAccount.Proxy.cs:
         //   PUSHDATA1 20 <accountId> | PUSH1 PACK PUSH15 | PUSHDATA1 6 "verify" |
@@ -140,11 +42,107 @@ namespace SmartAccount.Mocks
         };
         private static readonly byte[] SyscallSystemContractCall = new byte[] { 0x41, 0x62, 0x7D, 0x5B, 0x52 };
 
+        private static byte[] U64BE(BigInteger value)
+        {
+            ExecutionEngine.Assert(value >= 0 && value < (BigInteger.One << 64), "Invalid uint64");
+            byte[] encoded = new byte[8];
+            for (int i = 7; i >= 0; i--)
+            {
+                encoded[i] = (byte)(value & 255);
+                value >>= 8;
+            }
+            return encoded;
+        }
+
+        private static byte[] InstanceKey(byte[] prefix, UInt160 accountId, BigInteger moduleId)
+        {
+            return Helper.Concat(Helper.Concat(prefix, (byte[])accountId), U64BE(moduleId));
+        }
+
         /// <summary>
-        /// Address that holds a virtual account's assets when this stub plays the core: the same
-        /// pure derivation as the real core's <c>getProxyScriptHash</c>, so verifier and hook
-        /// vectors that meter or gate on the asset address see a value that differs from the
-        /// account id exactly as they would on chain.
+        /// Records the instance the core addresses in one writer phase, exactly the value
+        /// the real core returns from <c>getAuthorizedModuleId</c>.
+        /// </summary>
+        public static void SetAuthorizedModuleId(UInt160 accountId, BigInteger phase, BigInteger moduleId)
+        {
+            ExecutionEngine.Assert(phase >= 1 && phase <= 6, "Unknown phase");
+            Storage.Put(Storage.CurrentContext, InstanceKey(Prefix_AuthorizedModule, accountId, phase), moduleId);
+        }
+
+        [Safe]
+        public static BigInteger GetAuthorizedModuleId(UInt160 accountId, BigInteger phase)
+        {
+            ByteString? value = Storage.Get(Storage.CurrentContext,
+                InstanceKey(Prefix_AuthorizedModule, accountId, phase));
+            return value == null ? BigInteger.Zero : (BigInteger)value;
+        }
+
+        /// <summary>
+        /// Installs a stub module instance with the fields modules actually read, so
+        /// <see cref="GetModule"/> can answer with the real 12-element descriptor layout.
+        /// </summary>
+        public static void SetModule(UInt160 accountId, BigInteger moduleId, BigInteger moduleType,
+            BigInteger credentialGeneration, bool instanceIsolation, bool messageCapability,
+            bool thresholdMemberEligible)
+        {
+            ExecutionEngine.Assert(moduleId > 0 && moduleType >= 1 && moduleType <= 2, "Invalid module");
+            Storage.Put(Storage.CurrentContext, InstanceKey(Prefix_Module, accountId, moduleId),
+                StdLib.Serialize(new object[]
+                {
+                    moduleId, moduleType, credentialGeneration, instanceIsolation,
+                    messageCapability, thresholdMemberEligible
+                }));
+        }
+
+        /// <summary>
+        /// Descriptor layout of the real core (SmartAccount.State.cs):
+        /// [moduleId, moduleType, contractHash, contractId, updateCounter, nefSha256,
+        ///  profileSha256, moduleRevision, credentialGeneration, instanceIsolation,
+        ///  messageCapability, thresholdMemberEligible]; empty when not installed.
+        /// </summary>
+        [Safe]
+        public static object[] GetModule(UInt160 accountId, BigInteger moduleId)
+        {
+            ByteString? value = Storage.Get(Storage.CurrentContext,
+                InstanceKey(Prefix_Module, accountId, moduleId));
+            if (value == null) return new object[0];
+            object[] stored = (object[])StdLib.Deserialize(value!);
+            return new object[]
+            {
+                (BigInteger)stored[0],
+                (BigInteger)stored[1],
+                Runtime.ExecutingScriptHash,
+                BigInteger.Zero,
+                BigInteger.Zero,
+                (ByteString)new byte[32],
+                (ByteString)new byte[32],
+                BigInteger.One,
+                (BigInteger)stored[2],
+                (bool)stored[3],
+                (bool)stored[4],
+                (bool)stored[5]
+            };
+        }
+
+        /// <summary>Native-core asset address override; defaults to the account id itself.</summary>
+        public static void SetAccountAddress(UInt160 accountId, UInt160 address)
+        {
+            Storage.Put(Storage.CurrentContext, Helper.Concat(Prefix_AccountAddress, (byte[])accountId), (byte[])address);
+        }
+
+        [Safe]
+        public static UInt160 GetAccountAddress(UInt160 accountId)
+        {
+            ByteString? value = Storage.Get(Storage.CurrentContext,
+                Helper.Concat(Prefix_AccountAddress, (byte[])accountId));
+            return value == null ? accountId : (UInt160)value;
+        }
+
+        /// <summary>
+        /// Address that holds a virtual account's assets when this stub plays the custom
+        /// core: the same pure derivation as the real core's <c>getProxyScriptHash</c>, so
+        /// verifier and hook vectors that meter or gate on the asset address see a value
+        /// that differs from the account id exactly as they would on chain.
         /// </summary>
         [Safe]
         public static UInt160 GetProxyScriptHash(UInt160 accountId)
@@ -158,116 +156,11 @@ namespace SmartAccount.Mocks
             return (UInt160)CryptoLib.Ripemd160(CryptoLib.Sha256(script));
         }
 
-        [Safe]
-        public static bool CanExecuteVerifier(UInt160 accountId, UInt160 caller, UInt160 verifier) => true;
-
-        [Safe]
-        public static bool CanExecuteHook(UInt160 accountId, UInt160 caller, UInt160 hook) => true;
-
-        // The production core exposes this marker so protocol paymasters can close the
-        // confused-deputy window on settlement (settlement is only valid after a sponsored
-        // execution completed). This stub plays the core for paymaster harnesses, which call
-        // the marker during settlement, and reports that no user operation is in flight.
+        // The core exposes this marker so protocol paymasters can close the
+        // confused-deputy window on settlement; this stub reports that no user
+        // operation is in flight.
         [Safe]
         public static bool IsUserOpExecutionActive() => false;
-
-        // Test-only dependency registry used to exercise the same composite cleanup
-        // contract as SmartAccount without deploying a full account fixture.
-        public static void SetVerifierDependencies(UInt160 accountId, UInt160[] children)
-        {
-            byte[] key = Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data != null)
-            {
-                UInt160[] previous = (UInt160[])StdLib.Deserialize(data!);
-                for (int i = 0; i < previous.Length; i++)
-                {
-                    bool retained = false;
-                    for (int j = 0; j < children.Length; j++)
-                    {
-                        if (previous[i] == children[j])
-                        {
-                            retained = true;
-                            break;
-                        }
-                    }
-                    if (!retained)
-                    {
-                        Contract.Call(previous[i], "clearAccount", CallFlags.All, new object[] { accountId });
-                    }
-                }
-            }
-            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
-        }
-
-        public static void ClearVerifierDependencies(UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(Prefix_VerifierDependencies, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return;
-
-            UInt160[] children = (UInt160[])StdLib.Deserialize(data!);
-            for (int i = 0; i < children.Length; i++)
-            {
-                Contract.Call(children[i], "clearAccount", CallFlags.All, new object[] { accountId });
-            }
-            Storage.Delete(Storage.CurrentContext, key);
-        }
-
-        public static void SetHookDependencies(UInt160 accountId, UInt160[] children)
-        {
-            byte[] key = Helper.Concat(Prefix_HookDependencies, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data != null)
-            {
-                UInt160[] previous = (UInt160[])StdLib.Deserialize(data!);
-                for (int i = 0; i < previous.Length; i++)
-                {
-                    bool retained = false;
-                    for (int j = 0; j < children.Length; j++)
-                    {
-                        if (previous[i] == children[j])
-                        {
-                            retained = true;
-                            break;
-                        }
-                    }
-                    if (!retained)
-                    {
-                        Contract.Call(previous[i], "clearAccount", CallFlags.All, new object[] { accountId });
-                    }
-                }
-            }
-            Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(children));
-        }
-
-        public static void ClearHookDependencies(UInt160 accountId)
-        {
-            byte[] key = Helper.Concat(Prefix_HookDependencies, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return;
-
-            UInt160[] children = (UInt160[])StdLib.Deserialize(data!);
-            for (int i = 0; i < children.Length; i++)
-            {
-                Contract.Call(children[i], "clearAccount", CallFlags.All, new object[] { accountId });
-            }
-            Storage.Delete(Storage.CurrentContext, key);
-        }
-
-        public static void SetBackupOwner(UInt160 accountId, UInt160 owner)
-        {
-            Storage.Put(Storage.CurrentContext, Helper.Concat(Prefix_BackupOwner, (byte[])accountId), (byte[])owner);
-        }
-
-        [Safe]
-        public static UInt160 GetBackupOwner(UInt160 accountId)
-        {
-            ByteString? value = Storage.Get(
-                Storage.CurrentContext,
-                Helper.Concat(Prefix_BackupOwner, (byte[])accountId));
-            return value == null ? UInt160.Zero : (UInt160)value;
-        }
 
         /// <summary>
         /// Forwards an arbitrary call so the target observes this contract as its caller.
@@ -277,15 +170,14 @@ namespace SmartAccount.Mocks
             return Contract.Call(target, method, CallFlags.All, args);
         }
 
-        public static object ForwardAfter(UInt160 firstTarget, string firstMethod, object[] firstArgs, UInt160 target, string method, object[] args)
+        public static object ForwardAfter(UInt160 firstTarget, string firstMethod, object[] firstArgs,
+            UInt160 target, string method, object[] args)
         {
             Contract.Call(firstTarget, firstMethod, CallFlags.All, firstArgs);
             return Contract.Call(target, method, CallFlags.All, args);
         }
 
-        /// <summary>
-        /// Exposes the block time the VM is executing against so tests can compute billing periods exactly.
-        /// </summary>
+        /// <summary>Block time the VM is executing against, so tests compute periods exactly.</summary>
         [Safe]
         public static BigInteger Now() => Runtime.Time;
     }

@@ -107,8 +107,8 @@ namespace SmartAccount
             public ByteString ProfileSha256 = (ByteString)new byte[0];
             public BigInteger ModuleRevision;
             public BigInteger CredentialGeneration;
-            // Declared capability profile (installer-declared until modules ship
-            // canonical profile JSON — TODO(26): verify against module profile).
+            // Capability flags read from the module's canonical profile JSON
+            // at install / rebind time (ProfileSha256 pins that profile).
             public bool InstanceIsolation;
             public bool MessageCapability;
             public bool ThresholdMemberEligible;

@@ -435,6 +435,81 @@ deInitData)`, `configure(accountId, moduleId, generation, configData)`,
 longer hard-codes per-method allowlists such as `setPublicKey` — modules decode
 their own `configData` through the core configuration gate.
 
+### 9.1 Callback ABI as compiled
+
+Manifest names are the C# method names with the first character lower-cased
+(`OnInstall` → `onInstall`, `ValidateUserOp` → `validateUserOp`). `preCheck`
+parameter is named `operation`; `postCheck` last parameter is named `hookData`.
+Type names below are manifest parameter types.
+
+| Direction | Operation | Manifest ABI | Notes |
+| --- | --- | --- | --- |
+| module→core | `getModuleProfile()` | `→ String`, **safe** | Canonical profile bytes, ≤ 2048 bytes, no arguments, no writes. |
+| core→module | `onInstall(accountId, moduleId, generation, initData)` | `Hash160, Integer, Integer, Array → Void` | `initData` is a command array (see §9.3) or empty. |
+| core→module | `configure(accountId, moduleId, generation, configData)` | `Hash160, Integer, Integer, Array → Void` | Same command shape; runs at the configuration phase. |
+| core→module | `onUninstall(accountId, moduleId, generation, deInitData)` | `Hash160, Integer, Integer, Array → Void` | Must clear every instance-scoped key of `(accountId, moduleId)`. |
+| core→module (validator) | `validateUserOp(accountId, operationDigest, operation)` | `Hash160, ByteArray, Array → Boolean`, **safe** | `operationDigest` is the §4.3 core digest; `operation` is the canonical 13-field view. |
+| core→module (validator) | `onUserOpComplete(accountId, operation, result)` | `Hash160, Array, Any → Void` | Completion phase only; `result` is the sanitized target result. |
+| core→module (hook) | `preCheck(accountId, operation)` | `Hash160, Array → ByteArray` | Returns instance `hookData`; `null` is normalised to the empty byte string; at most 512 bytes or `SA_HOOK_DATA_TOO_LARGE`. |
+| core→module (hook) | `postCheck(accountId, operation, result, hookData)` | `Hash160, Array, Any, ByteArray → Void` | Receives exactly the bytes the same instance returned from `preCheck`; never another instance's. |
+| core→module (validator, `messageCapability`) | `isValidSignature(accountId, originalSender, validatorId, generation, hash, signatures)` | `Hash160, Hash160, Integer, Integer, ByteArray, Array → Boolean`, **safe** | `hash` is the core domain-bound module message digest, verified directly. Callers are limited to `ReadOnly`. |
+
+Binding order at install: profile digest → profile parse (version, module type,
+contract name, capabilities) → the complete callback surface above. Missing
+methods fail before the instance is written; `getModuleProfile` and the
+validation/message callbacks must be declared `safe`, so a caller passing write
+flags still cannot write from them. Hook pre/post are write-capable by design
+(they meter balances) but run with the hook's own instance keys only.
+
+### 9.2 Instance authentication (module side)
+
+A module never trusts a caller-declared instance. It resolves one in this order:
+
+1. `authorizedCore()` (module storage) must equal `Runtime.CallingScriptHash`;
+   a zero or invalid core fails with `SA_CORE_NOT_CONFIGURED`, any other caller
+   with `Unauthorized caller`.
+2. The core answers `getAuthorizedModuleId(accountId, phase)` with the instance
+   it is currently addressing. Phases are `Validation 1`, `HookPre 2`,
+   `TargetDispatch 3`, `HookPost 4`, `Completion 5`, `Configuration 6`; `0`
+   means the phase does not address this module. Lifecycle callbacks are
+   authorised only when phase 6 returns exactly the `moduleId` they received.
+3. `validateUserOp` runs during the read-only preview with no writer phase; the
+   module then uses `operation[validatorId]` (index 7) as its instance id.
+4. `getModule(accountId, moduleId)` returns the descriptor
+   `[moduleId, moduleType, contractHash, contractId, updateCounter, nefSha256,
+   profileSha256, moduleRevision, credentialGeneration, instanceIsolation,
+   messageCapability, thresholdMemberEligible]`. Index 8
+   (`credentialGeneration`) binds a threshold member's signature to its own
+   instance.
+5. The asset-holding script hash is `getProxyScriptHash(accountId)` on the
+   custom kernel and `getAccountAddress(accountId)` on the native kernel.
+
+The instance key is `prefix (1 byte) ‖ accountId (20 bytes) ‖ moduleId
+(8 bytes, big-endian)`; modules never key on a caller-supplied context blob.
+
+### 9.3 Configuration command arrays
+
+`initData`, `configData` and `deInitData` are `[command, ...args]` arrays. Each
+module owns its command vocabulary; the core only enforces the array bound
+(≤ §3 argument count) and the 2.5 GAS lifecycle budget. Shipped modules use:
+
+| Module | Commands |
+| --- | --- |
+| `P256Validator`, `Web3AuthValidator`, `TeeKeyValidator` | `setPublicKey(publicKey)` — 33-byte compressed or 65-byte uncompressed, stored compressed. |
+| `NeoWitnessValidator` | `setSigners(signers[], threshold)` |
+| `MultiSigValidator` | `setMemberKey(publicKey)` — one key per instance. |
+| `SessionKeyValidator` | `setSessionKey(publicKey, target, method, expiry, cap, subId)` / `clearSessionKey()` |
+| `SubscriptionValidator` | `createSubscription(publicKey, payee, token, amount, period)` / `cancelSubscription(subId)` |
+| `DelegatedIdentityValidator` | `setConfig(publicKey, provider, masterNullifier)` |
+| `ZKEmailVerifier` | none — the proof verifier is not deployed, so every callback fails closed. |
+| `ActionSessionValidator` | `setRecoveryService(service)` / `clearRecoveryService()` |
+| `DailyLimitHook` | `setDailyLimit(token, maxAmount, useRollingWindow)` / `clearDailyLimit(token)` |
+| `TokenRestrictedHook` | `restrictToken(token)` / `unrestrictToken(token)` |
+| `WhitelistHook` | `allowTarget(target)` / `denyTarget(target)` |
+| `NeoDIDCredentialHook` | `requireCredential(target, provider, claimType, commitment)` / `clearRequirement(target)` |
+| `MultiHook` | none — retired, installation is rejected (§1.2). |
+
+
 ## 10. Lifecycle, pending intents and time locks
 
 Normal configuration (empty-slot install, uninstall, hook order change,
@@ -499,6 +574,31 @@ aggregate deliberately leaves headroom under the 1.5 GAS overall verification
 ceiling for core dispatch. Any budget overrun fails the whole transaction
 fail-closed; there is no try-and-continue.
 
+### 11.1 Where the numbers live and what they cover
+
+Both kernels pin the four values as private constants in their protocol constant
+files (`contracts/custom/SmartAccount.ModuleProtocol.cs` and
+`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`):
+`ValidationAggregateGasLimit = 100_000_000`, `HookCallbackGasLimit =
+250_000_000`, `ValidatorCompletionGasLimit = 100_000_000`,
+`LifecycleCallbackGasLimit = 250_000_000`.
+
+Bounds that shape the worst case are pinned in the same files: `HookDataBytesMax
+= 512`, `ModuleProfileBytesMax = 2048`, `ArgsCountMax = 64`,
+`HookProofsEntriesMax = 8`, `HookProofBytesMax = 4096` (aggregate),
+`OperationEncodedSizeMax = 16384`, `EnvelopeEncodedSizeMax = 65536`.
+
+- `getModuleProfile` is charged as a lifecycle callback (2.5 GAS) and runs with
+  `CallFlags.ReadStates`: a profile cannot read balances, call other contracts
+  or write.
+- Each hook callback has its own 2.5 GAS cap; a hook never carries unused budget
+  into the next hook. `preCheck` runs in ascending `hookOrder`, `postCheck` in
+  reverse over the same approved set.
+- The validation aggregate covers every validator call in one transaction,
+  including threshold members; completion has its own 1 GAS aggregate.
+- A callback that returns a value of the wrong ABI type fails at the manifest
+  check, not at gas: the core does not coerce.
+
 ## 12. Module capability declaration profile
 
 Every installable module ships a canonical profile JSON (the profile hashed
@@ -530,6 +630,63 @@ into the 0x52 binding). Schema (skeleton in
 - `thresholdMemberEligible` marks scalar validators that may join a threshold
   policy.
 - `compositeLayer` ≤ 1 (one layer; no nesting/cycles).
+
+### 12.1 Canonical bytes and the source of truth
+
+The profile is a UTF-8 JSON document with object keys sorted, no whitespace and
+**no trailing newline**; the canonical form is what the module returns and what
+the installer hashes. `timestamp`-like or environment-dependent fields are not
+allowed: the same source must produce the same bytes on every machine.
+
+Each module keeps its canonical bytes twice, and both copies are checked:
+
+| Copy | Purpose |
+| --- | --- |
+| `contracts/plugins/<validators\|hooks\|recovery>/<Name>.profile.json` | Editable source of truth, reviewable in isolation. |
+| `private const string ModuleProfileJson = "…"` in the module source | What `getModuleProfile()` returns on chain. |
+
+`scripts/sync-module-profiles.mjs` rewrites non-canonical files, patches the
+literal from the `.profile.json`, verifies the module declares the callbacks its
+profile claims, and supports `--check` (exit 1 on STALE/ERROR).
+`contracts/compile.sh` runs `--check` before compiling, so a drifted literal can
+never reach an artifact.
+
+Binding order and failure modes (custom and native kernels alike):
+
+1. `getModuleProfile` must exist and be `safe` → otherwise
+   `SA_MODULE_CODE_BINDING_MISMATCH`.
+2. `SHA-256(returned bytes)` must equal the `profileDigest32` in the install
+   action → otherwise `SA_MODULE_CODE_BINDING_MISMATCH`.
+3. `profileVersion` must equal 1, `moduleType` must match the requested type,
+   `contractName` must equal the manifest name, the four capability keys must be
+   present → otherwise `SA_MODULE_CODE_BINDING_MISMATCH` or
+   `SA_MODULE_TYPE_UNSUPPORTED`.
+4. Hook profiles claiming `messageCapability` or `thresholdMemberEligible` fail
+   with `SA_MODULE_TYPE_UNSUPPORTED`; `compositeLayer` outside 0–1 likewise.
+5. Only then is the callback ABI of §9.1 checked and the instance written; the
+   recorded capability flags are read from the profile, never declared by the
+   installer.
+
+The capability matrix shipped with this repository:
+
+| Module | instanceIsolation | messageCapability | thresholdMemberEligible | compositeLayer |
+| --- | --- | --- | --- | --- |
+| `P256Validator` | false | false | true | 0 |
+| `Web3AuthValidator` | false | true | true | 0 |
+| `TeeKeyValidator` | false | false | true | 0 |
+| `NeoWitnessValidator` | false | false | true | 0 |
+| `DelegatedIdentityValidator` | false | false | true | 0 |
+| `MultiSigValidator` | true | false | true | 0 |
+| `SessionKeyValidator` | true | false | false | 0 |
+| `SubscriptionValidator` | false | false | false | 0 |
+| `ZKEmailVerifier` | false | false | false | 0 |
+| `ActionSessionValidator` | false | false | false | 0 |
+| `DailyLimitHook`, `TokenRestrictedHook`, `WhitelistHook`, `NeoDIDCredentialHook` | false | false | false | 0 |
+| `MultiHook` | false | false | false | 1 |
+
+`Web3AuthValidator` is the only shipped validator that implements
+`isValidSignature`; a profile claiming `messageCapability` without that method
+still fails binding at §9.1.
 
 ## 13. ERC alignment boundary
 
@@ -589,13 +746,17 @@ the same key builders: `UInt64ToBigEndian`, per-prefix composite key builders).
 | §4/§5 envelope + digest | `SmartAccount.Execution.cs` (13-field decode, digest, batch), new `SmartAccount.Intents.cs` if split |
 | §6 nonce | `SmartAccount.Internal.cs`/new nonce partial (0x56/0x5C, merge with legacy 0x03) |
 | §8 message | `SmartAccount.State.cs` (built-in P-256 subjects, 0x57) |
-| §9 interface + lifecycle | `SmartAccount.Accounts.cs` (registration identity custody+salt, atomic initial install), `SmartAccount.Internal.cs`/new modules partial (0x51–0x53, 0x5B), `SmartAccount.HookChildren.cs`+`SmartAccount.VerifierChildren.cs` **deleted** (replaced by core-owned collections) |
+| §9 interface + lifecycle | `SmartAccount.Accounts.cs` (registration identity custody+salt, atomic initial install), `SmartAccount.Modules.cs` (0x51–0x53, 0x5B; `AssertModuleCallbackAbi`, `BindModuleProfile`, hook pre/post dispatch), `SmartAccount.State.cs` (`getModule`/`getModules` descriptors), `SmartAccount.Message.cs` (module `isValidSignature` route), no `HookChildren`/`VerifierChildren` adapter partials remain |
 | §10 intents | new intents partial (0x55/0x5E) |
 | §7.5 Market | `SmartAccount.MarketEscrow.cs` (0x5D binding, no owner-side 0x1D writes, epoch validation), `SmartAccount.Escape.cs` (0x59 records, callback-free escape) |
 | F-1 (verify scope) | `SmartAccount.VerifyContext.cs` — delete `verifyScopeTarget` authorization, phase gates |
 | F-7 (phase gates) | `SmartAccount.VerifyContext.cs` + `SmartAccount.Execution.cs` (0x58 context, direct-caller + ReadOnly + strict domain checks for read-only callbacks) |
 | events | `SmartAccount.Events.cs` (§10bis table; keep existing AA-free events) |
-| plugins | `contracts/plugins/verifiers/*`, `contracts/plugins/hooks/*` renamed per §1.2; MultiHook stops install |
+| plugins | `contracts/plugins/validators/` — 9 validators (`P256Validator`, `Web3AuthValidator`, `TeeKeyValidator`, `NeoWitnessValidator`, `DelegatedIdentityValidator`, `MultiSigValidator`, `SessionKeyValidator`, `SubscriptionValidator`, `ZKEmailVerifier`) plus the shared layer `ModuleOperation.cs`, `ValidatorAuthority.cs`, `ValidatorPayload.cs`, `ValidatorClock.cs`, `ValidatorModels.cs`, `SignerDomain.cs` |
+| hooks | `contracts/plugins/hooks/` — `DailyLimitHook`, `TokenRestrictedHook`, `WhitelistHook`, `NeoDIDCredentialHook`, retired `MultiHook` (installation rejected), shared `HookAuthority.cs` |
+| recovery split | `contracts/plugins/recovery/ActionSessionValidator.cs` (validator module) and `contracts/plugins/recovery/SocialRecoveryService.*.cs` (service contract); each ships a canonical profile |
+| profile sources | `<Name>.profile.json` next to every module, literal embedded as `ModuleProfileJson`, kept in sync by `scripts/sync-module-profiles.mjs` and gated by `contracts/compile.sh` (§12.1) |
+| build layout | `contracts/compile.sh` emits `contracts/bin/public` for the core, services and mocks, `bin/public/validators`, `bin/public/hooks`; nccs compiles every project in the directory it is given |
 
 ### 16.2 Native kernel (#40, shares its batch with #29)
 

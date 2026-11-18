@@ -13,7 +13,7 @@ namespace SmartAccount
     /// 0x54 core-owned hook order, 0x5B core-owned threshold policies, the
     /// shared never-reusing moduleId allocator, on-chain code binding, the
     /// lifecycle action executors shared by configuration intents and v4
-    /// registration, and the module callback adaptation layer (TODO(26)).
+    /// registration, canonical-profile binding and the v4 module callbacks.
     ///
     /// New code NEVER routes through the legacy 0x01 Verifier/HookId pointers;
     /// those rows survive only as migration input (SmartAccount.Migration.cs).
@@ -169,6 +169,22 @@ namespace SmartAccount
                 if (module != null && module.ContractHash == contractHash) return moduleId;
             }
             return BigInteger.Zero;
+        }
+
+        /// <summary>Number of installed instances of the given type bound to one contract hash.</summary>
+        private static BigInteger CountModuleInstancesOfContract(UInt160 accountId, int moduleType, UInt160 contractHash)
+        {
+            byte[] prefix = Helper.Concat(
+                Helper.Concat(Prefix_ModuleIndex, (byte[])accountId), new byte[] { (byte)moduleType });
+            BigInteger count = BigInteger.Zero;
+            Iterator it = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);
+            while (it.Next())
+            {
+                BigInteger moduleId = ModuleIdFromKeyBytes((byte[])(ByteString)it.Value);
+                ModuleInstance? module = GetModuleInstance(accountId, moduleId);
+                if (module != null && module.ContractHash == contractHash) count += BigInteger.One;
+            }
+            return count;
         }
 
         /// <summary>
@@ -390,9 +406,116 @@ namespace SmartAccount
             module.ContractId = contract.Id;
             module.UpdateCounter = contract.UpdateCounter;
             module.NefSha256 = CryptoLib.Sha256(contract.Nef);
-            // TODO(26): pin the digest of the module's canonical profile JSON
-            // once modules ship profiles; until then it is installer-declared.
             module.ProfileSha256 = profileDigest;
+        }
+
+        /// <summary>
+        /// Canonical-profile binding (spec §7.3/§12). The module's own
+        /// read-only <c>getModuleProfile()</c> must return exactly the bytes
+        /// whose SHA-256 the configuration action committed to; the capability
+        /// flags recorded in 0x52 are then READ from that profile, never
+        /// declared by the installer. The read is bounded like a lifecycle
+        /// callback and carries no write permission.
+        /// </summary>
+        private static void BindModuleProfile(ModuleInstance module, Contract contract, ByteString profileDigest)
+        {
+            UInt160 moduleHash = contract.Hash;
+            ExecutionEngine.Assert(
+                ModuleExposesSafeMethod(moduleHash, "getModuleProfile", ContractParameterType.String),
+                ErrorModuleCodeBindingMismatch);
+
+            long gasBefore = PrepareCallbackBudget(null, GasPoolNone, LifecycleCallbackGasLimit);
+            string profileJson = (string)CallModuleGasCapped(
+                moduleHash, "getModuleProfile", CallFlags.ReadStates, LifecycleCallbackGasLimit, new object[] { });
+            ChargeCallbackGas(null, GasPoolNone, gasBefore, LifecycleCallbackGasLimit);
+
+            ExecutionEngine.Assert(profileJson != null && profileJson.Length > 0
+                && profileJson.Length <= ModuleProfileBytesMax, ErrorModuleCodeBindingMismatch);
+            ExecutionEngine.Assert(CryptoLib.Sha256((ByteString)profileJson) == profileDigest,
+                ErrorModuleCodeBindingMismatch);
+
+            Map<string, object> profile = (Map<string, object>)StdLib.JsonDeserialize(profileJson);
+            ExecutionEngine.Assert(profile.HasKey("profileVersion") && profile.HasKey("moduleType")
+                && profile.HasKey("contractName") && profile.HasKey("capabilities"),
+                ErrorModuleCodeBindingMismatch);
+            ExecutionEngine.Assert((BigInteger)profile["profileVersion"] == ModuleProfileVersion,
+                ErrorModuleCodeBindingMismatch);
+            ExecutionEngine.Assert((string)profile["moduleType"] == ModuleTypeNameFromCode((int)module.ModuleType),
+                ErrorModuleTypeUnsupported);
+            ExecutionEngine.Assert((string)profile["contractName"] == contract.Manifest.Name,
+                ErrorModuleCodeBindingMismatch);
+
+            Map<string, object> capabilities = (Map<string, object>)profile["capabilities"];
+            ExecutionEngine.Assert(capabilities.HasKey("instanceIsolation") && capabilities.HasKey("messageCapability")
+                && capabilities.HasKey("thresholdMemberEligible") && capabilities.HasKey("compositeLayer"),
+                ErrorModuleCodeBindingMismatch);
+            bool instanceIsolation = (bool)capabilities["instanceIsolation"];
+            bool messageCapability = (bool)capabilities["messageCapability"];
+            bool thresholdMemberEligible = (bool)capabilities["thresholdMemberEligible"];
+            BigInteger compositeLayer = (BigInteger)capabilities["compositeLayer"];
+            // One composition layer at most, and composition is core-owned
+            // (hookOrder / threshold policies): no nesting, no cycles (§12).
+            ExecutionEngine.Assert(compositeLayer >= 0 && compositeLayer <= ModuleCompositeLayerMax,
+                ErrorModuleTypeUnsupported);
+            if (module.ModuleType == ModuleTypeCodeHook)
+            {
+                // Message signing and threshold membership are validator
+                // capabilities; a hook profile claiming them is malformed.
+                ExecutionEngine.Assert(!messageCapability && !thresholdMemberEligible, ErrorModuleTypeUnsupported);
+            }
+
+            module.InstanceIsolation = instanceIsolation;
+            module.MessageCapability = messageCapability;
+            module.ThresholdMemberEligible = thresholdMemberEligible;
+
+            AssertModuleCallbackAbi(moduleHash, module);
+        }
+
+        /// <summary>
+        /// Manifest ABI shape of the v4 callbacks (spec §9). A missing-method
+        /// fault is not catchable, so the complete callback surface of the
+        /// module type is checked before the instance is bound. Validation and
+        /// message callbacks must be declared safe: they can then never write,
+        /// whatever call flags a caller passes.
+        /// </summary>
+        private static void AssertModuleCallbackAbi(UInt160 moduleHash, ModuleInstance module)
+        {
+            bool supported =
+                ModuleExposesMethod(moduleHash, "onInstall", ContractParameterType.Void,
+                    ContractParameterType.Hash160, ContractParameterType.Integer,
+                    ContractParameterType.Integer, ContractParameterType.Array)
+                && ModuleExposesMethod(moduleHash, "onUninstall", ContractParameterType.Void,
+                    ContractParameterType.Hash160, ContractParameterType.Integer,
+                    ContractParameterType.Integer, ContractParameterType.Array)
+                && ModuleExposesMethod(moduleHash, "configure", ContractParameterType.Void,
+                    ContractParameterType.Hash160, ContractParameterType.Integer,
+                    ContractParameterType.Integer, ContractParameterType.Array);
+            if (module.ModuleType == ModuleTypeCodeValidator)
+            {
+                supported = supported
+                    && ModuleExposesSafeMethod(moduleHash, "validateUserOp", ContractParameterType.Boolean,
+                        ContractParameterType.Hash160, ContractParameterType.ByteArray, ContractParameterType.Array)
+                    && ModuleExposesMethod(moduleHash, "onUserOpComplete", ContractParameterType.Void,
+                        ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any);
+                if (module.MessageCapability)
+                {
+                    supported = supported
+                        && ModuleExposesSafeMethod(moduleHash, "isValidSignature", ContractParameterType.Boolean,
+                            ContractParameterType.Hash160, ContractParameterType.Hash160,
+                            ContractParameterType.Integer, ContractParameterType.Integer,
+                            ContractParameterType.ByteArray, ContractParameterType.Array);
+                }
+            }
+            else
+            {
+                supported = supported
+                    && ModuleExposesMethod(moduleHash, "preCheck", ContractParameterType.ByteArray,
+                        ContractParameterType.Hash160, ContractParameterType.Array)
+                    && ModuleExposesMethod(moduleHash, "postCheck", ContractParameterType.Void,
+                        ContractParameterType.Hash160, ContractParameterType.Array,
+                        ContractParameterType.Any, ContractParameterType.ByteArray);
+            }
+            ExecutionEngine.Assert(supported, ErrorModuleTypeUnsupported);
         }
 
         /// <summary>
@@ -421,19 +544,18 @@ namespace SmartAccount
 
         private static void ExecuteInstallModuleAction(UInt160 accountId, AccountControl control, object[] action)
         {
-            // [ActionInstallModule, type, contractHash, profileDigest32, instanceIsolation, messageCapability, thresholdMemberEligible]
-            ExecutionEngine.Assert(action.Length == 7, ErrorOperationMalformed);
+            // [ActionInstallModule, type, contractHash, profileDigest32, initData[]]
+            ExecutionEngine.Assert(action.Length == 5, ErrorOperationMalformed);
             int moduleType = (int)(BigInteger)action[1];
             UInt160 contractHash = (UInt160)action[2];
             ByteString profileDigest = (ByteString)action[3];
-            bool instanceIsolation = (bool)action[4];
-            bool messageCapability = (bool)action[5];
-            bool thresholdMemberEligible = (bool)action[6];
+            object[] initData = (object[])action[4];
 
             ExecutionEngine.Assert(moduleType == ModuleTypeCodeValidator || moduleType == ModuleTypeCodeHook,
                 ErrorModuleTypeUnsupported);
             AssertModuleContractAddress(contractHash);
             ExecutionEngine.Assert(profileDigest != null && profileDigest.Length == 32, ErrorOperationMalformed);
+            ExecutionEngine.Assert(initData != null && initData.Length <= ArgsCountMax, ErrorOperationMalformed);
 
             BigInteger existingCount = CountModulesOfType(accountId, moduleType);
             if (moduleType == ModuleTypeCodeValidator)
@@ -443,13 +565,6 @@ namespace SmartAccount
             else
             {
                 ExecutionEngine.Assert(existingCount < MaxHookModuleInstances, ErrorModuleLimitHook);
-            }
-            if (!instanceIsolation)
-            {
-                // A second instance of the same contract requires the declared
-                // instance-isolation capability (spec §3.1).
-                ExecutionEngine.Assert(FindModuleIdByContract(accountId, moduleType, contractHash) == 0,
-                    ErrorModuleInstanceIsolationRequired);
             }
 
             Contract? contract = ContractManagement.GetContract(contractHash);
@@ -469,11 +584,16 @@ namespace SmartAccount
             ModuleInstance module = new ModuleInstance();
             module.ModuleType = (byte)moduleType;
             CaptureCodeBinding(module, contract!, profileDigest!);
+            BindModuleProfile(module, contract!, profileDigest!);
             module.ModuleRevision = BigInteger.One;
             module.CredentialGeneration = BigInteger.One;
-            module.InstanceIsolation = instanceIsolation;
-            module.MessageCapability = messageCapability;
-            module.ThresholdMemberEligible = thresholdMemberEligible;
+            if (!module.InstanceIsolation)
+            {
+                // A second instance of the same contract requires the
+                // instance-isolation capability of its profile (spec §3.1).
+                ExecutionEngine.Assert(FindModuleIdByContract(accountId, moduleType, contractHash) == 0,
+                    ErrorModuleInstanceIsolationRequired);
+            }
 
             BigInteger moduleId = AllocateModuleId(control);
             PutModuleInstance(accountId, moduleId, module);
@@ -491,7 +611,7 @@ namespace SmartAccount
                 control.DefaultOperationAuthorization = false;
             }
 
-            CallModuleOnInstall(accountId, moduleId, module);
+            CallModuleLifecycle(accountId, moduleId, module, "onInstall", initData!);
             OnModuleInstanceInstalled(accountId, moduleId, module.ModuleType, contractHash, module.CredentialGeneration);
             // §18 reused-event mirror: legacy indexers keep their
             // ModuleInstalled feed across the v4 transition.
@@ -500,9 +620,11 @@ namespace SmartAccount
 
         private static void ExecuteUninstallModuleAction(UInt160 accountId, AccountControl control, object[] action)
         {
-            // [ActionUninstallModule, moduleId]
-            ExecutionEngine.Assert(action.Length == 2, ErrorOperationMalformed);
+            // [ActionUninstallModule, moduleId, deInitData[]]
+            ExecutionEngine.Assert(action.Length == 3, ErrorOperationMalformed);
             BigInteger moduleId = (BigInteger)action[1];
+            object[] deInitData = (object[])action[2];
+            ExecutionEngine.Assert(deInitData != null && deInitData.Length <= ArgsCountMax, ErrorOperationMalformed);
             ModuleInstance module = RequireModuleInstance(accountId, moduleId);
 
             if (module.ModuleType == ModuleTypeCodeValidator)
@@ -513,19 +635,19 @@ namespace SmartAccount
                 // Callback first, while the instance is still installed and its
                 // phase authorization (0x58) is meaningful; a callback fault
                 // reverts the whole action.
-                CallModuleOnUninstall(accountId, moduleId, module);
+                CallModuleLifecycle(accountId, moduleId, module, "onUninstall", deInitData!);
                 DeleteModuleInstance(accountId, moduleId, module);
             }
             else
             {
-                CallModuleOnUninstall(accountId, moduleId, module);
+                CallModuleLifecycle(accountId, moduleId, module, "onUninstall", deInitData!);
                 // Delete first so the order validator sees the post-removal
                 // installed set.
                 DeleteModuleInstance(accountId, moduleId, module);
                 RemoveHookFromOrder(accountId, moduleId);
             }
 
-            // Uninstall is callback-bound through the adaptation layer; the
+            // Uninstall is callback-bound (onUninstall); the
             // callback-free emergency removal path (spec §6.7/§6.8) lives in
             // SmartAccount.Escape.cs and never reaches this executor.
             OnModuleInstanceRemoved(accountId, moduleId);
@@ -536,15 +658,14 @@ namespace SmartAccount
 
         private static void ExecuteConfigureModuleAction(UInt160 accountId, AccountControl control, object[] action)
         {
-            // [ActionConfigureModule, moduleId, args]
+            // [ActionConfigureModule, moduleId, configData[]]
             ExecutionEngine.Assert(action.Length == 3, ErrorOperationMalformed);
             BigInteger moduleId = (BigInteger)action[1];
-            object[] configureArgs = (object[])action[2];
-            ExecutionEngine.Assert(configureArgs != null && configureArgs.Length <= ArgsCountMax, ErrorOperationMalformed);
+            object[] configData = (object[])action[2];
+            ExecutionEngine.Assert(configData != null && configData.Length <= ArgsCountMax, ErrorOperationMalformed);
 
             ModuleInstance module = RequireModuleInstance(accountId, moduleId);
-            AssertCodeBindingUnchanged(module);
-            CallModuleConfigure(accountId, moduleId, module, configureArgs!);
+            CallModuleLifecycle(accountId, moduleId, module, "configure", configData!);
             module.ModuleRevision += 1;
             PutModuleInstance(accountId, moduleId, module);
             OnModuleInstanceConfigured(accountId, moduleId, module.CredentialGeneration);
@@ -575,7 +696,22 @@ namespace SmartAccount
             ModuleInstance module = RequireModuleInstance(accountId, moduleId);
             Contract? contract = ContractManagement.GetContract(module.ContractHash);
             ExecutionEngine.Assert(contract != null, ErrorModuleCodeBindingMismatch);
+            bool wasThresholdMemberEligible = module.ThresholdMemberEligible;
             CaptureCodeBinding(module, contract!, profileDigest!);
+            // The rebound code is re-profiled: its capability flags replace
+            // the recorded ones, and a rebind may never strand state that
+            // depends on a capability the new profile no longer declares.
+            BindModuleProfile(module, contract!, profileDigest!);
+            if (!module.InstanceIsolation)
+            {
+                ExecutionEngine.Assert(
+                    CountModuleInstancesOfContract(accountId, (int)module.ModuleType, module.ContractHash!) <= 1,
+                    ErrorModuleInstanceIsolationRequired);
+            }
+            if (wasThresholdMemberEligible && !module.ThresholdMemberEligible)
+            {
+                ExecutionEngine.Assert(!IsMemberOfActivePolicy(accountId, moduleId), ErrorIntentConflict);
+            }
             module.ModuleRevision += 1;
             PutModuleInstance(accountId, moduleId, module);
             OnModuleCodeRebound(accountId, moduleId, module.NefSha256);
@@ -688,7 +824,7 @@ namespace SmartAccount
             switch (code)
             {
                 case ActionInstallModule:
-                    ExecutionEngine.Assert(action.Length == 7, ErrorOperationMalformed);
+                    ExecutionEngine.Assert(action.Length == 5, ErrorOperationMalformed);
                     int moduleType = (int)(BigInteger)action[1];
                     ExecutionEngine.Assert(moduleType == ModuleTypeCodeValidator || moduleType == ModuleTypeCodeHook,
                         ErrorModuleTypeUnsupported);
@@ -696,14 +832,17 @@ namespace SmartAccount
                     ExecutionEngine.Assert(contractHash != null && contractHash != UInt160.Zero, ErrorOperationMalformed);
                     ByteString profileDigest = (ByteString)action[3];
                     ExecutionEngine.Assert(profileDigest != null && profileDigest.Length == 32, ErrorOperationMalformed);
-                    _b = ExpectBool(action[4]);
-                    _b = ExpectBool(action[5]);
-                    _b = ExpectBool(action[6]);
+                    object[] initData = (object[])action[4];
+                    ExecutionEngine.Assert(initData != null && initData.Length <= ArgsCountMax,
+                        ErrorOperationMalformed);
                     break;
                 case ActionUninstallModule:
-                    ExecutionEngine.Assert(action.Length == 2, ErrorOperationMalformed);
+                    ExecutionEngine.Assert(action.Length == 3, ErrorOperationMalformed);
                     BigInteger uninstallId = (BigInteger)action[1];
                     ExecutionEngine.Assert(uninstallId > 0, ErrorModuleIdInvalid);
+                    object[] deInitData = (object[])action[2];
+                    ExecutionEngine.Assert(deInitData != null && deInitData.Length <= ArgsCountMax,
+                        ErrorOperationMalformed);
                     break;
                 case ActionRebindModuleCode:
                     ExecutionEngine.Assert(action.Length == 3, ErrorOperationMalformed);
@@ -716,8 +855,8 @@ namespace SmartAccount
                     ExecutionEngine.Assert(action.Length == 3, ErrorOperationMalformed);
                     BigInteger configureId = (BigInteger)action[1];
                     ExecutionEngine.Assert(configureId > 0, ErrorModuleIdInvalid);
-                    object[] configureArgs = (object[])action[2];
-                    ExecutionEngine.Assert(configureArgs != null && configureArgs.Length <= ArgsCountMax,
+                    object[] configData = (object[])action[2];
+                    ExecutionEngine.Assert(configData != null && configData.Length <= ArgsCountMax,
                         ErrorOperationMalformed);
                     break;
                 case ActionSetHookOrder:
@@ -984,9 +1123,10 @@ namespace SmartAccount
         /// Phase-exact module authorization (F-7). A plugin callback into the
         /// core is authorized only while the recorded writer phase matches AND
         /// the caller IS the contract of the recorded active module instance.
-        /// Returns the authorized moduleId, or -1. This replaces the retired
-        /// stage-blind canConfigureVerifier/canExecuteVerifier/canExecuteHook
-        /// root/child parameters.
+        /// Returns the authorized moduleId, or -1. Modules call this from
+        /// inside a callback to authenticate the core and learn which of their
+        /// instances is being addressed; there is no stage-blind or
+        /// caller-declared alternative.
         /// </summary>
         [Safe]
         public static BigInteger getAuthorizedModuleId(UInt160 accountId, byte phase)
@@ -1004,8 +1144,8 @@ namespace SmartAccount
         //     Plan B (a hard per-call cap via System.Contract.CallWithGasLimit) is
         //     only reachable from the PLATFORM build — see the PLAN A
         //     DEGRADATION note on CallModuleGasCapped. Either way EVERY module
-        //     callback — validation, preExecute, postExecute, onInstall,
-        //     onUninstall, configure/cleanup — runs inside the same fail-closed
+        //     callback — validateUserOp, preCheck, postCheck, onUserOpComplete,
+        //     onInstall, onUninstall, configure — runs inside the same fail-closed
         //     envelope: a pre-call GasLeft/pool gate and a post-call
         //     measured-delta charge against the per-call cap plus that callback's
         //     own transaction-scoped pool. Validation, hooks and completion hold
@@ -1113,51 +1253,27 @@ namespace SmartAccount
 #endif
 
         // ========================================================================
-        // 12. Module callback adaptation layer (TODO(26))
-        //     The v4 kernel routes callbacks through the LEGACY plugin ABI
-        //     until task 26 ships the v4 module-side ABI. Each site carries an
-        //     explicit TODO(26) marker naming the v4 replacement:
-        //       supportsV3        -> onInstall(moduleType, additionalContext)
-        //       clearAccount      -> onUninstall(accountId, moduleId)
-        //       configure         -> configure(accountId, moduleId, args)  [new ABI name]
-        //       validateSignature -> validateUserOp(accountId, operationDigest, operation)
-        //       postExecute (validator) -> onUserOpComplete(accountId, operation, result)
-        //       preExecute        -> preCheck(accountId, operation) -> hookData
-        //       postExecute (hook) -> postCheck(accountId, operation, result, hookData)
+        // 12. Module callbacks (spec §9)
+        //     Core -> module calls, all addressed to a recorded 0x52 instance:
+        //       onInstall(accountId, moduleId, generation, initData)
+        //       onUninstall(accountId, moduleId, generation, deInitData)
+        //       configure(accountId, moduleId, generation, configData)
+        //       validateUserOp(accountId, operationDigest, operation) -> bool
+        //       onUserOpComplete(accountId, operation, result)
+        //       preCheck(accountId, operation) -> hookData (<= 512 bytes)
+        //       postCheck(accountId, operation, result, hookData)
         //
-        //     Validation is dispatched by manifest probe: a module that DECLARES
-        //     validateUserOp(hash160, byte[], array) receives the operation digest
-        //     plus the full 13-field canonical operation, so epoch, credential
-        //     generation, configuration nonce and hook proofs are all bound into
-        //     what it verifies. A module that only declares the legacy
-        //     validateSignature gets the legacy six-field view — that gap is
-        //     exactly what TODO(26) removes, and it is why the built-in route and
-        //     every v4 module check the digest.
+        //     Every helper records the writer phase and the active instance in
+        //     0x58 BEFORE the call, so the module can authenticate the core and
+        //     learn its instance id through getAuthorizedModuleId. The helpers
+        //     share the caller's live context record: pool charges accumulate
+        //     on one object and are never reloaded from a stale copy.
         // ========================================================================
 
         /// <summary>
-        /// Legacy 6-field operation view [target, method, args, nonce,
-        /// deadline, signature] of the canonical v4 operation, deep-copied so
-        /// callbacks can never mutate signed content (spec §3.6).
-        /// </summary>
-        private static object[] BuildLegacyOperationView(object[] operation)
-        {
-            object[] args = (object[])operation[OpArgs];
-            return new object[]
-            {
-                operation[OpTarget],
-                operation[OpMethod],
-                CloneOperationArguments(args),
-                operation[OpNonce],
-                operation[OpDeadline],
-                operation[OpSignature]
-            };
-        }
-
-        /// <summary>
         /// Canonical v4 operation view: all 13 fields in protocol order,
-        /// deep-copied (spec §4.1). This is what a v4 validator receives, so
-        /// every signed/bound field is visible to it.
+        /// deep-copied (spec §4.1). This is what every callback receives, so
+        /// every signed/bound field is visible and none can be mutated.
         /// </summary>
         private static object[] BuildCanonicalOperationView(object[] operation)
         {
@@ -1179,194 +1295,124 @@ namespace SmartAccount
             };
         }
 
-        /// <summary>Name/arity probe over the deployed module manifest.</summary>
-        private static bool ModuleDeclaresMethod(UInt160 module, string methodName, int parameterCount)
+        /// <summary>
+        /// Lifecycle callback (onInstall / onUninstall / configure) inside the
+        /// PhaseConfiguration writer phase of exactly this instance. A fault
+        /// reverts the whole configuration action; the callback may not swap
+        /// the code under the account.
+        /// </summary>
+        private static void CallModuleLifecycle(
+            UInt160 accountId, BigInteger moduleId, ModuleInstance module, string callback, object[] data)
         {
-            Contract? deployed = ContractManagement.GetContract(module);
-            if (deployed == null) return false;
-            ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
-            for (int i = 0; i < methods.Length; i++)
-            {
-                if (methods[i].Name == methodName && methods[i].Parameters.Length == parameterCount) return true;
-            }
-            return false;
-        }
-
-        /// <summary>v4 validation ABI: validateUserOp(accountId, operationDigest, operation).</summary>
-        private static bool ModuleSupportsV4Validation(ModuleInstance module)
-        {
-            return ModuleDeclaresMethod(module.ContractHash!, "validateUserOp", 3);
-        }
-
-        private static void CallModuleOnInstall(UInt160 accountId, BigInteger moduleId, ModuleInstance module)
-        {
-            // TODO(26): v4 onInstall lifecycle callback. Legacy plugins expose
-            // no install callback; the transition probe is the legacy
-            // capability declaration supportsV3().
             AssertCodeBindingUnchanged(module);
-            ApplicationContextRecord ctx = BeginApplicationContext(accountId);
-            long gasBefore = PrepareCallbackBudget(ctx, GasPoolNone, LifecycleCallbackGasLimit);
-            EnterModulePhase(accountId, ctx, PhaseConfiguration, moduleId);
+            bool ownsContext;
+            ApplicationContextRecord ctx = OpenApplicationContext(accountId, out ownsContext);
             try
             {
-                bool supported = (bool)CallModuleGasCapped(
-                    module.ContractHash, "supportsV3", CallFlags.ReadOnly, LifecycleCallbackGasLimit, new object[] { });
+                long gasBefore = PrepareCallbackBudget(ctx, GasPoolNone, LifecycleCallbackGasLimit);
+                EnterModulePhase(accountId, ctx, PhaseConfiguration, moduleId);
+                CallModuleGasCapped(module.ContractHash, callback, CallFlags.All, LifecycleCallbackGasLimit,
+                    new object[] { accountId, moduleId, module.CredentialGeneration, CloneOperationArguments(data) });
                 ChargeCallbackGas(ctx, GasPoolNone, gasBefore, LifecycleCallbackGasLimit);
-                ExecutionEngine.Assert(supported, ErrorModuleTypeUnsupported);
-                // The install callback must not have swapped the code under the
-                // account: the recorded hash/updateCounter/NEF hash still bind.
                 AssertCodeBindingUnchanged(module);
             }
             finally
             {
-                EndApplicationContext(accountId);
-            }
-        }
-
-        private static void CallModuleOnUninstall(UInt160 accountId, BigInteger moduleId, ModuleInstance module)
-        {
-            // TODO(26): v4 onUninstall(accountId, moduleId). The legacy
-            // per-account cleanup callback is clearAccount.
-            AssertCodeBindingUnchanged(module);
-            ApplicationContextRecord ctx = BeginApplicationContext(accountId);
-            long gasBefore = PrepareCallbackBudget(ctx, GasPoolNone, LifecycleCallbackGasLimit);
-            EnterModulePhase(accountId, ctx, PhaseConfiguration, moduleId);
-            try
-            {
-                CallModuleGasCapped(module.ContractHash, "clearAccount", CallFlags.All, LifecycleCallbackGasLimit,
-                    new object[] { accountId });
-                ChargeCallbackGas(ctx, GasPoolNone, gasBefore, LifecycleCallbackGasLimit);
-            }
-            finally
-            {
-                EndApplicationContext(accountId);
-            }
-        }
-
-        private static void CallModuleConfigure(UInt160 accountId, BigInteger moduleId, ModuleInstance module, object[] configureArgs)
-        {
-            // TODO(26): v4 configure(accountId, moduleId, args). Legacy plugins
-            // have no generic configure entrypoint; a module that does not
-            // expose "configure" faults here — fail-closed by design, and the
-            // configuration intent is not applied.
-            AssertCodeBindingUnchanged(module);
-            ApplicationContextRecord ctx = BeginApplicationContext(accountId);
-            long gasBefore = PrepareCallbackBudget(ctx, GasPoolNone, LifecycleCallbackGasLimit);
-            EnterModulePhase(accountId, ctx, PhaseConfiguration, moduleId);
-            try
-            {
-                CallModuleGasCapped(module.ContractHash, "configure", CallFlags.All, LifecycleCallbackGasLimit,
-                    new object[] { accountId, moduleId, CloneOperationArguments(configureArgs) });
-                ChargeCallbackGas(ctx, GasPoolNone, gasBefore, LifecycleCallbackGasLimit);
-            }
-            finally
-            {
-                EndApplicationContext(accountId);
+                CloseModulePhase(accountId, ctx, ownsContext);
             }
         }
 
         /// <summary>
-        /// Signature validation by the routed validator instance. Read-only
-        /// (F-7: validation callbacks never receive write permissions),
-        /// budget-charged against the transaction validation aggregate.
-        /// A v4 module receives the operation digest and the full 13-field
-        /// canonical operation; only a legacy module falls back to the
-        /// six-field view.
+        /// Closes the writer phase. The owner of the 0x58 row deletes it; an
+        /// inner sequence keeps the row and its gas pools for the enclosing
+        /// envelope.
+        /// </summary>
+        private static void CloseModulePhase(UInt160 accountId, ApplicationContextRecord ctx, bool ownsContext)
+        {
+            if (ownsContext)
+            {
+                EndApplicationContext(accountId);
+                return;
+            }
+            EnterModulePhase(accountId, ctx, PhaseNone, BigInteger.Zero);
+        }
+
+        /// <summary>
+        /// Signature validation by one validator instance (the routed
+        /// validator, or one threshold-policy member). Read-only (F-7:
+        /// validation never receives write permission) and charged against
+        /// the envelope's validation aggregate.
         /// </summary>
         private static bool CallValidatorValidateUserOp(
-            UInt160 accountId, BigInteger moduleId, ModuleInstance module, object[] operation,
-            ByteString operationDigest)
+            UInt160 accountId, ApplicationContextRecord ctx, BigInteger moduleId, ModuleInstance module,
+            object[] operation, ByteString operationDigest)
         {
-            // TODO(26): v4 validateUserOp(accountId, operationDigest, operation)
-            // with a structured validation result replacing the Boolean.
-            ApplicationContextRecord ctx = RequireApplicationContext(accountId);
-            ExecutionEngine.Assert(ctx.Phase == PhaseValidation && ctx.ActiveModuleId == moduleId, ErrorPhaseViolation);
             AssertCodeBindingUnchanged(module);
             long gasBefore = PrepareCallbackBudget(ctx, GasPoolValidation, ValidationAggregateGasLimit);
-            bool accepted;
-            if (ModuleSupportsV4Validation(module))
-            {
-                accepted = (bool)CallModuleGasCapped(
-                    module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationAggregateGasLimit,
-                    new object[]
-                    {
-                        accountId,
-                        operationDigest,
-                        BuildCanonicalOperationView(operation)
-                    });
-            }
-            else
-            {
-                accepted = (bool)CallModuleGasCapped(
-                    module.ContractHash, "validateSignature", CallFlags.ReadOnly, ValidationAggregateGasLimit,
-                    new object[] { accountId, BuildLegacyOperationView(operation) });
-            }
+            EnterModulePhase(accountId, ctx, PhaseValidation, moduleId);
+            bool accepted = (bool)CallModuleGasCapped(
+                module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationAggregateGasLimit,
+                new object[] { accountId, operationDigest, BuildCanonicalOperationView(operation) });
             ChargeCallbackGas(ctx, GasPoolValidation, gasBefore, ValidationAggregateGasLimit);
-            SaveApplicationContext(accountId, ctx);
             return accepted;
         }
 
         /// <summary>
         /// Validator completion callback (also invoked per threshold-approved
-        /// member). Budget-charged against the completion aggregate.
+        /// member). Charged against the completion aggregate.
         /// </summary>
         private static void CallValidatorOnUserOpComplete(
-            UInt160 accountId, BigInteger moduleId, ModuleInstance module, object[] operation, object result)
+            UInt160 accountId, ApplicationContextRecord ctx, BigInteger moduleId, ModuleInstance module,
+            object[] operation, object result)
         {
-            // TODO(26): v4 onUserOpComplete(accountId, operation, result).
-            ApplicationContextRecord ctx = RequireApplicationContext(accountId);
-            ExecutionEngine.Assert(ctx.Phase == PhaseCompletion && ctx.ActiveModuleId == moduleId, ErrorPhaseViolation);
             AssertCodeBindingUnchanged(module);
             long gasBefore = PrepareCallbackBudget(ctx, GasPoolCompletion, ValidatorCompletionGasLimit);
+            EnterModulePhase(accountId, ctx, PhaseCompletion, moduleId);
             CallModuleGasCapped(
-                module.ContractHash, "postExecute", CallFlags.All, ValidatorCompletionGasLimit,
-                new object[] { accountId, BuildLegacyOperationView(operation), CloneCallbackValue(result)! });
+                module.ContractHash, "onUserOpComplete", CallFlags.All, ValidatorCompletionGasLimit,
+                new object[] { accountId, BuildCanonicalOperationView(operation), CloneCallbackValue(result)! });
             ChargeCallbackGas(ctx, GasPoolCompletion, gasBefore, ValidatorCompletionGasLimit);
-            SaveApplicationContext(accountId, ctx);
         }
 
         /// <summary>
-        /// Hook preCheck. Returns per-instance hookData (empty in the legacy
-        /// adaptation) that is handed only to the same instance's postCheck.
-        /// Charged to the hook pool, never to validation (spec §11).
+        /// Hook preCheck. Returns the instance's hookData (at most
+        /// HookDataBytesMax bytes), which the core keeps in invocation-local
+        /// state and hands only to the same instance's postCheck. Charged to
+        /// the hook pool, never to validation (spec §11).
         /// </summary>
         private static ByteString CallHookPreCheck(
-            UInt160 accountId, BigInteger moduleId, ModuleInstance module, object[] operation)
+            UInt160 accountId, ApplicationContextRecord ctx, BigInteger moduleId, ModuleInstance module,
+            object[] operation)
         {
-            // TODO(26): v4 preCheck(accountId, operation) -> hookData (<= 512
-            // bytes). Legacy hooks return no hookData.
-            ApplicationContextRecord ctx = RequireApplicationContext(accountId);
-            ExecutionEngine.Assert(ctx.Phase == PhaseHookPre && ctx.ActiveModuleId == moduleId, ErrorPhaseViolation);
             AssertCodeBindingUnchanged(module);
             long gasBefore = PrepareCallbackBudget(ctx, GasPoolHook, HookCallbackGasLimit);
-            CallModuleGasCapped(
-                module.ContractHash, "preExecute", CallFlags.All, HookCallbackGasLimit,
-                new object[] { accountId, BuildLegacyOperationView(operation) });
+            EnterModulePhase(accountId, ctx, PhaseHookPre, moduleId);
+            ByteString? hookData = (ByteString?)CallModuleGasCapped(
+                module.ContractHash, "preCheck", CallFlags.All, HookCallbackGasLimit,
+                new object[] { accountId, BuildCanonicalOperationView(operation) });
             ChargeCallbackGas(ctx, GasPoolHook, gasBefore, HookCallbackGasLimit);
-            SaveApplicationContext(accountId, ctx);
-            return (ByteString)new byte[0];
+            if (hookData == null) return (ByteString)new byte[0];
+            ExecutionEngine.Assert(hookData!.Length <= HookDataBytesMax, ErrorHookDataTooLarge);
+            return hookData;
         }
 
         /// <summary>
         /// Hook postCheck over the ORIGINAL pre-approved hook snapshot. A
-        /// postCheck only ever runs for hooks whose preCheck succeeded.
+        /// postCheck only ever runs for hooks whose preCheck succeeded and
+        /// receives exactly the hookData that same instance returned.
         /// Charged to the hook pool, never to validation (spec §11).
         /// </summary>
         private static void CallHookPostCheck(
-            UInt160 accountId, BigInteger moduleId, ModuleInstance module, object[] operation, object result, ByteString hookData)
+            UInt160 accountId, ApplicationContextRecord ctx, BigInteger moduleId, ModuleInstance module,
+            object[] operation, object result, ByteString hookData)
         {
-            // TODO(26): v4 postCheck(accountId, operation, result, hookData).
-            ApplicationContextRecord ctx = RequireApplicationContext(accountId);
-            ExecutionEngine.Assert(ctx.Phase == PhaseHookPost && ctx.ActiveModuleId == moduleId, ErrorPhaseViolation);
             AssertCodeBindingUnchanged(module);
             long gasBefore = PrepareCallbackBudget(ctx, GasPoolHook, HookCallbackGasLimit);
-            // TODO(26): hookData is not forwarded to legacy postExecute; the
-            // adaptation layer drops it because legacy hooks return none.
+            EnterModulePhase(accountId, ctx, PhaseHookPost, moduleId);
             CallModuleGasCapped(
-                module.ContractHash, "postExecute", CallFlags.All, HookCallbackGasLimit,
-                new object[] { accountId, BuildLegacyOperationView(operation), CloneCallbackValue(result)! });
+                module.ContractHash, "postCheck", CallFlags.All, HookCallbackGasLimit,
+                new object[] { accountId, BuildCanonicalOperationView(operation), CloneCallbackValue(result)!, hookData });
             ChargeCallbackGas(ctx, GasPoolHook, gasBefore, HookCallbackGasLimit);
-            SaveApplicationContext(accountId, ctx);
         }
 
         // ========================================================================

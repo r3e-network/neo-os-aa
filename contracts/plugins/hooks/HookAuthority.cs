@@ -27,12 +27,60 @@ namespace SmartAccount.Hooks
         private static readonly byte[] Prefix_RegistryTimelock = new byte[] { 0xFA };
         private static readonly BigInteger AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000;
 
-        internal static byte[] AccountKey(byte[] prefix, UInt160 accountId)
+        /// <summary>
+        /// The core this hook trusts. Native builds additionally pin it to the
+        /// native SmartAccount contract hash.
+        /// </summary>
+        internal static UInt160 Core()
+        {
+            UInt160 core = AuthorizedCore();
+#if SMARTACCOUNT_NATIVE
+            NativeAuthority.RequirePinnedCore(core);
+#endif
+            return core;
+        }
+
+        internal static byte[] InstanceKey(byte[] prefix, UInt160 accountId, BigInteger moduleId)
+        {
+            return ModuleContext.InstanceKey(prefix, accountId, moduleId);
+        }
+
+        /// <summary>Deletes every key under one instance-scoped prefix.</summary>
+        internal static void DeleteInstancePrefix(byte[] prefix, UInt160 accountId, BigInteger moduleId)
+        {
+            ModuleContext.DeleteInstancePrefix(prefix, accountId, moduleId);
+        }
+
+        /// <summary>onInstall / onUninstall / configure: configuration phase, exact instance.</summary>
+        internal static void RequireLifecycle(UInt160 accountId, BigInteger moduleId)
+        {
+            ModuleContext.RequireLifecycle(Core(), accountId, moduleId);
+        }
+
+        /// <summary>preCheck: returns the hook instance the core is running.</summary>
+        internal static BigInteger RequirePreCheck(UInt160 accountId, object[] operation)
+        {
+            ModuleOperation.RequireShape(operation);
+            return ModuleContext.RequireInstance(Core(), accountId, ModulePhase.HookPre);
+        }
+
+        /// <summary>postCheck: returns the hook instance the core is running.</summary>
+        internal static BigInteger RequirePostCheck(UInt160 accountId, object[] operation)
+        {
+            ModuleOperation.RequireShape(operation);
+            return ModuleContext.RequireInstance(Core(), accountId, ModulePhase.HookPost);
+        }
+
+        /// <summary>
+        /// The script hash that holds the account's assets: the proxy script
+        /// hash on the custom core, the account address on the native core.
+        /// </summary>
+        internal static UInt160 AssetAddress(UInt160 accountId)
         {
 #if SMARTACCOUNT_NATIVE
-            return NativeAuthority.AccountKey(prefix, accountId);
+            return (UInt160)Contract.Call(Core(), "getAccountAddress", CallFlags.ReadOnly, new object[] { accountId });
 #else
-            return Helper.Concat(prefix, (byte[])accountId);
+            return (UInt160)Contract.Call(Core(), "getProxyScriptHash", CallFlags.ReadOnly, new object[] { accountId });
 #endif
         }
 
@@ -193,37 +241,6 @@ namespace SmartAccount.Hooks
             Storage.Delete(Storage.CurrentContext, Prefix_PendingUpdateManifestHash);
             Storage.Delete(Storage.CurrentContext, Prefix_UpdateTimelock);
             ContractManagement.Update(nef, manifest);
-        }
-
-        internal static void ValidateConfigCaller(UInt160 accountId, UInt160 hookContract)
-        {
-#if SMARTACCOUNT_NATIVE
-            NativeAuthority.Require(AuthorizedCore(), accountId, "hook", "configuration");
-#else
-            UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
-            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
-
-            bool authorized = (bool)Contract.Call(
-                core,
-                "canConfigureHook",
-                CallFlags.ReadOnly,
-                new object[] { accountId, hookContract });
-            ExecutionEngine.Assert(authorized, "Unauthorized");
-#endif
-        }
-
-        internal static void ValidateExecutionCaller(UInt160 accountId, UInt160 callerContract, UInt160 hookContract)
-        {
-            UInt160 core = AuthorizedCore();
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
-
-            bool authorized = (bool)Contract.Call(
-                core,
-                "canExecuteHook",
-                CallFlags.ReadOnly,
-                new object[] { accountId, callerContract, hookContract });
-            ExecutionEngine.Assert(authorized, "Unauthorized");
         }
 
         internal static void RotateAdmin(UInt160 newAdmin)

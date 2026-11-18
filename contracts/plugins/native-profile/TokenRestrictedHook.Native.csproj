@@ -9,6 +9,7 @@
     <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
     <Compile Include="NativeAuthority.cs" />
     <Compile Include="../hooks/HookAuthority.cs" />
+    <Compile Include="../validators/ModuleOperation.cs" />
     <Compile Include="../hooks/TokenRestrictedHook.cs" />
   </ItemGroup>
 </Project>

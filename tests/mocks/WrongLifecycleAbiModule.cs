@@ -1,3 +1,4 @@
+using System.Numerics;
 using Neo;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
@@ -6,25 +7,33 @@ using System.ComponentModel;
 namespace SmartAccount.Mocks
 {
     /// <summary>
-    /// Test-only module whose method names are present but whose validation return type is
-    /// deliberately wrong. A V3 marker and method-count check must not be enough to bind it.
+    /// Test-only validator whose canonical profile is well formed but whose lifecycle
+    /// callback return type is deliberately wrong (<c>onInstall</c> returns Any instead
+    /// of Void). The core must validate the manifest ABI shape, not only the method name
+    /// (docs/SA-MODULE-PROTOCOL.md §9).
     /// </summary>
     [DisplayName("WrongLifecycleAbiModule")]
     [ContractPermission("*", "*")]
-    [ManifestExtra("Description", "Test-only malformed SA lifecycle ABI")]
+    [ManifestExtra("Description", "Test-only malformed validator lifecycle ABI")]
     public class WrongLifecycleAbiModule : SmartContract
     {
-        [Safe]
-        public static bool SupportsV3() => true;
+        // Canonical bytes of the profile this mock commits to; the validator capability
+        // flags are irrelevant because binding must fail on the callback ABI.
+        private const string ModuleProfileJson = "{\"callbacks\":[\"validateUserOp\",\"onUserOpComplete\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"WrongLifecycleAbiModule\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"validator\",\"profileVersion\":1}";
 
         [Safe]
-        public static bool SupportsComposition() => false;
+        public static string GetModuleProfile() => ModuleProfileJson;
 
-        // `object` compiles to ABI return type Any, not Boolean.
-        public static object ValidateSignature(UInt160 accountId, object op) => true;
+        // `object` compiles to ABI return type Any, not Void.
+        public static object OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData) => true;
 
-        public static void PostExecute(UInt160 accountId, object op, object result) { }
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] data) { }
 
-        public static void ClearAccount(UInt160 accountId) { }
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData) { }
+
+        [Safe]
+        public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation) => true;
+
+        public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result) { }
     }
 }

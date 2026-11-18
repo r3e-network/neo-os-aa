@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);SMARTACCOUNT_NATIVE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+    <Compile Include="NativeAuthority.cs" />
+    <Compile Include="../validators/ValidatorAuthority.cs" />
+    <Compile Include="../validators/ModuleOperation.cs" />
+    <Compile Include="../validators/ValidatorPayload.cs" />
+    <Compile Include="../validators/ValidatorModels.cs" />
+    <Compile Include="../validators/SignerDomain.cs" />
+    <Compile Include="../validators/ValidatorClock.cs" />
+    <Compile Include="../validators/SessionKeyValidator.cs" />
+  </ItemGroup>
+</Project>

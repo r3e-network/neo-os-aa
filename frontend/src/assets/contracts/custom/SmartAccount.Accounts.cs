@@ -227,8 +227,8 @@ namespace SmartAccount
 
         // ========================================================================
         // 3. Deployed-module manifest ABI helpers
-        //    Retained for the TODO(26) plugin adaptation layer (profile /
-        //    capability probing before callbacks). A marker alone is never
+        //    Used by the install / rebind profile binding
+        //    (AssertModuleCallbackAbi). A marker alone is never
         //    enough: a stale or malicious module could advertise a method
         //    while omitting it, and missing-method faults are not catchable,
         //    so the full ABI shape is checked before any binding.

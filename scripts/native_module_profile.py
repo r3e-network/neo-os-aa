@@ -57,18 +57,12 @@ def profile_digest(parameters):
 
 NATIVE_CONTRACT = "398dc3f0227d7efac5533ed5ce9937390c158084"
 NATIVE_CONTRACT_METHODS = {
-    "NeoNativeVerifier": {"getAuthorityEpoch", "hasModuleContext"},
-    "WhitelistHook": {"getAuthorityEpoch", "hasModuleContext"},
-    "SessionKeyVerifier": {
-        "canonicalP256PublicKey", "getAccountAddress", "getAuthorizationDomain",
-        "getAuthorityEpoch", "getOperationDigest", "hasModuleContext",
-    },
-    "DailyLimitHook": {"getAccountAddress", "getAuthorityEpoch", "hasModuleContext"},
-    "TokenRestrictedHook": {"getAccountAddress", "getAuthorityEpoch", "hasModuleContext"},
-    "MultiSigVerifier": {
-        "clearVerifierDependencies", "getAuthorityEpoch", "hasModuleContext",
-        "setVerifierDependencies",
-    },
+    "NeoWitnessValidator": {"getAuthorizedModuleId", "getModule"},
+    "WhitelistHook": {"getAuthorizedModuleId"},
+    "SessionKeyValidator": {"getAuthorizedModuleId", "getAccountAddress", "getModule"},
+    "DailyLimitHook": {"getAccountAddress", "getAuthorizedModuleId"},
+    "TokenRestrictedHook": {"getAccountAddress", "getAuthorizedModuleId"},
+    "MultiSigValidator": {"getAuthorizedModuleId", "getModule"},
 }
 
 

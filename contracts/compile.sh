@@ -15,6 +15,12 @@ fi
 # compiled with anything but the pinned nccs package are not the pinned build.
 node "$ROOT_DIR/scripts/check_neo_platform_packages.mjs" --compiler-only
 
+# Every module embeds the canonical bytes of its <Name>.profile.json literal, and the
+# core binds an instance to the SHA-256 of exactly those bytes (spec §12). Refuse to
+# compile a tree whose profiles and literals have drifted apart.
+echo "Checking module profiles..."
+node "$ROOT_DIR/scripts/sync-module-profiles.mjs" --check
+
 # nccs 3.9.1 does not read MSBuild DefineConstants, and C# #define directives are
 # file-scoped. Define PLATFORM in every disposable source copy; never mutate the
 # public sources or write private bytes to bin/public.
@@ -38,55 +44,52 @@ echo "Cleaning stale build intermediates..."
 find "$ROOT_DIR/contracts/custom" "$ROOT_DIR/contracts/plugins" "$ROOT_DIR/tests/mocks" \
   -type d -name obj -prune -exec rm -rf {} +
 
+# Artifacts are addressed by name, so a directory left over from an earlier layout
+# would let a gate read bytes this run never produced (for example a renamed
+# module or the retired bin/public/verifiers tree). Rebuild the public tree empty.
+echo "Cleaning stale public artifacts..."
+rm -rf "$ROOT_DIR/contracts/bin/public"
+mkdir -p "$ROOT_DIR/contracts/bin/public"
+
 # Every project writes into contracts/bin/public whatever directory it lives in, so the artifact
 # layout the tests, the SDK and the deploy scripts read does not follow the source layout.
-echo "Compiling SmartAccount V3 Core..."
+# nccs compiles every project in the directory of the project it is given, so one
+# invocation per directory produces that directory's whole artifact set.
+echo "Compiling SmartAccount v4 Core..."
 pushd custom >/dev/null
 "$NCCS_BIN" SmartAccount.csproj -o ../bin/public
 popd >/dev/null
 
-echo "Compiling Verifiers..."
-pushd plugins/verifiers >/dev/null
-"$NCCS_BIN" ./Web3AuthVerifier.csproj -o ../../bin/public/verifiers
-"$NCCS_BIN" ./TEEVerifier.csproj -o ../../bin/public/verifiers
-"$NCCS_BIN" ./SessionKeyVerifier.csproj -o ../../bin/public/verifiers
-"$NCCS_BIN" ./WebAuthnVerifier.csproj -o ../../bin/public/verifiers
-"$NCCS_BIN" ./ZKEmailVerifier.csproj -o ../../bin/public/verifiers
-"$NCCS_BIN" ./ZkLoginVerifier.csproj -o ../../bin/public/verifiers
-"$NCCS_BIN" ./MultiSigVerifier.csproj -o ../../bin/public/verifiers
-"$NCCS_BIN" ./SubscriptionVerifier.csproj -o ../../bin/public/verifiers
-"$NCCS_BIN" ./NeoNativeVerifier.csproj -o ../../bin/public/verifiers
+echo "Compiling Validators..."
+pushd plugins/validators >/dev/null
+"$NCCS_BIN" ./P256Validator.csproj -o ../../bin/public/validators
 popd >/dev/null
 
 echo "Compiling Hooks..."
 pushd plugins/hooks >/dev/null
 "$NCCS_BIN" ./DailyLimitHook.csproj -o ../../bin/public/hooks
-"$NCCS_BIN" ./NeoDIDCredentialHook.csproj -o ../../bin/public/hooks
-"$NCCS_BIN" ./WhitelistHook.csproj -o ../../bin/public/hooks
-"$NCCS_BIN" ./MultiHook.csproj -o ../../bin/public/hooks
-"$NCCS_BIN" ./TokenRestrictedHook.csproj -o ../../bin/public/hooks
 popd >/dev/null
 
-# Test-support mocks. The contract test suite deploys all seven from bin/public
-# (MockTransferTarget in the execution/market/escrow suites, MockVerifierCore in the
-# verifier suites, and
-# MarkerOnlyModule, WrongLifecycleAbiModule and WrongHookLifecycleAbiModule in
-# the lifecycle-ABI negative suite, plus PolicyExecutionProbe for policy enforcement), so they
-# are always compiled: a clean checkout that skipped them could not run
-# `dotnet test`. bin/public is gitignored and the deploy scripts select artifacts by
-# name, so the mocks never reach a network. INCLUDE_VALIDATION_MOCKS is accepted
-# for compatibility with older runbooks but no longer changes the output.
-# Phase 1b: PlatformRegistrarMock was removed — the registrar suites now deploy the
-# real SAPlatformRegistrar service contract built below.
+# Recovery ships one validator (the action-session authorization) and one service
+# contract (the social-recovery state machine); both build into bin/public.
+echo "Compiling Recovery Contracts..."
+pushd plugins/recovery >/dev/null
+"$NCCS_BIN" ./ActionSessionValidator.csproj -o ../../bin/public
+popd >/dev/null
+
+# Test-support mocks. The contract test suite deploys all six from bin/public
+# (MockTransferTarget in the execution/market/escrow suites, MockVerifierCore as the
+# protocol v4 core stub in the module suites, and MarkerOnlyModule,
+# WrongLifecycleAbiModule and WrongHookLifecycleAbiModule in the callback-ABI
+# negative suite, plus PolicyExecutionProbe as the adversarial token), so they are
+# always compiled: a clean checkout that skipped them could not run `dotnet test`.
+# bin/public is gitignored and the deploy scripts select artifacts by name, so the
+# mocks never reach a network. INCLUDE_VALIDATION_MOCKS is accepted for
+# compatibility with older runbooks but no longer changes the output.
 # The mock sources live with the tests (tests/mocks), not under contracts/.
 echo "Compiling test-support mocks..."
 pushd "$ROOT_DIR/tests/mocks" >/dev/null
 "$NCCS_BIN" ./MockVerifierCore.csproj -o ../../contracts/bin/public
-"$NCCS_BIN" ./MockTransferTarget.csproj -o ../../contracts/bin/public
-"$NCCS_BIN" ./MarkerOnlyModule.csproj -o ../../contracts/bin/public
-"$NCCS_BIN" ./WrongLifecycleAbiModule.csproj -o ../../contracts/bin/public
-"$NCCS_BIN" ./WrongHookLifecycleAbiModule.csproj -o ../../contracts/bin/public
-"$NCCS_BIN" ./PolicyExecutionProbe.csproj -o ../../contracts/bin/public
 popd >/dev/null
 
 echo "Compiling Market Contracts..."
@@ -108,11 +111,6 @@ popd >/dev/null
 echo "Compiling Registrar Contracts..."
 pushd custom/registrar >/dev/null
 "$NCCS_BIN" ./PlatformRegistrar.csproj -o ../../bin/public
-popd >/dev/null
-
-echo "Compiling Recovery Contracts..."
-pushd plugins/recovery >/dev/null
-"$NCCS_BIN" ./MorpheusSocialRecoveryVerifier.csproj -o ../../bin/public
 popd >/dev/null
 
 echo "Compiling the private PLATFORM core into its separate artifact directory..."

@@ -438,7 +438,7 @@ namespace SmartAccount
                         && !IsMemberOfActivePolicy(accountId, validatorId)
                         && credentialGeneration == module.CredentialGeneration)
                     {
-                        accepted = CallValidatorValidateStandalone(accountId, module, op);
+                        accepted = CallValidatorValidateStandalone(accountId, module, op, operationDigest);
                     }
                     else
                     {
@@ -457,39 +457,19 @@ namespace SmartAccount
         /// Standalone read-only validator invocation for validateUserOp: no
         /// 0x58 phase context exists (the preview never mutates state), but
         /// the Plan A/Plan B per-call budget and code-binding continuity still
-        /// apply. A v4 module receives the operation digest plus the full
-        /// 13-field canonical operation; only a legacy module gets the
-        /// six-field view.
+        /// apply. The module receives the same digest and 13-field canonical
+        /// operation as in execution; because no writer phase is recorded it
+        /// resolves its instance from <c>operation[validatorId]</c>, which the
+        /// preview has already matched to this very instance (spec §9).
         /// </summary>
         private static bool CallValidatorValidateStandalone(
-            UInt160 accountId, ModuleInstance module, object[] operation)
+            UInt160 accountId, ModuleInstance module, object[] operation, ByteString operationDigest)
         {
             AssertCodeBindingUnchanged(module);
-            ByteString operationDigest = ComputeOperationDigest(
-                accountId, operation,
-                (BigInteger)operation[OpValidatorId],
-                (BigInteger)operation[OpCredentialGeneration],
-                (BigInteger)operation[OpAuthorityEpoch],
-                (BigInteger)operation[OpConfigurationNonce]);
             long gasBefore = PrepareCallbackBudget(null, GasPoolNone, ValidationAggregateGasLimit);
-            bool accepted;
-            if (ModuleSupportsV4Validation(module))
-            {
-                accepted = (bool)CallModuleGasCapped(
-                    module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationAggregateGasLimit,
-                    new object[]
-                    {
-                        accountId,
-                        operationDigest,
-                        BuildCanonicalOperationView(operation)
-                    });
-            }
-            else
-            {
-                accepted = (bool)CallModuleGasCapped(
-                    module.ContractHash, "validateSignature", CallFlags.ReadOnly, ValidationAggregateGasLimit,
-                    new object[] { accountId, BuildLegacyOperationView(operation) });
-            }
+            bool accepted = (bool)CallModuleGasCapped(
+                module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationAggregateGasLimit,
+                new object[] { accountId, operationDigest, BuildCanonicalOperationView(operation) });
             ChargeCallbackGas(null, GasPoolNone, gasBefore, ValidationAggregateGasLimit);
             return accepted;
         }
@@ -610,9 +590,8 @@ namespace SmartAccount
                         ModuleInstance memberModule = RequireModuleInstance(accountId, members[i]);
                         ExecutionEngine.Assert(memberModule.ModuleType == ModuleTypeCodeValidator,
                             ErrorValidatorNotFound);
-                        EnterModulePhase(accountId, ctx, PhaseValidation, members[i]);
                         bool memberAccepted = CallValidatorValidateUserOp(
-                            accountId, members[i], memberModule, op, operationDigest);
+                            accountId, ctx, members[i], memberModule, op, operationDigest);
                         if (memberAccepted)
                         {
                             approvedMembers[approvals] = members[i];
@@ -623,9 +602,8 @@ namespace SmartAccount
                 }
                 else if (validatorModule != null)
                 {
-                    EnterModulePhase(accountId, ctx, PhaseValidation, validatorId);
                     bool accepted = CallValidatorValidateUserOp(
-                        accountId, validatorId, validatorModule, op, operationDigest);
+                        accountId, ctx, validatorId, validatorModule, op, operationDigest);
                     ExecutionEngine.Assert(accepted, ErrorValidationRejected);
                 }
                 else
@@ -638,6 +616,9 @@ namespace SmartAccount
                 }
 
                 // ---- Nonce consumption (all validations passed) ----
+                // Validation is closed before any core write: no module holds
+                // a writer phase while the nonce is consumed.
+                EnterModulePhase(accountId, ctx, PhaseNone, BigInteger.Zero);
                 ConsumeOperationNonce(accountId, channel, namespaceDigest, sequence);
 
                 // Deep-copied arguments: a hook or callback must never mutate
@@ -645,18 +626,16 @@ namespace SmartAccount
                 object[] executionArgs = CloneOperationArguments((object[])op[OpArgs]);
 
                 // ---- Phase: HookPre (snapshot order) ----
+                // hookData is invocation-local: slot i belongs to the hook
+                // instance at snapshot position i and is handed back only to
+                // that same instance's postCheck.
                 int hookCount = hookOrder.HookIds.Length;
                 ByteString[] hookData = new ByteString[hookCount];
                 for (int i = 0; i < hookCount; i++)
                 {
                     BigInteger hookId = hookOrder.HookIds[i];
                     ModuleInstance hookModule = RequireModuleInstance(accountId, hookId);
-                    EnterModulePhase(accountId, ctx, PhaseHookPre, hookId);
-                    ByteString data = CallHookPreCheck(accountId, hookId, hookModule, op);
-                    // TODO(26): hookData is per-instance v4 preCheck output;
-                    // the legacy adaptation always yields empty data.
-                    ExecutionEngine.Assert(data.Length <= HookDataBytesMax, ErrorHookDataTooLarge);
-                    hookData[i] = data;
+                    hookData[i] = CallHookPreCheck(accountId, ctx, hookId, hookModule, op);
                 }
 
                 // ---- Phase: TargetDispatch (all module authorization closed;
@@ -676,8 +655,7 @@ namespace SmartAccount
                 {
                     BigInteger hookId = hookOrder.HookIds[i];
                     ModuleInstance hookModule = RequireModuleInstance(accountId, hookId);
-                    EnterModulePhase(accountId, ctx, PhaseHookPost, hookId);
-                    CallHookPostCheck(accountId, hookId, hookModule, op, result, hookData[i]);
+                    CallHookPostCheck(accountId, ctx, hookId, hookModule, op, result, hookData[i]);
                 }
 
                 // ---- Phase: Completion (approved routing subject only) ----
@@ -687,15 +665,14 @@ namespace SmartAccount
                     {
                         if (approvedMembers[i] == 0) break;
                         ModuleInstance memberModule = RequireModuleInstance(accountId, approvedMembers[i]);
-                        EnterModulePhase(accountId, ctx, PhaseCompletion, approvedMembers[i]);
-                        CallValidatorOnUserOpComplete(accountId, approvedMembers[i], memberModule, op, result);
+                        CallValidatorOnUserOpComplete(accountId, ctx, approvedMembers[i], memberModule, op, result);
                     }
                 }
                 else if (validatorModule != null)
                 {
-                    EnterModulePhase(accountId, ctx, PhaseCompletion, validatorId);
-                    CallValidatorOnUserOpComplete(accountId, validatorId, validatorModule, op, result);
+                    CallValidatorOnUserOpComplete(accountId, ctx, validatorId, validatorModule, op, result);
                 }
+                EnterModulePhase(accountId, ctx, PhaseNone, BigInteger.Zero);
 
                 OnUserOpExecuted(accountId, target, (string)method, nonce);
                 return result;

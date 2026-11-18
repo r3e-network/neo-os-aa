@@ -313,15 +313,24 @@ namespace SmartAccount
                 accountId, originalSender, validatorId, credentialGeneration,
                 control.AuthorityEpoch, hash);
 
-            // TODO(26): v4 forward ABI (accountId, originalSender, validatorId,
-            // generation, hash, signatures). The legacy plugin ABI is
-            // isValidSignature(accountId, hash, signature); the sanitized
-            // payload forwarded today is the serialized signature-pair array.
+            // Forward ABI (spec §8/§9): the module receives the original
+            // sender, its own instance id and generation, the domain-bound
+            // message digest and the sanitized signature pairs. The call is
+            // read-only and the callback is declared safe, so message
+            // validation can never write.
             AssertCallbackGasBudget(ValidationAggregateGasLimit);
             long gasBefore = Runtime.GasLeft;
             bool accepted = (bool)CallModuleGasCapped(
                 module.ContractHash, "isValidSignature", CallFlags.ReadOnly, ValidationAggregateGasLimit,
-                new object[] { accountId, moduleMessageDigest, StdLib.Serialize(signaturePairs) });
+                new object[]
+                {
+                    accountId,
+                    originalSender,
+                    validatorId,
+                    credentialGeneration,
+                    moduleMessageDigest,
+                    CloneOperationArguments(signaturePairs)
+                });
             ChargeCallbackGas(null, GasPoolNone, gasBefore, ValidationAggregateGasLimit);
             return accepted ? ValidSignatureMagic() : InvalidSignatureMagic();
         }

@@ -1,0 +1,1 @@
+{"callbacks":["validateUserOp","onUserOpComplete"],"capabilities":{"compositeLayer":0,"instanceIsolation":true,"messageCapability":false,"thresholdMemberEligible":true},"contractName":"MultiSigValidator","lifecycle":["onInstall","onUninstall","configure"],"moduleType":"validator","profileVersion":1}

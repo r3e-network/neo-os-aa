@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RunNccsAfterBuild>false</RunNccsAfterBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../validators/ValidatorAuthority.cs" />
+    <Compile Include="../validators/ModuleOperation.cs" />
+    <Compile Include="../validators/ValidatorPayload.cs" />
+    <Compile Include="../validators/ValidatorModels.cs" />
+    <Compile Include="../validators/SignerDomain.cs" />
+    <Compile Include="../validators/ValidatorClock.cs" />
+    <Compile Include="ActionSessionValidator.cs" />
+  </ItemGroup>
+
+  <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
+    <Message Text="Compiling Neo smart contract: ActionSessionValidator.cs" Importance="high" />
+    <Exec Command="nccs ./ActionSessionValidator.csproj -o ../../bin/public/recovery" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+
+</Project>

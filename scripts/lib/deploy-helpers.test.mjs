@@ -7,13 +7,13 @@ const { neon, invokePersisted, artifactPaths, parseVanityVerifyScript, classifyA
 const publicHash = '6d0656f6dd91469db1c90cc1e574380613f43738';
 
 test('public artifact selection cannot escape into the private profile', () => {
-  for (const name of ['../platform/SmartAccount', '/tmp/other', 'verifiers/../../platform/Core', '', '..\\platform\\Core']) {
+  for (const name of ['../platform/SmartAccount', '/tmp/other', 'validators/../../platform/Core', '', '..\\platform\\Core']) {
     assert.throws(() => artifactPaths(name), /public artifact name/);
   }
   // path.join yields native separators; the suffix pin must not depend on the host OS.
   const sep = '[\\\\/]';
   assert.match(artifactPaths('SmartAccount').nef, new RegExp(`contracts${sep}bin${sep}public${sep}SmartAccount\\.nef$`));
-  assert.match(artifactPaths('verifiers/WebAuthnVerifier').nef, new RegExp(`contracts${sep}bin${sep}public${sep}verifiers${sep}WebAuthnVerifier\\.nef$`));
+  assert.match(artifactPaths('validators/P256Validator').nef, new RegExp(`contracts${sep}bin${sep}public${sep}validators${sep}P256Validator\\.nef$`));
 });
 
 function stubContract(t, methods) {

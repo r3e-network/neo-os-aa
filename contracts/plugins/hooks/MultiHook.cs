@@ -1,6 +1,5 @@
 using System.Numerics;
 using Neo;
-using Neo.SmartContract;
 using Neo.SmartContract.Framework;
 using Neo.SmartContract.Framework.Attributes;
 using Neo.SmartContract.Framework.Native;
@@ -9,47 +8,30 @@ using System.ComponentModel;
 
 namespace SmartAccount.Hooks
 {
-    public class UserOperation
-    {
-        public UInt160 TargetContract;
-        public string Method;
-        public object[] Args;
-        public BigInteger Nonce;
-        public BigInteger Deadline;
-        public ByteString Signature;
-    }
-
     /// <summary>
-    /// Hook combiner that executes multiple hook plugins as a single policy surface.
+    /// Legacy hook combiner, retired in protocol v4.
     /// </summary>
     /// <remarks>
-    /// Use this contract when an account must satisfy more than one policy at once, for example
-    /// whitelist plus daily limit plus a credential check. Pre-hooks run in forward order and
-    /// post-hooks run in reverse order.
+    /// The v4 core owns composition: one <c>hookOrder</c> list per account runs
+    /// installed hooks in ascending order and replays them in reverse for
+    /// <c>postCheck</c> (docs/SA-MODULE-PROTOCOL.md §1.2, §3). A migrated
+    /// MultiHook account unfolds into that core-owned order, so this contract
+    /// stops accepting new installs and refuses to run any callback. The
+    /// contract keeps its governance surface only so the deployed artifact and
+    /// its timelocked upgrade path stay addressable.
     /// </remarks>
     [DisplayName("MultiHook")]
-    [ContractPermission("*", "canExecuteHook")]
-    [ContractPermission("*", "canConfigureHook")]
-    [ContractPermission("*", "setHookDependencies")]
-    [ContractPermission("*", "clearHookDependencies")]
-    [ContractPermission("*", "preExecute")]
-    [ContractPermission("*", "postExecute")]
-    [ContractPermission("*", "supportsV3")]
-    [ManifestExtra("Description", "Composable Hook to chain multiple hooks")]
+    [ContractPermission("*", "getAuthorizedModuleId")]
+    [ManifestExtra("Description", "Retired composable hook; protocol v4 uses the core-owned hookOrder")]
     public class MultiHook : SmartContract
     {
-        private static readonly byte[] Prefix_Hooks = new byte[] { 0x01 };
-        private static readonly byte[] Prefix_ExecutionDepth = new byte[] { 0x02 };
-        private const int MaxHooks = 8;
-        private const int MaxHookDepth = 3;
+        // Canonical bytes of MultiHook.profile.json (scripts/sync-module-profiles.mjs).
+        private const string ModuleProfileJson = "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":1,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"MultiHook\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}";
 
         public static void _deploy(object data, bool update) => HookAuthority.Initialize(data, update);
 
         [Safe]
-        public static bool SupportsV3() => true;
-
-        [Safe]
-        public static bool SupportsComposition() => true;
+        public static string GetModuleProfile() => ModuleProfileJson;
 
         [Safe]
         public static UInt160 AuthorizedCore() => HookAuthority.AuthorizedCore();
@@ -73,232 +55,39 @@ namespace SmartAccount.Hooks
 
         public static void Update(ByteString nef, string manifest) => HookAuthority.Update(nef, manifest);
 
-        /// <summary>
-        /// Sets the ordered hook list for an account or clears it when the array is empty.
-        /// </summary>
-        public static void SetHooks(UInt160 accountId, UInt160[] hooks)
+        // ---- Lifecycle: no new installs (spec §1.2) ----
+
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
         {
-            HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
-            byte[] key = Helper.Concat(Prefix_Hooks, (byte[])accountId);
-            if (hooks == null || hooks.Length == 0)
-            {
-                Storage.Delete(Storage.CurrentContext, key);
-                UInt160 core = HookAuthority.AuthorizedCore();
-                Contract.Call(core, "setHookDependencies", CallFlags.All,
-                    new object[] { accountId, new UInt160[0] });
-            }
-            else
-            {
-                ExecutionEngine.Assert(hooks.Length <= MaxHooks, $"Maximum {MaxHooks} hooks allowed");
-                for (int i = 0; i < hooks.Length; i++)
-                {
-                    ExecutionEngine.Assert(hooks[i] != UInt160.Zero && hooks[i].IsValid, "Invalid hook");
-                    ExecutionEngine.Assert(hooks[i] != Runtime.ExecutingScriptHash, "Self hook not allowed");
-                    for (int j = i + 1; j < hooks.Length; j++)
-                    {
-                        ExecutionEngine.Assert(hooks[i] != hooks[j], "Duplicate hook not allowed");
-                    }
-                    AssertChildHook(hooks[i]);
-                }
-                Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(hooks));
-                UInt160 core = HookAuthority.AuthorizedCore();
-                Contract.Call(core, "setHookDependencies", CallFlags.All,
-                    new object[] { accountId, hooks });
-            }
+            HookAuthority.RequireLifecycle(accountId, moduleId);
+            ExecutionEngine.Assert(false, "MultiHook is not installable in protocol v4; use the core hookOrder");
         }
 
-        private static void AssertChildHook(UInt160 hook)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
         {
-            Contract? deployed = ContractManagement.GetContract(hook);
-            ExecutionEngine.Assert(deployed != null, "Child hook is not deployed");
-
-            ContractMethodDescriptor[] methods = deployed.Manifest.Abi.Methods;
-            ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsV3", ContractParameterType.Boolean), "Child hook V3 marker missing");
-            ExecutionEngine.Assert(ExposesSafeMethod(methods, "supportsComposition", ContractParameterType.Boolean), "Child hook composition marker missing");
-            ExecutionEngine.Assert(ExposesMethod(methods, "preExecute", ContractParameterType.Void,
-                ContractParameterType.Hash160, ContractParameterType.Array), "Child hook pre ABI missing");
-            ExecutionEngine.Assert(ExposesMethod(methods, "postExecute", ContractParameterType.Void,
-                ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any), "Child hook post ABI missing");
-            ExecutionEngine.Assert(ExposesMethod(methods, "clearAccount", ContractParameterType.Void,
-                ContractParameterType.Hash160), "Child hook cleanup ABI missing");
-
-            bool supported = (bool)Contract.Call(hook, "supportsV3", CallFlags.ReadOnly, new object[] { });
-            ExecutionEngine.Assert(supported, "Child hook does not implement V3 interface");
-            bool composite = (bool)Contract.Call(hook, "supportsComposition", CallFlags.ReadOnly, new object[] { });
-            ExecutionEngine.Assert(!composite, "Composite hook cannot be a child");
+            HookAuthority.RequireLifecycle(accountId, moduleId);
+            ExecutionEngine.Assert(false, "MultiHook is retired in protocol v4");
         }
 
-        private static bool ExposesSafeMethod(ContractMethodDescriptor[] methods, string name,
-            ContractParameterType returnType, params ContractParameterType[] parameterTypes)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
         {
-            for (int i = 0; i < methods.Length; i++)
-            {
-                ContractMethodDescriptor method = methods[i];
-                if (!method.Safe || method.Name != name || method.ReturnType != returnType
-                    || method.Parameters.Length != parameterTypes.Length) continue;
-                bool parametersMatch = true;
-                for (int j = 0; j < parameterTypes.Length; j++)
-                {
-                    if (method.Parameters[j].Type != parameterTypes[j])
-                    {
-                        parametersMatch = false;
-                        break;
-                    }
-                }
-                if (parametersMatch)
-                {
-                    return true;
-                }
-            }
-            return false;
+            // No instance storage exists: v4 never installs this contract.
+            HookAuthority.RequireLifecycle(accountId, moduleId);
         }
 
-        private static bool ExposesMethod(ContractMethodDescriptor[] methods, string name,
-            ContractParameterType returnType, params ContractParameterType[] parameterTypes)
+        // ---- Execution: never runs in v4 ----
+
+        public static ByteString PreCheck(UInt160 accountId, object[] operation)
         {
-            for (int i = 0; i < methods.Length; i++)
-            {
-                ContractMethodDescriptor method = methods[i];
-                if (method.Name != name || method.ReturnType != returnType
-                    || method.Parameters.Length != parameterTypes.Length) continue;
-                bool parametersMatch = true;
-                for (int j = 0; j < parameterTypes.Length; j++)
-                {
-                    if (method.Parameters[j].Type != parameterTypes[j])
-                    {
-                        parametersMatch = false;
-                        break;
-                    }
-                }
-                if (parametersMatch)
-                {
-                    return true;
-                }
-            }
-            return false;
+            HookAuthority.RequirePreCheck(accountId, operation);
+            ExecutionEngine.Assert(false, "MultiHook is retired in protocol v4");
+            return (ByteString)new byte[0];
         }
 
-        [Safe]
-        public static UInt160[] GetHooks(UInt160 accountId)
+        public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)
         {
-            byte[] key = Helper.Concat(Prefix_Hooks, (byte[])accountId);
-            ByteString? data = Storage.Get(Storage.CurrentContext, key);
-            if (data == null) return new UInt160[0];
-            return (UInt160[])StdLib.Deserialize(data!);
-        }
-
-        [Safe]
-        public static UInt160[] GetChildHookConfig(UInt160 accountId) => GetHooks(accountId);
-
-        /// <summary>
-        /// Forwards the pre-execution phase through each configured hook in order.
-        /// </summary>
-        public static void PreExecute(UInt160 accountId, object[] opParams)
-        {
-            HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
-
-            // Circular dependency guard using execution depth tracking
-            byte[] depthKey = Helper.Concat(Prefix_ExecutionDepth, (byte[])accountId);
-            ByteString? depthData = Storage.Get(Storage.CurrentContext, depthKey);
-            BigInteger depth = depthData == null ? 0 : (BigInteger)depthData;
-
-            ExecutionEngine.Assert(depth < MaxHookDepth, "Maximum hook depth exceeded");
-
-            depth++;
-            Storage.Put(Storage.CurrentContext, depthKey, depth);
-
-            try
-            {
-                UInt160[] hooks = GetHooks(accountId);
-                for (int i = 0; i < hooks.Length; i++)
-                {
-                    object[] childParams = CloneHookParams(opParams);
-                    ByteString snapshot = StdLib.Serialize(childParams);
-                    Contract.Call(hooks[i], "preExecute", CallFlags.All, new object[] { accountId, childParams });
-                    ExecutionEngine.Assert(
-                        StdLib.MemoryCompare(snapshot, StdLib.Serialize(childParams)) == 0,
-                        "Child hook mutated authenticated operation");
-                }
-            }
-            finally
-            {
-                // Decrement depth to allow re-entry from other operations
-                depth--;
-                if (depth <= 0)
-                {
-                    Storage.Delete(Storage.CurrentContext, depthKey);
-                }
-                else
-                {
-                    Storage.Put(Storage.CurrentContext, depthKey, depth);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Forwards the post-execution phase through each configured hook in reverse order.
-        /// </summary>
-        public static void PostExecute(UInt160 accountId, object[] opParams, object result)
-        {
-            HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash);
-
-            // Circular dependency guard using execution depth tracking
-            byte[] depthKey = Helper.Concat(Prefix_ExecutionDepth, (byte[])accountId);
-            ByteString? depthData = Storage.Get(Storage.CurrentContext, depthKey);
-            BigInteger depth = depthData == null ? 0 : (BigInteger)depthData;
-
-            ExecutionEngine.Assert(depth < MaxHookDepth, "Maximum hook depth exceeded");
-
-            depth++;
-            Storage.Put(Storage.CurrentContext, depthKey, depth);
-
-            try
-            {
-                UInt160[] hooks = GetHooks(accountId);
-                // Contract.Call exposes mutable VM containers by reference. Give
-                // every child a fresh result graph so one post-hook cannot change
-                // the value observed by the next hook or by later accounting.
-                ByteString resultSnapshot = StdLib.Serialize(result);
-                for (int i = hooks.Length - 1; i >= 0; i--)
-                {
-                    object[] childParams = CloneHookParams(opParams);
-                    ByteString snapshot = StdLib.Serialize(childParams);
-                    Contract.Call(
-                        hooks[i],
-                        "postExecute",
-                        CallFlags.All,
-                        new object[] { accountId, childParams, StdLib.Deserialize(resultSnapshot) });
-                    ExecutionEngine.Assert(
-                        StdLib.MemoryCompare(snapshot, StdLib.Serialize(childParams)) == 0,
-                        "Child hook mutated authenticated operation");
-                }
-            }
-            finally
-            {
-                // Decrement depth to allow re-entry from other operations
-                depth--;
-                if (depth <= 0)
-                {
-                    Storage.Delete(Storage.CurrentContext, depthKey);
-                }
-                else
-                {
-                    Storage.Put(Storage.CurrentContext, depthKey, depth);
-                }
-            }
-        }
-
-        public static void ClearAccount(UInt160 accountId)
-        {
-            HookAuthority.ValidateConfigCaller(accountId, Runtime.ExecutingScriptHash);
-            UInt160 core = HookAuthority.AuthorizedCore();
-            Contract.Call(core, "clearHookDependencies", CallFlags.All, new object[] { accountId });
-            Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_Hooks, (byte[])accountId));
-        }
-
-        private static object[] CloneHookParams(object[] opParams)
-        {
-            return (object[])StdLib.Deserialize(StdLib.Serialize(opParams));
+            HookAuthority.RequirePostCheck(accountId, operation);
+            ExecutionEngine.Assert(false, "MultiHook is retired in protocol v4");
         }
     }
 }

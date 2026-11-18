@@ -46,10 +46,12 @@ namespace SmartAccount
     //                        expire with their writer phase.
     // Every other outbound axis of this contract is fixed-shape and
     // enumerated below for review:
-    //   * module callbacks        : supportsV3 / clearAccount / configure /
-    //                              validateSignature / postExecute /
-    //                              preExecute on the account's recorded
-    //                              0x52 module instances (gas-capped)
+    //   * module callbacks        : getModuleProfile / onInstall /
+    //                              onUninstall / configure /
+    //                              validateUserOp / onUserOpComplete /
+    //                              preCheck / postCheck / isValidSignature
+    //                              on the account's recorded 0x52 module
+    //                              instances (gas-capped)
     //   * paymaster settlement    : authorizedCore (read) +
     //                              settleReimbursement on the authorized
     //                              SAPaymaster

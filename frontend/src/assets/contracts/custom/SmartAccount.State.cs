@@ -228,8 +228,9 @@ namespace SmartAccount
         /// <summary>
         /// True when the account has an installed module instance of the
         /// given type whose contract hash matches. The additionalContext
-        /// parameter is reserved for instance-isolated installs
-        /// (TODO(26): instance addressing).
+        /// parameter is kept for ERC-7579 signature alignment and is not
+        /// interpreted: instances are addressed by moduleId (getModule /
+        /// getModules), never by an opaque context blob.
         /// </summary>
         [Safe]
         public static bool IsModuleInstalled(UInt160 accountId, string moduleType, UInt160 moduleHash, ByteString additionalContext)
