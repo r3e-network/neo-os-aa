@@ -160,8 +160,7 @@ signing layout is specified in [SA-EIP-712-SPEC.md](SA-EIP-712-SPEC.md).
 A same-day design-phase cleanup removed every pre-deployment compatibility
 path (legacy storage-prefix fallbacks, the one-time rotation migration, the
 v3 recovery action ticket and the migration/upgrade scripts), bringing the
-bringing the candidate to 81 ABI entries against the 90 entries of the pinned public artifact.
-is overloaded) against the 90 methods of the pinned public artifact.
+candidate to 81 ABI entries against the 90 entries of the pinned public artifact.
 
 The public deployments still run the 90-method artifact, so the extraction,
 freeze, discovery and day-one-session-key surfaces stay

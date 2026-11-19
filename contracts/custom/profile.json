@@ -69,10 +69,10 @@
   "currentSourceCandidate": {
     "artifactRoot": "contracts/bin/public",
     "status": "source-ahead-of-pinned-public-artifact",
-    "abiMethodCount": 109,
+    "abiMethodCount": 81,
     "releaseGate": "required-before-public-upgrade",
     "localAcceptance": {
-      "status": "GO-DECLARED-ORDINARY-SCOPE",
+      "status": "GO-DECLARED-CUSTOM-SCOPE",
       "evidence": "docs/reports/sa-ordinary-candidate-compatibility-20261116.json",
       "note": "The 2026-10-13 acceptance report this status was recorded against is not part of this checkout; the cited receipt is the current candidate evidence.",
       "scope": "Contract, SDK, frontend and formal-model gates; selected nine-module private-chain source acceptance. Registrar deployment compatibility and native conformance remain separate."
