@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Read-only join for the eight-module public-runtime source acceptance suite.
+// Read-only join for the nine-module public-runtime source acceptance suite.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -62,8 +62,8 @@ export function verifyCustomRuntimeProvenance({ repro, receipt, repoRoot = root,
   const rows = names.map((name) => {
     const artifact = runtime.artifacts.find((row) => row.contractName === name);
     const chain = runtime.readback.find((row) => row.contractName === name);
-    assert.equal(artifact.relativeNefPath, `${name}.nef`);
-    assert.equal(artifact.relativeManifestPath, `${name}.manifest.json`);
+    assert.ok(artifact.relativeNefPath === `${name}.nef` || artifact.relativeNefPath.endsWith(`/${name}.nef`), 'NEF path names the artifact');
+    assert.ok(artifact.relativeManifestPath === `${name}.manifest.json` || artifact.relativeManifestPath.endsWith(`/${name}.manifest.json`), 'Manifest path names the artifact');
     const nef = fs.readFileSync(path.join(releaseRoot, artifact.relativeNefPath));
     const manifestBytes = fs.readFileSync(path.join(releaseRoot, artifact.relativeManifestPath));
     const manifest = JSON.parse(manifestBytes);
@@ -71,8 +71,8 @@ export function verifyCustomRuntimeProvenance({ repro, receipt, repoRoot = root,
     const script = parseNefScript(nef), checksum = nef.readUInt32LE(nef.length - 4);
     assert.equal(artifact.nefSha256, sha256(nef));
     assert.equal(artifact.manifestSha256, sha256(manifestBytes));
-    assert.equal(repro.certificate.release_artifact_sha256[`public/${name}.nef`], artifact.nefSha256);
-    assert.equal(repro.certificate.release_artifact_sha256[`public/${name}.manifest.json`], artifact.manifestSha256);
+    assert.equal(repro.certificate.release_artifact_sha256[`public/${artifact.relativeNefPath}`], artifact.nefSha256);
+    assert.equal(repro.certificate.release_artifact_sha256[`public/${artifact.relativeManifestPath}`], artifact.manifestSha256);
     assert.equal(artifact.nefScriptSha256, sha256(script));
     assert.equal(artifact.nefChecksum, checksum);
     assert.deepEqual(canonical(artifact.manifest), canonical(manifest), 'Local receipt manifest differs');
@@ -93,7 +93,7 @@ export function verifyCustomRuntimeProvenance({ repro, receipt, repoRoot = root,
   return { schema: 'neoos-sa-custom-runtime-provenance/v1', status: 'PASS', sourceSnapshotSha256: repro.certificate.source_snapshot_sha256,
     publicNetworkWritesPerformed: false, runtimeArtifactsChecked: rows.length, rows,
     measuredSubset: 'source_build.REQUIRED_ARTIFACTS', fullModuleProvenanceVerified: false,
-    boundary: 'Public-runtime source acceptance for the eight deployed modules; no full-module, compiler refinement or public deployment claim.' };
+    boundary: 'Public-runtime source acceptance for the nine deployed modules; no full-module, compiler refinement or public deployment claim.' };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

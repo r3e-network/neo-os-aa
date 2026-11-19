@@ -50,7 +50,12 @@ class Rx:
         self.port = port
         self.neoxp = neoxp or os.environ.get("NEOXP") or shutil.which("neoxp") or str(Path.home() / ".dotnet" / "tools" / "neoxp")
         self.file = self.workdir / "sa.neo-express"
-        self.env = {k: os.environ[k] for k in ("PATH", "DOTNET_ROOT", "LANG", "TMPDIR") if k in os.environ}
+        # A minimal environment is deliberate, but Winsock on Windows needs SystemRoot (it
+        # loads mswsock.dll from %SystemRoot%\system32); without it every socket init fails
+        # with WSAEPROVIDERFAILEDINIT and the node exits before it binds its RPC port.
+        self.env = {k: os.environ[k] for k in ("PATH", "DOTNET_ROOT", "LANG", "TMPDIR",
+                                               "SystemRoot", "windir", "SystemDrive", "TEMP", "TMP",
+                                               "USERPROFILE") if k in os.environ}
         self.env["HOME"] = str(self.workdir)
         self.env.setdefault("DOTNET_ROOT", v.dotnet_root())
         self.node = None

@@ -41,7 +41,7 @@ public-VM harness does not establish native-chain admission or recovery.
 
 Pass --neoexpress (or set NEOOS_REQUIRE_NEOEXPRESS=1) for public-profile source acceptance on
 a fresh disposable chain using published NeoExpress. It rebuilds both artifact profiles,
-executes the eight-module source suite, joins its RPC readback to the build certificate,
+executes the nine-module source suite, joins its RPC readback to the build certificate,
 and writes dated receipts under docs/reports/. NEOOS_NEOXP (else NEOXP, PATH, or
 ~/.dotnet/tools/neoxp) selects the published runner. Full-module PLATFORM provenance
 remains a separate NOT RUN gate; this command never touches a public network.
@@ -212,7 +212,7 @@ if [[ $run_contracts -eq 1 ]]; then
   # The private-chain validation is opt-in for the same reason: it needs the neoxp tool,
   # takes several minutes, and a missing tool must read as NOT RUN, never as a pass.
   if [[ $run_neoexpress -eq 1 || "${NEOOS_REQUIRE_NEOEXPRESS:-0}" == "1" ]]; then
-    echo "neoexpress gate: public-profile source acceptance on published NeoExpress (eight deployed modules)"
+    echo "neoexpress gate: public-profile source acceptance on published NeoExpress (nine deployed modules)"
     neoxp_tool="${NEOOS_NEOXP:-${NEOXP:-$(command -v neoxp || true)}}"
     neoxp_tool="${neoxp_tool:-$HOME/.dotnet/tools/neoxp}"
     neoexpress_date="$(date -u +%Y%m%d)"
@@ -226,12 +226,12 @@ if [[ $run_contracts -eq 1 ]]; then
     node scripts/check-artifact-reproducibility.mjs --json > "$repro_receipt"
     NEOXP="$neoxp_tool" python3 tests/localchain/run.py --variant source \
       --source-dir "$ROOT_DIR/contracts/bin/public" --receipt "$neoexpress_receipt"
-    echo "neoexpress gate: joining source/rebuild certificate to eight-module RPC readback"
+    echo "neoexpress gate: joining source/rebuild certificate to nine-module RPC readback"
     node scripts/check-custom-runtime-provenance.mjs \
       --repro "$repro_receipt" \
       --receipt "$neoexpress_receipt" > "$provenance_receipt"
     echo "neoexpress gate: provenance receipt written to ${provenance_receipt#$ROOT_DIR/}"
-    echo "unselected PLATFORM matrix: NOT RUN - custom source acceptance covers eight deployed modules; full-module validation has a separate runner."
+    echo "unselected PLATFORM matrix: NOT RUN - custom source acceptance covers nine deployed modules; full-module validation has a separate runner."
   else
     mark_not_run "neoexpress"
     echo "neoexpress gate: NOT RUN - tests/localchain/run.py --variant source (public-profile private-chain acceptance) was skipped."

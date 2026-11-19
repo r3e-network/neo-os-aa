@@ -83,7 +83,7 @@ test('custom NeoExpress selects public source acceptance and its bounded evidenc
   assert.match(result.trace, /selected-NEOXP \/fixture\/published-neoxp/);
   assert.match(result.trace, /check-custom-runtime-provenance\.mjs --repro .* --receipt/);
   assert.doesNotMatch(result.trace, /python3 scripts\/neoexpress_validate\.py|node scripts\/verify-private-artifact-provenance\.mjs/);
-  assert.match(result.stdout, /eight deployed modules/);
+  assert.match(result.stdout, /nine deployed modules/);
   assert.match(result.stdout, /unselected PLATFORM matrix: NOT RUN/);
   assert.match(result.stdout, /notRun=cross-repo,formal\./);
 });

@@ -54,7 +54,7 @@ dotnet test SmartAccount.sln -c Release
 `contracts/bin/public` 交给 `tests/localchain/run.py --variant source`。`NEOOS_NEOXP`（否则
 `NEOXP`、PATH 或用户工具目录）选择已发布的运行器；该路径不启用任何私有分叉。
 
-`scripts/check-custom-runtime-provenance.mjs` 把重建证书与当前源码快照、八个已部署模块的精确
+`scripts/check-custom-runtime-provenance.mjs` 把重建证书与当前源码快照、九个已部署模块的精确
 NEF 哈希、校验和、完整 manifest 与 RPC script 回读连接起来。它复用源码套件已有的验收预言机。
 这是经过测量的子集，不是对整个模块目录或公开部署的证明。独立的
 `scripts/neoexpress_validate.py` 与 `verify-private-artifact-provenance.mjs` 仍然是私有 PLATFORM

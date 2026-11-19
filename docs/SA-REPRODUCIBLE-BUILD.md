@@ -64,7 +64,7 @@ the user tool directory) selects the published runner; no private hardfork is
 enabled by this path.
 
 `scripts/check-custom-runtime-provenance.mjs` joins the rebuild certificate to
-the current source snapshot and the eight deployed modules' exact NEF hashes,
+the current source snapshot and the nine deployed modules' exact NEF hashes,
 checksums, full manifests and RPC script readback. It reuses the source suite's
 existing acceptance oracle. This is a measured subset, not proof of the entire
 module catalog or public deployment. The separate

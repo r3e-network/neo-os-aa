@@ -2,10 +2,10 @@
 """SA module: local-chain acceptance scenarios (RPC-driven, published neoxp, no private hardfork).
 
 Variant 'deployed' uses the unchanged contracts/build artifacts assessed on 2026-10-05.
-Variant 'source' compiles the current checkout with the pinned published compiler and deploys those
-bytes; its expectations follow the build profile read from the compiled core (DEC-SA-1): while the
-source still emits System.Contract.CallWithGasLimit every verifier-signed operation must fault on a
-published node, and once the public build profile lands the same operations must execute.
+Variant 'source' compiles the current checkout with the pinned published compiler and deploys
+the protocol v4 module roster (contracts/bin/public): a deterministic custody+salt account, the
+atomic initial install, the 24 h configuration-intent path for every later module change and the
+13-field user operation. Its receipts are checked against tests/localchain/expected-source.json.
 """
 import argparse, base64, datetime as dt, hashlib, json, os, re, shutil, subprocess, sys, time, traceback
 import signal, socket, tempfile, random
@@ -25,9 +25,8 @@ NODE = os.environ.get("NODE") or shutil.which("node") or "node"
 
 SOURCE_RUNNER_FILES = (
     "scripts/localchain/sa_rpc_scenarios.py", "scripts/localchain/source_build.py",
-    "scripts/localchain/rpcx.py", "scripts/localchain/source_proxy_relay_probe.mjs",
-    "scripts/neoexpress_validate.py", "tests/localchain/test_source_gate.py",
-    "tests/localchain/expected-source.json",
+    "scripts/localchain/rpcx.py", "scripts/neoexpress_validate.py",
+    "tests/localchain/test_source_gate.py", "tests/localchain/expected-source.json",
 )
 
 # Receipts are review artifacts and may contain exception traces from the relay
@@ -116,6 +115,165 @@ def bring_up(c, variant, workdir, bin_dir=None):
     x = Ctx(c, variant, workdir)
     x.core = core
     return c, x
+
+
+# ---------------------------------------------------------------- protocol v4
+# The source variant drives the protocol v4 module ABI: a deterministic
+# custody+salt account, the atomic initial install, the 24h configuration-intent
+# path for every later module change, the 13-field user operation and the
+# per-instance module state. The roster below is the public-profile roster the
+# compiler writes (contracts/bin/public), and it is the same tuple
+# source_build.REQUIRED_ARTIFACTS declares; the local-chain gate refuses a build
+# whose artifacts do not belong to it.
+MODULE_PROTOCOL_VERSION = 4
+MODULE_CHANGE_DELAY_S = 86_400            # 24 h module-change timelock (spec 10)
+RECOVERY_TIMELOCK_MS = int(7 * DAY * 1000)
+NONCE_SUBKEY = b"\x00" * 32       # NonceSubkeySize (SmartAccount.ModuleProtocol.cs)
+MODULE_TYPE_VALIDATOR = 1
+MODULE_TYPE_HOOK = 4
+ACCOUNT_MODULES = MODULES = srcbuild.MODULE_FILES
+
+
+def module_profile_digest(c, module):
+    """SHA256 of the exact profile string the module's getModuleProfile returns (spec 3.1)."""
+    profile = c.read(module, "getModuleProfile")
+    if isinstance(profile, bytes):
+        profile = profile.decode("utf-8")
+    if not isinstance(profile, str) or not profile:
+        raise Fail("module %s returned no profile string (got %r)" % (module, profile))
+    return hashlib.sha256(profile.encode("utf-8")).digest()
+
+
+def install_action(c, module, module_type, init=()):
+    return A(I(1), I(module_type), H(module), B(module_profile_digest(c, module)), A(*init))
+
+
+def configure_action(module_id, config):
+    return A(I(3), I(module_id), A(*config))
+
+
+def builtin_signature(script, signature, subject_revision=1):
+    """Serialize the built-in route's signature envelope exactly as the core reads it (spec §8).
+
+    Layout: Array(4) [protocolVersion, 0, subjectRevision, Array[[script, r||s]]]. The core
+    deserializes this ByteString with StdLib.Deserialize, matches the signer script against the
+    account's message subjects and verifies the 64-byte P-256 signature over the operation
+    digest, so the 0x40/0x21/0x28 type bytes below are part of the wire format.
+    """
+    def vm_int(value):
+        # Integer == 0x21 <varint byte length> <little-endian two's complement bytes>.
+        if value == 0:
+            return b"\x21\x00"
+        if 1 <= value <= 0x7F:
+            return b"\x21\x01" + bytes([value])
+        width = (int(value).bit_length() + 8) // 8
+        return b"\x21" + v.varint(width) + int(value).to_bytes(width, "little")
+
+    def vm_bytes(payload):
+        return b"\x28" + v.varint(len(payload)) + bytes(payload)
+
+    pair = b"\x40\x02" + vm_bytes(script) + vm_bytes(signature)
+    return (b"\x40\x04" + vm_int(MODULE_PROTOCOL_VERSION) + vm_int(0) + vm_int(subject_revision)
+            + b"\x40\x01" + pair)
+
+
+def bring_up_v4(c, workdir, bin_dir):
+    """Deploy the v4 public roster and open a v4 account context (no v3 registration)."""
+    c.create(NAMES)
+    c.start()
+    c.fund(NAMES, 3000)
+    bin_dir = Path(bin_dir)
+    for name in MODULES:
+        path = bin_dir / MODULES[name]
+        if name == "SmartAccount":
+            core = c.deploy(name, path)
+        else:
+            c.deploy(name, path, data_core=core)
+    x = V4Ctx(c, workdir)
+    x.core = core
+    return c, x
+
+
+class V4Ctx:
+    """Protocol v4 account/module/intent helpers for the source acceptance suite."""
+
+    def __init__(self, c, workdir):
+        self.c, self.workdir = c, Path(workdir)
+        self.core = None
+        self.accounts = {}
+        self.current = None
+
+    # ---- accounts
+    def create(self, label, owner="owner", actions=()):
+        c = self.c
+        salt = label.encode()
+        account = c.hash_of(self.core, "computeAccountIdentity", H(c.hashes[owner]), B(salt))
+        if actions:
+            c.send(f"createAccount {label} with {len(actions)} initial module action(s)", [{"w": owner}], self.core,
+                   "createAccount", [H(account), H(c.hashes[owner]), B(salt), I(RECOVERY_TIMELOCK_MS), A(*actions)])
+        else:
+            c.send(f"createAccount {label}", [{"w": owner}], self.core, "createAccount",
+                   [H(account), H(c.hashes[owner]), B(salt), I(RECOVERY_TIMELOCK_MS), A()])
+        self.accounts[label] = {"id": account, "owner": owner}
+        self.current = account
+        return account
+
+    def control(self, account):
+        """The v4 control record: getAccount() is [exists,status,custody,authority,epoch,nonce,...]."""
+        state = self.c.read(self.core, "getAccount", H(account))
+        return {"status": int(state[1]), "custody": state[2], "epoch": int(state[4]),
+                "nonce": int(state[5]), "ownerOnly": bool(state[9])}
+
+    def proxy(self, account):
+        return self.c.hash_of(self.core, "getProxyScriptHash", H(account))
+
+    # ---- module enumeration
+    def module_ids(self, account, module_type="validator"):
+        page = self.c.read(self.core, "getModules", H(account), S(module_type), I(0), I(16))
+        return [int(value) for value in page[0]]
+
+    def module(self, account, module_id):
+        return self.c.read(self.core, "getModule", H(account), I(module_id))
+
+    # ---- 24 h configuration intent path
+    def propose(self, label, owner, account, actions):
+        self.c.send(f"propose {label}", [{"w": owner}], self.core, "proposeConfiguration",
+                    [H(account), A(*actions), A()])
+        pending = self.c.read(self.core, "getPendingConfigurationIntentIds", H(account))
+        if not pending:
+            raise Fail("no pending configuration intent after proposing " + label)
+        return int(pending[-1])
+
+    def confirm(self, label, owner, account, intent_id, actions):
+        self.c.fastforward(MODULE_CHANGE_DELAY_S + 60)
+        self.c.send(f"confirm {label} after the 24 h delay", [{"w": owner}], self.core, "confirmConfiguration",
+                    [H(account), I(intent_id), A(*actions)])
+
+    def apply(self, label, owner, account, actions):
+        intent_id = self.propose(label, owner, account, actions)
+        self.confirm(label, owner, account, intent_id, actions)
+        return intent_id
+
+    # ---- user operations
+    def op(self, target, method, args, nonce, validator_id=0, generation=1, epoch=None, config_nonce=None,
+           signature=None, proofs=(), subkey=NONCE_SUBKEY):
+        if epoch is None or config_nonce is None:
+            control = self.control(self.current)
+            epoch = control["epoch"] if epoch is None else epoch
+            config_nonce = control["nonce"] if config_nonce is None else config_nonce
+        return A(I(MODULE_PROTOCOL_VERSION), H(target), S(method), A(*args), I(nonce), B(subkey),
+                 I(FAR_DEADLINE), I(validator_id), I(generation), I(epoch), I(config_nonce),
+                 B(signature or b"\x00"), A(*proofs))
+
+    def digest(self, account, operation):
+        return self.c.read(self.core, "getOperationDigest", H(account), operation)
+
+    def nonce(self, account, validator_id=0, subkey=NONCE_SUBKEY):
+        """The packed nonce the core expects: 191-bit derived channel | 64-bit sequence."""
+        return int(self.c.read(self.core, "getNonce", H(account), I(validator_id), B(subkey)))
+
+    def sequence(self, account, validator_id=0, subkey=NONCE_SUBKEY):
+        return self.nonce(account, validator_id, subkey) & ((1 << 64) - 1)
 
 
 # ---------------------------------------------------------------- scenarios
@@ -1220,429 +1378,167 @@ def sc_relay_route(c, x):
     return {"relay": results}
 
 
-# ------------------------------------------------- current-source variant
-def sc_source_build_and_native(c, x):
-    """SRC-01/02 the build profile of the current source and the native-owner path on a published node."""
-    c.records.append({"scenario": "SRC-01/02 current source core: build profile and native-owner execution"})
+def sc_v4_build_and_execute(c, x):
+    """SRC-01/02 the v4 build profile and a custody-witness user operation on a published node."""
+    c.records.append({"scenario": "SRC-01/02 current source core: build profile and custody-witness execution"})
     profile = x.source_profile
     c.check(profile["coreSha256"] != profile["deployedCoreSha256"],
-            "the source variant deploys freshly compiled bytes, not the pinned deployed artifact")
-    if profile["profile"] == srcbuild.PROFILE_SYSCALL_PRESENT:
-        c.check(profile["validateSignature"] == 1 and profile["postExecute"] == 1,
-                "the compiled source core emits System.Contract.CallWithGasLimit for both verifier callbacks")
-    else:
-        c.check(profile["validateSignature"] == 0 and profile["postExecute"] == 0,
-                "the compiled source core emits no gas-bounded verifier callback (DEC-SA-1 is cleared)")
-    account, proxy = x.register("source-native")
-    c.check(c.hash_of(x.core, "getBackupOwner", H(account)) == c.hashes["owner"], "backup owner recorded")
-    c.check(c.hash_of(x.core, "getVerifier", H(account)) == ZERO, "no verifier: native fallback")
-    target = c.contracts["MockTransferTarget"]
-    c.send("native-owner executeUserOp on the source core", [{"w": "owner"}], x.core, "executeUserOp",
-           [H(account), x.op(target, "transfer", [H(proxy), H(c.hashes["buyer"]), I(1000), B(b"")], 0)])
-    c.check(x.nonce(account) == 1, "native-witness operation HALTed and advanced the nonce")
-    return {"profile": profile["profile"]}
-
-
-def sc_source_proxy_witness(c, x):
-    """SRC-03 the proxy-witness path with no verifier: it never reaches the gas-bounded syscall."""
-    c.records.append({"scenario": "SRC-03 current source core: proxy witness without a verifier"})
-    core = x.core
-    account, proxy = x.register("source-gas")
+            "the source variant deploys freshly compiled bytes, not a pinned artifact")
+    c.check(profile["profile"] == srcbuild.PROFILE_SYSCALL_ABSENT,
+            "the v4 public profile carries no private gas-bounded syscall")
+    c.check(profile["validateSignature"] == 0 and profile["postExecute"] == 0,
+            "the v4 core makes no gas-bounded verifier callback: modules are contracts")
+    target, validator = c.contracts["MockTransferTarget"], c.contracts["NeoWitnessValidator"]
     owner, buyer = c.hashes["owner"], c.hashes["buyer"]
-    c.send("fund the proxy address with 10 GAS", [{"w": "owner"}], GAS_HASH, "transfer",
-           [H(owner), H(proxy), I(10 * GAS), B(b"")])
-    c.check(c.gas(proxy) == 10 * GAS, "proxy address holds 10 GAS")
-    c.send("admin sets the verify-scope target to GAS", [{"w": "deployer"}], core, "setVerifyScopeTarget",
-           [H(account), H(GAS_HASH)])
-    c.check(c.hash_of(core, "getVerifyScopeTarget", H(account)) == GAS_HASH, "scope target recorded")
-    pscript = proxy_script_for(account, core)
-    psig = lambda target: {"proxy": proxy, "core": core, "target": target, "script": pscript}
-    gas_op = lambda n: x.op(GAS_HASH, "transfer", [H(proxy), H(buyer), I(GAS), B(b"")], n)
-    before = c.gas(buyer)
-    rec = c.send("proxy-witness GAS transfer on the source core", [{"w": "owner"}, psig(GAS_HASH)], core,
-                 "executeUserOp", [H(account), gas_op(0)])
-    c.check(rec["outcome"] == "HALT", "the proxy-witness operation HALTed and moved the signed amount")
-    c.check(c.gas(buyer) - before == GAS, "buyer received exactly 1 GAS from the SA proxy address")
-    c.check(c.gas(proxy) == 9 * GAS, "proxy address paid exactly 1 GAS; the owner wallet paid the fees")
-    c.check(x.nonce(account) == 1, "nonce advanced")
-    rec = c.send("proxy rules naming another asset are still refused by the node", [{"w": "owner"}, psig(NEO_HASH)],
-                 core, "executeUserOp", [H(account), gas_op(1)], expect="REJECT")
-    c.check(rec["outcome"] == "REJECTED", "proxy rules naming another asset are still refused by the node")
-    return {}
+    install = install_action(c, validator, MODULE_TYPE_VALIDATOR, [S("setSigners"), A(H(owner)), I(1)])
+    account = x.create("source-custody", actions=[install])
+    proxy = x.proxy(account)
+    c.check(x.module_ids(account) == [1], "the atomic initial install allocated module 1")
+    op = x.op(target, "transfer", [H(proxy), H(buyer), I(1000), B(b"")], x.nonce(account, 1), validator_id=1)
+    c.send("custody-witness user operation on the v4 core", [{"w": "owner", "scope": "Global"}], x.core, "executeUserOp", [H(account), op])
+    c.check(x.sequence(account, 1) == 1, "the witness validator advanced its own nonce channel")
+    c.send("replay of the consumed nonce", [{"w": "owner", "scope": "Global"}], x.core, "executeUserOp", [H(account), op], expect="FAULT")
+    c.send("a stranger submits the operation without the custody witness", [{"w": "stranger", "scope": "Global"}], x.core,
+           "executeUserOp", [H(account), x.op(target, "transfer", [H(proxy), H(buyer), I(1000), B(b"")],
+                                                x.nonce(account, 1), validator_id=1)], expect="FAULT")
+    c.check(x.sequence(account, 1) == 1, "the refused submission consumed no nonce")
+    c.send("a second createAccount for the same identity", [{"w": "owner", "scope": "Global"}], x.core, "createAccount",
+           [H(account), H(owner), B(b"source-custody"), I(RECOVERY_TIMELOCK_MS), A()],
+           expect="FAULT", expect_text="Account already exists")
+    return {"account": account, "profile": profile["profile"]}
 
 
-def sc_source_verifier_callback(c, x):
-    """SRC-04 the verifier validateSignature callback: the DEC-SA-1 fault, or execution after the profile."""
-    c.records.append({"scenario": "SRC-04 current source core: verifier callback (validateSignature)"})
-    verifier, target = c.contracts["WebAuthnVerifier"], c.contracts["MockTransferTarget"]
-    key = v.P256Key(x.workdir, "source-p256")
-    account, proxy = x.register("source-p256", verifier=verifier, params=key.compressed)
-    args = [H(proxy), H(c.hashes["buyer"]), I(1000), B(b"")]
-    payload = c.read(verifier, "getPayload", H(account), H(target), S("transfer"), A(*args), I(0), I(FAR_DEADLINE))
-    op = x.op(target, "transfer", args, 0, sig=key.sign(payload))
-    if x.source_profile["profile"] == srcbuild.PROFILE_SYSCALL_PRESENT:
-        rec = c.send("verifier-signed operation on the source core (expected DEC-SA-1 fault)", [{"w": "relay"}],
-                     x.core, "executeUserOp", [H(account), op], expect="FAULT")
-        c.check(SOURCE_FAULT_MARKER in (rec.get("exception") or ""),
-                "DEC-SA-1 expected fault: the verifier-signed operation faults on a published node")
-        c.check(str(srcbuild.INTEROP_HASH) in (rec.get("exception") or ""),
-                "the fault names the unregistered interop 1371299780")
-        c.check(x.nonce(account) == 0, "the fault left the account nonce unconsumed")
-    else:
-        rec = c.send("verifier-signed operation on the source core (public profile landed)", [{"w": "relay"}],
-                     x.core, "executeUserOp", [H(account), op])
-        c.check(rec["outcome"] == "HALT", "DEC-SA-1 cleared: the verifier-signed operation HALTed")
-        c.check(x.nonce(account) == 1, "the verifier path advanced the nonce")
-    return {}
+def sc_v4_session_key(c, x):
+    """SRC-03 a session-key validator installed through the 24 h configuration intent."""
+    c.records.append({"scenario": "SRC-03 current source core: 24 h intent installs a session key"})
+    target, validator, session = (c.contracts[n] for n in ("MockTransferTarget", "NeoWitnessValidator", "SessionKeyValidator"))
+    owner, buyer = c.hashes["owner"], c.hashes["buyer"]
+    key = v.P256Key(x.workdir, "source-v4-session")
+    account = x.create("source-session", actions=[
+        install_action(c, validator, MODULE_TYPE_VALIDATOR, [S("setSigners"), A(H(owner)), I(1)])])
+    proxy = x.proxy(account)
+    grant_config = [S("setSessionKey"), B(key.compressed), H(target), S("transfer"),
+                    I(c.now_ms() + 7 * DAY * 1000), I(1000), S("source session key")]
+    install = install_action(c, session, MODULE_TYPE_VALIDATOR, grant_config)
+    x.apply("install the session key validator", "owner", account, [install])
+    c.check(x.module_ids(account) == [1, 2], "the intent install allocated module 2 after the delayed confirm")
+    module_id = 2
+    grant = c.read(session, "getGrantDigest", H(account), I(module_id))
+    c.check(isinstance(grant, bytes) and len(grant) == 32, "the session grant digest is recorded")
+    args = [H(proxy), H(buyer), I(500), B(b"")]
+    unsigned = x.op(target, "transfer", args, x.nonce(account, module_id), validator_id=module_id)
+    digest = x.digest(account, unsigned)
+    c.check(isinstance(digest, bytes) and len(digest) == 32, "the core issues a 32-byte operation digest")
+    signed = x.op(target, "transfer", args, x.nonce(account, module_id), validator_id=module_id, signature=grant + key.sign(digest))
+    c.send("session-key-signed operation submitted by the relay", [{"w": "relay", "scope": "Global"}], x.core, "executeUserOp",
+           [H(account), signed])
+    c.check(x.sequence(account, module_id) == 1, "the session key advanced its own nonce channel")
+    c.send("the same operation signed with a foreign key", [{"w": "relay", "scope": "Global"}], x.core, "executeUserOp",
+           [H(account), x.op(target, "transfer", args, x.nonce(account, module_id), validator_id=module_id,
+                            signature=grant + b"\x00" * 64)], expect="FAULT")
+    c.check(x.sequence(account, module_id) == 1, "the refused signature consumed no nonce")
+    c.send("a session key beyond its granted target", [{"w": "relay", "scope": "Global"}], x.core, "executeUserOp",
+           [H(account), x.op(GAS_HASH, "transfer", [H(proxy), H(buyer), I(GAS), B(b"")], x.nonce(account, module_id),
+                            validator_id=module_id, signature=grant + key.sign(digest))], expect="FAULT")
+    c.check(x.sequence(account, module_id) == 1, "the out-of-grant target consumed no nonce")
+    return {"account": account, "moduleId": module_id}
 
 
-def sc_source_verifier_proxy_witness(c, x):
-    """SRC-03b the verifier-backed proxy witness: a P-256 owner signs a GAS transfer out of the proxy."""
-    c.records.append({"scenario": "SRC-03b current source core: verifier-backed proxy witness (P-256)"})
-    core, verifier = x.core, c.contracts["WebAuthnVerifier"]
-    key = v.P256Key(x.workdir, "source-p256-proxy")
-    account, proxy = x.register("source-p256-proxy", verifier=verifier, params=key.compressed)
-    buyer = c.hashes["buyer"]
-    c.send("fund the proxy address with 5 GAS", [{"w": "owner"}], GAS_HASH, "transfer",
-           [H(c.hashes["owner"]), H(proxy), I(5 * GAS), B(b"")])
-    c.send("admin sets the verify-scope target to GAS", [{"w": "deployer"}], core, "setVerifyScopeTarget",
-           [H(account), H(GAS_HASH)])
-    args = [H(proxy), H(buyer), I(GAS), B(b"")]
-    payload = c.read(verifier, "getPayload", H(account), H(GAS_HASH), S("transfer"), A(*args), I(0), I(FAR_DEADLINE))
-    op = x.op(GAS_HASH, "transfer", args, 0, sig=key.sign(payload))
-    psig = {"proxy": proxy, "core": core, "target": GAS_HASH, "script": proxy_script_for(account, core)}
-    before_buyer, before_proxy = c.gas(buyer), c.gas(proxy)
-    if x.source_profile["profile"] == srcbuild.PROFILE_SYSCALL_PRESENT:
-        rec = c.send("verifier-backed proxy-witness GAS transfer (expected DEC-SA-1 fault)", [{"w": "relay"}, psig],
-                     core, "executeUserOp", [H(account), op], expect="FAULT")
-        c.check(SOURCE_FAULT_MARKER in (rec.get("exception") or ""),
-                "DEC-SA-1 expected fault: the verifier-backed proxy-witness operation faults on a published node")
-        c.check(str(srcbuild.INTEROP_HASH) in (rec.get("exception") or ""),
-                "the fault names the unregistered interop 1371299780")
-        c.check(c.gas(buyer) == before_buyer and c.gas(proxy) == before_proxy and x.nonce(account) == 0,
-                "no GAS moved and the nonce is unchanged")
-    else:
-        c.send("verifier-backed proxy-witness GAS transfer (public profile landed)", [{"w": "relay"}, psig],
-               core, "executeUserOp", [H(account), op])
-        c.check(c.gas(buyer) - before_buyer == GAS and before_proxy - c.gas(proxy) == GAS,
-                "buyer +1 GAS, proxy -1 GAS exactly")
-        c.check(x.nonce(account) == 1, "the verifier-backed proxy witness advanced the nonce")
-    return {}
+def sc_v4_hook_policy(c, x):
+    """SRC-04 a hook installed through the intent path enforces its policy on execution."""
+    c.records.append({"scenario": "SRC-04 current source core: hook policy via the intent path"})
+    target, validator, hook = (c.contracts[n] for n in ("MockTransferTarget", "NeoWitnessValidator", "WhitelistHook"))
+    owner, buyer = c.hashes["owner"], c.hashes["buyer"]
+    account = x.create("source-hook", actions=[
+        install_action(c, validator, MODULE_TYPE_VALIDATOR, [S("setSigners"), A(H(owner)), I(1)])])
+    proxy = x.proxy(account)
+    install = install_action(c, hook, MODULE_TYPE_HOOK, [S("allowTarget"), H(target)])
+    x.apply("install the whitelist hook", "owner", account, [install])
+    c.check(x.module_ids(account, "hook") == [2], "the hook instance was allocated module 2")
+    c.check(c.read(x.core, "getHookOrder", H(account))[0] == [2], "the hook joined the core-owned hook order")
+    c.send("an operation to the allowlisted target executes", [{"w": "owner", "scope": "Global"}], x.core, "executeUserOp",
+           [H(account), x.op(target, "transfer", [H(proxy), H(buyer), I(1000), B(b"")], x.nonce(account, 1), validator_id=1)])
+    c.check(x.sequence(account, 1) == 1, "the allowlisted operation advanced the nonce")
+    c.send("an operation to another target is blocked by the hook", [{"w": "owner", "scope": "Global"}], x.core, "executeUserOp",
+           [H(account), x.op(GAS_HASH, "transfer", [H(proxy), H(buyer), I(GAS), B(b"")], x.nonce(account, 1), validator_id=1)],
+           expect="FAULT", expect_text="not in whitelist")
+    c.check(x.sequence(account, 1) == 1, "the blocked operation consumed no nonce")
+    x.apply("allow the asset target too", "owner", account, [configure_action(2, [S("allowTarget"), H(GAS_HASH)])])
+    c.send("the newly allowlisted target executes", [{"w": "owner", "scope": "Global"}], x.core, "executeUserOp",
+           [H(account), x.op(GAS_HASH, "transfer", [H(proxy), H(buyer), I(GAS), B(b"")], x.nonce(account, 1), validator_id=1)])
+    c.check(x.sequence(account, 1) == 2, "the reconfigured hook allowed the operation")
+    return {"account": account}
 
 
-def sc_source_proxy_relay(c, x):
-    """Fresh-source direct GAS transfer and explicit rejection of unsafe sponsored proxy envelopes."""
-    if x.source_profile["profile"] == srcbuild.PROFILE_SYSCALL_PRESENT:
-        c.check(True, "public-node relay proof is unavailable for the private-syscall profile")
-        return {"supported": False}
-    core, verifier, pm = x.core, c.contracts["WebAuthnVerifier"], c.contracts["SAPaymaster"]
-    key = v.P256Key(x.workdir, "source-relay-proxy")
-    account, proxy = x.register("source-relay-proxy", verifier=verifier, params=key.compressed)
-    buyer, sponsor = c.hashes["buyer"], c.hashes["sponsor"]
-    c.send("fund source relay proxy with 10 GAS", [{"w": "owner"}], GAS_HASH, "transfer", [H(c.hashes["owner"]), H(proxy), I(10 * GAS), B(b"")])
-    c.send("configure source relay proxy GAS scope", [{"w": "deployer"}], core, "setVerifyScopeTarget", [H(account), H(GAS_HASH)])
-    c.send("fund source relay sponsor deposit", [{"w": "sponsor"}], GAS_HASH, "transfer", [H(sponsor), H(pm), I(100 * GAS), B(b"")])
-    c.send("configure source relay sponsorship policy", [{"w": "sponsor"}], pm, "setPolicy", [H(account), H(GAS_HASH), S("transfer"), I(30 * GAS), I(0), I(0), I(0)])
-    ar = [H(proxy), H(buyer), I(GAS), B(b"")]
-    def operation(nonce):
-        payload = c.read(verifier, "getPayload", H(account), H(GAS_HASH), S("transfer"), A(*ar), I(nonce), I(FAR_DEADLINE))
-        return x.op(GAS_HASH, "transfer", ar, nonce, sig=key.sign(payload))
-    def invocation(nonce, sponsored=False):
-        op = json.loads(json.dumps(operation(nonce)))
-        op["type"] = "Struct"
-        # rpcx ByteArray values are base64; the route wire protocol carries hex.
-        op["value"][-1]["value"] = "0x" + base64.b64decode(op["value"][-1]["value"]).hex()
-        op["value"][2]["value"][-1]["value"] = "0x"
-        return {"scriptHash": core, "operation": "executeSponsoredUserOp" if sponsored else "executeUserOp",
-                "args": [H(account), op] + ([H(pm), H(sponsor), I(30 * GAS)] if sponsored else [])}
-    bad = invocation(0)
-    bad["args"][1]["value"][-1]["value"] = "0x" + "00" * 64
-    fx = {"rpcUrl": f"http://127.0.0.1:{c.port}", "core": core, "accountId": account, "proxy": proxy,
-          "buyer": buyer, "owner": c.hashes["owner"], "relay": c.hashes["relay"], "gas": GAS_HASH,
-          "paymaster": pm, "sponsor": sponsor, "amount": GAS,
-          "invocations": {"invalidSignature": bad, "direct": invocation(0), "sponsored": invocation(1, True)}}
-    fixture = x.workdir / "source-proxy-relay.json"
-    fixture.write_text(json.dumps(fx))
-    env = {k: os.environ[k] for k in ("PATH", "LANG", "TMPDIR") if k in os.environ}
-    env["RELAY_PRIVATE_KEY_HEX"] = c.keys["relay"].der.read_bytes()[7:39].hex()
-    done = subprocess.run(["node", str(SA / "scripts/localchain/source_proxy_relay_probe.mjs"), str(fixture)],
-                          capture_output=True, text=True, env=env, timeout=180)
-    if done.returncode:
-        raise Fail("source relay probe failed: " + done.stderr[-500:])
-    proof = json.loads(done.stdout)
-    x.source_proxy_relay = proof
-    for case in proof["cases"]:
-        if case.get("execution"):
-            c.records.append({"step": "source proxy relay " + case["name"], "outcome": case["execution"]["vmstate"], "txid": case["response"].get("txid")})
-    c.check(not _source_proxy_relay_failures(proof), "source relay proof binds invalid-signature and fee refusals, direct transfer, nonce, owner and fee payer")
-    c.check(proof["cases"][1]["execution"]["vmstate"] == "HALT" and proof["cases"][2]["response"].get("txid") is None, "direct proxy transfer HALTed and sponsored relay transfer was refused")
-    psig = {"proxy": proxy, "core": core, "target": GAS_HASH, "script": proxy_script_for(account, core)}
-    before = (c.gas(proxy), c.gas(buyer), x.nonce(account), c.read(pm, "getSponsorDeposit", H(sponsor)))
-    c.send("correct sponsored proxy envelope remains refused", [{"w": "relay"}, psig], core, "executeSponsoredUserOp",
-           [H(account), operation(1), H(pm), H(sponsor), I(GAS)], expect="REJECT")
-    c.send("wrong account in sponsored proxy envelope", [{"w": "relay"}, psig], core, "executeSponsoredUserOp",
-           [H(c.hashes["stranger"]), operation(1), H(pm), H(sponsor), I(GAS)], expect="REJECT")
-    c.send("wrong scope in sponsored proxy envelope", [{"w": "relay"}, dict(psig, target=NEO_HASH)], core, "executeSponsoredUserOp",
-           [H(account), operation(1), H(pm), H(sponsor), I(GAS)], expect="REJECT")
-    c.check(before == (c.gas(proxy), c.gas(buyer), x.nonce(account), c.read(pm, "getSponsorDeposit", H(sponsor))),
-            "all sponsored proxy envelopes are rejected by the node and leave assets, nonce and deposit unchanged")
-    return {"supported": True}
-
-
-def _proxy_data_prefix_only(script):
-    cursor = 0
-    while cursor < len(script):
-        op = script[cursor]
-        if op in srcbuild._PUSHDATA_PREFIX:
-            width = srcbuild._PUSHDATA_PREFIX[op]
-            if cursor + 1 + width > len(script):
-                return False
-            size = 1 + width + int.from_bytes(script[cursor + 1:cursor + 1 + width], "little")
-        elif 0 <= op <= 5:
-            size = 1 + srcbuild._OPERAND_SIZE[op]
-        elif op in (8, 9, 11, 190, 191, 192, 194, 197, 200) or 15 <= op <= 32:
-            size = 1
-        elif op == 219:
-            size = 2
-        else:
-            return False
-        cursor += size
-        if cursor > len(script):
-            return False
-    return True
-
-
-def _source_proxy_relay_failures(proof):
-    """Load-bearing chain readback; accepting a txid or a green named check alone is insufficient."""
-    errors = []
-    try:
-        proxy_bytes = proxy_script_for(proof["accountId"], proof["core"])
-        if proof["proxy"] != "0x" + v.hash160(proxy_bytes)[::-1].hex():
-            errors.append("proxy identity derived from this core and account")
-        cases = proof["cases"]
-        if [r["name"] for r in cases] != ["invalidSignature", "direct", "sponsored"]:
-            return ["proxy relay case inventory"]
-        bad = cases[0]
-        if bad["response"].get("txid") or bad["execution"] is not None or bad["before"] != bad["after"] or bad["response"].get("vmState") != "FAULT":
-            errors.append("invalid signature must refuse without state change")
-        refusals = proof["refusals"]
-        if [row["name"] for row in refusals] != ["missingReserve", "insufficientReserve", "networkFeeCeiling"]:
-            errors.append("proxy reserve refusal inventory")
-        for row, marker in zip(refusals, ("SA_RELAY_PROXY_NETWORK_FEE_RESERVE", "InsufficientFunds", "SA_RELAY_MAX_NETWORK_FEE")):
-            if row["status"] != 502 or row["response"].get("txid") or row["execution"] is not None or row["before"] != row["after"] or marker not in row["response"].get("rawMessage", ""):
-                errors.append(row["name"] + " refuses without fee or nonce consumption")
-        amount = int(proof["amount"])
-        if amount <= 0:
-            errors.append("positive transfer amount")
-        denied = cases[2]
-        if denied["status"] != 502 or denied["response"].get("txid") or denied["execution"] is not None or denied["before"] != denied["after"] or "Sponsored proxy transfers are not supported" not in denied["response"].get("rawMessage", ""):
-            errors.append("sponsored proxy relay is explicitly refused without state change")
-        for row in cases[1:2]:
-            before, after, response, transaction = row["before"], row["after"], row["response"], row["transaction"]
-            if row["status"] != 200 or row["execution"]["vmstate"] != "HALT" or transaction["hash"] != response["txid"]:
-                errors.append(row["name"] + " persisted HALT")
-            if int(after["buyer"]) - int(before["buyer"]) != amount or int(before["proxy"]) - int(after["proxy"]) != amount:
-                errors.append(row["name"] + " exact asset movement")
-            if int(after["nonce"]) != int(before["nonce"]) + 1 or after["owner"] != before["owner"]:
-                errors.append(row["name"] + " nonce and owner unchanged")
-            method = "executeSponsoredUserOp" if row["name"] == "sponsored" else "executeUserOp"
-            tail = b"\x0c\x14" + v.hash_le(proof["accountId"]) + bytes([0x15 if row["name"] == "sponsored" else 0x12, 0xC0, 0x1F, 0x0C, len(method)]) + method.encode() + b"\x0c\x14" + v.hash_le(proof["core"]) + bytes.fromhex("41627d5b52")
-            application_script = base64.b64decode(transaction["script"])
-            if not application_script.endswith(tail) or not _proxy_data_prefix_only(application_script[:-len(tail)]):
-                errors.append(row["name"] + " exact core/account execution envelope")
-            signers = transaction["signers"]
-            if len(signers) != 2 or signers[0]["account"] != proof["relay"] or signers[1]["account"] != proof["proxy"]:
-                errors.append(row["name"] + " exact fee payer and proxy signers")
-            if signers[0]["scopes"] != "CalledByEntry" or signers[1]["scopes"] != "WitnessRules" or signers[1]["rules"] != v.sa_proxy_rules(proof["core"], GAS_HASH):
-                errors.append(row["name"] + " exact witness scopes")
-            witnesses = transaction["witnesses"]
-            if len(witnesses) != 2 or witnesses[1]["invocation"] != "" or base64.b64decode(witnesses[1]["verification"]) != proxy_script_for(proof["accountId"], proof["core"]):
-                errors.append(row["name"] + " proxy script identity")
-            paid = int(response["systemFee"]) + int(response["networkFee"])
-            if paid <= 0 or int(transaction["sysfee"]) + int(transaction["netfee"]) != paid:
-                errors.append(row["name"] + " persisted fee accounting")
-            debit = int(before["deposit"]) - int(after["deposit"])
-            if debit != 0 or int(before["relay"]) - int(after["relay"]) != paid:
-                errors.append("direct fee payer balance")
-        if cases[0]["after"] != cases[1]["before"] or cases[1]["after"] != cases[2]["before"]:
-            errors.append("proxy relay causal state continuity")
-    except (KeyError, TypeError, ValueError, IndexError, AttributeError):
-        errors.append("complete typed proxy relay evidence")
-    return errors
-
-
-def _source_account_snapshot(c, x, account, proxy):
-    return {"proxy": c.hash_of(x.core, "getProxyScriptHash", H(account)),
-            "owner": c.hash_of(x.core, "getBackupOwner", H(account)),
-            "verifier": c.hash_of(x.core, "getVerifier", H(account)),
-            "hook": c.hash_of(x.core, "getHook", H(account)),
-            "mode": c.read(x.core, "isOwnerOnlyRecovery", H(account)),
-            "escape": str(c.read(x.core, "getEscapeTriggeredAt", H(account))),
-            "nonce": str(x.nonce(account)), "proxyGas": str(c.gas(proxy)),
-            "buyerGas": str(c.gas("buyer"))}
-
-
-def sc_source_owner_only_recovery(c, x):
-    """SRC-10 signed callback-free recovery after a certified hook rejects ordinary cleanup."""
-    verifier, hook, target = (c.contracts[n] for n in ("WebAuthnVerifier", "WhitelistHook", "MockTransferTarget"))
-    key = v.P256Key(x.workdir, "source-recovery-p256")
-    account, proxy = x.register("source-owner-only", verifier=verifier, params=key.compressed, hook=hook)
-    owner = c.hashes["owner"]
-    c.send("fund the recovery account proxy", [{"w": "owner"}], GAS_HASH, "transfer",
-           [H(owner), H(proxy), I(10 * GAS), B(b"")])
-    c.send("configure the recovery account proxy GAS scope", [{"w": "deployer"}], x.core,
-           "setVerifyScopeTarget", [H(account), H(GAS_HASH)])
-    c.send("hook admin proposes a different authorized core", [{"w": "deployer"}], hook,
-           "proposeAuthorizedCore", [H(target)])
-    c.send("backup owner initiates source recovery", [{"w": "owner"}], x.core, "initiateEscape", [H(account)])
-    before = _source_account_snapshot(c, x, account, proxy)
-    c.check(before["verifier"] == verifier and before["hook"] == hook and before["mode"] is False,
-            "recovery account has a verifier and hook before owner-only recovery")
-    deadline = int(before["escape"]) + x.accounts["source-owner-only"]["timelock"] * 1000
-    early = c.send("owner-only recovery before maturity", [{"w": "owner"}], x.core,
-                   "finalizeEscapeToOwner", [H(account)], expect="FAULT", expect_text="Timelock active")
-    c.check(c.now_ms() < deadline and _source_account_snapshot(c, x, account, proxy) == before,
-            "premature owner-only recovery faults and changes no account or asset state")
-    _, mature = c.jump_to(deadline + 60_000)
-    c.send("hook admin confirms its matured authorized-core replacement", [{"w": "deployer"}], hook,
-           "confirmAuthorizedCore", [H(target)])
-    c.check(mature >= deadline and c.hash_of(hook, "authorizedCore") == target,
-            "chain maturity and old hook core mismatch are read back")
-    stranger = c.send("stranger cannot finalize owner-only recovery", [{"w": "stranger"}], x.core,
-                      "finalizeEscapeToOwner", [H(account)], expect="FAULT", expect_text="Only backup owner can finalize")
-    legacy = c.send("ordinary escape fails at old hook cleanup", [{"w": "owner"}], x.core,
-                    "finalizeEscape", [H(account), H(ZERO)], expect="FAULT", expect_text="Unauthorized caller")
-    after_legacy = _source_account_snapshot(c, x, account, proxy)
-    old_key = c.read(verifier, "getPublicKey", H(account)).hex()
-    c.check(after_legacy == before and old_key == key.compressed.hex(),
-            "ordinary cleanup failure rolls back verifier cleanup, pointers, nonce and assets")
-    recovered = c.send("signed callback-free owner-only escape", [{"w": "owner"}], x.core,
-                       "finalizeEscapeToOwner", [H(account)])
-    after = _source_account_snapshot(c, x, account, proxy)
-    retained_key = c.read(verifier, "getPublicKey", H(account)).hex()
-    c.check(recovered["outcome"] == "HALT" and "OwnerOnlyRecoveryFinalized" in recovered["events"],
-            "signed owner-only finalization HALTs and emits its recovery-mode event")
-    c.check(after["mode"] is True and after["verifier"] == ZERO and after["hook"] == ZERO and after["escape"] == "0",
-            "mode query confirms permanent owner-only state with no active modules or escape")
-    c.check(after["owner"] == owner and after["proxy"] == before["proxy"] and after["nonce"] == before["nonce"]
-            and after["proxyGas"] == before["proxyGas"] and after["buyerGas"] == before["buyerGas"],
-            "recovery preserves backup owner, account proxy, nonce and all observed assets")
-    c.check(retained_key == old_key,
-            "callback-free recovery leaves old verifier storage untouched instead of invoking cleanup")
-    op = x.op(target, "transfer", [H(proxy), H(c.hashes["buyer"]), I(1000), B(b"")], int(after["nonce"]))
-    owner_exec = c.send("owner executes the recovered account without a plugin", [{"w": "owner"}], x.core,
-                        "executeUserOp", [H(account), op])
-    after_owner = _source_account_snapshot(c, x, account, proxy)
-    c.check(owner_exec["outcome"] == "HALT" and int(after_owner["nonce"]) == int(before["nonce"]) + 1,
-            "backup-owner witness executes without the detached verifier and hook")
-    proxy_signer = {"proxy": proxy, "core": x.core, "target": GAS_HASH, "script": proxy_script_for(account, x.core)}
-    proxy_exec = c.send("owner spends proxy GAS after callback-free recovery", [{"w": "owner"}, proxy_signer], x.core,
-                        "executeUserOp", [H(account), x.op(GAS_HASH, "transfer",
-                            [H(proxy), H(c.hashes["buyer"]), I(GAS), B(b"")], int(after_owner["nonce"]))])
-    final = _source_account_snapshot(c, x, account, proxy)
-    c.check(proxy_exec["outcome"] == "HALT" and int(final["proxyGas"]) == int(before["proxyGas"]) - GAS
-            and int(final["buyerGas"]) == int(before["buyerGas"]) + GAS and int(final["nonce"]) == int(before["nonce"]) + 2,
-            "the recovered proxy witness transfers exactly one GAS and advances the original nonce cursor")
-    refusals = [early, stranger, legacy]
-    for method, module in (("updateVerifier", verifier), ("updateHook", hook)):
-        args = [H(account), H(module)] + ([B(key.compressed)] if method == "updateVerifier" else [])
-        refusals.append(c.send("owner-only rejects " + method, [{"w": "owner"}], x.core, method, args,
-                               expect="FAULT", expect_text="Owner-only recovery is permanent"))
-    c.check(_source_account_snapshot(c, x, account, proxy) == final,
-            "permanent owner-only mode refuses both verifier and hook reinstallation without state changes")
-    refusals.append(c.send("stranger cannot execute the recovered account", [{"w": "stranger"}], x.core,
-                          "executeUserOp", [H(account), x.op(target, "symbol", [], int(final["nonce"]))],
-                          expect="FAULT", expect_text="Native witness failed"))
-    c.check(_source_account_snapshot(c, x, account, proxy) == final,
-            "a stranger still cannot execute or advance the recovered account nonce")
-    x.source_owner_recovery = {
-        "core": x.core, "accountId": account, "proxy": proxy, "owner": owner,
-        "verifier": verifier, "hook": hook, "reboundCore": target,
-        "deadlineMs": str(deadline), "matureAtMs": str(mature),
-        "escapeTimelockSeconds": x.accounts["source-owner-only"]["timelock"],
-        "hookAuthorizedCore": c.hash_of(hook, "authorizedCore"),
-        "before": before, "afterLegacy": after_legacy, "afterRecovery": after,
-        "afterOwnerExecution": after_owner, "final": final, "oldPublicKey": old_key, "retainedPublicKey": retained_key,
-        "refusals": [{k: row.get(k) for k in ("step", "outcome", "exception")} for row in refusals],
-        "transactions": [{"kind": kind, "txid": row["txid"], "transaction": c.rpc("getrawtransaction", [row["txid"], 1]),
-                           "execution": c.rpc("getapplicationlog", [row["txid"]])["executions"][0]}
-                         for kind, row in (("recovery", recovered), ("owner", owner_exec), ("proxy", proxy_exec))]}
-    return {"accountId": account, "mode": final["mode"]}
-
-
-def sc_source_sponsored_transaction_cap(c, x):
-    """SRC-08 two sponsored entrypoints in one real signed transaction share its fee budget."""
-    account, proxy = x.register("source-sponsor-cap")
-    pm, target, sponsor = c.contracts["SAPaymaster"], c.contracts["MockTransferTarget"], c.hashes["sponsor"]
-    c.send("sponsor deposits GAS for the source aggregate-cap scenario", [{"w": "sponsor"}], GAS_HASH,
-           "transfer", [H(sponsor), H(pm), I(500 * GAS), B(b"")])
-    c.send("sponsor authorizes source account symbol calls", [{"w": "sponsor"}], pm, "setPolicy",
-           [H(account), H(target), S("symbol"), I(200 * GAS), I(400 * GAS), I(400 * GAS), I(0)])
-    signers = [{"w": "relay"}, {"w": "owner"}]
-    sj = [c._signer_json(signer) for signer in signers]
-    requests = [GAS // 2, 100 * GAS]
-    operations = [x.op(target, "symbol", [], nonce) for nonce in (0, 1)]
-    fragments = []
-    for method, op, requested in (("executeSponsoredUserOp", operations[0], requests[0]),
-                                  ("executeSponsoredUserOps", A(operations[1]), requests[1])):
-        result = c.rpc("invokefunction", [x.core, method, [H(account), op, H(pm), H(sponsor), I(requested)], sj])
-        fragment = base64.b64decode(result["script"], validate=True)
-        if not fragment.endswith(bytes.fromhex("41627d5b52")):
-            raise Fail("RPC invocation fragment must end at the core Contract.Call")
-        fragments.append(fragment)
-    # DROP the first result; the second is the complete batch result. Price this
-    # exact two-call script, not the single-call probe used by Rx.send.
-    script = fragments[0] + bytes([0x45]) + fragments[1]
-    encoded = base64.b64encode(script).decode()
-    probe = c.rpc("invokescript", [encoded, sj])
-    if probe.get("state") != "HALT":
-        raise Fail("complete sponsored transaction estimation faulted: " + str(probe.get("exception")))
-    sysfee, netfee = int(probe["gasconsumed"]) + 3 * GAS, GAS
-    paid = sysfee + netfee
-    c.check(requests[0] < paid < sum(requests),
-            "the complete two-entrypoint sponsored script prices with a fee between its partial and total requests")
-    before = {"deposit": str(c.read(pm, "getSponsorDeposit", H(sponsor))), "relay": str(c.gas("relay")),
-              "nonce": str(x.nonce(account))}
-    rec = {"step": "signed single-plus-batch sponsored transaction", "call": "two sponsored entrypoints",
-           "signers": ["relay", "owner"], "simulation": probe["state"]}
-    c.records.append(rec)
-    c._broadcast(rec, signers, sj, script, sysfee, netfee)
-    transaction = c.rpc("getrawtransaction", [rec["txid"], 1])
-    execution = c.rpc("getapplicationlog", [rec["txid"]])["executions"][0]
-    reimbursed = [n for n in execution.get("notifications", []) if n.get("eventname") == "Reimbursed"
-                  and n.get("contract") == pm]
-    amounts = [int(n["state"]["value"][3]["value"]) for n in reimbursed]
-    after = {"deposit": str(c.read(pm, "getSponsorDeposit", H(sponsor))), "relay": str(c.gas("relay")),
-             "nonce": str(x.nonce(account))}
-    actual_cost = int(transaction["sysfee"]) + int(transaction["netfee"])
-    c.check(rec["outcome"] == "HALT" and len(amounts) == 2,
-            "one signed transaction HALTs both sponsored entrypoints and emits two reimbursements")
-    c.check(actual_cost == paid and amounts == [requests[0], actual_cost - requests[0]],
-            "the second reimbursement receives only the first invocation's unused transaction fee budget")
-    c.check(sum(amounts) == actual_cost and sum(amounts) < sum(requests),
-            "aggregate reimbursement equals actual transaction fees and cannot repay them twice")
-    c.check(int(before["deposit"]) - int(after["deposit"]) == actual_cost and after["relay"] == before["relay"],
-            "sponsor debit equals actual fees and the relay is made whole without profit")
-    c.check(int(after["nonce"]) == int(before["nonce"]) + 2,
-            "single-plus-batch sponsorship advances the account nonce exactly twice")
-    c.check(transaction["script"] == encoded and probe["state"] == "HALT",
-            "the signed persisted sponsored transaction uses the complete script that was estimated")
-    x.source_sponsorship_cap = {"core": x.core, "accountId": account, "paymaster": pm, "sponsor": sponsor,
-                               "relay": c.hashes["relay"], "owner": c.hashes["owner"], "before": before, "after": after,
-                               "requests": [str(n) for n in requests], "script": encoded, "estimate": probe,
-                               "txid": rec["txid"], "transaction": transaction, "execution": execution, "amounts": [str(n) for n in amounts]}
-    rec.pop("notifications", None)
-    return {"actualFee": str(actual_cost), "aggregateReimbursement": str(sum(amounts))}
+def sc_v4_owner_only_recovery(c, x):
+    """SRC-10 the owner-only recovery policy, its 7-day timelock and the custody rotation."""
+    c.records.append({"scenario": "SRC-10 current source recovery: owner-only policy and custody rotation"})
+    target, validator = c.contracts["MockTransferTarget"], c.contracts["NeoWitnessValidator"]
+    owner, buyer = c.hashes["owner"], c.hashes["buyer"]
+    account = x.create("source-recovery", actions=[
+        install_action(c, validator, MODULE_TYPE_VALIDATOR, [S("setSigners"), A(H(owner)), I(1)])])
+    proxy = x.proxy(account)
+    x.apply("set the owner-only recovery policy", "owner", account,
+            [A(I(8), H(owner), I(RECOVERY_TIMELOCK_MS), BOOL(True))])
+    c.check(c.read(x.core, "isOwnerOnlyRecovery", H(account)) is True, "the account is permanently owner-only")
+    c.send("a module change is rejected up front on an owner-only account", [{"w": "owner", "scope": "Global"}], x.core,
+           "proposeConfiguration",
+           [H(account), A(install_action(c, c.contracts["WhitelistHook"], MODULE_TYPE_HOOK, [])), A()], expect="FAULT")
+    c.send("the witness validator still executes before recovery", [{"w": "owner", "scope": "Global"}], x.core, "executeUserOp",
+           [H(account), x.op(target, "transfer", [H(proxy), H(buyer), I(1000), B(b"")], x.nonce(account, 1), validator_id=1)])
+    epoch_before = x.control(account)["epoch"]
+    c.send("the custody begins recovery to a new custody", [{"w": "owner"}, {"w": "buyer"}], x.core,
+           "beginRecovery", [H(account), H(buyer)])
+    c.send("recovery cannot execute inside its 7-day timelock", [{"w": "relay", "scope": "Global"}], x.core, "executeRecovery",
+           [H(account)], expect="FAULT")
+    c.fastforward(7 * DAY + 3600)
+    c.send("permissionless recovery execution after the timelock", [{"w": "relay", "scope": "Global"}], x.core, "executeRecovery", [H(account)])
+    c.check(x.module_ids(account) == [], "recovery removed every module instance")
+    c.check(c.read(x.core, "getHookOrder", H(account))[0] == [], "recovery emptied the hook order")
+    c.check(c.read(x.core, "getRecoveryStatus", H(account)) == [], "the matured recovery record is consumed")
+    c.check(x.proxy(account) == proxy, "the account proxy address is unchanged by recovery")
+    control = x.control(account)
+    custody = control["custody"]
+    c.check("0x" + custody[::-1].hex() == buyer if isinstance(custody, bytes) else custody == buyer,
+            "recovery rotated the custody to the new owner")
+    c.check(control["epoch"] == epoch_before + 1, "recovery advanced the authority epoch by exactly one")
+    c.check(control["ownerOnly"] is True and c.read(x.core, "isOwnerOnlyRecovery", H(account)) is True,
+            "the owner-only latch survives recovery: it is monotonic and can never be cleared")
+    c.check(c.read(x.core, "getAccount", H(account))[7] is True,
+            "recovery re-enabled the built-in operation route")
+    # An owner-only account can never install a module again, so the rotated custody is proved
+    # through the built-in route: recovery rebuilt the default message subject (custody address)
+    # against the NEW custody, which is the §8/§14 no-usable-subject guarantee.
+    c.send("an owner-only account still refuses a module install after recovery", [{"w": "buyer", "scope": "Global"}],
+           x.core, "proposeConfiguration",
+           [H(account), A(install_action(c, validator, MODULE_TYPE_VALIDATOR, [S("setSigners"), A(H(buyer)), I(1)])), A()],
+           expect="FAULT", expect_text="Owner-only recovery is permanent")
+    args = [H(proxy), H(buyer), I(1000), B(b"")]
+    digest = x.digest(account, x.op(target, "transfer", args, x.nonce(account)))
+    buyer_key = c.keys["buyer"]
+    signed = x.op(target, "transfer", args, x.nonce(account),
+                  signature=builtin_signature(buyer_key.verification, buyer_key.sign(digest)))
+    c.send("the rotated custody executes through the restored built-in route", [{"w": "relay", "scope": "Global"}], x.core,
+           "executeUserOp", [H(account), signed])
+    c.check(x.sequence(account) == 1, "the rebuilt custody subject authorized the built-in operation")
+    c.send("replay of the recovered-account operation", [{"w": "relay", "scope": "Global"}], x.core, "executeUserOp",
+           [H(account), signed], expect="FAULT")
+    owner_key = c.keys["owner"]
+    stale_digest = x.digest(account, x.op(target, "transfer", args, x.nonce(account)))
+    c.send("the previous custody can no longer authorize the recovered account", [{"w": "owner", "scope": "Global"}],
+           x.core, "executeUserOp",
+           [H(account), x.op(target, "transfer", args, x.nonce(account),
+                            signature=builtin_signature(owner_key.verification, owner_key.sign(stale_digest)))],
+           expect="FAULT")
+    c.check(x.sequence(account) == 1, "no refused submission consumed a nonce on the recovered account")
+    return {"account": account}
 
 
 SOURCE_SCENARIOS = [
-    ("SRC-01/02 current source core: build profile and native-owner execution", sc_source_build_and_native),
-    ("SRC-03 current source core: proxy witness without a verifier", sc_source_proxy_witness),
-    ("SRC-04 current source core: verifier callback (validateSignature)", sc_source_verifier_callback),
-    ("SRC-03b current source core: verifier-backed proxy witness (P-256)", sc_source_verifier_proxy_witness),
-    ("SRC-09 current source relay: proxy GAS and sponsored refusal", sc_source_proxy_relay),
-    ("SRC-08 current source sponsorship: shared transaction fee cap", sc_source_sponsored_transaction_cap),
-    ("SRC-10 current source recovery: permanent callback-free owner-only", sc_source_owner_only_recovery),
+    ("SRC-01/02 current source core: build profile and custody-witness execution", sc_v4_build_and_execute),
+    ("SRC-03 current source core: 24 h intent installs a session key", sc_v4_session_key),
+    ("SRC-04 current source core: hook policy via the intent path", sc_v4_hook_policy),
+    ("SRC-10 current source recovery: owner-only policy and custody rotation", sc_v4_owner_only_recovery),
 ]
 
 
@@ -1671,12 +1567,6 @@ def run(variant, workdir, port, receipt_path, plant_mismatch=False):
     c, x = Rx(workdir, port), None
     def save():
         receipt["records"] = c.records if c else []
-        if x is not None and hasattr(x, "source_proxy_relay"):
-            receipt["sourceProxyRelay"] = x.source_proxy_relay
-        if x is not None and hasattr(x, "source_owner_recovery"):
-            receipt["sourceOwnerRecovery"] = x.source_owner_recovery
-        if x is not None and hasattr(x, "source_sponsorship_cap"):
-            receipt["sourceSponsorshipCap"] = x.source_sponsorship_cap
         if x is not None and hasattr(x, "sdkSponsored"):
             receipt["sdkSponsored"] = x.sdkSponsored
         _write_receipt(receipt_path, receipt)
@@ -1727,12 +1617,6 @@ def run_source(workdir, port, receipt_path, source_dir=None):
     c, x = Rx(workdir, port), None
     def save():
         receipt["records"] = c.records if c else []
-        if x is not None and hasattr(x, "source_proxy_relay"):
-            receipt["sourceProxyRelay"] = x.source_proxy_relay
-        if x is not None and hasattr(x, "source_owner_recovery"):
-            receipt["sourceOwnerRecovery"] = x.source_owner_recovery
-        if x is not None and hasattr(x, "source_sponsorship_cap"):
-            receipt["sourceSponsorshipCap"] = x.source_sponsorship_cap
         _write_receipt(receipt_path, receipt)
     def attempt(name, fn, *a):
         _attempt(receipt, c, save, name, fn, *a)
@@ -1753,11 +1637,11 @@ def run_source(workdir, port, receipt_path, source_dir=None):
         artifacts = srcbuild.artifact_snapshot(source_dir)
         receipt["sourceArtifactRuntime"] = {
             "schema": "neoos-sa-custom-source-artifact-runtime/v1",
-            "publicNetwork": False, "scope": "8 deployed artifacts only",
+            "publicNetwork": False, "scope": "%d deployed artifacts only" % len(srcbuild.REQUIRED_ARTIFACTS),
             "artifacts": artifacts, "readback": [],
             "runnerSourceSha256": runner_sources,
         }
-        c, x = bring_up(c, "source", workdir, bin_dir=source_dir)
+        c, x = bring_up_v4(c, workdir, source_dir)
         x.source_profile = profile
         receipt["tool"] = v.ANSI.sub("", subprocess.run([c.neoxp, "--version"], capture_output=True, text=True, env=c.env).stdout).strip()
         receipt["magic"] = c.magic
@@ -1791,7 +1675,6 @@ def run_source(workdir, port, receipt_path, source_dir=None):
             raise Fail("current source artifacts changed during private-chain validation")
         if source_runner_snapshot() != runner_sources:
             raise Fail("source-chain runner or oracle changed during private-chain validation")
-        receipt["sourceProxyRelay"] = getattr(x, "source_proxy_relay", None)
         receipt["status"] = "DONE"
     except Exception as e:
         receipt["status"] = "ABORTED"; receipt["abort"] = f"{type(e).__name__}: {str(e)[:700]}"
@@ -1907,112 +1790,6 @@ def validate_receipt(receipt, expected):
         "transaction outcomes: %d executed, %d simulated faults, %d refusals"
         % (totals["executedTransactions"], totals["simulatedFaults"], totals["nodeRefusals"]))
     return failures
-
-
-
-def _source_recovery_failures(proof):
-    """Require causal RPC state and signed Application evidence, not only named PASS checks."""
-    failures = []
-    try:
-        before, legacy, after, owner, final = [proof[k] for k in
-            ("before", "afterLegacy", "afterRecovery", "afterOwnerExecution", "final")]
-        proxy = "0x" + v.hash160(proxy_script_for(proof["accountId"], proof["core"]))[::-1].hex()
-        if proof["proxy"] != proxy or any(row["proxy"] != proxy or row["owner"] != proof["owner"]
-                                          for row in (before, legacy, after, owner, final)):
-            failures.append("owner-only account identity and owner continuity")
-        if before["verifier"] != proof["verifier"] or before["hook"] != proof["hook"] or before["mode"] is not False:
-            failures.append("owner-only configured initial modules")
-        timelock = proof["escapeTimelockSeconds"]
-        if type(timelock) is not int or not (604800 <= timelock <= 7776000) or \
-                int(proof["deadlineMs"]) != int(before["escape"]) + timelock * 1000 or \
-                int(before["escape"]) <= 0 or int(proof["matureAtMs"]) < int(proof["deadlineMs"]) or legacy != before:
-            failures.append("owner-only matured escape and failed cleanup rollback")
-        if proof["hookAuthorizedCore"] != proof["reboundCore"] or proof["reboundCore"] == proof["core"]:
-            failures.append("owner-only old hook cleanup authorization is actually broken")
-        if any(row["mode"] is not True or row["verifier"] != ZERO or row["hook"] != ZERO or row["escape"] != "0"
-               for row in (after, owner, final)):
-            failures.append("owner-only permanent detached mode")
-        if any(after[k] != before[k] for k in ("nonce", "proxyGas", "buyerGas")):
-            failures.append("owner-only finalization preserves nonce and assets")
-        if int(owner["nonce"]) != int(before["nonce"]) + 1 or int(final["nonce"]) != int(before["nonce"]) + 2:
-            failures.append("owner-only original nonce cursor advances twice")
-        if owner["proxyGas"] != after["proxyGas"] or owner["buyerGas"] != after["buyerGas"] or \
-                int(final["proxyGas"]) != int(before["proxyGas"]) - GAS or int(final["buyerGas"]) != int(before["buyerGas"]) + GAS:
-            failures.append("owner-only actual proxy asset movement")
-        key = bytes.fromhex(proof["oldPublicKey"])
-        if len(key) != 33 or proof["retainedPublicKey"] != proof["oldPublicKey"]:
-            failures.append("owner-only old verifier storage retained without callbacks")
-        refusals = proof["refusals"]
-        markers = ["Timelock active", "Only backup owner can finalize", "Unauthorized caller",
-                   "Owner-only recovery is permanent", "Owner-only recovery is permanent", "Native witness failed"]
-        if len(refusals) != len(markers) or any(row["outcome"] != "FAULT" or marker not in row["exception"]
-                                              for row, marker in zip(refusals, markers)):
-            failures.append("owner-only maturity, owner, cleanup, reinstall and stranger refusals")
-        txs = proof["transactions"]
-        if [row["kind"] for row in txs] != ["recovery", "owner", "proxy"]:
-            failures.append("owner-only ordered signed transactions")
-        for row in txs:
-            tx, execution = row["transaction"], row["execution"]
-            if tx["hash"] != row["txid"] or not isinstance(row["txid"], str) or len(row["txid"]) != 66:
-                failures.append("owner-only persisted transaction identity")
-            expected_signers = [proof["owner"]] + ([proxy] if row["kind"] == "proxy" else [])
-            if [signer["account"] for signer in tx["signers"]] != expected_signers or execution["vmstate"] != "HALT":
-                failures.append("owner-only signed transaction roles and HALT: " + row["kind"])
-            if len(tx["witnesses"]) != len(expected_signers) or any(not witness.get("verification") for witness in tx["witnesses"]):
-                failures.append("owner-only transaction witness inventory")
-            invocation = base64.b64decode(tx["witnesses"][0]["invocation"], validate=True)
-            if len(invocation) != 66 or invocation[:2] != b"\x0c\x40":
-                failures.append("owner-only real P256 owner signature witness")
-            script = base64.b64decode(tx["script"], validate=True)
-            if row["kind"] == "recovery" and b"finalizeEscapeToOwner" not in script:
-                failures.append("owner-only explicit finalization script")
-        events = txs[0]["execution"].get("notifications", [])
-        if not any(event["contract"] == proof["core"] and event["eventname"] == "OwnerOnlyRecoveryFinalized" for event in events):
-            failures.append("owner-only finalization mode event")
-    except (KeyError, TypeError, ValueError, IndexError, AttributeError):
-        failures.append("complete typed owner-only recovery evidence")
-    return failures
-
-
-def _source_sponsorship_cap_failures(proof):
-    failures = []
-    try:
-        tx, execution, before, after = [proof[k] for k in ("transaction", "execution", "before", "after")]
-        fees = int(tx["sysfee"]) + int(tx["netfee"])
-        if tx["hash"] != proof["txid"] or not isinstance(proof["txid"], str) or len(proof["txid"]) != 66:
-            failures.append("sponsorship persisted transaction identity")
-        requests = [int(value) for value in proof["requests"]]
-        amounts = [int(value) for value in proof["amounts"]]
-        if execution["vmstate"] != "HALT" or proof["estimate"]["state"] != "HALT":
-            failures.append("sponsorship complete script estimation and persisted HALT")
-        if tx["script"] != proof["script"]:
-            failures.append("sponsorship exact estimated and persisted script")
-        script = base64.b64decode(proof["script"], validate=True)
-        if script.count(b"executeSponsoredUserOp") != 2 or b"executeSponsoredUserOps" not in script:
-            failures.append("sponsorship single-plus-batch two-entrypoint script")
-        if [row["account"] for row in tx["signers"]] != [proof["relay"], proof["owner"]] or len(tx["witnesses"]) != 2:
-            failures.append("sponsorship independent relay and owner signatures")
-        if len(requests) != 2 or len(amounts) != 2 or not (0 < requests[0] < fees < sum(requests)) or \
-                amounts != [requests[0], fees - requests[0]]:
-            failures.append("sponsorship shared remaining transaction fee allowance")
-        if int(before["deposit"]) - int(after["deposit"]) != fees or before["relay"] != after["relay"]:
-            failures.append("sponsorship deposit debit and no relay profit")
-        if int(after["nonce"]) != int(before["nonce"]) + 2:
-            failures.append("sponsorship two successful original nonce transitions")
-        events = [n for n in execution["notifications"] if n["contract"] == proof["paymaster"] and n["eventname"] == "Reimbursed"]
-        if len(events) != 2:
-            failures.append("sponsorship two authentic paymaster events")
-        else:
-            for index, event in enumerate(events):
-                fields = event["state"]["value"]
-                if [_event_hash(field) for field in fields[:3]] != [proof["sponsor"], proof["accountId"], proof["relay"]] or \
-                        int(fields[3]["value"]) != amounts[index]:
-                    failures.append("sponsorship event roles and remaining fee amount")
-    except (KeyError, TypeError, ValueError, IndexError, AttributeError):
-        failures.append("complete typed shared transaction sponsorship evidence")
-    return failures
-
-
 def validate_source_receipt(receipt, expected):
     """The source variant's gate: the build profile decides which half of the expectations applies."""
     failures = []
@@ -2037,22 +1814,12 @@ def validate_source_receipt(receipt, expected):
         failures.append("the source core digest is recorded")
     elif source["coreSha256"] == expected["deployedCore"]["sha256"]:
         failures.append("the source build is not the deployed artifact")
-    if profile == srcbuild.PROFILE_SYSCALL_ABSENT:
-        proof = receipt.get("sourceProxyRelay") or {}
-        failures += _source_proxy_relay_failures(proof)
-        if proof.get("core") != (receipt.get("contracts") or {}).get("SmartAccount"):
-            failures.append("proxy relay proof uses the deployed source core")
-        if proof.get("amount") != GAS:
-            failures.append("proxy relay proof transfers exactly one GAS")
-    recovery, cap = receipt.get("sourceOwnerRecovery") or {}, receipt.get("sourceSponsorshipCap") or {}
-    failures += _source_recovery_failures(recovery)
-    failures += _source_sponsorship_cap_failures(cap)
+    # The v4 suite proves the module ABI on the deployed source core: the receipt must deploy
+    # exactly the nine public artifacts the roster declares.
     contracts = receipt.get("contracts") or {}
-    if recovery.get("core") != contracts.get("SmartAccount") or cap.get("core") != contracts.get("SmartAccount"):
-        failures.append("recovery and sponsorship use the deployed source core")
-    if recovery.get("verifier") != contracts.get("WebAuthnVerifier") or recovery.get("hook") != contracts.get("WhitelistHook") or \
-            recovery.get("reboundCore") != contracts.get("MockTransferTarget") or cap.get("paymaster") != contracts.get("SAPaymaster"):
-        failures.append("recovery and sponsorship use only the eight certified deployed artifacts")
+    absent = [name for name in srcbuild.REQUIRED_ARTIFACTS if name not in contracts]
+    if absent:
+        failures.append("the receipt deploys the v4 roster: missing " + ", ".join(absent))
     totals = wanted["totals"]
     failures += _inventory_failures(
         receipt, wanted["scenarios"], totals,
@@ -2062,13 +1829,13 @@ def validate_source_receipt(receipt, expected):
 
 
 def validate_source_artifact_runtime(receipt):
-    """Recompute all eight RPC readbacks; declared equality alone is no evidence."""
+    """Recompute all nine RPC readbacks; declared equality alone is no evidence."""
     failures = []
     try:
         evidence = receipt["sourceArtifactRuntime"]
         if evidence["schema"] != "neoos-sa-custom-source-artifact-runtime/v1" or evidence["publicNetwork"] is not False:
             return ["source artifact evidence schema and private network"]
-        if evidence["scope"] != "8 deployed artifacts only":
+        if evidence["scope"] != "%d deployed artifacts only" % len(srcbuild.REQUIRED_ARTIFACTS):
             failures.append("source artifact evidence scope")
         if evidence["runnerSourceSha256"] != source_runner_snapshot():
             failures.append("source runner/oracle hashes match current inputs")
@@ -2085,8 +1852,8 @@ def validate_source_artifact_runtime(receipt):
         for artifact in artifacts:
             name = artifact["contractName"]
             row = remote[name]
-            if (artifact["relativeNefPath"] != name + ".nef"
-                    or artifact["relativeManifestPath"] != name + ".manifest.json"):
+            if (artifact["relativeNefPath"] != srcbuild.MODULE_FILES[name]
+                    or artifact["relativeManifestPath"] != srcbuild.MODULE_FILES[name].replace(".nef", ".manifest.json")):
                 failures.append("source artifact path: " + name)
             for field in ("nefSha256", "manifestSha256", "nefScriptSha256", "manifestCanonicalSha256"):
                 if not hex64(artifact[field]):

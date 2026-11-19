@@ -85,45 +85,17 @@ def nef_with_declared_script_length(declared, body):
     return bytes(out)
 
 
-def proxy_relay_proof():
-    """Independent minimal successful chain observations for mutation gates."""
-    proof = {name: "0x" + char * 40 for name, char in (("core", "1"), ("accountId", "2"), ("proxy", "3"),
-             ("buyer", "4"), ("owner", "5"), ("relay", "6"), ("paymaster", "7"), ("sponsor", "8"))}
-    proof["amount"] = suite.GAS
-    proof["proxy"] = "0x" + suite.v.hash160(suite.proxy_script_for(proof["accountId"], proof["core"]))[::-1].hex()
-    initial = {"proxy": "1000000000", "buyer": "0", "owner": "999", "relay": "999", "nonce": "0", "deposit": "1000"}
-    proof["cases"] = [{"name": "invalidSignature", "before": initial, "after": dict(initial), "status": 200,
-                       "response": {"vmState": "FAULT"}, "execution": None, "transaction": None}]
-    proof["refusals"] = [{"name": name, "before": dict(initial), "after": dict(initial), "status": 502,
-                           "response": {"rawMessage": marker}, "execution": None} for name, marker in (
-                             ("missingReserve", "SA_RELAY_PROXY_NETWORK_FEE_RESERVE"),
-                             ("insufficientReserve", "InsufficientFunds"),
-                             ("networkFeeCeiling", "SA_RELAY_MAX_NETWORK_FEE"))]
-    previous = initial
-    for name in ("direct",):
-        after = dict(previous, proxy=str(int(previous["proxy"]) - proof["amount"]), buyer=str(int(previous["buyer"]) + proof["amount"]),
-                     nonce=str(int(previous["nonce"]) + 1))
-        if name == "direct":
-            after["relay"] = str(int(previous["relay"]) - 120)
-        else:
-            after["deposit"] = str(int(previous["deposit"]) - 120)
-        txid = "0x" + ("ab" if name == "direct" else "cd") * 32
-        method = "executeUserOp" if name == "direct" else "executeSponsoredUserOp"
-        tail = b"\x0c\x14" + suite.v.hash_le(proof["accountId"]) + bytes([0x12 if name == "direct" else 0x15, 0xC0, 0x1F, 0x0C, len(method)]) + method.encode() + b"\x0c\x14" + suite.v.hash_le(proof["core"]) + bytes.fromhex("41627d5b52")
-        tx = {"hash": txid, "sysfee": "100", "netfee": "20", "script": base64.b64encode(tail).decode(),
-              "signers": [{"account": proof["relay"], "scopes": "CalledByEntry"}, {"account": proof["proxy"], "scopes": "WitnessRules", "rules": suite.v.sa_proxy_rules(proof["core"], suite.GAS_HASH)}],
-              "witnesses": [{}, {"invocation": "", "verification": base64.b64encode(suite.proxy_script_for(proof["accountId"], proof["core"])).decode()}]}
-        events = []
-        if name == "sponsored":
-            fields = [{"type": "ByteString", "value": base64.b64encode(suite.v.hash_le(proof[who])).decode()} for who in ("sponsor", "accountId", "relay")]
-            events = [{"contract": proof["paymaster"], "eventname": "Reimbursed", "state": {"type": "Array", "value": fields + [{"type": "Integer", "value": "120"}]}}]
-        proof["cases"].append({"name": name, "before": dict(previous), "after": after, "status": 200,
-                               "response": {"txid": txid, "systemFee": "100", "networkFee": "20"},
-                               "transaction": tx, "execution": {"vmstate": "HALT", "notifications": events}})
-        previous = after
-    proof["cases"].append({"name": "sponsored", "before": dict(previous), "after": dict(previous), "status": 502,
-                           "response": {"rawMessage": "Sponsored proxy transfers are not supported"}, "execution": None, "transaction": None})
-    return proof
+def write_artifact_set(directory, methods=None):
+    """Write the nine public artifacts at the nested paths the roster declares."""
+    for name in source_build.REQUIRED_ARTIFACTS:
+        nef, manifest = source_build.artifact_paths(directory, name)
+        nef.parent.mkdir(parents=True, exist_ok=True)
+        nef.write_bytes(nef_bytes(b"\x11\x40"))
+        declared = methods if name == "SmartAccount" and methods is not None \
+            else [{"name": method, "safe": False, "parameters": [], "returntype": "Void", "offset": 0}
+                  for method in source_build.REQUIRED_CORE_METHODS]
+        manifest.write_text(json.dumps({"name": name, "abi": {"methods": declared}}))
+    return Path(directory)
 
 
 class DetectorTest(unittest.TestCase):
@@ -184,51 +156,27 @@ class DetectorTest(unittest.TestCase):
                     source_build.profile_of(path)
 
 
-def source_new_path_proofs(contracts):
-    """Independent minimal RPC observations for the new causal evidence mutation gates."""
-    core, verifier, hook, target, pm = [contracts[name] for name in
-        ("SmartAccount", "WebAuthnVerifier", "WhitelistHook", "MockTransferTarget", "SAPaymaster")]
-    owner, relay, sponsor = ["0x" + digit * 40 for digit in ("a", "b", "c")]
-    account = "0x" + "d" * 40
-    proxy = "0x" + suite.v.hash160(suite.proxy_script_for(account, core))[::-1].hex()
-    witness = {"invocation": base64.b64encode(b"\x0c\x40" + b"s" * 64).decode(), "verification": "AQ=="}
-    before = {"proxy": proxy, "owner": owner, "verifier": verifier, "hook": hook, "mode": False,
-              "escape": "1000", "nonce": "7", "proxyGas": str(10 * suite.GAS), "buyerGas": "0"}
-    after = dict(before, verifier=suite.ZERO, hook=suite.ZERO, mode=True, escape="0")
-    owner_after = dict(after, nonce="8")
-    final = dict(owner_after, nonce="9", proxyGas=str(9 * suite.GAS), buyerGas=str(suite.GAS))
-    recovery = {"core": core, "accountId": account, "proxy": proxy, "owner": owner,
-                "verifier": verifier, "hook": hook, "reboundCore": target, "hookAuthorizedCore": target,
-                "escapeTimelockSeconds": 604800, "deadlineMs": "604801000", "matureAtMs": "604801001",
-                "before": before, "afterLegacy": dict(before), "afterRecovery": after,
-                "afterOwnerExecution": owner_after, "final": final,
-                "oldPublicKey": "02" + "11" * 32, "retainedPublicKey": "02" + "11" * 32,
-                "refusals": [{"outcome": "FAULT", "exception": marker} for marker in
-                    ("Timelock active", "Only backup owner can finalize", "Unauthorized caller",
-                     "Owner-only recovery is permanent", "Owner-only recovery is permanent", "Native witness failed")],
-                "transactions": []}
-    for kind in ("recovery", "owner", "proxy"):
-        signers = [{"account": owner}] + ([{"account": proxy}] if kind == "proxy" else [])
-        txid = "0x" + {"recovery": "12", "owner": "34", "proxy": "56"}[kind] * 32
-        recovery["transactions"].append({"kind": kind, "txid": txid,
-            "transaction": {"hash": txid, "signers": signers, "witnesses": [copy.deepcopy(witness) for _ in signers],
-                            "script": base64.b64encode(b"finalizeEscapeToOwner" if kind == "recovery" else b"executeUserOp").decode()},
-            "execution": {"vmstate": "HALT", "notifications": [{"contract": core, "eventname": "OwnerOnlyRecoveryFinalized"}] if kind == "recovery" else []}})
-    script = base64.b64encode(b"executeSponsoredUserOp\x45executeSponsoredUserOps").decode()
-    events = []
-    for amount in (50, 70):
-        fields = [{"type": "ByteString", "value": base64.b64encode(suite.v.hash_le(value)).decode()}
-                  for value in (sponsor, account, relay)]
-        events.append({"contract": pm, "eventname": "Reimbursed", "state": {"type": "Array", "value": fields + [{"type": "Integer", "value": str(amount)}]}})
-    cap = {"core": core, "accountId": account, "paymaster": pm, "sponsor": sponsor, "relay": relay, "owner": owner,
-           "before": {"deposit": "1000", "relay": "900", "nonce": "0"},
-           "after": {"deposit": "880", "relay": "900", "nonce": "2"},
-           "requests": ["50", "1000"], "amounts": ["50", "70"], "script": script, "estimate": {"state": "HALT"},
-           "txid": "0x" + "78" * 32,
-           "transaction": {"hash": "0x" + "78" * 32, "sysfee": "100", "netfee": "20", "script": script,
-                           "signers": [{"account": relay}, {"account": owner}], "witnesses": [witness, witness]},
-           "execution": {"vmstate": "HALT", "notifications": events}}
-    return recovery, cap
+class RosterTest(unittest.TestCase):
+    def test_the_roster_is_the_nine_v4_modules_at_their_declared_paths(self):
+        self.assertEqual(("SmartAccount", "MockTransferTarget", "SAPaymaster", "NeoWitnessValidator",
+                          "SessionKeyValidator", "MultiSigValidator", "WhitelistHook", "DailyLimitHook",
+                          "TokenRestrictedHook"), source_build.REQUIRED_ARTIFACTS)
+        self.assertEqual("validators/NeoWitnessValidator.nef", source_build.MODULE_FILES["NeoWitnessValidator"])
+        self.assertEqual("hooks/WhitelistHook.nef", source_build.MODULE_FILES["WhitelistHook"])
+
+    def test_a_build_without_the_v4_entrypoints_fails_closed(self):
+        with tempfile.TemporaryDirectory() as output:
+            write_artifact_set(output, methods=[{"name": "registerAccount", "safe": False,
+                                                 "parameters": [], "returntype": "Void", "offset": 0}])
+            with self.assertRaises(source_build.BuildError):
+                source_build.require_artifacts(output)
+
+    def test_a_build_without_a_nested_module_fails_closed(self):
+        with tempfile.TemporaryDirectory() as output:
+            write_artifact_set(output)
+            Path(output, "validators/SessionKeyValidator.nef").unlink()
+            with self.assertRaises(source_build.BuildError):
+                source_build.require_artifacts(output)
 
 
 class SourceReceiptGateTest(unittest.TestCase):
@@ -244,16 +192,14 @@ class SourceReceiptGateTest(unittest.TestCase):
                               "coreSha256": "b" * 64},
                    "results": [], "records": []}
         with tempfile.TemporaryDirectory() as output:
-            for name in source_build.REQUIRED_ARTIFACTS:
-                Path(output, name + ".nef").write_bytes(nef_bytes(b"\x11\x40"))
-                Path(output, name + ".manifest.json").write_text(json.dumps({"name": name, "abi": {"methods": []}}))
+            write_artifact_set(output)
             artifacts = source_build.artifact_snapshot(output)
         receipt["source"]["coreSha256"] = artifacts[0]["nefSha256"]
         receipt["contracts"] = {name: "0x" + format(index + 1, "040x")
                                 for index, name in enumerate(source_build.REQUIRED_ARTIFACTS)}
         receipt["sourceArtifactRuntime"] = {
             "schema": "neoos-sa-custom-source-artifact-runtime/v1", "publicNetwork": False,
-            "scope": "8 deployed artifacts only", "artifacts": artifacts,
+            "scope": "%d deployed artifacts only" % len(source_build.REQUIRED_ARTIFACTS), "artifacts": artifacts,
             "runnerSourceSha256": suite.source_runner_snapshot(),
             "readback": [{"contractName": artifact["contractName"],
                           "contractHash": receipt["contracts"][artifact["contractName"]],
@@ -271,48 +217,28 @@ class SourceReceiptGateTest(unittest.TestCase):
         for outcome, key in (("HALT", "executedTransactions"), ("FAULT", "simulatedFaults"),
                              ("REJECTED", "nodeRefusals")):
             receipt["records"].extend({"outcome": outcome} for _ in range(wanted["totals"][key]))
-        if profile == source_build.PROFILE_SYSCALL_ABSENT:
-            receipt["sourceProxyRelay"] = proxy_relay_proof()
-            receipt["contracts"]["SmartAccount"] = receipt["sourceProxyRelay"]["core"]
-            receipt["sourceArtifactRuntime"]["readback"][0]["contractHash"] = receipt["sourceProxyRelay"]["core"]
-        receipt["sourceOwnerRecovery"], receipt["sourceSponsorshipCap"] = source_new_path_proofs(receipt["contracts"])
         return receipt
 
-    def test_new_path_proofs_reject_causal_drift(self):
-        mutations = {
-            "missing recovery": lambda r: r.pop("sourceOwnerRecovery"),
-            "missing cap": lambda r: r.pop("sourceSponsorshipCap"),
-            "legacy cleanup mutated nonce": lambda r: r["sourceOwnerRecovery"]["afterLegacy"].update(nonce="8"),
-            "unmatured recovery": lambda r: r["sourceOwnerRecovery"].update(matureAtMs="1000"),
-            "fake short recovery timer": lambda r: r["sourceOwnerRecovery"].update(escapeTimelockSeconds=1),
-            "hook still trusts original core": lambda r: r["sourceOwnerRecovery"].update(hookAuthorizedCore=r["sourceOwnerRecovery"]["core"]),
-            "unrelated recovery txid": lambda r: r["sourceOwnerRecovery"]["transactions"][0].update(txid="0x" + "ff" * 32),
-            "unrelated sponsorship txid": lambda r: r["sourceSponsorshipCap"].update(txid="0x" + "ff" * 32),
-            "mode is false": lambda r: r["sourceOwnerRecovery"]["afterRecovery"].update(mode=False),
-            "old module active": lambda r: r["sourceOwnerRecovery"]["final"].update(verifier=r["sourceOwnerRecovery"]["verifier"]),
-            "identity moved": lambda r: r["sourceOwnerRecovery"]["final"].update(proxy="0x" + "f" * 40),
-            "nonce reset": lambda r: r["sourceOwnerRecovery"]["afterRecovery"].update(nonce="0"),
-            "cleanup silently invoked": lambda r: r["sourceOwnerRecovery"].update(retainedPublicKey=""),
-            "no signature": lambda r: r["sourceOwnerRecovery"]["transactions"][0]["transaction"]["witnesses"][0].update(invocation=""),
-            "wrong recovery role": lambda r: r["sourceOwnerRecovery"]["transactions"][0]["transaction"]["signers"][0].update(account="0x" + "f" * 40),
-            "no mode event": lambda r: r["sourceOwnerRecovery"]["transactions"][0]["execution"].update(notifications=[]),
-            "reinstall not refused": lambda r: r["sourceOwnerRecovery"]["refusals"][3].update(outcome="HALT"),
-            "proxy debit wrong": lambda r: r["sourceOwnerRecovery"]["final"].update(proxyGas="1"),
-            "repeat full fee": lambda r: r["sourceSponsorshipCap"].update(amounts=["120", "120"]),
-            "wrong deposit debit": lambda r: r["sourceSponsorshipCap"]["after"].update(deposit="760"),
-            "relay profits": lambda r: r["sourceSponsorshipCap"]["after"].update(relay="1020"),
-            "nonce only once": lambda r: r["sourceSponsorshipCap"]["after"].update(nonce="1"),
-            "changed persisted script": lambda r: r["sourceSponsorshipCap"]["transaction"].update(script="AA=="),
-            "bad full script estimate": lambda r: r["sourceSponsorshipCap"]["estimate"].update(state="FAULT"),
-            "one reimbursement": lambda r: r["sourceSponsorshipCap"]["execution"]["notifications"].pop(),
-            "forged event amount": lambda r: r["sourceSponsorshipCap"]["execution"]["notifications"][1]["state"]["value"][3].update(value="120"),
-            "foreign paymaster": lambda r: r["sourceSponsorshipCap"].update(paymaster="0x" + "f" * 40),
-        }
-        for label, mutate in mutations.items():
-            with self.subTest(label=label):
-                receipt = self.receipt(source_build.PROFILE_SYSCALL_ABSENT)
-                mutate(receipt)
-                self.assertTrue(suite.validate_source_receipt(receipt, self.expected), label)
+    def test_the_v4_oracle_declares_the_public_build_profile(self):
+        self.assertEqual("v4", self.expected.get("suite"))
+        self.assertEqual({source_build.PROFILE_SYSCALL_ABSENT}, set(self.expected["profiles"]))
+        self.assertEqual("absent", self.expected["profiles"][source_build.PROFILE_SYSCALL_ABSENT]["build"]["gasBounded"])
+
+    def test_profile_inventory_matches_the_suite_scenarios(self):
+        names = [name for name, _ in suite.SOURCE_SCENARIOS]
+        for profile, wanted in self.expected["profiles"].items():
+            with self.subTest(profile=profile):
+                self.assertEqual(names, [scenario["name"] for scenario in wanted["scenarios"]])
+
+    def test_each_profile_validates_its_own_receipt(self):
+        for profile in self.expected["profiles"]:
+            with self.subTest(profile=profile):
+                self.assertEqual([], suite.validate_source_receipt(self.receipt(profile), self.expected))
+
+    def test_the_declared_roster_is_required(self):
+        receipt = self.receipt(source_build.PROFILE_SYSCALL_ABSENT)
+        receipt["contracts"].pop("SessionKeyValidator")
+        self.assertTrue(suite.validate_source_receipt(receipt, self.expected))
 
     def test_source_artifact_readback_mutations_fail_closed(self):
         mutations = {
@@ -328,6 +254,7 @@ class SourceReceiptGateTest(unittest.TestCase):
             "duplicate readback": lambda r: r["sourceArtifactRuntime"]["readback"].append(copy.deepcopy(r["sourceArtifactRuntime"]["readback"][0])),
             "foreign deployment": lambda r: r["contracts"].update(Unknown="0x" + "ff" * 20),
             "historical core substitute": lambda r: r["sourceArtifactRuntime"]["artifacts"][0].update(nefSha256=self.expected["deployedCore"]["sha256"]),
+            "flat artifact path": lambda r: r["sourceArtifactRuntime"]["artifacts"][3].update(relativeNefPath="NeoWitnessValidator.nef"),
             "wrong artifact path": lambda r: r["sourceArtifactRuntime"]["artifacts"][1].update(relativeNefPath="../build/MockTransferTarget.nef"),
             "missing manifest hash": lambda r: r["sourceArtifactRuntime"]["artifacts"][1].pop("manifestSha256"),
             "bad hash": lambda r: r["sourceArtifactRuntime"]["artifacts"][1].update(nefSha256="unknown"),
@@ -349,11 +276,11 @@ class SourceReceiptGateTest(unittest.TestCase):
 
     def test_source_snapshot_requires_fresh_named_nef_manifest_pairs(self):
         with tempfile.TemporaryDirectory() as output:
-            for name in source_build.REQUIRED_ARTIFACTS:
-                Path(output, name + ".nef").write_bytes(nef_bytes(b"\x40"))
-                Path(output, name + ".manifest.json").write_text(json.dumps({"name": name}))
+            write_artifact_set(output)
             rows = source_build.artifact_snapshot(output)
             self.assertEqual(list(source_build.REQUIRED_ARTIFACTS), [row["contractName"] for row in rows])
+            self.assertEqual("validators/NeoWitnessValidator.nef",
+                             [row["relativeNefPath"] for row in rows if row["contractName"] == "NeoWitnessValidator"][0])
             core = Path(output, "SmartAccount.nef")
             core.write_bytes(core.read_bytes()[:-1] + b"\x00")
             with self.assertRaises(source_build.NefError):
@@ -366,31 +293,16 @@ class SourceReceiptGateTest(unittest.TestCase):
             with self.assertRaises(source_build.BuildError):
                 source_build.artifact_snapshot(output)
 
-    def test_both_profiles_are_declared(self):
-        self.assertEqual({source_build.PROFILE_SYSCALL_PRESENT, source_build.PROFILE_SYSCALL_ABSENT},
-                         set(self.expected["profiles"]))
-
-    def test_profile_inventory_matches_the_suite_scenarios(self):
-        names = [name for name, _ in suite.SOURCE_SCENARIOS]
-        for profile, wanted in self.expected["profiles"].items():
-            with self.subTest(profile=profile):
-                self.assertEqual(names, [scenario["name"] for scenario in wanted["scenarios"]])
-
-    def test_each_profile_validates_its_own_receipt(self):
-        for profile in self.expected["profiles"]:
-            with self.subTest(profile=profile):
-                self.assertEqual([], suite.validate_source_receipt(self.receipt(profile), self.expected))
-
     def test_mutants_fail_closed(self):
-        present = source_build.PROFILE_SYSCALL_PRESENT
+        absent = source_build.PROFILE_SYSCALL_ABSENT
         mutations = [
             lambda r: r.update(status="ABORTED"),
             lambda r: r.update(variant="deployed"),
             lambda r: r.update(profile="no-such-profile"),
-            # a build that still emits the syscall cannot claim the cleared profile
-            lambda r: r.update(profile=source_build.PROFILE_SYSCALL_ABSENT),
-            lambda r: r["source"].update(gasBoundedSyscall=0),
-            lambda r: r["source"].update(validateSignature=0),
+            # a build that still emits the syscall cannot claim the public profile
+            lambda r: r.update(profile=source_build.PROFILE_SYSCALL_PRESENT),
+            lambda r: r["source"].update(gasBoundedSyscall=2),
+            lambda r: r["source"].update(validateSignature=1),
             lambda r: r["source"].update(postExecute=2),
             lambda r: r["source"].update(coreSha256=self.expected["deployedCore"]["sha256"]),
             lambda r: r["source"].pop("coreSha256"),
@@ -405,7 +317,7 @@ class SourceReceiptGateTest(unittest.TestCase):
         ]
         for index, mutate in enumerate(mutations):
             with self.subTest(mutation=index):
-                receipt = self.receipt(present)
+                receipt = self.receipt(absent)
                 mutate(receipt)
                 self.assertTrue(suite.validate_source_receipt(receipt, self.expected),
                                 "mutation %d survived the source gate" % index)
@@ -416,46 +328,10 @@ class SourceReceiptGateTest(unittest.TestCase):
         self.assertTrue(suite.validate_source_receipt(receipt, self.expected))
 
     def test_outcome_drift_fails_closed(self):
-        present = source_build.PROFILE_SYSCALL_PRESENT
         for outcome in ("HALT", "FAULT", "REJECTED"):
             with self.subTest(outcome=outcome):
-                receipt = self.receipt(present)
-                receipt["records"].append({"outcome": outcome})
-                self.assertTrue(suite.validate_source_receipt(receipt, self.expected))
-
-
-    def test_proxy_relay_causal_readback_mutations_fail_closed(self):
-        mutations = [
-            lambda p: p.pop("cases"),
-            lambda p: p.update(proxy="0x" + "9" * 40),
-            lambda p: p.pop("refusals"),
-            lambda p: p["refusals"][1]["after"].update(nonce="1"),
-            lambda p: p["refusals"][2]["response"].update(txid="unexpected"),
-            lambda p: p["refusals"][0]["response"].update(rawMessage="unrelated error"),
-            lambda p: p["cases"].reverse(),
-            lambda p: p["cases"][0]["response"].update(txid="unexpected"),
-            lambda p: p["cases"][0]["after"].update(nonce="1"),
-            lambda p: p["cases"][1]["after"].update(buyer="0"),
-            lambda p: p["cases"][1]["after"].update(proxy="1000"),
-            lambda p: p["cases"][1]["after"].update(owner="0"),
-            lambda p: p["cases"][1]["after"].update(nonce="0"),
-            lambda p: p["cases"][1]["transaction"]["signers"][0].update(account=p["proxy"]),
-            lambda p: p["cases"][1]["transaction"]["signers"][1].update(scopes="Global"),
-            lambda p: p["cases"][1]["transaction"].update(script="AA=="),
-            lambda p: p["cases"][1]["transaction"].update(script=base64.b64encode(b"\x40" + base64.b64decode(p["cases"][1]["transaction"]["script"])).decode()),
-            lambda p: p["cases"][1]["transaction"]["witnesses"][1].update(verification="AA=="),
-            lambda p: p["cases"][1]["transaction"].update(netfee="21"),
-            lambda p: p["cases"][2]["after"].update(deposit="0"),
-            lambda p: p["cases"][2]["response"].update(txid="unexpected"),
-            lambda p: p["cases"][2]["response"].update(rawMessage="unrelated error"),
-            lambda p: p["cases"][2].update(status=200),
-            lambda p: p["cases"][2]["after"].update(proxy="0"),
-        ]
-        self.assertEqual([], suite._source_proxy_relay_failures(proxy_relay_proof()))
-        for index, mutate in enumerate(mutations):
-            with self.subTest(mutation=index):
                 receipt = self.receipt(source_build.PROFILE_SYSCALL_ABSENT)
-                mutate(receipt["sourceProxyRelay"])
+                receipt["records"].append({"outcome": outcome})
                 self.assertTrue(suite.validate_source_receipt(receipt, self.expected))
 
 

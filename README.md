@@ -271,7 +271,7 @@ when requested, a missing tool fails the gate rather than producing a pass:
 ```
 
 For `custom` or `all`, `--neoexpress` uses published NeoExpress for the public
-source suite. Its eight deployed modules are linked to the rebuild certificate
+source suite. Its nine deployed modules are linked to the rebuild certificate
 through exact artifact hashes and full RPC readback. It writes distinct
 `sa-custom-source-chain-*` and `sa-custom-runtime-provenance-*` receipts.
 The private PLATFORM full-module matrix and native-chain validators have
@@ -367,7 +367,7 @@ of this repository's acceptance today, and it is not reproduced here.
 
 The evidence this repository can reproduce today is the local-chain suite
 (`tests/localchain/README.md`). Its deployed variant runs the eight artifacts pinned by SHA-256 in
-`tests/localchain/expected-deployed.json` — `SmartAccountV3`, `MockTransferTarget`,
+`tests/localchain/expected-deployed.json` — `SmartAccount`, `MockTransferTarget`,
 `WebAuthnVerifier`, `SessionKeyVerifier`, `SAPaymaster`, `WhitelistHook`, `DailyLimitHook` and
 `SocialRecoveryVerifier` — and it performs no public-chain readback.
 

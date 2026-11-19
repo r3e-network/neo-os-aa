@@ -30,26 +30,28 @@ FAULT_MARKER = "The given key '1371299780' was not present in the dictionary."
 PROFILE_SYSCALL_PRESENT = "platform-syscall-present"
 PROFILE_SYSCALL_ABSENT = "platform-syscall-absent"
 
-# The eight artifacts the local-chain suite deploys, in the names the compiler writes. This is the
-# protocol v3 roster: it is the shape of tests/localchain/expected-source.json and of every RPC
-# scenario in sa_rpc_scenarios.py, which still drives registerAccount/getVerifier/getNonce and the
-# six-field operation. Protocol v4 renamed the three verifiers to validators, replaced the
-# per-module configuration calls with the configure lifecycle callback and the configuration-intent
-# path, and moved the plugins under contracts/plugins/{validators,hooks}. Until that suite is
-# ported, the source variant fails closed at the roster instead of deploying a v4 build into
-# v3-shaped expectations.
-REQUIRED_ARTIFACTS = (
-    "SmartAccount",
-    "MockTransferTarget",
-    "WebAuthnVerifier",
-    "SessionKeyVerifier",
-    "SAPaymaster",
-    "WhitelistHook",
-    "DailyLimitHook",
-    "SocialRecoveryVerifier",
-)
-# Artifacts that exist in both rosters: their presence identifies a v4 public build.
-SHARED_ARTIFACTS = ("SmartAccount", "MockTransferTarget", "SAPaymaster")
+# The protocol v4 public-profile roster the local-chain suite deploys, in the relative paths the
+# compiler writes under contracts/bin/public (validators and hooks live in subdirectories). The
+# suite drives the v4 ABI only: deterministic custody+salt accounts, the atomic initial install,
+# the 24 h configuration-intent path (proposeConfiguration/confirmConfiguration), the 13-field
+# user operation and per-instance module state.
+MODULE_FILES = {
+    "SmartAccount": "SmartAccount.nef",
+    "MockTransferTarget": "MockTransferTarget.nef",
+    "SAPaymaster": "SAPaymaster.nef",
+    "NeoWitnessValidator": "validators/NeoWitnessValidator.nef",
+    "SessionKeyValidator": "validators/SessionKeyValidator.nef",
+    "MultiSigValidator": "validators/MultiSigValidator.nef",
+    "WhitelistHook": "hooks/WhitelistHook.nef",
+    "DailyLimitHook": "hooks/DailyLimitHook.nef",
+    "TokenRestrictedHook": "hooks/TokenRestrictedHook.nef",
+}
+REQUIRED_ARTIFACTS = tuple(MODULE_FILES)
+# A v4 core must expose the registration and intent entrypoints this suite drives.
+REQUIRED_CORE_METHODS = ("createAccount", "proposeConfiguration", "confirmConfiguration",
+                         "executeUserOp", "executeSponsoredUserOp", "getOperationDigest")
+# Artifacts that identify any build as a core-plus-policy build (never a bare helper).
+CORE_ARTIFACTS = ("SmartAccount",)
 
 # Neo VM operand sizes (Neo.VM OpCode attributes), needed to walk the script instead of searching
 # it for bytes: a syscall token inside a PUSHDATA operand is data, not a call site.
@@ -226,27 +228,31 @@ def find_nccs():
     return candidate
 
 
+def artifact_paths(directory, name):
+    """The NEF and manifest paths of one roster artifact (nested for validators/hooks)."""
+    nef = Path(directory) / MODULE_FILES[name]
+    return nef, nef.with_name(nef.name.replace(".nef", ".manifest.json"))
+
+
 def require_artifacts(directory):
     directory = Path(directory)
     missing = [name for name in REQUIRED_ARTIFACTS
-               if not (directory / (name + ".nef")).is_file() or not (directory / (name + ".manifest.json")).is_file()]
+               if not artifact_paths(directory, name)[0].is_file()
+               or not artifact_paths(directory, name)[1].is_file()]
     if missing:
-        shared = [name for name in SHARED_ARTIFACTS
-                  if (directory / (name + ".nef")).is_file() and (directory / (name + ".manifest.json")).is_file()]
-        if shared:
-            # Do not report a v4 build as a directory that is missing artifacts: the roster this
-            # module requires is the v3 one, so the truthful diagnosis is the unported suite.
-            raise BuildError(
-                "the local-chain acceptance suite still drives the protocol v3 ABI: %s holds the v4 "
-                "public build (%s) but the suite deploys and calls %s. Port sa_rpc_scenarios.py and "
-                "REQUIRED_ARTIFACTS to v4 before running the source variant."
-                % (directory, ", ".join(shared), ", ".join(missing)))
         raise BuildError("the source build directory %s is missing: %s" % (directory, ", ".join(missing)))
+    # The suite drives the v4 entrypoints only; a core without them is another protocol revision.
+    core_manifest = json.loads(artifact_paths(directory, "SmartAccount")[1].read_text(encoding="utf-8"))
+    declared = {entry.get("name") for entry in core_manifest.get("abi", {}).get("methods", [])}
+    absent = [method for method in REQUIRED_CORE_METHODS if method not in declared]
+    if absent:
+        raise BuildError("the source core at %s does not expose the protocol v4 entrypoints %s"
+                         % (directory, ", ".join(absent)))
     return directory
 
 
 def artifact_snapshot(directory):
-    """Pin the eight artifacts actually deployed by the source-chain suite.
+    """Pin the nine artifacts actually deployed by the source-chain suite.
 
     Hash the complete NEF and manifest bytes separately from the NEF script and
     parsed manifest used for RPC readback. No historical artifact is substituted.
@@ -254,8 +260,7 @@ def artifact_snapshot(directory):
     directory = require_artifacts(directory)
     rows = []
     for name in REQUIRED_ARTIFACTS:
-        nef_path = directory / (name + ".nef")
-        manifest_path = directory / (name + ".manifest.json")
+        nef_path, manifest_path = artifact_paths(directory, name)
         nef = read_nef(nef_path)
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict) or manifest.get("name") != name:
@@ -263,7 +268,8 @@ def artifact_snapshot(directory):
         canonical_manifest = json.dumps(manifest, sort_keys=True, separators=(",", ":"),
                                         ensure_ascii=False, allow_nan=False).encode("utf-8")
         rows.append({"contractName": name,
-                     "relativeNefPath": name + ".nef", "relativeManifestPath": name + ".manifest.json",
+                     "relativeNefPath": MODULE_FILES[name],
+                     "relativeManifestPath": MODULE_FILES[name].replace(".nef", ".manifest.json"),
                      "nefSha256": hashlib.sha256(nef_path.read_bytes()).hexdigest(),
                      "manifestSha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
                      "nefScriptSha256": hashlib.sha256(nef["script"]).hexdigest(),

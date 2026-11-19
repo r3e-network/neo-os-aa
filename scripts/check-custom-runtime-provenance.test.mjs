@@ -39,14 +39,19 @@ function fixture(t) {
   const nef = Buffer.concat([body, createHash('sha256').update(createHash('sha256').update(body).digest()).digest().subarray(0, 4)]);
   const checksum = nef.readUInt32LE(nef.length - 4);
   const artifacts = [], readback = [], hashes = {};
+  // The roster nests validators and hooks under validators/ and hooks/; the fixture writes each
+  // artifact where the roster says it lives, so the release root mirrors the recipe output.
+  const relative = Object.fromEntries(receipt.sourceArtifactRuntime.artifacts.map((a) => [a.contractName, a.relativeNefPath]));
   for (const [index, name] of names.entries()) {
+    const nefPath = relative[name];
+    const manifestPath = nefPath.replace(/\.nef$/, '.manifest.json');
     const manifest = { name, abi: { methods: [], events: [] }, extra: { fixture: true } };
     const manifestBytes = Buffer.from(JSON.stringify(manifest));
     const manifestCanonicalSha256 = sha256(Buffer.from(JSON.stringify(canonical(manifest))));
-    write(`contracts/bin/public/${name}.nef`, nef); write(`contracts/bin/public/${name}.manifest.json`, manifestBytes);
-    hashes[`public/${name}.nef`] = sha256(nef); hashes[`public/${name}.manifest.json`] = sha256(manifestBytes);
+    write(`contracts/bin/public/${nefPath}`, nef); write(`contracts/bin/public/${manifestPath}`, manifestBytes);
+    hashes[`public/${nefPath}`] = sha256(nef); hashes[`public/${manifestPath}`] = sha256(manifestBytes);
     receipt.contracts[name] ??= `0x${String(index).repeat(40)}`;
-    artifacts.push({ contractName: name, relativeNefPath: `${name}.nef`, relativeManifestPath: `${name}.manifest.json`,
+    artifacts.push({ contractName: name, relativeNefPath: nefPath, relativeManifestPath: manifestPath,
       nefSha256: sha256(nef), manifestSha256: sha256(manifestBytes), manifestCanonicalSha256, nefScriptSha256: sha256(Buffer.from([0x40])), nefChecksum: checksum, manifest });
     readback.push({ contractName: name, contractHash: receipt.contracts[name], nef: { script: 'QA==', checksum }, manifest,
       nefScriptSha256: sha256(Buffer.from([0x40])), nefChecksum: checksum, manifestCanonicalSha256,
@@ -59,7 +64,7 @@ function fixture(t) {
   }
   receipt.source.coreSha256 = sha256(nef);
   receipt.sourceArtifactRuntime = { ...receipt.sourceArtifactRuntime,
-    schema: 'neoos-sa-custom-source-artifact-runtime/v1', publicNetwork: false, scope: '8 deployed artifacts only', artifacts, readback };
+    schema: 'neoos-sa-custom-source-artifact-runtime/v1', publicNetwork: false, scope: `${names.length} deployed artifacts only`, artifacts, readback };
   receipt.gateFailures = [];
   const sources = buildInputSnapshot(repoRoot);
   const repro = { release_matches_fresh_build: true, drifted: [], missing: [], artifacts_compared: Object.keys(hashes).length,
@@ -68,12 +73,13 @@ function fixture(t) {
     certificate: { schema: 'neoos-sa-source-to-artifact-certificate/v1', source_root: 'repository', source_files: sources,
       source_snapshot_sha256: sha256(Buffer.from(JSON.stringify(sources))), byte_equal_release: true,
       fresh_artifact_sha256: { ...hashes }, release_artifact_sha256: { ...hashes } } };
-  return { repro, receipt, repoRoot, releaseRoot };
+  return { repro, receipt, repoRoot, releaseRoot, names };
 }
 
 test('joins rebuild, source inputs and exactly the source suite deployment/readback set', (t) => {
-  const report = verifyCustomRuntimeProvenance(fixture(t));
-  assert.equal(report.status, 'PASS'); assert.equal(report.runtimeArtifactsChecked, 8);
+  const fixtureSet = fixture(t);
+  const report = verifyCustomRuntimeProvenance(fixtureSet);
+  assert.equal(report.status, 'PASS'); assert.equal(report.runtimeArtifactsChecked, fixtureSet.names.length);
   assert.equal(report.fullModuleProvenanceVerified, false);
 });
 
