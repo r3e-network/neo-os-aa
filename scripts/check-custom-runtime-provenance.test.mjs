@@ -105,6 +105,11 @@ test('artifact and RPC mutations cannot hide behind producer equality flags', (t
     (r) => { r.sourceArtifactRuntime.readback[0].manifest.name = 'Other'; },
     (r) => { r.sourceArtifactRuntime.readback[0].contractHash = `0x${'a'.repeat(40)}`; },
     (r) => { r.sourceArtifactRuntime.publicNetwork = true; },
+    // The declared roster fixes where each artifact lives; a path that merely ends with the
+    // contract name could point the hash readback outside the release root.
+    (r) => { r.sourceArtifactRuntime.artifacts[0].relativeNefPath = '../build/SmartAccount.nef'; },
+    (r) => { r.sourceArtifactRuntime.artifacts[0].relativeManifestPath = '../build/SmartAccount.manifest.json'; },
+    (r) => { r.sourceArtifactRuntime.artifacts[3].relativeNefPath = 'NeoWitnessValidator.nef'; },
   ];
   for (const change of changes) { const f = fixture(t); change(f.receipt); assert.throws(() => verifyCustomRuntimeProvenance(f)); }
 });

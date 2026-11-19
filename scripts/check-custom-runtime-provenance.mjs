@@ -32,7 +32,7 @@ if failures: raise ValueError('Source acceptance oracle failed: ' + '; '.join(fa
 p=source_build.profile_of(Path(sys.argv[2]) / 'SmartAccount.nef')
 if p['profile'] != source_build.PROFILE_SYSCALL_ABSENT: raise ValueError('Custom build contains a private bounded syscall')
 if r['source']['coreSha256'] != p['coreSha256']: raise ValueError('Source receipt core differs from release NEF')
-print(json.dumps(list(source_build.REQUIRED_ARTIFACTS)))`;
+print(json.dumps({'names': list(source_build.REQUIRED_ARTIFACTS), 'moduleFiles': source_build.MODULE_FILES}))`;
   const result = spawnSync('python3', ['-c', code, root, releaseRoot], {
     input: JSON.stringify(receipt), encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024,
   });
@@ -50,7 +50,12 @@ export function verifyCustomRuntimeProvenance({ repro, receipt, repoRoot = root,
   assert.equal(receipt.variant, 'source');
   assert.equal(receipt.profile, 'platform-syscall-absent', 'Only public-profile source receipts qualify');
   assert.deepEqual(receipt.gateFailures, [], 'Recorded source acceptance gate did not pass');
-  const names = validateSourceOracle(receipt, releaseRoot).sort();
+  const oracle = validateSourceOracle(receipt, releaseRoot);
+  const names = [...oracle.names].sort();
+  // The roster declares where each artifact lives under the release root. Comparing against it,
+  // rather than against whatever path the receipt happens to carry, keeps the join inside the
+  // root: a receipt cannot point the hash readback at ../build or at another contract's bytes.
+  const moduleFiles = oracle.moduleFiles;
   const runtime = receipt.sourceArtifactRuntime;
   assert.equal(runtime?.schema, 'neoos-sa-custom-source-artifact-runtime/v1', 'Missing source runtime artifact evidence');
   assert.equal(runtime.publicNetwork, false);
@@ -62,8 +67,10 @@ export function verifyCustomRuntimeProvenance({ repro, receipt, repoRoot = root,
   const rows = names.map((name) => {
     const artifact = runtime.artifacts.find((row) => row.contractName === name);
     const chain = runtime.readback.find((row) => row.contractName === name);
-    assert.ok(artifact.relativeNefPath === `${name}.nef` || artifact.relativeNefPath.endsWith(`/${name}.nef`), 'NEF path names the artifact');
-    assert.ok(artifact.relativeManifestPath === `${name}.manifest.json` || artifact.relativeManifestPath.endsWith(`/${name}.manifest.json`), 'Manifest path names the artifact');
+    assert.ok(Object.hasOwn(moduleFiles, name), `Artifact ${name} is not in the roster`);
+    assert.equal(artifact.relativeNefPath, moduleFiles[name], 'NEF path differs from the declared roster path');
+    assert.equal(artifact.relativeManifestPath, moduleFiles[name].replace(/\.nef$/, '.manifest.json'),
+      'Manifest path differs from the declared roster path');
     const nef = fs.readFileSync(path.join(releaseRoot, artifact.relativeNefPath));
     const manifestBytes = fs.readFileSync(path.join(releaseRoot, artifact.relativeManifestPath));
     const manifest = JSON.parse(manifestBytes);
