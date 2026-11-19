@@ -30,7 +30,14 @@ FAULT_MARKER = "The given key '1371299780' was not present in the dictionary."
 PROFILE_SYSCALL_PRESENT = "platform-syscall-present"
 PROFILE_SYSCALL_ABSENT = "platform-syscall-absent"
 
-# The eight artifacts the local-chain suite deploys, in the names the compiler writes.
+# The eight artifacts the local-chain suite deploys, in the names the compiler writes. This is the
+# protocol v3 roster: it is the shape of tests/localchain/expected-source.json and of every RPC
+# scenario in sa_rpc_scenarios.py, which still drives registerAccount/getVerifier/getNonce and the
+# six-field operation. Protocol v4 renamed the three verifiers to validators, replaced the
+# per-module configuration calls with the configure lifecycle callback and the configuration-intent
+# path, and moved the plugins under contracts/plugins/{validators,hooks}. Until that suite is
+# ported, the source variant fails closed at the roster instead of deploying a v4 build into
+# v3-shaped expectations.
 REQUIRED_ARTIFACTS = (
     "SmartAccount",
     "MockTransferTarget",
@@ -41,6 +48,8 @@ REQUIRED_ARTIFACTS = (
     "DailyLimitHook",
     "SocialRecoveryVerifier",
 )
+# Artifacts that exist in both rosters: their presence identifies a v4 public build.
+SHARED_ARTIFACTS = ("SmartAccount", "MockTransferTarget", "SAPaymaster")
 
 # Neo VM operand sizes (Neo.VM OpCode attributes), needed to walk the script instead of searching
 # it for bytes: a syscall token inside a PUSHDATA operand is data, not a call site.
@@ -222,6 +231,16 @@ def require_artifacts(directory):
     missing = [name for name in REQUIRED_ARTIFACTS
                if not (directory / (name + ".nef")).is_file() or not (directory / (name + ".manifest.json")).is_file()]
     if missing:
+        shared = [name for name in SHARED_ARTIFACTS
+                  if (directory / (name + ".nef")).is_file() and (directory / (name + ".manifest.json")).is_file()]
+        if shared:
+            # Do not report a v4 build as a directory that is missing artifacts: the roster this
+            # module requires is the v3 one, so the truthful diagnosis is the unported suite.
+            raise BuildError(
+                "the local-chain acceptance suite still drives the protocol v3 ABI: %s holds the v4 "
+                "public build (%s) but the suite deploys and calls %s. Port sa_rpc_scenarios.py and "
+                "REQUIRED_ARTIFACTS to v4 before running the source variant."
+                % (directory, ", ".join(shared), ", ".join(missing)))
         raise BuildError("the source build directory %s is missing: %s" % (directory, ", ".join(missing)))
     return directory
 

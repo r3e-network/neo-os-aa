@@ -73,8 +73,16 @@ python3 scripts/native_epoch_probe.py --compiler "$NCCS_BIN" --output /tmp/nativ
 
 This compiles the actual six native modules into a temporary tree and executes
 them in the published NeoVM. A test-only SmartAccount ABI fixture at the fixed native address
-provides permissive callback grants and an explicit epoch setter. It establishes
-module storage isolation and composite object ownership, not native recovery
+answers `getAuthorizedModuleId(accountId, phase)`, `getModule(accountId, moduleId)`
+and `getAccountAddress`, and forwards every callback so the module observes the core
+as caller. The probe installs, configures, phase-checks and uninstalls each module
+for two accounts and asserts that the module rejects any caller other than the
+pinned core, that only the instance the core names for the configuration phase may
+be written, that instance state is keyed by account ‖ big-endian module id (no
+`0xA2` epoch tag, no little-endian id), that a session key cannot rotate inside its
+cooldown, that threshold member digests follow the core credential generation, and
+that uninstall sweeps the instance prefix without touching the sibling account. It
+establishes module lifecycle and storage isolation, not native recovery
 authorization, native admission, callback gas sufficiency or chain persistence.
 The report records copied production/test sources, committed restore locks and
 compiled artifacts. Every module and fixture restores in locked mode from those
@@ -82,11 +90,7 @@ locks; the explicit native dependency gate inventories both probe projects.
 No compiler output is patched. This regression does not substitute for the
 separate release build and artifact packaging gate.
 
-The matrix includes fresh reconfiguration, untouched peer accounts, cleanup
-without deleting a prior generation, exact epoch type/range/LE64, and an old
-untagged token key that would collide with an epoch-zero prefix without `0xA2`.
-Composite controls exercise both approval phases, exact Boolean votes, nested
-argument/result mutation, preservation of the caller's original result, and
-rejection of an Interop iterator result. Diagnostic leaves are explicitly
-handwritten test bytecode; the composite and six policy NEFs are real compiler
+The cases drive the v4 lifecycle callbacks only; the epoch-keyed storage and
+composite-verifier matrix of the previous module ABI is retired. The diagnostic
+fixture bytecode is explicitly test-only and the six policy NEFs are real compiler
 output. The private native recovery/reinstallation matrix remains required.

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -129,6 +130,7 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(activation.ValidationFailure):
                 activation.runtime_hashes(root)
 
+    @unittest.skipIf(os.name == "nt", "the neoxp launcher is a #!/usr/bin/env python3 script, which Windows neither finds nor executes")
     def test_runner_executes_exact_program_and_preserves_arguments(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

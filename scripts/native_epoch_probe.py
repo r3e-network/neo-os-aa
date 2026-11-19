@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile actual native modules and execute the test-only epoch ABI VM probe.
+"""Compile actual native modules and execute the test-only module-lifecycle VM probe.
 
 This is an isolated module regression, not a release build or native recovery
 integration gate. Compiler outputs are unmodified. Every module and test fixture
@@ -13,6 +13,10 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+
+# The probe drives every module the native profile declares through the v4 lifecycle
+# callbacks. If a module is added to the profile without a probe case the regression would
+# silently skip it, so the roster is checked in both directions before anything is built.
 
 
 def main():
@@ -33,6 +37,21 @@ def main():
                 shutil.copyfile(root / name, scratch / name)
                 report['sourceSha256'][name] = digest(root / name)
             profiles = json.loads((root / 'contracts/plugins/native-profile/profiles.json').read_text())
+            probe_source = (root / 'tests/NativeEpochProbe/Program.cs').read_text(encoding='utf-8')
+            uncovered = sorted(name for name in profiles if '"%s"' % name not in probe_source)
+            if uncovered:
+                raise RuntimeError(
+                    'tests/NativeEpochProbe has no lifecycle case for the native profile modules %s. '
+                    'Every module in contracts/plugins/native-profile/profiles.json must be installed, '
+                    'configured, phase-checked and uninstalled by the probe; add the case before running '
+                    'the native module regression.' % ', '.join(uncovered))
+            retired = sorted(name for name in ('NeoNativeVerifier', 'SessionKeyVerifier', 'MultiSigVerifier')
+                             if '"%s"' % name in probe_source)
+            if retired:
+                raise RuntimeError(
+                    'tests/NativeEpochProbe still names the retired protocol v3 modules %s. The probe '
+                    'must drive the v4 validators and hooks through the configure lifecycle callback.'
+                    % ', '.join(retired))
             for source in (root / 'contracts').rglob('*'):
                 if not source.is_file() or (source.suffix not in ('.cs', '.csproj') and not source.name.endswith('.lock.json')) or any(part in ('obj', 'bin') for part in source.relative_to(root).parts):
                     continue

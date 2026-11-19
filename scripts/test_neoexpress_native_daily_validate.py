@@ -133,7 +133,7 @@ class NativeDailyTests(unittest.TestCase):
     def test_daily_profile_is_explicit(self):
         profiles=json.loads((Path(__file__).resolve().parent.parent/'contracts/plugins/native-profile/profiles.json').read_text())
         self.assertEqual('hook',profiles['DailyLimitHook']['role'])
-        self.assertEqual(['setDailyLimit'],profiles['DailyLimitHook']['configurationMethods'])
+        self.assertEqual(['configure'],profiles['DailyLimitHook']['configurationMethods'])
 
     def test_all_pages_and_empty_prefix_are_read(self):
         a,b=row(b'\x01a'),row(b'\x01b')

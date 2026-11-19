@@ -17,6 +17,19 @@ neither on PATH nor in `~/.dotnet/tools`. On Homebrew the existing helper derive
 out to `openssl` and needs OpenSSL 3: the macOS system LibreSSL cannot read a DER
 key with `dgst -keyform DER`, so put a real OpenSSL first on PATH on macOS.
 
+> **Protocol v4 status.** The `deployed` variant is unchanged evidence: it runs the
+> frozen 2026-10-05 artifacts under `contracts/build/` and keeps its 129 checks. The
+> `source` variant is not ported yet. Both the artifact roster in
+> `scripts/localchain/source_build.py` and every scenario in
+> `scripts/localchain/sa_rpc_scenarios.py` drive the protocol v3 ABI
+> (`registerAccount`, `getVerifier`, `getNonce`, the six-field operation,
+> `WebAuthnVerifier` / `SessionKeyVerifier` / `SocialRecoveryVerifier`), while the
+> current checkout builds the v4 core and the `contracts/plugins/{validators,hooks}`
+> modules. Until the suite is retargeted, the source variant fails closed at the
+> roster with “the local-chain acceptance suite still drives the protocol v3 ABI”,
+> instead of deploying a v4 build into v3-shaped expectations. Retargeting this suite
+> is the remaining work behind `scripts/verify_repo.sh --neoexpress`.
+
 The suite creates a private published-neoxp chain with random loopback RPC/P2P
 ports above 20000 and disposable keys. Its data lives in `/private/tmp` on macOS
 (`/tmp` on Linux); it stops its own node PID and deletes the data on completion,

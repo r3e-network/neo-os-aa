@@ -98,7 +98,12 @@ the complete measured composite scenario matrix with the actual native VM. It
 rejects missing, duplicate, unknown, failed or over-budget cases; synthetic
 transaction signers make this a host test, not mempool or block confirmation.
 NativeEpochProbe in the native gate uses a test-only SmartAccount ABI fixture and is a
-different test boundary. Full-node SDK/private-chain receipts remain separate.
+different test boundary. Protocol v4 renamed the modules to validators and moved configuration onto the
+`configure` lifecycle callback. The probe now drives that callback set: it installs,
+configures, phase-checks and uninstalls every module the native profile builds, and
+asserts the pinned-core caller check, `(accountId, moduleId)` instance state and the
+retirement of the `0xA2` authority-epoch layout. Full-node SDK/private-chain receipts remain
+separate.
 Historical reports retain the commits and bytes they tested; a later test-only
 core commit does not change the production runtime identity recorded there.
 

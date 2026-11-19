@@ -85,7 +85,7 @@ class NativeSessionTests(unittest.TestCase):
 
     def test_profile_is_explicit_and_declares_configuration(self):
         profiles=json.loads((Path(__file__).resolve().parent.parent/'contracts/plugins/native-profile/profiles.json').read_text())
-        self.assertEqual(['setSessionKey','clearSessionKey'], profiles['SessionKeyVerifier']['configurationMethods'])
+        self.assertEqual(['configure'], profiles['SessionKeyValidator']['configurationMethods'])
 
     def test_signing_input_matches_published_native_vector(self):
         vectors=json.loads((Path(__file__).resolve().parent.parent/'docs/proposals/smartaccount-native-profile-v2-vectors.json').read_text())

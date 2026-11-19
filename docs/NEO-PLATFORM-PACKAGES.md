@@ -76,7 +76,7 @@ only to reject a non-empty value instead of silently reinterpreting an old one.
 It records original/prepared sources and both
 raw/packaged artifact bytes, then compares two independent scratch builds.
 Run `node scripts/check_neo_platform_packages.mjs --include-native` for all
-36 projects, including two test-only epoch probe projects and two source-runtime
+36 projects, including two test-only module probe projects and two source-runtime
 probe hosts, before building. The runtime hosts use no NuGet packages: their
 committed locks must contain an empty net10.0 dependency graph, and their Neo
 assemblies must come from an explicitly validated source-built runtime. Native

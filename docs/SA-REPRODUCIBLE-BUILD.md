@@ -174,7 +174,7 @@ recipe. These modules require SmartAccount and are not `public` artifacts.
 
 The native node/NeoExpress runtime has a separate source build and private-chain
 gate, documented in [native validation](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md).
-Module reproducibility and the test-only public-VM epoch probe do not establish
+Module reproducibility and the test-only public-VM module-lifecycle probe do not establish
 native-chain behavior or public activation.
 
 Historical reference digests before the 2026-10-08 consolidation (SHA-256; these are not pins for the

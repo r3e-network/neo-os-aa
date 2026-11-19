@@ -76,7 +76,7 @@ def check_module_build(compiled, artifacts, contracts):
     scripts = Path(__file__).parent
     require(compiled["recipeSha256"] == sha256(scripts/"build_native_modules.py") and
             compiled["packagingRecipeSha256"] == sha256(scripts/"native_module_profile.py"), "Native recipe changed after build")
-    parameters = contracts.parent / "docs/proposals/smartaccount-native-profile-v2-parameters.json"
+    parameters = contracts.parent / "docs/proposals/smartaccount-native-profile-v4-parameters.json"
     parameter_digest = profile_digest(parameters)
     packaging = json.loads((artifacts / "native-profile-packaging.json").read_text())
     require(packaging.get("status") == "PASS" and packaging.get("nefRewritten") is False,
@@ -92,24 +92,19 @@ def check_module_build(compiled, artifacts, contracts):
     for name, spec in profiles.items():
         certificate = packaging["artifacts"][name]
         require(type(certificate) is dict and certificate.get("nefSha256") == pins[name + ".nef"] and
-                certificate.get("packagedManifestSha256") == pins[name + ".manifest.json"],
+                certificate.get("manifestSha256") == pins[name + ".manifest.json"],
                 "Native packaging artifact certificate mismatch")
         manifest = json.loads((artifacts / (name + ".manifest.json")).read_text())
         require(manifest.get("name") == name, "Native manifest name mismatch")
-        extra = manifest.get("extra")
-        require(type(extra) is dict and type(extra.get("smartAccount")) is dict,
-                "Native manifest capability metadata is missing")
-        metadata = extra["smartAccount"]
-        require(type(metadata.get("abiVersion")) is int and type(metadata.get("compositeVerifier")) is bool,
-                "Native manifest ABI or composite marker has an incorrect type")
-        raw_manifest = copy.deepcopy(manifest)
-        del raw_manifest["extra"]["smartAccount"]
+        # Protocol v4 carries the capability profile inside the module (getModuleProfile) and marks the
+        # compiler manifest with SmartAccountProfile=native-v4. Re-admit the packaged bytes against the
+        # current descriptor, so a forged marker, permission allowlist, lifecycle ABI or capability is
+        # rejected even when the receipt and the artifact pins were rehashed to match.
         try:
-            expected = package_manifest(raw_manifest, spec["role"], spec["configurationMethods"],
-                                        spec["compositeVerifier"], parameter_digest, spec["compositeProfile"])
+            package_manifest(manifest, spec["role"], spec["configurationMethods"],
+                             spec["compositeVerifier"], parameter_digest, spec["compositeProfile"])
         except (KeyError, TypeError, ValueError) as error:
             raise ValidationFailure("Native packaged lifecycle ABI is invalid: " + str(error)) from error
-        require(manifest == expected, "Native packaged capability metadata differs from the current profile")
     return pins
 
 

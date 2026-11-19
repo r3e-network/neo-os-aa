@@ -18,6 +18,24 @@ if [[ -z "${DOTNET_ROOT:-}" || ! -d "$DOTNET_ROOT" ]]; then
   return 1 2>/dev/null || exit 1
 fi
 
+if [[ -z "${NCCS_BIN:-}" ]]; then
+  # Resolve the pinned compiler the way the platform installs it: the global tool
+  # launcher is `nccs` on macOS and Linux and `nccs.exe` on Windows, and it is
+  # only on PATH when the tools directory was added to it. An MSYS shell resolves
+  # `nccs` to `nccs.exe` for exec and for [ -f ] but reports the extension-less
+  # name, and callers hash the launcher bytes, so prefer a name that exists as a
+  # file on disk.
+  for resolved in "$(command -v nccs 2>/dev/null || true)" "$HOME/.dotnet/tools/nccs"; do
+    if [[ -n "$resolved" && -f "$resolved.exe" ]]; then
+      NCCS_BIN="$resolved.exe"
+      break
+    fi
+    if [[ -n "$resolved" && -f "$resolved" ]]; then
+      NCCS_BIN="$resolved"
+      break
+    fi
+  done
+fi
 export NCCS_BIN="${NCCS_BIN:-$HOME/.dotnet/tools/nccs}"
 if [[ ! -x "$NCCS_BIN" ]]; then
   echo "Neo compiler not found or not executable: $NCCS_BIN" >&2

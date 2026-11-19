@@ -45,19 +45,19 @@ class NativeModuleMatrixTests(unittest.TestCase):
         from test_native_module_profile import manifest
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); contracts = root / 'contracts'; (contracts / 'plugins/native-profile').mkdir(parents=True)
-            parameters = root / 'docs/proposals/smartaccount-native-profile-v2-parameters.json'
+            parameters = root / 'docs/proposals/smartaccount-native-profile-v4-parameters.json'
             parameters.parent.mkdir(parents=True)
             parameters.write_bytes((Path(__file__).resolve().parent.parent / parameters.relative_to(root)).read_bytes())
-            profiles = {'NeoNativeVerifier': {'project': 'NeoNativeVerifier.Native.csproj', 'role': 'verifier',
+            profiles = {'NeoWitnessValidator': {'project': 'NeoWitnessValidator.Native.csproj', 'role': 'verifier',
                 'configurationMethods': ['setConfig'], 'compositeVerifier': False, 'compositeProfile': ''}}
             descriptor = contracts / 'plugins/native-profile/profiles.json'; descriptor.write_text(json.dumps(profiles))
             raw = root / 'raw'; raw.mkdir(); artifacts = root / 'artifacts'
             body = b'NEF3' + bytes(64) + bytes(5) + b'\x01\x40'
-            (raw / 'NeoNativeVerifier.nef').write_bytes(body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4])
-            (raw / 'NeoNativeVerifier.manifest.json').write_text(json.dumps(manifest()))
+            (raw / 'NeoWitnessValidator.nef').write_bytes(body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4])
+            (raw / 'NeoWitnessValidator.manifest.json').write_text(json.dumps(manifest()))
             package(raw, artifacts, descriptor, parameters)
             source_pins = {n: hashlib.sha256((root / n).read_bytes()).hexdigest() for n in
-                ('contracts/plugins/native-profile/profiles.json', 'docs/proposals/smartaccount-native-profile-v2-parameters.json')}
+                ('contracts/plugins/native-profile/profiles.json', 'docs/proposals/smartaccount-native-profile-v4-parameters.json')}
             scripts = Path(__file__).parent
             receipt = {'schema': 'smartaccount-native-module-build/v2', 'sourceRoot': 'repository',
                 'restoreLockedMode': True, 'packageSourcesPolicy': 'nuget.config', 'status': 'PASS', 'reproducible': True,
@@ -90,14 +90,21 @@ class NativeModuleMatrixTests(unittest.TestCase):
                 with self.assertRaises(ValidationFailure): check_module_build(receipt, artifacts, contracts)
 
     def test_forged_packaged_metadata_rejected_even_with_rehashed_receipt(self):
-        for field, value in [('profileDigest', '00' * 32), ('compositeVerifier', 0),
-                ('compositeVerifier', True), ('abiVersion', 1), ('configurationMethods', ['postExecute']),
-                ('compositeProfile', 'MultiSigVerifier')]:
-            with self.subTest(field=field, value=value), self.module_fixture() as (receipt, artifacts, contracts, repin):
-                path = artifacts / 'NeoNativeVerifier.manifest.json'; manifest = json.loads(path.read_text())
-                manifest['extra']['smartAccount'][field] = value; path.write_text(json.dumps(manifest))
+        def callable_named(document, name):
+            return [m for m in document['abi']['methods'] if m['name'] == name][0]
+        for field, forge in [
+                ('profileMarker', lambda m: m['extra'].update(SmartAccountProfile='native-v3')),
+                ('permissionAllowlist', lambda m: m['permissions'][0]['methods'].append('registerAccount')),
+                ('lifecycleSafety', lambda m: callable_named(m, 'onInstall').update(safe=True)),
+                ('lifecycleAbi', lambda m: callable_named(m, 'onUserOpComplete')['parameters'].__setitem__(
+                    0, {'name': 'accountId', 'type': 'Integer'})),
+                ('capabilityScope', lambda m: callable_named(m, 'setConfig')['parameters'].__setitem__(
+                    0, {'name': 'accountId', 'type': 'Integer'}))]:
+            with self.subTest(field=field), self.module_fixture() as (receipt, artifacts, contracts, repin):
+                path = artifacts / 'NeoWitnessValidator.manifest.json'; document = json.loads(path.read_text())
+                forge(document); path.write_text(json.dumps(document))
                 cert_path = artifacts / 'native-profile-packaging.json'; cert = json.loads(cert_path.read_text())
-                cert['artifacts']['NeoNativeVerifier']['packagedManifestSha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+                cert['artifacts']['NeoWitnessValidator']['manifestSha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
                 cert_path.write_text(json.dumps(cert)); repin()
                 with self.assertRaises(ValidationFailure): check_module_build(receipt, artifacts, contracts)
 

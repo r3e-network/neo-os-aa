@@ -154,7 +154,7 @@ def build_diagnostic(compiler,cache,root):
         for policy in ('Directory.Build.props','Directory.Packages.props','Directory.Build.targets'):
             if (repository/policy).is_file():shutil.copyfile(repository/policy,project/policy)
         # Both diagnostic projects depend only on the same audited Framework pin.
-        shutil.copyfile(repository/'contracts/plugins/verifiers/packages.NeoNativeVerifier.lock.json',project/'packages.lock.json')
+        shutil.copyfile(repository/'contracts/plugins/validators/packages.NeoWitnessValidator.lock.json',project/'packages.lock.json')
         import xml.etree.ElementTree as ET
         config=ET.Element('configuration');feeds=ET.SubElement(config,'packageSources');ET.SubElement(feeds,'clear')
         ET.SubElement(feeds,'add',key='offline',value=str(cache));ET.ElementTree(config).write(project/'NuGet.Config')
@@ -198,7 +198,7 @@ def validate(runtime,dotnet,artifacts,build_receipt,module_receipt,output,advers
                 repository=Path(__file__).resolve().parent.parent
                 framework_version=ET.parse(repository/'Directory.Build.props').find('.//NeoSmartContractFrameworkVersion').text
                 report['diagnosticBuild']={'builds':diagnostic_builds,'compilerSha256':sha256(compiler),
-                    'dependencyPolicySha256':sha256(repository/'Directory.Build.props'),'packageLockSha256':sha256(repository/'contracts/plugins/verifiers/packages.NeoNativeVerifier.lock.json'),
+                    'dependencyPolicySha256':sha256(repository/'Directory.Build.props'),'packageLockSha256':sha256(repository/'contracts/plugins/validators/packages.NeoWitnessValidator.lock.json'),
                     'frameworkArchiveSha256':sha256(cache/'neo.smartcontract.framework'/framework_version/('neo.smartcontract.framework.'+framework_version+'.nupkg'))}
                 require(report['diagnosticBuild']['frameworkArchiveSha256']==json.loads(module_receipt.read_text())['frameworkArchiveSha256'],'Diagnostic framework mismatch')
             try:
